@@ -361,6 +361,19 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SymbolResult[]>([]);
   const [open, setOpen] = useState(false);
+  type MarketPayload = {
+  updatedAt: string;
+  topRanges: { symbol: string; changePct: number | null; rangePct: number | null; last: number | null }[];
+  topMovers: { symbol: string; changePct: number | null; rangePct: number | null; last: number | null }[];
+};
+
+type NewsPayload = {
+  symbol: string;
+  feeds: { label: string; items: { title: string; link: string; pubDate: string | null; source: string | null }[] }[];
+};
+
+const [market, setMarket] = useState<MarketPayload | null>(null);
+const [news, setNews] = useState<NewsPayload | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -440,6 +453,31 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
     };
   }, [query]);
 
+    useEffect(() => {
+    let cancelled = false;
+    const q = query.trim();
+    if (!q) {
+      setResults([]);
+      return;
+    }
+
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/symbols?q=${encodeURIComponent(q)}`, { cache: "no-store" });
+        const data = (await res.json()) as { results: SymbolResult[] };
+        if (cancelled) return;
+        setResults(Array.isArray(data.results) ? data.results : []);
+      } catch {
+        if (cancelled) return;
+        setResults([]);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [query]);
   const displayedHistory = useMemo(() => historyAll.slice(-tfDays), [historyAll, tfDays]);
 
   const closesAll = useMemo(() => historyAll.map((p) => p.close), [historyAll]);
@@ -612,59 +650,138 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
       </div>
 
       <div style={{ marginTop: 16, maxWidth: 920, display: "grid", gap: 16 }}>
-        <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
-          <h2 style={{ marginTop: 0 }}>{symbol}</h2>
+  {/* Card 1: Symbol summary */}
+  <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
+    <h2 style={{ marginTop: 0 }}>{symbol}</h2>
 
-          {loading ? (
-            <p style={{ margin: "8px 0" }}>Loading…</p>
-          ) : err ? (
-            <p style={{ margin: "8px 0" }}>{err}</p>
-          ) : (
-            <>
-              <p style={{ fontSize: 20, margin: "8px 0" }}>
-                <strong>Last price:</strong> {quote?.price == null ? "Unavailable" : `$${quote.price.toFixed(2)}`}
-              </p>
+    {loading ? (
+      <p style={{ margin: "8px 0" }}>Loading…</p>
+    ) : err ? (
+      <p style={{ margin: "8px 0" }}>{err}</p>
+    ) : (
+      <>
+        <p style={{ fontSize: 20, margin: "8px 0" }}>
+          <strong>Last price:</strong> {quote?.price == null ? "Unavailable" : `$${quote.price.toFixed(2)}`}
+        </p>
 
-              <p style={{ margin: "8px 0 0", opacity: 0.85 }}>
-                <strong>Signal:</strong> {signal.label}
-              </p>
-              <p style={{ margin: "6px 0 0", opacity: 0.7 }}>{signal.detail}</p>
+        <p style={{ margin: "8px 0 0", opacity: 0.85 }}>
+          <strong>Signal:</strong> {signal.label}
+        </p>
+        <p style={{ margin: "6px 0 0", opacity: 0.7 }}>{signal.detail}</p>
 
-              <div style={{ marginTop: 12, fontSize: 13, opacity: 0.75 }}>
-                <div>MA50: {typeof lastMA50 === "number" ? `$${lastMA50.toFixed(2)}` : "—"}</div>
-                <div>MA200: {typeof lastMA200 === "number" ? `$${lastMA200.toFixed(2)}` : "—"}</div>
-              </div>
-
-              <p style={{ marginTop: 12, opacity: 0.7 }}>
-                {quote?.date && quote?.time ? `As of ${quote.date} ${quote.time}` : "Timestamp unavailable"} • Source:{" "}
-                {quote?.source ?? "stooq.com"}
-              </p>
-            </>
-          )}
+        <div style={{ marginTop: 12, fontSize: 13, opacity: 0.75 }}>
+          <div>MA50: {typeof lastMA50 === "number" ? `$${lastMA50.toFixed(2)}` : "—"}</div>
+          <div>MA200: {typeof lastMA200 === "number" ? `$${lastMA200.toFixed(2)}` : "—"}</div>
         </div>
 
-        <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
-          <PriceChart
-            data={displayedHistory}
-            ma50={ma50}
-            ma200={ma200}
-            overlay={indicator}
-            bollUpper={bollUpper}
-            bollMid={bollMid}
-            bollLower={bollLower}
-            ema20={ema20}
-            rsi14={rsi14}
-            macdLine={macdLine}
-            macdSignal={macdSignal}
-            macdHist={macdHist}
-            vwap={vwap}
-            volume={volume}
-            stochK={stochK}
-            stochD={stochD}
-            atr14={atr14}
-          />
+        <p style={{ marginTop: 12, opacity: 0.7 }}>
+          {quote?.date && quote?.time ? `As of ${quote.date} ${quote.time}` : "Timestamp unavailable"} • Source:{" "}
+          {quote?.source ?? "stooq.com"}
+        </p>
+      </>
+    )}
+  </div>
+
+  {/* Card 2: Chart */}
+  <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
+    <PriceChart
+      data={displayedHistory}
+      ma50={ma50}
+      ma200={ma200}
+      overlay={indicator}
+      bollUpper={bollUpper}
+      bollMid={bollMid}
+      bollLower={bollLower}
+      ema20={ema20}
+      rsi14={rsi14}
+      macdLine={macdLine}
+      macdSignal={macdSignal}
+      macdHist={macdHist}
+      vwap={vwap}
+      volume={volume}
+      stochK={stochK}
+      stochD={stochD}
+      atr14={atr14}
+    />
+  </div>
+
+  {/* Card 3: Market overview */}
+  <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
+    <h2 style={{ marginTop: 0 }}>Market Overview</h2>
+
+    {market ? (
+      <>
+        <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 10 }}>
+          Updated: {new Date(market.updatedAt).toLocaleString()}
         </div>
+
+        <div style={{ display: "grid", gap: 16, gridTemplateColumns: "1fr 1fr" }}>
+          <div>
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>Top 10 daily ranges</div>
+            <div style={{ display: "grid", gap: 6 }}>
+              {market.topRanges.map((r) => (
+                <div key={r.symbol} style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ fontWeight: 700 }}>{r.symbol}</span>
+                  <span style={{ opacity: 0.8 }}>{r.rangePct == null ? "—" : `${r.rangePct.toFixed(2)}% range`}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>Top 5 movers (by %)</div>
+            <div style={{ display: "grid", gap: 6 }}>
+              {market.topMovers.map((r) => (
+                <div key={r.symbol} style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ fontWeight: 700 }}>{r.symbol}</span>
+                  <span style={{ opacity: 0.8 }}>
+                    {r.changePct == null ? "—" : `${r.changePct >= 0 ? "Up" : "Down"} ${Math.abs(r.changePct).toFixed(2)}%`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </>
+    ) : (
+      <div style={{ opacity: 0.7 }}>Market overview unavailable (check Twelve Data key).</div>
+    )}
+  </div>
+
+  {/* Card 4: News */}
+  <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
+    <h2 style={{ marginTop: 0 }}>Latest News</h2>
+
+    {news ? (
+      <div style={{ display: "grid", gap: 16, gridTemplateColumns: "1fr 1fr" }}>
+        {news.feeds.map((f) => (
+          <div key={f.label}>
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>{f.label}</div>
+            <div style={{ display: "grid", gap: 10 }}>
+              {f.items.length ? (
+                f.items.map((it, idx) => (
+                  <a
+                    key={idx}
+                    href={it.link}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ textDecoration: "none", color: "inherit" }}
+                  >
+                    <div style={{ fontWeight: 650 }}>{it.title}</div>
+                    <div style={{ fontSize: 12, opacity: 0.7, marginTop: 2 }}>
+                      {(it.source ?? "Source")} {it.pubDate ? `• ${new Date(it.pubDate).toLocaleString()}` : ""}
+                    </div>
+                  </a>
+                ))
+              ) : (
+                <div style={{ opacity: 0.7 }}>No headlines right now.</div>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
-    </main>
-  );
-}
+    ) : (
+      <div style={{ opacity: 0.7 }}>News unavailable.</div>
+    )}
+  </div>
+</div>
