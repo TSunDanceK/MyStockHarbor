@@ -96,6 +96,15 @@ const PRESET_TICKERS: { symbol: string; name: string }[] = [
   { symbol: "XOM", name: "Exxon Mobil Corp." }
 ].sort((a, b) => a.symbol.localeCompare(b.symbol));
 
+const TIMEFRAMES: { label: string; days: number }[] = [
+  { label: "3M", days: 90 },
+  { label: "6M", days: 180 },
+  { label: "1Y", days: 365 },
+  { label: "3Y", days: 365 * 3 },
+  { label: "5Y", days: 365 * 5 },
+  { label: "MAX", days: 4000 },
+];
+
 export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSymbol?: string }) {
   const [symbol, setSymbol] = useState(defaultSymbol);
   const [tfDays, setTfDays] = useState(365);
