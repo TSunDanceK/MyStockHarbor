@@ -334,14 +334,14 @@ const PRESET_TICKERS: { symbol: string; name: string }[] = [
 ].sort((a, b) => a.symbol.localeCompare(b.symbol));
 
 const TIMEFRAMES: { label: string; days: number }[] = [
-  { label: "3M", days: 90 },
-  { label: "6M", days: 180 },
-  { label: "1D", days: 1 },
+  { label: "1D", days: 30 },     // daily-only data: show last ~30 trading days so line can render
   { label: "1W", days: 7 },
   { label: "1M", days: 30 },
+  { label: "3M", days: 90 },
+  { label: "6M", days: 180 },
   { label: "1Y", days: 365 },
   { label: "3Y", days: 365 * 3 },
-  { label: "5Y", days: 365 * 5 },
+  { label: "MAX", days: 4000 },
 ];
 
 const INDICATORS: Overlay[] = [
@@ -493,7 +493,7 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
     };
   }, [symbol]);
 
-  const displayedHistory = useMemo(() => historyAll.slice(-tfDays), [historyAll, tfDays]);
+  const displayedHistory = useMemo(() => historyAll.slice(-Math.max(tfDays, 2)), [historyAll, tfDays]);
   const closesAll = useMemo(() => historyAll.map((p) => p.close), [historyAll]);
 
   const ma50Full = useMemo(() => movingAverage(closesAll, 50), [closesAll]);
