@@ -21,10 +21,19 @@ type Point = {
 
 type SymbolResult = { symbol: string; name: string; exchange: string };
 
+type MarketRow = {
+  symbol: string;
+  changePct: number | null;
+  rangePct: number | null;
+  last: number | null;
+  volume: number | null;
+};
+
 type MarketPayload = {
   updatedAt: string;
-  topRanges: { symbol: string; changePct: number | null; rangePct: number | null; last: number | null }[];
-  topMovers: { symbol: string; changePct: number | null; rangePct: number | null; last: number | null }[];
+  topTraded: MarketRow[];
+  topMovers: MarketRow[];
+  topRanges: MarketRow[]; // fallback if volume missing
 };
 
 type NewsPayload = {
@@ -32,10 +41,11 @@ type NewsPayload = {
   feeds: { label: string; items: { title: string; link: string; pubDate: string | null; source: string | null }[] }[];
 };
 
+/* ----------------------- indicator math helpers ----------------------- */
+
 function movingAverage(values: number[], window: number): (number | null)[] {
   const out: (number | null)[] = Array(values.length).fill(null);
   let sum = 0;
-
   for (let i = 0; i < values.length; i++) {
     sum += values[i];
     if (i >= window) sum -= values[i - window];
@@ -76,7 +86,6 @@ function ema(values: number[], period: number): (number | null)[] {
   if (values.length === 0) return out;
 
   const k = 2 / (period + 1);
-
   let emaPrev: number | null = null;
   let sum = 0;
 
@@ -161,6 +170,7 @@ function vwapFromPoints(points: Point[]): (number | null)[] {
   for (let i = 0; i < points.length; i++) {
     const p = points[i];
     const v = typeof p.volume === "number" && Number.isFinite(p.volume) ? p.volume : null;
+
     if (v == null || v <= 0) {
       out[i] = cumV > 0 ? cumPV / cumV : null;
       continue;
@@ -173,7 +183,6 @@ function vwapFromPoints(points: Point[]): (number | null)[] {
 
     cumPV += typical * v;
     cumV += v;
-
     out[i] = cumPV / cumV;
   }
 
@@ -213,7 +222,6 @@ function stochastic(points: Point[], kPeriod = 14, dPeriod = 3) {
   }
 
   const d = movingAverage(k.map((v) => (typeof v === "number" ? v : 0)), dPeriod).map((v, i) => (k[i] == null ? null : v));
-
   return { k, d };
 }
 
@@ -277,6 +285,8 @@ function valuationSignal(lastPrice: number | null, ma200Last: number | null) {
   if (diff < 0.05) return { label: "Fair-ish 🟡", detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% from MA200.` };
   return { label: "Overextended 🔴", detail: `Price is ${(diff * 100).toFixed(1)}% above MA200.` };
 }
+
+/* ----------------------------- constants ----------------------------- */
 
 const PRESET_TICKERS: { symbol: string; name: string }[] = [
   { symbol: "AAPL", name: "Apple Inc." },
@@ -349,6 +359,8 @@ const INDICATORS: Overlay[] = [
   "Volume",
 ];
 
+/* ----------------------------- component ----------------------------- */
+
 export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSymbol?: string }) {
   const [symbol, setSymbol] = useState(defaultSymbol);
   const [tfDays, setTfDays] = useState(365);
@@ -359,10 +371,12 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  // Autocomplete
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SymbolResult[]>([]);
   const [open, setOpen] = useState(false);
 
+  // Side cards
   const [market, setMarket] = useState<MarketPayload | null>(null);
   const [news, setNews] = useState<NewsPayload | null>(null);
 
@@ -423,6 +437,7 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
   useEffect(() => {
     let cancelled = false;
     const q = query.trim();
+
     if (!q) {
       setResults([]);
       return;
@@ -446,7 +461,7 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
     };
   }, [query]);
 
-  // Market overview (server-cached)
+  // Market overview
   useEffect(() => {
     let cancelled = false;
 
@@ -466,7 +481,7 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
     };
   }, []);
 
-  // News (per symbol)
+  // News
   useEffect(() => {
     let cancelled = false;
 
@@ -489,7 +504,6 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
   const displayedHistory = useMemo(() => historyAll.slice(-tfDays), [historyAll, tfDays]);
 
   const closesAll = useMemo(() => historyAll.map((p) => p.close), [historyAll]);
-
   const ma50Full = useMemo(() => movingAverage(closesAll, 50), [closesAll]);
   const ma200Full = useMemo(() => movingAverage(closesAll, 200), [closesAll]);
 
@@ -607,7 +621,7 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
                 color: "#111",
                 overflow: "hidden",
                 zIndex: 9999,
-                boxShadow: "0 8px 24px rgba(0, 0, 0, 0.10)",
+                boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
                 maxHeight: 340,
                 overflowY: "auto",
               }}
@@ -658,7 +672,7 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
       </div>
 
       <div style={{ marginTop: 16, maxWidth: 920, display: "grid", gap: 16 }}>
-        {/* Card 1: Symbol summary */}
+        {/* Card 1 */}
         <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
           <h2 style={{ marginTop: 0 }}>{symbol}</h2>
 
@@ -690,7 +704,7 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
           )}
         </div>
 
-        {/* Card 2: Chart */}
+        {/* Card 2 */}
         <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
           <PriceChart
             data={displayedHistory}
@@ -713,7 +727,7 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
           />
         </div>
 
-        {/* Card 3: Market overview */}
+        {/* Card 3 */}
         <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
           <h2 style={{ marginTop: 0 }}>Market Overview</h2>
 
@@ -725,13 +739,13 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
 
               <div style={{ display: "grid", gap: 16, gridTemplateColumns: "1fr 1fr" }}>
                 <div>
-                  <div style={{ fontWeight: 700, marginBottom: 8 }}>Top 10 daily ranges</div>
+                  <div style={{ fontWeight: 700, marginBottom: 8 }}>Top 10 traded (by volume)</div>
                   <div style={{ display: "grid", gap: 6 }}>
-                    {market.topRanges.map((r) => (
+                    {(market.topTraded?.length ? market.topTraded : market.topRanges).map((r) => (
                       <div key={r.symbol} style={{ display: "flex", justifyContent: "space-between" }}>
                         <span style={{ fontWeight: 700 }}>{r.symbol}</span>
                         <span style={{ opacity: 0.8 }}>
-                          {r.rangePct == null ? "—" : `${r.rangePct.toFixed(2)}% range`}
+                          {r.volume == null ? "—" : `${Math.round(r.volume).toLocaleString()} vol`}
                         </span>
                       </div>
                     ))}
@@ -745,9 +759,7 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
                       <div key={r.symbol} style={{ display: "flex", justifyContent: "space-between" }}>
                         <span style={{ fontWeight: 700 }}>{r.symbol}</span>
                         <span style={{ opacity: 0.8 }}>
-                          {r.changePct == null
-                            ? "—"
-                            : `${r.changePct >= 0 ? "Up" : "Down"} ${Math.abs(r.changePct).toFixed(2)}%`}
+                          {r.changePct == null ? "—" : `${r.changePct >= 0 ? "Up" : "Down"} ${Math.abs(r.changePct).toFixed(2)}%`}
                         </span>
                       </div>
                     ))}
@@ -760,7 +772,7 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
           )}
         </div>
 
-        {/* Card 4: News */}
+        {/* Card 4 */}
         <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
           <h2 style={{ marginTop: 0 }}>Latest News</h2>
 
