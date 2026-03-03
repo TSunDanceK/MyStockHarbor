@@ -91,7 +91,6 @@ const PRESET_TICKERS: { symbol: string; name: string }[] = [
 
 <label style={{ fontWeight: 600, marginLeft: 8 }}>Indicator</label>
 
-<label style={{ fontWeight: 600, marginLeft: 8 }}>Indicator</label>
 
 <select
   value={indicator}
@@ -116,6 +115,8 @@ const PRESET_TICKERS: { symbol: string; name: string }[] = [
     </option>
   ))}
 </select>
+
+<span style={{ opacity: 0.6 }}>or</span>
 
 const TIMEFRAMES: { label: string; days: number }[] = [
   { label: "3M", days: 90 },
@@ -236,92 +237,173 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
     setOpen(false);
   }
 
-  return (
-    <main style={{ padding: 40, fontFamily: "system-ui, Arial" }}>
-      <h1 style={{ fontSize: 32, marginBottom: 8 }}>My Stock Dashboard</h1>
-      <p style={{ marginTop: 0, opacity: 0.7 }}>Version 1 – Learning Build (free data)</p>
+return (
+  <main style={{ padding: 40, fontFamily: "system-ui, Arial" }}>
+    <h1 style={{ fontSize: 32, marginBottom: 8 }}>My Stock Dashboard</h1>
+    <p style={{ marginTop: 0, opacity: 0.7 }}>
+      Version 1 – Learning Build (free data)
+    </p>
 
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginTop: 16 }}>
-        <label style={{ fontWeight: 600 }}>Ticker</label>
+    <div
+      style={{
+        display: "flex",
+        gap: 12,
+        flexWrap: "wrap",
+        alignItems: "center",
+        marginTop: 16,
+      }}
+    >
+      {/* Ticker */}
+      <label style={{ fontWeight: 600 }}>Ticker</label>
 
-        <select
-          value={symbol}
-          onChange={(e) => chooseSymbol(e.target.value)}
-          style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #3333" }}
-        >
-          {PRESET_TICKERS.map((t) => (
-            <option key={t.symbol} value={t.symbol}>
-              {t.symbol} – {t.name}
-            </option>
-          ))}
-        </select>
+      <select
+        value={symbol}
+        onChange={(e) => chooseSymbol(e.target.value)}
+        style={{
+          padding: "8px 10px",
+          borderRadius: 10,
+          border: "1px solid #3333",
+        }}
+      >
+        {PRESET_TICKERS.map((t) => (
+          <option key={t.symbol} value={t.symbol}>
+            {t.symbol} – {t.name}
+          </option>
+        ))}
+      </select>
 
-        <span style={{ opacity: 0.6 }}>or</span>
+      {/* Indicator */}
+      <label style={{ fontWeight: 600, marginLeft: 8 }}>
+        Indicator
+      </label>
 
-        {/* Autocomplete */}
-        <div style={{ position: "relative" }}>
-          <input
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setOpen(true);
+      <select
+        value={indicator}
+        onChange={(e) => setIndicator(e.target.value as any)}
+        style={{
+          padding: "8px 10px",
+          borderRadius: 10,
+          border: "1px solid #3333",
+        }}
+      >
+        {[
+          "None",
+          "MA50",
+          "MA200",
+          "Bollinger(20,2)",
+          "RSI(14)",
+          "MACD(12,26,9)",
+          "EMA20",
+          "VWAP",
+          "Stochastic(14,3)",
+          "ATR(14)",
+          "Volume",
+        ].map((x) => (
+          <option key={x} value={x}>
+            {x}
+          </option>
+        ))}
+      </select>
+
+      <span style={{ opacity: 0.6 }}>or</span>
+
+      {/* Autocomplete Search */}
+      <div style={{ position: "relative" }}>
+        <input
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") chooseSymbol(query);
+          }}
+          placeholder="Search ticker or company"
+          style={{
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: "1px solid #3333",
+            width: 360,
+          }}
+        />
+
+        {open && results.length > 0 ? (
+          <div
+            style={{
+              position: "absolute",
+              top: "calc(100% + 6px)",
+              left: 0,
+              right: 0,
+              border: "1px solid #3333",
+              borderRadius: 12,
+              background: "#fff",
+              color: "#111",
+              overflow: "hidden",
+              zIndex: 9999,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
+              maxHeight: 340,
+              overflowY: "auto",
             }}
-            onFocus={() => setOpen(true)}
-            onBlur={() => setTimeout(() => setOpen(false), 150)} // allow click
-            onKeyDown={(e) => {
-              if (e.key === "Enter") chooseSymbol(query);
-            }}
-            placeholder="Search ticker or company (e.g. NVDA or Nvidia)"
+          >
+            {results.map((r) => (
+              <button
+                key={`${r.symbol}-${r.exchange}`}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => chooseSymbol(r.symbol)}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  textAlign: "left",
+                  padding: "10px 12px",
+                  border: "none",
+                  background: "transparent",
+                  cursor: "pointer",
+                }}
+              >
+                <div style={{ fontWeight: 700 }}>
+                  {r.symbol}{" "}
+                  <span style={{ fontWeight: 500, opacity: 0.7 }}>
+                    ({r.exchange})
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, opacity: 0.75 }}>
+                  {r.name}
+                </div>
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      {/* Timeframes */}
+      <div
+        style={{
+          marginLeft: "auto",
+          display: "flex",
+          gap: 8,
+          flexWrap: "wrap",
+        }}
+      >
+        {TIMEFRAMES.map((t) => (
+          <button
+            key={t.label}
+            onClick={() => setTfDays(t.days)}
             style={{
               padding: "8px 10px",
               borderRadius: 10,
               border: "1px solid #3333",
-              width: 360,
+              cursor: "pointer",
+              opacity: tfDays === t.days ? 1 : 0.7,
+              fontWeight: tfDays === t.days ? 700 : 500,
             }}
-          />
-
-          {open && results.length > 0 ? (
-            <div
-              style={{
-                position: "absolute",
-                top: "calc(100% + 6px)",
-                left: 0,
-                right: 0,
-                border: "1px solid #3333",
-                borderRadius: 12,
-                background: "#fff",
-                color: "#111",
-                overflow: "hidden",
-                zIndex: 9999,
-                boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
-                maxHeight: 340,
-                overflowY: "auto",
-              }}
-            >
-              {results.map((r) => (
-                <button
-                  key={`${r.symbol}-${r.exchange}`}
-                  onMouseDown={(e) => e.preventDefault()} // prevents blur cancelling the click
-                  onClick={() => chooseSymbol(r.symbol)}
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    textAlign: "left",
-                    padding: "10px 12px",
-                    border: "none",
-                    background: "transparent",
-                    cursor: "pointer",
-                  }}
-                >
-                  <div style={{ fontWeight: 700 }}>
-                    {r.symbol} <span style={{ fontWeight: 500, opacity: 0.7 }}>({r.exchange})</span>
-                  </div>
-                  <div style={{ fontSize: 12, opacity: 0.75 }}>{r.name}</div>
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+    </div>
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
           {TIMEFRAMES.map((t) => (
