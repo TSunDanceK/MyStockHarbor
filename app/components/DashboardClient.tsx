@@ -541,7 +541,40 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
   const lastMA50 = ma50.length ? ma50[ma50.length - 1] : null;
   const lastMA200 = ma200.length ? ma200[ma200.length - 1] : null;
 
-  const signal = useMemo(() => valuationSignal(lastClose, lastMA200), [lastClose, lastMA200]);
+const signal = useMemo(() => {
+  if (lastClose == null) return { label: "Signal unavailable", detail: "No price data." };
+
+  // helper: compare price to an indicator value
+  const compareTo = (name: string, v: number | null) => {
+    if (v == null) return { label: "Signal unavailable", detail: `Need enough data for ${name}.` };
+    const diff = (lastClose - v) / v;
+    if (diff <= -0.05) return { label: "Undervalued-ish 🟢", detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% below ${name}.` };
+    if (diff < 0.05) return { label: "Fair-ish 🟡", detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% from ${name}.` };
+    return { label: "Overextended 🔴", detail: `Price is ${(diff * 100).toFixed(1)}% above ${name}.` };
+  };
+
+  // pick which indicator to use
+  if (indicator === "MA50") return compareTo("MA50", lastMA50);
+  if (indicator === "MA200") return compareTo("MA200", lastMA200);
+
+  if (indicator === "EMA20") {
+    const lastEma20 = ema20.length ? ema20[ema20.length - 1] : null;
+    return compareTo("EMA20", typeof lastEma20 === "number" ? lastEma20 : null);
+  }
+
+  if (indicator === "VWAP") {
+    const lastVwap = vwap.length ? vwap[vwap.length - 1] : null;
+    return compareTo("VWAP", typeof lastVwap === "number" ? lastVwap : null);
+  }
+
+  if (indicator === "Bollinger(20,2)") {
+    const lastMid = bollMid.length ? bollMid[bollMid.length - 1] : null;
+    return compareTo("BB mid", typeof lastMid === "number" ? lastMid : null);
+  }
+
+  // If None: keep it simple for now = MA200 (we can upgrade to multi-indicator scoring next)
+  return compareTo("MA200", lastMA200);
+}, [indicator, lastClose, lastMA50, lastMA200, ema20, vwap, bollMid]);
 
   function chooseSymbol(s: string) {
     const cleaned = s.trim().toUpperCase();
@@ -692,17 +725,22 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
               <p style={{ margin: "6px 0 0", opacity: 0.7 }}>{signal.detail}</p>
 
               <div style={{ marginTop: 12, fontSize: 13, opacity: 0.75 }}>
-                <div>MA50: {typeof lastMA50 === "number" ? `$${lastMA50.toFixed(2)}` : "—"}</div>
-                <div>MA200: {typeof lastMA200 === "number" ? `$${lastMA200.toFixed(2)}` : "—"}</div>
-              </div>
-
-              <p style={{ marginTop: 12, opacity: 0.7 }}>
-                {quote?.date && quote?.time ? `As of ${quote.date} ${quote.time}` : "Timestamp unavailable"} • Source:{" "}
-                {quote?.source ?? "stooq.com"}
-              </p>
-            </>
-          )}
-        </div>
+  {indicator === "MA50" ? (
+    <div>MA50: {typeof lastMA50 === "number" ? `$${lastMA50.toFixed(2)}` : "—"}</div>
+  ) : indicator === "MA200" || indicator === "None" ? (
+    <div>MA200: {typeof lastMA200 === "number" ? `$${lastMA200.toFixed(2)}` : "—"}</div>
+  ) : indicator === "EMA20" ? (
+    <div>EMA20: {typeof ema20[ema20.length - 1] === "number" ? `$${(ema20[ema20.length - 1] as number).toFixed(2)}` : "—"}</div>
+  ) : indicator === "VWAP" ? (
+    <div>VWAP: {typeof vwap[vwap.length - 1] === "number" ? `$${(vwap[vwap.length - 1] as number).toFixed(2)}` : "—"}</div>
+  ) : indicator === "Bollinger(20,2)" ? (
+    <div>
+      BB Mid: {typeof bollMid[bollMid.length - 1] === "number" ? `$${(bollMid[bollMid.length - 1] as number).toFixed(2)}` : "—"}
+    </div>
+  ) : (
+    <div>Indicator value: —</div>
+  )}
+</div>
 
         {/* Card 2 */}
         <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
