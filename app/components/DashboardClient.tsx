@@ -16,6 +16,7 @@ type Point = { date: string; close: number };
 function movingAverage(values: number[], window: number): (number | null)[] {
   const out: (number | null)[] = Array(values.length).fill(null);
   let sum = 0;
+
   for (let i = 0; i < values.length; i++) {
     sum += values[i];
     if (i >= window) sum -= values[i - window];
@@ -28,10 +29,25 @@ function valuationSignal(lastPrice: number | null, ma200Last: number | null) {
   if (lastPrice === null || ma200Last === null) {
     return { label: "Signal unavailable", detail: "Need enough data for MA200." };
   }
+
   const diff = (lastPrice - ma200Last) / ma200Last;
-  if (diff <= -0.05) return { label: "Undervalued-ish 🟢", detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% below MA200.` };
-  if (diff < 0.05) return { label: "Fair-ish 🟡", detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% from MA200.` };
-  return { label: "Overextended 🔴", detail: `Price is ${(diff * 100).toFixed(1)}% above MA200.` };
+
+  if (diff <= -0.05) {
+    return {
+      label: "Undervalued-ish 🟢",
+      detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% below MA200.`,
+    };
+  }
+  if (diff < 0.05) {
+    return {
+      label: "Fair-ish 🟡",
+      detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% from MA200.`,
+    };
+  }
+  return {
+    label: "Overextended 🔴",
+    detail: `Price is ${(diff * 100).toFixed(1)}% above MA200.`,
+  };
 }
 
 const PRESET_TICKERS = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "TSLA"] as const;
@@ -48,12 +64,14 @@ const TIMEFRAMES: { label: string; days: number }[] = [
 export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSymbol?: string }) {
   const [symbol, setSymbol] = useState(defaultSymbol);
   const [tfDays, setTfDays] = useState(365);
+
   const [quote, setQuote] = useState<Quote | null>(null);
-  const [history, setHistory] = useState<Point[]>([]);
+  const [historyAll, setHistoryAll] = useState<Point[]>([]);
+
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // simple input for custom ticker too
+  // custom ticker input
   const [custom, setCustom] = useState(defaultSymbol);
 
   useEffect(() => {
@@ -64,23 +82,32 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
       setErr(null);
 
       try {
+        // IMPORTANT:
+        // Always fetch a long history so MA50/MA200 are computed correctly,
+        // then we slice the display by timeframe.
+        const historyDays = Math.max(tfDays, 2600); // ~10y of trading days-ish; enough context for MA200
+
         const [qRes, hRes] = await Promise.all([
           fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" }),
-          fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=${tfDays}`, { cache: "no-store" }),
+          fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=${historyDays}`, { cache: "no-store" }),
         ]);
+
+        if (!qRes.ok) throw new Error("Quote fetch failed");
+        if (!hRes.ok) throw new Error("History fetch failed");
 
         const q = (await qRes.json()) as Quote;
         const h = (await hRes.json()) as { symbol: string; points: Point[] };
 
         if (cancelled) return;
 
+        const pts = Array.isArray(h.points) ? h.points : [];
         setQuote(q);
-        setHistory(Array.isArray(h.points) ? h.points : []);
-      } catch (e: any) {
+        setHistoryAll(pts);
+      } catch {
         if (cancelled) return;
         setErr("Failed to load data (try another ticker).");
         setQuote(null);
-        setHistory([]);
+        setHistoryAll([]);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -92,11 +119,23 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
     };
   }, [symbol, tfDays]);
 
-  const closes = useMemo(() => history.map((p) => p.close), [history]);
-  const ma50 = useMemo(() => movingAverage(closes, 50), [closes]);
-  const ma200 = useMemo(() => movingAverage(closes, 200), [closes]);
+  // Slice the *displayed* series for the timeframe
+  const displayedHistory = useMemo(() => {
+    if (!historyAll.length) return [];
+    return historyAll.slice(-tfDays);
+  }, [historyAll, tfDays]);
 
-  const lastClose = history.length ? history[history.length - 1].close : null;
+  // Compute MAs on full history for correctness
+  const closesAll = useMemo(() => historyAll.map((p) => p.close), [historyAll]);
+  const ma50Full = useMemo(() => movingAverage(closesAll, 50), [closesAll]);
+  const ma200Full = useMemo(() => movingAverage(closesAll, 200), [closesAll]);
+
+  // Slice MA arrays to match displayed series length
+  const ma50 = useMemo(() => ma50Full.slice(-tfDays), [ma50Full, tfDays]);
+  const ma200 = useMemo(() => ma200Full.slice(-tfDays), [ma200Full, tfDays]);
+
+  // Use displayed last close so the “signal” matches what you're viewing
+  const lastClose = displayedHistory.length ? displayedHistory[displayedHistory.length - 1].close : null;
   const lastMA50 = ma50.length ? ma50[ma50.length - 1] : null;
   const lastMA200 = ma200.length ? ma200[ma200.length - 1] : null;
 
@@ -136,7 +175,7 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
           value={custom}
           onChange={(e) => setCustom(e.target.value)}
           placeholder="Type ticker (e.g. META)"
-          style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #3333", width: 200 }}
+          style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #3333", width: 220 }}
         />
         <button
           onClick={applyCustomTicker}
@@ -165,7 +204,7 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
         </div>
       </div>
 
-      <div style={{ marginTop: 16, maxWidth: 900, display: "grid", gap: 16 }}>
+      <div style={{ marginTop: 16, maxWidth: 920, display: "grid", gap: 16 }}>
         <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
           <h2 style={{ marginTop: 0 }}>{symbol}</h2>
 
@@ -199,7 +238,7 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
         </div>
 
         <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
-          <PriceChart data={history} ma50={ma50} ma200={ma200} />
+          <PriceChart data={displayedHistory} ma50={ma50} ma200={ma200} />
         </div>
       </div>
     </main>
