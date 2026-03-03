@@ -79,12 +79,12 @@ export default function PriceChart({
       if (typeof p.bl === "number") vals.push(p.bl);
     }
   }
-  // If no overlay values were added, just use price
+
   const min = Math.min(...vals);
   const max = Math.max(...vals);
   const range = Math.max(1e-9, max - min);
 
-  const x = (i: number) => pad + (i * (width - pad * 2)) / (series.length - 1);
+  const x = (i: number) => 34 + (i * (width - pad * 2)) / (series.length - 1);
   const y = (v: number) => pad + ((max - v) * (height - pad * 2)) / range;
 
   const pathFrom = (arr: Array<number | null>) => {
@@ -144,7 +144,9 @@ export default function PriceChart({
         {overlay === "Bollinger(20,2)" ? (
           <>
             {bollUPath ? <path d={bollUPath} fill="none" stroke="currentColor" strokeWidth="1.75" opacity="0.35" /> : null}
-            {bollMPath ? <path d={bollMPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.45" strokeDasharray="6 4" /> : null}
+            {bollMPath ? (
+              <path d={bollMPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.45" strokeDasharray="6 4" />
+            ) : null}
             {bollLPath ? <path d={bollLPath} fill="none" stroke="currentColor" strokeWidth="1.75" opacity="0.35" /> : null}
           </>
         ) : null}
@@ -153,7 +155,9 @@ export default function PriceChart({
       </svg>
 
       <div style={{ marginTop: 8, fontSize: 12, opacity: 0.7, display: "flex", gap: 14, flexWrap: "wrap" }}>
-        <span>From {series[0].date} → {series[series.length - 1].date}</span>
+        <span>
+          From {series[0].date} → {series[series.length - 1].date}
+        </span>
       </div>
     </div>
   );
