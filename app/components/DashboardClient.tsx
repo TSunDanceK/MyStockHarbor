@@ -27,6 +27,124 @@ function movingAverage(values: number[], window: number): (number | null)[] {
   return out;
 }
 
+function rollingStd(values: number[], window: number): (number | null)[] {
+  const out: (number | null)[] = Array(values.length).fill(null);
+  for (let i = window - 1; i < values.length; i++) {
+    let mean = 0;
+    for (let j = i - window + 1; j <= i; j++) mean += values[j];
+    mean /= window;
+
+    let variance = 0;
+    for (let j = i - window + 1; j <= i; j++) {
+      const d = values[j] - mean;
+      variance += d * d;
+    }
+    variance /= window;
+
+    out[i] = Math.sqrt(variance);
+  }
+  return out;
+}
+
+function bollinger(values: number[], window = 20, k = 2) {
+  const mid = movingAverage(values, window);
+  const sd = rollingStd(values, window);
+
+  const upper = mid.map((m, i) => (m == null || sd[i] == null ? null : m + k * sd[i]!));
+  const lower = mid.map((m, i) => (m == null || sd[i] == null ? null : m - k * sd[i]!));
+
+  return { upper, mid, lower };
+}
+
+function ema(values: number[], period: number): (number | null)[] {
+  const out: (number | null)[] = Array(values.length).fill(null);
+  if (values.length === 0) return out;
+
+  const k = 2 / (period + 1);
+
+  let emaPrev: number | null = null;
+  let sum = 0;
+
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i];
+
+    // warmup with SMA(period) to seed EMA
+    if (i < period) {
+      sum += v;
+      if (i === period - 1) {
+        emaPrev = sum / period;
+        out[i] = emaPrev;
+      }
+      continue;
+    }
+
+    if (emaPrev == null) {
+      emaPrev = v;
+    } else {
+      emaPrev = v * k + emaPrev * (1 - k);
+    }
+    out[i] = emaPrev;
+  }
+
+  return out;
+}
+
+// RSI Wilder's smoothing
+function rsiWilder(values: number[], period = 14): (number | null)[] {
+  const out: (number | null)[] = Array(values.length).fill(null);
+  if (values.length < period + 1) return out;
+
+  let gain = 0;
+  let loss = 0;
+
+  for (let i = 1; i <= period; i++) {
+    const diff = values[i] - values[i - 1];
+    if (diff >= 0) gain += diff;
+    else loss += -diff;
+  }
+
+  let avgGain = gain / period;
+  let avgLoss = loss / period;
+
+  const rs0 = avgLoss === 0 ? Infinity : avgGain / avgLoss;
+  out[period] = 100 - 100 / (1 + rs0);
+
+  for (let i = period + 1; i < values.length; i++) {
+    const diff = values[i] - values[i - 1];
+    const g = diff > 0 ? diff : 0;
+    const l = diff < 0 ? -diff : 0;
+
+    avgGain = (avgGain * (period - 1) + g) / period;
+    avgLoss = (avgLoss * (period - 1) + l) / period;
+
+    const rs = avgLoss === 0 ? Infinity : avgGain / avgLoss;
+    out[i] = 100 - 100 / (1 + rs);
+  }
+
+  return out;
+}
+
+function macd(values: number[], fast = 12, slow = 26, signal = 9) {
+  const emaFast = ema(values, fast);
+  const emaSlow = ema(values, slow);
+
+  const line: (number | null)[] = values.map((_, i) => {
+    const f = emaFast[i];
+    const s = emaSlow[i];
+    if (typeof f !== "number" || typeof s !== "number") return null;
+    return f - s;
+  });
+
+  // Signal EMA is computed on the MACD line; use 0 for nulls but keep nulls in output alignment
+  const lineForEma = line.map((v) => (typeof v === "number" ? v : 0));
+  const sigAll = ema(lineForEma, signal);
+
+  const sig: (number | null)[] = sigAll.map((v, i) => (line[i] == null ? null : v));
+  const hist: (number | null)[] = line.map((v, i) => (v == null || sig[i] == null ? null : v - sig[i]!));
+
+  return { line, signal: sig, hist };
+}
+
 function valuationSignal(lastPrice: number | null, ma200Last: number | null) {
   if (lastPrice === null || ma200Last === null) {
     return { label: "Signal unavailable", detail: "Need enough data for MA200." };
@@ -131,12 +249,10 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // Autocomplete state
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SymbolResult[]>([]);
   const [open, setOpen] = useState(false);
 
-  // Load quote + long history whenever symbol/timeframe changes
   useEffect(() => {
     let cancelled = false;
 
@@ -179,7 +295,6 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
     };
   }, [symbol, tfDays]);
 
-  // Autocomplete fetch (debounced)
   useEffect(() => {
     let cancelled = false;
     const q = query.trim();
@@ -208,12 +323,32 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
 
   const displayedHistory = useMemo(() => historyAll.slice(-tfDays), [historyAll, tfDays]);
 
-  // Compute MAs on full history for correctness; slice to timeframe for display
+  // ---------- Full-history indicator computation ----------
   const closesAll = useMemo(() => historyAll.map((p) => p.close), [historyAll]);
+
   const ma50Full = useMemo(() => movingAverage(closesAll, 50), [closesAll]);
   const ma200Full = useMemo(() => movingAverage(closesAll, 200), [closesAll]);
+
+  const ema20Full = useMemo(() => ema(closesAll, 20), [closesAll]);
+  const bbFull = useMemo(() => bollinger(closesAll, 20, 2), [closesAll]);
+  const rsi14Full = useMemo(() => rsiWilder(closesAll, 14), [closesAll]);
+  const macdFull = useMemo(() => macd(closesAll, 12, 26, 9), [closesAll]);
+
+  // slice all arrays to match displayedHistory length
   const ma50 = useMemo(() => ma50Full.slice(-tfDays), [ma50Full, tfDays]);
   const ma200 = useMemo(() => ma200Full.slice(-tfDays), [ma200Full, tfDays]);
+
+  const ema20 = useMemo(() => ema20Full.slice(-tfDays), [ema20Full, tfDays]);
+
+  const bollUpper = useMemo(() => bbFull.upper.slice(-tfDays), [bbFull, tfDays]);
+  const bollMid = useMemo(() => bbFull.mid.slice(-tfDays), [bbFull, tfDays]);
+  const bollLower = useMemo(() => bbFull.lower.slice(-tfDays), [bbFull, tfDays]);
+
+  const rsi14 = useMemo(() => rsi14Full.slice(-tfDays), [rsi14Full, tfDays]);
+
+  const macdLine = useMemo(() => macdFull.line.slice(-tfDays), [macdFull, tfDays]);
+  const macdSignal = useMemo(() => macdFull.signal.slice(-tfDays), [macdFull, tfDays]);
+  const macdHist = useMemo(() => macdFull.hist.slice(-tfDays), [macdFull, tfDays]);
 
   const lastClose = displayedHistory.length ? displayedHistory[displayedHistory.length - 1].close : null;
   const lastMA50 = ma50.length ? ma50[ma50.length - 1] : null;
@@ -265,7 +400,6 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
 
         <span style={{ opacity: 0.6 }}>or</span>
 
-        {/* Autocomplete Search */}
         <div style={{ position: "relative" }}>
           <input
             value={query}
@@ -330,7 +464,6 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
           ) : null}
         </div>
 
-        {/* Timeframes */}
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
           {TIMEFRAMES.map((t) => (
             <button
@@ -384,7 +517,20 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
         </div>
 
         <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
-          <PriceChart data={displayedHistory} ma50={ma50} ma200={ma200} overlay={indicator} />
+          <PriceChart
+            data={displayedHistory}
+            ma50={ma50}
+            ma200={ma200}
+            overlay={indicator}
+            bollUpper={bollUpper}
+            bollMid={bollMid}
+            bollLower={bollLower}
+            ema20={ema20}
+            rsi14={rsi14}
+            macdLine={macdLine}
+            macdSignal={macdSignal}
+            macdHist={macdHist}
+          />
         </div>
       </div>
     </main>
