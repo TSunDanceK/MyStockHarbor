@@ -13,6 +13,8 @@ type Quote = {
 
 type Point = { date: string; close: number };
 
+type SymbolResult = { symbol: string; name: string; exchange: string };
+
 function movingAverage(values: number[], window: number): (number | null)[] {
   const out: (number | null)[] = Array(values.length).fill(null);
   let sum = 0;
@@ -33,21 +35,12 @@ function valuationSignal(lastPrice: number | null, ma200Last: number | null) {
   const diff = (lastPrice - ma200Last) / ma200Last;
 
   if (diff <= -0.05) {
-    return {
-      label: "Undervalued-ish 🟢",
-      detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% below MA200.`,
-    };
+    return { label: "Undervalued-ish 🟢", detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% below MA200.` };
   }
   if (diff < 0.05) {
-    return {
-      label: "Fair-ish 🟡",
-      detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% from MA200.`,
-    };
+    return { label: "Fair-ish 🟡", detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% from MA200.` };
   }
-  return {
-    label: "Overextended 🔴",
-    detail: `Price is ${(diff * 100).toFixed(1)}% above MA200.`,
-  };
+  return { label: "Overextended 🔴", detail: `Price is ${(diff * 100).toFixed(1)}% above MA200.` };
 }
 
 const PRESET_TICKERS: { symbol: string; name: string }[] = [
@@ -93,7 +86,7 @@ const PRESET_TICKERS: { symbol: string; name: string }[] = [
   { symbol: "VZ", name: "Verizon Communications" },
   { symbol: "WFC", name: "Wells Fargo" },
   { symbol: "WMT", name: "Walmart Inc." },
-  { symbol: "XOM", name: "Exxon Mobil Corp." }
+  { symbol: "XOM", name: "Exxon Mobil Corp." },
 ].sort((a, b) => a.symbol.localeCompare(b.symbol));
 
 const TIMEFRAMES: { label: string; days: number }[] = [
@@ -111,13 +104,15 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
 
   const [quote, setQuote] = useState<Quote | null>(null);
   const [historyAll, setHistoryAll] = useState<Point[]>([]);
-
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // custom ticker input
-  const [custom, setCustom] = useState(defaultSymbol);
+  // Autocomplete state
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SymbolResult[]>([]);
+  const [open, setOpen] = useState(false);
 
+  // Load quote + long history whenever symbol/timeframe changes
   useEffect(() => {
     let cancelled = false;
 
@@ -126,10 +121,8 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
       setErr(null);
 
       try {
-        // IMPORTANT:
-        // Always fetch a long history so MA50/MA200 are computed correctly,
-        // then we slice the display by timeframe.
-        const historyDays = Math.max(tfDays, 2600); // ~10y of trading days-ish; enough context for MA200
+        // Always fetch long history so MA50/MA200 stay correct even when displaying 3M/6M
+        const historyDays = Math.max(tfDays, 2600);
 
         const [qRes, hRes] = await Promise.all([
           fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" }),
@@ -163,31 +156,55 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
     };
   }, [symbol, tfDays]);
 
-  // Slice the *displayed* series for the timeframe
-  const displayedHistory = useMemo(() => {
-    if (!historyAll.length) return [];
-    return historyAll.slice(-tfDays);
-  }, [historyAll, tfDays]);
+  // Autocomplete fetch (debounced)
+  useEffect(() => {
+    let cancelled = false;
+    const q = query.trim();
+    if (!q) {
+      setResults([]);
+      return;
+    }
 
-  // Compute MAs on full history for correctness
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/symbols?q=${encodeURIComponent(q)}`, { cache: "no-store" });
+        const data = (await res.json()) as { results: SymbolResult[] };
+        if (cancelled) return;
+        setResults(Array.isArray(data.results) ? data.results : []);
+      } catch {
+        if (cancelled) return;
+        setResults([]);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [query]);
+
+  const displayedHistory = useMemo(() => historyAll.slice(-tfDays), [historyAll, tfDays]);
+
   const closesAll = useMemo(() => historyAll.map((p) => p.close), [historyAll]);
   const ma50Full = useMemo(() => movingAverage(closesAll, 50), [closesAll]);
   const ma200Full = useMemo(() => movingAverage(closesAll, 200), [closesAll]);
 
-  // Slice MA arrays to match displayed series length
   const ma50 = useMemo(() => ma50Full.slice(-tfDays), [ma50Full, tfDays]);
   const ma200 = useMemo(() => ma200Full.slice(-tfDays), [ma200Full, tfDays]);
 
-  // Use displayed last close so the “signal” matches what you're viewing
   const lastClose = displayedHistory.length ? displayedHistory[displayedHistory.length - 1].close : null;
   const lastMA50 = ma50.length ? ma50[ma50.length - 1] : null;
   const lastMA200 = ma200.length ? ma200[ma200.length - 1] : null;
 
   const signal = useMemo(() => valuationSignal(lastClose, lastMA200), [lastClose, lastMA200]);
 
-  function applyCustomTicker() {
-    const cleaned = custom.trim().toUpperCase();
-    if (cleaned) setSymbol(cleaned);
+  function chooseSymbol(s: string) {
+    const cleaned = s.trim().toUpperCase();
+    if (!cleaned) return;
+    setSymbol(cleaned);
+    setQuery("");
+    setResults([]);
+    setOpen(false);
   }
 
   return (
@@ -198,35 +215,84 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginTop: 16 }}>
         <label style={{ fontWeight: 600 }}>Ticker</label>
 
-       <select
-  value={symbol}
-  onChange={(e) => {
-    setSymbol(e.target.value);
-    setCustom(e.target.value);
-  }}
-  style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #3333" }}
->
-  {PRESET_TICKERS.map((t) => (
-    <option key={t.symbol} value={t.symbol}>
-      {t.symbol} – {t.name}
-    </option>
-  ))}
-</select>
-
-<span style={{ opacity: 0.6 }}>or</span>
-
-        <input
-          value={custom}
-          onChange={(e) => setCustom(e.target.value)}
-          placeholder="Type ticker (e.g. META)"
-          style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #3333", width: 220 }}
-        />
-        <button
-          onClick={applyCustomTicker}
-          style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #3333", cursor: "pointer" }}
+        <select
+          value={symbol}
+          onChange={(e) => chooseSymbol(e.target.value)}
+          style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #3333" }}
         >
-          Load
-        </button>
+          {PRESET_TICKERS.map((t) => (
+            <option key={t.symbol} value={t.symbol}>
+              {t.symbol} – {t.name}
+            </option>
+          ))}
+        </select>
+
+        <span style={{ opacity: 0.6 }}>or</span>
+
+        {/* Autocomplete */}
+        <div style={{ position: "relative" }}>
+          <input
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setOpen(true);
+            }}
+            onFocus={() => setOpen(true)}
+            onBlur={() => setTimeout(() => setOpen(false), 150)} // allow click
+            onKeyDown={(e) => {
+              if (e.key === "Enter") chooseSymbol(query);
+            }}
+            placeholder="Search ticker or company (e.g. NVDA or Nvidia)"
+            style={{
+              padding: "8px 10px",
+              borderRadius: 10,
+              border: "1px solid #3333",
+              width: 360,
+            }}
+          />
+
+          {open && results.length > 0 ? (
+            <div
+              style={{
+                position: "absolute",
+                top: "calc(100% + 6px)",
+                left: 0,
+                right: 0,
+                border: "1px solid #3333",
+                borderRadius: 12,
+                background: "#fff",
+                color: "#111",
+                overflow: "hidden",
+                zIndex: 9999,
+                boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
+                maxHeight: 340,
+                overflowY: "auto",
+              }}
+            >
+              {results.map((r) => (
+                <button
+                  key={`${r.symbol}-${r.exchange}`}
+                  onMouseDown={(e) => e.preventDefault()} // prevents blur cancelling the click
+                  onClick={() => chooseSymbol(r.symbol)}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    textAlign: "left",
+                    padding: "10px 12px",
+                    border: "none",
+                    background: "transparent",
+                    cursor: "pointer",
+                  }}
+                >
+                  <div style={{ fontWeight: 700 }}>
+                    {r.symbol} <span style={{ fontWeight: 500, opacity: 0.7 }}>({r.exchange})</span>
+                  </div>
+                  <div style={{ fontSize: 12, opacity: 0.75 }}>{r.name}</div>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
           {TIMEFRAMES.map((t) => (
