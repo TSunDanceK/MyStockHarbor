@@ -33,7 +33,7 @@ type MarketPayload = {
   updatedAt: string;
   topTraded: MarketRow[];
   topMovers: MarketRow[];
-  topRanges: MarketRow[]; // fallback if volume missing
+  topRanges: MarketRow[];
 };
 
 type NewsPayload = {
@@ -178,7 +178,6 @@ function vwapFromPoints(points: Point[]): (number | null)[] {
 
     const h = typeof p.high === "number" && Number.isFinite(p.high) ? p.high : null;
     const l = typeof p.low === "number" && Number.isFinite(p.low) ? p.low : null;
-
     const typical = h != null && l != null ? (h + l + p.close) / 3 : p.close;
 
     cumPV += typical * v;
@@ -274,16 +273,16 @@ function atr(points: Point[], period = 14): (number | null)[] {
   return out;
 }
 
-function valuationSignal(lastPrice: number | null, ma200Last: number | null) {
-  if (lastPrice === null || ma200Last === null) {
-    return { label: "Signal unavailable", detail: "Need enough data for MA200." };
-  }
+/* ----------------------------- UI helpers ---------------------------- */
 
-  const diff = (lastPrice - ma200Last) / ma200Last;
+function compareTo(lastClose: number | null, name: string, v: number | null) {
+  if (lastClose == null) return { label: "Signal unavailable", detail: "No price data." };
+  if (v == null) return { label: "Signal unavailable", detail: `Need enough data for ${name}.` };
 
-  if (diff <= -0.05) return { label: "Undervalued-ish 🟢", detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% below MA200.` };
-  if (diff < 0.05) return { label: "Fair-ish 🟡", detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% from MA200.` };
-  return { label: "Overextended 🔴", detail: `Price is ${(diff * 100).toFixed(1)}% above MA200.` };
+  const diff = (lastClose - v) / v;
+  if (diff <= -0.05) return { label: "Undervalued-ish 🟢", detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% below ${name}.` };
+  if (diff < 0.05) return { label: "Fair-ish 🟡", detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% from ${name}.` };
+  return { label: "Overextended 🔴", detail: `Price is ${(diff * 100).toFixed(1)}% above ${name}.` };
 }
 
 /* ----------------------------- constants ----------------------------- */
@@ -371,16 +370,13 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // Autocomplete
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SymbolResult[]>([]);
   const [open, setOpen] = useState(false);
 
-  // Side cards
   const [market, setMarket] = useState<MarketPayload | null>(null);
   const [news, setNews] = useState<NewsPayload | null>(null);
 
-  // Load quote + long history whenever symbol/timeframe changes
   useEffect(() => {
     let cancelled = false;
 
@@ -390,7 +386,6 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
 
       try {
         const historyDays = Math.max(tfDays, 2600);
-
         const [qRes, hRes] = await Promise.all([
           fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" }),
           fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=${historyDays}`, { cache: "no-store" }),
@@ -433,7 +428,6 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
     };
   }, [symbol, tfDays]);
 
-  // Autocomplete fetch (debounced)
   useEffect(() => {
     let cancelled = false;
     const q = query.trim();
@@ -461,7 +455,6 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
     };
   }, [query]);
 
-  // Market overview
   useEffect(() => {
     let cancelled = false;
 
@@ -481,7 +474,6 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
     };
   }, []);
 
-  // News
   useEffect(() => {
     let cancelled = false;
 
@@ -502,8 +494,8 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
   }, [symbol]);
 
   const displayedHistory = useMemo(() => historyAll.slice(-tfDays), [historyAll, tfDays]);
-
   const closesAll = useMemo(() => historyAll.map((p) => p.close), [historyAll]);
+
   const ma50Full = useMemo(() => movingAverage(closesAll, 50), [closesAll]);
   const ma200Full = useMemo(() => movingAverage(closesAll, 200), [closesAll]);
 
@@ -519,62 +511,49 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
   const ma50 = useMemo(() => ma50Full.slice(-tfDays), [ma50Full, tfDays]);
   const ma200 = useMemo(() => ma200Full.slice(-tfDays), [ma200Full, tfDays]);
 
-  const ema20 = useMemo(() => ema20Full.slice(-tfDays), [ema20Full, tfDays]);
+  const ema20Arr = useMemo(() => ema20Full.slice(-tfDays), [ema20Full, tfDays]);
 
   const bollUpper = useMemo(() => bbFull.upper.slice(-tfDays), [bbFull, tfDays]);
   const bollMid = useMemo(() => bbFull.mid.slice(-tfDays), [bbFull, tfDays]);
   const bollLower = useMemo(() => bbFull.lower.slice(-tfDays), [bbFull, tfDays]);
 
-  const rsi14 = useMemo(() => rsi14Full.slice(-tfDays), [rsi14Full, tfDays]);
-
   const macdLine = useMemo(() => macdFull.line.slice(-tfDays), [macdFull, tfDays]);
   const macdSignal = useMemo(() => macdFull.signal.slice(-tfDays), [macdFull, tfDays]);
   const macdHist = useMemo(() => macdFull.hist.slice(-tfDays), [macdFull, tfDays]);
 
-  const vwap = useMemo(() => vwapFull.slice(-tfDays), [vwapFull, tfDays]);
-  const volume = useMemo(() => displayedHistory.map((p) => (typeof p.volume === "number" ? p.volume : null)), [displayedHistory]);
+  const vwapArr = useMemo(() => vwapFull.slice(-tfDays), [vwapFull, tfDays]);
+  const volumeArr = useMemo(() => displayedHistory.map((p) => (typeof p.volume === "number" ? p.volume : null)), [displayedHistory]);
   const stochK = useMemo(() => stochFull.k.slice(-tfDays), [stochFull, tfDays]);
   const stochD = useMemo(() => stochFull.d.slice(-tfDays), [stochFull, tfDays]);
-  const atr14 = useMemo(() => atr14Full.slice(-tfDays), [atr14Full, tfDays]);
+  const atr14Arr = useMemo(() => atr14Full.slice(-tfDays), [atr14Full, tfDays]);
 
   const lastClose = displayedHistory.length ? displayedHistory[displayedHistory.length - 1].close : null;
   const lastMA50 = ma50.length ? ma50[ma50.length - 1] : null;
   const lastMA200 = ma200.length ? ma200[ma200.length - 1] : null;
 
-const signal = useMemo(() => {
-  if (lastClose == null) return { label: "Signal unavailable", detail: "No price data." };
+  const signal = useMemo(() => {
+    if (indicator === "MA50") return compareTo(lastClose, "MA50", typeof lastMA50 === "number" ? lastMA50 : null);
+    if (indicator === "MA200" || indicator === "None")
+      return compareTo(lastClose, "MA200", typeof lastMA200 === "number" ? lastMA200 : null);
 
-  // helper: compare price to an indicator value
-  const compareTo = (name: string, v: number | null) => {
-    if (v == null) return { label: "Signal unavailable", detail: `Need enough data for ${name}.` };
-    const diff = (lastClose - v) / v;
-    if (diff <= -0.05) return { label: "Undervalued-ish 🟢", detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% below ${name}.` };
-    if (diff < 0.05) return { label: "Fair-ish 🟡", detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% from ${name}.` };
-    return { label: "Overextended 🔴", detail: `Price is ${(diff * 100).toFixed(1)}% above ${name}.` };
-  };
+    if (indicator === "EMA20") {
+      const v = ema20Arr.length ? ema20Arr[ema20Arr.length - 1] : null;
+      return compareTo(lastClose, "EMA20", typeof v === "number" ? v : null);
+    }
 
-  // pick which indicator to use
-  if (indicator === "MA50") return compareTo("MA50", lastMA50);
-  if (indicator === "MA200") return compareTo("MA200", lastMA200);
+    if (indicator === "VWAP") {
+      const v = vwapArr.length ? vwapArr[vwapArr.length - 1] : null;
+      return compareTo(lastClose, "VWAP", typeof v === "number" ? v : null);
+    }
 
-  if (indicator === "EMA20") {
-    const lastEma20 = ema20.length ? ema20[ema20.length - 1] : null;
-    return compareTo("EMA20", typeof lastEma20 === "number" ? lastEma20 : null);
-  }
+    if (indicator === "Bollinger(20,2)") {
+      const v = bollMid.length ? bollMid[bollMid.length - 1] : null;
+      return compareTo(lastClose, "BB mid", typeof v === "number" ? v : null);
+    }
 
-  if (indicator === "VWAP") {
-    const lastVwap = vwap.length ? vwap[vwap.length - 1] : null;
-    return compareTo("VWAP", typeof lastVwap === "number" ? lastVwap : null);
-  }
-
-  if (indicator === "Bollinger(20,2)") {
-    const lastMid = bollMid.length ? bollMid[bollMid.length - 1] : null;
-    return compareTo("BB mid", typeof lastMid === "number" ? lastMid : null);
-  }
-
-  // If None: keep it simple for now = MA200 (we can upgrade to multi-indicator scoring next)
-  return compareTo("MA200", lastMA200);
-}, [indicator, lastClose, lastMA50, lastMA200, ema20, vwap, bollMid]);
+    // for now, default to MA200 comparison
+    return compareTo(lastClose, "MA200", typeof lastMA200 === "number" ? lastMA200 : null);
+  }, [indicator, lastClose, lastMA50, lastMA200, ema20Arr, vwapArr, bollMid]);
 
   function chooseSymbol(s: string) {
     const cleaned = s.trim().toUpperCase();
@@ -584,6 +563,15 @@ const signal = useMemo(() => {
     setResults([]);
     setOpen(false);
   }
+
+  const lastIndicatorValue = useMemo(() => {
+    if (indicator === "MA50") return { label: "MA50", value: lastMA50 };
+    if (indicator === "MA200" || indicator === "None") return { label: "MA200", value: lastMA200 };
+    if (indicator === "EMA20") return { label: "EMA20", value: ema20Arr.length ? ema20Arr[ema20Arr.length - 1] : null };
+    if (indicator === "VWAP") return { label: "VWAP", value: vwapArr.length ? vwapArr[vwapArr.length - 1] : null };
+    if (indicator === "Bollinger(20,2)") return { label: "BB Mid", value: bollMid.length ? bollMid[bollMid.length - 1] : null };
+    return { label: "Indicator", value: null };
+  }, [indicator, lastMA50, lastMA200, ema20Arr, vwapArr, bollMid]);
 
   return (
     <main style={{ padding: 40, fontFamily: "system-ui, Arial" }}>
@@ -705,7 +693,7 @@ const signal = useMemo(() => {
       </div>
 
       <div style={{ marginTop: 16, maxWidth: 920, display: "grid", gap: 16 }}>
-        {/* Card 1 */}
+        {/* Card 1: Summary */}
         <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
           <h2 style={{ marginTop: 0 }}>{symbol}</h2>
 
@@ -725,24 +713,21 @@ const signal = useMemo(() => {
               <p style={{ margin: "6px 0 0", opacity: 0.7 }}>{signal.detail}</p>
 
               <div style={{ marginTop: 12, fontSize: 13, opacity: 0.75 }}>
-  {indicator === "MA50" ? (
-    <div>MA50: {typeof lastMA50 === "number" ? `$${lastMA50.toFixed(2)}` : "—"}</div>
-  ) : indicator === "MA200" || indicator === "None" ? (
-    <div>MA200: {typeof lastMA200 === "number" ? `$${lastMA200.toFixed(2)}` : "—"}</div>
-  ) : indicator === "EMA20" ? (
-    <div>EMA20: {typeof ema20[ema20.length - 1] === "number" ? `$${(ema20[ema20.length - 1] as number).toFixed(2)}` : "—"}</div>
-  ) : indicator === "VWAP" ? (
-    <div>VWAP: {typeof vwap[vwap.length - 1] === "number" ? `$${(vwap[vwap.length - 1] as number).toFixed(2)}` : "—"}</div>
-  ) : indicator === "Bollinger(20,2)" ? (
-    <div>
-      BB Mid: {typeof bollMid[bollMid.length - 1] === "number" ? `$${(bollMid[bollMid.length - 1] as number).toFixed(2)}` : "—"}
-    </div>
-  ) : (
-    <div>Indicator value: —</div>
-  )}
-</div>
+                <div>
+                  {lastIndicatorValue.label}:{" "}
+                  {typeof lastIndicatorValue.value === "number" ? `$${(lastIndicatorValue.value as number).toFixed(2)}` : "—"}
+                </div>
+              </div>
 
-        {/* Card 2 */}
+              <p style={{ marginTop: 12, opacity: 0.7 }}>
+                {quote?.date && quote?.time ? `As of ${quote.date} ${quote.time}` : "Timestamp unavailable"} • Source:{" "}
+                {quote?.source ?? "stooq.com"}
+              </p>
+            </>
+          )}
+        </div>
+
+        {/* Card 2: Chart */}
         <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
           <PriceChart
             data={displayedHistory}
@@ -752,20 +737,12 @@ const signal = useMemo(() => {
             bollUpper={bollUpper}
             bollMid={bollMid}
             bollLower={bollLower}
-            ema20={ema20}
-            rsi14={rsi14}
-            macdLine={macdLine}
-            macdSignal={macdSignal}
-            macdHist={macdHist}
-            vwap={vwap}
-            volume={volume}
-            stochK={stochK}
-            stochD={stochD}
-            atr14={atr14}
+            ema20={ema20Arr}
+            vwap={vwapArr}
           />
         </div>
 
-        {/* Card 3 */}
+        {/* Card 3: Market */}
         <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
           <h2 style={{ marginTop: 0 }}>Market Overview</h2>
 
@@ -810,7 +787,7 @@ const signal = useMemo(() => {
           )}
         </div>
 
-        {/* Card 4 */}
+        {/* Card 4: News */}
         <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
           <h2 style={{ marginTop: 0 }}>Latest News</h2>
 
