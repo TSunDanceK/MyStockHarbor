@@ -11,7 +11,13 @@ type Quote = {
   source: string;
 };
 
-type Point = { date: string; close: number };
+type Point = {
+  date: string;
+  close: number;
+  high?: number;
+  low?: number;
+  volume?: number;
+};
 
 type SymbolResult = { symbol: string; name: string; exchange: string };
 
@@ -49,10 +55,8 @@ function rollingStd(values: number[], window: number): (number | null)[] {
 function bollinger(values: number[], window = 20, k = 2) {
   const mid = movingAverage(values, window);
   const sd = rollingStd(values, window);
-
   const upper = mid.map((m, i) => (m == null || sd[i] == null ? null : m + k * sd[i]!));
   const lower = mid.map((m, i) => (m == null || sd[i] == null ? null : m - k * sd[i]!));
-
   return { upper, mid, lower };
 }
 
@@ -68,7 +72,6 @@ function ema(values: number[], period: number): (number | null)[] {
   for (let i = 0; i < values.length; i++) {
     const v = values[i];
 
-    // warmup with SMA(period) to seed EMA
     if (i < period) {
       sum += v;
       if (i === period - 1) {
@@ -78,18 +81,13 @@ function ema(values: number[], period: number): (number | null)[] {
       continue;
     }
 
-    if (emaPrev == null) {
-      emaPrev = v;
-    } else {
-      emaPrev = v * k + emaPrev * (1 - k);
-    }
+    emaPrev = emaPrev == null ? v : v * k + emaPrev * (1 - k);
     out[i] = emaPrev;
   }
 
   return out;
 }
 
-// RSI Wilder's smoothing
 function rsiWilder(values: number[], period = 14): (number | null)[] {
   const out: (number | null)[] = Array(values.length).fill(null);
   if (values.length < period + 1) return out;
@@ -135,7 +133,6 @@ function macd(values: number[], fast = 12, slow = 26, signal = 9) {
     return f - s;
   });
 
-  // Signal EMA is computed on the MACD line; use 0 for nulls but keep nulls in output alignment
   const lineForEma = line.map((v) => (typeof v === "number" ? v : 0));
   const sigAll = ema(lineForEma, signal);
 
@@ -143,6 +140,125 @@ function macd(values: number[], fast = 12, slow = 26, signal = 9) {
   const hist: (number | null)[] = line.map((v, i) => (v == null || sig[i] == null ? null : v - sig[i]!));
 
   return { line, signal: sig, hist };
+}
+
+function vwapFromPoints(points: Point[]): (number | null)[] {
+  const out: (number | null)[] = Array(points.length).fill(null);
+  let cumPV = 0;
+  let cumV = 0;
+
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    const v = typeof p.volume === "number" && Number.isFinite(p.volume) ? p.volume : null;
+    if (v == null || v <= 0) {
+      out[i] = cumV > 0 ? cumPV / cumV : null;
+      continue;
+    }
+
+    const h = typeof p.high === "number" && Number.isFinite(p.high) ? p.high : null;
+    const l = typeof p.low === "number" && Number.isFinite(p.low) ? p.low : null;
+
+    const typical =
+      h != null && l != null ? (h + l + p.close) / 3 : p.close;
+
+    cumPV += typical * v;
+    cumV += v;
+
+    out[i] = cumPV / cumV;
+  }
+
+  return out;
+}
+
+function stochastic(points: Point[], kPeriod = 14, dPeriod = 3) {
+  const k: (number | null)[] = Array(points.length).fill(null);
+
+  for (let i = 0; i < points.length; i++) {
+    if (i < kPeriod - 1) continue;
+
+    let highestHigh = -Infinity;
+    let lowestLow = Infinity;
+
+    for (let j = i - kPeriod + 1; j <= i; j++) {
+      const hh = points[j].high;
+      const ll = points[j].low;
+      if (typeof hh !== "number" || !Number.isFinite(hh)) {
+        highestHigh = NaN;
+        break;
+      }
+      if (typeof ll !== "number" || !Number.isFinite(ll)) {
+        lowestLow = NaN;
+        break;
+      }
+      if (hh > highestHigh) highestHigh = hh;
+      if (ll < lowestLow) lowestLow = ll;
+    }
+
+    if (!Number.isFinite(highestHigh) || !Number.isFinite(lowestLow)) continue;
+
+    const denom = highestHigh - lowestLow;
+    if (denom <= 0) continue;
+
+    k[i] = ((points[i].close - lowestLow) / denom) * 100;
+  }
+
+  // %D = SMA of %K
+  const d = movingAverage(k.map((v) => (typeof v === "number" ? v : 0)), dPeriod).map((v, i) =>
+    k[i] == null ? null : v
+  );
+
+  return { k, d };
+}
+
+function atr(points: Point[], period = 14): (number | null)[] {
+  const tr: (number | null)[] = Array(points.length).fill(null);
+
+  for (let i = 0; i < points.length; i++) {
+    const h = points[i].high;
+    const l = points[i].low;
+    const cPrev = i > 0 ? points[i - 1].close : null;
+
+    if (typeof h !== "number" || !Number.isFinite(h)) continue;
+    if (typeof l !== "number" || !Number.isFinite(l)) continue;
+
+    const hl = h - l;
+    const hc = cPrev == null ? hl : Math.abs(h - cPrev);
+    const lc = cPrev == null ? hl : Math.abs(l - cPrev);
+
+    tr[i] = Math.max(hl, hc, lc);
+  }
+
+  const out: (number | null)[] = Array(points.length).fill(null);
+
+  // Wilder smoothing
+  let sum = 0;
+  let count = 0;
+  let prevATR: number | null = null;
+
+  for (let i = 0; i < points.length; i++) {
+    const v = tr[i];
+
+    if (v == null) {
+      out[i] = prevATR;
+      continue;
+    }
+
+    if (prevATR == null) {
+      // seed with SMA of first "period" TR values (that exist)
+      sum += v;
+      count++;
+      if (count === period) {
+        prevATR = sum / period;
+        out[i] = prevATR;
+      }
+      continue;
+    }
+
+    prevATR = (prevATR * (period - 1) + v) / period;
+    out[i] = prevATR;
+  }
+
+  return out;
 }
 
 function valuationSignal(lastPrice: number | null, ma200Last: number | null) {
@@ -153,21 +269,12 @@ function valuationSignal(lastPrice: number | null, ma200Last: number | null) {
   const diff = (lastPrice - ma200Last) / ma200Last;
 
   if (diff <= -0.05) {
-    return {
-      label: "Undervalued-ish 🟢",
-      detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% below MA200.`,
-    };
+    return { label: "Undervalued-ish 🟢", detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% below MA200.` };
   }
   if (diff < 0.05) {
-    return {
-      label: "Fair-ish 🟡",
-      detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% from MA200.`,
-    };
+    return { label: "Fair-ish 🟡", detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% from MA200.` };
   }
-  return {
-    label: "Overextended 🔴",
-    detail: `Price is ${(diff * 100).toFixed(1)}% above MA200.`,
-  };
+  return { label: "Overextended 🔴", detail: `Price is ${(diff * 100).toFixed(1)}% above MA200.` };
 }
 
 const PRESET_TICKERS: { symbol: string; name: string }[] = [
@@ -272,11 +379,21 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
         if (!hRes.ok) throw new Error("History fetch failed");
 
         const q = (await qRes.json()) as Quote;
-        const h = (await hRes.json()) as { symbol: string; points: Point[] };
+        const h = (await hRes.json()) as { symbol: string; points: any[] };
 
         if (cancelled) return;
 
-        const pts = Array.isArray(h.points) ? h.points : [];
+        const ptsRaw = Array.isArray(h.points) ? h.points : [];
+        const pts: Point[] = ptsRaw
+          .map((p: any) => ({
+            date: String(p?.date ?? ""),
+            close: Number(p?.close),
+            high: p?.high == null ? undefined : Number(p.high),
+            low: p?.low == null ? undefined : Number(p.low),
+            volume: p?.volume == null ? undefined : Number(p.volume),
+          }))
+          .filter((p) => p.date && Number.isFinite(p.close));
+
         setQuote(q);
         setHistoryAll(pts);
       } catch {
@@ -323,7 +440,6 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
 
   const displayedHistory = useMemo(() => historyAll.slice(-tfDays), [historyAll, tfDays]);
 
-  // ---------- Full-history indicator computation ----------
   const closesAll = useMemo(() => historyAll.map((p) => p.close), [historyAll]);
 
   const ma50Full = useMemo(() => movingAverage(closesAll, 50), [closesAll]);
@@ -334,7 +450,10 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
   const rsi14Full = useMemo(() => rsiWilder(closesAll, 14), [closesAll]);
   const macdFull = useMemo(() => macd(closesAll, 12, 26, 9), [closesAll]);
 
-  // slice all arrays to match displayedHistory length
+  const vwapFull = useMemo(() => vwapFromPoints(historyAll), [historyAll]);
+  const stochFull = useMemo(() => stochastic(historyAll, 14, 3), [historyAll]);
+  const atr14Full = useMemo(() => atr(historyAll, 14), [historyAll]);
+
   const ma50 = useMemo(() => ma50Full.slice(-tfDays), [ma50Full, tfDays]);
   const ma200 = useMemo(() => ma200Full.slice(-tfDays), [ma200Full, tfDays]);
 
@@ -349,6 +468,12 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
   const macdLine = useMemo(() => macdFull.line.slice(-tfDays), [macdFull, tfDays]);
   const macdSignal = useMemo(() => macdFull.signal.slice(-tfDays), [macdFull, tfDays]);
   const macdHist = useMemo(() => macdFull.hist.slice(-tfDays), [macdFull, tfDays]);
+
+  const vwap = useMemo(() => vwapFull.slice(-tfDays), [vwapFull, tfDays]);
+  const volume = useMemo(() => displayedHistory.map((p) => (typeof p.volume === "number" ? p.volume : null)), [displayedHistory]);
+  const stochK = useMemo(() => stochFull.k.slice(-tfDays), [stochFull, tfDays]);
+  const stochD = useMemo(() => stochFull.d.slice(-tfDays), [stochFull, tfDays]);
+  const atr14 = useMemo(() => atr14Full.slice(-tfDays), [atr14Full, tfDays]);
 
   const lastClose = displayedHistory.length ? displayedHistory[displayedHistory.length - 1].close : null;
   const lastMA50 = ma50.length ? ma50[ma50.length - 1] : null;
@@ -530,6 +655,11 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
             macdLine={macdLine}
             macdSignal={macdSignal}
             macdHist={macdHist}
+            vwap={vwap}
+            volume={volume}
+            stochK={stochK}
+            stochD={stochD}
+            atr14={atr14}
           />
         </div>
       </div>
