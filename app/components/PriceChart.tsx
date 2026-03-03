@@ -156,24 +156,23 @@ export default function PriceChart({
   const bollMPath = pathFrom(series.map((p) => p.bm), yMain);
   const bollLPath = pathFrom(series.map((p) => p.bl), yMain);
 
-  const bollBandPath = useMemo(() => {
-    if (overlay !== "Bollinger(20,2)") return "";
+let bollBandPath = "";
 
-    const upperPts: { x: number; y: number }[] = [];
-    const lowerPts: { x: number; y: number }[] = [];
+if (overlay === "Bollinger(20,2)") {
+  const upperPts: { x: number; y: number }[] = [];
+  const lowerPts: { x: number; y: number }[] = [];
 
-    for (let i = 0; i < series.length; i++) {
-      const u = series[i].bu;
-      const l = series[i].bl;
-      if (typeof u !== "number" || !Number.isFinite(u)) continue;
-      if (typeof l !== "number" || !Number.isFinite(l)) continue;
+  for (let i = 0; i < series.length; i++) {
+    const u = series[i].bu;
+    const l = series[i].bl;
+    if (typeof u !== "number" || !Number.isFinite(u)) continue;
+    if (typeof l !== "number" || !Number.isFinite(l)) continue;
 
-      upperPts.push({ x: x(i), y: yMain(u) });
-      lowerPts.push({ x: x(i), y: yMain(l) });
-    }
+    upperPts.push({ x: x(i), y: yMain(u) });
+    lowerPts.push({ x: x(i), y: yMain(l) });
+  }
 
-    if (upperPts.length < 2 || lowerPts.length < 2) return "";
-
+  if (upperPts.length >= 2 && lowerPts.length >= 2) {
     let d = `M ${upperPts[0].x.toFixed(2)} ${upperPts[0].y.toFixed(2)}`;
     for (let i = 1; i < upperPts.length; i++) {
       d += ` L ${upperPts[i].x.toFixed(2)} ${upperPts[i].y.toFixed(2)}`;
@@ -182,8 +181,9 @@ export default function PriceChart({
       d += ` L ${lowerPts[i].x.toFixed(2)} ${lowerPts[i].y.toFixed(2)}`;
     }
     d += " Z";
-    return d;
-  }, [overlay, series, height, mainMin, mainMax]);
+    bollBandPath = d;
+  }
+}
 
   // ---------- RSI panel ----------
   const showRSI = overlay === "RSI(14)";
