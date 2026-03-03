@@ -2,7 +2,13 @@
 
 import React, { useMemo } from "react";
 
-type Point = { date: string; close: number };
+type Point = {
+  date: string;
+  close: number;
+  high?: number;
+  low?: number;
+  volume?: number;
+};
 
 export type Overlay =
   | "None"
@@ -33,16 +39,23 @@ export default function PriceChart({
   bollMid,
   bollLower,
 
-  // EMA20 (aligned to data length)
+  // EMA20 (aligned)
   ema20,
 
-  // RSI (aligned to data length)
+  // RSI (aligned)
   rsi14,
 
-  // MACD (aligned to data length)
+  // MACD (aligned)
   macdLine,
   macdSignal,
   macdHist,
+
+  // NEW indicators (aligned)
+  vwap,
+  volume,
+  stochK,
+  stochD,
+  atr14,
 
   height = 240,
 }: {
@@ -63,6 +76,12 @@ export default function PriceChart({
   macdSignal?: (number | null)[];
   macdHist?: (number | null)[];
 
+  vwap?: (number | null)[];
+  volume?: (number | null)[];
+  stochK?: (number | null)[];
+  stochD?: (number | null)[];
+  atr14?: (number | null)[];
+
   height?: number;
 }) {
   const width = 760;
@@ -74,6 +93,7 @@ export default function PriceChart({
 
     const a50 = ma50.length === n ? ma50 : Array(n).fill(null);
     const a200 = ma200.length === n ? ma200 : Array(n).fill(null);
+
     const e20 = ema20 && ema20.length === n ? ema20 : Array(n).fill(null);
 
     const u = bollUpper && bollUpper.length === n ? bollUpper : Array(n).fill(null);
@@ -85,6 +105,12 @@ export default function PriceChart({
     const ml = macdLine && macdLine.length === n ? macdLine : Array(n).fill(null);
     const ms = macdSignal && macdSignal.length === n ? macdSignal : Array(n).fill(null);
     const mh = macdHist && macdHist.length === n ? macdHist : Array(n).fill(null);
+
+    const vw = vwap && vwap.length === n ? vwap : Array(n).fill(null);
+    const vol = volume && volume.length === n ? volume : Array(n).fill(null);
+    const sk = stochK && stochK.length === n ? stochK : Array(n).fill(null);
+    const sd = stochD && stochD.length === n ? stochD : Array(n).fill(null);
+    const a14 = atr14 && atr14.length === n ? atr14 : Array(n).fill(null);
 
     return data.map((p, i) => ({
       ...p,
@@ -98,8 +124,30 @@ export default function PriceChart({
       macd: ml[i],
       signal: ms[i],
       hist: mh[i],
+      vwap: vw[i],
+      volume: vol[i],
+      stochK: sk[i],
+      stochD: sd[i],
+      atr14: a14[i],
     }));
-  }, [data, ma50, ma200, ema20, bollUpper, bollMid, bollLower, rsi14, macdLine, macdSignal, macdHist]);
+  }, [
+    data,
+    ma50,
+    ma200,
+    ema20,
+    bollUpper,
+    bollMid,
+    bollLower,
+    rsi14,
+    macdLine,
+    macdSignal,
+    macdHist,
+    vwap,
+    volume,
+    stochK,
+    stochD,
+    atr14,
+  ]);
 
   if (!series || series.length < 2) {
     return <div style={{ opacity: 0.7 }}>Not enough data to chart.</div>;
@@ -126,11 +174,12 @@ export default function PriceChart({
   // ---------- Main (price) y-range ----------
   const mainVals: number[] = [];
   for (const p of series) {
-    mainVals.push(p.close);
+    if (Number.isFinite(p.close)) mainVals.push(p.close);
 
     if (overlay === "MA50" && typeof p.ma50 === "number") mainVals.push(p.ma50);
     if (overlay === "MA200" && typeof p.ma200 === "number") mainVals.push(p.ma200);
     if (overlay === "EMA20" && typeof p.ema20 === "number") mainVals.push(p.ema20);
+    if (overlay === "VWAP" && typeof p.vwap === "number") mainVals.push(p.vwap);
 
     if (overlay === "Bollinger(20,2)") {
       if (typeof p.bu === "number") mainVals.push(p.bu);
@@ -144,52 +193,49 @@ export default function PriceChart({
   const mainRange = Math.max(1e-9, mainMax - mainMin);
   const yMain = (v: number) => pad + ((mainMax - v) * (height - pad * 2)) / mainRange;
 
-  const closePath = series
-    .map((p, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(2)} ${yMain(p.close).toFixed(2)}`)
-    .join(" ");
+  const closePath = pathFrom(
+    series.map((p) => (typeof p.close === "number" && Number.isFinite(p.close) ? p.close : null)),
+    yMain
+  );
 
   const ma50Path = pathFrom(series.map((p) => p.ma50), yMain);
   const ma200Path = pathFrom(series.map((p) => p.ma200), yMain);
   const ema20Path = pathFrom(series.map((p) => p.ema20), yMain);
+  const vwapPath = pathFrom(series.map((p) => p.vwap), yMain);
 
   const bollUPath = pathFrom(series.map((p) => p.bu), yMain);
   const bollMPath = pathFrom(series.map((p) => p.bm), yMain);
   const bollLPath = pathFrom(series.map((p) => p.bl), yMain);
 
-let bollBandPath = "";
+  // Bollinger shaded band (no hooks)
+  let bollBandPath = "";
+  if (overlay === "Bollinger(20,2)") {
+    const upperPts: { x: number; y: number }[] = [];
+    const lowerPts: { x: number; y: number }[] = [];
 
-if (overlay === "Bollinger(20,2)") {
-  const upperPts: { x: number; y: number }[] = [];
-  const lowerPts: { x: number; y: number }[] = [];
+    for (let i = 0; i < series.length; i++) {
+      const u = series[i].bu;
+      const l = series[i].bl;
+      if (typeof u !== "number" || !Number.isFinite(u)) continue;
+      if (typeof l !== "number" || !Number.isFinite(l)) continue;
 
-  for (let i = 0; i < series.length; i++) {
-    const u = series[i].bu;
-    const l = series[i].bl;
-    if (typeof u !== "number" || !Number.isFinite(u)) continue;
-    if (typeof l !== "number" || !Number.isFinite(l)) continue;
-
-    upperPts.push({ x: x(i), y: yMain(u) });
-    lowerPts.push({ x: x(i), y: yMain(l) });
-  }
-
-  if (upperPts.length >= 2 && lowerPts.length >= 2) {
-    let d = `M ${upperPts[0].x.toFixed(2)} ${upperPts[0].y.toFixed(2)}`;
-    for (let i = 1; i < upperPts.length; i++) {
-      d += ` L ${upperPts[i].x.toFixed(2)} ${upperPts[i].y.toFixed(2)}`;
+      upperPts.push({ x: x(i), y: yMain(u) });
+      lowerPts.push({ x: x(i), y: yMain(l) });
     }
-    for (let i = lowerPts.length - 1; i >= 0; i--) {
-      d += ` L ${lowerPts[i].x.toFixed(2)} ${lowerPts[i].y.toFixed(2)}`;
+
+    if (upperPts.length >= 2 && lowerPts.length >= 2) {
+      let d = `M ${upperPts[0].x.toFixed(2)} ${upperPts[0].y.toFixed(2)}`;
+      for (let i = 1; i < upperPts.length; i++) d += ` L ${upperPts[i].x.toFixed(2)} ${upperPts[i].y.toFixed(2)}`;
+      for (let i = lowerPts.length - 1; i >= 0; i--) d += ` L ${lowerPts[i].x.toFixed(2)} ${lowerPts[i].y.toFixed(2)}`;
+      d += " Z";
+      bollBandPath = d;
     }
-    d += " Z";
-    bollBandPath = d;
   }
-}
 
   // ---------- RSI panel ----------
   const showRSI = overlay === "RSI(14)";
-  const rsiVals = showRSI ? series.map((p) => p.rsi) : [];
-  const rsiPath = showRSI ? pathFrom(rsiVals, (v) => pad + ((100 - v) * (panelHeight - pad * 2)) / 100) : "";
   const yRSI = (v: number) => pad + ((100 - v) * (panelHeight - pad * 2)) / 100;
+  const rsiPath = showRSI ? pathFrom(series.map((p) => p.rsi), yRSI) : "";
 
   // ---------- MACD panel ----------
   const showMACD = overlay === "MACD(12,26,9)";
@@ -214,13 +260,35 @@ if (overlay === "Bollinger(20,2)") {
   const macdPath = showMACD ? pathFrom(macdArr, yMACD) : "";
   const sigPath = showMACD ? pathFrom(sigArr, yMACD) : "";
 
-  // ---------- Footer stats ----------
+  // ---------- Volume panel ----------
+  const showVolume = overlay === "Volume";
+  const volArr = showVolume ? series.map((p) => p.volume) : [];
+  const volMax = showVolume
+    ? Math.max(1, ...volArr.map((v) => (typeof v === "number" && Number.isFinite(v) ? v : 0)))
+    : 1;
+  const yVOL = (v: number) => pad + ((volMax - v) * (panelHeight - pad * 2)) / volMax;
+
+  // ---------- Stochastic panel ----------
+  const showStoch = overlay === "Stochastic(14,3)";
+  const ySTO = (v: number) => pad + ((100 - v) * (panelHeight - pad * 2)) / 100;
+  const stochKPath = showStoch ? pathFrom(series.map((p) => p.stochK), ySTO) : "";
+  const stochDPath = showStoch ? pathFrom(series.map((p) => p.stochD), ySTO) : "";
+
+  // ---------- ATR panel ----------
+  const showATR = overlay === "ATR(14)";
+  const atrArr = showATR ? series.map((p) => p.atr14) : [];
+  const atrVals = showATR
+    ? atrArr.filter((v): v is number => typeof v === "number" && Number.isFinite(v))
+    : [];
+  const atrMin = atrVals.length ? Math.min(...atrVals) : 0;
+  const atrMax = atrVals.length ? Math.max(...atrVals) : 1;
+  const atrRange = Math.max(1e-9, atrMax - atrMin);
+  const yATR = (v: number) => pad + ((atrMax - v) * (panelHeight - pad * 2)) / atrRange;
+  const atrPath = showATR ? pathFrom(atrArr, yATR) : "";
+
   const first = series[0];
   const last = series[series.length - 1];
   const ret = (last.close - first.close) / first.close;
-
-  const needsMoreData =
-    overlay === "VWAP" || overlay === "Volume" || overlay === "Stochastic(14,3)" || overlay === "ATR(14)";
 
   return (
     <div>
@@ -229,27 +297,17 @@ if (overlay === "Bollinger(20,2)") {
         <div style={{ opacity: 0.75 }}>Period return: {fmtPct(ret)}</div>
       </div>
 
-      {needsMoreData ? (
-        <div style={{ marginBottom: 10, fontSize: 12, opacity: 0.75 }}>
-          This indicator needs extra fields from /api/history (volume and/or high/low). Your history currently only has close.
-        </div>
-      ) : null}
-
       {/* MAIN PRICE CHART */}
       <svg width="100%" viewBox={`0 0 ${width} ${height}`} style={{ border: "1px solid #3333", borderRadius: 12 }}>
-        {/* axes */}
         <line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} stroke="currentColor" opacity="0.15" />
         <line x1={pad} y1={pad} x2={pad} y2={height - pad} stroke="currentColor" opacity="0.15" />
 
-        {/* Bollinger shaded band (behind price) */}
         {overlay === "Bollinger(20,2)" && bollBandPath ? (
           <path d={bollBandPath} fill="currentColor" opacity="0.08" stroke="none" />
         ) : null}
 
-        {/* price */}
         <path d={closePath} fill="none" stroke="currentColor" strokeWidth="2.25" opacity="0.95" />
 
-        {/* overlays */}
         {overlay === "MA50" && ma50Path ? (
           <path d={ma50Path} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.55" strokeDasharray="6 4" />
         ) : null}
@@ -260,6 +318,10 @@ if (overlay === "Bollinger(20,2)") {
 
         {overlay === "EMA20" && ema20Path ? (
           <path d={ema20Path} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.5" strokeDasharray="3 4" />
+        ) : null}
+
+        {overlay === "VWAP" && vwapPath ? (
+          <path d={vwapPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.5" strokeDasharray="8 4" />
         ) : null}
 
         {overlay === "Bollinger(20,2)" ? (
@@ -282,11 +344,8 @@ if (overlay === "Bollinger(20,2)") {
           <svg width="100%" viewBox={`0 0 ${width} ${panelHeight}`} style={{ border: "1px solid #3333", borderRadius: 12 }}>
             <line x1={pad} y1={panelHeight - pad} x2={width - pad} y2={panelHeight - pad} stroke="currentColor" opacity="0.15" />
             <line x1={pad} y1={pad} x2={pad} y2={panelHeight - pad} stroke="currentColor" opacity="0.15" />
-
-            {/* 70 / 30 guides */}
             <line x1={pad} y1={yRSI(70)} x2={width - pad} y2={yRSI(70)} stroke="currentColor" opacity="0.12" strokeDasharray="4 5" />
             <line x1={pad} y1={yRSI(30)} x2={width - pad} y2={yRSI(30)} stroke="currentColor" opacity="0.12" strokeDasharray="4 5" />
-
             {rsiPath ? <path d={rsiPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.85" /> : null}
           </svg>
         </div>
@@ -299,11 +358,7 @@ if (overlay === "Bollinger(20,2)") {
           <svg width="100%" viewBox={`0 0 ${width} ${panelHeight}`} style={{ border: "1px solid #3333", borderRadius: 12 }}>
             <line x1={pad} y1={panelHeight - pad} x2={width - pad} y2={panelHeight - pad} stroke="currentColor" opacity="0.15" />
             <line x1={pad} y1={pad} x2={pad} y2={panelHeight - pad} stroke="currentColor" opacity="0.15" />
-
-            {/* zero line */}
             <line x1={pad} y1={yMACD(0)} x2={width - pad} y2={yMACD(0)} stroke="currentColor" opacity="0.12" />
-
-            {/* histogram */}
             {histArr.map((v, i) => {
               if (typeof v !== "number" || !Number.isFinite(v)) return null;
               const xi = x(i);
@@ -320,9 +375,62 @@ if (overlay === "Bollinger(20,2)") {
                 />
               );
             })}
-
             {macdPath ? <path d={macdPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.85" /> : null}
             {sigPath ? <path d={sigPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.5" strokeDasharray="6 4" /> : null}
+          </svg>
+        </div>
+      ) : null}
+
+      {/* VOLUME PANEL */}
+      {showVolume ? (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Volume</div>
+          <svg width="100%" viewBox={`0 0 ${width} ${panelHeight}`} style={{ border: "1px solid #3333", borderRadius: 12 }}>
+            <line x1={pad} y1={panelHeight - pad} x2={width - pad} y2={panelHeight - pad} stroke="currentColor" opacity="0.15" />
+            <line x1={pad} y1={pad} x2={pad} y2={panelHeight - pad} stroke="currentColor" opacity="0.15" />
+            {volArr.map((v, i) => {
+              if (typeof v !== "number" || !Number.isFinite(v) || v <= 0) return null;
+              const xi = x(i);
+              return (
+                <line
+                  key={i}
+                  x1={xi}
+                  x2={xi}
+                  y1={panelHeight - pad}
+                  y2={yVOL(v)}
+                  stroke="currentColor"
+                  opacity="0.25"
+                  strokeWidth={3}
+                />
+              );
+            })}
+          </svg>
+        </div>
+      ) : null}
+
+      {/* STOCHASTIC PANEL */}
+      {showStoch ? (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Stochastic (14, 3)</div>
+          <svg width="100%" viewBox={`0 0 ${width} ${panelHeight}`} style={{ border: "1px solid #3333", borderRadius: 12 }}>
+            <line x1={pad} y1={panelHeight - pad} x2={width - pad} y2={panelHeight - pad} stroke="currentColor" opacity="0.15" />
+            <line x1={pad} y1={pad} x2={pad} y2={panelHeight - pad} stroke="currentColor" opacity="0.15" />
+            <line x1={pad} y1={ySTO(80)} x2={width - pad} y2={ySTO(80)} stroke="currentColor" opacity="0.12" strokeDasharray="4 5" />
+            <line x1={pad} y1={ySTO(20)} x2={width - pad} y2={ySTO(20)} stroke="currentColor" opacity="0.12" strokeDasharray="4 5" />
+            {stochKPath ? <path d={stochKPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.85" /> : null}
+            {stochDPath ? <path d={stochDPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.5" strokeDasharray="6 4" /> : null}
+          </svg>
+        </div>
+      ) : null}
+
+      {/* ATR PANEL */}
+      {showATR ? (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>ATR (14)</div>
+          <svg width="100%" viewBox={`0 0 ${width} ${panelHeight}`} style={{ border: "1px solid #3333", borderRadius: 12 }}>
+            <line x1={pad} y1={panelHeight - pad} x2={width - pad} y2={panelHeight - pad} stroke="currentColor" opacity="0.15" />
+            <line x1={pad} y1={pad} x2={pad} y2={panelHeight - pad} stroke="currentColor" opacity="0.15" />
+            {atrPath ? <path d={atrPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.85" /> : null}
           </svg>
         </div>
       ) : null}
