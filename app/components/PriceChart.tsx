@@ -23,7 +23,6 @@ function fmtPct(x: number) {
 }
 
 function fmtMoney(v: number) {
-  // lightweight formatting (no Intl surprises)
   if (!Number.isFinite(v)) return "—";
   const abs = Math.abs(v);
   if (abs >= 1000) return v.toFixed(0);
@@ -32,15 +31,11 @@ function fmtMoney(v: number) {
 }
 
 function fmtXLabel(s: string) {
-  // If it's ISO-like with time, show time; else show date
-  // ex: "2026-03-03" => "03/03"
-  // ex: "2026-03-03 14:30" => "14:30"
   const hasTime = s.includes(":");
   if (hasTime) {
     const m = s.match(/(\d{2}:\d{2})/);
     return m ? m[1] : s.slice(-5);
   }
-  // date
   const d = new Date(s);
   if (!Number.isFinite(d.getTime())) return s;
   const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -76,11 +71,10 @@ export default function PriceChart({
 }) {
   const width = 760;
 
-  // padding:
-  const padL = 34; // left
-  const padR = 54; // right for price labels
+  const padL = 34;
+  const padR = 54;
   const padT = 24;
-  const padB = 34; // bottom for x labels
+  const padB = 34;
 
   const series = useMemo(() => {
     const n = data.length;
@@ -96,42 +90,52 @@ export default function PriceChart({
 
     return data.map((p, i) => ({
       ...p,
-      ma50: a50[i],
-      ma200: a200[i],
-      bu: u[i],
-      bm: m[i],
-      bl: l[i],
-      ema20: e20[i],
-      vwap: vw[i],
+      ma50: a50[i] as number | null,
+      ma200: a200[i] as number | null,
+      bu: u[i] as number | null,
+      bm: m[i] as number | null,
+      bl: l[i] as number | null,
+      ema20: e20[i] as number | null,
+      vwap: vw[i] as number | null,
     }));
   }, [data, ma50, ma200, bollUpper, bollMid, bollLower, ema20, vwap]);
 
-  if (!series || series.length < 2) return <div style={{ opacity: 0.7 }}>Not enough data to chart.</div>;
+  const hasData = series.length >= 2;
+
+  const x = useMemo(() => {
+    return (i: number) => padL + (i * (width - padL - padR)) / Math.max(1, series.length - 1);
+  }, [series.length]);
 
   // y-range based on price + active overlays
-  const vals: number[] = [];
-  for (const p of series) {
-    vals.push(p.close);
+  const { min, max, range } = useMemo(() => {
+    if (!hasData) return { min: 0, max: 1, range: 1 };
 
-    if (overlay === "MA50" && typeof p.ma50 === "number") vals.push(p.ma50);
-    if (overlay === "MA200" && typeof p.ma200 === "number") vals.push(p.ma200);
+    const vals: number[] = [];
+    for (const p of series) {
+      vals.push(p.close);
 
-    if (overlay === "Bollinger(20,2)") {
-      if (typeof p.bu === "number") vals.push(p.bu);
-      if (typeof p.bm === "number") vals.push(p.bm);
-      if (typeof p.bl === "number") vals.push(p.bl);
+      if (overlay === "MA50" && typeof p.ma50 === "number") vals.push(p.ma50);
+      if (overlay === "MA200" && typeof p.ma200 === "number") vals.push(p.ma200);
+
+      if (overlay === "Bollinger(20,2)") {
+        if (typeof p.bu === "number") vals.push(p.bu);
+        if (typeof p.bm === "number") vals.push(p.bm);
+        if (typeof p.bl === "number") vals.push(p.bl);
+      }
+
+      if (overlay === "EMA20" && typeof p.ema20 === "number") vals.push(p.ema20);
+      if (overlay === "VWAP" && typeof p.vwap === "number") vals.push(p.vwap);
     }
 
-    if (overlay === "EMA20" && typeof p.ema20 === "number") vals.push(p.ema20);
-    if (overlay === "VWAP" && typeof p.vwap === "number") vals.push(p.vwap);
-  }
+    const minV = Math.min(...vals);
+    const maxV = Math.max(...vals);
+    const r = Math.max(1e-9, maxV - minV);
+    return { min: minV, max: maxV, range: r };
+  }, [hasData, series, overlay]);
 
-  const min = Math.min(...vals);
-  const max = Math.max(...vals);
-  const range = Math.max(1e-9, max - min);
-
-  const x = (i: number) => padL + (i * (width - padL - padR)) / (series.length - 1);
-  const y = (v: number) => padT + ((max - v) * (height - padT - padB)) / range;
+  const y = useMemo(() => {
+    return (v: number) => padT + ((max - v) * (height - padT - padB)) / range;
+  }, [max, range, height]);
 
   const pathFrom = (arr: Array<number | null>) => {
     let d = "";
@@ -149,26 +153,33 @@ export default function PriceChart({
     return d.trim();
   };
 
-  const closePath = series
-    .map((p, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(2)} ${y(p.close).toFixed(2)}`)
-    .join(" ");
+  const closePath = useMemo(() => {
+    if (!hasData) return "";
+    return series
+      .map((p, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(2)} ${y(p.close).toFixed(2)}`)
+      .join(" ");
+  }, [hasData, series, x, y]);
 
-  const ma50Path = pathFrom(series.map((p) => p.ma50));
-  const ma200Path = pathFrom(series.map((p) => p.ma200));
+  const ma50Path = useMemo(() => pathFrom(series.map((p) => p.ma50)), [series]);
+  const ma200Path = useMemo(() => pathFrom(series.map((p) => p.ma200)), [series]);
 
-  const bollUPath = pathFrom(series.map((p) => p.bu));
-  const bollMPath = pathFrom(series.map((p) => p.bm));
-  const bollLPath = pathFrom(series.map((p) => p.bl));
+  const bollUPath = useMemo(() => pathFrom(series.map((p) => p.bu)), [series]);
+  const bollMPath = useMemo(() => pathFrom(series.map((p) => p.bm)), [series]);
+  const bollLPath = useMemo(() => pathFrom(series.map((p) => p.bl)), [series]);
 
-  const ema20Path = pathFrom(series.map((p) => p.ema20));
-  const vwapPath = pathFrom(series.map((p) => p.vwap));
+  const ema20Path = useMemo(() => pathFrom(series.map((p) => p.ema20)), [series]);
+  const vwapPath = useMemo(() => pathFrom(series.map((p) => p.vwap)), [series]);
 
-  const first = series[0];
-  const last = series[series.length - 1];
-  const ret = (last.close - first.close) / first.close;
+  const ret = useMemo(() => {
+    if (!hasData) return 0;
+    const first = series[0].close;
+    const last = series[series.length - 1].close;
+    return (last - first) / first;
+  }, [hasData, series]);
 
-  // y-axis ticks on right (5 ticks)
+  // y-axis ticks on right
   const yTicks = useMemo(() => {
+    if (!hasData) return [];
     const ticks: { v: number; y: number }[] = [];
     const n = 5;
     for (let i = 0; i < n; i++) {
@@ -177,10 +188,11 @@ export default function PriceChart({
       ticks.push({ v, y: y(v) });
     }
     return ticks;
-  }, [max, range, height]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hasData, max, range, y]);
 
-  // x-axis ticks (5 ticks)
+  // x-axis ticks
   const xTicks = useMemo(() => {
+    if (!hasData) return [];
     const n = 5;
     const ticks: { i: number; x: number; label: string }[] = [];
     for (let k = 0; k < n; k++) {
@@ -188,14 +200,17 @@ export default function PriceChart({
       const i = Math.round(t * (series.length - 1));
       ticks.push({ i, x: x(i), label: fmtXLabel(series[i].date) });
     }
-    // de-dupe identical labels
     const seen = new Set<string>();
     return ticks.filter((t) => {
       if (seen.has(t.label)) return false;
       seen.add(t.label);
       return true;
     });
-  }, [series]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hasData, series, x]);
+
+  if (!hasData) return <div style={{ opacity: 0.7 }}>Not enough data to chart.</div>;
+
+  const last = series[series.length - 1];
 
   return (
     <div>
@@ -205,7 +220,6 @@ export default function PriceChart({
       </div>
 
       <svg width="100%" viewBox={`0 0 ${width} ${height}`} style={{ border: "1px solid #3333", borderRadius: 12 }}>
-        {/* plot area box */}
         <rect
           x={padL}
           y={padT}
@@ -216,24 +230,15 @@ export default function PriceChart({
           opacity="0.10"
         />
 
-        {/* horizontal grid + right y labels */}
         {yTicks.map((t, idx) => (
           <g key={idx}>
-            <line
-              x1={padL}
-              y1={t.y}
-              x2={width - padR}
-              y2={t.y}
-              stroke="currentColor"
-              opacity="0.08"
-            />
+            <line x1={padL} y1={t.y} x2={width - padR} y2={t.y} stroke="currentColor" opacity="0.08" />
             <text x={width - padR + 6} y={t.y + 4} fontSize={11} fill="currentColor" opacity="0.6">
               {fmtMoney(t.v)}
             </text>
           </g>
         ))}
 
-        {/* bottom x labels */}
         {xTicks.map((t, idx) => (
           <g key={idx}>
             <line x1={t.x} y1={height - padB} x2={t.x} y2={height - padB + 4} stroke="currentColor" opacity="0.25" />
@@ -243,10 +248,8 @@ export default function PriceChart({
           </g>
         ))}
 
-        {/* price */}
         <path d={closePath} fill="none" stroke="currentColor" strokeWidth="2.25" opacity="0.95" />
 
-        {/* overlays */}
         {overlay === "MA50" && ma50Path ? (
           <path d={ma50Path} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.55" strokeDasharray="6 4" />
         ) : null}
@@ -273,7 +276,6 @@ export default function PriceChart({
           <path d={vwapPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.45" strokeDasharray="3 4" />
         ) : null}
 
-        {/* last point */}
         <circle cx={x(series.length - 1)} cy={y(last.close)} r="3.5" fill="currentColor" opacity="0.9" />
       </svg>
 
