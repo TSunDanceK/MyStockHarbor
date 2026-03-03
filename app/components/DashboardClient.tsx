@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import PriceChart from "./PriceChart";
+import PriceChart, { type Overlay } from "./PriceChart";
 
 type Quote = {
   symbol: string;
@@ -89,6 +89,32 @@ const PRESET_TICKERS: { symbol: string; name: string }[] = [
   { symbol: "XOM", name: "Exxon Mobil Corp." },
 ].sort((a, b) => a.symbol.localeCompare(b.symbol));
 
+<label style={{ fontWeight: 600, marginLeft: 8 }}>Indicator</label>
+
+<select
+  value={indicator}
+  onChange={(e) => setIndicator(e.target.value as Overlay)}
+  style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #3333" }}
+>
+  {[
+    "None",
+    "MA50",
+    "MA200",
+    "Bollinger(20,2)",
+    "RSI(14)",
+    "MACD(12,26,9)",
+    "EMA20",
+    "VWAP",
+    "Stochastic(14,3)",
+    "ATR(14)",
+    "Volume",
+  ].map((x) => (
+    <option key={x} value={x}>
+      {x}
+    </option>
+  ))}
+</select>
+
 const TIMEFRAMES: { label: string; days: number }[] = [
   { label: "3M", days: 90 },
   { label: "6M", days: 180 },
@@ -101,6 +127,7 @@ const TIMEFRAMES: { label: string; days: number }[] = [
 export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSymbol?: string }) {
   const [symbol, setSymbol] = useState(defaultSymbol);
   const [tfDays, setTfDays] = useState(365);
+  const [indicator, setIndicator] = useState<Overlay>("None");
 
   const [quote, setQuote] = useState<Quote | null>(null);
   const [historyAll, setHistoryAll] = useState<Point[]>([]);
@@ -348,7 +375,12 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
         </div>
 
         <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
-          <PriceChart data={displayedHistory} ma50={ma50} ma200={ma200} />
+          <PriceChart
+  data={displayedHistory}
+  ma50={ma50}
+  ma200={ma200}
+  overlay={indicator}
+/>
         </div>
       </div>
     </main>
