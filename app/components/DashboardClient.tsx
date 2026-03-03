@@ -35,12 +35,21 @@ function valuationSignal(lastPrice: number | null, ma200Last: number | null) {
   const diff = (lastPrice - ma200Last) / ma200Last;
 
   if (diff <= -0.05) {
-    return { label: "Undervalued-ish 🟢", detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% below MA200.` };
+    return {
+      label: "Undervalued-ish 🟢",
+      detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% below MA200.`,
+    };
   }
   if (diff < 0.05) {
-    return { label: "Fair-ish 🟡", detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% from MA200.` };
+    return {
+      label: "Fair-ish 🟡",
+      detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% from MA200.`,
+    };
   }
-  return { label: "Overextended 🔴", detail: `Price is ${(diff * 100).toFixed(1)}% above MA200.` };
+  return {
+    label: "Overextended 🔴",
+    detail: `Price is ${(diff * 100).toFixed(1)}% above MA200.`,
+  };
 }
 
 const PRESET_TICKERS: { symbol: string; name: string }[] = [
@@ -89,35 +98,6 @@ const PRESET_TICKERS: { symbol: string; name: string }[] = [
   { symbol: "XOM", name: "Exxon Mobil Corp." },
 ].sort((a, b) => a.symbol.localeCompare(b.symbol));
 
-<label style={{ fontWeight: 600, marginLeft: 8 }}>Indicator</label>
-
-
-<select
-  value={indicator}
-  onChange={(e) => setIndicator(e.target.value as any)}
-  style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #3333" }}
->
-  {[
-    "None",
-    "MA50",
-    "MA200",
-    "Bollinger(20,2)",
-    "RSI(14)",
-    "MACD(12,26,9)",
-    "EMA20",
-    "VWAP",
-    "Stochastic(14,3)",
-    "ATR(14)",
-    "Volume",
-  ].map((x) => (
-    <option key={x} value={x}>
-      {x}
-    </option>
-  ))}
-</select>
-
-<span style={{ opacity: 0.6 }}>or</span>
-
 const TIMEFRAMES: { label: string; days: number }[] = [
   { label: "3M", days: 90 },
   { label: "6M", days: 180 },
@@ -125,6 +105,20 @@ const TIMEFRAMES: { label: string; days: number }[] = [
   { label: "3Y", days: 365 * 3 },
   { label: "5Y", days: 365 * 5 },
   { label: "MAX", days: 4000 },
+];
+
+const INDICATORS: Overlay[] = [
+  "None",
+  "MA50",
+  "MA200",
+  "Bollinger(20,2)",
+  "RSI(14)",
+  "MACD(12,26,9)",
+  "EMA20",
+  "VWAP",
+  "Stochastic(14,3)",
+  "ATR(14)",
+  "Volume",
 ];
 
 export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSymbol?: string }) {
@@ -151,7 +145,6 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
       setErr(null);
 
       try {
-        // Always fetch long history so MA50/MA200 stay correct even when displaying 3M/6M
         const historyDays = Math.max(tfDays, 2600);
 
         const [qRes, hRes] = await Promise.all([
@@ -215,10 +208,10 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
 
   const displayedHistory = useMemo(() => historyAll.slice(-tfDays), [historyAll, tfDays]);
 
+  // Compute MAs on full history for correctness; slice to timeframe for display
   const closesAll = useMemo(() => historyAll.map((p) => p.close), [historyAll]);
   const ma50Full = useMemo(() => movingAverage(closesAll, 50), [closesAll]);
   const ma200Full = useMemo(() => movingAverage(closesAll, 200), [closesAll]);
-
   const ma50 = useMemo(() => ma50Full.slice(-tfDays), [ma50Full, tfDays]);
   const ma200 = useMemo(() => ma200Full.slice(-tfDays), [ma200Full, tfDays]);
 
@@ -237,174 +230,107 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
     setOpen(false);
   }
 
-return (
-  <main style={{ padding: 40, fontFamily: "system-ui, Arial" }}>
-    <h1 style={{ fontSize: 32, marginBottom: 8 }}>My Stock Dashboard</h1>
-    <p style={{ marginTop: 0, opacity: 0.7 }}>
-      Version 1 – Learning Build (free data)
-    </p>
+  return (
+    <main style={{ padding: 40, fontFamily: "system-ui, Arial" }}>
+      <h1 style={{ fontSize: 32, marginBottom: 8 }}>My Stock Dashboard</h1>
+      <p style={{ marginTop: 0, opacity: 0.7 }}>Version 1 – Learning Build (free data)</p>
 
-    <div
-      style={{
-        display: "flex",
-        gap: 12,
-        flexWrap: "wrap",
-        alignItems: "center",
-        marginTop: 16,
-      }}
-    >
-      {/* Ticker */}
-      <label style={{ fontWeight: 600 }}>Ticker</label>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginTop: 16 }}>
+        <label style={{ fontWeight: 600 }}>Ticker</label>
 
-      <select
-        value={symbol}
-        onChange={(e) => chooseSymbol(e.target.value)}
-        style={{
-          padding: "8px 10px",
-          borderRadius: 10,
-          border: "1px solid #3333",
-        }}
-      >
-        {PRESET_TICKERS.map((t) => (
-          <option key={t.symbol} value={t.symbol}>
-            {t.symbol} – {t.name}
-          </option>
-        ))}
-      </select>
+        <select
+          value={symbol}
+          onChange={(e) => chooseSymbol(e.target.value)}
+          style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #3333" }}
+        >
+          {PRESET_TICKERS.map((t) => (
+            <option key={t.symbol} value={t.symbol}>
+              {t.symbol} – {t.name}
+            </option>
+          ))}
+        </select>
 
-      {/* Indicator */}
-      <label style={{ fontWeight: 600, marginLeft: 8 }}>
-        Indicator
-      </label>
+        <label style={{ fontWeight: 600, marginLeft: 8 }}>Indicator</label>
+        <select
+          value={indicator}
+          onChange={(e) => setIndicator(e.target.value as any)}
+          style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #3333" }}
+        >
+          {INDICATORS.map((x) => (
+            <option key={x} value={x}>
+              {x}
+            </option>
+          ))}
+        </select>
 
-      <select
-        value={indicator}
-        onChange={(e) => setIndicator(e.target.value as any)}
-        style={{
-          padding: "8px 10px",
-          borderRadius: 10,
-          border: "1px solid #3333",
-        }}
-      >
-        {[
-          "None",
-          "MA50",
-          "MA200",
-          "Bollinger(20,2)",
-          "RSI(14)",
-          "MACD(12,26,9)",
-          "EMA20",
-          "VWAP",
-          "Stochastic(14,3)",
-          "ATR(14)",
-          "Volume",
-        ].map((x) => (
-          <option key={x} value={x}>
-            {x}
-          </option>
-        ))}
-      </select>
+        <span style={{ opacity: 0.6 }}>or</span>
 
-      <span style={{ opacity: 0.6 }}>or</span>
-
-      {/* Autocomplete Search */}
-      <div style={{ position: "relative" }}>
-        <input
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setOpen(true);
-          }}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") chooseSymbol(query);
-          }}
-          placeholder="Search ticker or company"
-          style={{
-            padding: "8px 10px",
-            borderRadius: 10,
-            border: "1px solid #3333",
-            width: 360,
-          }}
-        />
-
-        {open && results.length > 0 ? (
-          <div
-            style={{
-              position: "absolute",
-              top: "calc(100% + 6px)",
-              left: 0,
-              right: 0,
-              border: "1px solid #3333",
-              borderRadius: 12,
-              background: "#fff",
-              color: "#111",
-              overflow: "hidden",
-              zIndex: 9999,
-              boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
-              maxHeight: 340,
-              overflowY: "auto",
+        {/* Autocomplete Search */}
+        <div style={{ position: "relative" }}>
+          <input
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setOpen(true);
             }}
-          >
-            {results.map((r) => (
-              <button
-                key={`${r.symbol}-${r.exchange}`}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => chooseSymbol(r.symbol)}
-                style={{
-                  display: "block",
-                  width: "100%",
-                  textAlign: "left",
-                  padding: "10px 12px",
-                  border: "none",
-                  background: "transparent",
-                  cursor: "pointer",
-                }}
-              >
-                <div style={{ fontWeight: 700 }}>
-                  {r.symbol}{" "}
-                  <span style={{ fontWeight: 500, opacity: 0.7 }}>
-                    ({r.exchange})
-                  </span>
-                </div>
-                <div style={{ fontSize: 12, opacity: 0.75 }}>
-                  {r.name}
-                </div>
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </div>
-
-      {/* Timeframes */}
-      <div
-        style={{
-          marginLeft: "auto",
-          display: "flex",
-          gap: 8,
-          flexWrap: "wrap",
-        }}
-      >
-        {TIMEFRAMES.map((t) => (
-          <button
-            key={t.label}
-            onClick={() => setTfDays(t.days)}
+            onFocus={() => setOpen(true)}
+            onBlur={() => setTimeout(() => setOpen(false), 150)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") chooseSymbol(query);
+            }}
+            placeholder="Search ticker or company"
             style={{
               padding: "8px 10px",
               borderRadius: 10,
               border: "1px solid #3333",
-              cursor: "pointer",
-              opacity: tfDays === t.days ? 1 : 0.7,
-              fontWeight: tfDays === t.days ? 700 : 500,
+              width: 360,
             }}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-    </div>
+          />
 
+          {open && results.length > 0 ? (
+            <div
+              style={{
+                position: "absolute",
+                top: "calc(100% + 6px)",
+                left: 0,
+                right: 0,
+                border: "1px solid #3333",
+                borderRadius: 12,
+                background: "#fff",
+                color: "#111",
+                overflow: "hidden",
+                zIndex: 9999,
+                boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
+                maxHeight: 340,
+                overflowY: "auto",
+              }}
+            >
+              {results.map((r) => (
+                <button
+                  key={`${r.symbol}-${r.exchange}`}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => chooseSymbol(r.symbol)}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    textAlign: "left",
+                    padding: "10px 12px",
+                    border: "none",
+                    background: "transparent",
+                    cursor: "pointer",
+                  }}
+                >
+                  <div style={{ fontWeight: 700 }}>
+                    {r.symbol} <span style={{ fontWeight: 500, opacity: 0.7 }}>({r.exchange})</span>
+                  </div>
+                  <div style={{ fontSize: 12, opacity: 0.75 }}>{r.name}</div>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        {/* Timeframes */}
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
           {TIMEFRAMES.map((t) => (
             <button
@@ -436,8 +362,7 @@ return (
           ) : (
             <>
               <p style={{ fontSize: 20, margin: "8px 0" }}>
-                <strong>Last price:</strong>{" "}
-                {quote?.price == null ? "Unavailable" : `$${quote.price.toFixed(2)}`}
+                <strong>Last price:</strong> {quote?.price == null ? "Unavailable" : `$${quote.price.toFixed(2)}`}
               </p>
 
               <p style={{ margin: "8px 0 0", opacity: 0.85 }}>
@@ -459,12 +384,7 @@ return (
         </div>
 
         <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
-          <PriceChart
-  data={displayedHistory}
-  ma50={ma50}
-  ma200={ma200}
-  overlay={indicator}
-/>
+          <PriceChart data={displayedHistory} ma50={ma50} ma200={ma200} overlay={indicator} />
         </div>
       </div>
     </main>
