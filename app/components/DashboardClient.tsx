@@ -189,21 +189,22 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginTop: 16 }}>
         <label style={{ fontWeight: 600 }}>Ticker</label>
 
-        <select
-          value={symbol}
-          onChange={(e) => {
-            setSymbol(e.target.value);
-            setCustom(e.target.value);
-          }}
-          style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #3333" }}
-        >
-          {PRESET_TICKERS.map((t) => (
-  <option key={t.symbol} value={t.symbol}>
-    {t.symbol} – {t.name}
-  </option>
-))}
+       <select
+  value={symbol}
+  onChange={(e) => {
+    setSymbol(e.target.value);
+    setCustom(e.target.value);
+  }}
+  style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #3333" }}
+>
+  {PRESET_TICKERS.map((t) => (
+    <option key={t.symbol} value={t.symbol}>
+      {t.symbol} – {t.name}
+    </option>
+  ))}
+</select>
 
-        <span style={{ opacity: 0.6 }}>or</span>
+<span style={{ opacity: 0.6 }}>or</span>
 
         <input
           value={custom}
