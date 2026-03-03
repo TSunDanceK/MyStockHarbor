@@ -91,9 +91,11 @@ const PRESET_TICKERS: { symbol: string; name: string }[] = [
 
 <label style={{ fontWeight: 600, marginLeft: 8 }}>Indicator</label>
 
+<label style={{ fontWeight: 600, marginLeft: 8 }}>Indicator</label>
+
 <select
   value={indicator}
-  onChange={(e) => setIndicator(e.target.value as Overlay)}
+  onChange={(e) => setIndicator(e.target.value as any)}
   style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #3333" }}
 >
   {[
