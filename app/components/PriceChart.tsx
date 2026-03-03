@@ -43,17 +43,43 @@ function fmtXLabel(s: string) {
   return `${mm}/${dd}`;
 }
 
+function minMax(arr: Array<number | null>) {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const v of arr) {
+    if (typeof v !== "number" || !Number.isFinite(v)) continue;
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
+  if (min === max) return { min: min - 1, max: max + 1 };
+  return { min, max };
+}
+
 export default function PriceChart({
   data,
   ma50,
   ma200,
   overlay = "None",
+
   bollUpper,
   bollMid,
   bollLower,
+
   ema20,
   vwap,
-  height = 260,
+
+  // sub-panel indicators
+  rsi14,
+  macdLine,
+  macdSignal,
+  macdHist,
+  stochK,
+  stochD,
+  atr14,
+  volume,
+
+  height = 320,
 }: {
   data: Point[];
   ma50: (number | null)[];
@@ -67,17 +93,41 @@ export default function PriceChart({
   ema20?: (number | null)[];
   vwap?: (number | null)[];
 
+  rsi14?: (number | null)[];
+  macdLine?: (number | null)[];
+  macdSignal?: (number | null)[];
+  macdHist?: (number | null)[];
+  stochK?: (number | null)[];
+  stochD?: (number | null)[];
+  atr14?: (number | null)[];
+  volume?: (number | null)[];
+
   height?: number;
 }) {
   const width = 760;
 
+  // padding
   const padL = 34;
   const padR = 54;
   const padT = 24;
   const padB = 34;
 
+  const wantsSubPanel =
+    overlay === "RSI(14)" ||
+    overlay === "MACD(12,26,9)" ||
+    overlay === "Stochastic(14,3)" ||
+    overlay === "ATR(14)" ||
+    overlay === "Volume";
+
+  const gap = wantsSubPanel ? 14 : 0;
+  const innerH = height - padT - padB - gap;
+
+  const priceH = wantsSubPanel ? Math.max(140, Math.floor(innerH * 0.62)) : innerH;
+  const subH = wantsSubPanel ? Math.max(90, innerH - priceH) : 0;
+
   const series = useMemo(() => {
     const n = data.length;
+
     const a50 = ma50.length === n ? ma50 : Array(n).fill(null);
     const a200 = ma200.length === n ? ma200 : Array(n).fill(null);
 
@@ -88,6 +138,17 @@ export default function PriceChart({
     const e20 = ema20 && ema20.length === n ? ema20 : Array(n).fill(null);
     const vw = vwap && vwap.length === n ? vwap : Array(n).fill(null);
 
+    const rsi = rsi14 && rsi14.length === n ? rsi14 : Array(n).fill(null);
+    const ml = macdLine && macdLine.length === n ? macdLine : Array(n).fill(null);
+    const ms = macdSignal && macdSignal.length === n ? macdSignal : Array(n).fill(null);
+    const mh = macdHist && macdHist.length === n ? macdHist : Array(n).fill(null);
+
+    const sk = stochK && stochK.length === n ? stochK : Array(n).fill(null);
+    const sd = stochD && stochD.length === n ? stochD : Array(n).fill(null);
+
+    const at = atr14 && atr14.length === n ? atr14 : Array(n).fill(null);
+    const vol = volume && volume.length === n ? volume : Array(n).fill(null);
+
     return data.map((p, i) => ({
       ...p,
       ma50: a50[i] as number | null,
@@ -97,8 +158,36 @@ export default function PriceChart({
       bl: l[i] as number | null,
       ema20: e20[i] as number | null,
       vwap: vw[i] as number | null,
+
+      rsi14: rsi[i] as number | null,
+      macdLine: ml[i] as number | null,
+      macdSignal: ms[i] as number | null,
+      macdHist: mh[i] as number | null,
+
+      stochK: sk[i] as number | null,
+      stochD: sd[i] as number | null,
+
+      atr14: at[i] as number | null,
+      volume: vol[i] as number | null,
     }));
-  }, [data, ma50, ma200, bollUpper, bollMid, bollLower, ema20, vwap]);
+  }, [
+    data,
+    ma50,
+    ma200,
+    bollUpper,
+    bollMid,
+    bollLower,
+    ema20,
+    vwap,
+    rsi14,
+    macdLine,
+    macdSignal,
+    macdHist,
+    stochK,
+    stochD,
+    atr14,
+    volume,
+  ]);
 
   const hasData = series.length >= 2;
 
@@ -106,9 +195,9 @@ export default function PriceChart({
     return (i: number) => padL + (i * (width - padL - padR)) / Math.max(1, series.length - 1);
   }, [series.length]);
 
-  // y-range based on price + active overlays
-  const { min, max, range } = useMemo(() => {
-    if (!hasData) return { min: 0, max: 1, range: 1 };
+  // PRICE Y RANGE (price + price overlays only)
+  const { pMin, pMax, pRange } = useMemo(() => {
+    if (!hasData) return { pMin: 0, pMax: 1, pRange: 1 };
 
     const vals: number[] = [];
     for (const p of series) {
@@ -130,14 +219,57 @@ export default function PriceChart({
     const minV = Math.min(...vals);
     const maxV = Math.max(...vals);
     const r = Math.max(1e-9, maxV - minV);
-    return { min: minV, max: maxV, range: r };
+    return { pMin: minV, pMax: maxV, pRange: r };
   }, [hasData, series, overlay]);
 
-  const y = useMemo(() => {
-    return (v: number) => padT + ((max - v) * (height - padT - padB)) / range;
-  }, [max, range, height]);
+  const yMain = useMemo(() => {
+    return (v: number) => padT + ((pMax - v) * priceH) / pRange;
+  }, [pMax, pRange, priceH]);
 
-  const pathFrom = (arr: Array<number | null>) => {
+  const subTop = padT + priceH + gap;
+
+  // SUBPANEL RANGE
+  const subRange = useMemo(() => {
+    if (!hasData || !wantsSubPanel) return null;
+
+    if (overlay === "RSI(14)") return { min: 0, max: 100 };
+    if (overlay === "Stochastic(14,3)") return { min: 0, max: 100 };
+
+    if (overlay === "MACD(12,26,9)") {
+      const mm1 = minMax(series.map((p) => p.macdLine));
+      const mm2 = minMax(series.map((p) => p.macdSignal));
+      const mm3 = minMax(series.map((p) => p.macdHist));
+      const mins = [mm1?.min, mm2?.min, mm3?.min].filter((x) => typeof x === "number") as number[];
+      const maxs = [mm1?.max, mm2?.max, mm3?.max].filter((x) => typeof x === "number") as number[];
+      if (!mins.length || !maxs.length) return null;
+      const min = Math.min(...mins);
+      const max = Math.max(...maxs);
+      if (min === max) return { min: min - 1, max: max + 1 };
+      return { min, max };
+    }
+
+    if (overlay === "ATR(14)") return minMax(series.map((p) => p.atr14));
+
+    if (overlay === "Volume") {
+      let max = 0;
+      for (const p of series) {
+        const v = p.volume;
+        if (typeof v === "number" && Number.isFinite(v) && v > max) max = v;
+      }
+      if (max <= 0) return null;
+      return { min: 0, max };
+    }
+
+    return null;
+  }, [hasData, wantsSubPanel, overlay, series]);
+
+  const ySub = useMemo(() => {
+    if (!subRange) return (v: number) => subTop + subH / 2;
+    const r = Math.max(1e-9, subRange.max - subRange.min);
+    return (v: number) => subTop + ((subRange.max - v) * subH) / r;
+  }, [subRange, subTop, subH]);
+
+  const pathFrom = (arr: Array<number | null>, yFn: (v: number) => number) => {
     let d = "";
     let started = false;
     for (let i = 0; i < arr.length; i++) {
@@ -147,7 +279,7 @@ export default function PriceChart({
         continue;
       }
       const cmd = started ? "L" : "M";
-      d += `${cmd} ${x(i).toFixed(2)} ${y(v).toFixed(2)} `;
+      d += `${cmd} ${x(i).toFixed(2)} ${yFn(v).toFixed(2)} `;
       started = true;
     }
     return d.trim();
@@ -156,19 +288,27 @@ export default function PriceChart({
   const closePath = useMemo(() => {
     if (!hasData) return "";
     return series
-      .map((p, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(2)} ${y(p.close).toFixed(2)}`)
+      .map((p, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(2)} ${yMain(p.close).toFixed(2)}`)
       .join(" ");
-  }, [hasData, series, x, y]);
+  }, [hasData, series, x, yMain]);
 
-  const ma50Path = useMemo(() => pathFrom(series.map((p) => p.ma50)), [series]);
-  const ma200Path = useMemo(() => pathFrom(series.map((p) => p.ma200)), [series]);
+  const ma50Path = useMemo(() => pathFrom(series.map((p) => p.ma50), yMain), [series, yMain]);
+  const ma200Path = useMemo(() => pathFrom(series.map((p) => p.ma200), yMain), [series, yMain]);
 
-  const bollUPath = useMemo(() => pathFrom(series.map((p) => p.bu)), [series]);
-  const bollMPath = useMemo(() => pathFrom(series.map((p) => p.bm)), [series]);
-  const bollLPath = useMemo(() => pathFrom(series.map((p) => p.bl)), [series]);
+  const bollUPath = useMemo(() => pathFrom(series.map((p) => p.bu), yMain), [series, yMain]);
+  const bollMPath = useMemo(() => pathFrom(series.map((p) => p.bm), yMain), [series, yMain]);
+  const bollLPath = useMemo(() => pathFrom(series.map((p) => p.bl), yMain), [series, yMain]);
 
-  const ema20Path = useMemo(() => pathFrom(series.map((p) => p.ema20)), [series]);
-  const vwapPath = useMemo(() => pathFrom(series.map((p) => p.vwap)), [series]);
+  const ema20Path = useMemo(() => pathFrom(series.map((p) => p.ema20), yMain), [series, yMain]);
+  const vwapPath = useMemo(() => pathFrom(series.map((p) => p.vwap), yMain), [series, yMain]);
+
+  // sub paths
+  const rsiPath = useMemo(() => pathFrom(series.map((p) => p.rsi14), ySub), [series, ySub]);
+  const macdLinePath = useMemo(() => pathFrom(series.map((p) => p.macdLine), ySub), [series, ySub]);
+  const macdSignalPath = useMemo(() => pathFrom(series.map((p) => p.macdSignal), ySub), [series, ySub]);
+  const stochKPath = useMemo(() => pathFrom(series.map((p) => p.stochK), ySub), [series, ySub]);
+  const stochDPath = useMemo(() => pathFrom(series.map((p) => p.stochD), ySub), [series, ySub]);
+  const atrPath = useMemo(() => pathFrom(series.map((p) => p.atr14), ySub), [series, ySub]);
 
   const ret = useMemo(() => {
     if (!hasData) return 0;
@@ -177,20 +317,20 @@ export default function PriceChart({
     return (last - first) / first;
   }, [hasData, series]);
 
-  // y-axis ticks on right
+  // price y ticks (right)
   const yTicks = useMemo(() => {
     if (!hasData) return [];
     const ticks: { v: number; y: number }[] = [];
     const n = 5;
     for (let i = 0; i < n; i++) {
       const t = i / (n - 1);
-      const v = max - t * range;
-      ticks.push({ v, y: y(v) });
+      const v = pMax - t * pRange;
+      ticks.push({ v, y: yMain(v) });
     }
     return ticks;
-  }, [hasData, max, range, y]);
+  }, [hasData, pMax, pRange, yMain]);
 
-  // x-axis ticks
+  // x ticks (bottom)
   const xTicks = useMemo(() => {
     if (!hasData) return [];
     const n = 5;
@@ -220,16 +360,10 @@ export default function PriceChart({
       </div>
 
       <svg width="100%" viewBox={`0 0 ${width} ${height}`} style={{ border: "1px solid #3333", borderRadius: 12 }}>
-        <rect
-          x={padL}
-          y={padT}
-          width={width - padL - padR}
-          height={height - padT - padB}
-          fill="none"
-          stroke="currentColor"
-          opacity="0.10"
-        />
+        {/* PRICE plot box */}
+        <rect x={padL} y={padT} width={width - padL - padR} height={priceH} fill="none" stroke="currentColor" opacity="0.10" />
 
+        {/* price grid + y labels */}
         {yTicks.map((t, idx) => (
           <g key={idx}>
             <line x1={padL} y1={t.y} x2={width - padR} y2={t.y} stroke="currentColor" opacity="0.08" />
@@ -239,6 +373,7 @@ export default function PriceChart({
           </g>
         ))}
 
+        {/* x labels */}
         {xTicks.map((t, idx) => (
           <g key={idx}>
             <line x1={t.x} y1={height - padB} x2={t.x} y2={height - padB + 4} stroke="currentColor" opacity="0.25" />
@@ -248,8 +383,10 @@ export default function PriceChart({
           </g>
         ))}
 
+        {/* price line */}
         <path d={closePath} fill="none" stroke="currentColor" strokeWidth="2.25" opacity="0.95" />
 
+        {/* price overlays */}
         {overlay === "MA50" && ma50Path ? (
           <path d={ma50Path} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.55" strokeDasharray="6 4" />
         ) : null}
@@ -276,7 +413,110 @@ export default function PriceChart({
           <path d={vwapPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.45" strokeDasharray="3 4" />
         ) : null}
 
-        <circle cx={x(series.length - 1)} cy={y(last.close)} r="3.5" fill="currentColor" opacity="0.9" />
+        {/* SUB PANEL */}
+        {wantsSubPanel ? (
+          <>
+            <rect x={padL} y={subTop} width={width - padL - padR} height={subH} fill="none" stroke="currentColor" opacity="0.10" />
+
+            {/* RSI */}
+            {overlay === "RSI(14)" ? (
+              <>
+                {/* 30/70 guides */}
+                <line x1={padL} y1={ySub(70)} x2={width - padR} y2={ySub(70)} stroke="currentColor" opacity="0.10" />
+                <line x1={padL} y1={ySub(30)} x2={width - padR} y2={ySub(30)} stroke="currentColor" opacity="0.10" />
+                {rsiPath ? <path d={rsiPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.55" /> : null}
+              </>
+            ) : null}
+
+            {/* MACD */}
+            {overlay === "MACD(12,26,9)" ? (
+              <>
+                {/* zero line */}
+                {subRange ? (
+                  <line x1={padL} y1={ySub(0)} x2={width - padR} y2={ySub(0)} stroke="currentColor" opacity="0.12" />
+                ) : null}
+
+                {/* histogram bars */}
+                {subRange
+                  ? series.map((p, i) => {
+                      const v = p.macdHist;
+                      if (typeof v !== "number" || !Number.isFinite(v)) return null;
+                      const x0 = x(i);
+                      const barW = Math.max(1, (width - padL - padR) / Math.max(10, series.length) - 1);
+                      const y0 = ySub(0);
+                      const yv = ySub(v);
+                      const h = Math.abs(yv - y0);
+                      return (
+                        <rect
+                          key={i}
+                          x={x0 - barW / 2}
+                          y={Math.min(y0, yv)}
+                          width={barW}
+                          height={h}
+                          fill="currentColor"
+                          opacity="0.18"
+                        />
+                      );
+                    })
+                  : null}
+
+                {macdLinePath ? <path d={macdLinePath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.55" /> : null}
+                {macdSignalPath ? (
+                  <path d={macdSignalPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.35" strokeDasharray="6 4" />
+                ) : null}
+              </>
+            ) : null}
+
+            {/* Stochastic */}
+            {overlay === "Stochastic(14,3)" ? (
+              <>
+                {/* 20/80 guides */}
+                <line x1={padL} y1={ySub(80)} x2={width - padR} y2={ySub(80)} stroke="currentColor" opacity="0.10" />
+                <line x1={padL} y1={ySub(20)} x2={width - padR} y2={ySub(20)} stroke="currentColor" opacity="0.10" />
+                {stochKPath ? <path d={stochKPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.55" /> : null}
+                {stochDPath ? (
+                  <path d={stochDPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.35" strokeDasharray="6 4" />
+                ) : null}
+              </>
+            ) : null}
+
+            {/* ATR */}
+            {overlay === "ATR(14)" ? (
+              <>{atrPath ? <path d={atrPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.55" /> : null}</>
+            ) : null}
+
+            {/* Volume */}
+            {overlay === "Volume" ? (
+              <>
+                {subRange
+                  ? series.map((p, i) => {
+                      const v = p.volume;
+                      if (typeof v !== "number" || !Number.isFinite(v) || v < 0) return null;
+                      const x0 = x(i);
+                      const barW = Math.max(1, (width - padL - padR) / Math.max(10, series.length) - 1);
+                      const y0 = ySub(0);
+                      const yv = ySub(v);
+                      const h = Math.abs(yv - y0);
+                      return (
+                        <rect
+                          key={i}
+                          x={x0 - barW / 2}
+                          y={Math.min(y0, yv)}
+                          width={barW}
+                          height={h}
+                          fill="currentColor"
+                          opacity="0.25"
+                        />
+                      );
+                    })
+                  : null}
+              </>
+            ) : null}
+          </>
+        ) : null}
+
+        {/* last point */}
+        <circle cx={x(series.length - 1)} cy={yMain(last.close)} r="3.5" fill="currentColor" opacity="0.9" />
       </svg>
 
       <div style={{ marginTop: 8, fontSize: 12, opacity: 0.7, display: "flex", gap: 14, flexWrap: "wrap" }}>
