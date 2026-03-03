@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 // Very small parser for the Nasdaq Trader symbol directory format (pipe-delimited)
 function parseNasdaqSymbolFile(text: string) {
