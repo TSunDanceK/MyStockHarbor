@@ -50,16 +50,51 @@ function valuationSignal(lastPrice: number | null, ma200Last: number | null) {
   };
 }
 
-const PRESET_TICKERS = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "TSLA"] as const;
-
-const TIMEFRAMES: { label: string; days: number }[] = [
-  { label: "3M", days: 90 },
-  { label: "6M", days: 180 },
-  { label: "1Y", days: 365 },
-  { label: "3Y", days: 365 * 3 },
-  { label: "5Y", days: 365 * 5 },
-  { label: "MAX", days: 4000 },
-];
+const PRESET_TICKERS: { symbol: string; name: string }[] = [
+  { symbol: "AAPL", name: "Apple Inc." },
+  { symbol: "ABBV", name: "AbbVie Inc." },
+  { symbol: "ABT", name: "Abbott Laboratories" },
+  { symbol: "ADBE", name: "Adobe Inc." },
+  { symbol: "AMZN", name: "Amazon.com Inc." },
+  { symbol: "AVGO", name: "Broadcom Inc." },
+  { symbol: "BAC", name: "Bank of America" },
+  { symbol: "BRK.B", name: "Berkshire Hathaway B" },
+  { symbol: "COST", name: "Costco Wholesale" },
+  { symbol: "CRM", name: "Salesforce Inc." },
+  { symbol: "CSCO", name: "Cisco Systems" },
+  { symbol: "CVX", name: "Chevron Corp." },
+  { symbol: "DIS", name: "Walt Disney Co." },
+  { symbol: "GOOGL", name: "Alphabet Inc. Class A" },
+  { symbol: "HD", name: "Home Depot" },
+  { symbol: "INTC", name: "Intel Corp." },
+  { symbol: "JNJ", name: "Johnson & Johnson" },
+  { symbol: "JPM", name: "JPMorgan Chase" },
+  { symbol: "KO", name: "Coca-Cola Co." },
+  { symbol: "LLY", name: "Eli Lilly & Co." },
+  { symbol: "MA", name: "Mastercard Inc." },
+  { symbol: "MCD", name: "McDonald's Corp." },
+  { symbol: "META", name: "Meta Platforms" },
+  { symbol: "MRK", name: "Merck & Co." },
+  { symbol: "MSFT", name: "Microsoft Corp." },
+  { symbol: "NFLX", name: "Netflix Inc." },
+  { symbol: "NVDA", name: "NVIDIA Corp." },
+  { symbol: "ORCL", name: "Oracle Corp." },
+  { symbol: "PEP", name: "PepsiCo Inc." },
+  { symbol: "PG", name: "Procter & Gamble" },
+  { symbol: "PYPL", name: "PayPal Holdings" },
+  { symbol: "QCOM", name: "Qualcomm Inc." },
+  { symbol: "SBUX", name: "Starbucks Corp." },
+  { symbol: "T", name: "AT&T Inc." },
+  { symbol: "TGT", name: "Target Corp." },
+  { symbol: "TSLA", name: "Tesla Inc." },
+  { symbol: "TXN", name: "Texas Instruments" },
+  { symbol: "UNH", name: "UnitedHealth Group" },
+  { symbol: "V", name: "Visa Inc." },
+  { symbol: "VZ", name: "Verizon Communications" },
+  { symbol: "WFC", name: "Wells Fargo" },
+  { symbol: "WMT", name: "Walmart Inc." },
+  { symbol: "XOM", name: "Exxon Mobil Corp." }
+].sort((a, b) => a.symbol.localeCompare(b.symbol));
 
 export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSymbol?: string }) {
   const [symbol, setSymbol] = useState(defaultSymbol);
@@ -163,11 +198,10 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
           style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #3333" }}
         >
           {PRESET_TICKERS.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
+  <option key={t.symbol} value={t.symbol}>
+    {t.symbol} – {t.name}
+  </option>
+))}
 
         <span style={{ opacity: 0.6 }}>or</span>
 
