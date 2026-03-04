@@ -1009,43 +1009,43 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
           ) : null}
         </div>
 
-{/* Indicator (next to search) */}
-<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-  <label style={{ fontWeight: 600 }}>Indicator</label>
-  <select
-    value={indicator}
-    onChange={(e) => setIndicator(e.target.value as any)}
-    style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #3333" }}
-  >
-    {INDICATORS.map((x) => (
-      <option key={x} value={x}>
-        {x}
-      </option>
-    ))}
-  </select>
-</div>
+        {/* Indicator (next to search) */}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <label style={{ fontWeight: 600 }}>Indicator</label>
+          <select
+            value={indicator}
+            onChange={(e) => setIndicator(e.target.value as any)}
+            style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #3333" }}
+          >
+            {INDICATORS.map((x) => (
+              <option key={x} value={x}>
+                {x}
+              </option>
+            ))}
+          </select>
+        </div>
 
-{/* Timeframes (stay pinned right) */}
-<div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
-  {TIMEFRAMES.map((t) => (
-    <button
-      key={t.label}
-      onClick={() => setTfDays(t.days)}
-      style={{
-        padding: "8px 10px",
-        borderRadius: 10,
-        border: "1px solid #3333",
-        cursor: "pointer",
-        opacity: tfDays === t.days ? 1 : 0.7,
-        fontWeight: tfDays === t.days ? 700 : 500,
-      }}
-    >
-      {t.label}
-    </button>
-  ))}
-</div>
+        {/* Timeframes (stay pinned right) */}
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {TIMEFRAMES.map((t) => (
+            <button
+              key={t.label}
+              onClick={() => setTfDays(t.days)}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 10,
+                border: "1px solid #3333",
+                cursor: "pointer",
+                opacity: tfDays === t.days ? 1 : 0.7,
+                fontWeight: tfDays === t.days ? 700 : 500,
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
       </div>
+
 
       <div style={{ marginTop: 16, maxWidth: 920, display: "grid", gap: 16 }}>
         {/* Card 1: Summary */}
