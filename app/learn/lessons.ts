@@ -9,6 +9,7 @@ export type Lesson = {
 };
 
 export const LESSONS: Lesson[] = [
+  // ---------------- BASICS ----------------
   {
     slug: "support-and-resistance",
     title: "Support & Resistance",
@@ -70,25 +71,70 @@ export const LESSONS: Lesson[] = [
       },
     ],
   },
+
+  // -------------- INDICATORS --------------
   {
-    slug: "moving-averages",
-    title: "Moving Averages (MA50 / MA200)",
+    slug: "atr",
+    title: "ATR (14)",
     category: "Indicators",
-    summary: "What moving averages measure and how traders use them.",
+    summary: "A volatility measure — useful for sizing stops and spotting ‘hot’ conditions.",
+    sections: [
+      {
+        heading: "What ATR measures",
+        body: [
+          "ATR (Average True Range) estimates how much price typically moves per bar.",
+          "Higher ATR = more volatility; lower ATR = quieter movement.",
+        ],
+      },
+      {
+        heading: "How traders use it",
+        body: [
+          "Stops: a common idea is to place stops a multiple of ATR away from entry (context matters).",
+          "Volatility regime: compare ATR to its recent average to see if conditions are unusually hot or quiet.",
+        ],
+      },
+    ],
+  },
+  {
+    slug: "bollinger-bands",
+    title: "Bollinger Bands (20,2)",
+    category: "Indicators",
+    summary: "Bands that expand/contract with volatility — often used to spot extremes.",
     sections: [
       {
         heading: "What they are",
         body: [
-          "A moving average is a smoothed line of price over a set number of periods.",
-          "MA50 reacts faster than MA200 because it uses fewer periods.",
+          "Bollinger Bands are built from a middle moving average (often 20) plus/minus a volatility measure (standard deviation).",
+          "When volatility rises, bands widen. When volatility falls, bands tighten.",
+        ],
+      },
+      {
+        heading: "Common reads",
+        body: [
+          "Touches of the outer bands can suggest an ‘extended’ move (not an automatic reversal).",
+          "‘Squeezes’ (very tight bands) can hint a big move may be coming, but not the direction.",
+        ],
+      },
+    ],
+  },
+  {
+    slug: "ema20",
+    title: "EMA (20)",
+    category: "Indicators",
+    summary: "A faster moving average that reacts quicker to price than a simple MA.",
+    sections: [
+      {
+        heading: "EMA vs SMA",
+        body: [
+          "EMA weights recent prices more heavily, so it responds faster than an SMA with the same period.",
+          "That speed can help in trending markets, but can also whipsaw in choppy markets.",
         ],
       },
       {
         heading: "Common uses",
         body: [
-          "Trend filter: price above MA200 is often treated as long-term bullish bias (not a rule).",
-          "Dynamic support/resistance: price often reacts near major averages.",
-          "Crossovers: MA50 crossing MA200 is a popular (but lagging) signal.",
+          "Trend guidance: price holding above EMA20 often supports bullish momentum (context matters).",
+          "Pullback zones: EMA20 is commonly watched as a ‘dynamic level’ in trends.",
         ],
       },
     ],
@@ -117,6 +163,29 @@ export const LESSONS: Lesson[] = [
     ],
   },
   {
+    slug: "moving-averages",
+    title: "Moving Averages (MA50 / MA200)",
+    category: "Indicators",
+    summary: "What moving averages measure and how traders use them.",
+    sections: [
+      {
+        heading: "What they are",
+        body: [
+          "A moving average is a smoothed line of price over a set number of periods.",
+          "MA50 reacts faster than MA200 because it uses fewer periods.",
+        ],
+      },
+      {
+        heading: "Common uses",
+        body: [
+          "Trend filter: price above MA200 is often treated as long-term bullish bias (not a rule).",
+          "Dynamic support/resistance: price often reacts near major averages.",
+          "Crossovers: MA50 crossing MA200 is a popular (but lagging) signal.",
+        ],
+      },
+    ],
+  },
+  {
     slug: "rsi",
     title: "RSI (14)",
     category: "Indicators",
@@ -128,6 +197,28 @@ export const LESSONS: Lesson[] = [
           "RSI > 70 is often called overbought; RSI < 30 is oversold.",
           "In strong trends, RSI can stay elevated/low for long periods.",
           "Use RSI with trend + levels, not alone.",
+        ],
+      },
+    ],
+  },
+  {
+    slug: "stochastic",
+    title: "Stochastic (14,3)",
+    category: "Indicators",
+    summary: "Oscillator that compares close vs recent range — often used for momentum extremes.",
+    sections: [
+      {
+        heading: "What it measures",
+        body: [
+          "Stochastic compares the close to the recent high/low range over a lookback window.",
+          "It’s often shown as %K (fast) and %D (smoothed).",
+        ],
+      },
+      {
+        heading: "Common reads",
+        body: [
+          "%K above ~80 is often called overbought; below ~20 is oversold.",
+          "Like RSI, it can stick in extremes during strong trends — use context.",
         ],
       },
     ],
@@ -153,12 +244,37 @@ export const LESSONS: Lesson[] = [
       },
     ],
   },
+  {
+    slug: "vwap",
+    title: "VWAP",
+    category: "Indicators",
+    summary: "A volume-weighted average price — often treated like a ‘fair value’ reference intraday.",
+    sections: [
+      {
+        heading: "What VWAP is",
+        body: [
+          "VWAP is the average price weighted by volume (more volume = more influence).",
+          "It’s most common for intraday trading; on daily data it’s more of a rough reference.",
+        ],
+      },
+      {
+        heading: "How traders use it",
+        body: [
+          "Mean reversion: price far above/below VWAP can be seen as extended (context matters).",
+          "Bias filter: some traders treat above VWAP as bullish intraday bias, below as bearish.",
+        ],
+      },
+    ],
+  },
 ];
+
+// --- helpers ---
 
 export function getLesson(slug: string) {
   return LESSONS.find((l) => l.slug === slug) ?? null;
 }
 
 export function lessonsByCategory(cat: Lesson["category"]) {
-  return LESSONS.filter((l) => l.category === cat);
+  // Keep the Learn page tidy as lessons grow
+  return LESSONS.filter((l) => l.category === cat).slice().sort((a, b) => a.title.localeCompare(b.title));
 }
