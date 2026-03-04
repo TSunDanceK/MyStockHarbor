@@ -2103,9 +2103,9 @@ const ChartCard = (opts?: { height?: number | string }) => {
 <div
   style={{
     display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(240px, 1fr))",
+    gridTemplateColumns: "repeat(3, minmax(220px, 1fr))", // ✅ 3 across
     gap: 14,
-    maxWidth: 980,
+    maxWidth: 1200,
   }}
 >
   {items.map((it) => {
@@ -2113,40 +2113,47 @@ const ChartCard = (opts?: { height?: number | string }) => {
     const isUp = typeof pct === "number" ? pct >= 0 : null;
 
     const arrow = isUp == null ? "•" : isUp ? "▲" : "▼";
-    const arrowColor =
-      isUp == null ? COLORS.mutedFg : isUp ? "#22c55e" : "#ef4444";
+    const arrowColor = isUp == null ? COLORS.mutedFg : isUp ? "#22c55e" : "#ef4444";
 
-    const pctText =
-      pct == null ? "—" : `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
+    const pctText = pct == null ? "—" : `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
+
+    // ✅ Convert stooq ETF symbol like "spy.us" -> "SPY" for your chart
+    const chartSymbol = (it.symbol || "").split(".")[0]?.toUpperCase() || it.symbol.toUpperCase();
 
     return (
-      <div
+      <button
         key={it.key}
+        type="button"
+        onClick={() => router.push(`/?symbol=${encodeURIComponent(chartSymbol)}`)} // ✅ click loads into chart
+        title={`Load ${chartSymbol} in chart`}
         style={{
           border: `1px solid ${COLORS.border}`,
           borderRadius: 16,
           padding: 14,
           background: COLORS.cardBg,
           color: COLORS.cardFg,
-          boxShadow: COLORS.isDark
-            ? "0 10px 26px rgba(0,0,0,0.35)"
-            : "0 10px 26px rgba(0,0,0,0.12)",
+          boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.35)" : "0 10px 26px rgba(0,0,0,0.12)",
+          cursor: "pointer",
+          textAlign: "left",
+          width: "100%",
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 950, fontSize: 16, lineHeight: 1.1 }}>
-              {it.label}
-            </div>
+            <div style={{ fontWeight: 950, fontSize: 16, lineHeight: 1.1 }}>{it.label}</div>
             <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
-              {it.symbol}
+              {it.symbol} • Click to load {chartSymbol}
             </div>
           </div>
 
           <div style={{ textAlign: "right" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
-              <span style={{ fontWeight: 950, color: arrowColor }}>{arrow}</span>
-              <span style={{ fontWeight: 950, color: arrowColor }}>{pctText}</span>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10 }}>
+              <span style={{ fontWeight: 950, color: arrowColor, fontSize: 16 }}>{arrow}</span>
+
+              {/* ✅ Bigger % */}
+              <span style={{ fontWeight: 950, color: arrowColor, fontSize: 22 }}>
+                {pctText}
+              </span>
             </div>
 
             <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
@@ -2158,7 +2165,7 @@ const ChartCard = (opts?: { height?: number | string }) => {
         <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
           {it.date && it.time ? `As of ${it.date} ${it.time}` : "Timestamp unavailable"}
         </div>
-      </div>
+      </button>
     );
   })}
 </div>
