@@ -7,6 +7,7 @@ type StooqRow = {
   symbol?: string;
   date?: string;
   time?: string;
+  open?: string;
   close?: string;
   previous_close?: string;
 };
@@ -37,16 +38,18 @@ function toNum(x: unknown): number | null {
 }
 
 async function fetchStooqQuote(symbol: string): Promise<StooqRow | null> {
-  // Stooq JSON quote endpoint
-  // Example: https://stooq.com/q/l/?s=spy.us&f=sd2t2ohlcv&h&e=json
-  const url = `https://stooq.com/q/l/?s=${encodeURIComponent(symbol)}&f=sd2t2ohlcv&h&e=json`;
+  /**
+   * Stooq JSON quote endpoint
+   * Fields:
+   * s = symbol, d = date, t = time, o = open, c = close
+   * (previous_close sometimes exists; if not, we'll fallback to open)
+   */
+  const url = `https://stooq.com/q/l/?s=${encodeURIComponent(symbol)}&f=sd2t2oc&h&e=json`;
 
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) return null;
 
   const json = (await res.json()) as any;
-
-  // Typical: { "symbols": [ { ... } ] }
   const row = Array.isArray(json?.symbols) ? json.symbols[0] : null;
   if (!row || typeof row !== "object") return null;
 
@@ -58,10 +61,10 @@ export async function GET() {
     return NextResponse.json(cache.payload);
   }
 
-  // ✅ Benchmarks via ETFs (Stooq is reliable with *.us)
+  // Use ETFs (SPY/QQQ) because they are reliably available on Stooq for free
   const defs = [
-    { key: "spx", label: "S&P 500 (via SPY)", symbol: "spy.us" },
-    { key: "ndx", label: "Nasdaq 100 (via QQQ)", symbol: "qqq.us" },
+    { key: "spy", label: "S&P 500 (via SPY)", symbol: "spy.us" },
+    { key: "qqq", label: "Nasdaq 100 (via QQQ)", symbol: "qqq.us" },
   ] as const;
 
   try {
@@ -71,10 +74,14 @@ export async function GET() {
       const r = rows[i];
 
       const close = toNum(r?.close);
-      const prev = toNum(r?.previous_close);
+      const prev = toNum((r as any)?.previous_close);
+      const open = toNum((r as any)?.open);
+
+      // If Stooq doesn't give previous_close, use open as a best-effort daily-move proxy
+      const base = prev ?? open ?? null;
 
       const changePct =
-        close != null && prev != null && prev !== 0 ? ((close - prev) / prev) * 100 : null;
+        close != null && base != null && base !== 0 ? ((close - base) / base) * 100 : null;
 
       return {
         key: d.key,
@@ -83,7 +90,7 @@ export async function GET() {
         date: typeof r?.date === "string" ? r!.date! : null,
         time: typeof r?.time === "string" ? r!.time! : null,
         close,
-        prevClose: prev,
+        prevClose: base,
         changePct,
       };
     });
