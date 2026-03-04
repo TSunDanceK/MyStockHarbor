@@ -1249,19 +1249,23 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
         style={{
           padding: "8px 12px",
           borderRadius: 12,
-          border: isDark ? "1px solid rgba(255,255,255,0.22)" : "1px solid rgba(0,0,0,0.18)",
-          background: isDark
+          border: darkMode ? "1px solid rgba(255,255,255,0.22)" : "1px solid rgba(0,0,0,0.18)",
+          background: darkMode
             ? active
               ? "rgba(255,255,255,0.18)"
               : "rgba(255,255,255,0.10)"
             : active
               ? "rgba(0,0,0,0.08)"
               : "#fff",
-          color: isDark ? "#fff" : "#111",
+          color: darkMode ? "#fff" : "#111",
           cursor: "pointer",
           opacity: 1,
           fontWeight: active ? 800 : 650,
-          boxShadow: active ? (isDark ? "0 8px 24px rgba(0,0,0,0.35)" : "0 8px 24px rgba(0,0,0,0.10)") : "none",
+          boxShadow: active
+            ? darkMode
+              ? "0 8px 24px rgba(0,0,0,0.35)"
+              : "0 8px 24px rgba(0,0,0,0.10)"
+            : "none",
         }}
       >
         {t.label}
