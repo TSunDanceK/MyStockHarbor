@@ -1641,7 +1641,7 @@ const ChartCard = (opts?: { height?: number | string }) => {
                   <p style={{ fontSize: 20, margin: "8px 0" }}>
                     <strong>Last price:</strong> {quote?.price == null ? "Unavailable" : `$${quote.price.toFixed(2)}`}
                   </p>
-                <>
+
                   <p style={{ margin: "8px 0 0", opacity: 0.85 }}>
                     <strong>Signal:</strong> {signal.label}
                   </p>
