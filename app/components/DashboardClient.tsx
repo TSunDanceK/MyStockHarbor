@@ -1088,7 +1088,6 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
   );
 
   return (
-  return (
     <main
       style={{
         padding: 40,
