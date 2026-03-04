@@ -337,11 +337,6 @@ function lastNum(arr: (number | null)[]) {
 }
 
 type OverviewItem = {
-  key: string;
-  label: string;
-  tone: "green" | "yellow" | "orange" | "red" | "muted";
-  valueText: string;
-};
 
 function toneToColor(tone: OverviewItem["tone"], isDark: boolean) {
   // simple, readable colors; no new libs
@@ -350,6 +345,32 @@ function toneToColor(tone: OverviewItem["tone"], isDark: boolean) {
   if (tone === "orange") return isDark ? "#fb923c" : "#ea580c";
   if (tone === "red") return isDark ? "#ef4444" : "#dc2626";
   return isDark ? "rgba(241,245,249,0.45)" : "rgba(11,18,32,0.45)";
+}
+
+function toneRank(tone: OverviewItem["tone"]) {
+  // higher = more attention
+  if (tone === "red") return 4;
+  if (tone === "orange") return 3;
+  if (tone === "yellow") return 2;
+  if (tone === "green") return 1;
+  return 0;
+}
+
+function compositeToneFromCounts(overbought: number, oversold: number, spikes: number) {
+  // net > 0 => overbought-heavy (red side), net < 0 => oversold-heavy (green side)
+  const net = overbought - oversold;
+  const intensity = overbought + oversold + spikes; // 0..10-ish
+
+  if (intensity <= 1) return { tone: "yellow" as const, tag: "Calm" };
+
+  if (net >= 2) return { tone: intensity >= 5 ? ("red" as const) : ("orange" as const), tag: "Overbought-leaning" };
+  if (net === 1) return { tone: "orange" as const, tag: "Slightly overbought" };
+
+  if (net <= -2) return { tone: intensity >= 5 ? ("green" as const) : ("yellow" as const), tag: "Oversold-leaning" };
+  if (net === -1) return { tone: "yellow" as const, tag: "Slightly oversold" };
+
+  // balanced
+  return { tone: intensity >= 5 ? ("orange" as const) : ("yellow" as const), tag: "Mixed" };
 }
 
 function clampNum(v: number, lo: number, hi: number) {
@@ -1001,6 +1022,37 @@ return { label: "Signal unavailable", detail: "Unknown indicator state." };
     atrSma20Arr,
   ]);
 
+    const overviewMeta = useMemo(() => {
+    if (indicator !== "None" || !composite) return null;
+
+    const toneInfo = compositeToneFromCounts(composite.overbought, composite.oversold, composite.spikes);
+    const toneColor = toneToColor(toneInfo.tone, COLORS.isDark);
+
+    // Market regime (simple + robust)
+    const ma50v = typeof lastMA50 === "number" ? lastMA50 : null;
+    const ma200v = typeof lastMA200 === "number" ? lastMA200 : null;
+
+    let trend = "Range / Mixed";
+    if (typeof lastClose === "number" && typeof ma50v === "number" && typeof ma200v === "number") {
+      if (lastClose > ma50v && ma50v > ma200v) trend = "Uptrend";
+      else if (lastClose < ma50v && ma50v < ma200v) trend = "Downtrend";
+    }
+
+    // Volatility regime using ATR ratio
+    const atrv = lastNum(atr14Arr);
+    const atrSma = lastNum(atrSma20Arr);
+    let vol = "Normal";
+    if (typeof atrv === "number" && typeof atrSma === "number" && atrSma > 0) {
+      const ratio = atrv / atrSma;
+      if (ratio >= 1.5) vol = "Elevated";
+      else if (ratio <= 0.85) vol = "Quiet";
+    }
+
+    return { toneColor, toneTag: toneInfo.tag, trend, vol };
+  }, [indicator, composite, COLORS.isDark, lastClose, lastMA50, lastMA200, atr14Arr, atrSma20Arr]);
+
+  
+
     const overviewItems = useMemo<OverviewItem[]>(() => {
     // Only show in Overview mode
     if (indicator !== "None") return [];
@@ -1008,7 +1060,8 @@ return { label: "Signal unavailable", detail: "Unknown indicator state." };
     const items: OverviewItem[] = [];
     const isDark = COLORS.isDark;
 
-    const push = (it: OverviewItem) => items.push(it);
+     let order = 0;
+    const push = (it: Omit<OverviewItem, "order">) => items.push({ ...it, order: order++ });
 
     // Helper: price distance classification
     const distTone = (pctAbs: number) => {
@@ -1027,9 +1080,10 @@ return { label: "Signal unavailable", detail: "Unknown indicator state." };
         label: "VWAP",
         tone,
         valueText: `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`,
+        severity: Math.abs(pct),
       });
     } else {
-      push({ key: "vwap", label: "VWAP", tone: "muted", valueText: "—" });
+     push({ key: "vwap", label: "VWAP", tone: "muted", valueText: "—", severity: 0 });
     }
 
     // MACD histogram momentum
@@ -1042,23 +1096,25 @@ return { label: "Signal unavailable", detail: "Unknown indicator state." };
         label: "MACD",
         tone,
         valueText: hist > flat ? "Bullish" : hist < -flat ? "Bearish" : "Flat",
+        severity: (Math.abs(hist) / Math.max(1e-9, Math.abs(lastClose))) * 100, // % of price
       });
     } else {
-      push({ key: "macd", label: "MACD", tone: "muted", valueText: "—" });
+    push({ key: "macd", label: "MACD", tone: "muted", valueText: "—", severity: 0 });
     }
 
     // RSI
     const rsi = lastNum(rsi14Arr);
     if (typeof rsi === "number") {
       const tone = rsi >= 70 ? "red" : rsi <= 30 ? "green" : "yellow";
-      push({
+       push({
         key: "rsi",
         label: "RSI",
         tone,
         valueText: rsi >= 70 ? "Overbought" : rsi <= 30 ? "Oversold" : "Neutral",
+        severity: rsi >= 70 ? rsi - 70 : rsi <= 30 ? 30 - rsi : 0,
       });
     } else {
-      push({ key: "rsi", label: "RSI", tone: "muted", valueText: "—" });
+    push({ key: "rsi", label: "RSI", tone: "muted", valueText: "—", severity: 0 });
     }
 
     // Stochastic %K
@@ -1070,9 +1126,10 @@ return { label: "Signal unavailable", detail: "Unknown indicator state." };
         label: "Stoch",
         tone,
         valueText: k >= 80 ? "Overbought" : k <= 20 ? "Oversold" : "Neutral",
+        severity: k >= 80 ? k - 80 : k <= 20 ? 20 - k : 0,
       });
     } else {
-      push({ key: "stoch", label: "Stoch", tone: "muted", valueText: "—" });
+    push({ key: "stoch", label: "Stoch", tone: "muted", valueText: "—", severity: 0 });
     }
 
     // MA200 distance (5%)
@@ -1085,9 +1142,10 @@ return { label: "Signal unavailable", detail: "Unknown indicator state." };
         label: "MA200",
         tone,
         valueText: `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`,
+        severity: Math.abs(pct),
       });
     } else {
-      push({ key: "ma200", label: "MA200", tone: "muted", valueText: "—" });
+    push({ key: "ma200", label: "MA200", tone: "muted", valueText: "—", severity: 0 });
     }
 
     // Volume spike vs SMA20 (1.8x)
@@ -1096,14 +1154,15 @@ return { label: "Signal unavailable", detail: "Unknown indicator state." };
     if (typeof vol === "number" && typeof volSma === "number" && volSma > 0) {
       const ratio = vol / volSma;
       const tone = ratio >= 1.8 ? "orange" : "yellow";
-      push({
+ push({
         key: "vol",
         label: "Volume",
         tone,
         valueText: ratio >= 1.8 ? `Spike ${ratio.toFixed(2)}×` : `Normal ${ratio.toFixed(2)}×`,
+        severity: Math.max(0, ratio - 1),
       });
     } else {
-      push({ key: "vol", label: "Volume", tone: "muted", valueText: "—" });
+   push({ key: "vol", label: "Volume", tone: "muted", valueText: "—", severity: 0 });
     }
 
     // ATR spike vs SMA20 (1.5x)
@@ -1117,13 +1176,19 @@ return { label: "Signal unavailable", detail: "Unknown indicator state." };
         label: "ATR",
         tone,
         valueText: ratio >= 1.5 ? `Spike ${ratio.toFixed(2)}×` : `Normal ${ratio.toFixed(2)}×`,
+        severity: Math.max(0, ratio - 1),
       });
     } else {
-      push({ key: "atr", label: "ATR", tone: "muted", valueText: "—" });
+    push({ key: "atr", label: "ATR", tone: "muted", valueText: "—", severity: 0 });
     }
 
-    // Keep the list compact (you can reorder these later)
-    return items;
+       // Sort: most severe first, then by tone, then stable order
+    return items.sort((a, b) => {
+      if (b.severity !== a.severity) return b.severity - a.severity;
+      const tr = toneRank(b.tone) - toneRank(a.tone);
+      if (tr !== 0) return tr;
+      return a.order - b.order;
+    });
   }, [
     indicator,
     COLORS.isDark,
@@ -1564,17 +1629,24 @@ const ChartCard = (opts?: { height?: number | string }) => {
                           Signal
                         </div>
 
-                        <div
-                          style={{
-                            marginTop: 6,
-                            fontSize: 28,
-                            fontWeight: 950,
-                            letterSpacing: "-0.2px",
-                            lineHeight: 1.15,
-                          }}
-                        >
-                          {signal.label}
-                        </div>
+<div
+  style={{
+    marginTop: 6,
+    fontSize: 28,
+    fontWeight: 950,
+    letterSpacing: "-0.2px",
+    lineHeight: 1.15,
+    color: overviewMeta?.toneColor ?? "inherit",
+  }}
+>
+  {signal.label}
+</div>
+
+{overviewMeta ? (
+  <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8, color: COLORS.mutedFg, fontWeight: 750 }}>
+    Regime: {overviewMeta.trend} • Volatility: {overviewMeta.vol} • Bias: {overviewMeta.toneTag}
+  </div>
+) : null}
 
                         <div style={{ marginTop: 8, fontSize: 13, opacity: 0.75, color: COLORS.mutedFg }}>
                           {signal.detail}
