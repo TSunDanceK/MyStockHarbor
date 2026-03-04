@@ -1681,9 +1681,7 @@ const ChartCard = (opts?: { height?: number | string }) => {
                           {signal.detail}
                         </div>
 
-                        <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>
-                          <strong>Overview:</strong> Composite {composite ? `${composite.flagged}/${composite.total}` : "—"} flags
-                        </div>
+                     
                       </div>
                     </div>
 
