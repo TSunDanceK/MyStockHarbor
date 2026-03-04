@@ -2,17 +2,20 @@ import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-type Tone = "green" | "yellow" | "orange" | "red";
+type PickerItem = {
+  symbol: string;
+  note?: string;
+  tone?: "green" | "yellow" | "orange" | "red";
+};
 
 type PickerSection = {
   title: string;
   description?: string;
-  items: { symbol: string; note?: string; tone?: Tone }[];
+  items: PickerItem[];
 };
 
 export async function GET() {
-  // TEMP: hard-coded examples
-  // Next step: generate these lists from your composite logic + market/top traded.
+  // ✅ Always return a stable shape: { sections: PickerSection[] }
   const sections: PickerSection[] = [
     {
       title: "Green Composite (Oversold-leaning)",
@@ -32,12 +35,12 @@ export async function GET() {
     },
     {
       title: "Buy The Dip",
-      description: "Pullbacks in uptrends (you’ll define the rules).",
+      description: "Pullbacks in uptrends (rules to be defined).",
       items: [{ symbol: "AMZN", note: "Example", tone: "yellow" }],
     },
     {
       title: "Breakouts",
-      description: "Strength + new highs / range breaks (you’ll define the rules).",
+      description: "Strength + new highs / range breaks (rules to be defined).",
       items: [{ symbol: "META", note: "Example", tone: "orange" }],
     },
   ];
