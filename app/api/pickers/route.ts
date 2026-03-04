@@ -2,29 +2,13 @@ import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-type Tone = "green" | "yellow" | "orange" | "red";
-
-type PickerItem = {
-  symbol: string;
-  note?: string;
-  tone?: Tone;
-  score?: number; // for sorting
-};
-
-type PickerSection = {
-  title: string;
-  description?: string;
-  items: PickerItem[];
-};
-
-type MarketRow = {
-  symbol: string;
-  volume: number | null;
-};
-
-type MarketPayload = {
-  topTraded: MarketRow[];
-};
+/**
+ * Pickers API
+ * - Builds a larger universe of symbols
+ * - Always prioritises Top Traded 50 inside each section
+ * - Caps each section to 20 symbols
+ * - Returns debug so you can verify what it did
+ */
 
 type Point = {
   date: string;
@@ -34,9 +18,42 @@ type Point = {
   volume?: number;
 };
 
-/* --------------------- small math helpers (server) --------------------- */
+type MarketRow = {
+  symbol: string;
+  changePct: number | null;
+  rangePct: number | null;
+  last: number | null;
+  volume: number | null;
+};
 
-function sma(values: number[], window: number): (number | null)[] {
+type MarketPayload = {
+  updatedAt: string;
+  topTraded: MarketRow[];
+  topMovers: MarketRow[];
+  topRanges: MarketRow[];
+};
+
+type PickerItem = { symbol: string; note?: string; tone?: "green" | "yellow" | "orange" | "red" };
+type PickerSection = { title: string; description?: string; items: PickerItem[] };
+
+function uniqStrings(arr: string[]) {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const s of arr) {
+    const x = s.trim().toUpperCase();
+    if (!x) continue;
+    if (seen.has(x)) continue;
+    seen.add(x);
+    out.push(x);
+  }
+  return out;
+}
+
+function last<T>(arr: T[]) {
+  return arr.length ? arr[arr.length - 1] : null;
+}
+
+function movingAverage(values: number[], window: number): (number | null)[] {
   const out: (number | null)[] = Array(values.length).fill(null);
   let sum = 0;
   for (let i = 0; i < values.length; i++) {
@@ -45,33 +62,6 @@ function sma(values: number[], window: number): (number | null)[] {
     if (i >= window - 1) out[i] = sum / window;
   }
   return out;
-}
-
-function rollingStd(values: number[], window: number): (number | null)[] {
-  const out: (number | null)[] = Array(values.length).fill(null);
-  for (let i = window - 1; i < values.length; i++) {
-    let mean = 0;
-    for (let j = i - window + 1; j <= i; j++) mean += values[j];
-    mean /= window;
-
-    let variance = 0;
-    for (let j = i - window + 1; j <= i; j++) {
-      const d = values[j] - mean;
-      variance += d * d;
-    }
-    variance /= window;
-
-    out[i] = Math.sqrt(variance);
-  }
-  return out;
-}
-
-function bollinger(values: number[], window = 20, k = 2) {
-  const mid = sma(values, window);
-  const sd = rollingStd(values, window);
-  const upper = mid.map((m, i) => (m == null || sd[i] == null ? null : m + k * sd[i]!));
-  const lower = mid.map((m, i) => (m == null || sd[i] == null ? null : m - k * sd[i]!));
-  return { upper, mid, lower };
 }
 
 function ema(values: number[], period: number): (number | null)[] {
@@ -148,37 +138,10 @@ function macd(values: number[], fast = 12, slow = 26, signal = 9) {
 
   const lineForEma = line.map((v) => (typeof v === "number" ? v : 0));
   const sigAll = ema(lineForEma, signal);
-
   const sig: (number | null)[] = sigAll.map((v, i) => (line[i] == null ? null : v));
   const hist: (number | null)[] = line.map((v, i) => (v == null || sig[i] == null ? null : v - sig[i]!));
 
   return { line, signal: sig, hist };
-}
-
-function vwapFromPoints(points: Point[]): (number | null)[] {
-  const out: (number | null)[] = Array(points.length).fill(null);
-  let cumPV = 0;
-  let cumV = 0;
-
-  for (let i = 0; i < points.length; i++) {
-    const p = points[i];
-    const v = typeof p.volume === "number" && Number.isFinite(p.volume) ? p.volume : null;
-
-    if (v == null || v <= 0) {
-      out[i] = cumV > 0 ? cumPV / cumV : null;
-      continue;
-    }
-
-    const h = typeof p.high === "number" && Number.isFinite(p.high) ? p.high : null;
-    const l = typeof p.low === "number" && Number.isFinite(p.low) ? p.low : null;
-    const typical = h != null && l != null ? (h + l + p.close) / 3 : p.close;
-
-    cumPV += typical * v;
-    cumV += v;
-    out[i] = cumPV / cumV;
-  }
-
-  return out;
 }
 
 function stochastic(points: Point[], kPeriod = 14) {
@@ -213,118 +176,49 @@ function stochastic(points: Point[], kPeriod = 14) {
     k[i] = ((points[i].close - lowestLow) / denom) * 100;
   }
 
-  return k;
+  return { k };
 }
 
-function atr(points: Point[], period = 14): (number | null)[] {
-  const tr: (number | null)[] = Array(points.length).fill(null);
-
-  for (let i = 0; i < points.length; i++) {
-    const h = points[i].high;
-    const l = points[i].low;
-    const cPrev = i > 0 ? points[i - 1].close : null;
-
-    if (typeof h !== "number" || !Number.isFinite(h)) continue;
-    if (typeof l !== "number" || !Number.isFinite(l)) continue;
-
-    const hl = h - l;
-    const hc = cPrev == null ? hl : Math.abs(h - cPrev);
-    const lc = cPrev == null ? hl : Math.abs(l - cPrev);
-
-    tr[i] = Math.max(hl, hc, lc);
-  }
-
+function vwapFromPoints(points: Point[]): (number | null)[] {
   const out: (number | null)[] = Array(points.length).fill(null);
-
-  let sum = 0;
-  let count = 0;
-  let prevATR: number | null = null;
+  let cumPV = 0;
+  let cumV = 0;
 
   for (let i = 0; i < points.length; i++) {
-    const v = tr[i];
+    const p = points[i];
+    const v = typeof p.volume === "number" && Number.isFinite(p.volume) ? p.volume : null;
 
-    if (v == null) {
-      out[i] = prevATR;
+    if (v == null || v <= 0) {
+      out[i] = cumV > 0 ? cumPV / cumV : null;
       continue;
     }
 
-    if (prevATR == null) {
-      sum += v;
-      count++;
-      if (count === period) {
-        prevATR = sum / period;
-        out[i] = prevATR;
-      }
-      continue;
-    }
+    const h = typeof p.high === "number" && Number.isFinite(p.high) ? p.high : null;
+    const l = typeof p.low === "number" && Number.isFinite(p.low) ? p.low : null;
+    const typical = h != null && l != null ? (h + l + p.close) / 3 : p.close;
 
-    prevATR = (prevATR * (period - 1) + v) / period;
-    out[i] = prevATR;
+    cumPV += typical * v;
+    cumV += v;
+    out[i] = cumPV / cumV;
   }
 
   return out;
 }
 
-function lastNum(arr: (number | null)[]) {
-  return arr.length ? arr[arr.length - 1] : null;
-}
-
-function smaNullable(values: (number | null)[], window: number): (number | null)[] {
-  const out: (number | null)[] = Array(values.length).fill(null);
-  if (window <= 0) return out;
-
-  for (let i = window - 1; i < values.length; i++) {
-    let sum = 0;
-    let ok = true;
-    for (let j = i - window + 1; j <= i; j++) {
-      const v = values[j];
-      if (typeof v !== "number" || !Number.isFinite(v)) {
-        ok = false;
-        break;
-      }
-      sum += v;
-    }
-    out[i] = ok ? sum / window : null;
-  }
-  return out;
-}
-
-/* -------------------------- composite scoring -------------------------- */
-
-type CompositeScore = {
-  overbought: number;
-  oversold: number;
-  spikes: number;
-  total: number;
-};
-
-function buildCompositeScore(points: Point[]): CompositeScore | null {
+function computeCompositeCounts(points: Point[]) {
   if (!points.length) return null;
 
   const closes = points.map((p) => p.close);
-  const lastClose = closes[closes.length - 1];
-  if (!Number.isFinite(lastClose)) return null;
+  const lastClose = last(closes);
+  if (typeof lastClose !== "number") return null;
 
-  const ma50 = lastNum(sma(closes, 50));
-  const ma200 = lastNum(sma(closes, 200));
-  const ema20v = lastNum(ema(closes, 20));
-  const bb = bollinger(closes, 20, 2);
-  const bbUpper = lastNum(bb.upper);
-  const bbLower = lastNum(bb.lower);
-
-  const rsi14 = lastNum(rsiWilder(closes, 14));
-  const stochK = lastNum(stochastic(points, 14));
-  const macdHist = lastNum(macd(closes, 12, 26, 9).hist);
-
-  const vwap = lastNum(vwapFromPoints(points));
-
-  const volumeFull = points.map((p) => (typeof p.volume === "number" && Number.isFinite(p.volume) ? p.volume : null));
-  const volSma20 = lastNum(smaNullable(volumeFull, 20));
-  const vol = lastNum(volumeFull);
-
-  const atr14Arr = atr(points, 14);
-  const atr14v = lastNum(atr14Arr);
-  const atrSma20 = lastNum(smaNullable(atr14Arr, 20));
+  const ma50 = last(movingAverage(closes, 50));
+  const ma200 = last(movingAverage(closes, 200));
+  const ema20 = last(ema(closes, 20));
+  const rsi14 = last(rsiWilder(closes, 14));
+  const macdHist = last(macd(closes, 12, 26, 9).hist);
+  const stochK = last(stochastic(points, 14).k);
+  const vwap = last(vwapFromPoints(points));
 
   let overbought = 0;
   let oversold = 0;
@@ -342,10 +236,6 @@ function buildCompositeScore(points: Point[]): CompositeScore | null {
     else if (stochK <= 20) oversold++;
   }
 
-  // Bollinger extremes
-  if (typeof bbUpper === "number" && lastClose > bbUpper) overbought++;
-  else if (typeof bbLower === "number" && lastClose < bbLower) oversold++;
-
   // VWAP distance (2%)
   if (typeof vwap === "number" && vwap > 0) {
     const pct = (lastClose - vwap) / vwap;
@@ -354,8 +244,8 @@ function buildCompositeScore(points: Point[]): CompositeScore | null {
   }
 
   // EMA20 distance (5%)
-  if (typeof ema20v === "number" && ema20v > 0) {
-    const pct = (lastClose - ema20v) / ema20v;
+  if (typeof ema20 === "number" && ema20 > 0) {
+    const pct = (lastClose - ema20) / ema20;
     if (pct >= 0.05) overbought++;
     else if (pct <= -0.05) oversold++;
   }
@@ -374,162 +264,157 @@ function buildCompositeScore(points: Point[]): CompositeScore | null {
     else if (pct <= -0.05) oversold++;
   }
 
-  // MACD hist vs price (0.2%)
-  if (typeof macdHist === "number") {
+  // MACD hist magnitude vs price (0.2%)
+  if (typeof macdHist === "number" && Number.isFinite(macdHist)) {
     const thresh = Math.abs(lastClose) * 0.002;
     if (macdHist >= thresh) overbought++;
     else if (macdHist <= -thresh) oversold++;
   }
 
-  // Volume spike (1.8x)
-  if (typeof vol === "number" && typeof volSma20 === "number" && volSma20 > 0) {
-    if (vol >= volSma20 * 1.8) spikes++;
-  }
+  // We keep spikes at 0 here to keep API light (you can add vol/atr spikes later).
+  const total = 7;
+  const flagged = overbought + oversold + spikes;
 
-  // ATR spike (1.5x)
-  if (typeof atr14v === "number" && typeof atrSma20 === "number" && atrSma20 > 0) {
-    if (atr14v >= atrSma20 * 1.5) spikes++;
-  }
-
-  return { overbought, oversold, spikes, total: 10 };
+  return { total, flagged, overbought, oversold, spikes };
 }
 
-/* ------------------------------ criteria ------------------------------ */
-
-function isBuyTheDip(points: Point[]): { ok: boolean; note?: string } {
-  // "Recently ATH within 4 months, but now down 20%+ from that ATH"
-  // Use last ~120 bars as 4 months-ish (daily bars)
-  if (points.length < 130) return { ok: false };
-
+/**
+ * Buy the Dip:
+ * - "Recently at ATH" (ATH set within last ~120 bars)
+ * - Now down 20% or more from that ATH
+ */
+function isBuyTheDip(points: Point[]) {
+  if (points.length < 60) return false;
   const closes = points.map((p) => p.close);
-  const last = closes[closes.length - 1];
+  const cur = last(closes);
+  if (typeof cur !== "number") return false;
 
-  const lookback = 120;
-  const start = Math.max(0, closes.length - lookback);
-  const recent = closes.slice(start);
-
-  const recentHigh = Math.max(...recent);
-  const recentHighIdx = recent.lastIndexOf(recentHigh); // within recent window
-
-  // ATH must have happened within the last 4 months window
-  if (!Number.isFinite(recentHigh) || recentHigh <= 0) return { ok: false };
-
-  const dropPct = ((last - recentHigh) / recentHigh) * 100;
-
-  if (dropPct <= -20) {
-    return { ok: true, note: `${dropPct.toFixed(1)}% off 4M high` };
+  let max = -Infinity;
+  let maxIdx = -1;
+  for (let i = 0; i < closes.length; i++) {
+    const v = closes[i];
+    if (v > max) {
+      max = v;
+      maxIdx = i;
+    }
   }
+  if (!Number.isFinite(max) || maxIdx < 0) return false;
 
-  // also require that the high was "near the top" of the 4M window (not ancient)
-  // (This keeps it aligned with your description)
-  if (recentHighIdx < recent.length - 120) return { ok: false };
-
-  return { ok: false };
+  const barsSinceHigh = closes.length - 1 - maxIdx;
+  if (barsSinceHigh > 120) return false; // “within ~4 months”
+  return cur <= max * 0.8;
 }
 
-function isBreakout(points: Point[]): { ok: boolean; note?: string } {
-  // "Hit ATH within last month"
-  if (points.length < 60) return { ok: false };
-
+/**
+ * Breakouts:
+ * - Printed an all-time high within last ~30 bars
+ */
+function isBreakout(points: Point[]) {
+  if (points.length < 30) return false;
   const closes = points.map((p) => p.close);
-  const last = closes[closes.length - 1];
 
-  const allTimeHigh = Math.max(...closes);
-  if (!Number.isFinite(allTimeHigh) || allTimeHigh <= 0) return { ok: false };
-
-  // must be basically at ATH (within 0.3%)
-  const distPct = ((last - allTimeHigh) / allTimeHigh) * 100;
-  if (distPct < -0.3) return { ok: false };
-
-  // ATH must have happened within last ~22 trading days (1 month-ish)
-  const lookback = 22;
-  const recent = closes.slice(-lookback);
-  const recentHigh = Math.max(...recent);
-
-  if (Math.abs((recentHigh - allTimeHigh) / allTimeHigh) <= 0.00001) {
-    return { ok: true, note: "New high (1M)" };
+  let max = -Infinity;
+  let maxIdx = -1;
+  for (let i = 0; i < closes.length; i++) {
+    const v = closes[i];
+    if (v > max) {
+      max = v;
+      maxIdx = i;
+    }
   }
+  if (!Number.isFinite(max) || maxIdx < 0) return false;
 
-  return { ok: false };
+  const barsSinceHigh = closes.length - 1 - maxIdx;
+  return barsSinceHigh <= 30;
 }
 
-/* -------------------------- concurrency limiter -------------------------- */
-
-async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, idx: number) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(items.length) as any;
-  let next = 0;
+/**
+ * Promise pool so we don’t smash the API.
+ */
+async function mapPool<T, R>(items: T[], limit: number, fn: (item: T, idx: number) => Promise<R>) {
+  const out: R[] = new Array(items.length) as any;
+  let i = 0;
 
   async function worker() {
-    while (true) {
-      const i = next++;
-      if (i >= items.length) return;
-      results[i] = await fn(items[i], i);
+    while (i < items.length) {
+      const idx = i++;
+      out[idx] = await fn(items[idx], idx);
     }
   }
 
-  const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
+  const workers = Array.from({ length: Math.max(1, limit) }, () => worker());
   await Promise.all(workers);
-  return results;
+  return out;
 }
 
-/* -------------------------------- route -------------------------------- */
+/**
+ * A bigger fallback universe so the page isn’t empty even when market API is small.
+ * (You can expand this list anytime.)
+ */
+const FALLBACK_UNIVERSE = uniqStrings([
+  "AAPL","MSFT","NVDA","AMZN","GOOGL","GOOG","META","TSLA","BRK.B","JPM","V","MA","UNH","XOM","AVGO","LLY","HD","COST","MRK","PEP",
+  "KO","ABBV","CRM","NFLX","AMD","ADBE","QCOM","INTC","CSCO","WMT","T","VZ","ORCL","MCD","NKE","DIS","BAC","WFC","PM","IBM",
+  "GE","CAT","BA","PFE","TMO","TXN","LIN","DHR","RTX","HON","LOW","UPS","SBUX","AMGN","GS","MS","SPY","QQQ","DIA","IWM",
+  "PLTR","SNOW","SHOP","UBER","ABT","CVX","COP","NEE","SO","DUK","SCHW","BLK","C","AXP","DE","LMT","NOW","INTU","BKNG","MU",
+  "PANW","CRWD","TSM","ASML","BABA","JD","PDD","NVO","SAP","SONY",
+]);
 
 export async function GET(req: Request) {
-  // Build a base URL so this works on Vercel + locally
-const host =
-  req.headers.get("x-forwarded-host") ??
-  req.headers.get("host") ??
-  process.env.VERCEL_URL ??
-  "localhost:3000";
+  const origin = new URL(req.url).origin;
 
-const proto =
-  req.headers.get("x-forwarded-proto") ??
-  (host.includes("localhost") ? "http" : "https");
+  const debug: any = {
+    origin,
+    universe: { priorityCount: 0, fallbackCount: FALLBACK_UNIVERSE.length, totalCount: 0 },
+    fetches: { marketOk: false, historyOk: 0, historyFail: 0 },
+    notes: [] as string[],
+  };
 
-const baseUrl = host.startsWith("http") ? host : `${proto}://${host}`;
-
-  // 1) Get Top Traded 50
-  let topTraded: string[] = [];
+  // 1) Get market (top traded / movers / ranges)
+  let market: MarketPayload | null = null;
   try {
-    const mRes = await fetch(`${baseUrl}/api/market`, { cache: "no-store" });
+    const mRes = await fetch(`${origin}/api/market`, { cache: "no-store" });
     if (mRes.ok) {
-      const m = (await mRes.json()) as MarketPayload;
-      topTraded = (m?.topTraded ?? [])
-        .map((x) => String(x?.symbol ?? "").toUpperCase())
-        .filter(Boolean)
-        .slice(0, 50);
+      market = (await mRes.json()) as MarketPayload;
+      debug.fetches.marketOk = true;
+    } else {
+      debug.notes.push(`/api/market not ok (${mRes.status})`);
     }
   } catch {
-    topTraded = [];
+    debug.notes.push("Failed to fetch /api/market (using fallback universe)");
   }
 
-  // If market API fails, fall back to a small (but non-empty) set
-  if (!topTraded.length) {
-    topTraded = ["AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "TSLA", "AVGO", "BRK.B", "JPM"];
-  }
+  const topTraded = (market?.topTraded ?? []).map((r) => r.symbol).slice(0, 50);
+  const movers = (market?.topMovers ?? []).map((r) => r.symbol);
+  const ranges = (market?.topRanges ?? []).map((r) => r.symbol);
 
-  // 2) Fetch history for each ticker and score it
-  const historyDays = 2600; // like your dashboard (enough for MA200 etc.)
+  const prioritySymbols = uniqStrings([...topTraded]);
+  const extraMarket = uniqStrings([...movers, ...ranges]);
 
-  const scored = await mapLimit(
-    topTraded,
-    8,
-    async (symbol): Promise<{
-      symbol: string;
-      comp: CompositeScore | null;
-      dip: { ok: boolean; note?: string };
-      breakout: { ok: boolean; note?: string };
-    }> => {
+  // 2) Universe = priority first, then other market lists, then fallback list
+  const universe = uniqStrings([...prioritySymbols, ...extraMarket, ...FALLBACK_UNIVERSE]);
+
+  debug.universe.priorityCount = prioritySymbols.length;
+  debug.universe.totalCount = universe.length;
+
+  // 3) Fetch history for each symbol (pool limited)
+  // NOTE: keep this reasonable; 1200 bars is enough for MA200 + “dip/breakout-ish” on free data.
+  const DAYS = 1200;
+
+  const histories = await mapPool(
+    universe,
+    6,
+    async (symbol) => {
       try {
-        const hRes = await fetch(`${baseUrl}/api/history?symbol=${encodeURIComponent(symbol)}&days=${historyDays}`, {
+        const hRes = await fetch(`${origin}/api/history?symbol=${encodeURIComponent(symbol)}&days=${DAYS}`, {
           cache: "no-store",
         });
-        if (!hRes.ok) throw new Error("history failed");
-
-        const h = (await hRes.json()) as { points?: any[] };
-        const ptsRaw = Array.isArray(h?.points) ? h.points : [];
-
-        const pts: Point[] = ptsRaw
+        if (!hRes.ok) {
+          debug.fetches.historyFail++;
+          return { symbol, points: null as Point[] | null };
+        }
+        const h = (await hRes.json()) as { symbol: string; points: any[] };
+        const ptsRaw = Array.isArray(h.points) ? h.points : [];
+        const points: Point[] = ptsRaw
           .map((p: any) => ({
             date: String(p?.date ?? ""),
             close: Number(p?.close),
@@ -539,96 +424,127 @@ const baseUrl = host.startsWith("http") ? host : `${proto}://${host}`;
           }))
           .filter((p) => p.date && Number.isFinite(p.close));
 
-        const comp = buildCompositeScore(pts);
-        const dip = isBuyTheDip(pts);
-        const breakout = isBreakout(pts);
+        if (points.length < 60) {
+          debug.fetches.historyFail++;
+          return { symbol, points: null as Point[] | null };
+        }
 
-        return { symbol, comp, dip, breakout };
+        debug.fetches.historyOk++;
+        return { symbol, points };
       } catch {
-        return { symbol, comp: null, dip: { ok: false }, breakout: { ok: false } };
+        debug.fetches.historyFail++;
+        return { symbol, points: null as Point[] | null };
       }
     }
   );
 
-  // 3) Build sections
-  const green: PickerItem[] = [];
-  const red: PickerItem[] = [];
-  const dips: PickerItem[] = [];
-  const breakouts: PickerItem[] = [];
+  // 4) Compute signals per symbol
+  const rows = histories
+    .filter((x) => x.points && x.points.length)
+    .map((x) => {
+      const composite = computeCompositeCounts(x.points!);
+      const dip = isBuyTheDip(x.points!);
+      const breakout = isBreakout(x.points!);
 
-  for (const s of scored) {
-    const c = s.comp;
-    if (c) {
-      const net = c.oversold - c.overbought;
+      return {
+        symbol: x.symbol,
+        composite,
+        dip,
+        breakout,
+        isPriority: prioritySymbols.includes(x.symbol),
+      };
+    })
+    .filter((r) => r.composite); // require composite available
 
-      // Green Composite criteria (oversold-leaning)
-      if (net >= 2) {
-        green.push({
-          symbol: s.symbol,
-          tone: "green",
-          score: c.oversold * 10 + c.spikes, // most green markers first
-          note: `${c.oversold} oversold / ${c.overbought} overbought`,
-        });
-      }
-
-      // Red Composite criteria (overbought-leaning)
-      if (-net >= 2) {
-        red.push({
-          symbol: s.symbol,
-          tone: "red",
-          score: c.overbought * 10 + c.spikes, // most red markers first
-          note: `${c.overbought} overbought / ${c.oversold} oversold`,
-        });
-      }
-    }
-
-    // Buy the Dip
-    if (s.dip.ok) {
-      dips.push({
-        symbol: s.symbol,
-        tone: "yellow",
-        score: 1,
-        note: s.dip.note,
-      });
-    }
-
-    // Breakouts
-    if (s.breakout.ok) {
-      breakouts.push({
-        symbol: s.symbol,
-        tone: "orange",
-        score: 1,
-        note: s.breakout.note,
-      });
-    }
+  function takeTop20(matches: typeof rows, sorter: (a: any, b: any) => number) {
+    const pri = matches.filter((m) => m.isPriority).sort(sorter);
+    const oth = matches.filter((m) => !m.isPriority).sort(sorter);
+    return [...pri, ...oth].slice(0, 20);
   }
 
-  // Sort & limit to 20 each
-  green.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-  red.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  // GREEN: oversold leaning, most oversold markers first
+  const greenMatches = rows.filter((r) => {
+    const c = r.composite!;
+    return c.oversold >= 2 && c.oversold > c.overbought;
+  });
+
+  const greenFinal = takeTop20(greenMatches, (a, b) => {
+    const ao = a.composite!.oversold - a.composite!.overbought;
+    const bo = b.composite!.oversold - b.composite!.overbought;
+    if (bo !== ao) return bo - ao;
+    return (b.composite!.oversold ?? 0) - (a.composite!.oversold ?? 0);
+  });
+
+  // RED: overbought leaning, most overbought markers first
+  const redMatches = rows.filter((r) => {
+    const c = r.composite!;
+    return c.overbought >= 2 && c.overbought > c.oversold;
+  });
+
+  const redFinal = takeTop20(redMatches, (a, b) => {
+    const ao = a.composite!.overbought - a.composite!.oversold;
+    const bo = b.composite!.overbought - b.composite!.oversold;
+    if (bo !== ao) return bo - ao;
+    return (b.composite!.overbought ?? 0) - (a.composite!.overbought ?? 0);
+  });
+
+  // DIP: use dip rule, prioritise top traded first
+  const dipMatches = rows.filter((r) => r.dip);
+  const dipFinal = takeTop20(dipMatches, (a, b) => {
+    // modest sort: more oversold markers first
+    return (b.composite!.oversold ?? 0) - (a.composite!.oversold ?? 0);
+  });
+
+  // BREAKOUTS: use breakout rule, prioritise top traded first
+  const breakoutMatches = rows.filter((r) => r.breakout);
+  const breakoutFinal = takeTop20(breakoutMatches, (a, b) => {
+    // modest sort: more overbought markers first (strength)
+    return (b.composite!.overbought ?? 0) - (a.composite!.overbought ?? 0);
+  });
 
   const sections: PickerSection[] = [
     {
       title: "Green Composite (Oversold-leaning)",
-      description: "Top traded stocks skewing oversold across multiple indicators.",
-      items: green.slice(0, 20),
+      description: "Stocks flashing multiple oversold / dip-style signals.",
+      items: greenFinal.map((r) => ({
+        symbol: r.symbol,
+        tone: "green",
+        note: `${r.composite!.oversold} oversold`,
+      })),
     },
     {
       title: "Red Composite (Overbought-leaning)",
-      description: "Top traded stocks skewing overbought / extended across multiple indicators.",
-      items: red.slice(0, 20),
+      description: "Stocks looking stretched / extended / euphoric.",
+      items: redFinal.map((r) => ({
+        symbol: r.symbol,
+        tone: "red",
+        note: `${r.composite!.overbought} overbought`,
+      })),
     },
     {
       title: "Buy The Dip",
-      description: "Top traded stocks down 20%+ from a recent 4-month high.",
-      items: dips.slice(0, 20),
+      description: "Recently printed a high, then dropped 20%+ within ~4 months.",
+      items: dipFinal.map((r) => ({
+        symbol: r.symbol,
+        tone: "yellow",
+        note: "Dip setup",
+      })),
     },
     {
       title: "Breakouts",
-      description: "Top traded stocks printing / matching an all-time high within the last month.",
-      items: breakouts.slice(0, 20),
+      description: "Printed a new high within the last month.",
+      items: breakoutFinal.map((r) => ({
+        symbol: r.symbol,
+        tone: "orange",
+        note: "New high",
+      })),
     },
   ];
 
-  return NextResponse.json({ sections, universe: topTraded.length });
+  // Extra debug so you can validate quickly
+  debug.sections = sections.map((s) => ({ title: s.title, count: s.items.length }));
+  debug.prioritySample = prioritySymbols.slice(0, 10);
+  debug.universeSample = universe.slice(0, 15);
+
+  return NextResponse.json({ updatedAt: new Date().toISOString(), sections, debug });
 }
