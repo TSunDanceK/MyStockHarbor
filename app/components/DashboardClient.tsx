@@ -1017,11 +1017,11 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
         .map((d) => d.name)
         .join(", ");
 
-      return {
-        label: `Composite: ${composite.flagged}/${composite.total} flags`,
+return {
+        label: `Overall Signal: ${composite.flagged}/${composite.total} checks`,
         detail:
           (parts.length ? `${parts.join(" • ")}.` : "No strong extremes detected.") +
-          (detailList ? ` Top flags: ${detailList}.` : ""),
+          (detailList ? ` Top checks: ${detailList}.` : ""),
       };
     }
 
@@ -1264,8 +1264,12 @@ return { label: "Signal unavailable", detail: "Unknown indicator state." };
   ]);
 
   const lastIndicatorValue = useMemo(() => {
-    if (indicator === "None") {
-      return { label: "Composite", value: composite ? composite.flagged : null, total: composite ? composite.total : null };
+if (indicator === "None") {
+      return {
+        label: "Overall Signal",
+        value: composite ? composite.flagged : null,
+        total: composite ? composite.total : null,
+      };
     }
 
     if (indicator === "MA50") return { label: "MA50", value: lastMA50 };
@@ -1728,7 +1732,7 @@ const ChartCard = (opts?: { height?: number | string }) => {
       flex: "0 0 auto",
     }}
   />
-  <span>Signal</span>
+ <span>Overall Signal</span>
 </div>
 
 <div
