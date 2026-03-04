@@ -586,14 +586,40 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
   const [market, setMarket] = useState<MarketPayload | null>(null);
   const [news, setNews] = useState<NewsPayload | null>(null);
 
-// Large screen modal
-const [expanded, setExpanded] = useState(false);
+  // Theme (site-wide)
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
 
-// Reset zoom/pan when switching ticker (better UX)
-useEffect(() => {
-  setWindowDays(tfDays);
-  setWindowOffset(0);
-}, [symbol, tfDays]);
+  const COLORS = useMemo(() => {
+    const isDark = theme === "dark";
+    return {
+      isDark,
+
+      // page
+      pageBg: isDark ? "#06080d" : "#f6f7fb",
+      pageFg: isDark ? "#f1f5f9" : "#0b1220",
+      mutedFg: isDark ? "rgba(241,245,249,0.70)" : "rgba(11,18,32,0.65)",
+
+      // surfaces/cards
+      cardBg: isDark ? "#0b1220" : "#ffffff",
+      cardFg: isDark ? "#f1f5f9" : "#0b1220",
+      border: isDark ? "rgba(255,255,255,0.14)" : "rgba(11,18,32,0.14)",
+
+      // controls
+      controlBg: isDark ? "rgba(255,255,255,0.06)" : "rgba(11,18,32,0.04)",
+      controlBgSolid: isDark ? "#0f172a" : "#ffffff",
+      controlBorder: isDark ? "rgba(255,255,255,0.18)" : "rgba(11,18,32,0.18)",
+      controlFg: isDark ? "#f1f5f9" : "#0b1220",
+    };
+  }, [theme]);
+
+  // Large screen modal
+  const [expanded, setExpanded] = useState(false);
+
+  // Reset zoom/pan when switching ticker or timeframe (better UX)
+  useEffect(() => {
+    setWindowDays(tfDays);
+    setWindowOffset(0);
+  }, [symbol, tfDays]);
 
   // ESC closes modal
   useEffect(() => {
@@ -905,42 +931,57 @@ useEffect(() => {
     setOpen(false);
   }
 
-  const ChartCard = (
-    <div style={{ padding: 16, border: "1px solid #3336", borderRadius: 12, position: "relative", background: "#fff" }}>
-      <PriceChart
-        data={displayedHistory}
-        ma50={ma50}
-        ma200={ma200}
-        overlay={indicator}
-        bollUpper={bollUpper}
-        bollMid={bollMid}
-        bollLower={bollLower}
-        ema20={ema20Arr}
-        vwap={vwapArr}
-        rsi14={rsi14Arr}
-        macdLine={macdLine}
-        macdSignal={macdSignal}
-        macdHist={macdHist}
-        stochK={stochK}
-        stochD={stochD}
-        atr14={atr14Arr}
-        volume={volumeArr}
-      />
+    const ChartCard = (
+    <div
+      style={{
+        padding: 16,
+        border: `1px solid ${COLORS.border}`,
+        borderRadius: 14,
+        position: "relative",
+        background: COLORS.cardBg,
+        color: COLORS.cardFg,
+
+        // IMPORTANT: give the chart real space
+        height: 460,
+      }}
+    >
+      {/* Chart area */}
+      <div style={{ position: "absolute", inset: 16, top: 60 }}>
+        <PriceChart
+          data={displayedHistory}
+          ma50={ma50}
+          ma200={ma200}
+          overlay={indicator}
+          bollUpper={bollUpper}
+          bollMid={bollMid}
+          bollLower={bollLower}
+          ema20={ema20Arr}
+          vwap={vwapArr}
+          rsi14={rsi14Arr}
+          macdLine={macdLine}
+          macdSignal={macdSignal}
+          macdHist={macdHist}
+          stochK={stochK}
+          stochD={stochD}
+          atr14={atr14Arr}
+          volume={volumeArr}
+        />
+      </div>
 
       {/* Chart controls (top-right) */}
       <div
         style={{
           position: "absolute",
-          right: 10,
-          top: 10,
+          right: 12,
+          top: 12,
           display: "flex",
-          gap: 6,
+          gap: 8,
           alignItems: "center",
-          background: "rgba(255,255,255,0.92)",
-          border: "1px solid #3333",
-          borderRadius: 12,
-          padding: 6,
-          boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
+          background: COLORS.controlBgSolid,
+          border: `1px solid ${COLORS.controlBorder}`,
+          borderRadius: 14,
+          padding: 8,
+          boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.45)" : "0 10px 26px rgba(0,0,0,0.12)",
         }}
       >
         <button
@@ -948,13 +989,15 @@ useEffect(() => {
           disabled={offset >= maxOffset}
           title="Pan left (older)"
           style={{
-            padding: "8px 10px",
-            borderRadius: 10,
-            border: "1px solid #3336",
-            background: "#fff",
+            padding: "10px 12px",
+            borderRadius: 12,
+            border: `1px solid ${COLORS.controlBorder}`,
+            background: COLORS.controlBg,
+            color: COLORS.controlFg,
             cursor: offset >= maxOffset ? "not-allowed" : "pointer",
             opacity: offset >= maxOffset ? 0.45 : 1,
-            fontWeight: 800,
+            fontWeight: 900,
+            fontSize: 14,
           }}
         >
           ←
@@ -965,13 +1008,15 @@ useEffect(() => {
           disabled={offset <= 0}
           title="Pan right (newer)"
           style={{
-            padding: "8px 10px",
-            borderRadius: 10,
-            border: "1px solid #3336",
-            background: "#fff",
+            padding: "10px 12px",
+            borderRadius: 12,
+            border: `1px solid ${COLORS.controlBorder}`,
+            background: COLORS.controlBg,
+            color: COLORS.controlFg,
             cursor: offset <= 0 ? "not-allowed" : "pointer",
             opacity: offset <= 0 ? 0.45 : 1,
-            fontWeight: 800,
+            fontWeight: 900,
+            fontSize: 14,
           }}
         >
           →
@@ -985,12 +1030,14 @@ useEffect(() => {
           }}
           title="Zoom in"
           style={{
-            padding: "8px 10px",
-            borderRadius: 10,
-            border: "1px solid #3336",
-            background: "#fff",
+            padding: "10px 12px",
+            borderRadius: 12,
+            border: `1px solid ${COLORS.controlBorder}`,
+            background: COLORS.controlBg,
+            color: COLORS.controlFg,
             cursor: "pointer",
             fontWeight: 900,
+            fontSize: 14,
           }}
         >
           +
@@ -1003,18 +1050,20 @@ useEffect(() => {
           }}
           title="Zoom out"
           style={{
-            padding: "8px 10px",
-            borderRadius: 10,
-            border: "1px solid #3336",
-            background: "#fff",
+            padding: "10px 12px",
+            borderRadius: 12,
+            border: `1px solid ${COLORS.controlBorder}`,
+            background: COLORS.controlBg,
+            color: COLORS.controlFg,
             cursor: "pointer",
             fontWeight: 900,
+            fontSize: 14,
           }}
         >
           −
         </button>
 
-        <div style={{ fontSize: 12, opacity: 0.75, marginLeft: 4, marginRight: 4, whiteSpace: "nowrap" }}>
+        <div style={{ fontSize: 12, opacity: 0.8, color: COLORS.mutedFg, whiteSpace: "nowrap", fontWeight: 700 }}>
           {Math.min(win, totalPoints)} bars
         </div>
 
@@ -1022,12 +1071,14 @@ useEffect(() => {
           onClick={() => setExpanded(true)}
           title="Expand chart"
           style={{
-            padding: "8px 10px",
-            borderRadius: 10,
-            border: "1px solid #3336",
-            background: "#fff",
+            padding: "10px 12px",
+            borderRadius: 12,
+            border: `1px solid ${COLORS.controlBorder}`,
+            background: COLORS.controlBg,
+            color: COLORS.controlFg,
             cursor: "pointer",
             fontWeight: 900,
+            fontSize: 14,
           }}
         >
           ⤢
@@ -1037,9 +1088,39 @@ useEffect(() => {
   );
 
   return (
-    <main style={{ padding: 40, fontFamily: "system-ui, Arial" }}>
-      <h1 style={{ fontSize: 32, marginBottom: 8 }}>My Stock Dashboard</h1>
-      <p style={{ marginTop: 0, opacity: 0.7 }}>Version 1 – Learning Build (free data)</p>
+  return (
+    <main
+      style={{
+        padding: 40,
+        fontFamily: "system-ui, Arial",
+        background: COLORS.pageBg,
+        color: COLORS.pageFg,
+        minHeight: "100vh",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+        <h1 style={{ fontSize: 32, margin: 0 }}>My Stock Dashboard</h1>
+
+        <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center" }}>
+          <button
+            onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+            style={{
+              padding: "10px 12px",
+              borderRadius: 12,
+              border: `1px solid ${COLORS.controlBorder}`,
+              background: COLORS.controlBg,
+              color: COLORS.controlFg,
+              cursor: "pointer",
+              fontWeight: 800,
+            }}
+            title="Toggle theme"
+          >
+            {COLORS.isDark ? "🌙 Dark" : "☀️ Light"}
+          </button>
+        </div>
+      </div>
+
+      <p style={{ marginTop: 0, opacity: 0.75, color: COLORS.mutedFg }}>Version 1 – Learning Build (free data)</p>
 
       {/* Controls row */}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginTop: 16 }}>
