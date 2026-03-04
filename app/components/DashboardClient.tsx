@@ -337,6 +337,15 @@ function lastNum(arr: (number | null)[]) {
 }
 
 type OverviewItem = {
+  key: string;
+  label: string;
+  tone: "green" | "yellow" | "orange" | "red" | "muted";
+  valueText: string;
+
+  // used for sorting
+  severity: number; // bigger = more important
+  order: number; // stable original order
+};
 
 function toneToColor(tone: OverviewItem["tone"], isDark: boolean) {
   // simple, readable colors; no new libs
