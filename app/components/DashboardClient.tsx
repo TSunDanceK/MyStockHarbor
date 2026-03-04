@@ -906,7 +906,7 @@ useEffect(() => {
   }
 
   const ChartCard = (
-    <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12, position: "relative" }}>
+    <div style={{ padding: 16, border: "1px solid #3336", borderRadius: 12, position: "relative", background: "#fff" }}>
       <PriceChart
         data={displayedHistory}
         ma50={ma50}
@@ -927,24 +927,112 @@ useEffect(() => {
         volume={volumeArr}
       />
 
-      {/* Expand button (bottom-right) */}
-      <button
-        onClick={() => setExpanded(true)}
-        title="Expand chart"
+      {/* Chart controls (top-right) */}
+      <div
         style={{
           position: "absolute",
           right: 10,
-          bottom: 10,
-          borderRadius: 10,
+          top: 10,
+          display: "flex",
+          gap: 6,
+          alignItems: "center",
+          background: "rgba(255,255,255,0.92)",
           border: "1px solid #3333",
-          background: "#fff",
-          padding: "8px 10px",
-          cursor: "pointer",
+          borderRadius: 12,
+          padding: 6,
           boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
         }}
       >
-        ⤢
-      </button>
+        <button
+          onClick={() => setWindowOffset((o) => Math.min(maxOffset, o + Math.max(1, Math.floor(win * 0.2))))}
+          disabled={offset >= maxOffset}
+          title="Pan left (older)"
+          style={{
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: "1px solid #3336",
+            background: "#fff",
+            cursor: offset >= maxOffset ? "not-allowed" : "pointer",
+            opacity: offset >= maxOffset ? 0.45 : 1,
+            fontWeight: 800,
+          }}
+        >
+          ←
+        </button>
+
+        <button
+          onClick={() => setWindowOffset((o) => Math.max(0, o - Math.max(1, Math.floor(win * 0.2))))}
+          disabled={offset <= 0}
+          title="Pan right (newer)"
+          style={{
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: "1px solid #3336",
+            background: "#fff",
+            cursor: offset <= 0 ? "not-allowed" : "pointer",
+            opacity: offset <= 0 ? 0.45 : 1,
+            fontWeight: 800,
+          }}
+        >
+          →
+        </button>
+
+        {/* IMPORTANT: + zooms IN (fewer bars), - zooms OUT (more bars) */}
+        <button
+          onClick={() => {
+            setWindowDays((d) => Math.max(2, Math.floor(d * 0.8)));
+            setWindowOffset(0);
+          }}
+          title="Zoom in"
+          style={{
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: "1px solid #3336",
+            background: "#fff",
+            cursor: "pointer",
+            fontWeight: 900,
+          }}
+        >
+          +
+        </button>
+
+        <button
+          onClick={() => {
+            setWindowDays((d) => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25)));
+            setWindowOffset(0);
+          }}
+          title="Zoom out"
+          style={{
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: "1px solid #3336",
+            background: "#fff",
+            cursor: "pointer",
+            fontWeight: 900,
+          }}
+        >
+          −
+        </button>
+
+        <div style={{ fontSize: 12, opacity: 0.75, marginLeft: 4, marginRight: 4, whiteSpace: "nowrap" }}>
+          {Math.min(win, totalPoints)} bars
+        </div>
+
+        <button
+          onClick={() => setExpanded(true)}
+          title="Expand chart"
+          style={{
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: "1px solid #3336",
+            background: "#fff",
+            cursor: "pointer",
+            fontWeight: 900,
+          }}
+        >
+          ⤢
+        </button>
+      </div>
     </div>
   );
 
@@ -960,7 +1048,14 @@ useEffect(() => {
         <select
           value={symbol}
           onChange={(e) => chooseSymbol(e.target.value)}
-          style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #3333" }}
+          style={{
+            padding: "10px 12px",
+            borderRadius: 12,
+            border: "1px solid #3336",
+            background: "#fff",
+            color: "#111",
+            fontWeight: 700,
+          }}
         >
           {PRESET_TICKERS.map((t) => (
             <option key={t.symbol} value={t.symbol}>
@@ -1040,7 +1135,15 @@ useEffect(() => {
           <select
             value={indicator}
             onChange={(e) => setIndicator(e.target.value as any)}
-            style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #3333" }}
+            style={{
+              padding: "10px 12px",
+              borderRadius: 12,
+              border: "1px solid #3336",
+              background: "#fff",
+              color: "#111",
+              fontWeight: 700,
+              minWidth: 200,
+            }}
           >
             {INDICATORS.map((x) => (
               <option key={x} value={x}>
@@ -1050,106 +1153,30 @@ useEffect(() => {
           </select>
         </div>
 
-        {/* Zoom + Pan + Timeframes (right side) */}
-        <div style={{ marginLeft: "auto", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          {/* Pan + Zoom controls */}
-          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        {/* Timeframes (pinned right) */}
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {TIMEFRAMES.map((t) => (
             <button
-              onClick={() => setWindowOffset((o) => Math.min(maxOffset, o + Math.max(1, Math.floor(win * 0.2))))}
-              disabled={offset >= maxOffset}
-              title="Pan left (older)"
-              style={{
-                padding: "8px 10px",
-                borderRadius: 10,
-                border: "1px solid #3333",
-                cursor: offset >= maxOffset ? "not-allowed" : "pointer",
-                opacity: offset >= maxOffset ? 0.4 : 1,
-                fontWeight: 700,
-              }}
-            >
-              ←
-            </button>
-
-            <button
-              onClick={() => setWindowOffset((o) => Math.max(0, o - Math.max(1, Math.floor(win * 0.2))))}
-              disabled={offset <= 0}
-              title="Pan right (newer)"
-              style={{
-                padding: "8px 10px",
-                borderRadius: 10,
-                border: "1px solid #3333",
-                cursor: offset <= 0 ? "not-allowed" : "pointer",
-                opacity: offset <= 0 ? 0.4 : 1,
-                fontWeight: 700,
-              }}
-            >
-              →
-            </button>
-
-            <button
+              key={t.label}
               onClick={() => {
-                setWindowDays((d) => Math.max(2, Math.floor(d * 0.8)));
+                setTfDays(t.days);
+                setWindowDays(t.days);
                 setWindowOffset(0);
               }}
-              title="Zoom in"
               style={{
                 padding: "8px 10px",
                 borderRadius: 10,
-                border: "1px solid #3333",
+                border: "1px solid #3336",
+                background: "#fff",
                 cursor: "pointer",
-                fontWeight: 900,
+                opacity: tfDays === t.days ? 1 : 0.8,
+                fontWeight: tfDays === t.days ? 800 : 600,
               }}
             >
-              −
+              {t.label}
             </button>
-
-            <button
-              onClick={() => {
-                setWindowDays((d) => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25)));
-                setWindowOffset(0);
-              }}
-              title="Zoom out"
-              style={{
-                padding: "8px 10px",
-                borderRadius: 10,
-                border: "1px solid #3333",
-                cursor: "pointer",
-                fontWeight: 900,
-              }}
-            >
-              +
-            </button>
-
-            <div style={{ fontSize: 12, opacity: 0.65, marginLeft: 6 }}>
-              Window: {Math.min(win, totalPoints)} bars
-            </div>
-          </div>
-
-          {/* Timeframes */}
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {TIMEFRAMES.map((t) => (
-              <button
-                key={t.label}
-                onClick={() => {
-                  setTfDays(t.days);
-                  setWindowDays(t.days);
-                  setWindowOffset(0);
-                }}
-                style={{
-                  padding: "8px 10px",
-                  borderRadius: 10,
-                  border: "1px solid #3333",
-                  cursor: "pointer",
-                  opacity: tfDays === t.days ? 1 : 0.7,
-                  fontWeight: tfDays === t.days ? 700 : 500,
-                }}
-              >
-                {t.label}
-              </button>
-            ))}
-       </div>
+          ))}
         </div>
-      </div>
 
 
       <div style={{ marginTop: 16, maxWidth: 920, display: "grid", gap: 16 }}>
@@ -1225,16 +1252,17 @@ useEffect(() => {
               style={{
                 width: "min(1200px, 96vw)",
                 height: "min(85vh, 900px)",
-                background: "#fff",
+                background: "#0b1220",
+                color: "#e6e6e6",
                 borderRadius: 14,
-                border: "1px solid #3333",
+                border: "1px solid rgba(255,255,255,0.14)",
                 boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
                 display: "grid",
                 gridTemplateRows: "auto 1fr",
                 overflow: "hidden",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: 12, borderBottom: "1px solid #3333" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: 12, borderBottom: "1px solid rgba(255,255,255,0.14)" }}>
                 <div style={{ fontWeight: 800 }}>{symbol} — Expanded Chart</div>
                 <button
                   onClick={() => setExpanded(false)}
@@ -1250,9 +1278,10 @@ useEffect(() => {
                 </button>
               </div>
 
-              <div style={{ padding: 14, position: "relative", overflow: "auto" }}>
-                {/* reuse same chart card content (no duplicated state) */}
-                {ChartCard}
+           <div style={{ padding: 14, position: "relative", overflow: "auto" }}>
+                <div style={{ filter: "invert(1) hue-rotate(180deg)", borderRadius: 12 }}>
+                  {ChartCard}
+                </div>
               </div>
             </div>
           </div>
