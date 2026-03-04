@@ -1010,21 +1010,20 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
         </div>
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          {/* SWAPPED: indicator dropdown moved to right side */}
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <label style={{ fontWeight: 600 }}>Indicator</label>
-            <select
-              value={indicator}
-              onChange={(e) => setIndicator(e.target.value as any)}
-              style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #3333" }}
-            >
-              {INDICATORS.map((x) => (
-                <option key={x} value={x}>
-                  {x}
-                </option>
-              ))}
-            </select>
-          </div>
+<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+  <label style={{ fontWeight: 600 }}>Indicator</label>
+  <select
+    value={indicator}
+    onChange={(e) => setIndicator(e.target.value as any)}
+    style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #3333" }}
+  >
+    {INDICATORS.map((x) => (
+      <option key={x} value={x}>
+        {x}
+      </option>
+    ))}
+  </select>
+</div>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {TIMEFRAMES.map((t) => (
