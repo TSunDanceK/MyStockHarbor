@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import PriceChart, { type Overlay } from "./PriceChart";
 
 type Quote = {
@@ -1467,7 +1468,7 @@ const ChartCard = (opts?: { height?: number | string }) => {
 <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
   <h1 style={{ fontSize: 32, margin: 0 }}>My Stock Dashboard</h1>
 
-<a
+<Link
   href="/pickers"
   style={{
     padding: "12px 16px",
@@ -1488,7 +1489,7 @@ const ChartCard = (opts?: { height?: number | string }) => {
   }}
 >
   🔎 Find Your Next Stock <span style={{ opacity: 0.9 }}>→</span>
-</a>
+</Link>
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center" }}>
           <button
