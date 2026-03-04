@@ -23,25 +23,21 @@ type Point = {
 
 type SymbolResult = { symbol: string; name: string; exchange: string };
 
-type MarketRow = {
+type BenchItem = {
+  key: string;
+  label: string;
   symbol: string;
+  date: string | null;
+  time: string | null;
+  close: number | null;
+  prevClose: number | null;
   changePct: number | null;
-  rangePct: number | null;
-  last: number | null;
-  volume: number | null;
 };
 
-type MarketPayload = {
+type BenchPayload = {
   updatedAt: string;
-
-  // NEW (optional metadata from /api/market)
-  scope?: string;
-  provider?: string;
-  rateLimited?: boolean;
-
-  topTraded: MarketRow[];
-  topMovers: MarketRow[];
-  topRanges: MarketRow[];
+  scope: string;
+  items: BenchItem[];
 };
 
 type NewsPayload = {
@@ -768,7 +764,7 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
   const [results, setResults] = useState<SymbolResult[]>([]);
   const [open, setOpen] = useState(false);
 
-  const [market, setMarket] = useState<MarketPayload | null>(null);
+  const [bench, setBench] = useState<BenchPayload | null>(null);
   const [news, setNews] = useState<NewsPayload | null>(null);
 
   // Theme (site-wide)
@@ -898,46 +894,34 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
     };
   }, [query]);
 
-  // Market overview (robust + defensive)
-  useEffect(() => {
-    let cancelled = false;
+// Benchmarks (S&P + Nasdaq) — free, avoids TwelveData credit limits
+useEffect(() => {
+  let cancelled = false;
 
-    async function loadMarket() {
-      try {
-        const res = await fetch("/api/market", { cache: "no-store" });
-        if (!res.ok) throw new Error("Market API failed");
+  async function loadBench() {
+    try {
+      const res = await fetch("/api/benchmarks", { cache: "no-store" });
+      if (!res.ok) throw new Error("Benchmarks API failed");
 
-        const raw = (await res.json()) as any;
+      const raw = (await res.json()) as any;
 
-        const safe: MarketPayload = {
-          updatedAt: typeof raw?.updatedAt === "string" ? raw.updatedAt : new Date().toISOString(),
+      const safe: BenchPayload = {
+        updatedAt: typeof raw?.updatedAt === "string" ? raw.updatedAt : new Date().toISOString(),
+        scope: typeof raw?.scope === "string" ? raw.scope : "Benchmarks",
+        items: Array.isArray(raw?.items) ? raw.items : [],
+      };
 
-          // NEW: keep the helpful flags (so UI can explain what's happening)
-          scope: typeof raw?.scope === "string" ? raw.scope : undefined,
-          provider: typeof raw?.provider === "string" ? raw.provider : undefined,
-          rateLimited: typeof raw?.rateLimited === "boolean" ? raw.rateLimited : undefined,
-
-          topTraded: Array.isArray(raw?.topTraded) ? raw.topTraded : [],
-          topMovers: Array.isArray(raw?.topMovers) ? raw.topMovers : [],
-          topRanges: Array.isArray(raw?.topRanges) ? raw.topRanges : [],
-        };
-
-        if (!cancelled) setMarket(safe);
-      } catch (e) {
-        if (!cancelled) setMarket({
-          updatedAt: new Date().toISOString(),
-          topTraded: [],
-          topMovers: [],
-          topRanges: [],
-        });
-      }
+      if (!cancelled) setBench(safe);
+    } catch {
+      if (!cancelled) setBench({ updatedAt: new Date().toISOString(), scope: "Benchmarks", items: [] });
     }
+  }
 
-    loadMarket();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  loadBench();
+  return () => {
+    cancelled = true;
+  };
+}, []);
 
   // News (per symbol)
   useEffect(() => {
@@ -2095,87 +2079,69 @@ const ChartCard = (opts?: { height?: number | string }) => {
           </div>
         ) : null}
 
-        {/* Card 3: Market */}
-        <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
-          <h2 style={{ marginTop: 0 }}>Market Overview</h2>
+{/* Card 3: Benchmarks */}
+<div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
+  <h2 style={{ marginTop: 0 }}>Market (Benchmarks)</h2>
 
-          {(() => {
-            const topTraded = Array.isArray(market?.topTraded) ? market!.topTraded : [];
-            const topMovers = Array.isArray(market?.topMovers) ? market!.topMovers : [];
-            const topRanges = Array.isArray(market?.topRanges) ? market!.topRanges : [];
+  {(() => {
+    const items = Array.isArray(bench?.items) ? bench!.items : [];
 
-            const hasAny = topTraded.length || topMovers.length || topRanges.length;
+    if (!bench) {
+      return <div style={{ opacity: 0.7 }}>Market data unavailable.</div>;
+    }
 
-            if (!market) {
-              return <div style={{ opacity: 0.7 }}>Market overview unavailable.</div>;
-            }
+    if (!items.length) {
+      return <div style={{ opacity: 0.7 }}>Market data unavailable.</div>;
+    }
 
-            if (market.rateLimited) {
-              return (
-                <div
-                  style={{
-                    opacity: 0.9,
-                    border: "1px solid rgba(255,255,255,0.14)",
-                    background: "rgba(255,255,255,0.06)",
-                    borderRadius: 14,
-                    padding: 14,
-                  }}
-                >
-                  <div style={{ fontWeight: 900, marginBottom: 6 }}>Market Overview paused</div>
-                  <div style={{ opacity: 0.8, lineHeight: 1.35 }}>
-                    Twelve Data daily free limit has been hit.
-                    <br />
-                    Try again tomorrow, or reduce the universe / upgrade plan.
-                  </div>
-                </div>
-              );
-            }
+    return (
+      <>
+        <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 10 }}>
+          Updated: {new Date(bench.updatedAt).toLocaleString()} • {bench.scope}
+        </div>
 
-            if (!hasAny) {
-              return <div style={{ opacity: 0.7 }}>Market overview unavailable.</div>;
-            }
+        <div style={{ display: "grid", gap: 10, maxWidth: 720 }}>
+          {items.map((it) => {
+            const pct = typeof it.changePct === "number" ? it.changePct : null;
+            const pctText = pct == null ? "—" : `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
 
             return (
-              <>
-                <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 10 }}>
-                  Updated: {new Date(market.updatedAt).toLocaleString()}
-                </div>
-
-                <div style={{ display: "grid", gap: 16, gridTemplateColumns: "1fr 1fr" }}>
-                  <div>
-                    <div style={{ fontWeight: 700, marginBottom: 8 }}>Top 10 traded (by volume)</div>
-                    <div style={{ display: "grid", gap: 6 }}>
-                      {(topTraded.length ? topTraded : topRanges).map((r) => (
-                        <div key={r.symbol} style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span style={{ fontWeight: 700 }}>{r.symbol}</span>
-                          <span style={{ opacity: 0.8 }}>
-                            {r.volume == null ? "—" : `${Math.round(r.volume).toLocaleString()} vol`}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
+              <div
+                key={it.key}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  padding: "10px 12px",
+                  borderRadius: 14,
+                  border: `1px solid ${COLORS.border}`,
+                  background: COLORS.controlBg,
+                }}
+              >
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  <div style={{ fontWeight: 950 }}>
+                    {it.label} <span style={{ opacity: 0.75, fontWeight: 800 }}>({it.symbol})</span>
                   </div>
-
-                  <div>
-                    <div style={{ fontWeight: 700, marginBottom: 8 }}>Top 5 movers (by %)</div>
-                    <div style={{ display: "grid", gap: 6 }}>
-                      {topMovers.map((r) => (
-                        <div key={r.symbol} style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span style={{ fontWeight: 700 }}>{r.symbol}</span>
-                          <span style={{ opacity: 0.8 }}>
-                            {r.changePct == null
-                              ? "—"
-                              : `${r.changePct >= 0 ? "Up" : "Down"} ${Math.abs(r.changePct).toFixed(2)}%`}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
+                  <div style={{ fontSize: 12, opacity: 0.7 }}>
+                    {it.date && it.time ? `As of ${it.date} ${it.time}` : "Timestamp unavailable"}
                   </div>
                 </div>
-              </>
+
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontWeight: 950 }}>{pctText}</div>
+                  <div style={{ fontSize: 12, opacity: 0.7 }}>
+                    {typeof it.close === "number" ? it.close.toFixed(2) : "—"}
+                  </div>
+                </div>
+              </div>
             );
-          })()}
+          })}
         </div>
+      </>
+    );
+  })()}
+</div>
 
         {/* Card 4: News */}
         <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
