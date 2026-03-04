@@ -892,17 +892,32 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
     };
   }, [query]);
 
-  // Market overview
+  // Market overview (robust + defensive)
   useEffect(() => {
     let cancelled = false;
 
     async function loadMarket() {
       try {
         const res = await fetch("/api/market", { cache: "no-store" });
-        const data = (await res.json()) as MarketPayload;
-        if (!cancelled) setMarket(data);
-      } catch {
-        if (!cancelled) setMarket(null);
+        if (!res.ok) throw new Error("Market API failed");
+
+        const raw = (await res.json()) as any;
+
+        const safe: MarketPayload = {
+          updatedAt: typeof raw?.updatedAt === "string" ? raw.updatedAt : new Date().toISOString(),
+          topTraded: Array.isArray(raw?.topTraded) ? raw.topTraded : [],
+          topMovers: Array.isArray(raw?.topMovers) ? raw.topMovers : [],
+          topRanges: Array.isArray(raw?.topRanges) ? raw.topRanges : [],
+        };
+
+        if (!cancelled) setMarket(safe);
+      } catch (e) {
+        if (!cancelled) setMarket({
+          updatedAt: new Date().toISOString(),
+          topTraded: [],
+          topMovers: [],
+          topRanges: [],
+        });
       }
     }
 
@@ -2072,43 +2087,57 @@ const ChartCard = (opts?: { height?: number | string }) => {
         <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
           <h2 style={{ marginTop: 0 }}>Market Overview</h2>
 
-          {market ? (
-            <>
-              <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 10 }}>
-                Updated: {new Date(market.updatedAt).toLocaleString()}
-              </div>
+          {(() => {
+            const topTraded = Array.isArray(market?.topTraded) ? market!.topTraded : [];
+            const topMovers = Array.isArray(market?.topMovers) ? market!.topMovers : [];
+            const topRanges = Array.isArray(market?.topRanges) ? market!.topRanges : [];
 
-              <div style={{ display: "grid", gap: 16, gridTemplateColumns: "1fr 1fr" }}>
-                <div>
-                  <div style={{ fontWeight: 700, marginBottom: 8 }}>Top 10 traded (by volume)</div>
-                  <div style={{ display: "grid", gap: 6 }}>
-                    {(market.topTraded?.length ? market.topTraded : market.topRanges).map((r) => (
-                      <div key={r.symbol} style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span style={{ fontWeight: 700 }}>{r.symbol}</span>
-                        <span style={{ opacity: 0.8 }}>{r.volume == null ? "—" : `${Math.round(r.volume).toLocaleString()} vol`}</span>
-                      </div>
-                    ))}
-                  </div>
+            const hasAny = topTraded.length || topMovers.length || topRanges.length;
+
+            if (!market || !hasAny) {
+              return <div style={{ opacity: 0.7 }}>Market overview unavailable.</div>;
+            }
+
+            return (
+              <>
+                <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 10 }}>
+                  Updated: {new Date(market.updatedAt).toLocaleString()}
                 </div>
 
-                <div>
-                  <div style={{ fontWeight: 700, marginBottom: 8 }}>Top 5 movers (by %)</div>
-                  <div style={{ display: "grid", gap: 6 }}>
-                    {market.topMovers.map((r) => (
-                      <div key={r.symbol} style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span style={{ fontWeight: 700 }}>{r.symbol}</span>
-                        <span style={{ opacity: 0.8 }}>
-                          {r.changePct == null ? "—" : `${r.changePct >= 0 ? "Up" : "Down"} ${Math.abs(r.changePct).toFixed(2)}%`}
-                        </span>
-                      </div>
-                    ))}
+                <div style={{ display: "grid", gap: 16, gridTemplateColumns: "1fr 1fr" }}>
+                  <div>
+                    <div style={{ fontWeight: 700, marginBottom: 8 }}>Top 10 traded (by volume)</div>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      {(topTraded.length ? topTraded : topRanges).map((r) => (
+                        <div key={r.symbol} style={{ display: "flex", justifyContent: "space-between" }}>
+                          <span style={{ fontWeight: 700 }}>{r.symbol}</span>
+                          <span style={{ opacity: 0.8 }}>
+                            {r.volume == null ? "—" : `${Math.round(r.volume).toLocaleString()} vol`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ fontWeight: 700, marginBottom: 8 }}>Top 5 movers (by %)</div>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      {topMovers.map((r) => (
+                        <div key={r.symbol} style={{ display: "flex", justifyContent: "space-between" }}>
+                          <span style={{ fontWeight: 700 }}>{r.symbol}</span>
+                          <span style={{ opacity: 0.8 }}>
+                            {r.changePct == null
+                              ? "—"
+                              : `${r.changePct >= 0 ? "Up" : "Down"} ${Math.abs(r.changePct).toFixed(2)}%`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </>
-          ) : (
-            <div style={{ opacity: 0.7 }}>Market overview unavailable (check Twelve Data key).</div>
-          )}
+              </>
+            );
+          })()}
         </div>
 
         {/* Card 4: News */}
