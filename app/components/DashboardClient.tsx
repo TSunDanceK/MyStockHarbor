@@ -1247,24 +1247,22 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
           setWindowOffset(0);
         }}
         style={{
-          padding: "8px 12px",
+          padding: "10px 12px",
           borderRadius: 12,
-          border: darkMode ? "1px solid rgba(255,255,255,0.22)" : "1px solid rgba(0,0,0,0.18)",
-          background: darkMode
-            ? active
+          border: `1px solid ${COLORS.controlBorder}`,
+          background: active
+            ? COLORS.isDark
               ? "rgba(255,255,255,0.18)"
-              : "rgba(255,255,255,0.10)"
-            : active
-              ? "rgba(0,0,0,0.08)"
-              : "#fff",
-          color: darkMode ? "#fff" : "#111",
+              : "rgba(0,0,0,0.08)"
+            : COLORS.controlBg,
+          color: COLORS.controlFg,
           cursor: "pointer",
           opacity: 1,
-          fontWeight: active ? 800 : 650,
+          fontWeight: active ? 900 : 750,
           boxShadow: active
-            ? darkMode
-              ? "0 8px 24px rgba(0,0,0,0.35)"
-              : "0 8px 24px rgba(0,0,0,0.10)"
+            ? COLORS.isDark
+              ? "0 10px 26px rgba(0,0,0,0.45)"
+              : "0 10px 26px rgba(0,0,0,0.12)"
             : "none",
         }}
       >
