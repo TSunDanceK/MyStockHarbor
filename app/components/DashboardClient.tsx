@@ -287,9 +287,204 @@ function compareTo(lastClose: number | null, name: string, v: number | null) {
   if (v == null) return { label: "Signal unavailable", detail: `Need enough data for ${name}.` };
 
   const diff = (lastClose - v) / v;
-  if (diff <= -0.05) return { label: "Undervalued-ish 🟢", detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% below ${name}.` };
-  if (diff < 0.05) return { label: "Fair-ish 🟡", detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% from ${name}.` };
+  if (diff <= -0.05)
+    return { label: "Undervalued-ish 🟢", detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% below ${name}.` };
+  if (diff < 0.05)
+    return { label: "Fair-ish 🟡", detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% from ${name}.` };
   return { label: "Overextended 🔴", detail: `Price is ${(diff * 100).toFixed(1)}% above ${name}.` };
+}
+
+function lastNum(arr: (number | null)[]) {
+  return arr.length ? arr[arr.length - 1] : null;
+}
+
+/** Strict SMA over nullable values: returns null if any null in window. */
+function smaNullable(values: (number | null)[], window: number): (number | null)[] {
+  const out: (number | null)[] = Array(values.length).fill(null);
+  if (window <= 0) return out;
+
+  for (let i = window - 1; i < values.length; i++) {
+    let sum = 0;
+    let ok = true;
+    for (let j = i - window + 1; j <= i; j++) {
+      const v = values[j];
+      if (typeof v !== "number" || !Number.isFinite(v)) {
+        ok = false;
+        break;
+      }
+      sum += v;
+    }
+    out[i] = ok ? sum / window : null;
+  }
+  return out;
+}
+
+type CompositeDetail = {
+  name: string;
+  state: "overbought" | "oversold" | "spike";
+  value?: number | null;
+};
+
+type CompositeSignal = {
+  total: number;
+  flagged: number;
+  overbought: number;
+  oversold: number;
+  spikes: number;
+  details: CompositeDetail[];
+};
+
+function buildCompositeSignal(args: {
+  lastClose: number | null;
+  rsi14: number | null;
+  stochK: number | null;
+  bollUpper: number | null;
+  bollLower: number | null;
+  macdHist: number | null;
+  ma50: number | null;
+  ma200: number | null;
+  ema20: number | null;
+  vwap: number | null;
+  vol: number | null;
+  volSma20: number | null;
+  atr14: number | null;
+  atrSma20: number | null;
+}): CompositeSignal | null {
+  const {
+    lastClose,
+    rsi14,
+    stochK,
+    bollUpper,
+    bollLower,
+    macdHist,
+    ma50,
+    ma200,
+    ema20,
+    vwap,
+    vol,
+    volSma20,
+    atr14,
+    atrSma20,
+  } = args;
+
+  if (lastClose == null) return null;
+
+  const details: CompositeDetail[] = [];
+  let overbought = 0;
+  let oversold = 0;
+  let spikes = 0;
+
+  // 1) RSI
+  if (typeof rsi14 === "number") {
+    if (rsi14 >= 70) {
+      overbought++;
+      details.push({ name: "RSI(14)", state: "overbought", value: rsi14 });
+    } else if (rsi14 <= 30) {
+      oversold++;
+      details.push({ name: "RSI(14)", state: "oversold", value: rsi14 });
+    }
+  }
+
+  // 2) Stoch %K
+  if (typeof stochK === "number") {
+    if (stochK >= 80) {
+      overbought++;
+      details.push({ name: "Stoch %K", state: "overbought", value: stochK });
+    } else if (stochK <= 20) {
+      oversold++;
+      details.push({ name: "Stoch %K", state: "oversold", value: stochK });
+    }
+  }
+
+  // 3) Bollinger extremes
+  if (typeof bollUpper === "number" && lastClose > bollUpper) {
+    overbought++;
+    details.push({ name: "Bollinger", state: "overbought", value: lastClose });
+  } else if (typeof bollLower === "number" && lastClose < bollLower) {
+    oversold++;
+    details.push({ name: "Bollinger", state: "oversold", value: lastClose });
+  }
+
+  // 4) VWAP distance (2%)
+  if (typeof vwap === "number" && vwap > 0) {
+    const pct = (lastClose - vwap) / vwap;
+    if (pct >= 0.02) {
+      overbought++;
+      details.push({ name: "VWAP dist", state: "overbought", value: pct * 100 });
+    } else if (pct <= -0.02) {
+      oversold++;
+      details.push({ name: "VWAP dist", state: "oversold", value: pct * 100 });
+    }
+  }
+
+  // 5) Price vs EMA20 (5%)
+  if (typeof ema20 === "number" && ema20 > 0) {
+    const pct = (lastClose - ema20) / ema20;
+    if (pct >= 0.05) {
+      overbought++;
+      details.push({ name: "EMA20 dist", state: "overbought", value: pct * 100 });
+    } else if (pct <= -0.05) {
+      oversold++;
+      details.push({ name: "EMA20 dist", state: "oversold", value: pct * 100 });
+    }
+  }
+
+  // 6) Price vs MA50 (5%)
+  if (typeof ma50 === "number" && ma50 > 0) {
+    const pct = (lastClose - ma50) / ma50;
+    if (pct >= 0.05) {
+      overbought++;
+      details.push({ name: "MA50 dist", state: "overbought", value: pct * 100 });
+    } else if (pct <= -0.05) {
+      oversold++;
+      details.push({ name: "MA50 dist", state: "oversold", value: pct * 100 });
+    }
+  }
+
+  // 7) Price vs MA200 (5%)
+  if (typeof ma200 === "number" && ma200 > 0) {
+    const pct = (lastClose - ma200) / ma200;
+    if (pct >= 0.05) {
+      overbought++;
+      details.push({ name: "MA200 dist", state: "overbought", value: pct * 100 });
+    } else if (pct <= -0.05) {
+      oversold++;
+      details.push({ name: "MA200 dist", state: "oversold", value: pct * 100 });
+    }
+  }
+
+  // 8) MACD hist magnitude vs price (0.2%)
+  if (typeof macdHist === "number" && Number.isFinite(macdHist)) {
+    const thresh = Math.abs(lastClose) * 0.002; // 0.2% of price
+    if (macdHist >= thresh) {
+      overbought++;
+      details.push({ name: "MACD hist", state: "overbought", value: macdHist });
+    } else if (macdHist <= -thresh) {
+      oversold++;
+      details.push({ name: "MACD hist", state: "oversold", value: macdHist });
+    }
+  }
+
+  // 9) Volume spike vs SMA20 (1.8x)
+  if (typeof vol === "number" && typeof volSma20 === "number" && volSma20 > 0) {
+    if (vol >= volSma20 * 1.8) {
+      spikes++;
+      details.push({ name: "Volume spike", state: "spike", value: vol / volSma20 });
+    }
+  }
+
+  // 10) ATR spike vs SMA20 (1.5x)
+  if (typeof atr14 === "number" && typeof atrSma20 === "number" && atrSma20 > 0) {
+    if (atr14 >= atrSma20 * 1.5) {
+      spikes++;
+      details.push({ name: "ATR spike", state: "spike", value: atr14 / atrSma20 });
+    }
+  }
+
+  const total = 10;
+  const flagged = overbought + oversold + spikes;
+
+  return { total, flagged, overbought, oversold, spikes, details };
 }
 
 /* ----------------------------- constants ----------------------------- */
@@ -383,6 +578,19 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
 
   const [market, setMarket] = useState<MarketPayload | null>(null);
   const [news, setNews] = useState<NewsPayload | null>(null);
+
+  // Large screen modal
+  const [expanded, setExpanded] = useState(false);
+
+  // ESC closes modal
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setExpanded(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [expanded]);
 
   // Load quote + history
   useEffect(() => {
@@ -553,62 +761,115 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
     [displayedHistory]
   );
 
+  const volSma20Arr = useMemo(() => smaNullable(volumeArr, 20), [volumeArr]);
+  const atrSma20Arr = useMemo(() => smaNullable(atr14Arr, 20), [atr14Arr]);
+
   const lastClose = displayedHistory.length ? displayedHistory[displayedHistory.length - 1].close : null;
-  const lastMA50 = ma50.length ? ma50[ma50.length - 1] : null;
-  const lastMA200 = ma200.length ? ma200[ma200.length - 1] : null;
+  const lastMA50 = lastNum(ma50);
+  const lastMA200 = lastNum(ma200);
 
-  const signal = useMemo(() => {
-    if (indicator === "MA50") return compareTo(lastClose, "MA50", typeof lastMA50 === "number" ? lastMA50 : null);
-    if (indicator === "MA200" || indicator === "None")
-      return compareTo(lastClose, "MA200", typeof lastMA200 === "number" ? lastMA200 : null);
+  const composite = useMemo(() => {
+    if (indicator !== "None") return null;
 
-    if (indicator === "EMA20") {
-      const v = ema20Arr.length ? ema20Arr[ema20Arr.length - 1] : null;
-      return compareTo(lastClose, "EMA20", typeof v === "number" ? v : null);
-    }
-
-    if (indicator === "VWAP") {
-      const v = vwapArr.length ? vwapArr[vwapArr.length - 1] : null;
-      return compareTo(lastClose, "VWAP", typeof v === "number" ? v : null);
-    }
-
-    if (indicator === "Bollinger(20,2)") {
-      const v = bollMid.length ? bollMid[bollMid.length - 1] : null;
-      return compareTo(lastClose, "BB mid", typeof v === "number" ? v : null);
-    }
-
-    // Sub-panel indicators (RSI/MACD/Stoch/ATR/Volume) don't compare to price directly,
-    // so keep a stable fallback for now:
-    return compareTo(lastClose, "MA200", typeof lastMA200 === "number" ? lastMA200 : null);
-  }, [indicator, lastClose, lastMA50, lastMA200, ema20Arr, vwapArr, bollMid]);
-
-  const lastIndicatorValue = useMemo(() => {
-    if (indicator === "MA50") return { label: "MA50", value: lastMA50 };
-    if (indicator === "MA200" || indicator === "None") return { label: "MA200", value: lastMA200 };
-    if (indicator === "EMA20") return { label: "EMA20", value: ema20Arr.length ? ema20Arr[ema20Arr.length - 1] : null };
-    if (indicator === "VWAP") return { label: "VWAP", value: vwapArr.length ? vwapArr[vwapArr.length - 1] : null };
-    if (indicator === "Bollinger(20,2)") return { label: "BB Mid", value: bollMid.length ? bollMid[bollMid.length - 1] : null };
-
-    if (indicator === "RSI(14)") return { label: "RSI(14)", value: rsi14Arr.length ? rsi14Arr[rsi14Arr.length - 1] : null };
-    if (indicator === "MACD(12,26,9)") return { label: "MACD line", value: macdLine.length ? macdLine[macdLine.length - 1] : null };
-    if (indicator === "Stochastic(14,3)") return { label: "%K", value: stochK.length ? stochK[stochK.length - 1] : null };
-    if (indicator === "ATR(14)") return { label: "ATR(14)", value: atr14Arr.length ? atr14Arr[atr14Arr.length - 1] : null };
-    if (indicator === "Volume") return { label: "Volume", value: volumeArr.length ? volumeArr[volumeArr.length - 1] : null };
-
-    return { label: "Indicator", value: null };
+    return buildCompositeSignal({
+      lastClose,
+      rsi14: lastNum(rsi14Arr),
+      stochK: lastNum(stochK),
+      bollUpper: lastNum(bollUpper),
+      bollLower: lastNum(bollLower),
+      macdHist: lastNum(macdHist),
+      ma50: typeof lastMA50 === "number" ? lastMA50 : null,
+      ma200: typeof lastMA200 === "number" ? lastMA200 : null,
+      ema20: lastNum(ema20Arr),
+      vwap: lastNum(vwapArr),
+      vol: lastNum(volumeArr),
+      volSma20: lastNum(volSma20Arr),
+      atr14: lastNum(atr14Arr),
+      atrSma20: lastNum(atrSma20Arr),
+    });
   }, [
     indicator,
+    lastClose,
+    rsi14Arr,
+    stochK,
+    bollUpper,
+    bollLower,
+    macdHist,
     lastMA50,
     lastMA200,
     ema20Arr,
     vwapArr,
-    bollMid,
-    rsi14Arr,
-    macdLine,
-    stochK,
-    atr14Arr,
     volumeArr,
+    volSma20Arr,
+    atr14Arr,
+    atrSma20Arr,
   ]);
+
+  const signal = useMemo(() => {
+    // NEW: composite when None
+    if (indicator === "None") {
+      if (!composite) return { label: "Signal unavailable", detail: "No price data." };
+
+      const parts: string[] = [];
+      if (composite.overbought) parts.push(`${composite.overbought} overbought`);
+      if (composite.oversold) parts.push(`${composite.oversold} oversold`);
+      if (composite.spikes) parts.push(`${composite.spikes} spikes`);
+
+      const detailList = composite.details
+        .slice(0, 4)
+        .map((d) => d.name)
+        .join(", ");
+
+      return {
+        label: `Composite: ${composite.flagged}/${composite.total} flags`,
+        detail:
+          (parts.length ? `${parts.join(" • ")}.` : "No strong extremes detected.") +
+          (detailList ? ` Top flags: ${detailList}.` : ""),
+      };
+    }
+
+    // Existing single-indicator logic
+    if (indicator === "MA50") return compareTo(lastClose, "MA50", typeof lastMA50 === "number" ? lastMA50 : null);
+    if (indicator === "MA200") return compareTo(lastClose, "MA200", typeof lastMA200 === "number" ? lastMA200 : null);
+
+    if (indicator === "EMA20") {
+      const v = lastNum(ema20Arr);
+      return compareTo(lastClose, "EMA20", typeof v === "number" ? v : null);
+    }
+
+    if (indicator === "VWAP") {
+      const v = lastNum(vwapArr);
+      return compareTo(lastClose, "VWAP", typeof v === "number" ? v : null);
+    }
+
+    if (indicator === "Bollinger(20,2)") {
+      const v = lastNum(bollMid);
+      return compareTo(lastClose, "BB mid", typeof v === "number" ? v : null);
+    }
+
+    // Sub-panel indicators: keep stable fallback
+    return compareTo(lastClose, "MA200", typeof lastMA200 === "number" ? lastMA200 : null);
+  }, [indicator, composite, lastClose, lastMA50, lastMA200, ema20Arr, vwapArr, bollMid]);
+
+  const lastIndicatorValue = useMemo(() => {
+    if (indicator === "None") {
+      return { label: "Composite", value: composite ? composite.flagged : null, total: composite ? composite.total : null };
+    }
+
+    if (indicator === "MA50") return { label: "MA50", value: lastMA50 };
+    if (indicator === "MA200") return { label: "MA200", value: lastMA200 };
+    if (indicator === "EMA20") return { label: "EMA20", value: lastNum(ema20Arr) };
+    if (indicator === "VWAP") return { label: "VWAP", value: lastNum(vwapArr) };
+    if (indicator === "Bollinger(20,2)") return { label: "BB Mid", value: lastNum(bollMid) };
+
+    if (indicator === "RSI(14)") return { label: "RSI(14)", value: lastNum(rsi14Arr) };
+    if (indicator === "MACD(12,26,9)") return { label: "MACD line", value: lastNum(macdLine) };
+    if (indicator === "Stochastic(14,3)") return { label: "%K", value: lastNum(stochK) };
+    if (indicator === "ATR(14)") return { label: "ATR(14)", value: lastNum(atr14Arr) };
+    if (indicator === "Volume") return { label: "Volume", value: lastNum(volumeArr) };
+
+    return { label: "Indicator", value: null };
+  }, [indicator, composite, lastMA50, lastMA200, ema20Arr, vwapArr, bollMid, rsi14Arr, macdLine, stochK, atr14Arr, volumeArr]);
 
   function chooseSymbol(s: string) {
     const cleaned = s.trim().toUpperCase();
@@ -619,11 +880,55 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
     setOpen(false);
   }
 
+  const ChartCard = (
+    <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12, position: "relative" }}>
+      <PriceChart
+        data={displayedHistory}
+        ma50={ma50}
+        ma200={ma200}
+        overlay={indicator}
+        bollUpper={bollUpper}
+        bollMid={bollMid}
+        bollLower={bollLower}
+        ema20={ema20Arr}
+        vwap={vwapArr}
+        rsi14={rsi14Arr}
+        macdLine={macdLine}
+        macdSignal={macdSignal}
+        macdHist={macdHist}
+        stochK={stochK}
+        stochD={stochD}
+        atr14={atr14Arr}
+        volume={volumeArr}
+      />
+
+      {/* Expand button (bottom-right) */}
+      <button
+        onClick={() => setExpanded(true)}
+        title="Expand chart"
+        style={{
+          position: "absolute",
+          right: 10,
+          bottom: 10,
+          borderRadius: 10,
+          border: "1px solid #3333",
+          background: "#fff",
+          padding: "8px 10px",
+          cursor: "pointer",
+          boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
+        }}
+      >
+        ⤢
+      </button>
+    </div>
+  );
+
   return (
     <main style={{ padding: 40, fontFamily: "system-ui, Arial" }}>
       <h1 style={{ fontSize: 32, marginBottom: 8 }}>My Stock Dashboard</h1>
       <p style={{ marginTop: 0, opacity: 0.7 }}>Version 1 – Learning Build (free data)</p>
 
+      {/* Controls row */}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginTop: 16 }}>
         <label style={{ fontWeight: 600 }}>Ticker</label>
 
@@ -639,21 +944,7 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
           ))}
         </select>
 
-        <label style={{ fontWeight: 600, marginLeft: 8 }}>Indicator</label>
-        <select
-          value={indicator}
-          onChange={(e) => setIndicator(e.target.value as any)}
-          style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #3333" }}
-        >
-          {INDICATORS.map((x) => (
-            <option key={x} value={x}>
-              {x}
-            </option>
-          ))}
-        </select>
-
-        <span style={{ opacity: 0.6 }}>or</span>
-
+        {/* SWAPPED: manual search comes earlier */}
         <div style={{ position: "relative" }}>
           <input
             value={query}
@@ -718,23 +1009,41 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
           ) : null}
         </div>
 
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {TIMEFRAMES.map((t) => (
-            <button
-              key={t.label}
-              onClick={() => setTfDays(t.days)}
-              style={{
-                padding: "8px 10px",
-                borderRadius: 10,
-                border: "1px solid #3333",
-                cursor: "pointer",
-                opacity: tfDays === t.days ? 1 : 0.7,
-                fontWeight: tfDays === t.days ? 700 : 500,
-              }}
+        <div style={{ marginLeft: "auto", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          {/* SWAPPED: indicator dropdown moved to right side */}
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <label style={{ fontWeight: 600 }}>Indicator</label>
+            <select
+              value={indicator}
+              onChange={(e) => setIndicator(e.target.value as any)}
+              style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #3333" }}
             >
-              {t.label}
-            </button>
-          ))}
+              {INDICATORS.map((x) => (
+                <option key={x} value={x}>
+                  {x}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {TIMEFRAMES.map((t) => (
+              <button
+                key={t.label}
+                onClick={() => setTfDays(t.days)}
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: 10,
+                  border: "1px solid #3333",
+                  cursor: "pointer",
+                  opacity: tfDays === t.days ? 1 : 0.7,
+                  fontWeight: tfDays === t.days ? 700 : 500,
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -760,16 +1069,24 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
 
               <div style={{ marginTop: 12, fontSize: 13, opacity: 0.75 }}>
                 <div>
-                  {lastIndicatorValue.label}:{" "}
-                  {typeof lastIndicatorValue.value === "number"
-                    ? indicator === "RSI(14)" || indicator === "Stochastic(14,3)"
-                      ? `${(lastIndicatorValue.value as number).toFixed(2)}`
-                      : indicator === "MACD(12,26,9)"
-                        ? `${(lastIndicatorValue.value as number).toFixed(4)}`
-                        : indicator === "Volume"
-                          ? `${Math.round(lastIndicatorValue.value as number).toLocaleString()}`
-                          : `$${(lastIndicatorValue.value as number).toFixed(2)}`
-                    : "—"}
+                  {indicator === "None" ? (
+                    <>
+                      Composite flags: {composite ? `${composite.flagged}/${composite.total}` : "—"}
+                    </>
+                  ) : (
+                    <>
+                      {lastIndicatorValue.label}:{" "}
+                      {typeof (lastIndicatorValue as any).value === "number"
+                        ? indicator === "RSI(14)" || indicator === "Stochastic(14,3)"
+                          ? `${((lastIndicatorValue as any).value as number).toFixed(2)}`
+                          : indicator === "MACD(12,26,9)"
+                            ? `${((lastIndicatorValue as any).value as number).toFixed(4)}`
+                            : indicator === "Volume"
+                              ? `${Math.round((lastIndicatorValue as any).value as number).toLocaleString()}`
+                              : `$${(((lastIndicatorValue as any).value as number) ?? 0).toFixed(2)}`
+                        : "—"}
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -782,27 +1099,59 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
         </div>
 
         {/* Card 2: Chart */}
-        <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
-          <PriceChart
-            data={displayedHistory}
-            ma50={ma50}
-            ma200={ma200}
-            overlay={indicator}
-            bollUpper={bollUpper}
-            bollMid={bollMid}
-            bollLower={bollLower}
-            ema20={ema20Arr}
-            vwap={vwapArr}
-            rsi14={rsi14Arr}
-            macdLine={macdLine}
-            macdSignal={macdSignal}
-            macdHist={macdHist}
-            stochK={stochK}
-            stochD={stochD}
-            atr14={atr14Arr}
-            volume={volumeArr}
-          />
-        </div>
+        {ChartCard}
+
+        {/* Modal (Large screen) */}
+        {expanded ? (
+          <div
+            onMouseDown={() => setExpanded(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.55)",
+              zIndex: 99999,
+              display: "grid",
+              placeItems: "center",
+              padding: 16,
+            }}
+          >
+            <div
+              onMouseDown={(e) => e.stopPropagation()}
+              style={{
+                width: "min(1200px, 96vw)",
+                height: "min(85vh, 900px)",
+                background: "#fff",
+                borderRadius: 14,
+                border: "1px solid #3333",
+                boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
+                display: "grid",
+                gridTemplateRows: "auto 1fr",
+                overflow: "hidden",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: 12, borderBottom: "1px solid #3333" }}>
+                <div style={{ fontWeight: 800 }}>{symbol} — Expanded Chart</div>
+                <button
+                  onClick={() => setExpanded(false)}
+                  style={{
+                    borderRadius: 10,
+                    border: "1px solid #3333",
+                    background: "#fff",
+                    padding: "8px 10px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Close ✕
+                </button>
+              </div>
+
+              <div style={{ padding: 14, position: "relative", overflow: "auto" }}>
+                {/* reuse same chart card content (no duplicated state) */}
+                {ChartCard}
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {/* Card 3: Market */}
         <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
