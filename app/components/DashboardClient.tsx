@@ -356,6 +356,43 @@ function toneToColor(tone: OverviewItem["tone"], isDark: boolean) {
   return isDark ? "rgba(241,245,249,0.45)" : "rgba(11,18,32,0.45)";
 }
 
+function renderFlagsMeter(opts: {
+  flagged: number;
+  total: number;
+  color: string;
+  isDark: boolean;
+}) {
+  const { flagged, total, color, isDark } = opts;
+  const safeTotal = Math.max(1, Math.min(20, Math.floor(total)));
+  const safeFlagged = Math.max(0, Math.min(safeTotal, Math.floor(flagged)));
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
+      <div style={{ display: "flex", gap: 6 }}>
+        {Array.from({ length: safeTotal }).map((_, i) => {
+          const on = i < safeFlagged;
+          return (
+            <span
+              key={i}
+              style={{
+                width: 14,
+                height: 6,
+                borderRadius: 999,
+                background: on ? color : isDark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)",
+                border: isDark ? "1px solid rgba(255,255,255,0.14)" : "1px solid rgba(0,0,0,0.10)",
+              }}
+            />
+          );
+        })}
+      </div>
+
+      <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>
+        {safeFlagged}/{safeTotal}
+      </div>
+    </div>
+  );
+}
+
 function toneRank(tone: OverviewItem["tone"]) {
   // higher = more attention
   if (tone === "red") return 4;
@@ -1661,7 +1698,7 @@ const ChartCard = (opts?: { height?: number | string }) => {
 <div
   style={{
     marginTop: 6,
-    fontSize: 26, // Composite slightly smaller (meet in the middle)
+    fontSize: 28,
     fontWeight: 950,
     letterSpacing: "-0.2px",
     lineHeight: 1.15,
@@ -1670,6 +1707,16 @@ const ChartCard = (opts?: { height?: number | string }) => {
 >
   {signal.label}
 </div>
+
+{composite && overviewMeta ? (
+  renderFlagsMeter({
+    flagged: composite.flagged,
+    total: composite.total,
+    color: overviewMeta.toneColor,
+    isDark: COLORS.isDark,
+  })
+) : null}
+                        
 
 {overviewMeta ? (
   <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8, color: COLORS.mutedFg, fontWeight: 750 }}>
