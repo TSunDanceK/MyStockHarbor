@@ -9,37 +9,40 @@ export default function LearnPage() {
   return (
     <main
       style={{
-        padding: 24,
+        padding: 0,
         fontFamily: "system-ui, Arial",
         background: "#06080d",
         color: "#f1f5f9",
         minHeight: "100vh",
       }}
     >
-      <div style={{ maxWidth: 980, margin: "0 auto" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <div>
-            <h1 style={{ margin: 0, fontSize: 34, letterSpacing: "-0.4px" }}>Learn the Basics</h1>
-            <p style={{ margin: "8px 0 0", opacity: 0.75 }}>
+      <div className="wrap">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <h1 style={{ margin: 0, fontSize: 34, letterSpacing: "-0.4px" }}>
+              Learn the Basics
+            </h1>
+            <p style={{ margin: "8px 0 0", opacity: 0.75, lineHeight: 1.5 }}>
               Short lessons on reading charts, key concepts, and the indicators used in MyStockHarbor.
             </p>
           </div>
 
-          <Link
-            href="/"
-            style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: "1px solid rgba(255,255,255,0.14)",
-              background: "rgba(255,255,255,0.06)",
-              color: "#f1f5f9",
-              textDecoration: "none",
-              fontWeight: 850,
-              whiteSpace: "nowrap",
-            }}
-          >
-            ← Back to Dashboard
-          </Link>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <Link href="/" style={btn()}>
+              ← Dashboard
+            </Link>
+            <Link href="/pickers" style={btn()}>
+              Find Stocks →
+            </Link>
+          </div>
         </div>
 
         <div style={{ marginTop: 22, display: "grid", gap: 18 }}>
@@ -47,6 +50,13 @@ export default function LearnPage() {
           <Section title="INDICATORS" items={indicators} />
         </div>
       </div>
+
+      <style>{`
+        .wrap { max-width: 980px; margin: 0 auto; padding: 24px; }
+        @media (max-width: 760px) {
+          .wrap { padding: 16px !important; }
+        }
+      `}</style>
     </main>
   );
 }
@@ -85,13 +95,27 @@ function Section(props: { title: string; items: { slug: string; title: string; s
               color: "#f1f5f9",
               textDecoration: "none",
               display: "block",
+              transition: "transform 120ms ease, background 120ms ease",
             }}
           >
             <div style={{ fontWeight: 900, fontSize: 16 }}>{it.title}</div>
-            <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75 }}>{it.summary}</div>
+            <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>{it.summary}</div>
           </Link>
         ))}
       </div>
     </section>
   );
+}
+
+function btn(): React.CSSProperties {
+  return {
+    padding: "10px 12px",
+    borderRadius: 12,
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "rgba(255,255,255,0.06)",
+    color: "#f1f5f9",
+    textDecoration: "none",
+    fontWeight: 850,
+    whiteSpace: "nowrap",
+  };
 }
