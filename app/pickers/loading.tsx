@@ -1,6 +1,6 @@
-"use client";
+// app/pickers/loading.tsx
 
-export default function Loading() {
+export default function LoadingPickers() {
   return (
     <main
       style={{
@@ -11,58 +11,39 @@ export default function Loading() {
         minHeight: "100vh",
       }}
     >
-   <h1 style={{ fontSize: 32, margin: 0 }}>Find Your Next Stock</h1>
-<p style={{ opacity: 0.75, marginTop: 8 }}>Building your stock lists…</p>
+      <h1 style={{ margin: 0, fontSize: 32, letterSpacing: "-0.3px" }}>Find Your Next Stock</h1>
+      <p style={{ marginTop: 10, opacity: 0.75 }}>
+        Building your stock lists… (first load can take ~10–15s)
+      </p>
 
-<div
-  style={{
-    marginTop: 18,
-    width: 420,
-    height: 8,
-    borderRadius: 999,
-    overflow: "hidden",
-    background: "rgba(255,255,255,0.08)",
-    border: "1px solid rgba(255,255,255,0.14)",
-  }}
->
-  <div
-    style={{
-      height: "100%",
-      width: "40%",
-      borderRadius: 999,
-      background: "rgba(59,130,246,0.85)",
-      animation: "pickersBar 1.1s infinite linear",
-    }}
-  />
-</div>
-
-      {/* progress bar */}
+      {/* Loading bar */}
       <div
         style={{
           marginTop: 18,
           width: 420,
-          height: 8,
+          maxWidth: "100%",
+          height: 10,
           borderRadius: 999,
           overflow: "hidden",
           background: "rgba(255,255,255,0.08)",
-          border: "1px solid rgba(255,255,255,0.14)",
+          border: "1px solid rgba(255,255,255,0.16)",
         }}
       >
         <div
           style={{
             height: "100%",
-            width: "40%",
+            width: "35%",
             borderRadius: 999,
-            background: "rgba(59,130,246,0.85)",
-            animation: "pickersBar 1.1s infinite linear",
+            background: "rgba(59,130,246,0.95)",
+            animation: "pickersBar 1.1s linear infinite",
           }}
         />
       </div>
 
-      {/* skeleton cards */}
-      <div style={{ marginTop: 26, display: "grid", gap: 16, maxWidth: 900 }}>
+      {/* Skeleton blocks */}
+      <div style={{ marginTop: 22, display: "grid", gap: 14, maxWidth: 980 }}>
         {Array.from({ length: 4 }).map((_, i) => (
-          <div
+          <section
             key={i}
             style={{
               border: "1px solid rgba(255,255,255,0.14)",
@@ -71,45 +52,60 @@ export default function Loading() {
               background: "#0b1220",
             }}
           >
-            <div
-              style={{
-                width: 240,
-                height: 16,
-                borderRadius: 8,
-                background: "rgba(255,255,255,0.08)",
-              }}
-            />
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+              <div style={{ display: "grid", gap: 8 }}>
+                <div
+                  style={{
+                    width: 260,
+                    height: 18,
+                    borderRadius: 8,
+                    background: "rgba(255,255,255,0.08)",
+                  }}
+                />
+                <div
+                  style={{
+                    width: 420,
+                    height: 12,
+                    borderRadius: 8,
+                    background: "rgba(255,255,255,0.06)",
+                  }}
+                />
+              </div>
 
-            <div
-              style={{
-                marginTop: 12,
-                display: "flex",
-                gap: 10,
-                flexWrap: "wrap",
-              }}
-            >
-              {Array.from({ length: 8 }).map((__, j) => (
+              <div
+                style={{
+                  width: 90,
+                  height: 12,
+                  borderRadius: 8,
+                  background: "rgba(255,255,255,0.06)",
+                }}
+              />
+            </div>
+
+            <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {Array.from({ length: 10 }).map((__, j) => (
                 <div
                   key={j}
                   style={{
-                    width: 90,
-                    height: 36,
+                    height: 38,
+                    width: 96,
                     borderRadius: 999,
-                    background: "rgba(255,255,255,0.06)",
-                    border: "1px solid rgba(255,255,255,0.10)",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    background: "rgba(255,255,255,0.05)",
                   }}
                 />
               ))}
             </div>
-          </div>
+          </section>
         ))}
       </div>
 
+      {/* Keyframes MUST be inside returned JSX */}
       <style>{`
         @keyframes pickersBar {
-          0% { transform: translateX(-20%); opacity: 0.55; }
-          50% { transform: translateX(120%); opacity: 0.95; }
-          100% { transform: translateX(240%); opacity: 0.55; }
+          0% { transform: translateX(-60%); opacity: 0.55; }
+          50% { transform: translateX(140%); opacity: 0.95; }
+          100% { transform: translateX(320%); opacity: 0.55; }
         }
       `}</style>
     </main>
