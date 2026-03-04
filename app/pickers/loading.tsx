@@ -11,53 +11,36 @@ export default function Loading() {
         minHeight: "100vh",
       }}
     >
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16 }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 32, letterSpacing: "-0.3px" }}>Find Your Next Stock</h1>
-          <p style={{ marginTop: 10, opacity: 0.75 }}>Loading screeners…</p>
-        </div>
+      <h1 style={{ fontSize: 32, margin: 0 }}>Find Your Next Stock</h1>
+      <p style={{ opacity: 0.75, marginTop: 8 }}>Loading screeners…</p>
 
-        <div
-          style={{
-            padding: "10px 12px",
-            borderRadius: 12,
-            border: "1px solid rgba(255,255,255,0.18)",
-            background: "rgba(255,255,255,0.06)",
-            opacity: 0.8,
-            fontWeight: 800,
-          }}
-        >
-          ← Back to Dashboard
-        </div>
-      </div>
-
-      {/* fake progress bar */}
+      {/* progress bar */}
       <div
         style={{
           marginTop: 18,
-          maxWidth: 980,
+          width: 420,
+          height: 8,
           borderRadius: 999,
-          height: 10,
           overflow: "hidden",
+          background: "rgba(255,255,255,0.08)",
           border: "1px solid rgba(255,255,255,0.14)",
-          background: "rgba(255,255,255,0.06)",
         }}
       >
-<div
-  style={{
-    height: "100%",
-    width: "35%",
-    borderRadius: 999,
-    background: "rgba(59,130,246,0.85)",
-    display: "block",
-    willChange: "transform",
-    animation: "pickersBar 1.1s infinite linear",
-  }}
-/>
+        <div
+          style={{
+            height: "100%",
+            width: "40%",
+            borderRadius: 999,
+            background: "rgba(59,130,246,0.85)",
+            animation: "pickersBar 1.1s infinite linear",
+          }}
+        />
+      </div>
 
-      <div style={{ marginTop: 22, display: "grid", gap: 16, maxWidth: 980 }}>
+      {/* skeleton cards */}
+      <div style={{ marginTop: 26, display: "grid", gap: 16, maxWidth: 900 }}>
         {Array.from({ length: 4 }).map((_, i) => (
-          <section
+          <div
             key={i}
             style={{
               border: "1px solid rgba(255,255,255,0.14)",
@@ -66,38 +49,47 @@ export default function Loading() {
               background: "#0b1220",
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
-              <div style={{ width: 260, height: 18, borderRadius: 8, background: "rgba(255,255,255,0.08)" }} />
-              <div style={{ width: 90, height: 14, borderRadius: 8, background: "rgba(255,255,255,0.06)" }} />
-            </div>
+            <div
+              style={{
+                width: 240,
+                height: 16,
+                borderRadius: 8,
+                background: "rgba(255,255,255,0.08)",
+              }}
+            />
 
-            <div style={{ marginTop: 10, width: 420, height: 12, borderRadius: 8, background: "rgba(255,255,255,0.06)" }} />
-
-            <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
-              {Array.from({ length: 10 }).map((__, j) => (
+            <div
+              style={{
+                marginTop: 12,
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+              }}
+            >
+              {Array.from({ length: 8 }).map((__, j) => (
                 <div
                   key={j}
                   style={{
-                    width: 92,
+                    width: 90,
                     height: 36,
                     borderRadius: 999,
-                    border: "1px solid rgba(255,255,255,0.10)",
                     background: "rgba(255,255,255,0.06)",
+                    border: "1px solid rgba(255,255,255,0.10)",
                   }}
                 />
               ))}
             </div>
-          </section>
+          </div>
         ))}
       </div>
 
-<style>{`
-  @keyframes pickersBar {
-    0% { transform: translateX(-10%); opacity: 0.55; }
-    50% { transform: translateX(120%); opacity: 0.95; }
-    100% { transform: translateX(240%); opacity: 0.55; }
-  }
-`}</style>
+      <style>{`
+        @keyframes pickersBar {
+          0% { transform: translateX(-20%); opacity: 0.55; }
+          50% { transform: translateX(120%); opacity: 0.95; }
+          100% { transform: translateX(240%); opacity: 0.55; }
+        }
+      `}</style>
     </main>
   );
 }
