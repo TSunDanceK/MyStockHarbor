@@ -1541,22 +1541,76 @@ const ChartCard = (opts?: { height?: number | string }) => {
             <p style={{ margin: "8px 0" }}>{err}</p>
           ) : (
             <>
-              <p style={{ fontSize: 20, margin: "8px 0" }}>
-                <strong>Last price:</strong> {quote?.price == null ? "Unavailable" : `$${quote.price.toFixed(2)}`}
-              </p>
-
               {indicator === "None" ? (
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1.1fr 0.9fr",
-                    gap: 16,
-                    marginTop: 10,
-                    alignItems: "start",
-                  }}
-                >
-                  {/* LEFT: Big dominant signal */}
-                  <div>
+                <>
+                  {/* TOP ROW: left = ticker/price, right = breakdown (aligned to top) */}
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1.1fr 0.9fr",
+                      gap: 16,
+                      alignItems: "start",
+                      marginTop: 8,
+                    }}
+                  >
+                    <div>
+                      <p style={{ fontSize: 20, margin: "8px 0" }}>
+                        <strong>Last price:</strong> {quote?.price == null ? "Unavailable" : `$${quote.price.toFixed(2)}`}
+                      </p>
+                    </div>
+
+                    <div
+                      style={{
+                        border: `1px solid ${COLORS.border}`,
+                        borderRadius: 12,
+                        padding: 12,
+                        background: COLORS.controlBg,
+                      }}
+                    >
+                      <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10, opacity: 0.9 }}>
+                        Breakdown
+                      </div>
+
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {overviewItems.map((it) => {
+                          const dot = toneToColor(it.tone, COLORS.isDark);
+
+                          return (
+                            <div
+                              key={it.key}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                gap: 10,
+                              }}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                                <span
+                                  style={{
+                                    width: 10,
+                                    height: 10,
+                                    borderRadius: 999,
+                                    background: dot,
+                                    boxShadow: COLORS.isDark ? "0 0 0 3px rgba(255,255,255,0.04)" : "0 0 0 3px rgba(0,0,0,0.03)",
+                                    flex: "0 0 auto",
+                                  }}
+                                />
+                                <span style={{ fontWeight: 850, fontSize: 13, whiteSpace: "nowrap" }}>{it.label}</span>
+                              </div>
+
+                              <span style={{ fontSize: 12, opacity: 0.85, color: COLORS.mutedFg, textAlign: "right" }}>
+                                {it.valueText}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SECOND ROW: big dominant signal (full width feel, still left-biased) */}
+                  <div style={{ marginTop: 12 }}>
                     <div style={{ fontSize: 14, opacity: 0.8, color: COLORS.mutedFg, fontWeight: 800 }}>
                       Signal
                     </div>
@@ -1581,58 +1635,12 @@ const ChartCard = (opts?: { height?: number | string }) => {
                       <strong>Overview:</strong> Composite {composite ? `${composite.flagged}/${composite.total}` : "—"} flags
                     </div>
                   </div>
-
-                  {/* RIGHT: Compact breakdown list */}
-                  <div
-                    style={{
-                      border: `1px solid ${COLORS.border}`,
-                      borderRadius: 12,
-                      padding: 12,
-                      background: COLORS.controlBg,
-                    }}
-                  >
-                    <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10, opacity: 0.9 }}>
-                      Breakdown
-                    </div>
-
-                    <div style={{ display: "grid", gap: 8 }}>
-                      {overviewItems.map((it) => {
-                        const dot = toneToColor(it.tone, COLORS.isDark);
-
-                        return (
-                          <div
-                            key={it.key}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              gap: 10,
-                            }}
-                          >
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                              <span
-                                style={{
-                                  width: 10,
-                                  height: 10,
-                                  borderRadius: 999,
-                                  background: dot,
-                                  boxShadow: COLORS.isDark ? "0 0 0 3px rgba(255,255,255,0.04)" : "0 0 0 3px rgba(0,0,0,0.03)",
-                                  flex: "0 0 auto",
-                                }}
-                              />
-                              <span style={{ fontWeight: 850, fontSize: 13, whiteSpace: "nowrap" }}>{it.label}</span>
-                            </div>
-
-                            <span style={{ fontSize: 12, opacity: 0.85, color: COLORS.mutedFg, textAlign: "right" }}>
-                              {it.valueText}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
+                </>
               ) : (
+                <>
+                  <p style={{ fontSize: 20, margin: "8px 0" }}>
+                    <strong>Last price:</strong> {quote?.price == null ? "Unavailable" : `$${quote.price.toFixed(2)}`}
+                  </p>
                 <>
                   <p style={{ margin: "8px 0 0", opacity: 0.85 }}>
                     <strong>Signal:</strong> {signal.label}
