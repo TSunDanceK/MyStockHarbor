@@ -241,6 +241,10 @@ export async function GET() {
     .sort((a, b) => b.rangePct! - a.rangePct!)
     .slice(0, 10);
 
+const isRateLimited =
+    Array.isArray(debug.errors) &&
+    debug.errors.some((e: any) => typeof e?.message === "string" && e.message.toLowerCase().includes("run out of api credits"));
+
   const payload = {
     updatedAt: new Date().toISOString(),
     scope: "Curated Universe (Dashboard + Pickers + Extras)",
@@ -248,12 +252,13 @@ export async function GET() {
     quotesReturned: quotes.length,
     rowsBuilt: rows.length,
 
+    rateLimited: isRateLimited,
+    provider: "twelvedata",
+
     topTraded,
     topMovers,
     topRanges,
 
-    // ✅ Temporary: keep this so you can see what’s going wrong in Vercel
-    // Once stable, we can remove it.
     debug,
   };
 
