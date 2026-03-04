@@ -294,6 +294,44 @@ function compareTo(lastClose: number | null, name: string, v: number | null) {
   return { label: "Overextended 🔴", detail: `Price is ${(diff * 100).toFixed(1)}% above ${name}.` };
 }
 
+function compareOscillator(name: string, v: number | null, low: number, high: number) {
+  if (v == null) return { label: "Signal unavailable", detail: `Need enough data for ${name}.` };
+
+  if (v >= high) return { label: "Overbought 🔴", detail: `${name} is ${v.toFixed(2)} (≥ ${high}).` };
+  if (v <= low) return { label: "Oversold 🟢", detail: `${name} is ${v.toFixed(2)} (≤ ${low}).` };
+  return { label: "Neutral-ish 🟡", detail: `${name} is ${v.toFixed(2)}.` };
+}
+
+function compareMacdHistogram(lastClose: number | null, hist: number | null) {
+  if (lastClose == null) return { label: "Signal unavailable", detail: "No price data." };
+  if (hist == null) return { label: "Signal unavailable", detail: "Need enough data for MACD." };
+
+  // Treat “flat” as within ~0.1% of price (tweakable)
+  const flat = Math.abs(lastClose) * 0.001;
+
+  if (hist > flat) return { label: "Bullish momentum 🟢", detail: `MACD histogram is positive (${hist.toFixed(4)}).` };
+  if (hist < -flat) return { label: "Bearish momentum 🔴", detail: `MACD histogram is negative (${hist.toFixed(4)}).` };
+  return { label: "Flat momentum 🟡", detail: `MACD histogram near zero (${hist.toFixed(4)}).` };
+}
+
+function compareSpike(name: string, v: number | null, sma: number | null, spikeMult: number, unit?: string) {
+  if (v == null || sma == null || sma <= 0) return { label: "Signal unavailable", detail: `Need enough data for ${name}.` };
+
+  const ratio = v / sma;
+
+  if (ratio >= spikeMult) {
+    return {
+      label: "Spike ⚡",
+      detail: `${name} is ${ratio.toFixed(2)}× its 20SMA.${unit ? ` (${unit})` : ""}`,
+    };
+  }
+
+  return {
+    label: "Normal range 🟡",
+    detail: `${name} is ${ratio.toFixed(2)}× its 20SMA.${unit ? ` (${unit})` : ""}`,
+  };
+}
+
 function lastNum(arr: (number | null)[]) {
   return arr.length ? arr[arr.length - 1] : null;
 }
@@ -898,9 +936,42 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
       return compareTo(lastClose, "BB mid", typeof v === "number" ? v : null);
     }
 
-    // Sub-panel indicators: keep stable fallback
-    return compareTo(lastClose, "MA200", typeof lastMA200 === "number" ? lastMA200 : null);
-  }, [indicator, composite, lastClose, lastMA50, lastMA200, ema20Arr, vwapArr, bollMid]);
+// Sub-panel indicators: interpret them directly (NOT vs MA200)
+if (indicator === "RSI(14)") return compareOscillator("RSI(14)", lastNum(rsi14Arr), 30, 70);
+
+if (indicator === "Stochastic(14,3)") return compareOscillator("Stochastic %K", lastNum(stochK), 20, 80);
+
+if (indicator === "MACD(12,26,9)") {
+  return compareMacdHistogram(lastClose, lastNum(macdHist));
+}
+
+if (indicator === "Volume") {
+  return compareSpike("Volume", lastNum(volumeArr), lastNum(volSma20Arr), 1.8, "higher = more activity");
+}
+
+if (indicator === "ATR(14)") {
+  return compareSpike("ATR(14)", lastNum(atr14Arr), lastNum(atrSma20Arr), 1.5, "higher = more volatility");
+}
+
+// Safety fallback
+return { label: "Signal unavailable", detail: "Unknown indicator state." };
+    }, [
+    indicator,
+    composite,
+    lastClose,
+    lastMA50,
+    lastMA200,
+    ema20Arr,
+    vwapArr,
+    bollMid,
+    rsi14Arr,
+    stochK,
+    macdHist,
+    volumeArr,
+    volSma20Arr,
+    atr14Arr,
+    atrSma20Arr,
+  ]);
 
   const lastIndicatorValue = useMemo(() => {
     if (indicator === "None") {
