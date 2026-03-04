@@ -934,21 +934,47 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
   const ChartCard = (opts?: { height?: number | string }) => {
     const height = opts?.height ?? 460;
 
-    return (
+return (
+  <div
+    style={{
+      border: `1px solid ${COLORS.border}`,
+      borderRadius: 14,
+      background: COLORS.cardBg,
+      color: COLORS.cardFg,
+      height,
+      display: "flex",
+      flexDirection: "column",
+      overflow: "hidden",
+    }}
+  >
+
+    {/* Header row */}
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "12px 16px",
+        borderBottom: `1px solid ${COLORS.border}`,
+      }}
+    >
+      <div style={{ fontWeight: 700 }}>
+        Price ({indicator})
+      </div>
+
       <div
         style={{
-          padding: 16,
-          border: `1px solid ${COLORS.border}`,
-          borderRadius: 14,
-          position: "relative",
-          background: COLORS.cardBg,
-          color: COLORS.cardFg,
-          height,
-          overflow: "hidden",
+          display: "flex",
+          gap: 8,
+          alignItems: "center",
+          background: COLORS.controlBgSolid,
+          border: `1px solid ${COLORS.controlBorder}`,
+          borderRadius: 12,
+          padding: 6,
         }}
       >
         {/* Chart area */}
-        <div style={{ position: "absolute", inset: 16, top: 60, bottom: 16 }}>
+        <div style={{ flex: 1, padding: 16 }}>
           <PriceChart
             data={displayedHistory}
             ma50={ma50}
@@ -968,123 +994,6 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
             atr14={atr14Arr}
             volume={volumeArr}
           />
-        </div>
-
-        {/* Chart controls (top-right) */}
-        <div
-          style={{
-            position: "absolute",
-            right: 12,
-            top: 12,
-            display: "flex",
-            gap: 8,
-            alignItems: "center",
-            background: COLORS.controlBgSolid,
-            border: `1px solid ${COLORS.controlBorder}`,
-            borderRadius: 14,
-            padding: 8,
-            boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.45)" : "0 10px 26px rgba(0,0,0,0.12)",
-            zIndex: 5,
-          }}
-        >
-          <button
-            onClick={() => setWindowOffset((o) => Math.min(maxOffset, o + Math.max(1, Math.floor(win * 0.2))))}
-            disabled={offset >= maxOffset}
-            title="Pan left (older)"
-            style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: `1px solid ${COLORS.controlBorder}`,
-              background: COLORS.controlBg,
-              color: COLORS.controlFg,
-              cursor: offset >= maxOffset ? "not-allowed" : "pointer",
-              opacity: offset >= maxOffset ? 0.45 : 1,
-              fontWeight: 900,
-              fontSize: 14,
-            }}
-          >
-            ←
-          </button>
-
-          <button
-            onClick={() => setWindowOffset((o) => Math.max(0, o - Math.max(1, Math.floor(win * 0.2))))}
-            disabled={offset <= 0}
-            title="Pan right (newer)"
-            style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: `1px solid ${COLORS.controlBorder}`,
-              background: COLORS.controlBg,
-              color: COLORS.controlFg,
-              cursor: offset <= 0 ? "not-allowed" : "pointer",
-              opacity: offset <= 0 ? 0.45 : 1,
-              fontWeight: 900,
-              fontSize: 14,
-            }}
-          >
-            →
-          </button>
-
-          <button
-            onClick={() => {
-              setWindowDays((d) => Math.max(2, Math.floor(d * 0.8)));
-              setWindowOffset(0);
-            }}
-            title="Zoom in"
-            style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: `1px solid ${COLORS.controlBorder}`,
-              background: COLORS.controlBg,
-              color: COLORS.controlFg,
-              cursor: "pointer",
-              fontWeight: 900,
-              fontSize: 14,
-            }}
-          >
-            +
-          </button>
-
-          <button
-            onClick={() => {
-              setWindowDays((d) => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25)));
-              setWindowOffset(0);
-            }}
-            title="Zoom out"
-            style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: `1px solid ${COLORS.controlBorder}`,
-              background: COLORS.controlBg,
-              color: COLORS.controlFg,
-              cursor: "pointer",
-              fontWeight: 900,
-              fontSize: 14,
-            }}
-          >
-            −
-          </button>
-
-          <div style={{ fontSize: 12, opacity: 0.8, color: COLORS.mutedFg, whiteSpace: "nowrap", fontWeight: 700 }}>
-            {Math.min(win, totalPoints)} bars
-          </div>
-
-          <button
-            onClick={() => setExpanded(true)}
-            title="Expand chart"
-            style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: `1px solid ${COLORS.controlBorder}`,
-              background: COLORS.controlBg,
-              color: COLORS.controlFg,
-              cursor: "pointer",
-              fontWeight: 900,
-              fontSize: 14,
-            }}
-          >
-            ⤢
-          </button>
         </div>
       </div>
     );
