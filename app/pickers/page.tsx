@@ -80,20 +80,23 @@ export default function PickersPage() {
           </p>
         </div>
 
-        <a
-          href="/"
-          style={{
-            padding: "10px 12px",
-            borderRadius: 12,
-            border: "1px solid rgba(255,255,255,0.18)",
-            textDecoration: "none",
-            color: "#f1f5f9",
-            fontWeight: 800,
-            background: "rgba(255,255,255,0.06)",
-          }}
-        >
-          ← Back to Dashboard
-        </a>
+<Link
+  href="/"
+  style={{
+    padding: "10px 12px",
+    borderRadius: 12,
+    border: "1px solid rgba(255,255,255,0.18)",
+    textDecoration: "none",
+    color: "#f1f5f9",
+    fontWeight: 800,
+    background: "rgba(255,255,255,0.06)",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+  }}
+>
+  ← Back to Dashboard
+</Link>
       </div>
 
       <div style={{ marginTop: 18, maxWidth: 980 }}>
