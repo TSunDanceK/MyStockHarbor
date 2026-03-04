@@ -1599,26 +1599,36 @@ const ChartCard = (opts?: { height?: number | string }) => {
         </select>
 
         {/* SWAPPED: manual search comes earlier */}
-        <div style={{ position: "relative" }}>
-          <input
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setOpen(true);
-            }}
-            onFocus={() => setOpen(true)}
-            onBlur={() => setTimeout(() => setOpen(false), 150)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") chooseSymbol(query);
-            }}
-            placeholder="Search ticker or company"
-            style={{
-              padding: "8px 10px",
-              borderRadius: 10,
-              border: "1px solid #3333",
-              width: 360,
-            }}
-          />
+        <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 4 }}>
+  <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.7 }}>
+    Search Any Stock
+  </div>
+<input
+  value={query}
+  onChange={(e) => {
+    setQuery(e.target.value);
+    setOpen(true);
+  }}
+  onFocus={() => setOpen(true)}
+  onBlur={() => setTimeout(() => setOpen(false), 150)}
+  onKeyDown={(e) => {
+    if (e.key === "Enter") chooseSymbol(query);
+  }}
+  placeholder="🔎 Search ANY ticker or company (e.g. IBM, NVIDIA, Tesla)"
+  style={{
+    padding: "12px 16px",
+    borderRadius: 14,
+    border: `2px solid ${COLORS.controlBorder}`,
+    background: COLORS.controlBgSolid,
+    color: COLORS.controlFg,
+    width: 420,
+    fontSize: 15,
+    fontWeight: 600,
+    boxShadow: COLORS.isDark
+      ? "0 6px 20px rgba(0,0,0,0.35)"
+      : "0 6px 20px rgba(0,0,0,0.12)",
+  }}
+/>
 
           {open && results.length > 0 ? (
             <div
