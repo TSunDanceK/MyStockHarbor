@@ -396,14 +396,14 @@ function buildCompositeFromHistory(points: Point[]): CompositeResult | null {
   };
 }
 
-function pickIsGreenComposite(c: CompositeResult) {
-  // “green composite” = oversold-leaning
+function pickIsGreenOverallSignal(c: CompositeResult) {
+  // “green overall signal” = oversold-leaning
   // tweakable thresholds:
   return c.oversold >= 2 && c.oversold > c.overbought;
 }
 
-function pickIsRedComposite(c: CompositeResult) {
-  // “red composite” = overbought-leaning
+function pickIsRedOverallSignal(c: CompositeResult) {
+  // “red overall signal” = overbought-leaning
   return c.overbought >= 2 && c.overbought > c.oversold;
 }
 
@@ -549,23 +549,23 @@ async function buildPickersPayload(origin: string) {
 
           if (comp) {
             // green/red composite
-            if (pickIsGreenComposite(comp)) {
+           if (pickIsGreenOverallSignal(comp)) {
               // more oversold & more total flags => rank higher
-              green.push({
-                symbol,
-                tone: "green",
-                note: `${comp.oversold} oversold • ${comp.flagged}/${comp.total} flags`,
-                _score: top50Boost(symbol) + comp.oversold * 50 + comp.flagged * 10,
-              });
+green.push({
+  symbol,
+  tone: "green",
+  note: `${comp.oversold} oversold • ${comp.flagged}/${comp.total} checks`,
+  _score: top50Boost(symbol) + comp.oversold * 50 + comp.flagged * 10,
+});
             }
 
-            if (pickIsRedComposite(comp)) {
-              red.push({
-                symbol,
-                tone: "red",
-                note: `${comp.overbought} overbought • ${comp.flagged}/${comp.total} flags`,
-                _score: top50Boost(symbol) + comp.overbought * 50 + comp.flagged * 10,
-              });
+           if (pickIsRedOverallSignal(comp)) {
+red.push({
+  symbol,
+  tone: "red",
+  note: `${comp.overbought} overbought • ${comp.flagged}/${comp.total} checks`,
+  _score: top50Boost(symbol) + comp.overbought * 50 + comp.flagged * 10,
+});
             }
           }
 
@@ -605,12 +605,12 @@ async function buildPickersPayload(origin: string) {
 
   const sections: PickerSection[] = [
     {
-      title: "Green Composite (Oversold-leaning)",
+      title: "Green Overall Signal (Oversold-leaning)",
       description: "Stocks flashing multiple “oversold / dip-style” signals. Top traded are prioritised.",
       items: takeTop(green, 20),
     },
     {
-      title: "Red Composite (Overbought-leaning)",
+      title: "Red Overall Signal (Overbought-leaning)",
       description: "Stocks looking stretched / extended. Top traded are prioritised.",
       items: takeTop(red, 20),
     },
