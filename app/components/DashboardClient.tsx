@@ -336,6 +336,26 @@ function lastNum(arr: (number | null)[]) {
   return arr.length ? arr[arr.length - 1] : null;
 }
 
+type OverviewItem = {
+  key: string;
+  label: string;
+  tone: "green" | "yellow" | "orange" | "red" | "muted";
+  valueText: string;
+};
+
+function toneToColor(tone: OverviewItem["tone"], isDark: boolean) {
+  // simple, readable colors; no new libs
+  if (tone === "green") return isDark ? "#22c55e" : "#16a34a";
+  if (tone === "yellow") return isDark ? "#eab308" : "#ca8a04";
+  if (tone === "orange") return isDark ? "#fb923c" : "#ea580c";
+  if (tone === "red") return isDark ? "#ef4444" : "#dc2626";
+  return isDark ? "rgba(241,245,249,0.45)" : "rgba(11,18,32,0.45)";
+}
+
+function clampNum(v: number, lo: number, hi: number) {
+  return Math.min(hi, Math.max(lo, v));
+}
+
 /** Strict SMA over nullable values: returns null if any null in window. */
 function smaNullable(values: (number | null)[], window: number): (number | null)[] {
   const out: (number | null)[] = Array(values.length).fill(null);
@@ -973,6 +993,144 @@ return { label: "Signal unavailable", detail: "Unknown indicator state." };
     atrSma20Arr,
   ]);
 
+    const overviewItems = useMemo<OverviewItem[]>(() => {
+    // Only show in Overview mode
+    if (indicator !== "None") return [];
+
+    const items: OverviewItem[] = [];
+    const isDark = COLORS.isDark;
+
+    const push = (it: OverviewItem) => items.push(it);
+
+    // Helper: price distance classification
+    const distTone = (pctAbs: number) => {
+      if (pctAbs >= 5) return "red";
+      if (pctAbs >= 2) return "orange";
+      return "yellow";
+    };
+
+    // VWAP distance (2%)
+    const vwap = lastNum(vwapArr);
+    if (typeof lastClose === "number" && typeof vwap === "number" && vwap > 0) {
+      const pct = ((lastClose - vwap) / vwap) * 100;
+      const tone = pct >= 2 || pct <= -2 ? (Math.abs(pct) >= 5 ? "red" : "orange") : "yellow";
+      push({
+        key: "vwap",
+        label: "VWAP",
+        tone,
+        valueText: `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`,
+      });
+    } else {
+      push({ key: "vwap", label: "VWAP", tone: "muted", valueText: "—" });
+    }
+
+    // MACD histogram momentum
+    const hist = lastNum(macdHist);
+    if (typeof lastClose === "number" && typeof hist === "number") {
+      const flat = Math.abs(lastClose) * 0.001;
+      const tone = hist > flat ? "green" : hist < -flat ? "red" : "yellow";
+      push({
+        key: "macd",
+        label: "MACD",
+        tone,
+        valueText: hist > flat ? "Bullish" : hist < -flat ? "Bearish" : "Flat",
+      });
+    } else {
+      push({ key: "macd", label: "MACD", tone: "muted", valueText: "—" });
+    }
+
+    // RSI
+    const rsi = lastNum(rsi14Arr);
+    if (typeof rsi === "number") {
+      const tone = rsi >= 70 ? "red" : rsi <= 30 ? "green" : "yellow";
+      push({
+        key: "rsi",
+        label: "RSI",
+        tone,
+        valueText: rsi >= 70 ? "Overbought" : rsi <= 30 ? "Oversold" : "Neutral",
+      });
+    } else {
+      push({ key: "rsi", label: "RSI", tone: "muted", valueText: "—" });
+    }
+
+    // Stochastic %K
+    const k = lastNum(stochK);
+    if (typeof k === "number") {
+      const tone = k >= 80 ? "red" : k <= 20 ? "green" : "yellow";
+      push({
+        key: "stoch",
+        label: "Stoch",
+        tone,
+        valueText: k >= 80 ? "Overbought" : k <= 20 ? "Oversold" : "Neutral",
+      });
+    } else {
+      push({ key: "stoch", label: "Stoch", tone: "muted", valueText: "—" });
+    }
+
+    // MA200 distance (5%)
+    const ma200v = typeof lastMA200 === "number" ? lastMA200 : null;
+    if (typeof lastClose === "number" && typeof ma200v === "number" && ma200v > 0) {
+      const pct = ((lastClose - ma200v) / ma200v) * 100;
+      const tone = distTone(Math.abs(pct)) as OverviewItem["tone"];
+      push({
+        key: "ma200",
+        label: "MA200",
+        tone,
+        valueText: `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`,
+      });
+    } else {
+      push({ key: "ma200", label: "MA200", tone: "muted", valueText: "—" });
+    }
+
+    // Volume spike vs SMA20 (1.8x)
+    const vol = lastNum(volumeArr);
+    const volSma = lastNum(volSma20Arr);
+    if (typeof vol === "number" && typeof volSma === "number" && volSma > 0) {
+      const ratio = vol / volSma;
+      const tone = ratio >= 1.8 ? "orange" : "yellow";
+      push({
+        key: "vol",
+        label: "Volume",
+        tone,
+        valueText: ratio >= 1.8 ? `Spike ${ratio.toFixed(2)}×` : `Normal ${ratio.toFixed(2)}×`,
+      });
+    } else {
+      push({ key: "vol", label: "Volume", tone: "muted", valueText: "—" });
+    }
+
+    // ATR spike vs SMA20 (1.5x)
+    const atrv = lastNum(atr14Arr);
+    const atrSma = lastNum(atrSma20Arr);
+    if (typeof atrv === "number" && typeof atrSma === "number" && atrSma > 0) {
+      const ratio = atrv / atrSma;
+      const tone = ratio >= 1.5 ? "orange" : "yellow";
+      push({
+        key: "atr",
+        label: "ATR",
+        tone,
+        valueText: ratio >= 1.5 ? `Spike ${ratio.toFixed(2)}×` : `Normal ${ratio.toFixed(2)}×`,
+      });
+    } else {
+      push({ key: "atr", label: "ATR", tone: "muted", valueText: "—" });
+    }
+
+    // Keep the list compact (you can reorder these later)
+    return items;
+  }, [
+    indicator,
+    COLORS.isDark,
+    lastClose,
+    lastMA200,
+    vwapArr,
+    macdHist,
+    rsi14Arr,
+    stochK,
+    volumeArr,
+    volSma20Arr,
+    atr14Arr,
+    atrSma20Arr,
+  ]);
+
   const lastIndicatorValue = useMemo(() => {
     if (indicator === "None") {
       return { label: "Composite", value: composite ? composite.flagged : null, total: composite ? composite.total : null };
@@ -1030,7 +1188,9 @@ const ChartCard = (opts?: { height?: number | string }) => {
           gap: 12,
         }}
       >
-        <div style={{ fontWeight: 800, whiteSpace: "nowrap" }}>Price ({indicator})</div>
+                <div style={{ fontWeight: 800, whiteSpace: "nowrap" }}>
+          Price ({indicator === "None" ? "Overview" : indicator})
+        </div>
 
         <div
           style={{
@@ -1313,9 +1473,9 @@ const ChartCard = (opts?: { height?: number | string }) => {
               minWidth: 200,
             }}
           >
-            {INDICATORS.map((x) => (
+                     {INDICATORS.map((x) => (
               <option key={x} value={x}>
-                {x}
+                {x === "None" ? "Overview" : x}
               </option>
             ))}
           </select>
@@ -1377,19 +1537,102 @@ const ChartCard = (opts?: { height?: number | string }) => {
                 <strong>Last price:</strong> {quote?.price == null ? "Unavailable" : `$${quote.price.toFixed(2)}`}
               </p>
 
-              <p style={{ margin: "8px 0 0", opacity: 0.85 }}>
-                <strong>Signal:</strong> {signal.label}
-              </p>
-              <p style={{ margin: "6px 0 0", opacity: 0.7 }}>{signal.detail}</p>
+              {indicator === "None" ? (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1.1fr 0.9fr",
+                    gap: 16,
+                    marginTop: 10,
+                    alignItems: "start",
+                  }}
+                >
+                  {/* LEFT: Big dominant signal */}
+                  <div>
+                    <div style={{ fontSize: 14, opacity: 0.8, color: COLORS.mutedFg, fontWeight: 800 }}>
+                      Signal
+                    </div>
 
-              <div style={{ marginTop: 12, fontSize: 13, opacity: 0.75 }}>
-                <div>
-                  {indicator === "None" ? (
-                    <>
-                      Composite flags: {composite ? `${composite.flagged}/${composite.total}` : "—"}
-                    </>
-                  ) : (
-                    <>
+                    <div
+                      style={{
+                        marginTop: 6,
+                        fontSize: 26,
+                        fontWeight: 950,
+                        letterSpacing: "-0.2px",
+                        lineHeight: 1.15,
+                      }}
+                    >
+                      {signal.label}
+                    </div>
+
+                    <div style={{ marginTop: 8, fontSize: 13, opacity: 0.75, color: COLORS.mutedFg }}>
+                      {signal.detail}
+                    </div>
+
+                    <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>
+                      <strong>Overview:</strong> Composite {composite ? `${composite.flagged}/${composite.total}` : "—"} flags
+                    </div>
+                  </div>
+
+                  {/* RIGHT: Compact breakdown list */}
+                  <div
+                    style={{
+                      border: `1px solid ${COLORS.border}`,
+                      borderRadius: 12,
+                      padding: 12,
+                      background: COLORS.controlBg,
+                    }}
+                  >
+                    <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10, opacity: 0.9 }}>
+                      Breakdown
+                    </div>
+
+                    <div style={{ display: "grid", gap: 8 }}>
+                      {overviewItems.map((it) => {
+                        const dot = toneToColor(it.tone, COLORS.isDark);
+
+                        return (
+                          <div
+                            key={it.key}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: 10,
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                              <span
+                                style={{
+                                  width: 10,
+                                  height: 10,
+                                  borderRadius: 999,
+                                  background: dot,
+                                  boxShadow: COLORS.isDark ? "0 0 0 3px rgba(255,255,255,0.04)" : "0 0 0 3px rgba(0,0,0,0.03)",
+                                  flex: "0 0 auto",
+                                }}
+                              />
+                              <span style={{ fontWeight: 850, fontSize: 13, whiteSpace: "nowrap" }}>{it.label}</span>
+                            </div>
+
+                            <span style={{ fontSize: 12, opacity: 0.85, color: COLORS.mutedFg, textAlign: "right" }}>
+                              {it.valueText}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p style={{ margin: "8px 0 0", opacity: 0.85 }}>
+                    <strong>Signal:</strong> {signal.label}
+                  </p>
+                  <p style={{ margin: "6px 0 0", opacity: 0.7 }}>{signal.detail}</p>
+
+                  <div style={{ marginTop: 12, fontSize: 13, opacity: 0.75 }}>
+                    <div>
                       {lastIndicatorValue.label}:{" "}
                       {typeof (lastIndicatorValue as any).value === "number"
                         ? indicator === "RSI(14)" || indicator === "Stochastic(14,3)"
@@ -1400,10 +1643,10 @@ const ChartCard = (opts?: { height?: number | string }) => {
                               ? `${Math.round((lastIndicatorValue as any).value as number).toLocaleString()}`
                               : `$${(((lastIndicatorValue as any).value as number) ?? 0).toFixed(2)}`
                         : "—"}
-                    </>
-                  )}
-                </div>
-              </div>
+                    </div>
+                  </div>
+                </>
+              )}
 
               <p style={{ marginTop: 12, opacity: 0.7 }}>
                 {quote?.date && quote?.time ? `As of ${quote.date} ${quote.time}` : "Timestamp unavailable"} • Source:{" "}
