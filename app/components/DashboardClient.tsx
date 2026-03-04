@@ -1569,11 +1569,18 @@ const ChartCard = (opts?: { height?: number | string }) => {
 
       {/* Controls row */}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginTop: 16 }}>
-{/* Search FIRST (light), then Ticker dropdown (dark) */}
-<div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+{/* Search FIRST (light), then Common Tickers (dark) — aligned + consistent sizing */}
+<div
+  style={{
+    display: "flex",
+    gap: 14,
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+  }}
+>
   {/* SEARCH (light) */}
-  <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 4 }}>
-    <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.85 }}>
+  <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 6 }}>
+    <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, lineHeight: 1 }}>
       Search Any Stock
     </div>
 
@@ -1590,17 +1597,19 @@ const ChartCard = (opts?: { height?: number | string }) => {
       }}
       placeholder="🔎 Search ANY ticker or company (e.g. IBM, NVIDIA, Tesla)"
       style={{
-        padding: "12px 16px",
+        height: 44,              // ✅ same “control height”
+        padding: "0 14px",       // ✅ consistent vertical alignment
         borderRadius: 14,
         border: "2px solid rgba(59,130,246,0.45)",
         background: "#ffffff",
         color: "#111",
-        width: 420,
-        fontSize: 15,
+        width: 260,              // ✅ similar size to others (not huge)
+        fontSize: 14,
         fontWeight: 750,
         boxShadow: COLORS.isDark
           ? "0 6px 20px rgba(0,0,0,0.35)"
           : "0 6px 20px rgba(0,0,0,0.12)",
+        outline: "none",
       }}
     />
 
@@ -1608,7 +1617,7 @@ const ChartCard = (opts?: { height?: number | string }) => {
       <div
         style={{
           position: "absolute",
-          top: "calc(100% + 6px)",
+          top: "calc(100% + 8px)",
           left: 0,
           right: 0,
           border: "1px solid #3333",
@@ -1647,34 +1656,33 @@ const ChartCard = (opts?: { height?: number | string }) => {
     ) : null}
   </div>
 
-  {/* TICKER (dark) */}
+  {/* COMMON TICKERS (dark) */}
   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-    <label style={{ fontWeight: 800, opacity: 0.9 }}>Ticker</label>
+    <label style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, lineHeight: 1 }}>
+      Common Tickers
+    </label>
 
     <select
       value={symbol}
       onChange={(e) => chooseSymbol(e.target.value)}
       style={{
-        padding: "10px 12px",
+        height: 44,               // ✅ same control height
+        padding: "0 12px",
         borderRadius: 12,
         border: `1px solid ${COLORS.controlBorder}`,
         background: COLORS.isDark ? "rgba(255,255,255,0.06)" : "rgba(11,18,32,0.06)",
         color: COLORS.controlFg,
-        fontWeight: 850,
-        minWidth: 300,
+        fontWeight: 900,
+        minWidth: 220,
       }}
     >
-      {/* ✅ Selected display = ticker only (works for preset + custom) */}
-      <option value={symbol}>
-        {symbol}
-      </option>
+      {/* Selected display = ticker only */}
+      <option value={symbol}>{symbol}</option>
 
-      {/* Divider */}
       <option disabled value="__divider__">
         ─────────────
       </option>
 
-      {/* Full names in the dropdown list */}
       {PRESET_TICKERS.map((t) => (
         <option key={t.symbol} value={t.symbol}>
           {t.symbol} — {t.name}
