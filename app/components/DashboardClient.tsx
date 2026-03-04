@@ -692,7 +692,46 @@ const INDICATORS: Overlay[] = [
 export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSymbol?: string }) {
   const searchParams = useSearchParams();
 
-  const [symbol, setSymbol] = useState(defaultSymbol);
+   const [symbol, setSymbol] = useState(defaultSymbol);
+
+  // Track a human-friendly company name for the currently selected symbol
+  const [symbolName, setSymbolName] = useState<string>("");
+
+  const presetNameFor = (sym: string) => {
+    const hit = PRESET_TICKERS.find((t) => t.symbol === sym);
+    return hit ? hit.name : "";
+  };
+
+  // Resolve name whenever symbol changes (preset first; otherwise try /api/symbols for exact match)
+  useEffect(() => {
+    const preset = presetNameFor(symbol);
+    if (preset) {
+      setSymbolName(preset);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function resolve() {
+      try {
+        const res = await fetch(`/api/symbols?q=${encodeURIComponent(symbol)}`, { cache: "no-store" });
+        if (!res.ok) throw new Error("symbols lookup failed");
+
+        const data = (await res.json()) as { results?: SymbolResult[] };
+        const rows = Array.isArray(data.results) ? data.results : [];
+        const exact = rows.find((r) => (r.symbol ?? "").toUpperCase() === symbol.toUpperCase());
+
+        if (!cancelled) setSymbolName(exact?.name ?? "");
+      } catch {
+        if (!cancelled) setSymbolName("");
+      }
+    }
+
+    resolve();
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol]);
   
  useEffect(() => {
   const urlSymbol = searchParams.get("symbol");
@@ -1544,6 +1583,14 @@ const ChartCard = (opts?: { height?: number | string }) => {
             fontWeight: 700,
           }}
         >
+          {/* If the current symbol isn't in the preset list, still show it as selected */}
+          {!PRESET_TICKERS.some((t) => t.symbol === symbol) ? (
+            <option value={symbol}>
+              {symbol}
+              {symbolName ? ` – ${symbolName}` : " – (Custom)"}
+            </option>
+          ) : null}
+
           {PRESET_TICKERS.map((t) => (
             <option key={t.symbol} value={t.symbol}>
               {t.symbol} – {t.name}
@@ -1684,7 +1731,14 @@ const ChartCard = (opts?: { height?: number | string }) => {
       <div style={{ marginTop: 16, maxWidth: 920, display: "grid", gap: 16 }}>
         {/* Card 1: Summary */}
         <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
-          <h2 style={{ marginTop: 0 }}>{symbol}</h2>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 28, fontWeight: 950, letterSpacing: "-0.3px" }}>
+              {symbol}
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 800, opacity: 0.85, color: COLORS.mutedFg }}>
+              {symbolName ? `— ${symbolName}` : "—"}
+            </div>
+          </div>
 
           {loading ? (
             <p style={{ margin: "8px 0" }}>Loading…</p>
