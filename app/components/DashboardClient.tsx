@@ -1569,34 +1569,33 @@ const ChartCard = (opts?: { height?: number | string }) => {
 
       {/* Controls row */}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginTop: 16 }}>
-        <label style={{ fontWeight: 600 }}>Ticker</label>
+<label style={{ fontWeight: 600 }}>Ticker</label>
 
-        <select
-          value={symbol}
-          onChange={(e) => chooseSymbol(e.target.value)}
-          style={{
-            padding: "10px 12px",
-            borderRadius: 12,
-            border: "1px solid #3336",
-            background: "#fff",
-            color: "#111",
-            fontWeight: 700,
-          }}
-        >
-          {/* If the current symbol isn't in the preset list, still show it as selected */}
-          {!PRESET_TICKERS.some((t) => t.symbol === symbol) ? (
-            <option value={symbol}>
-              {symbol}
-              {symbolName ? ` – ${symbolName}` : " – (Custom)"}
-            </option>
-          ) : null}
+<select
+  value={symbol}
+  onChange={(e) => chooseSymbol(e.target.value)}
+  style={{
+    padding: "10px 12px",
+    borderRadius: 12,
+    border: `1px solid ${COLORS.controlBorder}`,
+    background: COLORS.controlBg,
+    color: COLORS.controlFg,
+    fontWeight: 700,
+  }}
+>
+  {!PRESET_TICKERS.some((t) => t.symbol === symbol) ? (
+    <option value={symbol}>
+      {symbol}
+      {symbolName ? ` – ${symbolName}` : " – (Custom)"}
+    </option>
+  ) : null}
 
-          {PRESET_TICKERS.map((t) => (
-            <option key={t.symbol} value={t.symbol}>
-              {t.symbol} – {t.name}
-            </option>
-          ))}
-        </select>
+  {PRESET_TICKERS.map((t) => (
+    <option key={t.symbol} value={t.symbol}>
+      {t.symbol} – {t.name}
+    </option>
+  ))}
+</select>
 
         {/* SWAPPED: manual search comes earlier */}
         <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 4 }}>
@@ -1618,9 +1617,9 @@ const ChartCard = (opts?: { height?: number | string }) => {
   style={{
     padding: "12px 16px",
     borderRadius: 14,
-    border: `2px solid ${COLORS.controlBorder}`,
-    background: COLORS.controlBgSolid,
-    color: COLORS.controlFg,
+    border: "2px solid rgba(59,130,246,0.45)",
+background: "#ffffff",
+color: "#111",
     width: 420,
     fontSize: 15,
     fontWeight: 600,
