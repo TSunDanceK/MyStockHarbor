@@ -2100,44 +2100,68 @@ const ChartCard = (opts?: { height?: number | string }) => {
           Updated: {new Date(bench.updatedAt).toLocaleString()} • {bench.scope}
         </div>
 
-        <div style={{ display: "grid", gap: 10, maxWidth: 720 }}>
-          {items.map((it) => {
-            const pct = typeof it.changePct === "number" ? it.changePct : null;
-            const pctText = pct == null ? "—" : `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
+<div
+  style={{
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(240px, 1fr))",
+    gap: 14,
+    maxWidth: 980,
+  }}
+>
+  {items.map((it) => {
+    const pct = typeof it.changePct === "number" ? it.changePct : null;
+    const isUp = typeof pct === "number" ? pct >= 0 : null;
 
-            return (
-              <div
-                key={it.key}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  padding: "10px 12px",
-                  borderRadius: 14,
-                  border: `1px solid ${COLORS.border}`,
-                  background: COLORS.controlBg,
-                }}
-              >
-                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                  <div style={{ fontWeight: 950 }}>
-                    {it.label} <span style={{ opacity: 0.75, fontWeight: 800 }}>({it.symbol})</span>
-                  </div>
-                  <div style={{ fontSize: 12, opacity: 0.7 }}>
-                    {it.date && it.time ? `As of ${it.date} ${it.time}` : "Timestamp unavailable"}
-                  </div>
-                </div>
+    const arrow = isUp == null ? "•" : isUp ? "▲" : "▼";
+    const arrowColor =
+      isUp == null ? COLORS.mutedFg : isUp ? "#22c55e" : "#ef4444";
 
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontWeight: 950 }}>{pctText}</div>
-                  <div style={{ fontSize: 12, opacity: 0.7 }}>
-                    {typeof it.close === "number" ? it.close.toFixed(2) : "—"}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+    const pctText =
+      pct == null ? "—" : `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
+
+    return (
+      <div
+        key={it.key}
+        style={{
+          border: `1px solid ${COLORS.border}`,
+          borderRadius: 16,
+          padding: 14,
+          background: COLORS.cardBg,
+          color: COLORS.cardFg,
+          boxShadow: COLORS.isDark
+            ? "0 10px 26px rgba(0,0,0,0.35)"
+            : "0 10px 26px rgba(0,0,0,0.12)",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 950, fontSize: 16, lineHeight: 1.1 }}>
+              {it.label}
+            </div>
+            <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
+              {it.symbol}
+            </div>
+          </div>
+
+          <div style={{ textAlign: "right" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
+              <span style={{ fontWeight: 950, color: arrowColor }}>{arrow}</span>
+              <span style={{ fontWeight: 950, color: arrowColor }}>{pctText}</span>
+            </div>
+
+            <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
+              {typeof it.close === "number" ? it.close.toFixed(2) : "—"}
+            </div>
+          </div>
         </div>
+
+        <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
+          {it.date && it.time ? `As of ${it.date} ${it.time}` : "Timestamp unavailable"}
+        </div>
+      </div>
+    );
+  })}
+</div>
       </>
     );
   })()}
