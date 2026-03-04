@@ -17,11 +17,6 @@ export type Overlay =
   | "ATR(14)"
   | "Volume";
 
-function fmtPct(x: number) {
-  const s = x >= 0 ? "+" : "";
-  return `${s}${(x * 100).toFixed(2)}%`;
-}
-
 function fmtMoney(v: number) {
   if (!Number.isFinite(v)) return "—";
   const abs = Math.abs(v);
@@ -104,6 +99,8 @@ export default function PriceChart({
 
   height?: number;
 }) {
+  // This width is just the coordinate-system width used by the SVG viewBox.
+  // The SVG itself is width="100%" so it will scale to the parent container.
   const width = 760;
 
   // padding
@@ -264,7 +261,7 @@ export default function PriceChart({
   }, [hasData, wantsSubPanel, overlay, series]);
 
   const ySub = useMemo(() => {
-    if (!subRange) return (v: number) => subTop + subH / 2;
+    if (!subRange) return (_v: number) => subTop + subH / 2;
     const r = Math.max(1e-9, subRange.max - subRange.min);
     return (v: number) => subTop + ((subRange.max - v) * subH) / r;
   }, [subRange, subTop, subH]);
@@ -310,13 +307,6 @@ export default function PriceChart({
   const stochDPath = useMemo(() => pathFrom(series.map((p) => p.stochD), ySub), [series, ySub]);
   const atrPath = useMemo(() => pathFrom(series.map((p) => p.atr14), ySub), [series, ySub]);
 
-  const ret = useMemo(() => {
-    if (!hasData) return 0;
-    const first = series[0].close;
-    const last = series[series.length - 1].close;
-    return (last - first) / first;
-  }, [hasData, series]);
-
   // price y ticks (right)
   const yTicks = useMemo(() => {
     if (!hasData) return [];
@@ -353,15 +343,18 @@ export default function PriceChart({
   const last = series[series.length - 1];
 
   return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, gap: 12, flexWrap: "wrap" }}>
-        <div style={{ fontWeight: 700 }}>Price ({overlay === "None" ? "no overlay" : overlay})</div>
-        <div style={{ opacity: 0.75 }}>Period return: {fmtPct(ret)}</div>
-      </div>
-
+    <div style={{ width: "100%" }}>
       <svg width="100%" viewBox={`0 0 ${width} ${height}`} style={{ border: "1px solid #3333", borderRadius: 12 }}>
         {/* PRICE plot box */}
-        <rect x={padL} y={padT} width={width - padL - padR} height={priceH} fill="none" stroke="currentColor" opacity="0.10" />
+        <rect
+          x={padL}
+          y={padT}
+          width={width - padL - padR}
+          height={priceH}
+          fill="none"
+          stroke="currentColor"
+          opacity="0.10"
+        />
 
         {/* price grid + y labels */}
         {yTicks.map((t, idx) => (
@@ -416,12 +409,19 @@ export default function PriceChart({
         {/* SUB PANEL */}
         {wantsSubPanel ? (
           <>
-            <rect x={padL} y={subTop} width={width - padL - padR} height={subH} fill="none" stroke="currentColor" opacity="0.10" />
+            <rect
+              x={padL}
+              y={subTop}
+              width={width - padL - padR}
+              height={subH}
+              fill="none"
+              stroke="currentColor"
+              opacity="0.10"
+            />
 
             {/* RSI */}
             {overlay === "RSI(14)" ? (
               <>
-                {/* 30/70 guides */}
                 <line x1={padL} y1={ySub(70)} x2={width - padR} y2={ySub(70)} stroke="currentColor" opacity="0.10" />
                 <line x1={padL} y1={ySub(30)} x2={width - padR} y2={ySub(30)} stroke="currentColor" opacity="0.10" />
                 {rsiPath ? <path d={rsiPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.55" /> : null}
@@ -431,12 +431,10 @@ export default function PriceChart({
             {/* MACD */}
             {overlay === "MACD(12,26,9)" ? (
               <>
-                {/* zero line */}
                 {subRange ? (
                   <line x1={padL} y1={ySub(0)} x2={width - padR} y2={ySub(0)} stroke="currentColor" opacity="0.12" />
                 ) : null}
 
-                {/* histogram bars */}
                 {subRange
                   ? series.map((p, i) => {
                       const v = p.macdHist;
@@ -470,7 +468,6 @@ export default function PriceChart({
             {/* Stochastic */}
             {overlay === "Stochastic(14,3)" ? (
               <>
-                {/* 20/80 guides */}
                 <line x1={padL} y1={ySub(80)} x2={width - padR} y2={ySub(80)} stroke="currentColor" opacity="0.10" />
                 <line x1={padL} y1={ySub(20)} x2={width - padR} y2={ySub(20)} stroke="currentColor" opacity="0.10" />
                 {stochKPath ? <path d={stochKPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.55" /> : null}
@@ -481,9 +478,7 @@ export default function PriceChart({
             ) : null}
 
             {/* ATR */}
-            {overlay === "ATR(14)" ? (
-              <>{atrPath ? <path d={atrPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.55" /> : null}</>
-            ) : null}
+            {overlay === "ATR(14)" ? <>{atrPath ? <path d={atrPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.55" /> : null}</> : null}
 
             {/* Volume */}
             {overlay === "Volume" ? (
