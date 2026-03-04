@@ -1534,7 +1534,7 @@ return (
     }}
   >
     <div className="pageWrap">
-<div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+<div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8, flexWrap: "wrap" }}>
   <h1 style={{ fontSize: 32, margin: 0 }}>My Stock Dashboard</h1>
 
 <button
@@ -1596,7 +1596,7 @@ return (
   ) : null}
 </button>
 
-        <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center" }}>
+       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <button
             onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
             style={{
