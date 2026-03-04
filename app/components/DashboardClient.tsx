@@ -586,8 +586,14 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
   const [market, setMarket] = useState<MarketPayload | null>(null);
   const [news, setNews] = useState<NewsPayload | null>(null);
 
-  // Large screen modal
-  const [expanded, setExpanded] = useState(false);
+// Large screen modal
+const [expanded, setExpanded] = useState(false);
+
+// Reset zoom/pan when switching ticker (better UX)
+useEffect(() => {
+  setWindowDays(tfDays);
+  setWindowOffset(0);
+}, [symbol, tfDays]);
 
   // ESC closes modal
   useEffect(() => {
