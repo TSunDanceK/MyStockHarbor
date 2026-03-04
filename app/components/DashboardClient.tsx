@@ -931,73 +931,178 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
     setOpen(false);
   }
 
-  const ChartCard = (opts?: { height?: number | string }) => {
-    const height = opts?.height ?? 460;
+const ChartCard = (opts?: { height?: number | string }) => {
+  const height = opts?.height ?? 460;
 
-return (
-  <div
-    style={{
-      border: `1px solid ${COLORS.border}`,
-      borderRadius: 14,
-      background: COLORS.cardBg,
-      color: COLORS.cardFg,
-      height,
-      display: "flex",
-      flexDirection: "column",
-      overflow: "hidden",
-    }}
-  >
-
-    {/* Header row */}
+  return (
     <div
       style={{
+        border: `1px solid ${COLORS.border}`,
+        borderRadius: 14,
+        background: COLORS.cardBg,
+        color: COLORS.cardFg,
+        height,
         display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "12px 16px",
-        borderBottom: `1px solid ${COLORS.border}`,
+        flexDirection: "column",
+        overflow: "hidden",
+        minHeight: 0,
       }}
     >
-      <div style={{ fontWeight: 700 }}>
-        Price ({indicator})
-      </div>
-
+      {/* Header row */}
       <div
         style={{
           display: "flex",
-          gap: 8,
           alignItems: "center",
-          background: COLORS.controlBgSolid,
-          border: `1px solid ${COLORS.controlBorder}`,
-          borderRadius: 12,
-          padding: 6,
+          justifyContent: "space-between",
+          padding: "12px 16px",
+          borderBottom: `1px solid ${COLORS.border}`,
+          gap: 12,
         }}
       >
-        {/* Chart area */}
-        <div style={{ flex: 1, padding: 16 }}>
-          <PriceChart
-            data={displayedHistory}
-            ma50={ma50}
-            ma200={ma200}
-            overlay={indicator}
-            bollUpper={bollUpper}
-            bollMid={bollMid}
-            bollLower={bollLower}
-            ema20={ema20Arr}
-            vwap={vwapArr}
-            rsi14={rsi14Arr}
-            macdLine={macdLine}
-            macdSignal={macdSignal}
-            macdHist={macdHist}
-            stochK={stochK}
-            stochD={stochD}
-            atr14={atr14Arr}
-            volume={volumeArr}
-          />
+        <div style={{ fontWeight: 800, whiteSpace: "nowrap" }}>Price ({indicator})</div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            background: COLORS.controlBgSolid,
+            border: `1px solid ${COLORS.controlBorder}`,
+            borderRadius: 12,
+            padding: 6,
+          }}
+        >
+          <button
+            onClick={() => setWindowOffset((o) => Math.min(maxOffset, o + Math.max(1, Math.floor(win * 0.2))))}
+            disabled={offset >= maxOffset}
+            title="Pan left (older)"
+            style={{
+              padding: "8px 10px",
+              borderRadius: 10,
+              border: `1px solid ${COLORS.controlBorder}`,
+              background: COLORS.controlBg,
+              color: COLORS.controlFg,
+              cursor: offset >= maxOffset ? "not-allowed" : "pointer",
+              opacity: offset >= maxOffset ? 0.45 : 1,
+              fontWeight: 900,
+              fontSize: 14,
+              lineHeight: 1,
+            }}
+          >
+            ←
+          </button>
+
+          <button
+            onClick={() => setWindowOffset((o) => Math.max(0, o - Math.max(1, Math.floor(win * 0.2))))}
+            disabled={offset <= 0}
+            title="Pan right (newer)"
+            style={{
+              padding: "8px 10px",
+              borderRadius: 10,
+              border: `1px solid ${COLORS.controlBorder}`,
+              background: COLORS.controlBg,
+              color: COLORS.controlFg,
+              cursor: offset <= 0 ? "not-allowed" : "pointer",
+              opacity: offset <= 0 ? 0.45 : 1,
+              fontWeight: 900,
+              fontSize: 14,
+              lineHeight: 1,
+            }}
+          >
+            →
+          </button>
+
+          <button
+            onClick={() => {
+              setWindowDays((d) => Math.max(2, Math.floor(d * 0.8)));
+              setWindowOffset(0);
+            }}
+            title="Zoom in"
+            style={{
+              padding: "8px 10px",
+              borderRadius: 10,
+              border: `1px solid ${COLORS.controlBorder}`,
+              background: COLORS.controlBg,
+              color: COLORS.controlFg,
+              cursor: "pointer",
+              fontWeight: 900,
+              fontSize: 14,
+              lineHeight: 1,
+            }}
+          >
+            +
+          </button>
+
+          <button
+            onClick={() => {
+              setWindowDays((d) => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25)));
+              setWindowOffset(0);
+            }}
+            title="Zoom out"
+            style={{
+              padding: "8px 10px",
+              borderRadius: 10,
+              border: `1px solid ${COLORS.controlBorder}`,
+              background: COLORS.controlBg,
+              color: COLORS.controlFg,
+              cursor: "pointer",
+              fontWeight: 900,
+              fontSize: 14,
+              lineHeight: 1,
+            }}
+          >
+            −
+          </button>
+
+          <div style={{ fontSize: 12, opacity: 0.8, color: COLORS.mutedFg, whiteSpace: "nowrap", fontWeight: 700 }}>
+            {Math.min(win, totalPoints)} bars
+          </div>
+
+          <button
+            onClick={() => setExpanded(true)}
+            title="Expand chart"
+            style={{
+              padding: "8px 10px",
+              borderRadius: 10,
+              border: `1px solid ${COLORS.controlBorder}`,
+              background: COLORS.controlBg,
+              color: COLORS.controlFg,
+              cursor: "pointer",
+              fontWeight: 900,
+              fontSize: 14,
+              lineHeight: 1,
+            }}
+          >
+            ⤢
+          </button>
         </div>
       </div>
-    );
-  };
+
+      {/* Chart area */}
+      <div style={{ flex: 1, padding: 16, minHeight: 0 }}>
+        <PriceChart
+          data={displayedHistory}
+          ma50={ma50}
+          ma200={ma200}
+          overlay={indicator}
+          bollUpper={bollUpper}
+          bollMid={bollMid}
+          bollLower={bollLower}
+          ema20={ema20Arr}
+          vwap={vwapArr}
+          rsi14={rsi14Arr}
+          macdLine={macdLine}
+          macdSignal={macdSignal}
+          macdHist={macdHist}
+          stochK={stochK}
+          stochD={stochD}
+          atr14={atr14Arr}
+          volume={volumeArr}
+        />
+      </div>
+    </div>
+  );
+};
 
   return (
     <main
