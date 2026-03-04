@@ -1141,8 +1141,9 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
                 {t.label}
               </button>
             ))}
-          </div>
+       </div>
         </div>
+      </div>
 
 
       <div style={{ marginTop: 16, maxWidth: 920, display: "grid", gap: 16 }}>
