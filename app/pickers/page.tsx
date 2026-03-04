@@ -100,8 +100,51 @@ export default function PickersPage() {
 </Link>
       </div>
 
-      <div style={{ marginTop: 18, maxWidth: 980 }}>
-        {loading ? <div style={{ opacity: 0.75 }}>Loading…</div> : null}
+        <div style={{ marginTop: 18, maxWidth: 980 }}>
+        {loading ? (
+          <>
+            <div style={{ fontSize: 22, fontWeight: 950, letterSpacing: "-0.2px" }}>
+              We are gathering stocks for you, please wait…
+            </div>
+            <div style={{ marginTop: 8, opacity: 0.75 }}>
+              First load can take ~10–15 seconds (cached loads are much faster).
+            </div>
+
+            {/* Loading bar */}
+            <div
+              style={{
+                marginTop: 14,
+                width: 420,
+                maxWidth: "100%",
+                height: 10,
+                borderRadius: 999,
+                overflow: "hidden",
+                background: "rgba(255,255,255,0.08)",
+                border: "1px solid rgba(255,255,255,0.16)",
+              }}
+            >
+              <div
+                style={{
+                  height: "100%",
+                  width: "35%",
+                  borderRadius: 999,
+                  background: "rgba(59,130,246,0.95)",
+                  animation: "pickersBar 1.1s linear infinite",
+                }}
+              />
+            </div>
+
+            {/* Keyframes MUST be inside returned JSX */}
+            <style>{`
+              @keyframes pickersBar {
+                0% { transform: translateX(-60%); opacity: 0.55; }
+                50% { transform: translateX(140%); opacity: 0.95; }
+                100% { transform: translateX(320%); opacity: 0.55; }
+              }
+            `}</style>
+          </>
+        ) : null}
+
         {err ? <div style={{ opacity: 0.75 }}>{err}</div> : null}
       </div>
 
