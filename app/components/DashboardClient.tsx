@@ -33,6 +33,12 @@ type MarketRow = {
 
 type MarketPayload = {
   updatedAt: string;
+
+  // NEW (optional metadata from /api/market)
+  scope?: string;
+  provider?: string;
+  rateLimited?: boolean;
+
   topTraded: MarketRow[];
   topMovers: MarketRow[];
   topRanges: MarketRow[];
@@ -905,6 +911,12 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
 
         const safe: MarketPayload = {
           updatedAt: typeof raw?.updatedAt === "string" ? raw.updatedAt : new Date().toISOString(),
+
+          // NEW: keep the helpful flags (so UI can explain what's happening)
+          scope: typeof raw?.scope === "string" ? raw.scope : undefined,
+          provider: typeof raw?.provider === "string" ? raw.provider : undefined,
+          rateLimited: typeof raw?.rateLimited === "boolean" ? raw.rateLimited : undefined,
+
           topTraded: Array.isArray(raw?.topTraded) ? raw.topTraded : [],
           topMovers: Array.isArray(raw?.topMovers) ? raw.topMovers : [],
           topRanges: Array.isArray(raw?.topRanges) ? raw.topRanges : [],
@@ -2094,7 +2106,32 @@ const ChartCard = (opts?: { height?: number | string }) => {
 
             const hasAny = topTraded.length || topMovers.length || topRanges.length;
 
-            if (!market || !hasAny) {
+            if (!market) {
+              return <div style={{ opacity: 0.7 }}>Market overview unavailable.</div>;
+            }
+
+            if (market.rateLimited) {
+              return (
+                <div
+                  style={{
+                    opacity: 0.9,
+                    border: "1px solid rgba(255,255,255,0.14)",
+                    background: "rgba(255,255,255,0.06)",
+                    borderRadius: 14,
+                    padding: 14,
+                  }}
+                >
+                  <div style={{ fontWeight: 900, marginBottom: 6 }}>Market Overview paused</div>
+                  <div style={{ opacity: 0.8, lineHeight: 1.35 }}>
+                    Twelve Data daily free limit has been hit.
+                    <br />
+                    Try again tomorrow, or reduce the universe / upgrade plan.
+                  </div>
+                </div>
+              );
+            }
+
+            if (!hasAny) {
               return <div style={{ opacity: 0.7 }}>Market overview unavailable.</div>;
             }
 
