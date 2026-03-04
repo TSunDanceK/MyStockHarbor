@@ -1834,7 +1834,7 @@ return (
         </div>
 
 
-      <div style={{ marginTop: 16, maxWidth: 920, display: "grid", gap: 16 }}>
+     <div className="mainGrid">
         {/* Card 1: Summary */}
         <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
@@ -1855,15 +1855,7 @@ return (
               {indicator === "None" ? (
                 <>
                   {/* ONE ROW: left column = price + big signal, right column = breakdown */}
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1.1fr 0.9fr",
-                      gap: 16,
-                      alignItems: "start",
-                      marginTop: 8,
-                    }}
-                  >
+<div className="summaryGrid">
                     {/* LEFT: price + dominant signal */}
                     <div style={{ minWidth: 0 }}>
                       <p style={{ fontSize: 20, margin: "8px 0" }}>
@@ -2117,14 +2109,7 @@ return (
           Updated: {new Date(bench.updatedAt).toLocaleString()} • {bench.scope}
         </div>
 
-<div
-  style={{
-    display: "grid",
-    gridTemplateColumns: "repeat(3, minmax(220px, 1fr))", // ✅ 3 across
-    gap: 14,
-    maxWidth: 1200,
-  }}
->
+<div className="benchGrid">
   {items.map((it) => {
     const pct = typeof it.changePct === "number" ? it.changePct : null;
     const isUp = typeof pct === "number" ? pct >= 0 : null;
@@ -2196,7 +2181,7 @@ return (
           <h2 style={{ marginTop: 0 }}>Latest News</h2>
 
           {news ? (
-            <div style={{ display: "grid", gap: 16, gridTemplateColumns: "1fr 1fr" }}>
+            <div className="newsGrid">
               {news.feeds.map((f) => (
                 <div key={f.label}>
                   <div style={{ fontWeight: 700, marginBottom: 8 }}>{f.label}</div>
