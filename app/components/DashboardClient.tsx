@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import PriceChart, { type Overlay } from "./PriceChart";
 
@@ -689,7 +690,18 @@ const INDICATORS: Overlay[] = [
 /* ----------------------------- component ----------------------------- */
 
 export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSymbol?: string }) {
+  const searchParams = useSearchParams();
+
   const [symbol, setSymbol] = useState(defaultSymbol);
+  
+ useEffect(() => {
+  const urlSymbol = searchParams.get("symbol");
+  const cleaned = urlSymbol ? urlSymbol.trim().toUpperCase() : "";
+
+  if (cleaned && cleaned !== symbol) {
+    setSymbol(cleaned);
+  }
+}, [searchParams, symbol]);
 
   // Timeframe buttons (used for fetching + resetting view)
   const [tfDays, setTfDays] = useState(365);
