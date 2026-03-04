@@ -865,13 +865,21 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
 
   const atr14Arr = useMemo(() => atr14Full.slice(-n), [atr14Full, n]);
 
-  const volumeArr = useMemo(
-    () => displayedHistory.map((p) => (typeof p.volume === "number" && Number.isFinite(p.volume) ? p.volume : null)),
-    [displayedHistory]
+  // Volume (compute on FULL history so SMA20 works even on short display windows like 1W)
+  const volumeFull = useMemo(
+    () => historyAll.map((p) => (typeof p.volume === "number" && Number.isFinite(p.volume) ? p.volume : null)),
+    [historyAll]
   );
 
-  const volSma20Arr = useMemo(() => smaNullable(volumeArr, 20), [volumeArr]);
-  const atrSma20Arr = useMemo(() => smaNullable(atr14Arr, 20), [atr14Arr]);
+  const volSma20Full = useMemo(() => smaNullable(volumeFull, 20), [volumeFull]);
+
+  // Slice to match displayed length (n)
+  const volumeArr = useMemo(() => volumeFull.slice(-n), [volumeFull, n]);
+  const volSma20Arr = useMemo(() => volSma20Full.slice(-n), [volSma20Full, n]);
+
+  // ATR SMA20: compute on FULL ATR series, then slice to -n
+  const atrSma20Full = useMemo(() => smaNullable(atr14Full, 20), [atr14Full]);
+  const atrSma20Arr = useMemo(() => atrSma20Full.slice(-n), [atrSma20Full, n]);
 
   const lastClose = displayedHistory.length ? displayedHistory[displayedHistory.length - 1].close : null;
   const lastMA50 = lastNum(ma50);
