@@ -7,25 +7,60 @@ export default function LessonPage({ params }: { params: { slug: string } }) {
 
   if (!lesson) {
     return (
-      <main style={{ padding: 24, fontFamily: "system-ui, Arial", background: "#06080d", color: "#f1f5f9", minHeight: "100vh" }}>
-        <div style={{ maxWidth: 860, margin: "0 auto" }}>
+      <main
+        style={{
+          padding: 0,
+          fontFamily: "system-ui, Arial",
+          background: "#06080d",
+          color: "#f1f5f9",
+          minHeight: "100vh",
+        }}
+      >
+        <div className="wrap">
           <h1 style={{ marginTop: 0 }}>Lesson not found</h1>
           <Link href="/learn" style={{ color: "#93c5fd" }}>
             ← Back to Learn
           </Link>
         </div>
+
+        <style>{`
+          .wrap { max-width: 860px; margin: 0 auto; padding: 24px; }
+          @media (max-width: 760px) {
+            .wrap { padding: 16px !important; }
+          }
+        `}</style>
       </main>
     );
   }
 
   return (
-    <main style={{ padding: 24, fontFamily: "system-ui, Arial", background: "#06080d", color: "#f1f5f9", minHeight: "100vh" }}>
-      <div style={{ maxWidth: 860, margin: "0 auto" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <div>
-            <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 800 }}>{lesson.category.toUpperCase()}</div>
-            <h1 style={{ margin: "6px 0 0", fontSize: 34, letterSpacing: "-0.4px" }}>{lesson.title}</h1>
-            <div style={{ marginTop: 8, opacity: 0.75 }}>{lesson.summary}</div>
+    <main
+      style={{
+        padding: 0,
+        fontFamily: "system-ui, Arial",
+        background: "#06080d",
+        color: "#f1f5f9",
+        minHeight: "100vh",
+      }}
+    >
+      <div className="wrap">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 800 }}>
+              {lesson.category.toUpperCase()}
+            </div>
+            <h1 style={{ margin: "6px 0 0", fontSize: 34, letterSpacing: "-0.4px" }}>
+              {lesson.title}
+            </h1>
+            <div style={{ marginTop: 8, opacity: 0.75, lineHeight: 1.5 }}>{lesson.summary}</div>
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -38,7 +73,7 @@ export default function LessonPage({ params }: { params: { slug: string } }) {
           </div>
         </div>
 
-        {/* Placeholder “image slot” for your future AI-generated consistent visuals */}
+        {/* Placeholder “image slot” for future consistent AI visuals */}
         <div
           style={{
             marginTop: 18,
@@ -49,7 +84,7 @@ export default function LessonPage({ params }: { params: { slug: string } }) {
           }}
         >
           <div style={{ fontWeight: 900 }}>Visual (coming soon)</div>
-          <div style={{ fontSize: 13, opacity: 0.75, marginTop: 6 }}>
+          <div style={{ fontSize: 13, opacity: 0.75, marginTop: 6, lineHeight: 1.5 }}>
             This box will hold a consistent-style diagram/image for: <strong>{lesson.title}</strong>
           </div>
         </div>
@@ -77,6 +112,13 @@ export default function LessonPage({ params }: { params: { slug: string } }) {
           ))}
         </div>
       </div>
+
+      <style>{`
+        .wrap { max-width: 860px; margin: 0 auto; padding: 24px; }
+        @media (max-width: 760px) {
+          .wrap { padding: 16px !important; }
+        }
+      `}</style>
     </main>
   );
 }
