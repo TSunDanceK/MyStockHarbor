@@ -1569,108 +1569,120 @@ const ChartCard = (opts?: { height?: number | string }) => {
 
       {/* Controls row */}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginTop: 16 }}>
-<label style={{ fontWeight: 600 }}>Ticker</label>
+{/* Search FIRST (light), then Ticker dropdown (dark) */}
+<div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+  {/* SEARCH (light) */}
+  <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 4 }}>
+    <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.85 }}>
+      Search Any Stock
+    </div>
 
-<select
-  value={symbol}
-  onChange={(e) => chooseSymbol(e.target.value)}
-  style={{
-    padding: "10px 12px",
-    borderRadius: 12,
-    border: `1px solid ${COLORS.controlBorder}`,
-    background: COLORS.controlBg,
-    color: COLORS.controlFg,
-    fontWeight: 700,
-  }}
->
-  {!PRESET_TICKERS.some((t) => t.symbol === symbol) ? (
-    <option value={symbol}>
-      {symbol}
-      {symbolName ? ` – ${symbolName}` : " – (Custom)"}
-    </option>
-  ) : null}
+    <input
+      value={query}
+      onChange={(e) => {
+        setQuery(e.target.value);
+        setOpen(true);
+      }}
+      onFocus={() => setOpen(true)}
+      onBlur={() => setTimeout(() => setOpen(false), 150)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") chooseSymbol(query);
+      }}
+      placeholder="🔎 Search ANY ticker or company (e.g. IBM, NVIDIA, Tesla)"
+      style={{
+        padding: "12px 16px",
+        borderRadius: 14,
+        border: "2px solid rgba(59,130,246,0.45)",
+        background: "#ffffff",
+        color: "#111",
+        width: 420,
+        fontSize: 15,
+        fontWeight: 750,
+        boxShadow: COLORS.isDark
+          ? "0 6px 20px rgba(0,0,0,0.35)"
+          : "0 6px 20px rgba(0,0,0,0.12)",
+      }}
+    />
 
-  {PRESET_TICKERS.map((t) => (
-    <option key={t.symbol} value={t.symbol}>
-      {t.symbol} – {t.name}
-    </option>
-  ))}
-</select>
-
-        {/* SWAPPED: manual search comes earlier */}
-        <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 4 }}>
-  <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.7 }}>
-    Search Any Stock
-  </div>
-<input
-  value={query}
-  onChange={(e) => {
-    setQuery(e.target.value);
-    setOpen(true);
-  }}
-  onFocus={() => setOpen(true)}
-  onBlur={() => setTimeout(() => setOpen(false), 150)}
-  onKeyDown={(e) => {
-    if (e.key === "Enter") chooseSymbol(query);
-  }}
-  placeholder="🔎 Search ANY ticker or company (e.g. IBM, NVIDIA, Tesla)"
-  style={{
-    padding: "12px 16px",
-    borderRadius: 14,
-    border: "2px solid rgba(59,130,246,0.45)",
-background: "#ffffff",
-color: "#111",
-    width: 420,
-    fontSize: 15,
-    fontWeight: 600,
-    boxShadow: COLORS.isDark
-      ? "0 6px 20px rgba(0,0,0,0.35)"
-      : "0 6px 20px rgba(0,0,0,0.12)",
-  }}
-/>
-
-          {open && results.length > 0 ? (
-            <div
-              style={{
-                position: "absolute",
-                top: "calc(100% + 6px)",
-                left: 0,
-                right: 0,
-                border: "1px solid #3333",
-                borderRadius: 12,
-                background: "#fff",
-                color: "#111",
-                overflow: "hidden",
-                zIndex: 9999,
-                boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
-                maxHeight: 340,
-                overflowY: "auto",
-              }}
-            >
-              {results.map((r) => (
-                <button
-                  key={`${r.symbol}-${r.exchange}`}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => chooseSymbol(r.symbol)}
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    textAlign: "left",
-                    padding: "10px 12px",
-                    border: "none",
-                    background: "transparent",
-                    cursor: "pointer",
-                  }}
-                >
-                  <div style={{ fontWeight: 700 }}>
-                    {r.symbol} <span style={{ fontWeight: 500, opacity: 0.7 }}>({r.exchange})</span>
-                  </div>
-                  <div style={{ fontSize: 12, opacity: 0.75 }}>{r.name}</div>
-                </button>
-              ))}
+    {open && results.length > 0 ? (
+      <div
+        style={{
+          position: "absolute",
+          top: "calc(100% + 6px)",
+          left: 0,
+          right: 0,
+          border: "1px solid #3333",
+          borderRadius: 12,
+          background: "#fff",
+          color: "#111",
+          overflow: "hidden",
+          zIndex: 9999,
+          boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
+          maxHeight: 340,
+          overflowY: "auto",
+        }}
+      >
+        {results.map((r) => (
+          <button
+            key={`${r.symbol}-${r.exchange}`}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => chooseSymbol(r.symbol)}
+            style={{
+              display: "block",
+              width: "100%",
+              textAlign: "left",
+              padding: "10px 12px",
+              border: "none",
+              background: "transparent",
+              cursor: "pointer",
+            }}
+          >
+            <div style={{ fontWeight: 800 }}>
+              {r.symbol} <span style={{ fontWeight: 600, opacity: 0.7 }}>({r.exchange})</span>
             </div>
-          ) : null}
-        </div>
+            <div style={{ fontSize: 12, opacity: 0.75 }}>{r.name}</div>
+          </button>
+        ))}
+      </div>
+    ) : null}
+  </div>
+
+  {/* TICKER (dark) */}
+  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+    <label style={{ fontWeight: 800, opacity: 0.9 }}>Ticker</label>
+
+    <select
+      value={symbol}
+      onChange={(e) => chooseSymbol(e.target.value)}
+      style={{
+        padding: "10px 12px",
+        borderRadius: 12,
+        border: `1px solid ${COLORS.controlBorder}`,
+        background: COLORS.isDark ? "rgba(255,255,255,0.06)" : "rgba(11,18,32,0.06)",
+        color: COLORS.controlFg,
+        fontWeight: 850,
+        minWidth: 300,
+      }}
+    >
+      {/* ✅ Selected display = ticker only (works for preset + custom) */}
+      <option value={symbol}>
+        {symbol}
+      </option>
+
+      {/* Divider */}
+      <option disabled value="__divider__">
+        ─────────────
+      </option>
+
+      {/* Full names in the dropdown list */}
+      {PRESET_TICKERS.map((t) => (
+        <option key={t.symbol} value={t.symbol}>
+          {t.symbol} — {t.name}
+        </option>
+      ))}
+    </select>
+  </div>
+</div>
 
         {/* Indicator (next to search) */}
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
