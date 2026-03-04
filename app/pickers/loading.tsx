@@ -43,16 +43,17 @@ export default function Loading() {
           background: "rgba(255,255,255,0.06)",
         }}
       >
-        <div
-          style={{
-            height: "100%",
-            width: "35%",
-            borderRadius: 999,
-            background: "rgba(59,130,246,0.85)",
-            animation: "loadingBar 1.1s infinite ease-in-out",
-          }}
-        />
-      </div>
+<div
+  style={{
+    height: "100%",
+    width: "35%",
+    borderRadius: 999,
+    background: "rgba(59,130,246,0.85)",
+    display: "block",
+    willChange: "transform",
+    animation: "pickersBar 1.1s infinite linear",
+  }}
+/>
 
       <div style={{ marginTop: 22, display: "grid", gap: 16, maxWidth: 980 }}>
         {Array.from({ length: 4 }).map((_, i) => (
@@ -90,13 +91,13 @@ export default function Loading() {
         ))}
       </div>
 
-      <style>{`
-        @keyframes loadingBar {
-          0% { transform: translateX(-40%); opacity: 0.45; }
-          50% { transform: translateX(180%); opacity: 0.9; }
-          100% { transform: translateX(420%); opacity: 0.45; }
-        }
-      `}</style>
+<style>{`
+  @keyframes pickersBar {
+    0% { transform: translateX(-10%); opacity: 0.55; }
+    50% { transform: translateX(120%); opacity: 0.95; }
+    100% { transform: translateX(240%); opacity: 0.55; }
+  }
+`}</style>
     </main>
   );
 }
