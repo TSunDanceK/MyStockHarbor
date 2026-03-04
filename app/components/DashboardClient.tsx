@@ -564,7 +564,14 @@ const INDICATORS: Overlay[] = [
 
 export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSymbol?: string }) {
   const [symbol, setSymbol] = useState(defaultSymbol);
+
+  // Timeframe buttons (used for fetching + resetting view)
   const [tfDays, setTfDays] = useState(365);
+
+  // Zoom/Pan window (display-only; does NOT trigger refetch)
+  const [windowDays, setWindowDays] = useState(365);
+  const [windowOffset, setWindowOffset] = useState(0); // 0 = most recent, higher = pan left into older data
+
   const [indicator, setIndicator] = useState<Overlay>("None");
 
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -714,8 +721,20 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
     };
   }, [symbol]);
 
-  // Displayed data (always at least 2 points)
-  const displayedHistory = useMemo(() => historyAll.slice(-Math.max(tfDays, 2)), [historyAll, tfDays]);
+  // Displayed data window (Zoom/Pan) - always at least 2 points
+  const totalPoints = historyAll.length;
+  const win = Math.max(windowDays, 2);
+  const maxOffset = Math.max(totalPoints - win, 0);
+  const offset = Math.min(Math.max(windowOffset, 0), maxOffset);
+
+  const displayedHistory = useMemo(() => {
+    if (!historyAll.length) return [];
+    const end = totalPoints - offset; // exclusive
+    const start = Math.max(0, end - win);
+    const slice = historyAll.slice(start, end);
+    return slice.length >= 2 ? slice : historyAll.slice(-2);
+  }, [historyAll, totalPoints, offset, win]);
+
   const n = displayedHistory.length;
 
   // Indicators computed on FULL history for correctness
@@ -1025,26 +1044,105 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
           </select>
         </div>
 
-        {/* Timeframes (stay pinned right) */}
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {TIMEFRAMES.map((t) => (
+        {/* Zoom + Pan + Timeframes (right side) */}
+        <div style={{ marginLeft: "auto", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          {/* Pan + Zoom controls */}
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <button
-              key={t.label}
-              onClick={() => setTfDays(t.days)}
+              onClick={() => setWindowOffset((o) => Math.min(maxOffset, o + Math.max(1, Math.floor(win * 0.2))))}
+              disabled={offset >= maxOffset}
+              title="Pan left (older)"
+              style={{
+                padding: "8px 10px",
+                borderRadius: 10,
+                border: "1px solid #3333",
+                cursor: offset >= maxOffset ? "not-allowed" : "pointer",
+                opacity: offset >= maxOffset ? 0.4 : 1,
+                fontWeight: 700,
+              }}
+            >
+              ←
+            </button>
+
+            <button
+              onClick={() => setWindowOffset((o) => Math.max(0, o - Math.max(1, Math.floor(win * 0.2))))}
+              disabled={offset <= 0}
+              title="Pan right (newer)"
+              style={{
+                padding: "8px 10px",
+                borderRadius: 10,
+                border: "1px solid #3333",
+                cursor: offset <= 0 ? "not-allowed" : "pointer",
+                opacity: offset <= 0 ? 0.4 : 1,
+                fontWeight: 700,
+              }}
+            >
+              →
+            </button>
+
+            <button
+              onClick={() => {
+                setWindowDays((d) => Math.max(2, Math.floor(d * 0.8)));
+                setWindowOffset(0);
+              }}
+              title="Zoom in"
               style={{
                 padding: "8px 10px",
                 borderRadius: 10,
                 border: "1px solid #3333",
                 cursor: "pointer",
-                opacity: tfDays === t.days ? 1 : 0.7,
-                fontWeight: tfDays === t.days ? 700 : 500,
+                fontWeight: 900,
               }}
             >
-              {t.label}
+              −
             </button>
-          ))}
+
+            <button
+              onClick={() => {
+                setWindowDays((d) => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25)));
+                setWindowOffset(0);
+              }}
+              title="Zoom out"
+              style={{
+                padding: "8px 10px",
+                borderRadius: 10,
+                border: "1px solid #3333",
+                cursor: "pointer",
+                fontWeight: 900,
+              }}
+            >
+              +
+            </button>
+
+            <div style={{ fontSize: 12, opacity: 0.65, marginLeft: 6 }}>
+              Window: {Math.min(win, totalPoints)} bars
+            </div>
+          </div>
+
+          {/* Timeframes */}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {TIMEFRAMES.map((t) => (
+              <button
+                key={t.label}
+                onClick={() => {
+                  setTfDays(t.days);
+                  setWindowDays(t.days);
+                  setWindowOffset(0);
+                }}
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: 10,
+                  border: "1px solid #3333",
+                  cursor: "pointer",
+                  opacity: tfDays === t.days ? 1 : 0.7,
+                  fontWeight: tfDays === t.days ? 700 : 500,
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
 
 
       <div style={{ marginTop: 16, maxWidth: 920, display: "grid", gap: 16 }}>
