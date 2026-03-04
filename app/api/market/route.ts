@@ -1,15 +1,20 @@
 // app/api/market/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Point = {
-  date: string;
-  close: number;
-  high?: number;
-  low?: number;
-  volume?: number;
+type Quote = {
+  symbol: string;
+  open?: string;
+  high?: string;
+  low?: string;
+  close?: string;
+  previous_close?: string;
+  percent_change?: string;
+  volume?: string;
+  status?: string;
+  message?: string;
 };
 
 type Row = {
@@ -20,162 +25,229 @@ type Row = {
   volume: number | null;
 };
 
-type MarketPayload = {
+type Payload = {
   updatedAt: string;
+  scope: string; // IMPORTANT: label what universe this is
+  universeSize: number;
   topTraded: Row[];
   topMovers: Row[];
   topRanges: Row[];
 };
 
-const CACHE_MS = 60_000; // 1 minute (keep)
-let cache: { at: number; payload: MarketPayload } | null = null;
+/* ----------------------------- caching ----------------------------- */
 
-// Keep aligned with your dashboard preset list (tickers only)
-const PRESET_SYMBOLS: string[] = [
+// Cache a bit longer to keep dashboard snappy + reduce API usage.
+const CACHE_MS = 5 * 60_000; // 5 minutes
+let cache: { at: number; payload: Payload } | null = null;
+
+/* ----------------------------- universe ---------------------------- */
+/**
+ * This defines the universe your "Market Overview" uses.
+ * It's NOT the whole market — it's a curated universe.
+ *
+ * We include:
+ * 1) Your dropdown tickers (PRESET_TICKERS)
+ * 2) Your pickers universe tickers (PRESET_UNIVERSE from /api/pickers route)
+ * 3) A few extra large caps / commonly searched (optional)
+ *
+ * You can expand this list safely, but:
+ * - More symbols = more API calls (chunked), more chance of rate limiting.
+ */
+
+// Your dropdown tickers (from DashboardClient PRESET_TICKERS)
+const PRESET_TICKERS: string[] = [
   "AAPL","ABBV","ABT","ADBE","AMZN","AVGO","BAC","BRK.B","COST","CRM","CSCO","CVX","DIS","GOOGL","HD",
   "INTC","JNJ","JPM","KO","LLY","MA","MCD","META","MRK","MSFT","NFLX","NVDA","ORCL","PEP","PG","PYPL",
   "QCOM","SBUX","T","TGT","TSLA","TXN","UNH","V","VZ","WFC","WMT","XOM",
 ];
 
-function originFromReq(req: NextRequest) {
-  const h = req.headers;
-  const proto = h.get("x-forwarded-proto") ?? "https";
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
-  return `${proto}://${host}`;
+// Your pickers universe list (copied from app/api/pickers/route.ts PRESET_UNIVERSE)
+const PICKERS_UNIVERSE: string[] = [
+  "AAPL","MSFT","NVDA","AMZN","GOOGL","META","TSLA","BRK.B","AVGO","LLY","JPM","V","UNH","XOM","PG","MA",
+  "COST","HD","MRK","ABBV","CRM","NFLX","ORCL","BAC","KO","PEP","ADBE","TMO","WMT","CSCO","ACN","MCD","ABT",
+  "CVX","LIN","AMD","NKE","DHR","TXN","INTC","QCOM","PM","IBM","NOW","SBUX","CAT","GE","AMAT","LOW",
+];
+
+// OPTIONAL: a few extra popular names (keep small)
+const EXTRA: string[] = [
+  "SPY","QQQ","IWM","DIA", // ETFs (if Twelve Data returns them on your plan)
+  "GOOG","BRK.A","PLTR","SNOW","SHOP","UBER","PANW","CRWD","TSM","ASML",
+];
+
+function buildUniverse(): string[] {
+  const set = new Set<string>();
+
+  for (const s of [...PRESET_TICKERS, ...PICKERS_UNIVERSE, ...EXTRA]) {
+    const sym = String(s || "").trim().toUpperCase();
+    if (sym) set.add(sym);
+  }
+
+  return Array.from(set);
 }
+
+/* ----------------------------- helpers ----------------------------- */
 
 function toNum(x: unknown): number | null {
   const n = typeof x === "string" ? Number(x) : typeof x === "number" ? x : NaN;
   return Number.isFinite(n) ? n : null;
 }
 
-// small p-limit (no deps)
-function pLimit(limit: number) {
-  let active = 0;
-  const queue: Array<() => void> = [];
-
-  const next = () => {
-    active--;
-    const fn = queue.shift();
-    if (fn) fn();
-  };
-
-  return async function <T>(fn: () => Promise<T>): Promise<T> {
-    if (active >= limit) {
-      await new Promise<void>((resolve) => queue.push(resolve));
-    }
-    active++;
-    try {
-      return await fn();
-    } finally {
-      next();
-    }
-  };
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
 }
 
-async function fetchHistory(origin: string, symbol: string, days: number) {
-  const u = `${origin}/api/history?symbol=${encodeURIComponent(symbol)}&days=${days}`;
-  const res = await fetch(u, { cache: "no-store" });
-  if (!res.ok) throw new Error("history fetch failed");
+function extractQuotesFromBatch(json: any): Quote[] {
+  if (!json || typeof json !== "object") return [];
 
-  const data = (await res.json()) as { symbol: string; points: any[] };
-  const ptsRaw = Array.isArray(data.points) ? data.points : [];
+  // If top-level is an error
+  if (typeof json.status === "string" && json.status === "error") return [];
 
-  const pts: Point[] = ptsRaw
-    .map((p: any) => ({
-      date: String(p?.date ?? ""),
-      close: Number(p?.close),
-      high: p?.high == null ? undefined : Number(p.high),
-      low: p?.low == null ? undefined : Number(p.low),
-      volume: p?.volume == null ? undefined : Number(p.volume),
-    }))
-    .filter((p) => p.date && Number.isFinite(p.close));
+  // If it's already an array or { data: [...] }
+  if (Array.isArray(json)) return json as Quote[];
+  if (Array.isArray(json.data)) return json.data as Quote[];
 
-  return pts;
-}
+  // Most common for batch: key-value object
+  // e.g. { "AAPL": {...}, "MSFT": {...} } OR request wrappers
+  const out: Quote[] = [];
 
-function buildRow(symbol: string, pts: Point[]): Row | null {
-  if (!pts.length) return null;
+  for (const [, v] of Object.entries(json)) {
+    if (!v || typeof v !== "object") continue;
 
-  const lastPt = pts[pts.length - 1];
-  const prevPt = pts.length >= 2 ? pts[pts.length - 2] : null;
+    const vv: any = v;
 
-  const last = toNum(lastPt.close);
-  const prev = prevPt ? toNum(prevPt.close) : null;
+    // request-style wrapper: { status:"ok", data:{...} }
+    if (vv.status === "ok" && vv.data && typeof vv.data === "object") {
+      if (typeof vv.data.symbol === "string") out.push(vv.data as Quote);
+      continue;
+    }
 
-  // % change vs previous close
-  let changePct: number | null = null;
-  if (last != null && prev != null && prev > 0) {
-    changePct = ((last - prev) / prev) * 100;
+    // direct quote object
+    if (typeof vv.symbol === "string") {
+      if (vv.status && vv.status === "error") continue;
+      out.push(vv as Quote);
+      continue;
+    }
+
+    // ok wrapper but fields on same level
+    if (vv.status === "ok" && typeof vv.symbol === "string") {
+      out.push(vv as Quote);
+      continue;
+    }
   }
 
-  // daily range %: (high-low) / denom
-  const high = toNum(lastPt.high);
-  const low = toNum(lastPt.low);
-
-  let rangePct: number | null = null;
-  const denom = last != null && last > 0 ? last : prev != null && prev > 0 ? prev : null;
-  if (denom && high != null && low != null) {
-    rangePct = ((high - low) / denom) * 100;
-  }
-
-  const volume = toNum(lastPt.volume);
-
-  return { symbol, changePct, rangePct, last, volume };
+  return out;
 }
 
-export async function GET(req: NextRequest) {
-  // 1) cache
+async function fetchBatchQuotes(apiKey: string, symbols: string[]): Promise<Quote[]> {
+  // TwelveData accepts comma-separated in one request, but URLs can get huge.
+  // Chunk to avoid URL-length failures and reduce random errors.
+  const CHUNK_SIZE = 40;
+
+  const parts = chunk(symbols, CHUNK_SIZE);
+  const all: Quote[] = [];
+
+  for (const p of parts) {
+    const joined = p.join(",");
+    const url =
+      `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(joined)}&apikey=${encodeURIComponent(apiKey)}`;
+
+    const res = await fetch(url, { cache: "no-store" });
+    const json = await res.json();
+
+    const quotes = extractQuotesFromBatch(json);
+    all.push(...quotes);
+  }
+
+  return all;
+}
+
+/* -------------------------------- GET -------------------------------- */
+
+export async function GET() {
+  const apiKey = process.env.TWELVEDATA_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json({ error: "Missing TWELVEDATA_API_KEY env var." }, { status: 500 });
+  }
+
   if (cache && Date.now() - cache.at < CACHE_MS) {
     return NextResponse.json(cache.payload);
   }
 
-  const origin = originFromReq(req);
+  try {
+    const universe = buildUniverse();
 
-  // Use enough days to guarantee “previous close” exists
-  const days = 10;
+    // Safety cap so you don’t accidentally nuke your API quota.
+    // You can increase this later if your Twelve Data plan allows it.
+    const MAX_UNIVERSE = 200;
+    const capped = universe.slice(0, MAX_UNIVERSE);
 
-  // Concurrency cap so we don’t slam your own /api/history
-  const limit = pLimit(8);
+    const quotes = await fetchBatchQuotes(apiKey, capped);
 
-  const rows: Row[] = [];
+    const rows: Row[] = quotes
+      .map((q) => {
+        const open = toNum(q.open);
+        const high = toNum(q.high);
+        const low = toNum(q.low);
+        const close = toNum(q.close);
+        const pct = toNum(q.percent_change);
+        const vol = toNum(q.volume);
 
-  await Promise.all(
-    PRESET_SYMBOLS.map((symbol) =>
-      limit(async () => {
-        try {
-          const pts = await fetchHistory(origin, symbol, days);
-          const row = buildRow(symbol, pts);
-          if (row) rows.push(row);
-        } catch {
-          // ignore per-symbol failures
+        // daily range %: (high-low) / denom
+        let rangePct: number | null = null;
+        const denom =
+          open && open > 0 ? open : close && close > 0 ? close : null;
+
+        if (denom && high != null && low != null) {
+          rangePct = ((high - low) / denom) * 100;
         }
+
+        return {
+          symbol: String(q.symbol || "").toUpperCase(),
+          changePct: pct,
+          rangePct,
+          last: close,
+          volume: vol,
+        };
       })
-    )
-  );
+      .filter((r) => r.symbol && (r.last != null || r.volume != null || r.changePct != null));
 
-  const topTraded = [...rows]
-    .filter((r) => r.volume != null)
-    .sort((a, b) => (b.volume! - a.volume!))
-    .slice(0, 10);
+    const topTraded = [...rows]
+      .filter((r) => r.volume != null)
+      .sort((a, b) => (b.volume! - a.volume!))
+      .slice(0, 10);
 
-  const topMovers = [...rows]
-    .filter((r) => r.changePct != null)
-    .sort((a, b) => Math.abs(b.changePct!) - Math.abs(a.changePct!))
-    .slice(0, 5);
+    const topMovers = [...rows]
+      .filter((r) => r.changePct != null)
+      .sort((a, b) => Math.abs(b.changePct!) - Math.abs(a.changePct!))
+      .slice(0, 5);
 
-  const topRanges = [...rows]
-    .filter((r) => r.rangePct != null)
-    .sort((a, b) => (b.rangePct! - a.rangePct!))
-    .slice(0, 10);
+    const topRanges = [...rows]
+      .filter((r) => r.rangePct != null)
+      .sort((a, b) => (b.rangePct! - a.rangePct!))
+      .slice(0, 10);
 
-  const payload: MarketPayload = {
-    updatedAt: new Date().toISOString(),
-    topTraded,
-    topMovers,
-    topRanges,
-  };
+    const payload: Payload = {
+      updatedAt: new Date().toISOString(),
+      scope: "Curated Universe (Dashboard + Pickers + Extras)",
+      universeSize: capped.length,
+      topTraded,
+      topMovers,
+      topRanges,
+    };
 
-  cache = { at: Date.now(), payload };
-  return NextResponse.json(payload);
+    cache = { at: Date.now(), payload };
+    return NextResponse.json(payload);
+  } catch {
+    const payload: Payload = {
+      updatedAt: new Date().toISOString(),
+      scope: "Curated Universe (Dashboard + Pickers + Extras)",
+      universeSize: 0,
+      topTraded: [],
+      topMovers: [],
+      topRanges: [],
+    };
+    return NextResponse.json(payload);
+  }
 }
