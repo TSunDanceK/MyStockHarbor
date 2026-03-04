@@ -11,8 +11,30 @@ export default function Loading() {
         minHeight: "100vh",
       }}
     >
-      <h1 style={{ fontSize: 32, margin: 0 }}>Find Your Next Stock</h1>
-      <p style={{ opacity: 0.75, marginTop: 8 }}>Loading screeners…</p>
+   <h1 style={{ fontSize: 32, margin: 0 }}>Find Your Next Stock</h1>
+<p style={{ opacity: 0.75, marginTop: 8 }}>Building your stock lists…</p>
+
+<div
+  style={{
+    marginTop: 18,
+    width: 420,
+    height: 8,
+    borderRadius: 999,
+    overflow: "hidden",
+    background: "rgba(255,255,255,0.08)",
+    border: "1px solid rgba(255,255,255,0.14)",
+  }}
+>
+  <div
+    style={{
+      height: "100%",
+      width: "40%",
+      borderRadius: 999,
+      background: "rgba(59,130,246,0.85)",
+      animation: "pickersBar 1.1s infinite linear",
+    }}
+  />
+</div>
 
       {/* progress bar */}
       <div
