@@ -1467,23 +1467,28 @@ const ChartCard = (opts?: { height?: number | string }) => {
 <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
   <h1 style={{ fontSize: 32, margin: 0 }}>My Stock Dashboard</h1>
 
-  <a
-    href="/pickers"
-    style={{
-      padding: "10px 12px",
-      borderRadius: 12,
-      border: `1px solid ${COLORS.controlBorder}`,
-      background: COLORS.isDark
-  ? "rgba(59,130,246,0.18)"
-  : "rgba(59,130,246,0.12)",
-      color: COLORS.controlFg,
-      textDecoration: "none",
-      fontWeight: 900,
-      fontSize: 14,
-    }}
-  >
-    Trading Styles →
-  </a>
+<a
+  href="/pickers"
+  style={{
+    padding: "12px 16px",
+    borderRadius: 14,
+    border: `1px solid rgba(59,130,246,0.55)`,
+    background: COLORS.isDark
+      ? "linear-gradient(135deg, rgba(59,130,246,0.35), rgba(59,130,246,0.18))"
+      : "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(59,130,246,0.12))",
+    color: COLORS.controlFg,
+    textDecoration: "none",
+    fontWeight: 950,
+    fontSize: 15,
+    letterSpacing: "0.2px",
+    boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.45)" : "0 10px 26px rgba(0,0,0,0.14)",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+  }}
+>
+  🔎 Find Your Next Stock <span style={{ opacity: 0.9 }}>→</span>
+</a>
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center" }}>
           <button
