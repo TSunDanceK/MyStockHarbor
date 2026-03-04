@@ -1233,30 +1233,42 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
           </select>
         </div>
 
-        {/* Timeframes (pinned right) */}
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {TIMEFRAMES.map((t) => (
-            <button
-              key={t.label}
-              onClick={() => {
-                setTfDays(t.days);
-                setWindowDays(t.days);
-                setWindowOffset(0);
-              }}
-              style={{
-                padding: "8px 10px",
-                borderRadius: 10,
-                border: "1px solid #3336",
-                background: "#fff",
-                cursor: "pointer",
-                opacity: tfDays === t.days ? 1 : 0.8,
-                fontWeight: tfDays === t.days ? 800 : 600,
-              }}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+{/* Timeframes (pinned right) */}
+<div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
+  {TIMEFRAMES.map((t) => {
+    const active = tfDays === t.days;
+
+    return (
+      <button
+        key={t.label}
+        onClick={() => {
+          setTfDays(t.days);
+          setWindowDays(t.days);
+          setWindowOffset(0);
+        }}
+        style={{
+          padding: "8px 12px",
+          borderRadius: 12,
+          border: isDark ? "1px solid rgba(255,255,255,0.22)" : "1px solid rgba(0,0,0,0.18)",
+          background: isDark
+            ? active
+              ? "rgba(255,255,255,0.18)"
+              : "rgba(255,255,255,0.10)"
+            : active
+              ? "rgba(0,0,0,0.08)"
+              : "#fff",
+          color: isDark ? "#fff" : "#111",
+          cursor: "pointer",
+          opacity: 1,
+          fontWeight: active ? 800 : 650,
+          boxShadow: active ? (isDark ? "0 8px 24px rgba(0,0,0,0.35)" : "0 8px 24px rgba(0,0,0,0.10)") : "none",
+        }}
+      >
+        {t.label}
+      </button>
+    );
+  })}
+</div>
         </div>
 
 
@@ -1359,11 +1371,20 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
                 </button>
               </div>
 
-           <div style={{ padding: 14, position: "relative", overflow: "auto" }}>
-                <div style={{ filter: "invert(1) hue-rotate(180deg)", borderRadius: 12 }}>
-                  {ChartCard}
-                </div>
-              </div>
+<div style={{ padding: 14, position: "relative", overflow: "auto" }}>
+  <div
+    style={{
+      borderRadius: 12,
+      overflow: "hidden", // ✅ IMPORTANT: clips the inverted chart cleanly
+      background: "#0b1220", // helps the edges match the modal
+      border: "1px solid rgba(255,255,255,0.14)",
+    }}
+  >
+    <div style={{ filter: "invert(1) hue-rotate(180deg)" }}>
+      {ChartCard}
+    </div>
+  </div>
+</div>
             </div>
           </div>
         ) : null}
