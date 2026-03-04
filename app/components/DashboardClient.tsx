@@ -1634,14 +1634,34 @@ const ChartCard = (opts?: { height?: number | string }) => {
                       </p>
 
                       <div style={{ marginTop: 18 }}>
-                        <div style={{ fontSize: 14, opacity: 0.8, color: COLORS.mutedFg, fontWeight: 800 }}>
-                          Signal
-                        </div>
+<div
+  style={{
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    fontSize: 16, // Signal slightly larger
+    opacity: 0.85,
+    color: COLORS.mutedFg,
+    fontWeight: 850,
+  }}
+>
+  <span
+    style={{
+      width: 10,
+      height: 10,
+      borderRadius: 999,
+      background: overviewMeta?.toneColor ?? (COLORS.isDark ? "rgba(241,245,249,0.35)" : "rgba(11,18,32,0.35)"),
+      boxShadow: COLORS.isDark ? "0 0 0 3px rgba(255,255,255,0.04)" : "0 0 0 3px rgba(0,0,0,0.03)",
+      flex: "0 0 auto",
+    }}
+  />
+  <span>Signal</span>
+</div>
 
 <div
   style={{
     marginTop: 6,
-    fontSize: 28,
+    fontSize: 26, // Composite slightly smaller (meet in the middle)
     fontWeight: 950,
     letterSpacing: "-0.2px",
     lineHeight: 1.15,
