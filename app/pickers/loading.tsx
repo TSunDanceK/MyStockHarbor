@@ -1,4 +1,6 @@
-export default function LoadingPickers() {
+"use client";
+
+export default function Loading() {
   return (
     <main
       style={{
@@ -9,101 +11,92 @@ export default function LoadingPickers() {
         minHeight: "100vh",
       }}
     >
-      <div style={{ maxWidth: 980 }}>
-        <h1 style={{ margin: 0, fontSize: 32, letterSpacing: "-0.3px" }}>Trading Styles</h1>
-        <p style={{ marginTop: 10, opacity: 0.75 }}>
-          Building today’s stock lists… this can take a few seconds.
-        </p>
-
-        {/* Loading bar */}
-        <div
-          style={{
-            marginTop: 18,
-            height: 10,
-            borderRadius: 999,
-            border: "1px solid rgba(255,255,255,0.14)",
-            background: "rgba(255,255,255,0.06)",
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              height: "100%",
-              width: "40%",
-              borderRadius: 999,
-              background: "rgba(59,130,246,0.55)",
-              animation: "pickersBar 1.1s ease-in-out infinite",
-            }}
-          />
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16 }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 32, letterSpacing: "-0.3px" }}>Find Your Next Stock</h1>
+          <p style={{ marginTop: 10, opacity: 0.75 }}>Loading screeners…</p>
         </div>
 
-        {/* Skeleton cards */}
-        <div style={{ marginTop: 22, display: "grid", gap: 16 }}>
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div
-              key={i}
-              style={{
-                border: "1px solid rgba(255,255,255,0.14)",
-                borderRadius: 14,
-                padding: 16,
-                background: "#0b1220",
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                <div style={{ width: "55%" }}>
-                  <div
-                    style={{
-                      height: 18,
-                      borderRadius: 8,
-                      background: "rgba(255,255,255,0.10)",
-                    }}
-                  />
-                  <div
-                    style={{
-                      marginTop: 10,
-                      height: 12,
-                      width: "75%",
-                      borderRadius: 8,
-                      background: "rgba(255,255,255,0.06)",
-                    }}
-                  />
-                </div>
+        <div
+          style={{
+            padding: "10px 12px",
+            borderRadius: 12,
+            border: "1px solid rgba(255,255,255,0.18)",
+            background: "rgba(255,255,255,0.06)",
+            opacity: 0.8,
+            fontWeight: 800,
+          }}
+        >
+          ← Back to Dashboard
+        </div>
+      </div>
+
+      {/* fake progress bar */}
+      <div
+        style={{
+          marginTop: 18,
+          maxWidth: 980,
+          borderRadius: 999,
+          height: 10,
+          overflow: "hidden",
+          border: "1px solid rgba(255,255,255,0.14)",
+          background: "rgba(255,255,255,0.06)",
+        }}
+      >
+        <div
+          style={{
+            height: "100%",
+            width: "35%",
+            borderRadius: 999,
+            background: "rgba(59,130,246,0.85)",
+            animation: "loadingBar 1.1s infinite ease-in-out",
+          }}
+        />
+      </div>
+
+      <div style={{ marginTop: 22, display: "grid", gap: 16, maxWidth: 980 }}>
+        {Array.from({ length: 4 }).map((_, i) => (
+          <section
+            key={i}
+            style={{
+              border: "1px solid rgba(255,255,255,0.14)",
+              borderRadius: 14,
+              padding: 16,
+              background: "#0b1220",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+              <div style={{ width: 260, height: 18, borderRadius: 8, background: "rgba(255,255,255,0.08)" }} />
+              <div style={{ width: 90, height: 14, borderRadius: 8, background: "rgba(255,255,255,0.06)" }} />
+            </div>
+
+            <div style={{ marginTop: 10, width: 420, height: 12, borderRadius: 8, background: "rgba(255,255,255,0.06)" }} />
+
+            <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {Array.from({ length: 10 }).map((__, j) => (
                 <div
+                  key={j}
                   style={{
-                    height: 14,
-                    width: 70,
-                    borderRadius: 8,
+                    width: 92,
+                    height: 36,
+                    borderRadius: 999,
+                    border: "1px solid rgba(255,255,255,0.10)",
                     background: "rgba(255,255,255,0.06)",
                   }}
                 />
-              </div>
-
-              <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
-                {Array.from({ length: 6 }).map((__, j) => (
-                  <div
-                    key={j}
-                    style={{
-                      height: 38,
-                      width: 120,
-                      borderRadius: 999,
-                      border: "1px solid rgba(255,255,255,0.14)",
-                      background: "rgba(255,255,255,0.06)",
-                    }}
-                  />
-                ))}
-              </div>
+              ))}
             </div>
-          ))}
-        </div>
-
-        <style>{`
-          @keyframes pickersBar {
-            0%   { transform: translateX(-60%); opacity: 0.65; }
-            50%  { transform: translateX(120%); opacity: 1; }
-            100% { transform: translateX(-60%); opacity: 0.65; }
-          }
-        `}</style>
+          </section>
+        ))}
       </div>
+
+      <style>{`
+        @keyframes loadingBar {
+          0% { transform: translateX(-40%); opacity: 0.45; }
+          50% { transform: translateX(180%); opacity: 0.9; }
+          100% { transform: translateX(420%); opacity: 0.45; }
+        }
+      `}</style>
     </main>
   );
 }
