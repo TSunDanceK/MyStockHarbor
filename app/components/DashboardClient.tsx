@@ -1464,8 +1464,26 @@ const ChartCard = (opts?: { height?: number | string }) => {
         minHeight: "100vh",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
-        <h1 style={{ fontSize: 32, margin: 0 }}>My Stock Dashboard</h1>
+<div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+  <h1 style={{ fontSize: 32, margin: 0 }}>My Stock Dashboard</h1>
+
+  <a
+    href="/pickers"
+    style={{
+      padding: "10px 12px",
+      borderRadius: 12,
+      border: `1px solid ${COLORS.controlBorder}`,
+      background: COLORS.isDark
+  ? "rgba(59,130,246,0.18)"
+  : "rgba(59,130,246,0.12)",
+      color: COLORS.controlFg,
+      textDecoration: "none",
+      fontWeight: 900,
+      fontSize: 14,
+    }}
+  >
+    Trading Styles →
+  </a>
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center" }}>
           <button
