@@ -476,9 +476,17 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, idx: numb
 
 export async function GET(req: Request) {
   // Build a base URL so this works on Vercel + locally
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "localhost:3000";
-  const proto = req.headers.get("x-forwarded-proto") ?? (host.includes("localhost") ? "http" : "https");
-  const baseUrl = `${proto}://${host}`;
+const host =
+  req.headers.get("x-forwarded-host") ??
+  req.headers.get("host") ??
+  process.env.VERCEL_URL ??
+  "localhost:3000";
+
+const proto =
+  req.headers.get("x-forwarded-proto") ??
+  (host.includes("localhost") ? "http" : "https");
+
+const baseUrl = host.startsWith("http") ? host : `${proto}://${host}`;
 
   // 1) Get Top Traded 50
   let topTraded: string[] = [];
