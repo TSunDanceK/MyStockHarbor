@@ -1357,7 +1357,9 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
                 boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
                 display: "grid",
                 gridTemplateRows: "auto 1fr",
+                minHeight: 0,
                 overflow: "hidden",
+                
               }}
             >
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: 12, borderBottom: "1px solid rgba(255,255,255,0.14)" }}>
@@ -1376,16 +1378,25 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
                 </button>
               </div>
 
-<div style={{ padding: 14, position: "relative", overflow: "hidden", height: "100%" }}>
+<div
+  style={{
+    padding: 14,
+    display: "flex",
+    flexDirection: "column",
+    minHeight: 0, // ✅ allows children to take 1fr height inside grid
+  }}
+>
   <div
     style={{
+      flex: 1,          // ✅ fill the available modal space
+      minHeight: 0,     // ✅ prevents overflow bugs
       borderRadius: 12,
-      overflow: "hidden", // ✅ IMPORTANT: clips the inverted chart cleanly
-      background: "#0b1220", // helps the edges match the modal
+      overflow: "hidden",
+      background: "#0b1220",
       border: "1px solid rgba(255,255,255,0.14)",
     }}
   >
-    <div style={{ filter: "invert(1) hue-rotate(180deg)" }}>
+    <div style={{ height: "100%", filter: "invert(1) hue-rotate(180deg)" }}>
       {ChartCard({ height: "100%" })}
     </div>
   </div>
