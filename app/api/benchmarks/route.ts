@@ -61,10 +61,11 @@ export async function GET() {
     return NextResponse.json(cache.payload);
   }
 
-  // Use ETFs (SPY/QQQ) because they are reliably available on Stooq for free
+  // Use ETFs (SPY/QQQ/DIA) because they are reliably available on Stooq for free
   const defs = [
     { key: "spy", label: "S&P 500 (via SPY)", symbol: "spy.us" },
     { key: "qqq", label: "Nasdaq 100 (via QQQ)", symbol: "qqq.us" },
+    { key: "dia", label: "Dow Jones (via DIA)", symbol: "dia.us" },
   ] as const;
 
   try {
