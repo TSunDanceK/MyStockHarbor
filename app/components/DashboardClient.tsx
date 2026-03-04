@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import React, { useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import PriceChart, { type Overlay } from "./PriceChart";
 
@@ -690,7 +690,9 @@ const INDICATORS: Overlay[] = [
 /* ----------------------------- component ----------------------------- */
 
 export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSymbol?: string }) {
+  const router = useRouter();
   const searchParams = useSearchParams();
+  const [isPicking, startPicking] = useTransition();
 
    const [symbol, setSymbol] = useState(defaultSymbol);
 
@@ -1523,8 +1525,15 @@ const ChartCard = (opts?: { height?: number | string }) => {
 <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
   <h1 style={{ fontSize: 32, margin: 0 }}>My Stock Dashboard</h1>
 
-<Link
-  href="/pickers"
+<button
+  type="button"
+  onClick={() => {
+    if (isPicking) return;
+    startPicking(() => {
+      router.push("/pickers");
+    });
+  }}
+  disabled={isPicking}
   style={{
     padding: "12px 16px",
     borderRadius: 14,
@@ -1540,11 +1549,40 @@ const ChartCard = (opts?: { height?: number | string }) => {
     boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.45)" : "0 10px 26px rgba(0,0,0,0.14)",
     display: "inline-flex",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
+    cursor: isPicking ? "not-allowed" : "pointer",
+    opacity: isPicking ? 0.85 : 1,
+    position: "relative",
+    overflow: "hidden",
   }}
+  title={isPicking ? "Loading…" : "Open stock pickers"}
 >
   🔎 Find Your Next Stock <span style={{ opacity: 0.9 }}>→</span>
-</Link>
+
+  {isPicking ? (
+    <span
+      aria-hidden
+      style={{
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: 3,
+        background: "rgba(255,255,255,0.22)",
+      }}
+    >
+      <span
+        style={{
+          display: "block",
+          height: "100%",
+          width: "45%",
+          background: "rgba(255,255,255,0.75)",
+          animation: "pickersBar 900ms ease-in-out infinite",
+        }}
+      />
+    </span>
+  ) : null}
+</button>
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center" }}>
           <button
@@ -1566,6 +1604,13 @@ const ChartCard = (opts?: { height?: number | string }) => {
       </div>
 
       <p style={{ marginTop: 0, opacity: 0.75, color: COLORS.mutedFg }}>Version 1 – Learning Build (free data)</p>
+      <style>{`
+  @keyframes pickersBar {
+    0% { transform: translateX(-10%); opacity: 0.55; }
+    50% { transform: translateX(120%); opacity: 0.95; }
+    100% { transform: translateX(240%); opacity: 0.55; }
+  }
+`}</style>
 
       {/* Controls row */}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginTop: 16 }}>
