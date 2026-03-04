@@ -1543,7 +1543,7 @@ const ChartCard = (opts?: { height?: number | string }) => {
             <>
               {indicator === "None" ? (
                 <>
-                  {/* TOP ROW: left = ticker/price, right = breakdown (aligned to top) */}
+                  {/* ONE ROW: left column = price + big signal, right column = breakdown */}
                   <div
                     style={{
                       display: "grid",
@@ -1553,12 +1553,40 @@ const ChartCard = (opts?: { height?: number | string }) => {
                       marginTop: 8,
                     }}
                   >
-                    <div>
+                    {/* LEFT: price + dominant signal */}
+                    <div style={{ minWidth: 0 }}>
                       <p style={{ fontSize: 20, margin: "8px 0" }}>
                         <strong>Last price:</strong> {quote?.price == null ? "Unavailable" : `$${quote.price.toFixed(2)}`}
                       </p>
+
+                      <div style={{ marginTop: 18 }}>
+                        <div style={{ fontSize: 14, opacity: 0.8, color: COLORS.mutedFg, fontWeight: 800 }}>
+                          Signal
+                        </div>
+
+                        <div
+                          style={{
+                            marginTop: 6,
+                            fontSize: 28,
+                            fontWeight: 950,
+                            letterSpacing: "-0.2px",
+                            lineHeight: 1.15,
+                          }}
+                        >
+                          {signal.label}
+                        </div>
+
+                        <div style={{ marginTop: 8, fontSize: 13, opacity: 0.75, color: COLORS.mutedFg }}>
+                          {signal.detail}
+                        </div>
+
+                        <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>
+                          <strong>Overview:</strong> Composite {composite ? `${composite.flagged}/${composite.total}` : "—"} flags
+                        </div>
+                      </div>
                     </div>
 
+                    {/* RIGHT: breakdown (top aligned) */}
                     <div
                       style={{
                         border: `1px solid ${COLORS.border}`,
@@ -1606,33 +1634,6 @@ const ChartCard = (opts?: { height?: number | string }) => {
                           );
                         })}
                       </div>
-                    </div>
-                  </div>
-
-                  {/* SECOND ROW: big dominant signal (full width feel, still left-biased) */}
-                  <div style={{ marginTop: 12 }}>
-                    <div style={{ fontSize: 14, opacity: 0.8, color: COLORS.mutedFg, fontWeight: 800 }}>
-                      Signal
-                    </div>
-
-                    <div
-                      style={{
-                        marginTop: 6,
-                        fontSize: 26,
-                        fontWeight: 950,
-                        letterSpacing: "-0.2px",
-                        lineHeight: 1.15,
-                      }}
-                    >
-                      {signal.label}
-                    </div>
-
-                    <div style={{ marginTop: 8, fontSize: 13, opacity: 0.75, color: COLORS.mutedFg }}>
-                      {signal.detail}
-                    </div>
-
-                    <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>
-                      <strong>Overview:</strong> Composite {composite ? `${composite.flagged}/${composite.total}` : "—"} flags
                     </div>
                   </div>
                 </>
