@@ -1523,16 +1523,17 @@ const ChartCard = (opts?: { height?: number | string }) => {
   );
 };
 
-  return (
-    <main
-      style={{
-        padding: 40,
-        fontFamily: "system-ui, Arial",
-        background: COLORS.pageBg,
-        color: COLORS.pageFg,
-        minHeight: "100vh",
-      }}
-    >
+return (
+  <main
+    style={{
+      padding: 0,
+      fontFamily: "system-ui, Arial",
+      background: COLORS.pageBg,
+      color: COLORS.pageFg,
+      minHeight: "100vh",
+    }}
+  >
+    <div className="pageWrap">
 <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
   <h1 style={{ fontSize: 32, margin: 0 }}>My Stock Dashboard</h1>
 
@@ -1615,11 +1616,27 @@ const ChartCard = (opts?: { height?: number | string }) => {
       </div>
 
       <p style={{ marginTop: 0, opacity: 0.75, color: COLORS.mutedFg }}>Version 1 – Learning Build (free data)</p>
-      <style>{`
+<style>{`
   @keyframes pickersBar {
     0% { transform: translateX(-10%); opacity: 0.55; }
     50% { transform: translateX(120%); opacity: 0.95; }
     100% { transform: translateX(240%); opacity: 0.55; }
+  }
+
+  /* ---------- responsive helpers (no libraries) ---------- */
+  .pageWrap { padding: 40px; }
+  .mainGrid { margin-top: 16px; max-width: 920px; display: grid; gap: 16px; }
+  .summaryGrid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 16px; align-items: start; margin-top: 8px; }
+  .benchGrid { display: grid; grid-template-columns: repeat(2, minmax(240px, 1fr)); gap: 14px; max-width: 980px; }
+  .newsGrid { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+
+  /* Mobile */
+  @media (max-width: 760px) {
+    .pageWrap { padding: 16px !important; }
+    .mainGrid { max-width: 100% !important; }
+    .summaryGrid { grid-template-columns: 1fr !important; }
+    .benchGrid { grid-template-columns: 1fr !important; }
+    .newsGrid { grid-template-columns: 1fr !important; }
   }
 `}</style>
 
@@ -2211,6 +2228,7 @@ const ChartCard = (opts?: { height?: number | string }) => {
           )}
         </div>
       </div>
-    </main>
-  );
+    </div>
+  </main>
+);
 }
