@@ -1692,29 +1692,33 @@ const ChartCard = (opts?: { height?: number | string }) => {
   </div>
 </div>
 
-        {/* Indicator (next to search) */}
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <label style={{ fontWeight: 600 }}>Indicator</label>
-          <select
-            value={indicator}
-            onChange={(e) => setIndicator(e.target.value as any)}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: "1px solid #3336",
-              background: "#fff",
-              color: "#111",
-              fontWeight: 700,
-              minWidth: 200,
-            }}
-          >
-                     {INDICATORS.map((x) => (
-              <option key={x} value={x}>
-                {x === "None" ? "Overview" : x}
-              </option>
-            ))}
-          </select>
-        </div>
+{/* Indicator (aligned like the others) */}
+<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+  <label style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, lineHeight: 1 }}>
+    Indicator
+  </label>
+
+  <select
+    value={indicator}
+    onChange={(e) => setIndicator(e.target.value as any)}
+    style={{
+      height: 44, // ✅ matches Search + Common Tickers
+      padding: "0 12px",
+      borderRadius: 12,
+      border: `1px solid ${COLORS.controlBorder}`,
+      background: "#ffffff",
+      color: "#111",
+      fontWeight: 900,
+      minWidth: 200,
+    }}
+  >
+    {INDICATORS.map((x) => (
+      <option key={x} value={x}>
+        {x === "None" ? "Overview" : x}
+      </option>
+    ))}
+  </select>
+</div>
 
 {/* Timeframes (pinned right) */}
 <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
