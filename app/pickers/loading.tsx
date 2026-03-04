@@ -11,9 +11,29 @@ export default function LoadingPickers() {
         minHeight: "100vh",
       }}
     >
-      <h1 style={{ margin: 0, fontSize: 32, letterSpacing: "-0.3px" }}>Find Your Next Stock</h1>
-      <p style={{ marginTop: 10, opacity: 0.75 }}>
-        Building your stock lists… (first load can take ~10–15s)
+<div style={{ marginTop: 20, textAlign: "center" }}>
+  <div
+    style={{
+      fontSize: 40,
+      fontWeight: 950,
+      letterSpacing: "-0.5px",
+      lineHeight: 1.1,
+    }}
+  >
+    We are gathering stocks for you
+  </div>
+
+  <div
+    style={{
+      marginTop: 12,
+      fontSize: 22,
+      opacity: 0.85,
+      fontWeight: 700,
+    }}
+  >
+    Please wait...
+  </div>
+</div>
       </p>
 
       {/* Loading bar */}
