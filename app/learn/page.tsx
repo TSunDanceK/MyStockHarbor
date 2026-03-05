@@ -88,7 +88,7 @@ function Section(props: { title: string; items: { slug: string; title: string; s
         {items.map((it) => (
           <Link
             key={it.slug}
-            href={`/learn/${it.slug}`}
+            href={`/learn/${encodeURIComponent(it.slug)}`}
             style={{
               border: "1px solid rgba(255,255,255,0.14)",
               borderRadius: 14,
