@@ -1097,9 +1097,10 @@ if (indicator === "ATR(14)") {
 
 // Safety fallback
 return { label: "Signal unavailable", detail: "Unknown indicator state." };
-    }, [
+  }, [
     indicator,
-    composite,
+    trendScore,
+    stretchScore,
     lastClose,
     lastMA50,
     lastMA200,
@@ -1116,9 +1117,11 @@ return { label: "Signal unavailable", detail: "Unknown indicator state." };
   ]);
 
     const overviewMeta = useMemo(() => {
-    if (indicator !== "None" || !composite) return null;
+    if (indicator !== "None" || !trendScore || !stretchScore) return null;
 
-    const toneInfo = compositeToneFromCounts(composite.overbought, composite.oversold, composite.spikes);
+    // Tone is based on Stretch extremes (mean-reversion bias).
+    // We no longer have "spikes" in the Stretch score, so pass 0.
+    const toneInfo = compositeToneFromCounts(stretchScore.overbought, stretchScore.oversold, 0);
     const toneColor = toneToColor(toneInfo.tone, COLORS.isDark);
 
     // Market regime (simple + robust)
@@ -1142,7 +1145,7 @@ return { label: "Signal unavailable", detail: "Unknown indicator state." };
     }
 
     return { toneColor, toneTag: toneInfo.tag, trend, vol };
-  }, [indicator, composite, COLORS.isDark, lastClose, lastMA50, lastMA200, atr14Arr, atrSma20Arr]);
+    }, [indicator, trendScore, stretchScore, COLORS.isDark, lastClose, lastMA50, lastMA200, atr14Arr, atrSma20Arr]);
 
   
 
@@ -1319,7 +1322,7 @@ if (indicator === "None") {
     if (indicator === "Volume") return { label: "Volume", value: lastNum(volumeArr) };
 
     return { label: "Indicator", value: null };
-  }, [indicator, composite, lastMA50, lastMA200, ema20Arr, vwapArr, bollMid, rsi14Arr, macdLine, stochK, atr14Arr, volumeArr]);
+  }, [indicator, stretchScore, lastMA50, lastMA200, ema20Arr, vwapArr, bollMid, rsi14Arr, macdLine, stochK, atr14Arr, volumeArr]);
 
   function chooseSymbol(s: string) {
     const cleaned = s.trim().toUpperCase();
@@ -1890,7 +1893,7 @@ return (
       width: 10,
       height: 10,
       borderRadius: 999,
-      background: overviewMeta?.toneColor ?? (COLORS.isDark ? "rgba(241,245,249,0.35)" : "rgba(11,18,32,0.35)"),
+      background: COLORS.isDark ? "rgba(241,245,249,0.35)" : "rgba(11,18,32,0.35)",
       boxShadow: COLORS.isDark ? "0 0 0 3px rgba(255,255,255,0.04)" : "0 0 0 3px rgba(0,0,0,0.03)",
       flex: "0 0 auto",
     }}
