@@ -673,6 +673,7 @@ const div = detectDivergenceFromHistory(pts, {
   minPriceSwingPct: 1.2,
   minRsiSwing: 4,
   macdStdMult: 0.35,
+  maxPivot2AgeBars: 12,
 });
           if (div) {
             divergences.push({
