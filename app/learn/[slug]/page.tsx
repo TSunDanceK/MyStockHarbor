@@ -36,28 +36,40 @@ function TipBox(props: { title: string; children: React.ReactNode }) {
   );
 }
 
-function ImageSlot(props: { label: string }) {
+function LessonImages(props: { slug: string; which: 1 | 2 | 3 }) {
+  const { slug, which } = props;
+
+  const src = `/learn/${slug}/${String(which).padStart(2, "0")}.png`;
+
   return (
-    <div
+    <figure
       style={{
-        marginTop: 14,
+        margin: "14px 0 0",
         borderRadius: 16,
         border: "1px solid rgba(255,255,255,0.14)",
-        background: "rgba(255,255,255,0.03)",
-        padding: 14,
+        background: "#06080d",
+        overflow: "hidden",
       }}
     >
-      <div style={{ fontWeight: 900 }}>Visual (coming soon)</div>
-      <div style={{ fontSize: 13, opacity: 0.75, marginTop: 6, lineHeight: 1.5 }}>
-        {props.label}
-      </div>
-    </div>
+      <img
+        src={src}
+        alt={`Lesson diagram ${which}`}
+        style={{
+          width: "100%",
+          height: "auto",
+          display: "block",
+          opacity: 1,
+          filter: "none",
+          mixBlendMode: "normal",
+        }}
+      />
+    </figure>
   );
 }
 
 export default async function LessonPage({ params }: Props) {
   // Extra defensive slug handling
-const { slug } = await params;
+const { slug } = params;
 
   const lesson = getLesson(slug);
 
@@ -149,46 +161,50 @@ const { slug } = await params;
 
         {/* Sections */}
         <div style={{ marginTop: 18, display: "grid", gap: 14 }}>
-          {lesson.sections.map((s) => {
-            const isMistakes = s.heading.toLowerCase().includes("common mistakes");
+{lesson.sections.map((s, idx) => {
+  const isMistakes = s.heading.toLowerCase().includes("common mistakes");
 
-            if (isMistakes) {
-              return (
-                <TipBox key={s.heading} title="Common mistakes (avoid these)">
-                  <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 8 }}>
-                    {s.body.map((p, idx) => (
-                      <li key={idx} style={{ opacity: 0.92, lineHeight: 1.55 }}>
-                        {p}
-                      </li>
-                    ))}
-                  </ul>
-                </TipBox>
-              );
-            }
+  if (isMistakes) {
+    return (
+      <TipBox key={s.heading} title="Common mistakes (avoid these)">
+        <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 8 }}>
+          {s.body.map((p, i) => (
+            <li key={i} style={{ opacity: 0.92, lineHeight: 1.55 }}>
+              {p}
+            </li>
+          ))}
+        </ul>
+      </TipBox>
+    );
+  }
 
-            return (
-              <section
-                key={s.heading}
-                style={{
-                  border: "1px solid rgba(255,255,255,0.14)",
-                  borderRadius: 16,
-                  padding: 16,
-                  background: "rgba(255,255,255,0.03)",
-                }}
-              >
-                <div style={{ fontWeight: 950, fontSize: 18 }}>{s.heading}</div>
-                <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-                  {s.body.map((p, idx) => (
-                    <p key={idx} style={{ margin: 0, opacity: 0.86, lineHeight: 1.6 }}>
-                      {p}
-                    </p>
-                  ))}
-                </div>
+  return (
+    <section
+      key={s.heading}
+      style={{
+        border: "1px solid rgba(255,255,255,0.14)",
+        borderRadius: 16,
+        padding: 16,
+        background: "rgba(255,255,255,0.03)",
+      }}
+    >
+      <div style={{ fontWeight: 950, fontSize: 18 }}>{s.heading}</div>
 
-                {/* Simple “image slot” after first 3 sections to keep a consistent look */}
-                {idxIsImageSlot(lesson.sections, s.heading) ? (
-                  <ImageSlot label={`Image idea: ${lesson.title} — ${s.heading}`} />
-                ) : null}
+      <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+        {s.body.map((p, i) => (
+          <p key={i} style={{ margin: 0, opacity: 0.86, lineHeight: 1.6 }}>
+            {p}
+          </p>
+        ))}
+      </div>
+
+      {/* Real lesson images (01.png after section 1, 02.png after section 3, 03.png after section 5 if it exists) */}
+      {idx === 0 ? <LessonImages slug={lesson.slug} which={1} /> : null}
+      {idx === 2 ? <LessonImages slug={lesson.slug} which={2} /> : null}
+      {idx === 4 ? <LessonImages slug={lesson.slug} which={3} /> : null}
+    </section>
+  );
+})}
               </section>
             );
           })}
