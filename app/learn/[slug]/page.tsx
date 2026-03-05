@@ -2,8 +2,15 @@
 import Link from "next/link";
 import { getLesson } from "../lessons";
 
-export default function LessonPage({ params }: { params: { slug: string } }) {
-  const lesson = getLesson(params.slug);
+type Props = {
+  params: {
+    slug: string;
+  };
+};
+
+export default function LessonPage({ params }: Props) {
+  const slug = params?.slug ?? "";
+  const lesson = getLesson(slug);
 
   if (!lesson) {
     return (
@@ -18,6 +25,7 @@ export default function LessonPage({ params }: { params: { slug: string } }) {
       >
         <div className="wrap">
           <h1 style={{ marginTop: 0 }}>Lesson not found</h1>
+          <p style={{ opacity: 0.7 }}>Slug received: {slug}</p>
           <Link href="/learn" style={{ color: "#93c5fd" }}>
             ← Back to Learn
           </Link>
@@ -57,35 +65,41 @@ export default function LessonPage({ params }: { params: { slug: string } }) {
             <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 800 }}>
               {lesson.category.toUpperCase()}
             </div>
+
             <h1 style={{ margin: "6px 0 0", fontSize: 34, letterSpacing: "-0.4px" }}>
               {lesson.title}
             </h1>
-            <div style={{ marginTop: 8, opacity: 0.75, lineHeight: 1.5 }}>{lesson.summary}</div>
+
+            <div style={{ marginTop: 8, opacity: 0.75, lineHeight: 1.5 }}>
+              {lesson.summary}
+            </div>
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <Link href="/learn" style={btn()}>
               ← Learn
             </Link>
+
             <Link href="/" style={btn()}>
               Dashboard →
             </Link>
           </div>
         </div>
 
-        {/* Placeholder “image slot” for future consistent AI visuals */}
         <div
           style={{
             marginTop: 18,
             borderRadius: 16,
             border: "1px solid rgba(255,255,255,0.14)",
-            background: "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(16,185,129,0.12))",
+            background:
+              "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(16,185,129,0.12))",
             padding: 16,
           }}
         >
           <div style={{ fontWeight: 900 }}>Visual (coming soon)</div>
-          <div style={{ fontSize: 13, opacity: 0.75, marginTop: 6, lineHeight: 1.5 }}>
-            This box will hold a consistent-style diagram/image for: <strong>{lesson.title}</strong>
+          <div style={{ fontSize: 13, opacity: 0.75, marginTop: 6 }}>
+            This box will hold a consistent-style diagram/image for:{" "}
+            <strong>{lesson.title}</strong>
           </div>
         </div>
 
@@ -101,9 +115,10 @@ export default function LessonPage({ params }: { params: { slug: string } }) {
               }}
             >
               <div style={{ fontWeight: 950, fontSize: 18 }}>{s.heading}</div>
+
               <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
                 {s.body.map((p, idx) => (
-                  <p key={idx} style={{ margin: 0, opacity: 0.85, lineHeight: 1.55 }}>
+                  <p key={idx} style={{ margin: 0, opacity: 0.85 }}>
                     {p}
                   </p>
                 ))}
