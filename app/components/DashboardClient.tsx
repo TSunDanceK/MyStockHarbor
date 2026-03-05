@@ -1339,26 +1339,25 @@ return { label: "Signal unavailable", detail: "Unknown indicator state." };
       push({ key: "atr", label: "ATR", tone: "muted", valueText: "—", severity: 0 });
     }
 
-// NEW: Divergence (Last ~40 bars) — filtered for clear/obvious signals
+// Divergence (Last ~40 bars) — always render rows (muted if none)
+const rsiTone = divergenceTone(divergence.rsi);
+const macdTone = divergenceTone(divergence.macd);
+
 push({
   key: "div_rsi",
   label: "RSI Div",
-  tone: divergenceTone(divergence.rsi),
-  valueText: divergenceLabel(divergence.rsi),
-  severity: divergenceSeverity(divergence.rsi),
+  tone: divergence.rsi === "none" ? "muted" : rsiTone,
+  valueText: divergence.rsi === "none" ? "—" : divergenceLabel(divergence.rsi),
+  severity: divergence.rsi === "none" ? 0 : divergenceSeverity(divergence.rsi),
 });
 
 push({
   key: "div_macd",
   label: "MACD Div",
-  tone: divergenceTone(divergence.macd),
-  valueText: divergenceLabel(divergence.macd),
-  severity: divergenceSeverity(divergence.macd),
+  tone: divergence.macd === "none" ? "muted" : macdTone,
+  valueText: divergence.macd === "none" ? "—" : divergenceLabel(divergence.macd),
+  severity: divergence.macd === "none" ? 0 : divergenceSeverity(divergence.macd),
 });
-    } else {
-      push({ key: "div_rsi", label: "RSI Div", tone: "muted", valueText: "—", severity: 0 });
-      push({ key: "div_macd", label: "MACD Div", tone: "muted", valueText: "—", severity: 0 });
-    }
 
     // Sort: most severe first, then by tone, then stable order
     return items.sort((a, b) => {
