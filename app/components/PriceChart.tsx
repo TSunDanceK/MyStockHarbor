@@ -52,7 +52,7 @@ function minMax(arr: Array<number | null>) {
   return { min, max };
 }
 
-export default function PriceChart({
+export type PriceChartProps = {
   data: Point[];
   ma50: (number | null)[];
   ma200: (number | null)[];
@@ -67,6 +67,7 @@ export default function PriceChart({
   ema20?: (number | null)[];
   vwap?: (number | null)[];
 
+  // sub-panel indicators
   rsi14?: (number | null)[];
   macdLine?: (number | null)[];
   macdSignal?: (number | null)[];
@@ -77,7 +78,35 @@ export default function PriceChart({
   volume?: (number | null)[];
 
   height?: number;
-}) {
+};
+
+export default function PriceChart({
+  data,
+  ma50,
+  ma200,
+  overlay = "None",
+
+  divergence,
+
+  bollUpper,
+  bollMid,
+  bollLower,
+
+  ema20,
+  vwap,
+
+  // sub-panel indicators
+  rsi14,
+  macdLine,
+  macdSignal,
+  macdHist,
+  stochK,
+  stochD,
+  atr14,
+  volume,
+
+  height = 320,
+}: PriceChartProps) {
   // This width is just the coordinate-system width used by the SVG viewBox.
   // The SVG itself is width="100%" so it will scale to the parent container.
   const width = 760;
