@@ -690,11 +690,19 @@ if (bo) {
     )
   );
 
-  const takeTop = (arr: PickerItem[], n: number) =>
-    arr
-      .sort((a, b) => (b._score ?? 0) - (a._score ?? 0))
-      .slice(0, n)
-      .map(({ symbol, note, tone }) => ({ symbol, note, tone }));
+const takeTop = (arr: PickerItem[], n: number, opts?: { volumeFirstIfMany?: boolean }) => {
+  const volumeFirst = opts?.volumeFirstIfMany === true && arr.length > 10;
+
+  const sorted = [...arr].sort((a, b) => {
+    // If many breakouts: volume spike dominates (we encoded it into _score already)
+    if (volumeFirst) return (b._score ?? 0) - (a._score ?? 0);
+
+    // Default: still use _score (works for all other lists)
+    return (b._score ?? 0) - (a._score ?? 0);
+  });
+
+  return sorted.slice(0, n).map(({ symbol, note, tone }) => ({ symbol, note, tone }));
+};
 
   const sections: PickerSection[] = [
     {
@@ -717,11 +725,11 @@ if (bo) {
       description: "Recently at ATH, but down 20%+ within ~4 months. Top traded are prioritised.",
       items: takeTop(dips, 20),
     },
-    {
-      title: "Breakouts",
-      description: "All-time highs within ~1 month. Top traded are prioritised.",
-      items: takeTop(breakouts, 20),
-    },
+{
+  title: "Breakouts",
+  description: "Fresh ATH breakouts. If >10, ranked by volume spike first. Top traded are prioritised.",
+  items: takeTop(breakouts, 20, { volumeFirstIfMany: true }),
+},
   ];
 
   return {
