@@ -743,20 +743,27 @@ const TIMEFRAMES: { label: string; days: number }[] = [
   { label: "MAX", days: 4000 },
 ];
 
+// Single source of truth: everything we show in Breakdown (and therefore also in the Indicator dropdown)
+const BREAKDOWN_DEFS = [
+  { key: "vwap", label: "VWAP", overlay: "VWAP" as const },
+  { key: "macd", label: "MACD", overlay: "MACD(12,26,9)" as const },
+  { key: "rsi", label: "RSI", overlay: "RSI(14)" as const },
+  { key: "stoch", label: "Stoch", overlay: "Stochastic(14,3)" as const },
+  { key: "ma200", label: "MA200", overlay: "MA200" as const },
+  { key: "vol", label: "Volume", overlay: "Volume" as const },
+  { key: "atr", label: "ATR", overlay: "ATR(14)" as const },
+
+  // Divergence items (still appear in Breakdown + dropdown)
+  { key: "div_rsi", label: "RSI Div", overlay: "RSI(14)" as const },
+  { key: "div_macd", label: "MACD Div", overlay: "MACD(12,26,9)" as const },
+] as const;
+
+// Dropdown is derived from the above list (so it can't get out of sync)
 const INDICATORS: Overlay[] = [
   "None",
   "MA50",
-  "MA200",
-  "Bollinger(20,2)",
-  "RSI(14)",
-  "MACD(12,26,9)",
-  "EMA20",
-  "VWAP",
-  "Stochastic(14,3)",
-  "ATR(14)",
-  "Volume",
+  ...Array.from(new Set(BREAKDOWN_DEFS.map((d) => d.overlay))),
 ];
-
 /* ----------------------------- component ----------------------------- */
 
 export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSymbol?: string }) {
@@ -2159,39 +2166,42 @@ return (
                       </div>
 
                       <div style={{ display: "grid", gap: 8 }}>
-                        {overviewItems.map((it) => {
-                          const dot = toneToColor(it.tone, COLORS.isDark);
+{BREAKDOWN_DEFS.map((d) => {
+  const it = overviewItems.find((x) => x.key === d.key);
+  if (!it) return null;
 
-                          return (
-                            <div
-                              key={it.key}
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                gap: 10,
-                              }}
-                            >
-                              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                                <span
-                                  style={{
-                                    width: 10,
-                                    height: 10,
-                                    borderRadius: 999,
-                                    background: dot,
-                                    boxShadow: COLORS.isDark ? "0 0 0 3px rgba(255,255,255,0.04)" : "0 0 0 3px rgba(0,0,0,0.03)",
-                                    flex: "0 0 auto",
-                                  }}
-                                />
-                                <span style={{ fontWeight: 850, fontSize: 13, whiteSpace: "nowrap" }}>{it.label}</span>
-                              </div>
+  const dot = toneToColor(it.tone, COLORS.isDark);
 
-                              <span style={{ fontSize: 12, opacity: 0.85, color: COLORS.mutedFg, textAlign: "right" }}>
-                                {it.valueText}
-                              </span>
-                            </div>
-                          );
-                        })}
+  return (
+    <div
+      key={it.key}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 10,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+        <span
+          style={{
+            width: 10,
+            height: 10,
+            borderRadius: 999,
+            background: dot,
+            boxShadow: COLORS.isDark ? "0 0 0 3px rgba(255,255,255,0.04)" : "0 0 0 3px rgba(0,0,0,0.03)",
+            flex: "0 0 auto",
+          }}
+        />
+        <span style={{ fontWeight: 850, fontSize: 13, whiteSpace: "nowrap" }}>{it.label}</span>
+      </div>
+
+      <span style={{ fontSize: 12, opacity: 0.85, color: COLORS.mutedFg, textAlign: "right" }}>
+        {it.valueText}
+      </span>
+    </div>
+  );
+})}
                       </div>
                     </div>
                   </div>
