@@ -4,7 +4,8 @@ import React, { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import PriceChart, { type Overlay } from "./PriceChart";
-import { detectDivergenceFromHistory, type DivResult } from "../../lib/ta/divergence";
+import { detectDivergenceFromHistory } from "../../lib/ta/divergence";
+import type { DivResult } from "../../lib/ta/divergence";
 
 type Quote = {
   symbol: string;
