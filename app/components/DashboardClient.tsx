@@ -1566,25 +1566,26 @@ const ChartCard = (opts?: { height?: number | string }) => {
 
       {/* Chart area */}
       <div style={{ flex: 1, padding: 16, minHeight: 0 }}>
-        <PriceChart
-          data={displayedHistory}
-          ma50={ma50}
-          ma200={ma200}
-          overlay={indicator}
-          bollUpper={bollUpper}
-          bollMid={bollMid}
-          bollLower={bollLower}
-          ema20={ema20Arr}
-          vwap={vwapArr}
-          rsi14={rsi14Arr}
-          macdLine={macdLine}
-          macdSignal={macdSignal}
-          macdHist={macdHist}
-          stochK={stochK}
-          stochD={stochD}
-          atr14={atr14Arr}
-          volume={volumeArr}
-        />
+<PriceChart
+  data={displayedHistory}
+  ma50={ma50}
+  ma200={ma200}
+  overlay={indicator}
+  divergence={divergence.div}
+  bollUpper={bollUpper}
+  bollMid={bollMid}
+  bollLower={bollLower}
+  ema20={ema20Arr}
+  vwap={vwapArr}
+  rsi14={rsi14Arr}
+  macdLine={macdLine}
+  macdSignal={macdSignal}
+  macdHist={macdHist}
+  stochK={stochK}
+  stochD={stochD}
+  atr14={atr14Arr}
+  volume={volumeArr}
+/>
       </div>
     </div>
   );
