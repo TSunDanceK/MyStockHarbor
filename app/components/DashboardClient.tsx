@@ -1082,19 +1082,19 @@ const divergence = useMemo<{
 }>(() => {
   if (indicator !== "None") return { div: null, rsi: "none", macd: "none" };
 
-  const div = detectDivergenceFromHistory(displayedHistory, {
-    lookbackBars: 40,
-    leftRight: 3,
-    minPriceSwingPct: 2.5,
-    minRsiSwing: 6,
-    macdStdMult: 0.6,
+  const div = detectDivergenceFromHistory(historyAll, {
+    lookbackBars: 60,
+    leftRight: 2,
+    minPriceSwingPct: 1.2,
+    minRsiSwing: 4,
+    macdStdMult: 0.35,
   });
 
   const rsi = divStateForIndicator(div, "rsi");
   const macd = divStateForIndicator(div, "macd");
 
   return { div, rsi, macd };
-}, [indicator, displayedHistory]);
+}, [indicator, historyAll]);
 
   const signal = useMemo(() => {
     // Overview summary text (Trend + Stretch)
