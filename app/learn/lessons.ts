@@ -14,36 +14,48 @@ export const LESSONS: Lesson[] = [
     slug: "support-and-resistance",
     title: "Support & Resistance",
     category: "Basics",
-    summary: "How to spot key levels and why price reacts around them.",
+    summary: "How to spot important price levels where markets often react.",
     sections: [
       {
-        heading: "What is support?",
+        heading: "What it is",
         body: [
-          "Support is a price area where buying interest has historically been strong enough to stop or slow a decline.",
-          "It’s usually an area (a zone), not a perfect line.",
+          "Support is a price area where buyers tend to step in and slow or stop a drop.",
+          "Resistance is a price area where sellers tend to step in and slow or stop a rise.",
+          "These levels form because many traders react to similar price areas.",
         ],
       },
       {
-        heading: "What is resistance?",
+        heading: "How to identify it",
         body: [
-          "Resistance is a price area where selling interest has historically been strong enough to stop or slow a rise.",
-          "Like support, it’s typically a zone.",
+          "Look for places where price has bounced or reversed more than once.",
+          "Support forms where price repeatedly stops falling.",
+          "Resistance forms where price repeatedly stops rising.",
+          "The more clean touches, the more meaningful the level can be.",
         ],
       },
       {
-        heading: "How to draw levels",
+        heading: "What it means",
         body: [
-          "Start with higher timeframes (Daily/Weekly). Mark obvious swing highs/lows.",
-          "Then refine with the timeframe you trade (e.g., 1H / 4H).",
-          "The more touches + the cleaner the reactions, the more meaningful the zone.",
+          "At support, demand has shown up before — price may bounce or pause again.",
+          "At resistance, supply has shown up before — price may reject or stall again.",
+          "If a level breaks, price often moves faster because the “wall” is gone.",
         ],
       },
       {
         heading: "Common mistakes",
         body: [
-          "Drawing too many lines (clutters your thinking).",
-          "Ignoring the timeframe context (a 5m level can be irrelevant to a daily trend).",
-          "Treating a level as exact to the cent—think zones.",
+          "Treating levels as exact prices instead of zones (areas).",
+          "Drawing too many lines until the chart becomes cluttered.",
+          "Ignoring trend context (a level on a tiny timeframe can be meaningless).",
+        ],
+      },
+      {
+        heading: "Why it’s useful",
+        body: [
+          "Helps plan entries near areas where price often reacts.",
+          "Helps place stops logically (beyond the zone, not inside it).",
+          "Helps set targets (next resistance / next support).",
+          "Helps recognize breakouts and false breakouts.",
         ],
       },
     ],
@@ -55,18 +67,43 @@ export const LESSONS: Lesson[] = [
     summary: "Why timeframe context matters and how to pick yours.",
     sections: [
       {
-        heading: "Timeframe controls context",
+        heading: "What it is",
         body: [
-          "Higher timeframes (Daily/Weekly) define the main trend and key levels.",
-          "Lower timeframes (1H/15m/5m) are best for entries and fine-tuning risk.",
+          "A timeframe is the “zoom level” of your chart (Daily, 4H, 1H, 15m, etc.).",
+          "Higher timeframes show the big picture (trend + major levels).",
+          "Lower timeframes show detail (entries + short-term noise).",
         ],
       },
       {
-        heading: "A simple approach",
+        heading: "How to identify it",
         body: [
-          "Trend: use Daily (or 4H if you’re more active).",
-          "Levels: use Daily/4H.",
-          "Entry timing: use 1H/15m.",
+          "Start higher (Daily/Weekly) to mark the main trend and key support/resistance.",
+          "Then go lower (4H/1H) to refine levels and find better entries.",
+          "If signals conflict, the higher timeframe usually matters more.",
+        ],
+      },
+      {
+        heading: "What it means",
+        body: [
+          "A “breakout” on 5m can be irrelevant on the Daily chart.",
+          "A strong Daily trend can overpower short-term pullbacks.",
+          "Good trading decisions usually match the higher-timeframe direction.",
+        ],
+      },
+      {
+        heading: "Common mistakes",
+        body: [
+          "Using only one timeframe and missing context.",
+          "Taking trades on tiny timeframes against the higher-timeframe trend.",
+          "Changing timeframes until you find a signal you like (confirmation bias).",
+        ],
+      },
+      {
+        heading: "Why it’s useful",
+        body: [
+          "Helps you trade with context instead of guessing.",
+          "Improves level quality (Daily levels are usually stronger than 5m levels).",
+          "Helps reduce overtrading by focusing on the right “zoom level.”",
         ],
       },
     ],
@@ -77,20 +114,46 @@ export const LESSONS: Lesson[] = [
     slug: "atr",
     title: "ATR (14)",
     category: "Indicators",
-    summary: "A volatility measure — useful for sizing stops and spotting ‘hot’ conditions.",
+    summary: "A volatility measure — useful for stops and spotting ‘hot’ conditions.",
     sections: [
       {
-        heading: "What ATR measures",
+        heading: "What it is",
         body: [
           "ATR (Average True Range) estimates how much price typically moves per bar.",
-          "Higher ATR = more volatility; lower ATR = quieter movement.",
+          "Higher ATR = more volatility. Lower ATR = quieter movement.",
+          "It does not tell direction — only how “active” price is.",
         ],
       },
       {
-        heading: "How traders use it",
+        heading: "How to identify it",
         body: [
-          "Stops: a common idea is to place stops a multiple of ATR away from entry (context matters).",
-          "Volatility regime: compare ATR to its recent average to see if conditions are unusually hot or quiet.",
+          "Watch for ATR rising quickly: volatility is increasing.",
+          "Compare ATR to its recent average (is it unusually high or low?).",
+          "Use the same timeframe as your trade (ATR changes by timeframe).",
+        ],
+      },
+      {
+        heading: "What it means",
+        body: [
+          "High ATR means bigger swings — stops may need more room.",
+          "Low ATR means smaller swings — moves may be slower and tighter.",
+          "Sudden ATR spikes can happen around news or breakouts.",
+        ],
+      },
+      {
+        heading: "Common mistakes",
+        body: [
+          "Using ATR as a buy/sell signal (it’s not directional).",
+          "Keeping the same stop size in all volatility regimes.",
+          "Comparing ATR values across different timeframes without context.",
+        ],
+      },
+      {
+        heading: "Why it’s useful",
+        body: [
+          "Helps size stops based on current market volatility.",
+          "Helps avoid getting stopped out by normal noise.",
+          "Helps spot when conditions are unusually “hot” or unusually “quiet.”",
         ],
       },
     ],
@@ -102,17 +165,43 @@ export const LESSONS: Lesson[] = [
     summary: "Bands that expand/contract with volatility — often used to spot extremes.",
     sections: [
       {
-        heading: "What they are",
+        heading: "What it is",
         body: [
-          "Bollinger Bands are built from a middle moving average (often 20) plus/minus a volatility measure (standard deviation).",
-          "When volatility rises, bands widen. When volatility falls, bands tighten.",
+          "Bollinger Bands are a middle moving average (often 20) plus/minus volatility (standard deviation).",
+          "When volatility rises, the bands widen.",
+          "When volatility falls, the bands tighten.",
         ],
       },
       {
-        heading: "Common reads",
+        heading: "How to identify it",
         body: [
-          "Touches of the outer bands can suggest an ‘extended’ move (not an automatic reversal).",
-          "‘Squeezes’ (very tight bands) can hint a big move may be coming, but not the direction.",
+          "Price near the upper band can mean “extended” (not guaranteed reversal).",
+          "Price near the lower band can mean “extended” to the downside.",
+          "A very tight band (a squeeze) suggests volatility is low and may expand soon.",
+        ],
+      },
+      {
+        heading: "What it means",
+        body: [
+          "Touches can happen many times in strong trends (bands aren’t a hard ceiling).",
+          "Squeezes can precede a big move — direction still needs confirmation.",
+          "Mean-reversion traders look for reversion back toward the middle band.",
+        ],
+      },
+      {
+        heading: "Common mistakes",
+        body: [
+          "Selling every upper-band touch and buying every lower-band touch.",
+          "Ignoring trend (bands behave differently in trends vs ranges).",
+          "Assuming a squeeze predicts direction (it doesn’t).",
+        ],
+      },
+      {
+        heading: "Why it’s useful",
+        body: [
+          "Helps spot volatility expansion and contraction.",
+          "Helps identify stretched conditions (with context).",
+          "Helps visualize when price is moving unusually far from its average.",
         ],
       },
     ],
@@ -124,17 +213,43 @@ export const LESSONS: Lesson[] = [
     summary: "A faster moving average that reacts quicker to price than a simple MA.",
     sections: [
       {
-        heading: "EMA vs SMA",
+        heading: "What it is",
         body: [
-          "EMA weights recent prices more heavily, so it responds faster than an SMA with the same period.",
-          "That speed can help in trending markets, but can also whipsaw in choppy markets.",
+          "EMA (Exponential Moving Average) is a smoothed price line that weights recent prices more.",
+          "It reacts faster than a simple moving average (SMA) of the same length.",
+          "EMA20 is commonly used as a trend/pullback reference.",
         ],
       },
       {
-        heading: "Common uses",
+        heading: "How to identify it",
         body: [
-          "Trend guidance: price holding above EMA20 often supports bullish momentum (context matters).",
-          "Pullback zones: EMA20 is commonly watched as a ‘dynamic level’ in trends.",
+          "In uptrends, price often stays above EMA20 and pulls back toward it.",
+          "In downtrends, price often stays below EMA20 and rallies into it.",
+          "Repeated “respect” of EMA20 can make it act like dynamic support/resistance.",
+        ],
+      },
+      {
+        heading: "What it means",
+        body: [
+          "Holding above EMA20 often supports bullish momentum (context matters).",
+          "Breaking below EMA20 can signal momentum weakening or a deeper pullback.",
+          "In choppy markets, EMA20 can whipsaw (many false signals).",
+        ],
+      },
+      {
+        heading: "Common mistakes",
+        body: [
+          "Using EMA20 alone as a buy/sell signal without trend context.",
+          "Trading EMA crossovers on low timeframes and getting whipsawed.",
+          "Assuming EMA20 is a “guaranteed bounce” level.",
+        ],
+      },
+      {
+        heading: "Why it’s useful",
+        body: [
+          "Helps quickly visualize short-term trend direction.",
+          "Helps spot pullbacks inside a trend.",
+          "Can help with trailing stops or dynamic support/resistance ideas.",
         ],
       },
     ],
@@ -146,18 +261,43 @@ export const LESSONS: Lesson[] = [
     summary: "A momentum indicator that shows trend strength and shifts.",
     sections: [
       {
-        heading: "What MACD measures",
+        heading: "What it is",
         body: [
-          "MACD compares two EMAs (fast vs slow) to estimate momentum.",
-          "The histogram shows the difference between MACD line and signal line.",
+          "MACD compares a fast EMA and slow EMA to estimate momentum.",
+          "The histogram shows the gap between the MACD line and the signal line.",
+          "It’s commonly used to judge momentum shifts, not exact tops/bottoms.",
         ],
       },
       {
-        heading: "How traders read it",
+        heading: "How to identify it",
         body: [
-          "Histogram rising above zero often suggests bullish momentum building.",
-          "Histogram falling below zero often suggests bearish momentum building.",
-          "Divergence (price up, MACD down) can hint momentum is weakening.",
+          "Histogram above zero = bullish momentum bias.",
+          "Histogram below zero = bearish momentum bias.",
+          "Watch histogram changes (rising vs falling) to see momentum strengthening or weakening.",
+        ],
+      },
+      {
+        heading: "What it means",
+        body: [
+          "Momentum can weaken before price reverses (useful early warning).",
+          "In strong trends, MACD can stay positive/negative for long periods.",
+          "Divergence (price up, MACD down) can hint momentum is fading.",
+        ],
+      },
+      {
+        heading: "Common mistakes",
+        body: [
+          "Using MACD as a standalone buy/sell system.",
+          "Overreacting to tiny histogram flips around zero.",
+          "Ignoring trend context (MACD behaves differently in strong trends).",
+        ],
+      },
+      {
+        heading: "Why it’s useful",
+        body: [
+          "Helps spot momentum shifts earlier than price alone.",
+          "Helps confirm trend direction (positive/negative bias).",
+          "Helps identify possible weakening via divergence.",
         ],
       },
     ],
@@ -169,18 +309,43 @@ export const LESSONS: Lesson[] = [
     summary: "What moving averages measure and how traders use them.",
     sections: [
       {
-        heading: "What they are",
+        heading: "What it is",
         body: [
-          "A moving average is a smoothed line of price over a set number of periods.",
-          "MA50 reacts faster than MA200 because it uses fewer periods.",
+          "A moving average is a smoothed line of price over a set number of bars.",
+          "MA50 reacts faster than MA200 because it uses fewer bars.",
+          "MA200 is often used as a long-term trend filter.",
         ],
       },
       {
-        heading: "Common uses",
+        heading: "How to identify it",
         body: [
-          "Trend filter: price above MA200 is often treated as long-term bullish bias (not a rule).",
-          "Dynamic support/resistance: price often reacts near major averages.",
-          "Crossovers: MA50 crossing MA200 is a popular (but lagging) signal.",
+          "Price above MA200 often suggests long-term bullish bias (not a rule).",
+          "Price below MA200 often suggests long-term bearish bias.",
+          "MA50 crossing MA200 is a popular signal — but it’s lagging.",
+        ],
+      },
+      {
+        heading: "What it means",
+        body: [
+          "Moving averages can act like dynamic support/resistance zones.",
+          "A strong trend often respects MA50/MA200 on pullbacks.",
+          "Crossovers happen after much of the move already happened.",
+        ],
+      },
+      {
+        heading: "Common mistakes",
+        body: [
+          "Buying/selling purely because price crossed an average once.",
+          "Treating MA lines as exact and ignoring zones.",
+          "Using moving averages in choppy ranges (lots of false signals).",
+        ],
+      },
+      {
+        heading: "Why it’s useful",
+        body: [
+          "Helps quickly identify long-term trend direction.",
+          "Helps map likely pullback areas in trending markets.",
+          "Adds structure and reduces emotional trading decisions.",
         ],
       },
     ],
@@ -192,11 +357,43 @@ export const LESSONS: Lesson[] = [
     summary: "Oscillator that helps identify momentum extremes (not a magic buy/sell).",
     sections: [
       {
-        heading: "How RSI is used",
+        heading: "What it is",
         body: [
-          "RSI > 70 is often called overbought; RSI < 30 is oversold.",
-          "In strong trends, RSI can stay elevated/low for long periods.",
-          "Use RSI with trend + levels, not alone.",
+          "RSI (Relative Strength Index) is a momentum oscillator from 0 to 100.",
+          "RSI above ~70 is often called overbought; below ~30 is often oversold.",
+          "It measures speed/strength of recent moves — not “value.”",
+        ],
+      },
+      {
+        heading: "How to identify it",
+        body: [
+          "RSI near/above 70 can signal stretched upside momentum.",
+          "RSI near/below 30 can signal stretched downside momentum.",
+          "In strong trends, RSI can stay high or low for a long time.",
+        ],
+      },
+      {
+        heading: "What it means",
+        body: [
+          "Overbought doesn’t mean “must sell” — it can mean strong trend.",
+          "Oversold doesn’t mean “must buy” — it can mean strong downtrend.",
+          "RSI divergence can warn momentum is weakening.",
+        ],
+      },
+      {
+        heading: "Common mistakes",
+        body: [
+          "Shorting just because RSI is above 70 in a strong uptrend.",
+          "Buying just because RSI is below 30 in a strong downtrend.",
+          "Using RSI alone without trend + levels.",
+        ],
+      },
+      {
+        heading: "Why it’s useful",
+        body: [
+          "Helps spot stretched momentum conditions.",
+          "Helps confirm trend strength (RSI tends to stay elevated in uptrends).",
+          "Helps warn of weakening momentum via divergence.",
         ],
       },
     ],
@@ -208,17 +405,43 @@ export const LESSONS: Lesson[] = [
     summary: "Oscillator that compares close vs recent range — often used for momentum extremes.",
     sections: [
       {
-        heading: "What it measures",
+        heading: "What it is",
         body: [
           "Stochastic compares the close to the recent high/low range over a lookback window.",
           "It’s often shown as %K (fast) and %D (smoothed).",
+          "Like RSI, it’s used to spot momentum extremes.",
         ],
       },
       {
-        heading: "Common reads",
+        heading: "How to identify it",
         body: [
           "%K above ~80 is often called overbought; below ~20 is oversold.",
-          "Like RSI, it can stick in extremes during strong trends — use context.",
+          "Crosses of %K and %D can hint momentum shifts (not guaranteed).",
+          "In strong trends, it can stay pinned near extremes.",
+        ],
+      },
+      {
+        heading: "What it means",
+        body: [
+          "Overbought/oversold can mean “strong trend” rather than “reversal.”",
+          "Momentum shifts matter more when they align with trend + levels.",
+          "Divergence between price and Stoch can also occur (similar idea to RSI).",
+        ],
+      },
+      {
+        heading: "Common mistakes",
+        body: [
+          "Buying/selling every overbought/oversold reading.",
+          "Ignoring trend (most oscillator losses come from fighting trends).",
+          "Over-trading tiny crosses on low timeframes.",
+        ],
+      },
+      {
+        heading: "Why it’s useful",
+        body: [
+          "Helps spot stretched momentum and possible pullbacks.",
+          "Helps time entries better in ranges when used with support/resistance.",
+          "Provides a second view of momentum similar to RSI.",
         ],
       },
     ],
@@ -230,16 +453,43 @@ export const LESSONS: Lesson[] = [
     summary: "How much traded can confirm moves and warn on weak breakouts.",
     sections: [
       {
-        heading: "Why volume matters",
+        heading: "What it is",
         body: [
+          "Volume is how much was traded during a bar (day/week/etc.).",
+          "Higher volume means more participation.",
+          "Lower volume means fewer participants and often weaker conviction.",
+        ],
+      },
+      {
+        heading: "How to identify it",
+        body: [
+          "Compare current volume to a recent average (like 20-bar average).",
           "Breakouts with higher-than-usual volume are typically more credible.",
           "Low-volume breakouts can fail more often (but not always).",
         ],
       },
       {
-        heading: "Simple habit",
+        heading: "What it means",
         body: [
-          "Compare today’s volume to the recent average (like a 20-day average).",
+          "High volume can confirm interest behind a move.",
+          "Low volume can mean a move is fragile or easily reversed.",
+          "Spikes can happen around news, earnings, or major breakouts.",
+        ],
+      },
+      {
+        heading: "Common mistakes",
+        body: [
+          "Assuming high volume always means bullish (it can be selling too).",
+          "Ignoring context (volume meaning changes at levels and breakouts).",
+          "Comparing volume across very different symbols without context.",
+        ],
+      },
+      {
+        heading: "Why it’s useful",
+        body: [
+          "Helps confirm breakouts and breakdowns.",
+          "Helps spot unusual activity.",
+          "Adds context to price moves (strong vs weak participation).",
         ],
       },
     ],
@@ -248,20 +498,46 @@ export const LESSONS: Lesson[] = [
     slug: "vwap",
     title: "VWAP",
     category: "Indicators",
-    summary: "A volume-weighted average price — often treated like a ‘fair value’ reference intraday.",
+    summary: "A volume-weighted average price — often treated like a ‘fair value’ reference.",
     sections: [
       {
-        heading: "What VWAP is",
+        heading: "What it is",
         body: [
           "VWAP is the average price weighted by volume (more volume = more influence).",
-          "It’s most common for intraday trading; on daily data it’s more of a rough reference.",
+          "It’s most common intraday; on daily data it’s a rough reference.",
+          "Many traders treat VWAP like a ‘fair price’ anchor.",
         ],
       },
       {
-        heading: "How traders use it",
+        heading: "How to identify it",
         body: [
-          "Mean reversion: price far above/below VWAP can be seen as extended (context matters).",
-          "Bias filter: some traders treat above VWAP as bullish intraday bias, below as bearish.",
+          "Price above VWAP often suggests buyers are in control (context matters).",
+          "Price below VWAP often suggests sellers are in control.",
+          "Large distance from VWAP can signal ‘stretched’ conditions.",
+        ],
+      },
+      {
+        heading: "What it means",
+        body: [
+          "Mean reversion traders watch for price to return toward VWAP.",
+          "Trend traders may prefer being on the same side as VWAP.",
+          "VWAP isn’t magic — it’s a reference point, not a guarantee.",
+        ],
+      },
+      {
+        heading: "Common mistakes",
+        body: [
+          "Using VWAP as a guaranteed bounce/reversal line.",
+          "Ignoring trend (price can stay far from VWAP in strong trends).",
+          "Overfitting rules to VWAP without considering the bigger chart context.",
+        ],
+      },
+      {
+        heading: "Why it’s useful",
+        body: [
+          "A simple “fair price” reference to judge if price is stretched.",
+          "Helps frame bias (above vs below) in active markets.",
+          "Pairs well with support/resistance and trend context.",
         ],
       },
     ],
@@ -275,31 +551,43 @@ export const LESSONS: Lesson[] = [
     summary: "When price and RSI disagree — often a warning that momentum is weakening.",
     sections: [
       {
-        heading: "What divergence means",
+        heading: "What it is",
         body: [
-          "Divergence is when price makes a new high/low, but the indicator does not.",
-          "It often suggests momentum is weakening, even if price is still moving.",
+          "Divergence is when price makes a new high/low, but RSI does not.",
+          "It can be an early warning that the current move is losing strength.",
+          "It’s a clue, not a guaranteed reversal signal.",
         ],
       },
       {
-        heading: "Bullish RSI divergence",
+        heading: "How to identify it",
         body: [
-          "Price makes a lower low, but RSI makes a higher low.",
-          "This can hint selling pressure is fading and a bounce may be possible.",
+          "Bearish: price makes a higher high, RSI makes a lower high.",
+          "Bullish: price makes a lower low, RSI makes a higher low.",
+          "Look for clear swing highs/lows (not tiny wiggles).",
         ],
       },
       {
-        heading: "Bearish RSI divergence",
+        heading: "What it means",
         body: [
-          "Price makes a higher high, but RSI makes a lower high.",
-          "This can hint buying pressure is fading and a pullback may be possible.",
+          "Momentum is not confirming the new price extreme.",
+          "The trend may slow, pull back, or reverse (context decides).",
+          "Divergence is stronger near major support/resistance levels.",
         ],
       },
       {
-        heading: "Important notes",
+        heading: "Common mistakes",
         body: [
-          "Divergence is not a guaranteed reversal signal.",
-          "It works best with trend + key levels (support/resistance), not alone.",
+          "Treating divergence as an automatic reversal trade.",
+          "Using very small swings (noise) and calling it divergence.",
+          "Ignoring the bigger trend (divergence can fail in strong trends).",
+        ],
+      },
+      {
+        heading: "Why it’s useful",
+        body: [
+          "Helps spot weakening momentum before price clearly turns.",
+          "Helps plan risk (tighten stops when momentum fades).",
+          "Pairs well with levels for higher-quality setups.",
         ],
       },
     ],
@@ -308,34 +596,46 @@ export const LESSONS: Lesson[] = [
     slug: "macd-divergence",
     title: "MACD Divergence",
     category: "Divergencies",
-    summary: "When price pushes but MACD momentum doesn’t — often a trend ‘weakening’ clue.",
+    summary: "When price pushes but MACD momentum doesn’t — a useful ‘weakening’ clue.",
     sections: [
       {
-        heading: "What to watch",
+        heading: "What it is",
         body: [
-          "MACD divergence compares price swings to MACD line (or histogram) swings.",
-          "It highlights when price is moving but momentum isn’t confirming.",
+          "Divergence is when price makes a new high/low, but MACD does not.",
+          "It highlights momentum disagreement with price.",
+          "Like RSI divergence, it’s a warning light — not a guarantee.",
         ],
       },
       {
-        heading: "Bullish MACD divergence",
+        heading: "How to identify it",
         body: [
-          "Price makes a lower low, but MACD makes a higher low.",
-          "This can hint downside momentum is weakening.",
+          "Bearish: price higher high, MACD lower high.",
+          "Bullish: price lower low, MACD higher low.",
+          "Use clear swing highs/lows for better signals.",
         ],
       },
       {
-        heading: "Bearish MACD divergence",
+        heading: "What it means",
         body: [
-          "Price makes a higher high, but MACD makes a lower high.",
-          "This can hint upside momentum is weakening.",
+          "Momentum is weakening even if price is still pushing.",
+          "Often leads to a pullback or a range before a bigger decision.",
+          "Best used with trend + a key level (support/resistance).",
         ],
       },
       {
-        heading: "Practical use",
+        heading: "Common mistakes",
         body: [
-          "Treat it as a ‘warning light’ — combine with trend + a level before acting.",
-          "If the bigger trend is strong, divergence can lead to a small pullback rather than a full reversal.",
+          "Shorting the first bearish divergence in a strong uptrend.",
+          "Calling tiny moves divergence (noise).",
+          "Ignoring that divergence can lead to a pullback, not a full reversal.",
+        ],
+      },
+      {
+        heading: "Why it’s useful",
+        body: [
+          "Helps spot momentum shifts earlier than price alone.",
+          "Helps manage risk (tighten stops / take partial profits).",
+          "Pairs well with levels to improve timing and confirmation.",
         ],
       },
     ],
@@ -350,5 +650,7 @@ export function getLesson(slug: string) {
 
 export function lessonsByCategory(cat: Lesson["category"]) {
   // Keep the Learn page tidy as lessons grow
-  return LESSONS.filter((l) => l.category === cat).slice().sort((a, b) => a.title.localeCompare(b.title));
+  return LESSONS.filter((l) => l.category === cat)
+    .slice()
+    .sort((a, b) => a.title.localeCompare(b.title));
 }
