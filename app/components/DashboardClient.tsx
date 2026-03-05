@@ -1036,25 +1036,26 @@ useEffect(() => {
   }, [indicator, lastClose, rsi14Arr, stochK, bollUpper, bollLower, ema20Arr, vwapArr, lastMA50]);
 
   const signal = useMemo(() => {
-    // NEW: composite when None
+    // Overview summary text (Trend + Stretch)
     if (indicator === "None") {
-      if (!composite) return { label: "Signal unavailable", detail: "No price data." };
+      if (!stretchScore || !trendScore) return { label: "Signal unavailable", detail: "No price data." };
 
       const parts: string[] = [];
-      if (composite.overbought) parts.push(`${composite.overbought} overbought`);
-      if (composite.oversold) parts.push(`${composite.oversold} oversold`);
-      if (composite.spikes) parts.push(`${composite.spikes} spikes`);
+      if (stretchScore.oversold) parts.push(`${stretchScore.oversold} oversold`);
+      if (stretchScore.overbought) parts.push(`${stretchScore.overbought} overbought`);
 
-      const detailList = composite.details
+      const detailList = stretchScore.details
+        .filter((d) => d.state === "oversold" || d.state === "overbought")
         .slice(0, 4)
         .map((d) => d.name)
         .join(", ");
 
-return {
-        label: `Overall Signal: ${composite.flagged}/${composite.total} checks`,
+      return {
+        label: `Stretch Score: ${stretchScore.flagged}/${stretchScore.total} checks`,
         detail:
-          (parts.length ? `${parts.join(" • ")}.` : "No strong extremes detected.") +
-          (detailList ? ` Top checks: ${detailList}.` : ""),
+          `Trend Score: ${trendScore.passed}/${trendScore.total}. ` +
+          (parts.length ? `${parts.join(" • ")}.` : "No strong stretch extremes detected.") +
+          (detailList ? ` Top stretch checks: ${detailList}.` : ""),
       };
     }
 
@@ -1299,9 +1300,9 @@ return { label: "Signal unavailable", detail: "Unknown indicator state." };
   const lastIndicatorValue = useMemo(() => {
 if (indicator === "None") {
       return {
-        label: "Overall Signal",
-        value: composite ? composite.flagged : null,
-        total: composite ? composite.total : null,
+        label: "Stretch Score",
+        value: stretchScore ? stretchScore.flagged : null,
+        total: stretchScore ? stretchScore.total : null,
       };
     }
 
