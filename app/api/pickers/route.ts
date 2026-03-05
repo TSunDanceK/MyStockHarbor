@@ -667,13 +667,12 @@ if (bo) {
   });
 }
 
-          // Divergences (last 40 bars) — RSI + MACD
-         const div = detectDivergenceFromHistory(pts, {
-  lookbackBars: 40,
-  leftRight: 3,
-  minPriceSwingPct: 2.5,
-  minRsiSwing: 6,
-  macdStdMult: 0.6,
+const div = detectDivergenceFromHistory(pts, {
+  lookbackBars: 60,
+  leftRight: 2,
+  minPriceSwingPct: 1.2,
+  minRsiSwing: 4,
+  macdStdMult: 0.35,
 });
           if (div) {
             divergences.push({
