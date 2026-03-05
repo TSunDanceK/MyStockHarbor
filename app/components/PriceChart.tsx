@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
+import type { DivResult } from "../../lib/ta/divergence";
 
 type Point = { date: string; close: number };
 
@@ -52,34 +53,12 @@ function minMax(arr: Array<number | null>) {
 }
 
 export default function PriceChart({
-  data,
-  ma50,
-  ma200,
-  overlay = "None",
-
-  bollUpper,
-  bollMid,
-  bollLower,
-
-  ema20,
-  vwap,
-
-  // sub-panel indicators
-  rsi14,
-  macdLine,
-  macdSignal,
-  macdHist,
-  stochK,
-  stochD,
-  atr14,
-  volume,
-
-  height = 320,
-}: {
   data: Point[];
   ma50: (number | null)[];
   ma200: (number | null)[];
   overlay?: Overlay;
+
+  divergence?: DivResult | null;
 
   bollUpper?: (number | null)[];
   bollMid?: (number | null)[];
@@ -266,6 +245,38 @@ export default function PriceChart({
     return (v: number) => subTop + ((subRange.max - v) * subH) / r;
   }, [subRange, subTop, subH]);
 
+    // --- Divergence line (MACD) ---
+  const macdDivLine = useMemo(() => {
+    if (overlay !== "MACD(12,26,9)") return null;
+    if (!divergence) return null;
+    if (!divergence.hasMacd) return null;
+
+    const n = series.length;
+    const lb = Math.min(divergence.lookbackBars ?? 40, n);
+
+    // divergence pivots are indexed inside the LOOKBACK slice (0..lb-1)
+    const base = n - lb;
+
+    const i1 = base + divergence.p1.idx;
+    const i2 = base + divergence.p2.idx;
+
+    if (i1 < 0 || i2 < 0 || i1 >= n || i2 >= n) return null;
+
+    const v1 = series[i1]?.macdLine;
+    const v2 = series[i2]?.macdLine;
+
+    if (typeof v1 !== "number" || !Number.isFinite(v1)) return null;
+    if (typeof v2 !== "number" || !Number.isFinite(v2)) return null;
+
+    return {
+      x1: x(i1),
+      y1: ySub(v1),
+      x2: x(i2),
+      y2: ySub(v2),
+      kind: divergence.kind,
+    };
+  }, [overlay, divergence, series, x, ySub]);
+
   const pathFrom = (arr: Array<number | null>, yFn: (v: number) => number) => {
     let d = "";
     let started = false;
@@ -434,9 +445,24 @@ export default function PriceChart({
                 {subRange ? (
                   <line x1={padL} y1={ySub(0)} x2={width - padR} y2={ySub(0)} stroke="currentColor" opacity="0.12" />
                 ) : null}
+                    {/* Divergence line on MACD (matches pivots) */}
+    {macdDivLine ? (
+      <line
+        x1={macdDivLine.x1}
+        y1={macdDivLine.y1}
+        x2={macdDivLine.x2}
+        y2={macdDivLine.y2}
+        stroke="currentColor"
+        strokeWidth={3.5}
+        opacity={0.9}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    ) : null}
 
                 {subRange
                   ? series.map((p, i) => {
+                    
                       const v = p.macdHist;
                       if (typeof v !== "number" || !Number.isFinite(v)) return null;
                       const x0 = x(i);
