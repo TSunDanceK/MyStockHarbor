@@ -708,6 +708,7 @@ async function buildPickersPayload(origin: string) {
   const red: PickerItem[] = [];
   const dips: PickerItem[] = [];
   const breakouts: PickerItem[] = [];
+  const divergences: PickerItem[] = [];
 
   // helper for “top50 first” scoring
   const isTop50 = (sym: string) => top50.includes(sym);
@@ -765,6 +766,16 @@ red.push({
               _score: top50Boost(symbol) + 1,
             });
           }
+                    // Divergences (last 40 bars) — RSI + MACD
+          const div = detectDivergenceFromHistory(pts, 40);
+          if (div) {
+            divergences.push({
+              symbol,
+              tone: div.kind === "bullish" ? "green" : "red",
+              note: div.note,
+              _score: top50Boost(symbol) + div.score,
+            });
+          }
         } catch {
           // ignore per-symbol failures
         }
@@ -780,10 +791,31 @@ red.push({
 
   const sections: PickerSection[] = [
     {
+      title: "Divergences",
+      description: "Best bullish + bearish divergences in the last ~40 bars (RSI + MACD). Top traded are prioritised.",
+      items: takeTop(divergences, 20),
+    },
+    {
       title: "Green Overall Signal (Oversold-leaning)",
       description: "Stocks flashing multiple “oversold / dip-style” signals. Top traded are prioritised.",
       items: takeTop(green, 20),
     },
+    {
+      title: "Red Overall Signal (Overbought-leaning)",
+      description: "Stocks looking stretched / extended. Top traded are prioritised.",
+      items: takeTop(red, 20),
+    },
+    {
+      title: "Buy The Dip",
+      description: "Recently at ATH, but down 20%+ within ~4 months. Top traded are prioritised.",
+      items: takeTop(dips, 20),
+    },
+    {
+      title: "Breakouts",
+      description: "All-time highs within ~1 month. Top traded are prioritised.",
+      items: takeTop(breakouts, 20),
+    },
+  ];
     {
       title: "Red Overall Signal (Overbought-leaning)",
       description: "Stocks looking stretched / extended. Top traded are prioritised.",
