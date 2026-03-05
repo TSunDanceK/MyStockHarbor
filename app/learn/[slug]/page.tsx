@@ -1,4 +1,6 @@
 // app/learn/[slug]/page.tsx
+export const dynamic = "force-dynamic";
+
 import Link from "next/link";
 import { getLesson } from "../lessons";
 
@@ -66,8 +68,11 @@ function LessonImages(props: { slug: string; which: 1 | 2 | 3 }) {
   );
 }
 
-export default function LessonPage({ params }: Props) {
-  const { slug } = params;
+export default async function LessonPage({ params }: Props) {
+  // Defensive: some builds pass params strangely (or as a Promise)
+  const resolvedParams: any = await Promise.resolve(params as any);
+  const slug = String(resolvedParams?.slug ?? "").trim();
+
   const lesson = getLesson(slug);
 
   if (!lesson) {
