@@ -75,9 +75,7 @@ const { slug } = await params;
         <div className="wrap">
           <h1 style={{ marginTop: 0 }}>Lesson not found</h1>
           <p style={{ opacity: 0.7 }}>Slug received: {slug || "(empty)"}</p>
-          <pre style={{ marginTop: 10, fontSize: 12, opacity: 0.85, whiteSpace: "pre-wrap" }}>
-            Params debug: {JSON.stringify(rawParams)}
-          </pre>
+       
 
           <div style={{ marginTop: 14 }}>
             <Link href="/learn" style={{ color: "#93c5fd" }}>
