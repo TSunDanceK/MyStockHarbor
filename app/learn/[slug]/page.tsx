@@ -38,7 +38,6 @@ function TipBox(props: { title: string; children: React.ReactNode }) {
 
 function LessonImages(props: { slug: string; which: 1 | 2 | 3 }) {
   const { slug, which } = props;
-
   const src = `/learn/${slug}/${String(which).padStart(2, "0")}.png`;
 
   return (
@@ -67,10 +66,8 @@ function LessonImages(props: { slug: string; which: 1 | 2 | 3 }) {
   );
 }
 
-export default async function LessonPage({ params }: Props) {
-  // Extra defensive slug handling
-const { slug } = params;
-
+export default function LessonPage({ params }: Props) {
+  const { slug } = params;
   const lesson = getLesson(slug);
 
   if (!lesson) {
@@ -87,7 +84,6 @@ const { slug } = params;
         <div className="wrap">
           <h1 style={{ marginTop: 0 }}>Lesson not found</h1>
           <p style={{ opacity: 0.7 }}>Slug received: {slug || "(empty)"}</p>
-       
 
           <div style={{ marginTop: 14 }}>
             <Link href="/learn" style={{ color: "#93c5fd" }}>
@@ -103,9 +99,6 @@ const { slug } = params;
       </main>
     );
   }
-
-  // Auto-detect “Common mistakes” section to turn into a tip box
-  const mistakes = lesson.sections.find((s) => s.heading.toLowerCase().includes("common mistakes"));
 
   return (
     <main
@@ -161,50 +154,47 @@ const { slug } = params;
 
         {/* Sections */}
         <div style={{ marginTop: 18, display: "grid", gap: 14 }}>
-{lesson.sections.map((s, idx) => {
-  const isMistakes = s.heading.toLowerCase().includes("common mistakes");
+          {lesson.sections.map((s, idx) => {
+            const isMistakes = s.heading.toLowerCase().includes("common mistakes");
 
-  if (isMistakes) {
-    return (
-      <TipBox key={s.heading} title="Common mistakes (avoid these)">
-        <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 8 }}>
-          {s.body.map((p, i) => (
-            <li key={i} style={{ opacity: 0.92, lineHeight: 1.55 }}>
-              {p}
-            </li>
-          ))}
-        </ul>
-      </TipBox>
-    );
-  }
+            if (isMistakes) {
+              return (
+                <TipBox key={s.heading} title="Common mistakes (avoid these)">
+                  <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 8 }}>
+                    {s.body.map((p, i) => (
+                      <li key={i} style={{ opacity: 0.92, lineHeight: 1.55 }}>
+                        {p}
+                      </li>
+                    ))}
+                  </ul>
+                </TipBox>
+              );
+            }
 
-  return (
-    <section
-      key={s.heading}
-      style={{
-        border: "1px solid rgba(255,255,255,0.14)",
-        borderRadius: 16,
-        padding: 16,
-        background: "rgba(255,255,255,0.03)",
-      }}
-    >
-      <div style={{ fontWeight: 950, fontSize: 18 }}>{s.heading}</div>
+            return (
+              <section
+                key={s.heading}
+                style={{
+                  border: "1px solid rgba(255,255,255,0.14)",
+                  borderRadius: 16,
+                  padding: 16,
+                  background: "rgba(255,255,255,0.03)",
+                }}
+              >
+                <div style={{ fontWeight: 950, fontSize: 18 }}>{s.heading}</div>
 
-      <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-        {s.body.map((p, i) => (
-          <p key={i} style={{ margin: 0, opacity: 0.86, lineHeight: 1.6 }}>
-            {p}
-          </p>
-        ))}
-      </div>
+                <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                  {s.body.map((p, i) => (
+                    <p key={i} style={{ margin: 0, opacity: 0.86, lineHeight: 1.6 }}>
+                      {p}
+                    </p>
+                  ))}
+                </div>
 
-      {/* Real lesson images (01.png after section 1, 02.png after section 3, 03.png after section 5 if it exists) */}
-      {idx === 0 ? <LessonImages slug={lesson.slug} which={1} /> : null}
-      {idx === 2 ? <LessonImages slug={lesson.slug} which={2} /> : null}
-      {idx === 4 ? <LessonImages slug={lesson.slug} which={3} /> : null}
-    </section>
-  );
-})}
+                {/* Images: 01 after section 1, 02 after section 3, 03 after section 5 */}
+                {idx === 0 ? <LessonImages slug={lesson.slug} which={1} /> : null}
+                {idx === 2 ? <LessonImages slug={lesson.slug} which={2} /> : null}
+                {idx === 4 ? <LessonImages slug={lesson.slug} which={3} /> : null}
               </section>
             );
           })}
@@ -225,10 +215,4 @@ const { slug } = params;
       `}</style>
     </main>
   );
-}
-
-// Helper: show image slot after certain headings (keeps layout consistent)
-function idxIsImageSlot(sections: { heading: string }[], heading: string) {
-  const idx = sections.findIndex((s) => s.heading === heading);
-  return idx === 0 || idx === 2; // image after section 1 and 3
 }
