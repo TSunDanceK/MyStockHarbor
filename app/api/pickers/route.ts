@@ -791,13 +791,8 @@ red.push({
 
   const sections: PickerSection[] = [
     {
-      title: "Divergences",
-      description: "Best bullish + bearish divergences in the last ~40 bars (RSI + MACD). Top traded are prioritised.",
-      items: takeTop(divergences, 20),
-    },
-    {
       title: "Green Overall Signal (Oversold-leaning)",
-      description: "Stocks flashing multiple “oversold / dip-style” signals. Top traded are prioritised.",
+      description: 'Stocks flashing multiple "oversold / dip-style" signals. Top traded are prioritised.',
       items: takeTop(green, 20),
     },
     {
