@@ -645,7 +645,8 @@ export const LESSONS: Lesson[] = [
 // --- helpers ---
 
 export function getLesson(slug: string) {
-  return LESSONS.find((l) => l.slug === slug) ?? null;
+  const s = decodeURIComponent(String(slug ?? "")).trim().toLowerCase();
+  return LESSONS.find((l) => String(l.slug ?? "").trim().toLowerCase() === s) ?? null;
 }
 
 export function lessonsByCategory(cat: Lesson["category"]) {
