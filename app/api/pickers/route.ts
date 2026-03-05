@@ -653,16 +653,19 @@ async function buildPickersPayload(origin: string) {
             });
           }
 
-          // Breakouts
-          const bo = computeBreakout(pts);
-          if (bo) {
-            breakouts.push({
-              symbol,
-              tone: "orange",
-              note: `Hit ATH recently`,
-              _score: top50Boost(symbol) + 1,
-            });
-          }
+// Breakouts
+const bo = computeBreakout(pts);
+if (bo) {
+  const volSpike = typeof (bo as any).volumeSpike === "number" ? (bo as any).volumeSpike : 0;
+
+  breakouts.push({
+    symbol,
+    tone: "orange",
+    note: `ATH + vol ${volSpike ? `${volSpike.toFixed(2)}×` : "—"}`,
+    // Score: top50 boost + volume spike dominates + tiny recency nudge
+    _score: top50Boost(symbol) + volSpike * 1000 + 1,
+  });
+}
 
           // Divergences (last 40 bars) — RSI + MACD
          const div = detectDivergenceFromHistory(pts, {
