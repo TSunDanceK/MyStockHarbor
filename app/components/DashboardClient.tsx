@@ -1112,12 +1112,12 @@ useEffect(() => {
   }, [indicator, lastClose, rsi14Arr, stochK, bollUpper, bollLower, ema20Arr, vwapArr, lastMA50]);
 
   // NEW: divergence (last 40 bars of the CURRENT visible window)
-  const divergence = useMemo(() => {
+  const divergence = useMemo<{ rsi: DivergenceState; macd: DivergenceState } | null>(() => {
     if (indicator !== "None") return null;
 
     const closes = displayedHistory.map((p) => p.close).filter((x) => Number.isFinite(x));
     if (closes.length < 10) {
-      return { rsi: "na" as DivergenceState, macd: "na" as DivergenceState };
+      return { rsi: "na", macd: "na" };
     }
 
     const lookback = 40;
@@ -1136,13 +1136,27 @@ useEffect(() => {
     // We evaluate both highs + lows and pick the “strongest” non-none result.
     const rsiBear = divergenceFromSeries(price40, rsiSeries, "high");
     const rsiBull = divergenceFromSeries(price40, rsiSeries, "low");
-    const rsi =
-      rsiBear === "bearish" ? "bearish" : rsiBull === "bullish" ? "bullish" : (rsiBear === "na" && rsiBull === "na" ? "na" : "none");
+
+    const rsi: DivergenceState =
+      rsiBear === "bearish"
+        ? "bearish"
+        : rsiBull === "bullish"
+          ? "bullish"
+          : rsiBear === "na" && rsiBull === "na"
+            ? "na"
+            : "none";
 
     const macdBear = divergenceFromSeries(price40, macdSeries, "high");
     const macdBull = divergenceFromSeries(price40, macdSeries, "low");
-    const macd =
-      macdBear === "bearish" ? "bearish" : macdBull === "bullish" ? "bullish" : (macdBear === "na" && macdBull === "na" ? "na" : "none");
+
+    const macd: DivergenceState =
+      macdBear === "bearish"
+        ? "bearish"
+        : macdBull === "bullish"
+          ? "bullish"
+          : macdBear === "na" && macdBull === "na"
+            ? "na"
+            : "none";
 
     return { rsi, macd };
   }, [indicator, displayedHistory, rsi14Arr, macdHist]);
