@@ -2168,7 +2168,7 @@ return (
         </div>
 
        {/* Card 2: Chart */}
-        {ChartCard({ height: 460 })}
+      <ChartCard height={460} />
 
         {/* Modal (Large screen) */}
         {expanded ? (
@@ -2236,7 +2236,7 @@ return (
     }}
   >
     <div style={{ height: "100%", filter: "invert(1) hue-rotate(180deg)" }}>
-      {ChartCard({ height: "100%" })}
+      <ChartCard height="100%" />
     </div>
   </div>
 </div>
