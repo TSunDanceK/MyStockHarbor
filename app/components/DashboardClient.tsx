@@ -370,6 +370,7 @@ function divergenceSeverity(state: DivergenceState) {
   return 5;
 }
 
+type OverviewItem = {
   key: string;
   label: string;
   tone: "green" | "yellow" | "orange" | "red" | "muted";
