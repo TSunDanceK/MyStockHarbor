@@ -640,7 +640,13 @@ async function buildPickersPayload(origin: string) {
           }
 
           // Divergences (last 40 bars) — RSI + MACD
-          const div = detectDivergenceFromHistory(pts, 40);
+         const div = detectDivergenceFromHistory(pts, {
+  lookbackBars: 40,
+  leftRight: 3,
+  minPriceSwingPct: 2.5,
+  minRsiSwing: 6,
+  macdStdMult: 0.6,
+});
           if (div) {
             divergences.push({
               symbol,
