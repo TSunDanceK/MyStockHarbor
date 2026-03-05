@@ -5,6 +5,7 @@ import { lessonsByCategory } from "./lessons";
 export default function LearnPage() {
   const basics = lessonsByCategory("Basics");
   const indicators = lessonsByCategory("Indicators");
+  const divergencies = lessonsByCategory("Divergencies");
 
   return (
     <main
@@ -48,6 +49,7 @@ export default function LearnPage() {
         <div style={{ marginTop: 22, display: "grid", gap: 18 }}>
           <Section title="BASICS" items={basics} />
           <Section title="INDICATORS" items={indicators} />
+          <Section title="DIVERGENCIES" items={divergencies} />
         </div>
       </div>
 
