@@ -3,7 +3,7 @@
 export type Lesson = {
   slug: string;
   title: string;
-  category: "Basics" | "Indicators";
+  category: "Basics" | "Indicators" | "Divergencies";
   summary: string;
   sections: { heading: string; body: string[] }[];
 };
@@ -262,6 +262,80 @@ export const LESSONS: Lesson[] = [
         body: [
           "Mean reversion: price far above/below VWAP can be seen as extended (context matters).",
           "Bias filter: some traders treat above VWAP as bullish intraday bias, below as bearish.",
+        ],
+      },
+    ],
+  },
+
+  // ------------ DIVERGENCIES ------------
+  {
+    slug: "rsi-divergence",
+    title: "RSI Divergence",
+    category: "Divergencies",
+    summary: "When price and RSI disagree — often a warning that momentum is weakening.",
+    sections: [
+      {
+        heading: "What divergence means",
+        body: [
+          "Divergence is when price makes a new high/low, but the indicator does not.",
+          "It often suggests momentum is weakening, even if price is still moving.",
+        ],
+      },
+      {
+        heading: "Bullish RSI divergence",
+        body: [
+          "Price makes a lower low, but RSI makes a higher low.",
+          "This can hint selling pressure is fading and a bounce may be possible.",
+        ],
+      },
+      {
+        heading: "Bearish RSI divergence",
+        body: [
+          "Price makes a higher high, but RSI makes a lower high.",
+          "This can hint buying pressure is fading and a pullback may be possible.",
+        ],
+      },
+      {
+        heading: "Important notes",
+        body: [
+          "Divergence is not a guaranteed reversal signal.",
+          "It works best with trend + key levels (support/resistance), not alone.",
+        ],
+      },
+    ],
+  },
+  {
+    slug: "macd-divergence",
+    title: "MACD Divergence",
+    category: "Divergencies",
+    summary: "When price pushes but MACD momentum doesn’t — often a trend ‘weakening’ clue.",
+    sections: [
+      {
+        heading: "What to watch",
+        body: [
+          "MACD divergence compares price swings to MACD line (or histogram) swings.",
+          "It highlights when price is moving but momentum isn’t confirming.",
+        ],
+      },
+      {
+        heading: "Bullish MACD divergence",
+        body: [
+          "Price makes a lower low, but MACD makes a higher low.",
+          "This can hint downside momentum is weakening.",
+        ],
+      },
+      {
+        heading: "Bearish MACD divergence",
+        body: [
+          "Price makes a higher high, but MACD makes a lower high.",
+          "This can hint upside momentum is weakening.",
+        ],
+      },
+      {
+        heading: "Practical use",
+        body: [
+          "Treat it as a ‘warning light’ — combine with trend + a level before acting.",
+          "If the bigger trend is strong, divergence can lead to a small pullback rather than a full reversal.",
         ],
       },
     ],
