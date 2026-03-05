@@ -1,7 +1,9 @@
 // app/api/pickers/route.ts
 export const dynamic = "force-dynamic";
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+import { detectDivergenceFromHistory } from "../../../lib/ta/divergence";
 
 type Point = {
   date: string;
@@ -272,15 +274,6 @@ function atr(points: Point[], period = 14): (number | null)[] {
 
 /* -------------------------- divergence helpers ----------------------- */
 
-type DivKind = "bullish" | "bearish";
-
-type DivResult = {
-  kind: DivKind;
-  hasRsi: boolean;
-  hasMacd: boolean;
-  note: string;
-  score: number;
-};
 
 function isFiniteNum(x: unknown): x is number {
   return typeof x === "number" && Number.isFinite(x);
