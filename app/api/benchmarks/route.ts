@@ -66,6 +66,7 @@ export async function GET() {
     { key: "spy", label: "S&P 500 (via SPY)", symbol: "spy.us" },
     { key: "qqq", label: "Nasdaq 100 (via QQQ)", symbol: "qqq.us" },
     { key: "dia", label: "Dow Jones (via DIA)", symbol: "dia.us" },
+    { key: "iwm", label: "Russell 2000 (via IWM)", symbol: "iwm.us" },
   ] as const;
 
   try {
