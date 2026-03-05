@@ -434,22 +434,47 @@ function computeBuyTheDip(points: Point[]) {
 }
 
 function computeBreakout(points: Point[]) {
-  // Criteria: hit all-time high within last month (~30 trading days)
-  const closes = points.map((p) => p.close).filter((x) => Number.isFinite(x));
-  if (closes.length < 60) return null;
+  /**
+   * Stricter breakout:
+   * - Must have made (or effectively matched) ATH VERY recently (last ~10 trading bars)
+   * - AND current close must still be near ATH (within 1%)
+   *
+   * This avoids "old" breakouts that happened weeks/months ago.
+   */
+  const pts = points.filter((p) => p?.date && Number.isFinite(p.close));
+  if (pts.length < 80) return null;
+
+  const closes = pts.map((p) => p.close);
+  const lastClose = closes[closes.length - 1];
+  if (!Number.isFinite(lastClose)) return null;
 
   const allTimeHigh = Math.max(...closes);
   if (!Number.isFinite(allTimeHigh) || allTimeHigh <= 0) return null;
 
-  const lookback = 30;
-  const recent = closes.slice(-lookback);
-  const recentHigh = Math.max(...recent);
+  // how close counts as "at ATH"
+  const epsAth = 0.002; // 0.2% of ATH
+  const athFloor = allTimeHigh * (1 - epsAth);
 
-  // breakout if recentHigh is effectively ATH
-  const isAth = Math.abs(recentHigh - allTimeHigh) / allTimeHigh <= 0.002;
-  if (!isAth) return null;
+  // find the most recent bar that matched ATH (within eps)
+  let lastAthIdx = -1;
+  for (let i = closes.length - 1; i >= 0; i--) {
+    if (closes[i] >= athFloor) {
+      lastAthIdx = i;
+      break;
+    }
+  }
+  if (lastAthIdx === -1) return null;
 
-  return { ath: allTimeHigh };
+  // MUST be very recent (last 10 trading bars)
+  const RECENT_BARS = 5;
+  if (lastAthIdx < closes.length - RECENT_BARS) return null;
+
+  // current price must still be close to ATH (within 1%)
+  const nearNow = lastClose >= allTimeHigh * 0.99;
+  if (!nearNow) return null;
+
+  const when = pts[lastAthIdx]?.date ?? null;
+  return { ath: allTimeHigh, when };
 }
 
 /* -------------------------- concurrency limit ------------------------ */
