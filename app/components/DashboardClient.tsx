@@ -448,172 +448,164 @@ function smaNullable(values: (number | null)[], window: number): (number | null)
   return out;
 }
 
-type CompositeDetail = {
-  name: string;
-  state: "overbought" | "oversold" | "spike";
-  value?: number | null;
+type TrendScore = {
+  total: number;     // fixed 4
+  passed: number;    // bullish checks passed
+  details: { name: string; ok: boolean | null }[];
 };
 
-type CompositeSignal = {
-  total: number;
-  flagged: number;
-  overbought: number;
+type StretchScore = {
+  total: number;      // fixed 6
+  flagged: number;    // extreme checks triggered (oversold or overbought)
   oversold: number;
-  spikes: number;
-  details: CompositeDetail[];
+  overbought: number;
+  details: { name: string; state: "oversold" | "overbought" | "neutral" | "na" }[];
 };
 
-function buildCompositeSignal(args: {
+function buildTrendScore(args: {
+  lastClose: number | null;
+  ma50: number | null;
+  ma200: number | null;
+  macdHist: number | null;
+}): TrendScore {
+  const { lastClose, ma50, ma200, macdHist } = args;
+
+  const checks: { name: string; ok: boolean | null }[] = [
+    {
+      name: "Price > MA200",
+      ok: typeof lastClose === "number" && typeof ma200 === "number" ? lastClose > ma200 : null,
+    },
+    {
+      name: "Price > MA50",
+      ok: typeof lastClose === "number" && typeof ma50 === "number" ? lastClose > ma50 : null,
+    },
+    {
+      name: "MA50 > MA200",
+      ok: typeof ma50 === "number" && typeof ma200 === "number" ? ma50 > ma200 : null,
+    },
+    {
+      name: "MACD hist > 0",
+      ok: typeof macdHist === "number" ? macdHist > 0 : null,
+    },
+  ];
+
+  const passed = checks.reduce((acc, c) => acc + (c.ok === true ? 1 : 0), 0);
+  return { total: 4, passed, details: checks };
+}
+
+function buildStretchScore(args: {
   lastClose: number | null;
   rsi14: number | null;
   stochK: number | null;
   bollUpper: number | null;
   bollLower: number | null;
-  macdHist: number | null;
-  ma50: number | null;
-  ma200: number | null;
   ema20: number | null;
   vwap: number | null;
-  vol: number | null;
-  volSma20: number | null;
-  atr14: number | null;
-  atrSma20: number | null;
-}): CompositeSignal | null {
-  const {
-    lastClose,
-    rsi14,
-    stochK,
-    bollUpper,
-    bollLower,
-    macdHist,
-    ma50,
-    ma200,
-    ema20,
-    vwap,
-    vol,
-    volSma20,
-    atr14,
-    atrSma20,
-  } = args;
+  ma50: number | null;
+}): StretchScore {
+  const { lastClose, rsi14, stochK, bollUpper, bollLower, ema20, vwap, ma50 } = args;
 
-  if (lastClose == null) return null;
-
-  const details: CompositeDetail[] = [];
-  let overbought = 0;
+  const details: StretchScore["details"] = [];
   let oversold = 0;
-  let spikes = 0;
+  let overbought = 0;
 
-  // 1) RSI
+  // 1) RSI(14)
   if (typeof rsi14 === "number") {
-    if (rsi14 >= 70) {
-      overbought++;
-      details.push({ name: "RSI(14)", state: "overbought", value: rsi14 });
-    } else if (rsi14 <= 30) {
+    if (rsi14 <= 30) {
       oversold++;
-      details.push({ name: "RSI(14)", state: "oversold", value: rsi14 });
+      details.push({ name: "RSI", state: "oversold" });
+    } else if (rsi14 >= 70) {
+      overbought++;
+      details.push({ name: "RSI", state: "overbought" });
+    } else {
+      details.push({ name: "RSI", state: "neutral" });
     }
+  } else {
+    details.push({ name: "RSI", state: "na" });
   }
 
   // 2) Stoch %K
   if (typeof stochK === "number") {
-    if (stochK >= 80) {
-      overbought++;
-      details.push({ name: "Stoch %K", state: "overbought", value: stochK });
-    } else if (stochK <= 20) {
+    if (stochK <= 20) {
       oversold++;
-      details.push({ name: "Stoch %K", state: "oversold", value: stochK });
+      details.push({ name: "Stoch", state: "oversold" });
+    } else if (stochK >= 80) {
+      overbought++;
+      details.push({ name: "Stoch", state: "overbought" });
+    } else {
+      details.push({ name: "Stoch", state: "neutral" });
     }
+  } else {
+    details.push({ name: "Stoch", state: "na" });
   }
 
-  // 3) Bollinger extremes
-  if (typeof bollUpper === "number" && lastClose > bollUpper) {
-    overbought++;
-    details.push({ name: "Bollinger", state: "overbought", value: lastClose });
-  } else if (typeof bollLower === "number" && lastClose < bollLower) {
-    oversold++;
-    details.push({ name: "Bollinger", state: "oversold", value: lastClose });
+  // 3) Bollinger extremes (price vs bands)
+  if (typeof lastClose === "number" && typeof bollLower === "number" && typeof bollUpper === "number") {
+    if (lastClose < bollLower) {
+      oversold++;
+      details.push({ name: "Bollinger", state: "oversold" });
+    } else if (lastClose > bollUpper) {
+      overbought++;
+      details.push({ name: "Bollinger", state: "overbought" });
+    } else {
+      details.push({ name: "Bollinger", state: "neutral" });
+    }
+  } else {
+    details.push({ name: "Bollinger", state: "na" });
   }
 
-  // 4) VWAP distance (2%)
-  if (typeof vwap === "number" && vwap > 0) {
+  // 4) VWAP distance (±2%)
+  if (typeof lastClose === "number" && typeof vwap === "number" && vwap > 0) {
     const pct = (lastClose - vwap) / vwap;
-    if (pct >= 0.02) {
-      overbought++;
-      details.push({ name: "VWAP dist", state: "overbought", value: pct * 100 });
-    } else if (pct <= -0.02) {
+    if (pct <= -0.02) {
       oversold++;
-      details.push({ name: "VWAP dist", state: "oversold", value: pct * 100 });
+      details.push({ name: "VWAP dist", state: "oversold" });
+    } else if (pct >= 0.02) {
+      overbought++;
+      details.push({ name: "VWAP dist", state: "overbought" });
+    } else {
+      details.push({ name: "VWAP dist", state: "neutral" });
     }
+  } else {
+    details.push({ name: "VWAP dist", state: "na" });
   }
 
-  // 5) Price vs EMA20 (5%)
-  if (typeof ema20 === "number" && ema20 > 0) {
+  // 5) EMA20 distance (±5%)
+  if (typeof lastClose === "number" && typeof ema20 === "number" && ema20 > 0) {
     const pct = (lastClose - ema20) / ema20;
-    if (pct >= 0.05) {
-      overbought++;
-      details.push({ name: "EMA20 dist", state: "overbought", value: pct * 100 });
-    } else if (pct <= -0.05) {
+    if (pct <= -0.05) {
       oversold++;
-      details.push({ name: "EMA20 dist", state: "oversold", value: pct * 100 });
+      details.push({ name: "EMA20 dist", state: "oversold" });
+    } else if (pct >= 0.05) {
+      overbought++;
+      details.push({ name: "EMA20 dist", state: "overbought" });
+    } else {
+      details.push({ name: "EMA20 dist", state: "neutral" });
     }
+  } else {
+    details.push({ name: "EMA20 dist", state: "na" });
   }
 
-  // 6) Price vs MA50 (5%)
-  if (typeof ma50 === "number" && ma50 > 0) {
+  // 6) MA50 distance (±5%)
+  if (typeof lastClose === "number" && typeof ma50 === "number" && ma50 > 0) {
     const pct = (lastClose - ma50) / ma50;
-    if (pct >= 0.05) {
-      overbought++;
-      details.push({ name: "MA50 dist", state: "overbought", value: pct * 100 });
-    } else if (pct <= -0.05) {
+    if (pct <= -0.05) {
       oversold++;
-      details.push({ name: "MA50 dist", state: "oversold", value: pct * 100 });
-    }
-  }
-
-  // 7) Price vs MA200 (5%)
-  if (typeof ma200 === "number" && ma200 > 0) {
-    const pct = (lastClose - ma200) / ma200;
-    if (pct >= 0.05) {
+      details.push({ name: "MA50 dist", state: "oversold" });
+    } else if (pct >= 0.05) {
       overbought++;
-      details.push({ name: "MA200 dist", state: "overbought", value: pct * 100 });
-    } else if (pct <= -0.05) {
-      oversold++;
-      details.push({ name: "MA200 dist", state: "oversold", value: pct * 100 });
+      details.push({ name: "MA50 dist", state: "overbought" });
+    } else {
+      details.push({ name: "MA50 dist", state: "neutral" });
     }
+  } else {
+    details.push({ name: "MA50 dist", state: "na" });
   }
 
-  // 8) MACD hist magnitude vs price (0.2%)
-  if (typeof macdHist === "number" && Number.isFinite(macdHist)) {
-    const thresh = Math.abs(lastClose) * 0.002; // 0.2% of price
-    if (macdHist >= thresh) {
-      overbought++;
-      details.push({ name: "MACD hist", state: "overbought", value: macdHist });
-    } else if (macdHist <= -thresh) {
-      oversold++;
-      details.push({ name: "MACD hist", state: "oversold", value: macdHist });
-    }
-  }
+  const total = 6;
+  const flagged = oversold + overbought;
 
-  // 9) Volume spike vs SMA20 (1.8x)
-  if (typeof vol === "number" && typeof volSma20 === "number" && volSma20 > 0) {
-    if (vol >= volSma20 * 1.8) {
-      spikes++;
-      details.push({ name: "Volume spike", state: "spike", value: vol / volSma20 });
-    }
-  }
-
-  // 10) ATR spike vs SMA20 (1.5x)
-  if (typeof atr14 === "number" && typeof atrSma20 === "number" && atrSma20 > 0) {
-    if (atr14 >= atrSma20 * 1.5) {
-      spikes++;
-      details.push({ name: "ATR spike", state: "spike", value: atr14 / atrSma20 });
-    }
-  }
-
-  const total = 10;
-  const flagged = overbought + oversold + spikes;
-
-  return { total, flagged, overbought, oversold, spikes, details };
+  return { total, flagged, oversold, overbought, details };
 }
 
 /* ----------------------------- constants ----------------------------- */
@@ -1017,42 +1009,31 @@ useEffect(() => {
   const lastMA50 = lastNum(ma50);
   const lastMA200 = lastNum(ma200);
 
-  const composite = useMemo(() => {
+  const trendScore = useMemo(() => {
     if (indicator !== "None") return null;
 
-    return buildCompositeSignal({
+    return buildTrendScore({
+      lastClose,
+      ma50: typeof lastMA50 === "number" ? lastMA50 : null,
+      ma200: typeof lastMA200 === "number" ? lastMA200 : null,
+      macdHist: lastNum(macdHist),
+    });
+  }, [indicator, lastClose, lastMA50, lastMA200, macdHist]);
+
+  const stretchScore = useMemo(() => {
+    if (indicator !== "None") return null;
+
+    return buildStretchScore({
       lastClose,
       rsi14: lastNum(rsi14Arr),
       stochK: lastNum(stochK),
       bollUpper: lastNum(bollUpper),
       bollLower: lastNum(bollLower),
-      macdHist: lastNum(macdHist),
-      ma50: typeof lastMA50 === "number" ? lastMA50 : null,
-      ma200: typeof lastMA200 === "number" ? lastMA200 : null,
       ema20: lastNum(ema20Arr),
       vwap: lastNum(vwapArr),
-      vol: lastNum(volumeArr),
-      volSma20: lastNum(volSma20Arr),
-      atr14: lastNum(atr14Arr),
-      atrSma20: lastNum(atrSma20Arr),
+      ma50: typeof lastMA50 === "number" ? lastMA50 : null,
     });
-  }, [
-    indicator,
-    lastClose,
-    rsi14Arr,
-    stochK,
-    bollUpper,
-    bollLower,
-    macdHist,
-    lastMA50,
-    lastMA200,
-    ema20Arr,
-    vwapArr,
-    volumeArr,
-    volSma20Arr,
-    atr14Arr,
-    atrSma20Arr,
-  ]);
+  }, [indicator, lastClose, rsi14Arr, stochK, bollUpper, bollLower, ema20Arr, vwapArr, lastMA50]);
 
   const signal = useMemo(() => {
     // NEW: composite when None
@@ -1913,26 +1894,74 @@ return (
       flex: "0 0 auto",
     }}
   />
- <span>Overall Signal</span>
+ <span>Trend Score</span>
 </div>
 
 <div
   style={{
     marginTop: 6,
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 950,
     letterSpacing: "-0.2px",
     lineHeight: 1.15,
-    color: overviewMeta?.toneColor ?? "inherit",
+    color: COLORS.pageFg,
   }}
 >
-  {signal.label}
+  {trendScore ? `${trendScore.passed}/${trendScore.total} checks` : "—"}
 </div>
 
-{composite && overviewMeta ? (
+{trendScore ? (
   renderFlagsMeter({
-    flagged: composite.flagged,
-    total: composite.total,
+    flagged: trendScore.passed,
+    total: trendScore.total,
+    color: COLORS.isDark ? "#22c55e" : "#16a34a",
+    isDark: COLORS.isDark,
+  })
+) : null}
+
+<div style={{ marginTop: 14 }} />
+
+<div
+  style={{
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    fontSize: 16,
+    opacity: 0.85,
+    color: COLORS.mutedFg,
+    fontWeight: 850,
+  }}
+>
+  <span
+    style={{
+      width: 10,
+      height: 10,
+      borderRadius: 999,
+      background: COLORS.isDark ? "#22c55e" : "#16a34a",
+      boxShadow: COLORS.isDark ? "0 0 0 3px rgba(255,255,255,0.04)" : "0 0 0 3px rgba(0,0,0,0.03)",
+      flex: "0 0 auto",
+    }}
+  />
+  <span>Stretch Score</span>
+</div>
+
+<div
+  style={{
+    marginTop: 6,
+    fontSize: 26,
+    fontWeight: 950,
+    letterSpacing: "-0.2px",
+    lineHeight: 1.15,
+    color: overviewMeta?.toneColor ?? COLORS.pageFg,
+  }}
+>
+  {stretchScore ? `${stretchScore.flagged}/${stretchScore.total} checks` : "—"}
+</div>
+
+{stretchScore && overviewMeta ? (
+  renderFlagsMeter({
+    flagged: stretchScore.flagged,
+    total: stretchScore.total,
     color: overviewMeta.toneColor,
     isDark: COLORS.isDark,
   })
