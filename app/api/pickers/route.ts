@@ -239,6 +239,181 @@ function atr(points: Point[], period = 14): (number | null)[] {
 
     tr[i] = Math.max(hl, hc, lc);
   }
+  /* -------------------------- divergence helpers ----------------------- */
+
+type DivKind = "bullish" | "bearish";
+
+type DivResult = {
+  kind: DivKind;
+  hasRsi: boolean;
+  hasMacd: boolean;
+  note: string;
+  score: number;
+};
+
+function isFiniteNum(x: unknown): x is number {
+  return typeof x === "number" && Number.isFinite(x);
+}
+
+function findPivotLows(values: number[], left = 2, right = 2) {
+  const pivots: number[] = [];
+  for (let i = left; i < values.length - right; i++) {
+    const v = values[i];
+    let ok = true;
+    for (let j = i - left; j <= i + right; j++) {
+      if (j === i) continue;
+      if (values[j] <= v) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) pivots.push(i);
+  }
+  return pivots;
+}
+
+function findPivotHighs(values: number[], left = 2, right = 2) {
+  const pivots: number[] = [];
+  for (let i = left; i < values.length - right; i++) {
+    const v = values[i];
+    let ok = true;
+    for (let j = i - left; j <= i + right; j++) {
+      if (j === i) continue;
+      if (values[j] >= v) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) pivots.push(i);
+  }
+  return pivots;
+}
+
+function pickLastTwo(pivots: number[]) {
+  if (pivots.length < 2) return null;
+  return [pivots[pivots.length - 2], pivots[pivots.length - 1]] as const;
+}
+
+/**
+ * Detect classic divergence in the last N bars:
+ * - Bullish: price makes lower low, oscillator makes higher low
+ * - Bearish: price makes higher high, oscillator makes lower high
+ *
+ * We compute oscillators on full history (for correctness), but evaluate pivots on the last N bars.
+ */
+function detectDivergenceFromHistory(points: Point[], lookbackBars = 40): DivResult | null {
+  const closesAll = points.map((p) => p.close).filter((x) => Number.isFinite(x));
+  if (closesAll.length < 80) return null; // room for RSI/MACD + pivots
+
+  const rsiAll = rsiWilder(closesAll, 14);
+  const macdAll = macd(closesAll, 12, 26, 9);
+
+  const n = closesAll.length;
+  const start = Math.max(0, n - lookbackBars);
+
+  const closes = closesAll.slice(start);
+  const rsi = rsiAll.slice(start);
+  const macdLine = macdAll.line.slice(start);
+
+  // Need enough points in the lookback slice to form pivots
+  if (closes.length < 12) return null;
+
+  // ---- Bullish (pivot lows) ----
+  const lowPivots = findPivotLows(closes, 2, 2);
+  const lastTwoLows = pickLastTwo(lowPivots);
+
+  // ---- Bearish (pivot highs) ----
+  const highPivots = findPivotHighs(closes, 2, 2);
+  const lastTwoHighs = pickLastTwo(highPivots);
+
+  const results: DivResult[] = [];
+
+  // Bullish check
+  if (lastTwoLows) {
+    const [i1, i2] = lastTwoLows;
+    const p1 = closes[i1];
+    const p2 = closes[i2];
+
+    // price lower low
+    if (isFiniteNum(p1) && isFiniteNum(p2) && p2 < p1) {
+      const r1 = rsi[i1];
+      const r2 = rsi[i2];
+      const m1 = macdLine[i1];
+      const m2 = macdLine[i2];
+
+      const hasRsi = isFiniteNum(r1) && isFiniteNum(r2) && r2 > r1;
+      const hasMacd = isFiniteNum(m1) && isFiniteNum(m2) && m2 > m1;
+
+      if (hasRsi || hasMacd) {
+        const priceDropPct = p1 > 0 ? ((p1 - p2) / p1) * 100 : 0;
+
+        // oscillator “strength”
+        const rsiGain = hasRsi ? Math.max(0, (r2 as number) - (r1 as number)) : 0; // points
+        const macdGain = hasMacd ? Math.max(0, (m2 as number) - (m1 as number)) : 0;
+
+        // score weights: prioritize meaningful price divergence, then osc confirmation
+        const score = priceDropPct * 6 + rsiGain * 2 + macdGain * 200;
+
+        const parts: string[] = [];
+        if (hasRsi) parts.push("Bullish RSI div");
+        if (hasMacd) parts.push("Bullish MACD div");
+
+        results.push({
+          kind: "bullish",
+          hasRsi,
+          hasMacd,
+          note: parts.join(" • "),
+          score,
+        });
+      }
+    }
+  }
+
+  // Bearish check
+  if (lastTwoHighs) {
+    const [i1, i2] = lastTwoHighs;
+    const p1 = closes[i1];
+    const p2 = closes[i2];
+
+    // price higher high
+    if (isFiniteNum(p1) && isFiniteNum(p2) && p2 > p1) {
+      const r1 = rsi[i1];
+      const r2 = rsi[i2];
+      const m1 = macdLine[i1];
+      const m2 = macdLine[i2];
+
+      const hasRsi = isFiniteNum(r1) && isFiniteNum(r2) && r2 < r1;
+      const hasMacd = isFiniteNum(m1) && isFiniteNum(m2) && m2 < m1;
+
+      if (hasRsi || hasMacd) {
+        const priceRisePct = p1 > 0 ? ((p2 - p1) / p1) * 100 : 0;
+
+        const rsiDrop = hasRsi ? Math.max(0, (r1 as number) - (r2 as number)) : 0;
+        const macdDrop = hasMacd ? Math.max(0, (m1 as number) - (m2 as number)) : 0;
+
+        const score = priceRisePct * 6 + rsiDrop * 2 + macdDrop * 200;
+
+        const parts: string[] = [];
+        if (hasRsi) parts.push("Bearish RSI div");
+        if (hasMacd) parts.push("Bearish MACD div");
+
+        results.push({
+          kind: "bearish",
+          hasRsi,
+          hasMacd,
+          note: parts.join(" • "),
+          score,
+        });
+      }
+    }
+  }
+
+  if (!results.length) return null;
+
+  // If both bullish + bearish exist (rare), keep the stronger one.
+  results.sort((a, b) => b.score - a.score);
+  return results[0];
+}
 
   const out: (number | null)[] = Array(points.length).fill(null);
 
