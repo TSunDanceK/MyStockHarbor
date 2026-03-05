@@ -52,12 +52,13 @@ function minMax(arr: Array<number | null>) {
   return { min, max };
 }
 
-export type PriceChartProps = {
+type Props = {
   data: Point[];
   ma50: (number | null)[];
   ma200: (number | null)[];
   overlay?: Overlay;
 
+  // NEW
   divergence?: DivResult | null;
 
   bollUpper?: (number | null)[];
@@ -67,7 +68,6 @@ export type PriceChartProps = {
   ema20?: (number | null)[];
   vwap?: (number | null)[];
 
-  // sub-panel indicators
   rsi14?: (number | null)[];
   macdLine?: (number | null)[];
   macdSignal?: (number | null)[];
@@ -80,35 +80,33 @@ export type PriceChartProps = {
   height?: number;
 };
 
-export default function PriceChart({
-  data,
-  ma50,
-  ma200,
-  overlay = "None",
+export default function PriceChart(props: Props) {
+  const {
+    data,
+    ma50,
+    ma200,
+    overlay = "None",
+    divergence = null,
 
-  divergence,
+    bollUpper,
+    bollMid,
+    bollLower,
 
-  bollUpper,
-  bollMid,
-  bollLower,
+    ema20,
+    vwap,
 
-  ema20,
-  vwap,
+    rsi14,
+    macdLine,
+    macdSignal,
+    macdHist,
+    stochK,
+    stochD,
+    atr14,
+    volume,
 
-  // sub-panel indicators
-  rsi14,
-  macdLine,
-  macdSignal,
-  macdHist,
-  stochK,
-  stochD,
-  atr14,
-  volume,
+    height = 320,
+  } = props;
 
-  height = 320,
-}: PriceChartProps) {
-  // This width is just the coordinate-system width used by the SVG viewBox.
-  // The SVG itself is width="100%" so it will scale to the parent container.
   const width = 760;
 
   // padding
@@ -274,38 +272,6 @@ export default function PriceChart({
     return (v: number) => subTop + ((subRange.max - v) * subH) / r;
   }, [subRange, subTop, subH]);
 
-    // --- Divergence line (MACD) ---
-  const macdDivLine = useMemo(() => {
-    if (overlay !== "MACD(12,26,9)") return null;
-    if (!divergence) return null;
-    if (!divergence.hasMacd) return null;
-
-    const n = series.length;
-    const lb = Math.min(divergence.lookbackBars ?? 40, n);
-
-    // divergence pivots are indexed inside the LOOKBACK slice (0..lb-1)
-    const base = n - lb;
-
-    const i1 = base + divergence.p1.idx;
-    const i2 = base + divergence.p2.idx;
-
-    if (i1 < 0 || i2 < 0 || i1 >= n || i2 >= n) return null;
-
-    const v1 = series[i1]?.macdLine;
-    const v2 = series[i2]?.macdLine;
-
-    if (typeof v1 !== "number" || !Number.isFinite(v1)) return null;
-    if (typeof v2 !== "number" || !Number.isFinite(v2)) return null;
-
-    return {
-      x1: x(i1),
-      y1: ySub(v1),
-      x2: x(i2),
-      y2: ySub(v2),
-      kind: divergence.kind,
-    };
-  }, [overlay, divergence, series, x, ySub]);
-
   const pathFrom = (arr: Array<number | null>, yFn: (v: number) => number) => {
     let d = "";
     let started = false;
@@ -324,9 +290,7 @@ export default function PriceChart({
 
   const closePath = useMemo(() => {
     if (!hasData) return "";
-    return series
-      .map((p, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(2)} ${yMain(p.close).toFixed(2)}`)
-      .join(" ");
+    return series.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(2)} ${yMain(p.close).toFixed(2)}`).join(" ");
   }, [hasData, series, x, yMain]);
 
   const ma50Path = useMemo(() => pathFrom(series.map((p) => p.ma50), yMain), [series, yMain]);
@@ -351,9 +315,9 @@ export default function PriceChart({
   const yTicks = useMemo(() => {
     if (!hasData) return [];
     const ticks: { v: number; y: number }[] = [];
-    const n = 5;
-    for (let i = 0; i < n; i++) {
-      const t = i / (n - 1);
+    const nTicks = 5;
+    for (let i = 0; i < nTicks; i++) {
+      const t = i / (nTicks - 1);
       const v = pMax - t * pRange;
       ticks.push({ v, y: yMain(v) });
     }
@@ -363,10 +327,10 @@ export default function PriceChart({
   // x ticks (bottom)
   const xTicks = useMemo(() => {
     if (!hasData) return [];
-    const n = 5;
+    const nTicks = 5;
     const ticks: { i: number; x: number; label: string }[] = [];
-    for (let k = 0; k < n; k++) {
-      const t = k / (n - 1);
+    for (let k = 0; k < nTicks; k++) {
+      const t = k / (nTicks - 1);
       const i = Math.round(t * (series.length - 1));
       ticks.push({ i, x: x(i), label: fmtXLabel(series[i].date) });
     }
@@ -382,19 +346,35 @@ export default function PriceChart({
 
   const last = series[series.length - 1];
 
+  // --------- Divergence line (MACD subpanel) ----------
+  const macdDivLine = useMemo(() => {
+    if (overlay !== "MACD(12,26,9)") return null;
+    if (!divergence || !divergence.hasMacd) return null;
+
+    const i1 = divergence.p1.idx;
+    const i2 = divergence.p2.idx;
+
+    if (i1 < 0 || i2 < 0) return null;
+    if (i1 >= series.length || i2 >= series.length) return null;
+
+    const m1 = series[i1]?.macdLine;
+    const m2 = series[i2]?.macdLine;
+    if (typeof m1 !== "number" || !Number.isFinite(m1)) return null;
+    if (typeof m2 !== "number" || !Number.isFinite(m2)) return null;
+
+    return {
+      x1: x(i1),
+      y1: ySub(m1),
+      x2: x(i2),
+      y2: ySub(m2),
+    };
+  }, [overlay, divergence, series, x, ySub]);
+
   return (
     <div style={{ width: "100%" }}>
       <svg width="100%" viewBox={`0 0 ${width} ${height}`} style={{ border: "1px solid #3333", borderRadius: 12 }}>
         {/* PRICE plot box */}
-        <rect
-          x={padL}
-          y={padT}
-          width={width - padL - padR}
-          height={priceH}
-          fill="none"
-          stroke="currentColor"
-          opacity="0.10"
-        />
+        <rect x={padL} y={padT} width={width - padL - padR} height={priceH} fill="none" stroke="currentColor" opacity="0.10" />
 
         {/* price grid + y labels */}
         {yTicks.map((t, idx) => (
@@ -420,44 +400,24 @@ export default function PriceChart({
         <path d={closePath} fill="none" stroke="currentColor" strokeWidth="2.25" opacity="0.95" />
 
         {/* price overlays */}
-        {overlay === "MA50" && ma50Path ? (
-          <path d={ma50Path} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.55" strokeDasharray="6 4" />
-        ) : null}
-
-        {overlay === "MA200" && ma200Path ? (
-          <path d={ma200Path} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.35" strokeDasharray="2 6" />
-        ) : null}
+        {overlay === "MA50" && ma50Path ? <path d={ma50Path} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.55" strokeDasharray="6 4" /> : null}
+        {overlay === "MA200" && ma200Path ? <path d={ma200Path} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.35" strokeDasharray="2 6" /> : null}
 
         {overlay === "Bollinger(20,2)" ? (
           <>
             {bollUPath ? <path d={bollUPath} fill="none" stroke="currentColor" strokeWidth="1.75" opacity="0.30" /> : null}
-            {bollMPath ? (
-              <path d={bollMPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.45" strokeDasharray="6 4" />
-            ) : null}
+            {bollMPath ? <path d={bollMPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.45" strokeDasharray="6 4" /> : null}
             {bollLPath ? <path d={bollLPath} fill="none" stroke="currentColor" strokeWidth="1.75" opacity="0.30" /> : null}
           </>
         ) : null}
 
-        {overlay === "EMA20" && ema20Path ? (
-          <path d={ema20Path} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.45" strokeDasharray="5 5" />
-        ) : null}
-
-        {overlay === "VWAP" && vwapPath ? (
-          <path d={vwapPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.45" strokeDasharray="3 4" />
-        ) : null}
+        {overlay === "EMA20" && ema20Path ? <path d={ema20Path} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.45" strokeDasharray="5 5" /> : null}
+        {overlay === "VWAP" && vwapPath ? <path d={vwapPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.45" strokeDasharray="3 4" /> : null}
 
         {/* SUB PANEL */}
         {wantsSubPanel ? (
           <>
-            <rect
-              x={padL}
-              y={subTop}
-              width={width - padL - padR}
-              height={subH}
-              fill="none"
-              stroke="currentColor"
-              opacity="0.10"
-            />
+            <rect x={padL} y={subTop} width={width - padL - padR} height={subH} fill="none" stroke="currentColor" opacity="0.10" />
 
             {/* RSI */}
             {overlay === "RSI(14)" ? (
@@ -471,27 +431,10 @@ export default function PriceChart({
             {/* MACD */}
             {overlay === "MACD(12,26,9)" ? (
               <>
-                {subRange ? (
-                  <line x1={padL} y1={ySub(0)} x2={width - padR} y2={ySub(0)} stroke="currentColor" opacity="0.12" />
-                ) : null}
-                    {/* Divergence line on MACD (matches pivots) */}
-    {macdDivLine ? (
-      <line
-        x1={macdDivLine.x1}
-        y1={macdDivLine.y1}
-        x2={macdDivLine.x2}
-        y2={macdDivLine.y2}
-        stroke="currentColor"
-        strokeWidth={3.5}
-        opacity={0.9}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    ) : null}
+                {subRange ? <line x1={padL} y1={ySub(0)} x2={width - padR} y2={ySub(0)} stroke="currentColor" opacity="0.12" /> : null}
 
                 {subRange
                   ? series.map((p, i) => {
-                    
                       const v = p.macdHist;
                       if (typeof v !== "number" || !Number.isFinite(v)) return null;
                       const x0 = x(i);
@@ -500,22 +443,27 @@ export default function PriceChart({
                       const yv = ySub(v);
                       const h = Math.abs(yv - y0);
                       return (
-                        <rect
-                          key={i}
-                          x={x0 - barW / 2}
-                          y={Math.min(y0, yv)}
-                          width={barW}
-                          height={h}
-                          fill="currentColor"
-                          opacity="0.18"
-                        />
+                        <rect key={i} x={x0 - barW / 2} y={Math.min(y0, yv)} width={barW} height={h} fill="currentColor" opacity="0.18" />
                       );
                     })
                   : null}
 
                 {macdLinePath ? <path d={macdLinePath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.55" /> : null}
-                {macdSignalPath ? (
-                  <path d={macdSignalPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.35" strokeDasharray="6 4" />
+                {macdSignalPath ? <path d={macdSignalPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.35" strokeDasharray="6 4" /> : null}
+
+                {/* Divergence line on MACD (matches pivots) */}
+                {macdDivLine ? (
+                  <line
+                    x1={macdDivLine.x1}
+                    y1={macdDivLine.y1}
+                    x2={macdDivLine.x2}
+                    y2={macdDivLine.y2}
+                    stroke="currentColor"
+                    strokeWidth={3.5}
+                    opacity={0.9}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 ) : null}
               </>
             ) : null}
@@ -526,9 +474,7 @@ export default function PriceChart({
                 <line x1={padL} y1={ySub(80)} x2={width - padR} y2={ySub(80)} stroke="currentColor" opacity="0.10" />
                 <line x1={padL} y1={ySub(20)} x2={width - padR} y2={ySub(20)} stroke="currentColor" opacity="0.10" />
                 {stochKPath ? <path d={stochKPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.55" /> : null}
-                {stochDPath ? (
-                  <path d={stochDPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.35" strokeDasharray="6 4" />
-                ) : null}
+                {stochDPath ? <path d={stochDPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.35" strokeDasharray="6 4" /> : null}
               </>
             ) : null}
 
@@ -548,15 +494,7 @@ export default function PriceChart({
                       const yv = ySub(v);
                       const h = Math.abs(yv - y0);
                       return (
-                        <rect
-                          key={i}
-                          x={x0 - barW / 2}
-                          y={Math.min(y0, yv)}
-                          width={barW}
-                          height={h}
-                          fill="currentColor"
-                          opacity="0.25"
-                        />
+                        <rect key={i} x={x0 - barW / 2} y={Math.min(y0, yv)} width={barW} height={h} fill="currentColor" opacity="0.25" />
                       );
                     })
                   : null}
