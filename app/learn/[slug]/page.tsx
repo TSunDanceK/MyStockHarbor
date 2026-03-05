@@ -55,15 +55,9 @@ function ImageSlot(props: { label: string }) {
   );
 }
 
-export default function LessonPage({ params }: Props) {
+export default async function LessonPage({ params }: Props) {
   // Extra defensive slug handling
-  const rawParams = params as any;
-  const slug =
-    typeof rawParams?.slug === "string"
-      ? rawParams.slug
-      : Array.isArray(rawParams?.slug)
-        ? rawParams.slug[0] ?? ""
-        : "";
+const { slug } = await params;
 
   const lesson = getLesson(slug);
 
