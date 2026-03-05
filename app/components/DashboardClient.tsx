@@ -453,7 +453,17 @@ function compositeToneFromCounts(overbought: number, oversold: number, spikes: n
   // balanced
   return { tone: intensity >= 5 ? ("orange" as const) : ("yellow" as const), tag: "Mixed" };
 }
+function trendToneFromScore(ts: TrendScore | null): OverviewItem["tone"] {
+  if (!ts) return "muted";
 
+  const ratio = ts.total > 0 ? ts.passed / ts.total : 0;
+
+  // 3/4 or 4/4 => green, 2/4 => yellow, 1/4 => orange, 0/4 => red
+  if (ratio >= 0.75) return "green";
+  if (ratio >= 0.5) return "yellow";
+  if (ratio >= 0.25) return "orange";
+  return "red";
+}
 function clampNum(v: number, lo: number, hi: number) {
   return Math.min(hi, Math.max(lo, v));
 }
@@ -1976,16 +1986,16 @@ return (
     fontWeight: 850,
   }}
 >
-  <span
-    style={{
-      width: 10,
-      height: 10,
-      borderRadius: 999,
-      background: COLORS.isDark ? "rgba(241,245,249,0.35)" : "rgba(11,18,32,0.35)",
-      boxShadow: COLORS.isDark ? "0 0 0 3px rgba(255,255,255,0.04)" : "0 0 0 3px rgba(0,0,0,0.03)",
-      flex: "0 0 auto",
-    }}
-  />
+<span
+  style={{
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    background: toneToColor(trendToneFromScore(trendScore), COLORS.isDark),
+    boxShadow: COLORS.isDark ? "0 0 0 3px rgba(255,255,255,0.04)" : "0 0 0 3px rgba(0,0,0,0.03)",
+    flex: "0 0 auto",
+  }}
+/>
  <span>Trend Score</span>
 </div>
 
