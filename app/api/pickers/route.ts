@@ -1,8 +1,7 @@
 // app/api/pickers/route.ts
 export const dynamic = "force-dynamic";
 
-import { NextRequest } from "next/server";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 type Point = {
   date: string;
@@ -239,7 +238,39 @@ function atr(points: Point[], period = 14): (number | null)[] {
 
     tr[i] = Math.max(hl, hc, lc);
   }
-  /* -------------------------- divergence helpers ----------------------- */
+
+  const out: (number | null)[] = Array(points.length).fill(null);
+
+  let sum = 0;
+  let count = 0;
+  let prevATR: number | null = null;
+
+  for (let i = 0; i < points.length; i++) {
+    const v = tr[i];
+
+    if (v == null) {
+      out[i] = prevATR;
+      continue;
+    }
+
+    if (prevATR == null) {
+      sum += v;
+      count++;
+      if (count === period) {
+        prevATR = sum / period;
+        out[i] = prevATR;
+      }
+      continue;
+    }
+
+    prevATR = (prevATR * (period - 1) + v) / period;
+    out[i] = prevATR;
+  }
+
+  return out;
+}
+
+/* -------------------------- divergence helpers ----------------------- */
 
 type DivKind = "bullish" | "bearish";
 
@@ -413,37 +444,6 @@ function detectDivergenceFromHistory(points: Point[], lookbackBars = 40): DivRes
   // If both bullish + bearish exist (rare), keep the stronger one.
   results.sort((a, b) => b.score - a.score);
   return results[0];
-}
-
-  const out: (number | null)[] = Array(points.length).fill(null);
-
-  let sum = 0;
-  let count = 0;
-  let prevATR: number | null = null;
-
-  for (let i = 0; i < points.length; i++) {
-    const v = tr[i];
-
-    if (v == null) {
-      out[i] = prevATR;
-      continue;
-    }
-
-    if (prevATR == null) {
-      sum += v;
-      count++;
-      if (count === period) {
-        prevATR = sum / period;
-        out[i] = prevATR;
-      }
-      continue;
-    }
-
-    prevATR = (prevATR * (period - 1) + v) / period;
-    out[i] = prevATR;
-  }
-
-  return out;
 }
 
 /* --------------------- composite + picker logic ---------------------- */
@@ -685,8 +685,55 @@ async function fetchHistory(origin: string, symbol: string, days: number) {
 /* ------------------------------ universe ----------------------------- */
 
 const PRESET_UNIVERSE: string[] = [
-  "AAPL","MSFT","NVDA","AMZN","GOOGL","META","TSLA","BRK.B","AVGO","LLY","JPM","V","UNH","XOM","PG","MA","COST","HD","MRK","ABBV","CRM","NFLX","ORCL","BAC","KO","PEP","ADBE","TMO","WMT","CSCO","ACN","MCD","ABT","CVX","LIN","AMD","NKE","DHR","TXN","INTC","QCOM","PM","IBM","NOW","SBUX","CAT","GE","AMAT","LOW",
-  // add more later if you want
+  "AAPL",
+  "MSFT",
+  "NVDA",
+  "AMZN",
+  "GOOGL",
+  "META",
+  "TSLA",
+  "BRK.B",
+  "AVGO",
+  "LLY",
+  "JPM",
+  "V",
+  "UNH",
+  "XOM",
+  "PG",
+  "MA",
+  "COST",
+  "HD",
+  "MRK",
+  "ABBV",
+  "CRM",
+  "NFLX",
+  "ORCL",
+  "BAC",
+  "KO",
+  "PEP",
+  "ADBE",
+  "TMO",
+  "WMT",
+  "CSCO",
+  "ACN",
+  "MCD",
+  "ABT",
+  "CVX",
+  "LIN",
+  "AMD",
+  "NKE",
+  "DHR",
+  "TXN",
+  "INTC",
+  "QCOM",
+  "PM",
+  "IBM",
+  "NOW",
+  "SBUX",
+  "CAT",
+  "GE",
+  "AMAT",
+  "LOW",
 ];
 
 /* --------------------------- builder function ------------------------ */
@@ -725,23 +772,22 @@ async function buildPickersPayload(origin: string) {
 
           if (comp) {
             // green/red composite
-           if (pickIsGreenOverallSignal(comp)) {
-              // more oversold & more total flags => rank higher
-green.push({
-  symbol,
-  tone: "green",
-  note: `${comp.oversold} oversold • ${comp.flagged}/${comp.total} checks`,
-  _score: top50Boost(symbol) + comp.oversold * 50 + comp.flagged * 10,
-});
+            if (pickIsGreenOverallSignal(comp)) {
+              green.push({
+                symbol,
+                tone: "green",
+                note: `${comp.oversold} oversold • ${comp.flagged}/${comp.total} checks`,
+                _score: top50Boost(symbol) + comp.oversold * 50 + comp.flagged * 10,
+              });
             }
 
-           if (pickIsRedOverallSignal(comp)) {
-red.push({
-  symbol,
-  tone: "red",
-  note: `${comp.overbought} overbought • ${comp.flagged}/${comp.total} checks`,
-  _score: top50Boost(symbol) + comp.overbought * 50 + comp.flagged * 10,
-});
+            if (pickIsRedOverallSignal(comp)) {
+              red.push({
+                symbol,
+                tone: "red",
+                note: `${comp.overbought} overbought • ${comp.flagged}/${comp.total} checks`,
+                _score: top50Boost(symbol) + comp.overbought * 50 + comp.flagged * 10,
+              });
             }
           }
 
@@ -766,7 +812,8 @@ red.push({
               _score: top50Boost(symbol) + 1,
             });
           }
-                    // Divergences (last 40 bars) — RSI + MACD
+
+          // Divergences (last 40 bars) — RSI + MACD
           const div = detectDivergenceFromHistory(pts, 40);
           if (div) {
             divergences.push({
@@ -801,20 +848,9 @@ red.push({
       items: takeTop(red, 20),
     },
     {
-      title: "Buy The Dip",
-      description: "Recently at ATH, but down 20%+ within ~4 months. Top traded are prioritised.",
-      items: takeTop(dips, 20),
-    },
-    {
-      title: "Breakouts",
-      description: "All-time highs within ~1 month. Top traded are prioritised.",
-      items: takeTop(breakouts, 20),
-    },
-  ];
-    {
-      title: "Red Overall Signal (Overbought-leaning)",
-      description: "Stocks looking stretched / extended. Top traded are prioritised.",
-      items: takeTop(red, 20),
+      title: "Divergences (Last ~40 bars)",
+      description: "RSI / MACD divergences (bullish or bearish). Strongest signals first.",
+      items: takeTop(divergences, 20),
     },
     {
       title: "Buy The Dip",
