@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import PriceChart, { type Overlay } from "./PriceChart";
+import { detectDivergenceFromHistory, type DivResult } from "../../lib/ta/divergence";
 
 type Quote = {
   symbol: string;
@@ -340,83 +341,35 @@ function lastNum(arr: (number | null)[]) {
   return arr.length ? arr[arr.length - 1] : null;
 }
 
-/* ----------------------- divergence helpers ----------------------- */
+/* ----------------------- divergence (shared engine) ----------------------- */
 
-type Pivot = { idx: number; v: number };
-type DivergenceState = "bullish" | "bearish" | "none" | "na";
+type DivergenceState = "bullish" | "bearish" | "none";
 
-function lastTwoPivots(values: number[], kind: "high" | "low"): Pivot[] {
-  // Very simple swing detection: local max/min vs immediate neighbors
-  // Returns the last two pivots found (chronological order).
-  const pivots: Pivot[] = [];
-  for (let i = 1; i < values.length - 1; i++) {
-    const a = values[i - 1];
-    const b = values[i];
-    const c = values[i + 1];
-
-    if (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(c)) continue;
-
-    const isHigh = b > a && b > c;
-    const isLow = b < a && b < c;
-
-    if (kind === "high" && isHigh) pivots.push({ idx: i, v: b });
-    if (kind === "low" && isLow) pivots.push({ idx: i, v: b });
-  }
-
-  if (pivots.length < 2) return [];
-  return pivots.slice(-2);
-}
-
-function divergenceFromSeries(
-  price: number[],
-  ind: number[],
-  kind: "high" | "low"
-): DivergenceState {
-  const p = lastTwoPivots(price, kind);
-  const i = lastTwoPivots(ind, kind);
-
-  if (p.length < 2 || i.length < 2) return "na";
-
-  // Compare last two pivots (older -> newer)
-  const p1 = p[0].v, p2 = p[1].v;
-  const i1 = i[0].v, i2 = i[1].v;
-
-  if (kind === "high") {
-    // Bearish: price higher high, indicator lower high
-    if (p2 > p1 && i2 < i1) return "bearish";
-    // Bullish "hidden-ish": price lower high, indicator higher high (optional)
-    // We'll keep it simple and call it none.
-    return "none";
-  }
-
-  // kind === "low"
-  // Bullish: price lower low, indicator higher low
-  if (p2 < p1 && i2 > i1) return "bullish";
-  return "none";
+function divStateForIndicator(div: DivResult | null, which: "rsi" | "macd"): DivergenceState {
+  if (!div) return "none";
+  if (which === "rsi" && !div.hasRsi) return "none";
+  if (which === "macd" && !div.hasMacd) return "none";
+  return div.kind;
 }
 
 function divergenceLabel(state: DivergenceState) {
   if (state === "bullish") return "Bullish 🟢";
   if (state === "bearish") return "Bearish 🔴";
-  if (state === "none") return "None 🟡";
-  return "—";
+  return "None 🟡";
 }
 
 function divergenceTone(state: DivergenceState): OverviewItem["tone"] {
   if (state === "bullish") return "green";
   if (state === "bearish") return "red";
-  if (state === "none") return "yellow";
-  return "muted";
+  return "yellow";
 }
 
 function divergenceSeverity(state: DivergenceState) {
   // enough to float near top when present
   if (state === "bearish" || state === "bullish") return 100;
-  if (state === "none") return 5;
-  return 0;
+  return 5;
 }
 
-type OverviewItem = {
   key: string;
   label: string;
   tone: "green" | "yellow" | "orange" | "red" | "muted";
@@ -1118,55 +1071,28 @@ useEffect(() => {
     });
   }, [indicator, lastClose, rsi14Arr, stochK, bollUpper, bollLower, ema20Arr, vwapArr, lastMA50]);
 
-  // NEW: divergence (last 40 bars of the CURRENT visible window)
-  const divergence = useMemo<{ rsi: DivergenceState; macd: DivergenceState } | null>(() => {
-    if (indicator !== "None") return null;
+// Divergence computed on the CURRENT visible window (so what you see matches the label).
+// If you want it to match Pickers exactly, keep the chart panned to the newest bars (offset = 0).
+const divergence = useMemo<{
+  div: DivResult | null;
+  rsi: DivergenceState;
+  macd: DivergenceState;
+}>(() => {
+  if (indicator !== "None") return { div: null, rsi: "none", macd: "none" };
 
-    const closes = displayedHistory.map((p) => p.close).filter((x) => Number.isFinite(x));
-    if (closes.length < 10) {
-      return { rsi: "na", macd: "na" };
-    }
+  const div = detectDivergenceFromHistory(displayedHistory, {
+    lookbackBars: 40,
+    leftRight: 3,
+    minPriceSwingPct: 2.5,
+    minRsiSwing: 6,
+    macdStdMult: 0.6,
+  });
 
-    const lookback = 40;
-    const price40 = closes.slice(-lookback);
+  const rsi = divStateForIndicator(div, "rsi");
+  const macd = divStateForIndicator(div, "macd");
 
-    // RSI series aligned to displayedHistory
-    const rsiSeries = rsi14Arr
-      .map((v) => (typeof v === "number" && Number.isFinite(v) ? v : NaN))
-      .slice(-lookback);
-
-    // MACD histogram series aligned to displayedHistory
-    const macdSeries = macdHist
-      .map((v) => (typeof v === "number" && Number.isFinite(v) ? v : NaN))
-      .slice(-lookback);
-
-    // We evaluate both highs + lows and pick the “strongest” non-none result.
-    const rsiBear = divergenceFromSeries(price40, rsiSeries, "high");
-    const rsiBull = divergenceFromSeries(price40, rsiSeries, "low");
-
-    const rsi: DivergenceState =
-      rsiBear === "bearish"
-        ? "bearish"
-        : rsiBull === "bullish"
-          ? "bullish"
-          : rsiBear === "na" && rsiBull === "na"
-            ? "na"
-            : "none";
-
-    const macdBear = divergenceFromSeries(price40, macdSeries, "high");
-    const macdBull = divergenceFromSeries(price40, macdSeries, "low");
-
-    const macd: DivergenceState =
-      macdBear === "bearish"
-        ? "bearish"
-        : macdBull === "bullish"
-          ? "bullish"
-          : macdBear === "na" && macdBull === "na"
-            ? "na"
-            : "none";
-
-    return { rsi, macd };
-  }, [indicator, displayedHistory, rsi14Arr, macdHist]);
+  return { div, rsi, macd };
+}, [indicator, displayedHistory]);
 
   const signal = useMemo(() => {
     // Overview summary text (Trend + Stretch)
@@ -1411,23 +1337,22 @@ return { label: "Signal unavailable", detail: "Unknown indicator state." };
       push({ key: "atr", label: "ATR", tone: "muted", valueText: "—", severity: 0 });
     }
 
-    // NEW: Divergence (last 40 bars)
-    if (divergence) {
-      push({
-        key: "div_rsi",
-        label: "RSI Div",
-        tone: divergenceTone(divergence.rsi),
-        valueText: divergenceLabel(divergence.rsi),
-        severity: divergenceSeverity(divergence.rsi),
-      });
+// NEW: Divergence (Last ~40 bars) — filtered for clear/obvious signals
+push({
+  key: "div_rsi",
+  label: "RSI Div",
+  tone: divergenceTone(divergence.rsi),
+  valueText: divergenceLabel(divergence.rsi),
+  severity: divergenceSeverity(divergence.rsi),
+});
 
-      push({
-        key: "div_macd",
-        label: "MACD Div",
-        tone: divergenceTone(divergence.macd),
-        valueText: divergenceLabel(divergence.macd),
-        severity: divergenceSeverity(divergence.macd),
-      });
+push({
+  key: "div_macd",
+  label: "MACD Div",
+  tone: divergenceTone(divergence.macd),
+  valueText: divergenceLabel(divergence.macd),
+  severity: divergenceSeverity(divergence.macd),
+});
     } else {
       push({ key: "div_rsi", label: "RSI Div", tone: "muted", valueText: "—", severity: 0 });
       push({ key: "div_macd", label: "MACD Div", tone: "muted", valueText: "—", severity: 0 });
