@@ -1610,7 +1610,7 @@ return (
   📚 Learn the Basics <span style={{ opacity: 0.9 }}>→</span>
 </button>
 
-       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+     <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginLeft: "auto" }}>
           <button
             onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
             style={{
@@ -1749,20 +1749,27 @@ return (
       Common Tickers
     </label>
 
-    <select
-      value={symbol}
-      onChange={(e) => chooseSymbol(e.target.value)}
-      style={{
-        height: 44,               // ✅ same control height
-        padding: "0 12px",
-        borderRadius: 12,
-        border: `1px solid ${COLORS.controlBorder}`,
-        background: COLORS.isDark ? "rgba(255,255,255,0.06)" : "rgba(11,18,32,0.06)",
-        color: COLORS.controlFg,
-        fontWeight: 900,
-        minWidth: 220,
-      }}
-    >
+<select
+  value={symbol}
+  onChange={(e) => chooseSymbol(e.target.value)}
+  style={{
+    height: 44,
+    padding: "0 14px",
+    borderRadius: 12,
+    border: `1px solid ${COLORS.controlBorder}`,
+
+    // ✅ Much clearer dropdown
+    background: "#ffffff",
+    color: "#111",
+
+    fontWeight: 800,
+    fontSize: 14,
+    letterSpacing: "0.2px",
+
+    minWidth: 240,
+    cursor: "pointer",
+  }}
+>
       {/* Selected display = ticker only */}
       <option value={symbol}>{symbol}</option>
 
@@ -1987,14 +1994,17 @@ return (
                     </div>
 
                     {/* RIGHT: breakdown (top aligned) */}
-                    <div
-                      style={{
-                        border: `1px solid ${COLORS.border}`,
-                        borderRadius: 12,
-                        padding: 12,
-                        background: COLORS.controlBg,
-                      }}
-                    >
+ <div
+  style={{
+    border: `1px solid ${COLORS.border}`,
+    borderRadius: 12,
+    padding: 12,
+    background: COLORS.controlBg,
+
+    // ✅ Pull ONLY the right panel upward (does not affect left Trend/Stretch block)
+    marginTop: -54,
+  }}
+>
                       <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10, opacity: 0.9 }}>
                         Breakdown
                       </div>
