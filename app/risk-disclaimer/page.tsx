@@ -1,4 +1,11 @@
 import Link from "next/link";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Risk Disclaimer | MyStockHarbor",
+  description:
+    "Read the MyStockHarbor risk disclaimer covering educational use, market risk, no financial advice, and limitation of liability.",
+};
 
 export default function RiskDisclaimerPage() {
   return (
