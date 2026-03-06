@@ -3,93 +3,143 @@ import Link from "next/link";
 type PlatformItem = {
   name: string;
   shortLabel: string;
+  logoSrc: string;
+  logoAlt: string;
   bestFor: string;
+  summary: string;
   pros: string[];
   cons: string[];
   note: string;
   affiliateHref: string;
+  ctaText: string;
 };
 
 const PLATFORMS: PlatformItem[] = [
   {
     name: "TradingView",
-    shortLabel: "Best charts-first platform",
-    bestFor: "People who want strong charting, clean layouts, and a platform that feels built around analysis first.",
+    shortLabel: "Best charting platform",
+    logoSrc: "/platforms/tradingview.png",
+    logoAlt: "TradingView logo",
+    bestFor:
+      "Beginners and experienced traders who want the best charts, indicators, layout tools, and a cleaner way to analyse stocks.",
+    summary:
+      "TradingView is the platform most people should use for charting. It is excellent for technical analysis, learning patterns, using indicators, and building confidence reading charts. For many users, the best setup is to do all chart analysis on TradingView, then use one of the broker platforms below to actually place stock trades.",
     pros: [
-      "Excellent charting and layout tools",
-      "Very strong for learning technical analysis",
-      "Great if you want charts first and execution second",
+      "Best overall platform here for charting and technical analysis",
+      "Excellent for beginners learning indicators, levels, and trend structure",
+      "Also strong enough for more advanced traders who want better chart layouts",
+      "Clean, modern interface that makes chart reading easier",
+      "Works very well as your main analysis platform even if you trade elsewhere",
     ],
     cons: [
-      "More of a charting-first workflow than a simple beginner investing app",
-      "Some users may still want a separate broker setup depending on how they trade",
+      "Many people still use a separate broker for placing the actual trade",
+      "It is more chart-focused than a simple beginner investing app",
+      "A brand-new investor may still need a broker below for direct stock execution",
     ],
-    note: "Best for traders who care a lot about charts, indicators, and structure.",
+    note:
+      "Best overall choice for charts. A very strong setup is: analyse on TradingView, then execute your stock trade using your broker.",
     affiliateHref: "#",
+    ctaText: "View TradingView",
   },
   {
     name: "Trading 212",
-    shortLabel: "Best beginner-friendly stock app",
-    bestFor: "Beginners who want a simple app for stocks and ETFs without too much complexity.",
+    shortLabel: "Best beginner broker app",
+    logoSrc: "/platforms/trading212.png",
+    logoAlt: "Trading 212 logo",
+    bestFor:
+      "Beginners who want a simple, clean platform for buying stocks and ETFs without feeling overwhelmed.",
+    summary:
+      "Trading 212 is one of the easiest stock platforms to start with. It feels more beginner-friendly than many professional broker platforms and is a good choice for people who want to keep things simple while they learn.",
     pros: [
-      "Very easy interface for newer users",
-      "Good for simple stock and ETF investing",
-      "Feels clean and approachable",
+      "Very beginner-friendly interface",
+      "Simple app for buying stocks and ETFs",
+      "Easy to understand compared with more advanced broker platforms",
+      "Good choice for someone starting small and learning the basics",
     ],
     cons: [
-      "Less advanced-feeling than pro-style platforms",
-      "May feel limited later if you want deeper tools",
+      "More advanced traders may eventually want deeper tools",
+      "Charting and analysis tools are not the main strength",
+      "Less professional-feeling than more advanced platforms",
     ],
-    note: "Best for someone starting out who wants simplicity and low friction.",
+    note:
+      "A very good broker for beginners. Many users would chart on TradingView, then place the trade using Trading 212.",
     affiliateHref: "#",
+    ctaText: "View Trading 212",
   },
   {
     name: "eToro",
-    shortLabel: "Best social-style investing platform",
-    bestFor: "Users who like a simple app experience and want a more social/investor-community feel.",
+    shortLabel: "Best social-style platform",
+    logoSrc: "/platforms/etoro.png",
+    logoAlt: "eToro logo",
+    bestFor:
+      "People who want a modern investing platform with a simple layout and a more social, app-based feel.",
+    summary:
+      "eToro is a well-known beginner-friendly platform that feels modern and accessible. It is often better suited to users who like a simple investing experience rather than a chart-heavy professional setup.",
     pros: [
-      "Very beginner-friendly layout",
-      "Social-style experience is easy to understand",
-      "Useful for users who want an investing app that feels modern and simple",
+      "Very approachable for newer users",
+      "Modern app feel",
+      "Easy to navigate compared with more complex broker platforms",
+      "Good for people who want a more casual investing experience",
     ],
     cons: [
-      "Not everyone wants the social angle",
-      "Serious chart-focused traders may outgrow it",
+      "Charting is not the main reason to choose it",
+      "More serious chart-focused traders may outgrow it",
+      "Not everyone wants the more social-style platform feel",
     ],
-    note: "Best for users who want a modern app and a more community-led feel.",
+    note:
+      "Good for users who want a simple and modern investing experience, but less ideal than TradingView for serious chart work.",
     affiliateHref: "#",
+    ctaText: "View eToro",
   },
   {
     name: "Interactive Brokers",
-    shortLabel: "Best for serious investors",
-    bestFor: "Users who want broader market access and a more professional-style platform.",
+    shortLabel: "Best advanced broker",
+    logoSrc: "/platforms/interactive-brokers.png",
+    logoAlt: "Interactive Brokers logo",
+    bestFor:
+      "More serious investors and traders who want a stronger broker platform and room to grow.",
+    summary:
+      "Interactive Brokers is a stronger choice for users who want a more professional broker setup. It can feel heavier for complete beginners, but it is a platform many people choose when they want more depth and do not want to outgrow their broker quickly.",
     pros: [
-      "Strong multi-market feel",
-      "Better suited to more serious or growing investors",
-      "Good if you want a platform you may not outgrow quickly",
+      "Better suited to serious investors and growing traders",
+      "More professional-feeling than beginner-first apps",
+      "A stronger long-term choice for users who want depth",
+      "Good if you want a broker you may not need to switch away from later",
     ],
     cons: [
-      "Can feel heavier for a complete beginner",
-      "Less beginner-friendly than simpler apps",
+      "Can feel more complex for a complete beginner",
+      "Not as easy to pick up as beginner-focused apps",
+      "Less friendly for someone who just wants the simplest possible start",
     ],
-    note: "Best for users who want depth and are happy with a more advanced platform.",
+    note:
+      "A strong broker choice for users who are becoming more serious. Many people would still prefer to chart on TradingView first.",
     affiliateHref: "#",
+    ctaText: "View Interactive Brokers",
   },
   {
     name: "Saxo",
-    shortLabel: "Best premium all-round investing experience",
-    bestFor: "People who want a polished investing platform that feels more premium and structured.",
+    shortLabel: "Best premium-feel platform",
+    logoSrc: "/platforms/saxo.png",
+    logoAlt: "Saxo logo",
+    bestFor:
+      "Users who want a more polished, premium-feeling investing platform and are happy with a more serious setup.",
+    summary:
+      "Saxo is a polished platform that feels more premium and structured than many beginner-first apps. It is often a better fit for users who want a more complete investing platform rather than the absolute simplest place to start.",
     pros: [
-      "Clean premium feel",
-      "Good fit for longer-term investing and broader platform use",
-      "Feels more serious than many beginner apps",
+      "Strong premium feel",
+      "More polished than many entry-level investing apps",
+      "Good for users who want a more serious platform experience",
+      "Can suit longer-term investors who want a more established setup",
     ],
     cons: [
-      "Not the simplest first app for brand-new users",
-      "May feel more platform-heavy than ultra-simple alternatives",
+      "Not as beginner-simple as Trading 212",
+      "May feel heavier than needed for a first investing app",
+      "Not the strongest choice here if your main focus is chart learning",
     ],
-    note: "Best for users who want a polished investing experience rather than the simplest possible app.",
+    note:
+      "A good option for users who want a more premium investing experience, though TradingView is still the better place to do chart analysis.",
     affiliateHref: "#",
+    ctaText: "View Saxo",
   },
 ];
 
@@ -154,8 +204,8 @@ export default function PlatformsPage() {
             </h1>
 
             <div style={{ marginTop: 8, opacity: 0.78, lineHeight: 1.55, maxWidth: 860 }}>
-              These are 5 strong platform options depending on whether you care more about charting,
-              simplicity, long-term investing, or a more advanced trading setup.
+              The best setup for many people is simple: use <strong>TradingView</strong> for charting and analysis,
+              then choose a broker platform below to actually buy and sell stocks.
             </div>
           </div>
 
@@ -173,6 +223,23 @@ export default function PlatformsPage() {
           style={{
             marginTop: 18,
             borderRadius: 16,
+            border: "1px solid rgba(34,197,94,0.28)",
+            background: "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(59,130,246,0.08))",
+            padding: 16,
+          }}
+        >
+          <div style={{ fontWeight: 950, marginBottom: 8 }}>Best starting idea</div>
+          <div style={{ opacity: 0.84, lineHeight: 1.55 }}>
+            If you are new, a smart setup is to <strong>learn charts on TradingView</strong>, then use a broker like{" "}
+            <strong>Trading 212</strong>, <strong>eToro</strong>, <strong>Interactive Brokers</strong>, or{" "}
+            <strong>Saxo</strong> to place the trade.
+          </div>
+        </div>
+
+        <div
+          style={{
+            marginTop: 18,
+            borderRadius: 16,
             border: "1px solid rgba(168,85,247,0.28)",
             background: "linear-gradient(135deg, rgba(168,85,247,0.14), rgba(59,130,246,0.08))",
             padding: 16,
@@ -181,7 +248,7 @@ export default function PlatformsPage() {
           <div style={{ fontWeight: 950, marginBottom: 8 }}>Important before you publish</div>
           <div style={{ opacity: 0.84, lineHeight: 1.55 }}>
             Replace each placeholder affiliate link in this page before publishing. Right now the buttons are ready,
-            but the links are set to <strong>#</strong> so you can safely wire in your own partner URLs later.
+            but the links are set to <strong>#</strong>.
           </div>
         </div>
 
@@ -205,7 +272,7 @@ export default function PlatformsPage() {
                   flexWrap: "wrap",
                 }}
               >
-                <div style={{ minWidth: 0, flex: "1 1 560px" }}>
+                <div style={{ minWidth: 0, flex: "1 1 700px" }}>
                   <div
                     style={{
                       display: "inline-flex",
@@ -223,17 +290,60 @@ export default function PlatformsPage() {
                     #{idx + 1} • {item.shortLabel}
                   </div>
 
-                  <h2 style={{ margin: "12px 0 0", fontSize: 28, letterSpacing: "-0.3px" }}>
-                    {item.name}
-                  </h2>
+                  <div
+                    style={{
+                      marginTop: 14,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 14,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 68,
+                        height: 68,
+                        borderRadius: 16,
+                        border: "1px solid rgba(255,255,255,0.12)",
+                        background: "#ffffff",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: 10,
+                        overflow: "hidden",
+                        flex: "0 0 auto",
+                      }}
+                    >
+                      <img
+                        src={item.logoSrc}
+                        alt={item.logoAlt}
+                        style={{
+                          maxWidth: "100%",
+                          maxHeight: "100%",
+                          objectFit: "contain",
+                          display: "block",
+                        }}
+                      />
+                    </div>
 
-                  <p style={{ margin: "10px 0 0", opacity: 0.84, lineHeight: 1.6 }}>
-                    <strong>Best for:</strong> {item.bestFor}
+                    <div style={{ minWidth: 0 }}>
+                      <h2 style={{ margin: 0, fontSize: 28, letterSpacing: "-0.3px" }}>
+                        {item.name}
+                      </h2>
+
+                      <p style={{ margin: "8px 0 0", opacity: 0.84, lineHeight: 1.6 }}>
+                        <strong>Best for:</strong> {item.bestFor}
+                      </p>
+                    </div>
+                  </div>
+
+                  <p style={{ margin: "14px 0 0", opacity: 0.84, lineHeight: 1.6 }}>
+                    {item.summary}
                   </p>
                 </div>
 
                 <a href={item.affiliateHref} style={affiliateBtn()}>
-                  View Platform →
+                  {item.ctaText} →
                 </a>
               </div>
 
