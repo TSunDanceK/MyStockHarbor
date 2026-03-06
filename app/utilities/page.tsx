@@ -3,6 +3,56 @@
 import Link from "next/link";
 import React, { useMemo, useState } from "react";
 
+function HelpTip({ text }: { text: string }) {
+  const [open, setOpen] = React.useState(false);
+
+  return (
+    <span
+      style={{
+        position: "relative",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: 16,
+        height: 16,
+        borderRadius: "50%",
+        background: "rgba(255,255,255,0.15)",
+        color: "#fff",
+        fontSize: 11,
+        fontWeight: 900,
+        cursor: "pointer",
+        marginLeft: 6,
+      }}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onClick={() => setOpen(!open)}
+    >
+      ?
+      {open && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 22,
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: 220,
+            padding: 10,
+            borderRadius: 10,
+            background: "#0f172a",
+            border: "1px solid rgba(255,255,255,0.14)",
+            fontSize: 12,
+            lineHeight: 1.5,
+            fontWeight: 600,
+            zIndex: 10,
+          }}
+        >
+          {text}
+        </div>
+      )}
+    </span>
+  );
+}
+
 function topBtn(): React.CSSProperties {
   return {
     padding: "10px 12px",
@@ -283,16 +333,26 @@ export default function UtilitiesPage() {
               <div>
                 <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
                   Trade Direction
-                </div>
-                <select value={marginSide} onChange={(e) => setMarginSide(e.target.value as "long" | "short")} style={selectStyle()}>
-                  <option value="long">Long</option>
-                  <option value="short">Short</option>
-                </select>
-              </div>
+         <div>
+  <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
+    Trade Direction
+    <HelpTip text="Choose Long if you expect price to rise, Short if you expect price to fall." />
+  </div>
+
+  <select
+    value={marginSide}
+    onChange={(e) => setMarginSide(e.target.value as "long" | "short")}
+    style={selectStyle()}
+  >
+    <option value="long">Long</option>
+    <option value="short">Short</option>
+  </select>
+</div>
 
               <div>
                 <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
                   Entry Price ($)
+                  <HelpTip text="The price where you enter the trade." />
                 </div>
                 <input value={marginEntry} onChange={(e) => setMarginEntry(e.target.value)} style={inputStyle()} />
               </div>
@@ -300,6 +360,7 @@ export default function UtilitiesPage() {
               <div>
                 <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
                   Position Size ($)
+                  <HelpTip text="How much borrowed money is used. 2× leverage means you control double your capital." />
                 </div>
                 <input value={marginPositionSize} onChange={(e) => setMarginPositionSize(e.target.value)} style={inputStyle()} />
               </div>
@@ -307,6 +368,7 @@ export default function UtilitiesPage() {
               <div>
                 <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
                   Leverage
+                  <HelpTip text="How much borrowed money is used. 2× leverage means you control double your capital." />
                 </div>
                 <input value={marginLeverage} onChange={(e) => setMarginLeverage(e.target.value)} style={inputStyle()} />
               </div>
@@ -314,6 +376,7 @@ export default function UtilitiesPage() {
               <div>
                 <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
                   Maintenance Margin (%)
+                  
                 </div>
                 <input value={marginMaintenance} onChange={(e) => setMarginMaintenance(e.target.value)} style={inputStyle()} />
               </div>
@@ -390,6 +453,7 @@ export default function UtilitiesPage() {
               <div>
                 <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
                   Risk Amount ($)
+                 <HelpTip text="Maximum dollar amount you are willing to lose if your stop loss is hit." />
                 </div>
                 <input value={riskAmount} onChange={(e) => setRiskAmount(e.target.value)} style={inputStyle()} />
               </div>
@@ -397,6 +461,7 @@ export default function UtilitiesPage() {
               <div>
                 <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
                   Entry Price ($)
+                  <HelpTip text="The price where you plan to enter the trade." />
                 </div>
                 <input value={riskEntry} onChange={(e) => setRiskEntry(e.target.value)} style={inputStyle()} />
               </div>
@@ -404,6 +469,7 @@ export default function UtilitiesPage() {
               <div>
                 <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
                   Stop Loss Price ($)
+                  <HelpTip text="The price where you will exit the trade to limit losses." />
                 </div>
                 <input value={riskStop} onChange={(e) => setRiskStop(e.target.value)} style={inputStyle()} />
               </div>
@@ -411,6 +477,7 @@ export default function UtilitiesPage() {
               <div>
                 <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
                   Target Price ($)
+                  <HelpTip text="Optional price where you plan to take profit." />
                 </div>
                 <input value={riskTarget} onChange={(e) => setRiskTarget(e.target.value)} style={inputStyle()} />
               </div>
