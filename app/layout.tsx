@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Link from "next/link";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -27,8 +28,71 @@ export default function RootLayout({
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        style={{
+          margin: 0,
+          minHeight: "100vh",
+          background: "#06080d",
+          color: "#f1f5f9",
+        }}
       >
-        {children}
+        <div
+          style={{
+            minHeight: "100vh",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          <div style={{ flex: 1 }}>{children}</div>
+
+          <footer
+            style={{
+              borderTop: "1px solid rgba(255,255,255,0.12)",
+              background: "#0b1220",
+              color: "rgba(241,245,249,0.82)",
+              padding: "18px 20px",
+            }}
+          >
+            <div
+              style={{
+                maxWidth: 1200,
+                margin: "0 auto",
+                display: "grid",
+                gap: 8,
+              }}
+            >
+              <div style={{ fontWeight: 800, fontSize: 14 }}>MyStockHarbor</div>
+
+              <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+                Trading and investing involve risk. The information on
+                MyStockHarbor is provided for educational purposes only and
+                should not be considered financial advice. Always do your own
+                research before making any investment decisions.
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: 14,
+                  flexWrap: "wrap",
+                  fontSize: 13,
+                }}
+              >
+                <Link
+                  href="/about"
+                  style={{ color: "#93c5fd", textDecoration: "none" }}
+                >
+                  About
+                </Link>
+                <Link
+                  href="/contact"
+                  style={{ color: "#93c5fd", textDecoration: "none" }}
+                >
+                  Contact
+                </Link>
+              </div>
+            </div>
+          </footer>
+        </div>
       </body>
     </html>
   );
