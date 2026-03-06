@@ -2162,128 +2162,266 @@ return (
                   {/* ONE ROW: left column = price + big signal, right column = breakdown */}
 <div className="summaryGrid">
                     {/* LEFT: price + dominant signal */}
-                    <div style={{ minWidth: 0 }}>
-                      <p style={{ fontSize: 20, margin: "8px 0" }}>
-                        <strong>Last price:</strong> {quote?.price == null ? "Unavailable" : `$${quote.price.toFixed(2)}`}
-                      </p>
-
-                      <div style={{ marginTop: 18 }}>
-<div
-  style={{
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    fontSize: 16,
-    opacity: 0.85,
-    color: COLORS.mutedFg,
-    fontWeight: 850,
-  }}
->
-  <span
+<div style={{ minWidth: 0 }}>
+  <div
     style={{
-      width: 10,
-      height: 10,
-      borderRadius: 999,
-      background: toneToColor(trendToneFromScore(trendScore), COLORS.isDark),
-      boxShadow: COLORS.isDark ? "0 0 0 3px rgba(255,255,255,0.04)" : "0 0 0 3px rgba(0,0,0,0.03)",
-      flex: "0 0 auto",
+      border: `1px solid ${COLORS.border}`,
+      borderRadius: 14,
+      background: COLORS.controlBg,
+      padding: 16,
     }}
-  />
-  <span>Trend Score</span>
-  <HelpTip
-    isDark={COLORS.isDark}
-    text="Trend Score measures how many bullish trend checks are currently passing, such as price vs moving averages and MACD momentum. Higher scores suggest a stronger trend structure."
-  />
-</div>
+  >
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        gap: 16,
+        flexWrap: "wrap",
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 30,
+            fontWeight: 950,
+            letterSpacing: "-0.4px",
+            lineHeight: 1,
+            color: COLORS.pageFg,
+          }}
+        >
+          {symbol}
+        </div>
 
-<div
-  style={{
-    marginTop: 6,
-    fontSize: 26,
-    fontWeight: 950,
-    letterSpacing: "-0.2px",
-    lineHeight: 1.15,
-    color: COLORS.pageFg,
-  }}
->
-  {trendScore ? `${trendScore.passed}/${trendScore.total} checks` : "—"}
-</div>
+        <div
+          style={{
+            marginTop: 6,
+            fontSize: 15,
+            fontWeight: 800,
+            color: COLORS.mutedFg,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {symbolName || "Company name unavailable"}
+        </div>
+      </div>
 
-{trendScore ? (
-  renderFlagsMeter({
-    flagged: trendScore.passed,
-    total: trendScore.total,
-    color: COLORS.isDark ? "#22c55e" : "#16a34a",
-    isDark: COLORS.isDark,
-  })
-) : null}
+      <div style={{ textAlign: "right", minWidth: 120 }}>
+        <div
+          style={{
+            fontSize: 12,
+            fontWeight: 800,
+            color: COLORS.mutedFg,
+            textTransform: "uppercase",
+            letterSpacing: "0.5px",
+          }}
+        >
+          Last Price
+        </div>
 
-<div style={{ marginTop: 14 }} />
+        <div
+          style={{
+            marginTop: 6,
+            fontSize: 30,
+            fontWeight: 950,
+            letterSpacing: "-0.4px",
+            color: COLORS.pageFg,
+          }}
+        >
+          {quote?.price == null ? "—" : `$${quote.price.toFixed(2)}`}
+        </div>
+      </div>
+    </div>
 
-<div
-  style={{
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    fontSize: 16,
-    opacity: 0.85,
-    color: COLORS.mutedFg,
-    fontWeight: 850,
-  }}
->
-  <span
-    style={{
-      width: 10,
-      height: 10,
-      borderRadius: 999,
-      background: COLORS.isDark ? "#22c55e" : "#16a34a",
-      boxShadow: COLORS.isDark ? "0 0 0 3px rgba(255,255,255,0.04)" : "0 0 0 3px rgba(0,0,0,0.03)",
-      flex: "0 0 auto",
-    }}
-  />
-  <span>Stretch Score</span>
-  <HelpTip
-    isDark={COLORS.isDark}
-    text="Stretch Score measures how many indicators suggest price may be extended, overbought, or oversold. Higher scores mean more signs that price is stretched away from normal conditions."
-  />
-</div>
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 12,
+        marginTop: 18,
+      }}
+    >
+      <div
+        style={{
+          border: `1px solid ${COLORS.border}`,
+          borderRadius: 12,
+          padding: 14,
+          background: COLORS.cardBg,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            fontSize: 14,
+            color: COLORS.mutedFg,
+            fontWeight: 850,
+          }}
+        >
+          <span
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: 999,
+              background: toneToColor(trendToneFromScore(trendScore), COLORS.isDark),
+              flex: "0 0 auto",
+            }}
+          />
+          <span>Trend Score</span>
+          <HelpTip
+            isDark={COLORS.isDark}
+            text="Trend Score measures how many bullish trend checks are currently passing, such as price vs moving averages and MACD momentum. Higher scores suggest a stronger trend structure."
+          />
+        </div>
 
-<div
-  style={{
-    marginTop: 6,
-    fontSize: 26,
-    fontWeight: 950,
-    letterSpacing: "-0.2px",
-    lineHeight: 1.15,
-    color: overviewMeta?.toneColor ?? COLORS.pageFg,
-  }}
->
-  {stretchScore ? `${stretchScore.flagged}/${stretchScore.total} checks` : "—"}
-</div>
+        <div
+          style={{
+            marginTop: 10,
+            fontSize: 32,
+            fontWeight: 950,
+            lineHeight: 1,
+            color: COLORS.pageFg,
+            letterSpacing: "-0.4px",
+          }}
+        >
+          {trendScore ? `${trendScore.passed}/${trendScore.total}` : "—"}
+        </div>
 
-{stretchScore && overviewMeta ? (
-  renderFlagsMeter({
-    flagged: stretchScore.flagged,
-    total: stretchScore.total,
-    color: overviewMeta.toneColor,
-    isDark: COLORS.isDark,
-  })
-) : null}
-                        
+        <div
+          style={{
+            marginTop: 4,
+            fontSize: 13,
+            fontWeight: 800,
+            color: COLORS.mutedFg,
+          }}
+        >
+          checks passing
+        </div>
 
-{overviewMeta ? (
-  <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8, color: COLORS.mutedFg, fontWeight: 750 }}>
-    Regime: {overviewMeta.trend} • Volatility: {overviewMeta.vol} • Bias: {overviewMeta.toneTag}
+        {trendScore ? (
+          renderFlagsMeter({
+            flagged: trendScore.passed,
+            total: trendScore.total,
+            color: COLORS.isDark ? "#22c55e" : "#16a34a",
+            isDark: COLORS.isDark,
+          })
+        ) : null}
+      </div>
+
+      <div
+        style={{
+          border: `1px solid ${COLORS.border}`,
+          borderRadius: 12,
+          padding: 14,
+          background: COLORS.cardBg,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            fontSize: 14,
+            color: COLORS.mutedFg,
+            fontWeight: 850,
+          }}
+        >
+          <span
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: 999,
+              background: overviewMeta?.toneColor ?? (COLORS.isDark ? "#22c55e" : "#16a34a"),
+              flex: "0 0 auto",
+            }}
+          />
+          <span>Stretch Score</span>
+          <HelpTip
+            isDark={COLORS.isDark}
+            text="Stretch Score measures how many indicators suggest price may be extended, overbought, or oversold. Higher scores mean more signs that price is stretched away from normal conditions."
+          />
+        </div>
+
+        <div
+          style={{
+            marginTop: 10,
+            fontSize: 32,
+            fontWeight: 950,
+            lineHeight: 1,
+            color: overviewMeta?.toneColor ?? COLORS.pageFg,
+            letterSpacing: "-0.4px",
+          }}
+        >
+          {stretchScore ? `${stretchScore.flagged}/${stretchScore.total}` : "—"}
+        </div>
+
+        <div
+          style={{
+            marginTop: 4,
+            fontSize: 13,
+            fontWeight: 800,
+            color: COLORS.mutedFg,
+          }}
+        >
+          stretch checks
+        </div>
+
+        {stretchScore && overviewMeta ? (
+          renderFlagsMeter({
+            flagged: stretchScore.flagged,
+            total: stretchScore.total,
+            color: overviewMeta.toneColor,
+            isDark: COLORS.isDark,
+          })
+        ) : null}
+      </div>
+    </div>
+
+    {overviewMeta ? (
+      <div
+        style={{
+          marginTop: 14,
+          padding: "10px 12px",
+          borderRadius: 12,
+          background: COLORS.cardBg,
+          border: `1px solid ${COLORS.border}`,
+          fontSize: 13,
+          fontWeight: 800,
+          color: COLORS.mutedFg,
+        }}
+      >
+        Regime: {overviewMeta.trend} • Volatility: {overviewMeta.vol} • Bias: {overviewMeta.toneTag}
+      </div>
+    ) : null}
+
+    <div
+      style={{
+        marginTop: 12,
+        fontSize: 13,
+        lineHeight: 1.6,
+        color: COLORS.mutedFg,
+      }}
+    >
+      {signal.detail}
+    </div>
+
+    <div
+      style={{
+        marginTop: 14,
+        paddingTop: 12,
+        borderTop: `1px solid ${COLORS.border}`,
+        fontSize: 13,
+        color: COLORS.mutedFg,
+      }}
+    >
+      {quote?.date && quote?.time ? `As of ${quote.date} ${quote.time}` : "Timestamp unavailable"} • Source:{" "}
+      {quote?.source ?? "stooq.com"}
+    </div>
   </div>
-) : null}
-
-                        <div style={{ marginTop: 8, fontSize: 13, opacity: 0.75, color: COLORS.mutedFg }}>
-                          {signal.detail}
-                        </div>
-
-                     
-                      </div>
-                    </div>
+</div>
 
                     {/* RIGHT: breakdown (top aligned) */}
  <div
