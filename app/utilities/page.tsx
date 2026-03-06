@@ -213,7 +213,14 @@ export default function UtilitiesPage() {
     const stop = toNum(riskStop);
     const target = toNum(riskTarget);
 
-    if (!Number.isFinite(risk) || !Number.isFinite(entry) || !Number.isFinite(stop) || risk <= 0 || entry <= 0 || stop <= 0) {
+    if (
+      !Number.isFinite(risk) ||
+      !Number.isFinite(entry) ||
+      !Number.isFinite(stop) ||
+      risk <= 0 ||
+      entry <= 0 ||
+      stop <= 0
+    ) {
       return {
         shares: null as number | null,
         positionSize: null as number | null,
@@ -333,12 +340,8 @@ export default function UtilitiesPage() {
               <div>
                 <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
                   Trade Direction
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
-                  Trade Direction
                   <HelpTip text="Choose Long if you expect price to rise, Short if you expect price to fall." />
                 </div>
-
                 <select
                   value={marginSide}
                   onChange={(e) => setMarginSide(e.target.value as "long" | "short")}
@@ -354,15 +357,11 @@ export default function UtilitiesPage() {
                   Entry Price ($)
                   <HelpTip text="The price where you enter the trade." />
                 </div>
-                <input value={marginEntry} onChange={(e) => setMarginEntry(e.target.value)} style={inputStyle()} />
-              </div>
-
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
-                  Position Size ($)
-                  <HelpTip text="How much borrowed money is used. 2× leverage means you control double your capital." />
-                </div>
-                <input value={marginPositionSize} onChange={(e) => setMarginPositionSize(e.target.value)} style={inputStyle()} />
+                <input
+                  value={marginEntry}
+                  onChange={(e) => setMarginEntry(e.target.value)}
+                  style={inputStyle()}
+                />
               </div>
 
               <div>
@@ -370,7 +369,23 @@ export default function UtilitiesPage() {
                   Position Size ($)
                   <HelpTip text="Total dollar value of the trade. Example: buying $4000 worth of stock." />
                 </div>
-                <input value={marginPositionSize} onChange={(e) => setMarginPositionSize(e.target.value)} style={inputStyle()} />
+                <input
+                  value={marginPositionSize}
+                  onChange={(e) => setMarginPositionSize(e.target.value)}
+                  style={inputStyle()}
+                />
+              </div>
+
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
+                  Leverage
+                  <HelpTip text="How much borrowed money is used. 2× leverage means you control double your capital." />
+                </div>
+                <input
+                  value={marginLeverage}
+                  onChange={(e) => setMarginLeverage(e.target.value)}
+                  style={inputStyle()}
+                />
               </div>
 
               <div>
@@ -378,8 +393,13 @@ export default function UtilitiesPage() {
                   Maintenance Margin (%)
                   <HelpTip text="Minimum equity your broker requires to keep the trade open. Higher % means liquidation happens sooner." />
                 </div>
-                <input value={marginMaintenance} onChange={(e) => setMarginMaintenance(e.target.value)} style={inputStyle()} />
+                <input
+                  value={marginMaintenance}
+                  onChange={(e) => setMarginMaintenance(e.target.value)}
+                  style={inputStyle()}
+                />
               </div>
+            </div>
 
             <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
               <div style={resultBoxStyle()}>
@@ -452,9 +472,13 @@ export default function UtilitiesPage() {
               <div>
                 <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
                   Risk Amount ($)
-                 <HelpTip text="Maximum dollar amount you are willing to lose if your stop loss is hit." />
+                  <HelpTip text="Maximum dollar amount you are willing to lose if your stop loss is hit." />
                 </div>
-                <input value={riskAmount} onChange={(e) => setRiskAmount(e.target.value)} style={inputStyle()} />
+                <input
+                  value={riskAmount}
+                  onChange={(e) => setRiskAmount(e.target.value)}
+                  style={inputStyle()}
+                />
               </div>
 
               <div>
@@ -462,7 +486,11 @@ export default function UtilitiesPage() {
                   Entry Price ($)
                   <HelpTip text="The price where you plan to enter the trade." />
                 </div>
-                <input value={riskEntry} onChange={(e) => setRiskEntry(e.target.value)} style={inputStyle()} />
+                <input
+                  value={riskEntry}
+                  onChange={(e) => setRiskEntry(e.target.value)}
+                  style={inputStyle()}
+                />
               </div>
 
               <div>
@@ -470,7 +498,11 @@ export default function UtilitiesPage() {
                   Stop Loss Price ($)
                   <HelpTip text="The price where you will exit the trade to limit losses." />
                 </div>
-                <input value={riskStop} onChange={(e) => setRiskStop(e.target.value)} style={inputStyle()} />
+                <input
+                  value={riskStop}
+                  onChange={(e) => setRiskStop(e.target.value)}
+                  style={inputStyle()}
+                />
               </div>
 
               <div>
@@ -478,7 +510,11 @@ export default function UtilitiesPage() {
                   Target Price ($)
                   <HelpTip text="Optional price where you plan to take profit." />
                 </div>
-                <input value={riskTarget} onChange={(e) => setRiskTarget(e.target.value)} style={inputStyle()} />
+                <input
+                  value={riskTarget}
+                  onChange={(e) => setRiskTarget(e.target.value)}
+                  style={inputStyle()}
+                />
               </div>
             </div>
 
