@@ -134,81 +134,14 @@ export default function UtilitiesPage() {
   const [marginEntry, setMarginEntry] = useState("1000");
   const [marginPositionSize, setMarginPositionSize] = useState("4000");
   const [marginLeverage, setMarginLeverage] = useState("2");
-  const [marginMaintenance, setMarginMaintenance] = useState("25");
+  
 
   const [riskAmount, setRiskAmount] = useState("100");
   const [riskEntry, setRiskEntry] = useState("4000");
   const [riskStop, setRiskStop] = useState("3900");
   const [riskTarget, setRiskTarget] = useState("4300");
 
-  const marginCalc = useMemo(() => {
-    const entry = toNum(marginEntry);
-    const positionSize = toNum(marginPositionSize);
-    const leverage = toNum(marginLeverage);
-    const maintenancePct = toNum(marginMaintenance);
-
-    if (
-      !Number.isFinite(entry) ||
-      !Number.isFinite(positionSize) ||
-      !Number.isFinite(leverage) ||
-      !Number.isFinite(maintenancePct) ||
-      entry <= 0 ||
-      positionSize <= 0 ||
-      leverage <= 0 ||
-      maintenancePct < 0
-    ) {
-      return {
-        liquidationPrice: null as number | null,
-        distancePct: null as number | null,
-      };
-    }
-
-    const marginUsed = positionSize / leverage;
-    const maintenanceRequirement = positionSize * (maintenancePct / 100);
-    const maxLossBeforeLiquidation = marginUsed - maintenanceRequirement;
-
-    if (maxLossBeforeLiquidation <= 0) {
-      return {
-        liquidationPrice: null as number | null,
-        distancePct: null as number | null,
-      };
-    }
-
-    const qty = positionSize / entry;
-    if (!Number.isFinite(qty) || qty <= 0) {
-      return {
-        liquidationPrice: null as number | null,
-        distancePct: null as number | null,
-      };
-    }
-
-    const moveAgainstYou = maxLossBeforeLiquidation / qty;
-
-    let liquidationPrice: number;
-    if (marginSide === "long") {
-      liquidationPrice = entry - moveAgainstYou;
-    } else {
-      liquidationPrice = entry + moveAgainstYou;
-    }
-
-    if (!Number.isFinite(liquidationPrice) || liquidationPrice <= 0) {
-      return {
-        liquidationPrice: null as number | null,
-        distancePct: null as number | null,
-      };
-    }
-
-    const distancePct =
-      marginSide === "long"
-        ? ((entry - liquidationPrice) / entry) * 100
-        : ((liquidationPrice - entry) / entry) * 100;
-
-    return {
-      liquidationPrice,
-      distancePct,
-    };
-  }, [marginEntry, marginPositionSize, marginLeverage, marginMaintenance, marginSide]);
-
+const marginCalc = useMemo(() => {
   const riskCalc = useMemo(() => {
     const risk = toNum(riskAmount);
     const entry = toNum(riskEntry);
@@ -419,40 +352,44 @@ export default function UtilitiesPage() {
               </div>
 
               <div>
-                <div
-  style={{
-    fontSize: 12,
-    fontWeight: 850,
-    color: "rgba(241,245,249,0.85)",
-    marginBottom: 6,
-  }}
->
-                  Maintenance Margin (%)
-                  <HelpTip text="Minimum equity your broker requires to keep the trade open. Higher % means liquidation happens sooner." />
-                </div>
-                <input
-                  value={marginMaintenance}
-                  onChange={(e) => setMarginMaintenance(e.target.value)}
-                  style={inputStyle()}
-                />
-              </div>
+
             </div>
 
-            <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
               <div style={resultBoxStyle()}>
-                <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 850 }}>Liquidation Price</div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "rgba(241,245,249,0.75)",
+                    fontWeight: 850,
+                    display: "flex",
+                    alignItems: "center",
+                  }}
+                >
+                  Liquidation Price
+                  <HelpTip text="Estimated liquidation price only. Some brokers may calculate liquidation differently." />
+                </div>
                 <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
                   {fmtMoney(marginCalc.liquidationPrice)}
                 </div>
               </div>
 
               <div style={resultBoxStyle()}>
-                <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 850 }}>Distance to Liquidation</div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "rgba(241,245,249,0.75)",
+                    fontWeight: 850,
+                    display: "flex",
+                    alignItems: "center",
+                  }}
+                >
+                  Distance to Liquidation
+                  <HelpTip text="Shows how far price can move against your trade before estimated liquidation. Some brokers may calculate liquidation differently." />
+                </div>
                 <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
                   {fmtPct(marginCalc.distancePct)}
                 </div>
               </div>
-            </div>
 
             <div style={{ marginTop: 18, ...resultBoxStyle() }}>
               <div style={{ fontWeight: 900, marginBottom: 6 }}>What this tool does</div>
@@ -591,8 +528,26 @@ export default function UtilitiesPage() {
                 </div>
               </div>
 
-              <div style={resultBoxStyle()}>
-                <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 850 }}>Total Position Size</div>
+              <div
+                style={{
+                  ...resultBoxStyle(),
+                  border: "1px solid rgba(34,197,94,0.28)",
+                  background: "linear-gradient(135deg, rgba(34,197,94,0.10), rgba(255,255,255,0.04))",
+                  boxShadow: "0 0 0 1px rgba(34,197,94,0.08) inset",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "rgba(241,245,249,0.78)",
+                    fontWeight: 850,
+                    display: "flex",
+                    alignItems: "center",
+                  }}
+                >
+                  Total Position Size
+                  <HelpTip text="This is the suggested trade size based on your chosen risk amount and stop loss distance." />
+                </div>
                 <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
                   {fmtMoney(riskCalc.positionSize)}
                 </div>
