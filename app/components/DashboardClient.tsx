@@ -1629,6 +1629,7 @@ return (
     overflow: "visible",
     marginRight: 8,
     flex: "0 0 auto",
+   marginLeft: -24,
   }}
 >
   <img
