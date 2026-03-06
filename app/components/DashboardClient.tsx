@@ -1619,15 +1619,16 @@ return (
       flexWrap: "wrap",
     }}
   >
-    <img
-      src="/logo.png"
-      alt="MyStockHarbor"
-      style={{
-        height: 48,
-        width: "auto",
-        objectFit: "contain",
-      }}
-    />
+<img
+  src="/logo.png"
+  alt="MyStockHarbor"
+  style={{
+    height: 64,
+    width: "auto",
+    objectFit: "contain",
+    display: "block",
+  }}
+/>
 
     <button
       type="button"
