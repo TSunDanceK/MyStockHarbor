@@ -333,21 +333,21 @@ export default function UtilitiesPage() {
               <div>
                 <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
                   Trade Direction
-         <div>
-  <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
-    Trade Direction
-    <HelpTip text="Choose Long if you expect price to rise, Short if you expect price to fall." />
-  </div>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
+                  Trade Direction
+                  <HelpTip text="Choose Long if you expect price to rise, Short if you expect price to fall." />
+                </div>
 
-  <select
-    value={marginSide}
-    onChange={(e) => setMarginSide(e.target.value as "long" | "short")}
-    style={selectStyle()}
-  >
-    <option value="long">Long</option>
-    <option value="short">Short</option>
-  </select>
-</div>
+                <select
+                  value={marginSide}
+                  onChange={(e) => setMarginSide(e.target.value as "long" | "short")}
+                  style={selectStyle()}
+                >
+                  <option value="long">Long</option>
+                  <option value="short">Short</option>
+                </select>
+              </div>
 
               <div>
                 <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
@@ -367,20 +367,19 @@ export default function UtilitiesPage() {
 
               <div>
                 <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
-                  Leverage
-                  <HelpTip text="How much borrowed money is used. 2× leverage means you control double your capital." />
+                  Position Size ($)
+                  <HelpTip text="Total dollar value of the trade. Example: buying $4000 worth of stock." />
                 </div>
-                <input value={marginLeverage} onChange={(e) => setMarginLeverage(e.target.value)} style={inputStyle()} />
+                <input value={marginPositionSize} onChange={(e) => setMarginPositionSize(e.target.value)} style={inputStyle()} />
               </div>
 
               <div>
                 <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
                   Maintenance Margin (%)
-                  
+                  <HelpTip text="Minimum equity your broker requires to keep the trade open. Higher % means liquidation happens sooner." />
                 </div>
                 <input value={marginMaintenance} onChange={(e) => setMarginMaintenance(e.target.value)} style={inputStyle()} />
               </div>
-            </div>
 
             <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
               <div style={resultBoxStyle()}>
