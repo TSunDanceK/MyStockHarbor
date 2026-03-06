@@ -62,12 +62,11 @@ export default function RootLayout({
             >
               <div style={{ fontWeight: 800, fontSize: 14 }}>MyStockHarbor</div>
 
-              <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-                Trading and investing involve risk. The information on
-                MyStockHarbor is provided for educational purposes only and
-                should not be considered financial advice. Always do your own
-                research before making any investment decisions.
-              </div>
+<div style={{ fontSize: 13, lineHeight: 1.6 }}>
+  MyStockHarbor is designed for educational purposes and general
+  market research. Please do your own research before making
+  financial decisions.
+</div>
 
               <div
                 style={{
