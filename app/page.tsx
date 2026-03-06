@@ -4,23 +4,20 @@ import { Suspense } from "react";
 export default function Page() {
   return (
     <>
-      {/* SEO content for search engines */}
-      <section style={{ padding: 40, maxWidth: 900, margin: "0 auto", fontFamily: "system-ui" }}>
-        <h1>MyStockHarbor – Free Trading Dashboard</h1>
-        <p>
-          MyStockHarbor is a simple trading dashboard designed to help traders
-          quickly understand market context, technical signals, and risk
-          management. Analyze stocks using indicators like RSI, MACD,
-          moving averages, VWAP, Bollinger Bands, and more.
-        </p>
-        <p>
-          The platform includes stock pickers, trading utilities,
-          educational trading lessons, and a clean charting interface
-          designed for beginner and intermediate traders.
-        </p>
-      </section>
+      <div
+        style={{
+          maxWidth: 1200,
+          margin: "0 auto",
+          padding: "16px 40px 0",
+          fontFamily: "system-ui, Arial",
+          color: "rgba(241,245,249,0.72)",
+          fontSize: 13,
+          lineHeight: 1.5,
+        }}
+      >
+        Educational stock dashboard and market research tools.
+      </div>
 
-      {/* Dashboard */}
       <Suspense fallback={<div style={{ padding: 40, fontFamily: "system-ui" }}>Loading dashboard…</div>}>
         <DashboardClient />
       </Suspense>
