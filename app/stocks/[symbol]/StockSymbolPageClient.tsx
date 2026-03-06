@@ -391,7 +391,8 @@ export default function StockSymbolPageClient({ symbol }: { symbol: string }) {
                     gap: 10,
                     padding: "12px 16px",
                     borderRadius: 14,
-                    background: "linear-gradient(135deg, rgba(59,130,246,0.28), rgba(59,130,246,0.12))",
+                    background:
+                      "linear-gradient(135deg, rgba(59,130,246,0.28), rgba(59,130,246,0.12))",
                     border: "1px solid rgba(59,130,246,0.50)",
                     color: "#f1f5f9",
                     textDecoration: "none",
@@ -407,3 +408,4 @@ export default function StockSymbolPageClient({ symbol }: { symbol: string }) {
       </div>
     </main>
   );
+}
