@@ -1621,7 +1621,7 @@ return (
   >
 <div
   style={{
-    width: 210,
+    width: 260,
     height: 72,
     display: "flex",
     alignItems: "center",
