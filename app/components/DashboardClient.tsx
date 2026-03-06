@@ -1623,7 +1623,7 @@ return (
   src="/logo.png"
   alt="MyStockHarbor"
   style={{
-    height: 96,
+    height:200,
     width: "auto",
     objectFit: "contain",
     display: "block",
