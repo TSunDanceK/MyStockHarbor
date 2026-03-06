@@ -1,0 +1,303 @@
+import Link from "next/link";
+
+function topBtn(): React.CSSProperties {
+  return {
+    padding: "10px 12px",
+    borderRadius: 12,
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "rgba(255,255,255,0.06)",
+    color: "#f1f5f9",
+    textDecoration: "none",
+    fontWeight: 850,
+    whiteSpace: "nowrap",
+  };
+}
+
+function inputStyle(): React.CSSProperties {
+  return {
+    width: "100%",
+    height: 44,
+    padding: "0 12px",
+    borderRadius: 12,
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "rgba(255,255,255,0.06)",
+    color: "#f1f5f9",
+    outline: "none",
+    fontSize: 14,
+    fontWeight: 700,
+    boxSizing: "border-box",
+  };
+}
+
+function resultBoxStyle(): React.CSSProperties {
+  return {
+    borderRadius: 14,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.04)",
+    padding: 14,
+  };
+}
+
+export default function UtilitiesPage() {
+  return (
+    <main
+      style={{
+        padding: 0,
+        fontFamily: "system-ui, Arial",
+        background: "#06080d",
+        color: "#f1f5f9",
+        minHeight: "100vh",
+      }}
+    >
+      <div className="wrap">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 800 }}>
+              TRADING UTILITIES
+            </div>
+
+            <h1 style={{ margin: "6px 0 0", fontSize: 34, letterSpacing: "-0.4px" }}>
+              Risk Tools & Calculators
+            </h1>
+
+            <div style={{ marginTop: 8, opacity: 0.78, lineHeight: 1.55, maxWidth: 860 }}>
+              Practical tools to help you manage risk, size positions properly, and avoid costly trading mistakes.
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <Link href="/" style={topBtn()}>
+              ← Dashboard
+            </Link>
+            <Link href="/learn" style={topBtn()}>
+              Learn →
+            </Link>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 22 }} className="grid2">
+          {/* LEFT CARD */}
+          <section
+            style={{
+              border: "1px solid rgba(255,255,255,0.14)",
+              borderRadius: 18,
+              padding: 18,
+              background: "rgba(255,255,255,0.03)",
+            }}
+          >
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "6px 10px",
+                borderRadius: 999,
+                background: "rgba(59,130,246,0.14)",
+                border: "1px solid rgba(59,130,246,0.22)",
+                fontSize: 12,
+                fontWeight: 900,
+                letterSpacing: "0.3px",
+              }}
+            >
+              MARGIN TOOL
+            </div>
+
+            <h2 style={{ margin: "12px 0 0", fontSize: 28, letterSpacing: "-0.3px" }}>
+              Margin / Liquidation Calculator
+            </h2>
+
+            <p style={{ margin: "10px 0 0", opacity: 0.84, lineHeight: 1.6 }}>
+              Estimate where your trade could be liquidated if the market moves against you while using leverage.
+            </p>
+
+            <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
+                  Account Size ($)
+                </div>
+                <input defaultValue="1000" style={inputStyle()} />
+              </div>
+
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
+                  Entry Price ($)
+                </div>
+                <input defaultValue="100" style={inputStyle()} />
+              </div>
+
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
+                  Position Size ($)
+                </div>
+                <input defaultValue="3000" style={inputStyle()} />
+              </div>
+
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
+                  Leverage
+                </div>
+                <input defaultValue="3" style={inputStyle()} />
+              </div>
+
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
+                  Maintenance Margin (%)
+                </div>
+                <input defaultValue="25" style={inputStyle()} />
+              </div>
+            </div>
+
+            <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
+              <div style={resultBoxStyle()}>
+                <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 850 }}>Liquidation Price</div>
+                <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>$—</div>
+              </div>
+
+              <div style={resultBoxStyle()}>
+                <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 850 }}>Distance to Liquidation</div>
+                <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>—%</div>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 18, ...resultBoxStyle() }}>
+              <div style={{ fontWeight: 900, marginBottom: 6 }}>What this tool does</div>
+              <div style={{ opacity: 0.84, lineHeight: 1.6 }}>
+                This calculator estimates the price at which your broker could automatically close your position due
+                to insufficient margin.
+              </div>
+            </div>
+
+            <div style={{ marginTop: 14, ...resultBoxStyle() }}>
+              <div style={{ fontWeight: 900, marginBottom: 6 }}>Why it matters</div>
+              <div style={{ opacity: 0.84, lineHeight: 1.6 }}>
+                If you use leverage without understanding liquidation, even a relatively small move against your trade
+                can cause forced selling. This tool helps you understand how close danger may be before entering a trade.
+              </div>
+            </div>
+          </section>
+
+          {/* RIGHT CARD */}
+          <section
+            style={{
+              border: "1px solid rgba(255,255,255,0.14)",
+              borderRadius: 18,
+              padding: 18,
+              background: "rgba(255,255,255,0.03)",
+            }}
+          >
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "6px 10px",
+                borderRadius: 999,
+                background: "rgba(34,197,94,0.14)",
+                border: "1px solid rgba(34,197,94,0.22)",
+                fontSize: 12,
+                fontWeight: 900,
+                letterSpacing: "0.3px",
+              }}
+            >
+              RISK TOOL
+            </div>
+
+            <h2 style={{ margin: "12px 0 0", fontSize: 28, letterSpacing: "-0.3px" }}>
+              Position Size / Stop Loss Calculator
+            </h2>
+
+            <p style={{ margin: "10px 0 0", opacity: 0.84, lineHeight: 1.6 }}>
+              Work out how many shares you can buy while keeping your loss within a sensible risk limit.
+            </p>
+
+            <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
+                  Account Size ($)
+                </div>
+                <input defaultValue="1000" style={inputStyle()} />
+              </div>
+
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
+                  Risk Per Trade (%)
+                </div>
+                <input defaultValue="1" style={inputStyle()} />
+              </div>
+
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
+                  Entry Price ($)
+                </div>
+                <input defaultValue="100" style={inputStyle()} />
+              </div>
+
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
+                  Stop Loss Price ($)
+                </div>
+                <input defaultValue="95" style={inputStyle()} />
+              </div>
+
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
+                  Target Price ($)
+                </div>
+                <input defaultValue="110" style={inputStyle()} />
+              </div>
+            </div>
+
+            <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
+              <div style={resultBoxStyle()}>
+                <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 850 }}>Max Shares</div>
+                <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>—</div>
+              </div>
+
+              <div style={resultBoxStyle()}>
+                <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 850 }}>Risk / Reward</div>
+                <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>—</div>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 18, ...resultBoxStyle() }}>
+              <div style={{ fontWeight: 900, marginBottom: 6 }}>What this tool does</div>
+              <div style={{ opacity: 0.84, lineHeight: 1.6 }}>
+                This calculator helps you decide how many shares to buy based on the amount you are prepared to lose if
+                your stop loss is hit.
+              </div>
+            </div>
+
+            <div style={{ marginTop: 14, ...resultBoxStyle() }}>
+              <div style={{ fontWeight: 900, marginBottom: 6 }}>Why it matters</div>
+              <div style={{ opacity: 0.84, lineHeight: 1.6 }}>
+                Good traders control their risk before entering a trade. Position sizing helps prevent one bad trade
+                from doing serious damage to your account and keeps your trading more disciplined over time.
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <style>{`
+        .wrap { max-width: 1180px; margin: 0 auto; padding: 24px; }
+        .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+        @media (max-width: 900px) {
+          .grid2 { grid-template-columns: 1fr !important; }
+        }
+
+        @media (max-width: 760px) {
+          .wrap { padding: 16px !important; }
+        }
+      `}</style>
+    </main>
+  );
+}
