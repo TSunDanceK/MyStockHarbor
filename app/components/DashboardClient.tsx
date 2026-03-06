@@ -1639,7 +1639,7 @@ return (
       width: "auto",
       objectFit: "contain",
       display: "block",
-      transform: "scale(1.8)",
+      transform: "scale(2.5)",
       transformOrigin: "left center",
     }}
   />
