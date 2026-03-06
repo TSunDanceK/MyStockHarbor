@@ -1,4 +1,11 @@
 import Link from "next/link";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Contact MyStockHarbor",
+  description:
+    "Contact MyStockHarbor for questions, feedback, website suggestions, and general enquiries.",
+};
 
 export default function ContactPage() {
   return (
