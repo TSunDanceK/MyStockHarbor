@@ -1706,6 +1706,35 @@ return (
       >
         🖥️ Choosing your Platform <span style={{ opacity: 0.9 }}>→</span>
       </button>
+
+      <button
+        type="button"
+        onClick={() => router.push("/utilities")}
+        style={{
+          padding: "12px 16px",
+          borderRadius: 14,
+          border: `1px solid rgba(234,179,8,0.55)`,
+          background: COLORS.isDark
+            ? "linear-gradient(135deg, rgba(234,179,8,0.24), rgba(249,115,22,0.16))"
+            : "linear-gradient(135deg, rgba(234,179,8,0.16), rgba(249,115,22,0.10))",
+          color: COLORS.controlFg,
+          textDecoration: "none",
+          fontWeight: 950,
+          fontSize: 15,
+          letterSpacing: "0.2px",
+          boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.45)" : "0 10px 26px rgba(0,0,0,0.14)",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 10,
+          cursor: "pointer",
+          opacity: 1,
+          position: "relative",
+          overflow: "hidden",
+        }}
+        title="Trading Utilities"
+      >
+        🧮 Trading Utilities <span style={{ opacity: 0.9 }}>→</span>
+      </button>
     </div>
 
     <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginLeft: "auto" }}>
