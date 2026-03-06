@@ -62,7 +62,11 @@ export default function LearnPage() {
     </main>
   );
 }
-
+function learnCardHref(slug: string) {
+  if (slug === "macd-divergence") return "/learn/macd";
+  if (slug === "rsi-divergence") return "/learn/rsi";
+  return `/learn/${encodeURIComponent(slug)}`;
+}
 function Section(props: { title: string; items: { slug: string; title: string; summary: string }[] }) {
   const { title, items } = props;
 
@@ -88,7 +92,7 @@ function Section(props: { title: string; items: { slug: string; title: string; s
         {items.map((it) => (
           <Link
             key={it.slug}
-            href={`/learn/${encodeURIComponent(it.slug)}`}
+            href={learnCardHref(it.slug)}
             style={{
               border: "1px solid rgba(255,255,255,0.14)",
               borderRadius: 14,
