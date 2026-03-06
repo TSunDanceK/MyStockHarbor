@@ -1629,7 +1629,7 @@ return (
     overflow: "visible",
     marginRight: 8,
     flex: "0 0 auto",
-   marginLeft: -24,
+   marginLeft: -32,
   }}
 >
   <img
@@ -1640,7 +1640,7 @@ return (
       width: "auto",
       objectFit: "contain",
       display: "block",
-      transform: "scale(2.5)",
+      transform: "scale(2.8)",
       transformOrigin: "left center",
     }}
   />
