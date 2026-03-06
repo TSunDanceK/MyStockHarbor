@@ -1,0 +1,25 @@
+import type { Metadata } from "next";
+import StockSymbolPageClient from "./StockSymbolPageClient";
+
+type PageProps = {
+  params: Promise<{
+    symbol: string;
+  }>;
+};
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { symbol } = await params;
+  const clean = symbol.trim().toUpperCase();
+
+  return {
+    title: `${clean} Stock Analysis | MyStockHarbor`,
+    description: `View ${clean} stock analysis, trend signals, moving averages, and a quick technical summary on MyStockHarbor.`,
+  };
+}
+
+export default async function StockSymbolPage({ params }: PageProps) {
+  const { symbol } = await params;
+  const clean = symbol.trim().toUpperCase();
+
+  return <StockSymbolPageClient symbol={clean} />;
+}
