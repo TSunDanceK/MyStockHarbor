@@ -22,6 +22,7 @@ function HelpTip({ text }: { text: string }) {
         fontWeight: 900,
         cursor: "pointer",
         marginLeft: 6,
+        flex: "0 0 auto",
       }}
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
@@ -29,7 +30,7 @@ function HelpTip({ text }: { text: string }) {
     >
       ?
       {open && (
-              <div
+        <div
           style={{
             position: "absolute",
             bottom: 22,
@@ -39,13 +40,15 @@ function HelpTip({ text }: { text: string }) {
             padding: 10,
             borderRadius: 10,
             backgroundColor: "#0f172a",
-            opacity: 1,
             border: "1px solid rgba(255,255,255,0.14)",
             fontSize: 12,
             lineHeight: 1.5,
             fontWeight: 600,
-            zIndex: 10,
+            color: "#f1f5f9",
+            zIndex: 50,
             boxShadow: "0 10px 24px rgba(0,0,0,0.45)",
+            opacity: 1,
+            pointerEvents: "none",
           }}
         >
           {text}
@@ -109,6 +112,31 @@ function resultBoxStyle(): React.CSSProperties {
   };
 }
 
+function labelStyle(): React.CSSProperties {
+  return {
+    fontSize: 12,
+    fontWeight: 850,
+    color: "rgba(241,245,249,0.85)",
+    marginBottom: 6,
+    display: "flex",
+    alignItems: "center",
+    gap: 2,
+    flexWrap: "wrap",
+  };
+}
+
+function resultLabelStyle(): React.CSSProperties {
+  return {
+    fontSize: 12,
+    color: "rgba(241,245,249,0.75)",
+    fontWeight: 850,
+    display: "flex",
+    alignItems: "center",
+    gap: 2,
+    flexWrap: "wrap",
+  };
+}
+
 function toNum(v: string) {
   const n = Number(v);
   return Number.isFinite(n) ? n : NaN;
@@ -131,17 +159,70 @@ function fmtNum(v: number | null) {
 
 export default function UtilitiesPage() {
   const [marginSide, setMarginSide] = useState<"long" | "short">("long");
-  const [marginEntry, setMarginEntry] = useState("1000");
-  const [marginPositionSize, setMarginPositionSize] = useState("4000");
+  const [marginEntry, setMarginEntry] = useState("100");
+  const [marginPositionSize, setMarginPositionSize] = useState("100");
   const [marginLeverage, setMarginLeverage] = useState("2");
-  
 
   const [riskAmount, setRiskAmount] = useState("100");
-  const [riskEntry, setRiskEntry] = useState("4000");
-  const [riskStop, setRiskStop] = useState("3900");
-  const [riskTarget, setRiskTarget] = useState("4300");
+  const [riskEntry, setRiskEntry] = useState("100");
+  const [riskStop, setRiskStop] = useState("90");
+  const [riskTarget, setRiskTarget] = useState("110");
 
-const marginCalc = useMemo(() => {
+  const marginCalc = useMemo(() => {
+    const entry = toNum(marginEntry);
+    const positionSize = toNum(marginPositionSize);
+    const leverage = toNum(marginLeverage);
+
+    if (
+      !Number.isFinite(entry) ||
+      !Number.isFinite(positionSize) ||
+      !Number.isFinite(leverage) ||
+      entry <= 0 ||
+      positionSize <= 0 ||
+      leverage <= 0
+    ) {
+      return {
+        liquidationPrice: null as number | null,
+        distancePct: null as number | null,
+      };
+    }
+
+    const qty = positionSize / entry;
+    if (!Number.isFinite(qty) || qty <= 0) {
+      return {
+        liquidationPrice: null as number | null,
+        distancePct: null as number | null,
+      };
+    }
+
+    const marginUsed = positionSize / leverage;
+    const moveAgainstYou = marginUsed / qty;
+
+    let liquidationPrice: number;
+    if (marginSide === "long") {
+      liquidationPrice = entry - moveAgainstYou;
+    } else {
+      liquidationPrice = entry + moveAgainstYou;
+    }
+
+    if (!Number.isFinite(liquidationPrice) || liquidationPrice <= 0) {
+      return {
+        liquidationPrice: null as number | null,
+        distancePct: null as number | null,
+      };
+    }
+
+    const distancePct =
+      marginSide === "long"
+        ? ((entry - liquidationPrice) / entry) * 100
+        : ((liquidationPrice - entry) / entry) * 100;
+
+    return {
+      liquidationPrice,
+      distancePct,
+    };
+  }, [marginEntry, marginPositionSize, marginLeverage, marginSide]);
+
   const riskCalc = useMemo(() => {
     const risk = toNum(riskAmount);
     const entry = toNum(riskEntry);
@@ -237,7 +318,6 @@ const marginCalc = useMemo(() => {
         </div>
 
         <div style={{ marginTop: 22 }} className="grid2">
-          {/* LEFT CARD */}
           <section
             style={{
               border: "1px solid rgba(255,255,255,0.14)",
@@ -273,14 +353,7 @@ const marginCalc = useMemo(() => {
 
             <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
               <div>
-                <div
-  style={{
-    fontSize: 12,
-    fontWeight: 850,
-    color: "rgba(241,245,249,0.85)",
-    marginBottom: 6,
-  }}
->
+                <div style={labelStyle()}>
                   Trade Direction
                   <HelpTip text="Choose Long if you expect price to rise, Short if you expect price to fall." />
                 </div>
@@ -295,14 +368,7 @@ const marginCalc = useMemo(() => {
               </div>
 
               <div>
-                <div
-  style={{
-    fontSize: 12,
-    fontWeight: 850,
-    color: "rgba(241,245,249,0.85)",
-    marginBottom: 6,
-  }}
->
+                <div style={labelStyle()}>
                   Entry Price ($)
                   <HelpTip text="The price where you enter the trade." />
                 </div>
@@ -314,16 +380,9 @@ const marginCalc = useMemo(() => {
               </div>
 
               <div>
-                <div
-  style={{
-    fontSize: 12,
-    fontWeight: 850,
-    color: "rgba(241,245,249,0.85)",
-    marginBottom: 6,
-  }}
->
+                <div style={labelStyle()}>
                   Position Size ($)
-                  <HelpTip text="Total dollar value of the trade. Example: buying $4000 worth of stock." />
+                  <HelpTip text="Total dollar value of the trade. Example: buying $100 worth of stock." />
                 </div>
                 <input
                   value={marginPositionSize}
@@ -333,14 +392,7 @@ const marginCalc = useMemo(() => {
               </div>
 
               <div>
-                <div
-  style={{
-    fontSize: 12,
-    fontWeight: 850,
-    color: "rgba(241,245,249,0.85)",
-    marginBottom: 6,
-  }}
->
+                <div style={labelStyle()}>
                   Leverage
                   <HelpTip text="How much borrowed money is used. 2× leverage means you control double your capital." />
                 </div>
@@ -350,21 +402,11 @@ const marginCalc = useMemo(() => {
                   style={inputStyle()}
                 />
               </div>
-
-              <div>
-
             </div>
 
+            <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
               <div style={resultBoxStyle()}>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "rgba(241,245,249,0.75)",
-                    fontWeight: 850,
-                    display: "flex",
-                    alignItems: "center",
-                  }}
-                >
+                <div style={resultLabelStyle()}>
                   Liquidation Price
                   <HelpTip text="Estimated liquidation price only. Some brokers may calculate liquidation differently." />
                 </div>
@@ -374,15 +416,7 @@ const marginCalc = useMemo(() => {
               </div>
 
               <div style={resultBoxStyle()}>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "rgba(241,245,249,0.75)",
-                    fontWeight: 850,
-                    display: "flex",
-                    alignItems: "center",
-                  }}
-                >
+                <div style={resultLabelStyle()}>
                   Distance to Liquidation
                   <HelpTip text="Shows how far price can move against your trade before estimated liquidation. Some brokers may calculate liquidation differently." />
                 </div>
@@ -390,12 +424,13 @@ const marginCalc = useMemo(() => {
                   {fmtPct(marginCalc.distancePct)}
                 </div>
               </div>
+            </div>
 
             <div style={{ marginTop: 18, ...resultBoxStyle() }}>
               <div style={{ fontWeight: 900, marginBottom: 6 }}>What this tool does</div>
               <div style={{ opacity: 0.84, lineHeight: 1.6 }}>
-                This calculator estimates the price at which your broker could automatically close your position due
-                to insufficient margin.
+                This calculator estimates the price at which your broker could automatically close your position due to
+                insufficient margin.
               </div>
             </div>
 
@@ -408,7 +443,6 @@ const marginCalc = useMemo(() => {
             </div>
           </section>
 
-          {/* RIGHT CARD */}
           <section
             style={{
               border: "1px solid rgba(255,255,255,0.14)",
@@ -444,14 +478,7 @@ const marginCalc = useMemo(() => {
 
             <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
               <div>
-                <div
-  style={{
-    fontSize: 12,
-    fontWeight: 850,
-    color: "rgba(241,245,249,0.85)",
-    marginBottom: 6,
-  }}
->
+                <div style={labelStyle()}>
                   Risk Amount ($)
                   <HelpTip text="Maximum dollar amount you are willing to lose if your stop loss is hit." />
                 </div>
@@ -463,14 +490,7 @@ const marginCalc = useMemo(() => {
               </div>
 
               <div>
-                <div
-  style={{
-    fontSize: 12,
-    fontWeight: 850,
-    color: "rgba(241,245,249,0.85)",
-    marginBottom: 6,
-  }}
->
+                <div style={labelStyle()}>
                   Entry Price ($)
                   <HelpTip text="The price where you plan to enter the trade." />
                 </div>
@@ -482,14 +502,7 @@ const marginCalc = useMemo(() => {
               </div>
 
               <div>
-                <div
-  style={{
-    fontSize: 12,
-    fontWeight: 850,
-    color: "rgba(241,245,249,0.85)",
-    marginBottom: 6,
-  }}
->
+                <div style={labelStyle()}>
                   Stop Loss Price ($)
                   <HelpTip text="The price where you will exit the trade to limit losses." />
                 </div>
@@ -501,14 +514,7 @@ const marginCalc = useMemo(() => {
               </div>
 
               <div>
-                <div
-  style={{
-    fontSize: 12,
-    fontWeight: 850,
-    color: "rgba(241,245,249,0.85)",
-    marginBottom: 6,
-  }}
->
+                <div style={labelStyle()}>
                   Target Price ($)
                   <HelpTip text="Optional price where you plan to take profit." />
                 </div>
@@ -522,7 +528,7 @@ const marginCalc = useMemo(() => {
 
             <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
               <div style={resultBoxStyle()}>
-                <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 850 }}>Max Shares</div>
+                <div style={resultLabelStyle()}>Max Shares</div>
                 <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
                   {fmtNum(riskCalc.shares)}
                 </div>
@@ -536,15 +542,7 @@ const marginCalc = useMemo(() => {
                   boxShadow: "0 0 0 1px rgba(34,197,94,0.08) inset",
                 }}
               >
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "rgba(241,245,249,0.78)",
-                    fontWeight: 850,
-                    display: "flex",
-                    alignItems: "center",
-                  }}
-                >
+                <div style={resultLabelStyle()}>
                   Total Position Size
                   <HelpTip text="This is the suggested trade size based on your chosen risk amount and stop loss distance." />
                 </div>
@@ -554,14 +552,14 @@ const marginCalc = useMemo(() => {
               </div>
 
               <div style={resultBoxStyle()}>
-                <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 850 }}>Dollar Risk</div>
+                <div style={resultLabelStyle()}>Dollar Risk</div>
                 <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
                   {fmtMoney(riskCalc.dollarRisk)}
                 </div>
               </div>
 
               <div style={resultBoxStyle()}>
-                <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 850 }}>Risk / Reward</div>
+                <div style={resultLabelStyle()}>Risk / Reward</div>
                 <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
                   {riskCalc.rr == null ? "—" : `1 : ${riskCalc.rr.toFixed(2)}`}
                 </div>
