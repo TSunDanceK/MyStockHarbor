@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import React, { useMemo, useState } from "react";
 
 function topBtn(): React.CSSProperties {
   return {
@@ -29,6 +32,22 @@ function inputStyle(): React.CSSProperties {
   };
 }
 
+function selectStyle(): React.CSSProperties {
+  return {
+    width: "100%",
+    height: 44,
+    padding: "0 12px",
+    borderRadius: 12,
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "#161b22",
+    color: "#f1f5f9",
+    outline: "none",
+    fontSize: 14,
+    fontWeight: 700,
+    boxSizing: "border-box",
+  };
+}
+
 function resultBoxStyle(): React.CSSProperties {
   return {
     borderRadius: 14,
@@ -38,7 +57,149 @@ function resultBoxStyle(): React.CSSProperties {
   };
 }
 
+function toNum(v: string) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+function fmtMoney(v: number | null) {
+  if (v == null || !Number.isFinite(v)) return "—";
+  return `$${v.toFixed(2)}`;
+}
+
+function fmtPct(v: number | null) {
+  if (v == null || !Number.isFinite(v)) return "—";
+  return `${v.toFixed(2)}%`;
+}
+
+function fmtNum(v: number | null) {
+  if (v == null || !Number.isFinite(v)) return "—";
+  return `${v.toFixed(2)}`;
+}
+
 export default function UtilitiesPage() {
+  const [marginSide, setMarginSide] = useState<"long" | "short">("long");
+  const [marginEntry, setMarginEntry] = useState("1000");
+  const [marginPositionSize, setMarginPositionSize] = useState("4000");
+  const [marginLeverage, setMarginLeverage] = useState("2");
+  const [marginMaintenance, setMarginMaintenance] = useState("25");
+
+  const [riskAmount, setRiskAmount] = useState("100");
+  const [riskEntry, setRiskEntry] = useState("4000");
+  const [riskStop, setRiskStop] = useState("3900");
+  const [riskTarget, setRiskTarget] = useState("4300");
+
+  const marginCalc = useMemo(() => {
+    const entry = toNum(marginEntry);
+    const positionSize = toNum(marginPositionSize);
+    const leverage = toNum(marginLeverage);
+    const maintenancePct = toNum(marginMaintenance);
+
+    if (
+      !Number.isFinite(entry) ||
+      !Number.isFinite(positionSize) ||
+      !Number.isFinite(leverage) ||
+      !Number.isFinite(maintenancePct) ||
+      entry <= 0 ||
+      positionSize <= 0 ||
+      leverage <= 0 ||
+      maintenancePct < 0
+    ) {
+      return {
+        liquidationPrice: null as number | null,
+        distancePct: null as number | null,
+      };
+    }
+
+    const marginUsed = positionSize / leverage;
+    const maintenanceRequirement = positionSize * (maintenancePct / 100);
+    const maxLossBeforeLiquidation = marginUsed - maintenanceRequirement;
+
+    if (maxLossBeforeLiquidation <= 0) {
+      return {
+        liquidationPrice: null as number | null,
+        distancePct: null as number | null,
+      };
+    }
+
+    const qty = positionSize / entry;
+    if (!Number.isFinite(qty) || qty <= 0) {
+      return {
+        liquidationPrice: null as number | null,
+        distancePct: null as number | null,
+      };
+    }
+
+    const moveAgainstYou = maxLossBeforeLiquidation / qty;
+
+    let liquidationPrice: number;
+    if (marginSide === "long") {
+      liquidationPrice = entry - moveAgainstYou;
+    } else {
+      liquidationPrice = entry + moveAgainstYou;
+    }
+
+    if (!Number.isFinite(liquidationPrice) || liquidationPrice <= 0) {
+      return {
+        liquidationPrice: null as number | null,
+        distancePct: null as number | null,
+      };
+    }
+
+    const distancePct =
+      marginSide === "long"
+        ? ((entry - liquidationPrice) / entry) * 100
+        : ((liquidationPrice - entry) / entry) * 100;
+
+    return {
+      liquidationPrice,
+      distancePct,
+    };
+  }, [marginEntry, marginPositionSize, marginLeverage, marginMaintenance, marginSide]);
+
+  const riskCalc = useMemo(() => {
+    const risk = toNum(riskAmount);
+    const entry = toNum(riskEntry);
+    const stop = toNum(riskStop);
+    const target = toNum(riskTarget);
+
+    if (!Number.isFinite(risk) || !Number.isFinite(entry) || !Number.isFinite(stop) || risk <= 0 || entry <= 0 || stop <= 0) {
+      return {
+        shares: null as number | null,
+        positionSize: null as number | null,
+        dollarRisk: null as number | null,
+        rr: null as number | null,
+      };
+    }
+
+    const riskPerShare = Math.abs(entry - stop);
+    if (!Number.isFinite(riskPerShare) || riskPerShare <= 0) {
+      return {
+        shares: null as number | null,
+        positionSize: null as number | null,
+        dollarRisk: null as number | null,
+        rr: null as number | null,
+      };
+    }
+
+    const shares = risk / riskPerShare;
+    const positionSize = shares * entry;
+    const dollarRisk = shares * riskPerShare;
+
+    let rr: number | null = null;
+    if (Number.isFinite(target) && target > 0) {
+      const rewardPerShare = Math.abs(target - entry);
+      rr = rewardPerShare > 0 ? rewardPerShare / riskPerShare : null;
+    }
+
+    return {
+      shares,
+      positionSize,
+      dollarRisk,
+      rr,
+    };
+  }, [riskAmount, riskEntry, riskStop, riskTarget]);
+
   return (
     <main
       style={{
@@ -121,49 +282,56 @@ export default function UtilitiesPage() {
             <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
               <div>
                 <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
-                  Account Size ($)
+                  Trade Direction
                 </div>
-                <input defaultValue="1000" style={inputStyle()} />
+                <select value={marginSide} onChange={(e) => setMarginSide(e.target.value as "long" | "short")} style={selectStyle()}>
+                  <option value="long">Long</option>
+                  <option value="short">Short</option>
+                </select>
               </div>
 
               <div>
                 <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
                   Entry Price ($)
                 </div>
-                <input defaultValue="100" style={inputStyle()} />
+                <input value={marginEntry} onChange={(e) => setMarginEntry(e.target.value)} style={inputStyle()} />
               </div>
 
               <div>
                 <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
                   Position Size ($)
                 </div>
-                <input defaultValue="3000" style={inputStyle()} />
+                <input value={marginPositionSize} onChange={(e) => setMarginPositionSize(e.target.value)} style={inputStyle()} />
               </div>
 
               <div>
                 <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
                   Leverage
                 </div>
-                <input defaultValue="3" style={inputStyle()} />
+                <input value={marginLeverage} onChange={(e) => setMarginLeverage(e.target.value)} style={inputStyle()} />
               </div>
 
               <div>
                 <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
                   Maintenance Margin (%)
                 </div>
-                <input defaultValue="25" style={inputStyle()} />
+                <input value={marginMaintenance} onChange={(e) => setMarginMaintenance(e.target.value)} style={inputStyle()} />
               </div>
             </div>
 
             <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
               <div style={resultBoxStyle()}>
                 <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 850 }}>Liquidation Price</div>
-                <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>$—</div>
+                <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
+                  {fmtMoney(marginCalc.liquidationPrice)}
+                </div>
               </div>
 
               <div style={resultBoxStyle()}>
                 <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 850 }}>Distance to Liquidation</div>
-                <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>—%</div>
+                <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
+                  {fmtPct(marginCalc.distancePct)}
+                </div>
               </div>
             </div>
 
@@ -221,49 +389,60 @@ export default function UtilitiesPage() {
             <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
               <div>
                 <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
-                  Account Size ($)
+                  Risk Amount ($)
                 </div>
-                <input defaultValue="1000" style={inputStyle()} />
-              </div>
-
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
-                  Risk Per Trade (%)
-                </div>
-                <input defaultValue="1" style={inputStyle()} />
+                <input value={riskAmount} onChange={(e) => setRiskAmount(e.target.value)} style={inputStyle()} />
               </div>
 
               <div>
                 <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
                   Entry Price ($)
                 </div>
-                <input defaultValue="100" style={inputStyle()} />
+                <input value={riskEntry} onChange={(e) => setRiskEntry(e.target.value)} style={inputStyle()} />
               </div>
 
               <div>
                 <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
                   Stop Loss Price ($)
                 </div>
-                <input defaultValue="95" style={inputStyle()} />
+                <input value={riskStop} onChange={(e) => setRiskStop(e.target.value)} style={inputStyle()} />
               </div>
 
               <div>
                 <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
                   Target Price ($)
                 </div>
-                <input defaultValue="110" style={inputStyle()} />
+                <input value={riskTarget} onChange={(e) => setRiskTarget(e.target.value)} style={inputStyle()} />
               </div>
             </div>
 
             <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
               <div style={resultBoxStyle()}>
                 <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 850 }}>Max Shares</div>
-                <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>—</div>
+                <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
+                  {fmtNum(riskCalc.shares)}
+                </div>
+              </div>
+
+              <div style={resultBoxStyle()}>
+                <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 850 }}>Total Position Size</div>
+                <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
+                  {fmtMoney(riskCalc.positionSize)}
+                </div>
+              </div>
+
+              <div style={resultBoxStyle()}>
+                <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 850 }}>Dollar Risk</div>
+                <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
+                  {fmtMoney(riskCalc.dollarRisk)}
+                </div>
               </div>
 
               <div style={resultBoxStyle()}>
                 <div style={{ fontSize: 12, opacity: 0.75, fontWeight: 850 }}>Risk / Reward</div>
-                <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>—</div>
+                <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
+                  {riskCalc.rr == null ? "—" : `1 : ${riskCalc.rr.toFixed(2)}`}
+                </div>
               </div>
             </div>
 
