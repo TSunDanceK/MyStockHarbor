@@ -29,7 +29,7 @@ function HelpTip({ text }: { text: string }) {
     >
       ?
       {open && (
-        <div
+              <div
           style={{
             position: "absolute",
             bottom: 22,
@@ -38,12 +38,14 @@ function HelpTip({ text }: { text: string }) {
             width: 220,
             padding: 10,
             borderRadius: 10,
-            background: "#0f172a",
+            backgroundColor: "#0f172a",
+            opacity: 1,
             border: "1px solid rgba(255,255,255,0.14)",
             fontSize: 12,
             lineHeight: 1.5,
             fontWeight: 600,
             zIndex: 10,
+            boxShadow: "0 10px 24px rgba(0,0,0,0.45)",
           }}
         >
           {text}
