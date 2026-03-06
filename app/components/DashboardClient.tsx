@@ -1821,206 +1821,199 @@ return (
 `}</style>
 
       {/* Controls row */}
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginTop: 16 }}>
-{/* Search FIRST (light), then Common Tickers (dark) — aligned + consistent sizing */}
-<div
-  style={{
-    display: "flex",
-    gap: 14,
-    alignItems: "flex-start",
-    flexWrap: "wrap",
-  }}
->
-  {/* SEARCH (light) */}
-  <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 6 }}>
-    <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, lineHeight: 1 }}>
-      Search Any Stock
-    </div>
-
-    <input
-      value={query}
-      onChange={(e) => {
-        setQuery(e.target.value);
-        setOpen(true);
-      }}
-      onFocus={() => setOpen(true)}
-      onBlur={() => setTimeout(() => setOpen(false), 150)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") chooseSymbol(query);
-      }}
-      placeholder="🔎 Search ANY ticker or company (e.g. IBM, NVIDIA, Tesla)"
-      style={{
-        height: 44,              // ✅ same “control height”
-        padding: "0 14px",       // ✅ consistent vertical alignment
-        borderRadius: 14,
-        border: "2px solid rgba(59,130,246,0.45)",
-        background: "#ffffff",
-        color: "#111",
-        width: 260,              // ✅ similar size to others (not huge)
-        fontSize: 14,
-        fontWeight: 750,
-        boxShadow: COLORS.isDark
-          ? "0 6px 20px rgba(0,0,0,0.35)"
-          : "0 6px 20px rgba(0,0,0,0.12)",
-        outline: "none",
-      }}
-    />
-
-    {open && results.length > 0 ? (
-      <div
-        style={{
-          position: "absolute",
-          top: "calc(100% + 8px)",
-          left: 0,
-          right: 0,
-          border: "1px solid #3333",
-          borderRadius: 12,
-          background: "#fff",
-          color: "#111",
-          overflow: "hidden",
-          zIndex: 9999,
-          boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
-          maxHeight: 340,
-          overflowY: "auto",
-        }}
-      >
-        {results.map((r) => (
-          <button
-            key={`${r.symbol}-${r.exchange}`}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => chooseSymbol(r.symbol)}
-            style={{
-              display: "block",
-              width: "100%",
-              textAlign: "left",
-              padding: "10px 12px",
-              border: "none",
-              background: "transparent",
-              cursor: "pointer",
-            }}
-          >
-            <div style={{ fontWeight: 800 }}>
-              {r.symbol} <span style={{ fontWeight: 600, opacity: 0.7 }}>({r.exchange})</span>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginTop: 16 }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 14,
+            alignItems: "flex-start",
+            flexWrap: "wrap",
+          }}
+        >
+          {/* SEARCH */}
+          <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, lineHeight: 1 }}>
+              Search Any Stock
             </div>
-            <div style={{ fontSize: 12, opacity: 0.75 }}>{r.name}</div>
-          </button>
-        ))}
-      </div>
-    ) : null}
-  </div>
 
-  {/* COMMON TICKERS (dark) */}
-  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-    <label style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, lineHeight: 1 }}>
-      Common Tickers
-    </label>
+            <input
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setOpen(true);
+              }}
+              onFocus={() => setOpen(true)}
+              onBlur={() => setTimeout(() => setOpen(false), 150)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") chooseSymbol(query);
+              }}
+              placeholder="🔎 Search ANY ticker or company"
+              style={{
+                height: 44,
+                padding: "0 14px",
+                borderRadius: 14,
+                border: "2px solid rgba(59,130,246,0.45)",
+                background: "#ffffff",
+                color: "#111",
+                width: 260,
+                fontSize: 14,
+                fontWeight: 750,
+                boxShadow: COLORS.isDark
+                  ? "0 6px 20px rgba(0,0,0,0.35)"
+                  : "0 6px 20px rgba(0,0,0,0.12)",
+                outline: "none",
+              }}
+            />
 
-{/* FIND YOUR NEXT STOCK */}
-<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-  <label style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, lineHeight: 1 }}>
-    Stock Pickers
-  </label>
+            {open && results.length > 0 ? (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "calc(100% + 8px)",
+                  left: 0,
+                  right: 0,
+                  border: "1px solid #3333",
+                  borderRadius: 12,
+                  background: "#fff",
+                  color: "#111",
+                  overflow: "hidden",
+                  zIndex: 9999,
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
+                  maxHeight: 340,
+                  overflowY: "auto",
+                }}
+              >
+                {results.map((r) => (
+                  <button
+                    key={`${r.symbol}-${r.exchange}`}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => chooseSymbol(r.symbol)}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      textAlign: "left",
+                      padding: "10px 12px",
+                      border: "none",
+                      background: "transparent",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div style={{ fontWeight: 800 }}>
+                      {r.symbol} <span style={{ fontWeight: 600, opacity: 0.7 }}>({r.exchange})</span>
+                    </div>
+                    <div style={{ fontSize: 12, opacity: 0.75 }}>{r.name}</div>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
 
-  <button
-    type="button"
-    onClick={() => {
-      if (isPicking) return;
-      startPicking(() => {
-        router.push("/pickers");
-      });
-    }}
-    disabled={isPicking}
-    style={{
-      height: 44,
-      padding: "0 18px",
-      borderRadius: 12,
-      border: `1px solid rgba(59,130,246,0.55)`,
-      background: COLORS.isDark
-        ? "linear-gradient(135deg, rgba(59,130,246,0.35), rgba(59,130,246,0.18))"
-        : "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(59,130,246,0.12))",
-      color: COLORS.controlFg,
-      fontWeight: 900,
-      fontSize: 14,
-      letterSpacing: "0.2px",
-      cursor: isPicking ? "not-allowed" : "pointer",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      minWidth: 220,
-    }}
-  >
-    🔎 Find Your Next Stock →
-  </button>
-</div>
-   
-{/* Indicator (aligned like the others) */}
-<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-  <label style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, lineHeight: 1 }}>
-    Indicator
-  </label>
+          {/* STOCK PICKERS */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <label style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, lineHeight: 1 }}>
+              Stock Pickers
+            </label>
 
-  <select
-    value={indicator}
-    onChange={(e) => setIndicator(e.target.value as any)}
-    style={{
-      height: 44, // ✅ matches Search + Common Tickers
-      padding: "0 12px",
-      borderRadius: 12,
-      border: `1px solid ${COLORS.controlBorder}`,
-      background: "#ffffff",
-      color: "#111",
-      fontWeight: 900,
-      minWidth: 200,
-    }}
-  >
-    {INDICATORS.map((x) => (
-      <option key={x} value={x}>
-        {x === "None" ? "Overview" : x}
-      </option>
-    ))}
-  </select>
-</div>
+            <button
+              type="button"
+              onClick={() => {
+                if (isPicking) return;
+                startPicking(() => {
+                  router.push("/pickers");
+                });
+              }}
+              disabled={isPicking}
+              style={{
+                height: 44,
+                padding: "0 18px",
+                borderRadius: 12,
+                border: `1px solid rgba(59,130,246,0.55)`,
+                background: COLORS.isDark
+                  ? "linear-gradient(135deg, rgba(59,130,246,0.35), rgba(59,130,246,0.18))"
+                  : "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(59,130,246,0.12))",
+                color: COLORS.controlFg,
+                fontWeight: 900,
+                fontSize: 14,
+                letterSpacing: "0.2px",
+                cursor: isPicking ? "not-allowed" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                minWidth: 220,
+              }}
+            >
+              🔎 Find Your Next Stock →
+            </button>
+          </div>
 
-{/* Timeframes (pinned right) */}
-<div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
-  {TIMEFRAMES.map((t) => {
-    const active = tfDays === t.days;
+          {/* INDICATOR */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <label style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, lineHeight: 1 }}>
+              Indicator
+            </label>
 
-    return (
-      <button
-        key={t.label}
-        onClick={() => {
-          setTfDays(t.days);
-          setWindowDays(t.days);
-          setWindowOffset(0);
-        }}
-        style={{
-          padding: "10px 12px",
-          borderRadius: 12,
-          border: `1px solid ${COLORS.controlBorder}`,
-          background: active
-            ? COLORS.isDark
-              ? "rgba(255,255,255,0.18)"
-              : "rgba(0,0,0,0.08)"
-            : COLORS.controlBg,
-          color: COLORS.controlFg,
-          cursor: "pointer",
-          opacity: 1,
-          fontWeight: active ? 900 : 750,
-          boxShadow: active
-            ? COLORS.isDark
-              ? "0 10px 26px rgba(0,0,0,0.45)"
-              : "0 10px 26px rgba(0,0,0,0.12)"
-            : "none",
-        }}
-      >
-        {t.label}
-      </button>
-    );
-  })}
-</div>
+            <select
+              value={indicator}
+              onChange={(e) => setIndicator(e.target.value as any)}
+              style={{
+                height: 44,
+                padding: "0 12px",
+                borderRadius: 12,
+                border: `1px solid ${COLORS.controlBorder}`,
+                background: "#ffffff",
+                color: "#111",
+                fontWeight: 900,
+                minWidth: 220,
+              }}
+            >
+              {INDICATORS.map((x) => (
+                <option key={x} value={x}>
+                  {x === "None" ? "Overview" : x}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
+        {/* Timeframes */}
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {TIMEFRAMES.map((t) => {
+            const active = tfDays === t.days;
+
+            return (
+              <button
+                key={t.label}
+                onClick={() => {
+                  setTfDays(t.days);
+                  setWindowDays(t.days);
+                  setWindowOffset(0);
+                }}
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  border: `1px solid ${COLORS.controlBorder}`,
+                  background: active
+                    ? COLORS.isDark
+                      ? "rgba(255,255,255,0.18)"
+                      : "rgba(0,0,0,0.08)"
+                    : COLORS.controlBg,
+                  color: COLORS.controlFg,
+                  cursor: "pointer",
+                  opacity: 1,
+                  fontWeight: active ? 900 : 750,
+                  boxShadow: active
+                    ? COLORS.isDark
+                      ? "0 10px 26px rgba(0,0,0,0.45)"
+                      : "0 10px 26px rgba(0,0,0,0.12)"
+                    : "none",
+                }}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
      <div className="mainGrid">
         {/* Card 1: Summary */}
