@@ -2,7 +2,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import { getLesson } from "../lessons";
+import { getLesson, getNextLesson } from "../lessons";
 
 type Props = {
   params: { slug: string };
@@ -74,6 +74,7 @@ export default async function LessonPage({ params }: Props) {
   const slug = String(resolvedParams?.slug ?? "").trim();
 
   const lesson = getLesson(slug);
+  const nextLesson = getNextLesson(slug);
 
   if (!lesson) {
     return (
@@ -206,12 +207,61 @@ export default async function LessonPage({ params }: Props) {
         </div>
 
         {/* Outro */}
+        {/* Outro */}
         <div style={{ marginTop: 18 }}>
           <TipBox title="Next step">
             Open the Dashboard, pick a stock, and try to explain what you see in one sentence. If you can explain it simply,
             you understand it.
           </TipBox>
         </div>
+
+        {nextLesson ? (
+          <div style={{ marginTop: 18 }}>
+            <Link
+              href={`/learn/${encodeURIComponent(nextLesson.slug)}`}
+              style={{
+                display: "block",
+                width: "100%",
+                textAlign: "center",
+                padding: "18px 20px",
+                borderRadius: 18,
+                border: "1px solid rgba(59,130,246,0.38)",
+                background:
+                  "linear-gradient(135deg, rgba(59,130,246,0.24), rgba(16,185,129,0.14))",
+                color: "#f8fafc",
+                textDecoration: "none",
+                fontWeight: 950,
+                fontSize: 16,
+                letterSpacing: "0.4px",
+                boxShadow: "0 10px 30px rgba(0,0,0,0.22)",
+              }}
+            >
+              MOVE TO {nextLesson.title.toUpperCase()} LESSON →
+            </Link>
+          </div>
+        ) : (
+          <div style={{ marginTop: 18 }}>
+            <Link
+              href="/learn"
+              style={{
+                display: "block",
+                width: "100%",
+                textAlign: "center",
+                padding: "18px 20px",
+                borderRadius: 18,
+                border: "1px solid rgba(255,255,255,0.14)",
+                background: "rgba(255,255,255,0.06)",
+                color: "#f8fafc",
+                textDecoration: "none",
+                fontWeight: 950,
+                fontSize: 16,
+                letterSpacing: "0.4px",
+              }}
+            >
+              BACK TO ALL LESSONS
+            </Link>
+          </div>
+        )}
       </div>
 
       <style>{`
