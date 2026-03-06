@@ -1623,10 +1623,11 @@ return (
   src="/logo.png"
   alt="MyStockHarbor"
   style={{
-    height: 64,
+    height: 96,
     width: "auto",
     objectFit: "contain",
     display: "block",
+    marginRight: 8,
   }}
 />
 
