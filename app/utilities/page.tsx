@@ -26,7 +26,7 @@ function HelpTip({ text }: { text: string }) {
       }}
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
-      onClick={() => setOpen(!open)}
+      onClick={() => setOpen((v) => !v)}
     >
       ?
       {open && (
@@ -103,7 +103,7 @@ function selectStyle(): React.CSSProperties {
   };
 }
 
-function resultBoxStyle(): React.CSSProperties {
+function baseResultBoxStyle(): React.CSSProperties {
   return {
     borderRadius: 14,
     border: "1px solid rgba(255,255,255,0.12)",
@@ -155,6 +155,51 @@ function fmtPct(v: number | null) {
 function fmtNum(v: number | null) {
   if (v == null || !Number.isFinite(v)) return "—";
   return `${v.toFixed(2)}`;
+}
+
+function getLiquidationColor(distance: number | null) {
+  if (distance == null || !Number.isFinite(distance)) return "neutral";
+  if (distance >= 50) return "green";
+  if (distance >= 31) return "yellow";
+  return "red";
+}
+
+function getRRColor(rr: number | null) {
+  if (rr == null || !Number.isFinite(rr)) return "neutral";
+  if (rr >= 2.5) return "green";
+  if (rr >= 1.5) return "yellow";
+  return "red";
+}
+
+function tintBox(type: "neutral" | "green" | "yellow" | "red", emphasize = false): React.CSSProperties {
+  const base = baseResultBoxStyle();
+
+  if (type === "green") {
+    return {
+      ...base,
+      border: "1px solid rgba(34,197,94,0.32)",
+      background: "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(255,255,255,0.04))",
+      boxShadow: emphasize ? "0 0 0 1px rgba(34,197,94,0.10) inset" : "none",
+    };
+  }
+
+  if (type === "yellow") {
+    return {
+      ...base,
+      border: "1px solid rgba(234,179,8,0.32)",
+      background: "linear-gradient(135deg, rgba(234,179,8,0.12), rgba(255,255,255,0.04))",
+    };
+  }
+
+  if (type === "red") {
+    return {
+      ...base,
+      border: "1px solid rgba(239,68,68,0.34)",
+      background: "linear-gradient(135deg, rgba(239,68,68,0.14), rgba(255,255,255,0.04))",
+    };
+  }
+
+  return base;
 }
 
 export default function UtilitiesPage() {
@@ -272,6 +317,9 @@ export default function UtilitiesPage() {
       rr,
     };
   }, [riskAmount, riskEntry, riskStop, riskTarget]);
+
+  const liquidationColor = getLiquidationColor(marginCalc.distancePct) as "neutral" | "green" | "yellow" | "red";
+  const rrColor = getRRColor(riskCalc.rr) as "neutral" | "green" | "yellow" | "red";
 
   return (
     <main
@@ -405,20 +453,26 @@ export default function UtilitiesPage() {
             </div>
 
             <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
-              <div style={resultBoxStyle()}>
+              <div style={tintBox(liquidationColor)}>
                 <div style={resultLabelStyle()}>
                   Liquidation Price
                   <HelpTip text="Estimated liquidation price only. Some brokers may calculate liquidation differently." />
+                  {liquidationColor === "red" ? (
+                    <span style={{ marginLeft: "auto", color: "#ef4444", fontWeight: 900 }}>⚠</span>
+                  ) : null}
                 </div>
                 <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
                   {fmtMoney(marginCalc.liquidationPrice)}
                 </div>
               </div>
 
-              <div style={resultBoxStyle()}>
+              <div style={tintBox(liquidationColor)}>
                 <div style={resultLabelStyle()}>
                   Distance to Liquidation
                   <HelpTip text="Shows how far price can move against your trade before estimated liquidation. Some brokers may calculate liquidation differently." />
+                  {liquidationColor === "red" ? (
+                    <span style={{ marginLeft: "auto", color: "#ef4444", fontWeight: 900 }}>⚠</span>
+                  ) : null}
                 </div>
                 <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
                   {fmtPct(marginCalc.distancePct)}
@@ -426,7 +480,7 @@ export default function UtilitiesPage() {
               </div>
             </div>
 
-            <div style={{ marginTop: 18, ...resultBoxStyle() }}>
+            <div style={{ marginTop: 18, ...baseResultBoxStyle() }}>
               <div style={{ fontWeight: 900, marginBottom: 6 }}>What this tool does</div>
               <div style={{ opacity: 0.84, lineHeight: 1.6 }}>
                 This calculator estimates the price at which your broker could automatically close your position due to
@@ -434,7 +488,7 @@ export default function UtilitiesPage() {
               </div>
             </div>
 
-            <div style={{ marginTop: 14, ...resultBoxStyle() }}>
+            <div style={{ marginTop: 14, ...baseResultBoxStyle() }}>
               <div style={{ fontWeight: 900, marginBottom: 6 }}>Why it matters</div>
               <div style={{ opacity: 0.84, lineHeight: 1.6 }}>
                 If you use leverage without understanding liquidation, even a relatively small move against your trade
@@ -527,21 +581,14 @@ export default function UtilitiesPage() {
             </div>
 
             <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
-              <div style={resultBoxStyle()}>
+              <div style={baseResultBoxStyle()}>
                 <div style={resultLabelStyle()}>Max Shares</div>
                 <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
                   {fmtNum(riskCalc.shares)}
                 </div>
               </div>
 
-              <div
-                style={{
-                  ...resultBoxStyle(),
-                  border: "1px solid rgba(34,197,94,0.28)",
-                  background: "linear-gradient(135deg, rgba(34,197,94,0.10), rgba(255,255,255,0.04))",
-                  boxShadow: "0 0 0 1px rgba(34,197,94,0.08) inset",
-                }}
-              >
+              <div style={tintBox("green", true)}>
                 <div style={resultLabelStyle()}>
                   Total Position Size
                   <HelpTip text="This is the suggested trade size based on your chosen risk amount and stop loss distance." />
@@ -551,22 +598,28 @@ export default function UtilitiesPage() {
                 </div>
               </div>
 
-              <div style={resultBoxStyle()}>
+              <div style={baseResultBoxStyle()}>
                 <div style={resultLabelStyle()}>Dollar Risk</div>
                 <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
                   {fmtMoney(riskCalc.dollarRisk)}
                 </div>
               </div>
 
-              <div style={resultBoxStyle()}>
-                <div style={resultLabelStyle()}>Risk / Reward</div>
+              <div style={tintBox(rrColor)}>
+                <div style={resultLabelStyle()}>
+                  Risk / Reward
+                  <HelpTip text="Compares your potential reward to your potential loss. Higher is usually better." />
+                  {rrColor === "red" ? (
+                    <span style={{ marginLeft: "auto", color: "#ef4444", fontWeight: 900 }}>⚠</span>
+                  ) : null}
+                </div>
                 <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
                   {riskCalc.rr == null ? "—" : `1 : ${riskCalc.rr.toFixed(2)}`}
                 </div>
               </div>
             </div>
 
-            <div style={{ marginTop: 18, ...resultBoxStyle() }}>
+            <div style={{ marginTop: 18, ...baseResultBoxStyle() }}>
               <div style={{ fontWeight: 900, marginBottom: 6 }}>What this tool does</div>
               <div style={{ opacity: 0.84, lineHeight: 1.6 }}>
                 This calculator helps you decide how many shares to buy based on the amount you are prepared to lose if
@@ -574,7 +627,7 @@ export default function UtilitiesPage() {
               </div>
             </div>
 
-            <div style={{ marginTop: 14, ...resultBoxStyle() }}>
+            <div style={{ marginTop: 14, ...baseResultBoxStyle() }}>
               <div style={{ fontWeight: 900, marginBottom: 6 }}>Why it matters</div>
               <div style={{ opacity: 0.84, lineHeight: 1.6 }}>
                 Good traders control their risk before entering a trade. Position sizing helps prevent one bad trade
