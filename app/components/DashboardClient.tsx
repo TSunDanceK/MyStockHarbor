@@ -1646,64 +1646,7 @@ return (
   />
 </div>
 
-    <button
-      type="button"
-      onClick={() => {
-        if (isPicking) return;
-        startPicking(() => {
-          router.push("/pickers");
-        });
-      }}
-      disabled={isPicking}
-      style={{
-        padding: "12px 16px",
-        borderRadius: 14,
-        border: `1px solid rgba(59,130,246,0.55)`,
-        background: COLORS.isDark
-          ? "linear-gradient(135deg, rgba(59,130,246,0.35), rgba(59,130,246,0.18))"
-          : "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(59,130,246,0.12))",
-        color: COLORS.controlFg,
-        textDecoration: "none",
-        fontWeight: 950,
-        fontSize: 15,
-        letterSpacing: "0.2px",
-        boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.45)" : "0 10px 26px rgba(0,0,0,0.14)",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 10,
-        cursor: isPicking ? "not-allowed" : "pointer",
-        opacity: isPicking ? 0.85 : 1,
-        position: "relative",
-        overflow: "hidden",
-      }}
-      title={isPicking ? "Loading…" : "Open stock pickers"}
-    >
-      🔎 Find Your Next Stock <span style={{ opacity: 0.9 }}>→</span>
 
-      {isPicking ? (
-        <span
-          aria-hidden
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: 3,
-            background: "rgba(255,255,255,0.22)",
-          }}
-        >
-          <span
-            style={{
-              display: "block",
-              height: "100%",
-              width: "45%",
-              background: "rgba(255,255,255,0.75)",
-              animation: "pickersBar 900ms ease-in-out infinite",
-            }}
-          />
-        </span>
-      ) : null}
-    </button>
 
     <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
       <button
@@ -1908,12 +1851,42 @@ return (
             ) : null}
           </div>
 
-          {/* STOCK PICKERS */}
+           {/* STOCK PICKERS */}
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <label style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, lineHeight: 1 }}>
               Stock Pickers
             </label>
 
+            <button
+              type="button"
+              onClick={() => {
+                if (isPicking) return;
+                startPicking(() => {
+                  router.push("/pickers");
+                });
+              }}
+              disabled={isPicking}
+              style={{
+                height: 44,
+                padding: "0 18px",
+                borderRadius: 12,
+                border: `1px solid rgba(59,130,246,0.55)`,
+                background: COLORS.isDark
+                  ? "linear-gradient(135deg, rgba(59,130,246,0.35), rgba(59,130,246,0.18))"
+                  : "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(59,130,246,0.12))",
+                color: COLORS.controlFg,
+                fontWeight: 900,
+                fontSize: 14,
+                letterSpacing: "0.2px",
+                cursor: isPicking ? "not-allowed" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                minWidth: 220,
+              }}
+            >
+              🔎 Find Your Next Stock →
+            </button>
           </div>
 
           {/* INDICATOR */}
