@@ -1713,94 +1713,181 @@ return (
 
 
 
-    <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-      <button
-        type="button"
-        onClick={() => router.push("/learn")}
-        style={{
-          padding: "12px 16px",
-          borderRadius: 14,
-          border: `1px solid rgba(34,197,94,0.55)`,
-          background: COLORS.isDark
-            ? "linear-gradient(135deg, rgba(34,197,94,0.28), rgba(34,197,94,0.14))"
-            : "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(34,197,94,0.10))",
-          color: COLORS.controlFg,
-          textDecoration: "none",
-          fontWeight: 950,
-          fontSize: 15,
-          letterSpacing: "0.2px",
-          boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.45)" : "0 10px 26px rgba(0,0,0,0.14)",
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 10,
-          cursor: "pointer",
-          opacity: 1,
-          position: "relative",
-          overflow: "hidden",
-        }}
-        title="Learn the Basics"
-      >
-        📚 Learn the Basics <span style={{ opacity: 0.9 }}>→</span>
-      </button>
+<div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+  <button
+    type="button"
+    onClick={() => router.push("/learn")}
+    style={{
+      padding: "12px 16px",
+      borderRadius: 14,
+      border: `1px solid rgba(34,197,94,0.55)`,
+      background: COLORS.isDark
+        ? "linear-gradient(135deg, rgba(34,197,94,0.28), rgba(34,197,94,0.14))"
+        : "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(34,197,94,0.10))",
+      color: COLORS.controlFg,
+      textDecoration: "none",
+      fontWeight: 950,
+      fontSize: 15,
+      letterSpacing: "0.2px",
+      boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.45)" : "0 10px 26px rgba(0,0,0,0.14)",
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 10,
+      cursor: "pointer",
+      opacity: 1,
+      position: "relative",
+      overflow: "hidden",
+    }}
+    title="Learn the Basics"
+  >
+    📚 Learn the Basics <span style={{ opacity: 0.9 }}>→</span>
+  </button>
 
-      <button
-        type="button"
-        onClick={() => router.push("/platforms")}
-        style={{
-          padding: "12px 16px",
-          borderRadius: 14,
-          border: `1px solid rgba(168,85,247,0.55)`,
-          background: COLORS.isDark
-            ? "linear-gradient(135deg, rgba(168,85,247,0.28), rgba(168,85,247,0.14))"
-            : "linear-gradient(135deg, rgba(168,85,247,0.18), rgba(168,85,247,0.10))",
-          color: COLORS.controlFg,
-          textDecoration: "none",
-          fontWeight: 950,
-          fontSize: 15,
-          letterSpacing: "0.2px",
-          boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.45)" : "0 10px 26px rgba(0,0,0,0.14)",
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 10,
-          cursor: "pointer",
-          opacity: 1,
-          position: "relative",
-          overflow: "hidden",
-        }}
-        title="Choosing your Platform"
-      >
-        🖥️ Choosing your Platform <span style={{ opacity: 0.9 }}>→</span>
-      </button>
+  <button
+    type="button"
+    onClick={() => router.push("/platforms")}
+    style={{
+      padding: "12px 16px",
+      borderRadius: 14,
+      border: `1px solid rgba(168,85,247,0.55)`,
+      background: COLORS.isDark
+        ? "linear-gradient(135deg, rgba(168,85,247,0.28), rgba(168,85,247,0.14))"
+        : "linear-gradient(135deg, rgba(168,85,247,0.18), rgba(168,85,247,0.10))",
+      color: COLORS.controlFg,
+      textDecoration: "none",
+      fontWeight: 950,
+      fontSize: 15,
+      letterSpacing: "0.2px",
+      boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.45)" : "0 10px 26px rgba(0,0,0,0.14)",
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 10,
+      cursor: "pointer",
+      opacity: 1,
+      position: "relative",
+      overflow: "hidden",
+    }}
+    title="Choosing your Platform"
+  >
+    🖥️ Choosing your Platform <span style={{ opacity: 0.9 }}>→</span>
+  </button>
 
-      <button
-        type="button"
-        onClick={() => router.push("/utilities")}
-        style={{
-          padding: "12px 16px",
-          borderRadius: 14,
-          border: `1px solid rgba(234,179,8,0.55)`,
-          background: COLORS.isDark
-            ? "linear-gradient(135deg, rgba(234,179,8,0.24), rgba(249,115,22,0.16))"
-            : "linear-gradient(135deg, rgba(234,179,8,0.16), rgba(249,115,22,0.10))",
-          color: COLORS.controlFg,
-          textDecoration: "none",
-          fontWeight: 950,
-          fontSize: 15,
-          letterSpacing: "0.2px",
-          boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.45)" : "0 10px 26px rgba(0,0,0,0.14)",
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 10,
-          cursor: "pointer",
-          opacity: 1,
-          position: "relative",
-          overflow: "hidden",
-        }}
-        title="Trading Utilities"
-      >
-        🧮 Trading Utilities <span style={{ opacity: 0.9 }}>→</span>
-      </button>
-    </div>
+  <button
+    type="button"
+    onClick={() => router.push("/utilities")}
+    style={{
+      padding: "12px 16px",
+      borderRadius: 14,
+      border: `1px solid rgba(234,179,8,0.55)`,
+      background: COLORS.isDark
+        ? "linear-gradient(135deg, rgba(234,179,8,0.24), rgba(249,115,22,0.16))"
+        : "linear-gradient(135deg, rgba(234,179,8,0.16), rgba(249,115,22,0.10))",
+      color: COLORS.controlFg,
+      textDecoration: "none",
+      fontWeight: 950,
+      fontSize: 15,
+      letterSpacing: "0.2px",
+      boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.45)" : "0 10px 26px rgba(0,0,0,0.14)",
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 10,
+      cursor: "pointer",
+      opacity: 1,
+      position: "relative",
+      overflow: "hidden",
+    }}
+    title="Trading Utilities"
+  >
+    🧮 Trading Utilities <span style={{ opacity: 0.9 }}>→</span>
+  </button>
+
+  <button
+    type="button"
+    onClick={() => router.push("/about")}
+    style={{
+      padding: "12px 16px",
+      borderRadius: 14,
+      border: `1px solid rgba(59,130,246,0.45)`,
+      background: COLORS.isDark
+        ? "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(59,130,246,0.10))"
+        : "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(59,130,246,0.08))",
+      color: COLORS.controlFg,
+      textDecoration: "none",
+      fontWeight: 900,
+      fontSize: 15,
+      letterSpacing: "0.2px",
+      boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.35)" : "0 10px 26px rgba(0,0,0,0.12)",
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 10,
+      cursor: "pointer",
+      opacity: 1,
+      position: "relative",
+      overflow: "hidden",
+    }}
+    title="About MyStockHarbor"
+  >
+    ℹ️ About
+  </button>
+
+  <button
+    type="button"
+    onClick={() => router.push("/contact")}
+    style={{
+      padding: "12px 16px",
+      borderRadius: 14,
+      border: `1px solid rgba(14,165,233,0.45)`,
+      background: COLORS.isDark
+        ? "linear-gradient(135deg, rgba(14,165,233,0.20), rgba(14,165,233,0.10))"
+        : "linear-gradient(135deg, rgba(14,165,233,0.12), rgba(14,165,233,0.06))",
+      color: COLORS.controlFg,
+      textDecoration: "none",
+      fontWeight: 900,
+      fontSize: 15,
+      letterSpacing: "0.2px",
+      boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.35)" : "0 10px 26px rgba(0,0,0,0.12)",
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 10,
+      cursor: "pointer",
+      opacity: 1,
+      position: "relative",
+      overflow: "hidden",
+    }}
+    title="Contact MyStockHarbor"
+  >
+    ✉️ Contact
+  </button>
+
+  <button
+    type="button"
+    onClick={() => router.push("/risk-disclaimer")}
+    style={{
+      padding: "12px 16px",
+      borderRadius: 14,
+      border: `1px solid rgba(244,114,182,0.45)`,
+      background: COLORS.isDark
+        ? "linear-gradient(135deg, rgba(244,114,182,0.18), rgba(244,114,182,0.08))"
+        : "linear-gradient(135deg, rgba(244,114,182,0.10), rgba(244,114,182,0.05))",
+      color: COLORS.controlFg,
+      textDecoration: "none",
+      fontWeight: 900,
+      fontSize: 15,
+      letterSpacing: "0.2px",
+      boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.35)" : "0 10px 26px rgba(0,0,0,0.12)",
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 10,
+      cursor: "pointer",
+      opacity: 1,
+      position: "relative",
+      overflow: "hidden",
+    }}
+    title="Risk Disclaimer"
+  >
+    ⚠️ Risk Disclaimer
+  </button>
+</div>
 
     <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginLeft: "auto" }}>
       <button
