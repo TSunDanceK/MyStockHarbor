@@ -342,6 +342,62 @@ function lastNum(arr: (number | null)[]) {
   return arr.length ? arr[arr.length - 1] : null;
 }
 
+function HelpTip(props: { text: string; isDark: boolean }) {
+  const [open, setOpen] = React.useState(false);
+
+  return (
+    <span
+      style={{
+        position: "relative",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: 16,
+        height: 16,
+        borderRadius: "50%",
+        background: props.isDark ? "rgba(255,255,255,0.15)" : "rgba(11,18,32,0.12)",
+        color: props.isDark ? "#fff" : "#0b1220",
+        fontSize: 11,
+        fontWeight: 900,
+        cursor: "pointer",
+        marginLeft: 6,
+        flex: "0 0 auto",
+      }}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onClick={() => setOpen((v) => !v)}
+    >
+      ?
+      {open ? (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 22,
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: 240,
+            padding: 10,
+            borderRadius: 10,
+            backgroundColor: props.isDark ? "#0f172a" : "#ffffff",
+            border: props.isDark
+              ? "1px solid rgba(255,255,255,0.14)"
+              : "1px solid rgba(11,18,32,0.14)",
+            color: props.isDark ? "#f1f5f9" : "#0b1220",
+            fontSize: 12,
+            lineHeight: 1.5,
+            fontWeight: 600,
+            zIndex: 50,
+            boxShadow: "0 10px 24px rgba(0,0,0,0.18)",
+            pointerEvents: "none",
+          }}
+        >
+          {props.text}
+        </div>
+      ) : null}
+    </span>
+  );
+}
+
 /* ----------------------- divergence (shared engine) ----------------------- */
 
 type DivergenceState = "bullish" | "bearish" | "none";
@@ -731,12 +787,16 @@ const INDICATORS: Overlay[] = [
 ];
 /* ----------------------------- component ----------------------------- */
 
-export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSymbol?: string }) {
+export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymbol?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPicking, startPicking] = useTransition();
 
-   const [symbol, setSymbol] = useState(defaultSymbol);
+  const [symbol, setSymbol] = useState(() => {
+    if (typeof window === "undefined") return defaultSymbol;
+    const saved = window.localStorage.getItem("msh_last_symbol");
+    return saved && saved.trim() ? saved.trim().toUpperCase() : defaultSymbol;
+  });
 
   // Track a human-friendly company name for the currently selected symbol
   const [symbolName, setSymbolName] = useState<string>("");
@@ -777,14 +837,19 @@ export default function DashboardClient({ defaultSymbol = "AAPL" }: { defaultSym
     };
   }, [symbol]);
   
- useEffect(() => {
-  const urlSymbol = searchParams.get("symbol");
-  const cleaned = urlSymbol ? urlSymbol.trim().toUpperCase() : "";
+  useEffect(() => {
+    const urlSymbol = searchParams.get("symbol");
+    const cleaned = urlSymbol ? urlSymbol.trim().toUpperCase() : "";
 
-  if (cleaned && cleaned !== symbol) {
-    setSymbol(cleaned);
-  }
-}, [searchParams, symbol]);
+    if (cleaned && cleaned !== symbol) {
+      setSymbol(cleaned);
+    }
+  }, [searchParams, symbol]);
+
+  useEffect(() => {
+    if (!symbol || !symbol.trim()) return;
+    window.localStorage.setItem("msh_last_symbol", symbol.trim().toUpperCase());
+  }, [symbol]);
 
   // Timeframe buttons (used for fetching + resetting view)
   const [tfDays, setTfDays] = useState(365);
@@ -2021,23 +2086,27 @@ return (
     display: "flex",
     alignItems: "center",
     gap: 8,
-    fontSize: 16, // Signal slightly larger
+    fontSize: 16,
     opacity: 0.85,
     color: COLORS.mutedFg,
     fontWeight: 850,
   }}
 >
-<span
-  style={{
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-    background: toneToColor(trendToneFromScore(trendScore), COLORS.isDark),
-    boxShadow: COLORS.isDark ? "0 0 0 3px rgba(255,255,255,0.04)" : "0 0 0 3px rgba(0,0,0,0.03)",
-    flex: "0 0 auto",
-  }}
-/>
- <span>Trend Score</span>
+  <span
+    style={{
+      width: 10,
+      height: 10,
+      borderRadius: 999,
+      background: toneToColor(trendToneFromScore(trendScore), COLORS.isDark),
+      boxShadow: COLORS.isDark ? "0 0 0 3px rgba(255,255,255,0.04)" : "0 0 0 3px rgba(0,0,0,0.03)",
+      flex: "0 0 auto",
+    }}
+  />
+  <span>Trend Score</span>
+  <HelpTip
+    isDark={COLORS.isDark}
+    text="Trend Score measures how many bullish trend checks are currently passing, such as price vs moving averages and MACD momentum. Higher scores suggest a stronger trend structure."
+  />
 </div>
 
 <div
@@ -2086,6 +2155,10 @@ return (
     }}
   />
   <span>Stretch Score</span>
+  <HelpTip
+    isDark={COLORS.isDark}
+    text="Stretch Score measures how many indicators suggest price may be extended, overbought, or oversold. Higher scores mean more signs that price is stretched away from normal conditions."
+  />
 </div>
 
 <div
