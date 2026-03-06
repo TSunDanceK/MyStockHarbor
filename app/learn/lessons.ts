@@ -650,8 +650,17 @@ export function getLesson(slug: string) {
 }
 
 export function lessonsByCategory(cat: Lesson["category"]) {
-  // Keep the Learn page tidy as lessons grow
-  return LESSONS.filter((l) => l.category === cat)
-    .slice()
-    .sort((a, b) => a.title.localeCompare(b.title));
+  return LESSONS.filter((l) => l.category === cat);
+}
+
+export function getNextLesson(slug: string) {
+  const s = decodeURIComponent(String(slug ?? "")).trim().toLowerCase();
+  const index = LESSONS.findIndex(
+    (l) => String(l.slug ?? "").trim().toLowerCase() === s
+  );
+
+  if (index === -1) return null;
+  if (index >= LESSONS.length - 1) return null;
+
+  return LESSONS[index + 1];
 }
