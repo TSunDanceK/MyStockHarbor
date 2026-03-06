@@ -61,10 +61,10 @@ export async function GET() {
     return NextResponse.json(cache.payload);
   }
 
-  // Use ETFs (SPY/QQQ/DIA) because they are reliably available on Stooq for free
+  // Use free Stooq symbols for broad market benchmarks
   const defs = [
     { key: "spy", label: "S&P 500 (via SPY)", symbol: "spy.us" },
-    { key: "qqq", label: "Nasdaq 100 (via QQQ)", symbol: "qqq.us" },
+    { key: "ndx", label: "Nasdaq 100 (NDX)", symbol: "ndx.us" },
     { key: "dia", label: "Dow Jones (via DIA)", symbol: "dia.us" },
     { key: "iwm", label: "Russell 2000 (via IWM)", symbol: "iwm.us" },
   ] as const;
@@ -99,7 +99,7 @@ export async function GET() {
 
     const payload: BenchPayload = {
       updatedAt: new Date().toISOString(),
-      scope: "Benchmarks (Stooq, free, via ETFs)",
+      scope: "Benchmarks (Stooq, free)",
       items,
     };
 
@@ -108,7 +108,7 @@ export async function GET() {
   } catch {
     const payload: BenchPayload = {
       updatedAt: new Date().toISOString(),
-      scope: "Benchmarks (Stooq, free, via ETFs)",
+     scope: "Benchmarks (Stooq, free)",
       items: [],
     };
     return NextResponse.json(payload);
