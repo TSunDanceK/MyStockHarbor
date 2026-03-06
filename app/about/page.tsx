@@ -48,15 +48,21 @@ export default function AboutPage() {
           </h1>
 
           <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92 }}>
-            MyStockHarbor is an educational trading dashboard built to help
+            MyStockHarbor is an educational trading dashboard designed to help
             beginner and intermediate traders better understand market context,
             technical indicators, and risk management.
           </p>
 
           <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92 }}>
-            The goal of the platform is to make trading tools easier to
-            understand by combining a clean charting experience with educational
-            content, stock pickers, market benchmarks, and practical utilities.
+            The platform was created to simplify technical analysis and make
+            trading tools easier to explore through a clean dashboard, visual
+            signals, educational content, and practical utilities.
+          </p>
+
+          <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92 }}>
+            MyStockHarbor combines chart-based analysis with learning resources
+            so traders can build confidence in reading price action, trend
+            strength, momentum, and market structure.
           </p>
 
           <h2 style={{ marginTop: 28, fontSize: 24, fontWeight: 850 }}>
@@ -69,6 +75,7 @@ export default function AboutPage() {
             <li>Stock pickers to help surface potential opportunities</li>
             <li>Trading utilities for position sizing and liquidation risk</li>
             <li>Educational lessons covering core trading concepts</li>
+            <li>Market benchmarks and news to support broader analysis</li>
           </ul>
 
           <h2 style={{ marginTop: 28, fontSize: 24, fontWeight: 850 }}>
@@ -87,20 +94,28 @@ export default function AboutPage() {
             consult a qualified professional where appropriate before making
             financial decisions.
           </p>
+
+          <h2 style={{ marginTop: 28, fontSize: 24, fontWeight: 850 }}>
+            Contact
+          </h2>
+
+          <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92 }}>
+            Questions, suggestions, and feedback are always welcome.
+          </p>
+
+          <p style={{ fontSize: 16 }}>
+            <Link
+              href="/contact"
+              style={{
+                color: "#93c5fd",
+                textDecoration: "none",
+                fontWeight: 700,
+              }}
+            >
+              Contact MyStockHarbor →
+            </Link>
+          </p>
         </section>
-        <h2 style={{ marginTop: 28, fontSize: 24, fontWeight: 850 }}>
-  Contact
-</h2>
-
-<p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92 }}>
-  Questions, suggestions, or feedback are welcome.
-</p>
-
-<p style={{ fontSize: 16 }}>
-  <Link href="/contact" style={{ color: "#93c5fd", fontWeight: 600 }}>
-    Contact MyStockHarbor →
-  </Link>
-</p>
       </div>
     </main>
   );
