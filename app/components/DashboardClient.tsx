@@ -1914,36 +1914,6 @@ return (
               Stock Pickers
             </label>
 
-            <button
-              type="button"
-              onClick={() => {
-                if (isPicking) return;
-                startPicking(() => {
-                  router.push("/pickers");
-                });
-              }}
-              disabled={isPicking}
-              style={{
-                height: 44,
-                padding: "0 18px",
-                borderRadius: 12,
-                border: `1px solid rgba(59,130,246,0.55)`,
-                background: COLORS.isDark
-                  ? "linear-gradient(135deg, rgba(59,130,246,0.35), rgba(59,130,246,0.18))"
-                  : "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(59,130,246,0.12))",
-                color: COLORS.controlFg,
-                fontWeight: 900,
-                fontSize: 14,
-                letterSpacing: "0.2px",
-                cursor: isPicking ? "not-allowed" : "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                minWidth: 220,
-              }}
-            >
-              🔎 Find Your Next Stock →
-            </button>
           </div>
 
           {/* INDICATOR */}
