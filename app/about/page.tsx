@@ -1,4 +1,11 @@
 import Link from "next/link";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "About MyStockHarbor | Trading Dashboard & Market Education",
+  description:
+    "Learn about MyStockHarbor, an educational trading dashboard built to help traders explore market context, technical indicators, and risk management tools.",
+};
 
 export default function AboutPage() {
   return (
