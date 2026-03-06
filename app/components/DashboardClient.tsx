@@ -1915,43 +1915,44 @@ return (
       Common Tickers
     </label>
 
-<select
-  value={symbol}
-  onChange={(e) => chooseSymbol(e.target.value)}
-  style={{
-    height: 44,
-    padding: "0 14px",
-    borderRadius: 12,
-    border: `1px solid ${COLORS.controlBorder}`,
+{/* FIND YOUR NEXT STOCK */}
+<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+  <label style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, lineHeight: 1 }}>
+    Stock Pickers
+  </label>
 
-    // ✅ Much clearer dropdown
-    background: "#ffffff",
-    color: "#111",
-
-    fontWeight: 800,
-    fontSize: 14,
-    letterSpacing: "0.2px",
-
-    minWidth: 240,
-    cursor: "pointer",
-  }}
->
-      {/* Selected display = ticker only */}
-      <option value={symbol}>{symbol}</option>
-
-      <option disabled value="__divider__">
-        ─────────────
-      </option>
-
-      {PRESET_TICKERS.map((t) => (
-        <option key={t.symbol} value={t.symbol}>
-          {t.symbol} — {t.name}
-        </option>
-      ))}
-    </select>
-  </div>
+  <button
+    type="button"
+    onClick={() => {
+      if (isPicking) return;
+      startPicking(() => {
+        router.push("/pickers");
+      });
+    }}
+    disabled={isPicking}
+    style={{
+      height: 44,
+      padding: "0 18px",
+      borderRadius: 12,
+      border: `1px solid rgba(59,130,246,0.55)`,
+      background: COLORS.isDark
+        ? "linear-gradient(135deg, rgba(59,130,246,0.35), rgba(59,130,246,0.18))"
+        : "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(59,130,246,0.12))",
+      color: COLORS.controlFg,
+      fontWeight: 900,
+      fontSize: 14,
+      letterSpacing: "0.2px",
+      cursor: isPicking ? "not-allowed" : "pointer",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      minWidth: 220,
+    }}
+  >
+    🔎 Find Your Next Stock →
+  </button>
 </div>
-
+   
 {/* Indicator (aligned like the others) */}
 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
   <label style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, lineHeight: 1 }}>
