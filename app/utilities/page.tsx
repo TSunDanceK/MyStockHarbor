@@ -340,7 +340,14 @@ export default function UtilitiesPage() {
 
             <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
               <div>
-                <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
+                <div
+  style={{
+    fontSize: 12,
+    fontWeight: 850,
+    color: "rgba(241,245,249,0.85)",
+    marginBottom: 6,
+  }}
+>
                   Trade Direction
                   <HelpTip text="Choose Long if you expect price to rise, Short if you expect price to fall." />
                 </div>
@@ -355,7 +362,14 @@ export default function UtilitiesPage() {
               </div>
 
               <div>
-                <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
+                <div
+  style={{
+    fontSize: 12,
+    fontWeight: 850,
+    color: "rgba(241,245,249,0.85)",
+    marginBottom: 6,
+  }}
+>
                   Entry Price ($)
                   <HelpTip text="The price where you enter the trade." />
                 </div>
@@ -367,7 +381,14 @@ export default function UtilitiesPage() {
               </div>
 
               <div>
-                <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
+                <div
+  style={{
+    fontSize: 12,
+    fontWeight: 850,
+    color: "rgba(241,245,249,0.85)",
+    marginBottom: 6,
+  }}
+>
                   Position Size ($)
                   <HelpTip text="Total dollar value of the trade. Example: buying $4000 worth of stock." />
                 </div>
@@ -379,7 +400,14 @@ export default function UtilitiesPage() {
               </div>
 
               <div>
-                <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
+                <div
+  style={{
+    fontSize: 12,
+    fontWeight: 850,
+    color: "rgba(241,245,249,0.85)",
+    marginBottom: 6,
+  }}
+>
                   Leverage
                   <HelpTip text="How much borrowed money is used. 2× leverage means you control double your capital." />
                 </div>
@@ -391,7 +419,14 @@ export default function UtilitiesPage() {
               </div>
 
               <div>
-                <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
+                <div
+  style={{
+    fontSize: 12,
+    fontWeight: 850,
+    color: "rgba(241,245,249,0.85)",
+    marginBottom: 6,
+  }}
+>
                   Maintenance Margin (%)
                   <HelpTip text="Minimum equity your broker requires to keep the trade open. Higher % means liquidation happens sooner." />
                 </div>
@@ -472,7 +507,14 @@ export default function UtilitiesPage() {
 
             <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
               <div>
-                <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
+                <div
+  style={{
+    fontSize: 12,
+    fontWeight: 850,
+    color: "rgba(241,245,249,0.85)",
+    marginBottom: 6,
+  }}
+>
                   Risk Amount ($)
                   <HelpTip text="Maximum dollar amount you are willing to lose if your stop loss is hit." />
                 </div>
@@ -484,7 +526,14 @@ export default function UtilitiesPage() {
               </div>
 
               <div>
-                <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
+                <div
+  style={{
+    fontSize: 12,
+    fontWeight: 850,
+    color: "rgba(241,245,249,0.85)",
+    marginBottom: 6,
+  }}
+>
                   Entry Price ($)
                   <HelpTip text="The price where you plan to enter the trade." />
                 </div>
@@ -496,7 +545,14 @@ export default function UtilitiesPage() {
               </div>
 
               <div>
-                <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
+                <div
+  style={{
+    fontSize: 12,
+    fontWeight: 850,
+    color: "rgba(241,245,249,0.85)",
+    marginBottom: 6,
+  }}
+>
                   Stop Loss Price ($)
                   <HelpTip text="The price where you will exit the trade to limit losses." />
                 </div>
@@ -508,7 +564,14 @@ export default function UtilitiesPage() {
               </div>
 
               <div>
-                <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, marginBottom: 6 }}>
+                <div
+  style={{
+    fontSize: 12,
+    fontWeight: 850,
+    color: "rgba(241,245,249,0.85)",
+    marginBottom: 6,
+  }}
+>
                   Target Price ($)
                   <HelpTip text="Optional price where you plan to take profit." />
                 </div>
