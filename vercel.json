@@ -1,0 +1,15 @@
+{
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "mystockharbour.com"
+        }
+      ],
+      "destination": "https://mystockharbor.com/$1",
+      "permanent": true
+    }
+  ]
+}
