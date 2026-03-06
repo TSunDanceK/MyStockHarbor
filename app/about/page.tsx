@@ -88,6 +88,19 @@ export default function AboutPage() {
             financial decisions.
           </p>
         </section>
+        <h2 style={{ marginTop: 28, fontSize: 24, fontWeight: 850 }}>
+  Contact
+</h2>
+
+<p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92 }}>
+  Questions, suggestions, or feedback are welcome.
+</p>
+
+<p style={{ fontSize: 16 }}>
+  <Link href="/contact" style={{ color: "#93c5fd", fontWeight: 600 }}>
+    Contact MyStockHarbor →
+  </Link>
+</p>
       </div>
     </main>
   );
