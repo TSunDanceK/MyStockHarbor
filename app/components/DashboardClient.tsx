@@ -2424,15 +2424,13 @@ return (
 </div>
 
                     {/* RIGHT: breakdown (top aligned) */}
- <div
+<div
   style={{
     border: `1px solid ${COLORS.border}`,
     borderRadius: 12,
     padding: 12,
     background: COLORS.controlBg,
-
-    // ✅ Pull ONLY the right panel upward (does not affect left Trend/Stretch block)
-    marginTop: -54,
+    marginTop: 0,
   }}
 >
                       <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10, opacity: 0.9 }}>
