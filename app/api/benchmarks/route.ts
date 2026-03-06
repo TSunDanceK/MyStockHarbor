@@ -64,7 +64,7 @@ export async function GET() {
   // Use free Stooq symbols for broad market benchmarks
   const defs = [
     { key: "spy", label: "S&P 500 (via SPY)", symbol: "spy.us" },
-   { key: "ndx", label: "Nasdaq 100 (NDX)", symbol: "ndx" },
+   { key: "ndx", label: "Nasdaq 100 (NDX)", symbol: "ndx.us" },
     { key: "dia", label: "Dow Jones (via DIA)", symbol: "dia.us" },
     { key: "iwm", label: "Russell 2000 (via IWM)", symbol: "iwm.us" },
   ] as const;
