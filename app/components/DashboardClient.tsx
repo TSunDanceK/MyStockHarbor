@@ -1611,7 +1611,16 @@ return (
   >
     <div className="pageWrap">
 <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8, flexWrap: "wrap" }}>
-  <h1 style={{ fontSize: 32, margin: 0 }}>My Stock Dashboard</h1>
+<h1
+  style={{
+    fontSize: 36,
+    margin: 0,
+    fontWeight: 950,
+    letterSpacing: "-0.4px",
+  }}
+>
+  MyStockHarbor
+</h1>
 
 <button
   type="button"
@@ -1751,7 +1760,18 @@ return (
         </div>
       </div>
 
-      <p style={{ marginTop: 0, opacity: 0.75, color: COLORS.mutedFg }}>Version 1 – Learning Build (free data)</p>
+    <p
+  style={{
+    marginTop: 2,
+    opacity: 0.8,
+    color: COLORS.mutedFg,
+    fontSize: 14,
+    fontWeight: 600,
+    letterSpacing: "0.2px",
+  }}
+>
+  Learn charts. Discover stocks. Trade smarter. — Version 1
+</p>
 <style>{`
   @keyframes pickersBar {
     0% { transform: translateX(-10%); opacity: 0.55; }
