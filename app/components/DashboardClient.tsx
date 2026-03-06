@@ -1610,17 +1610,15 @@ return (
     }}
   >
     <div className="pageWrap">
-<div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8, flexWrap: "wrap" }}>
-<h1
+<img
+  src="/logo.png"
+  alt="MyStockHarbor"
   style={{
-    fontSize: 36,
-    margin: 0,
-    fontWeight: 950,
-    letterSpacing: "-0.4px",
+    height: 48,
+    width: "auto",
+    objectFit: "contain",
   }}
->
-  MyStockHarbor
-</h1>
+/>
 
 <button
   type="button"
