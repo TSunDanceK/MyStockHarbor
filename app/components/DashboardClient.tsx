@@ -1,5 +1,5 @@
-"use client"; 
- 
+"use client";
+
 import React, { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -162,7 +162,6 @@ function macd(values: number[], fast = 12, slow = 26, signal = 9) {
     return f - s;
   });
 
-  // EMA expects numbers; we still keep nulls by masking later
   const lineForEma = line.map((v) => (typeof v === "number" ? v : 0));
   const sigAll = ema(lineForEma, signal);
 
@@ -312,7 +311,6 @@ function compareMacdHistogram(lastClose: number | null, hist: number | null) {
   if (lastClose == null) return { label: "Signal unavailable", detail: "No price data." };
   if (hist == null) return { label: "Signal unavailable", detail: "Need enough data for MACD." };
 
-  // Treat “flat” as within ~0.1% of price (tweakable)
   const flat = Math.abs(lastClose) * 0.001;
 
   if (hist > flat) return { label: "Bullish momentum 🟢", detail: `MACD histogram is positive (${hist.toFixed(4)}).` };
@@ -422,7 +420,6 @@ function divergenceTone(state: DivergenceState): OverviewItem["tone"] {
 }
 
 function divergenceSeverity(state: DivergenceState) {
-  // enough to float near top when present
   if (state === "bearish" || state === "bullish") return 100;
   return 5;
 }
@@ -432,14 +429,11 @@ type OverviewItem = {
   label: string;
   tone: "green" | "yellow" | "orange" | "red" | "muted";
   valueText: string;
-
-  // used for sorting
-  severity: number; // bigger = more important
-  order: number; // stable original order
+  severity: number;
+  order: number;
 };
 
 function toneToColor(tone: OverviewItem["tone"], isDark: boolean) {
-  // simple, readable colors; no new libs
   if (tone === "green") return isDark ? "#22c55e" : "#16a34a";
   if (tone === "yellow") return isDark ? "#eab308" : "#ca8a04";
   if (tone === "orange") return isDark ? "#fb923c" : "#ea580c";
@@ -485,7 +479,6 @@ function renderFlagsMeter(opts: {
 }
 
 function toneRank(tone: OverviewItem["tone"]) {
-  // higher = more attention
   if (tone === "red") return 4;
   if (tone === "orange") return 3;
   if (tone === "yellow") return 2;
@@ -494,9 +487,8 @@ function toneRank(tone: OverviewItem["tone"]) {
 }
 
 function compositeToneFromCounts(overbought: number, oversold: number, spikes: number) {
-  // net > 0 => overbought-heavy (red side), net < 0 => oversold-heavy (green side)
   const net = overbought - oversold;
-  const intensity = overbought + oversold + spikes; // 0..10-ish
+  const intensity = overbought + oversold + spikes;
 
   if (intensity <= 1) return { tone: "yellow" as const, tag: "Calm" };
 
@@ -506,25 +498,24 @@ function compositeToneFromCounts(overbought: number, oversold: number, spikes: n
   if (net <= -2) return { tone: intensity >= 5 ? ("green" as const) : ("yellow" as const), tag: "Oversold-leaning" };
   if (net === -1) return { tone: "yellow" as const, tag: "Slightly oversold" };
 
-  // balanced
   return { tone: intensity >= 5 ? ("orange" as const) : ("yellow" as const), tag: "Mixed" };
 }
+
 function trendToneFromScore(ts: TrendScore | null): OverviewItem["tone"] {
   if (!ts) return "muted";
 
   const ratio = ts.total > 0 ? ts.passed / ts.total : 0;
 
-  // 3/4 or 4/4 => green, 2/4 => yellow, 1/4 => orange, 0/4 => red
   if (ratio >= 0.75) return "green";
   if (ratio >= 0.5) return "yellow";
   if (ratio >= 0.25) return "orange";
   return "red";
 }
+
 function clampNum(v: number, lo: number, hi: number) {
   return Math.min(hi, Math.max(lo, v));
 }
 
-/** Strict SMA over nullable values: returns null if any null in window. */
 function smaNullable(values: (number | null)[], window: number): (number | null)[] {
   const out: (number | null)[] = Array(values.length).fill(null);
   if (window <= 0) return out;
@@ -546,14 +537,14 @@ function smaNullable(values: (number | null)[], window: number): (number | null)
 }
 
 type TrendScore = {
-  total: number;     // fixed 4
-  passed: number;    // bullish checks passed
+  total: number;
+  passed: number;
   details: { name: string; ok: boolean | null }[];
 };
 
 type StretchScore = {
-  total: number;      // fixed 6
-  flagged: number;    // extreme checks triggered (oversold or overbought)
+  total: number;
+  flagged: number;
   oversold: number;
   overbought: number;
   details: { name: string; state: "oversold" | "overbought" | "neutral" | "na" }[];
@@ -606,7 +597,6 @@ function buildStretchScore(args: {
   let oversold = 0;
   let overbought = 0;
 
-  // 1) RSI(14)
   if (typeof rsi14 === "number") {
     if (rsi14 <= 30) {
       oversold++;
@@ -621,7 +611,6 @@ function buildStretchScore(args: {
     details.push({ name: "RSI", state: "na" });
   }
 
-  // 2) Stoch %K
   if (typeof stochK === "number") {
     if (stochK <= 20) {
       oversold++;
@@ -636,7 +625,6 @@ function buildStretchScore(args: {
     details.push({ name: "Stoch", state: "na" });
   }
 
-  // 3) Bollinger extremes (price vs bands)
   if (typeof lastClose === "number" && typeof bollLower === "number" && typeof bollUpper === "number") {
     if (lastClose < bollLower) {
       oversold++;
@@ -651,7 +639,6 @@ function buildStretchScore(args: {
     details.push({ name: "Bollinger", state: "na" });
   }
 
-  // 4) VWAP distance (±2%)
   if (typeof lastClose === "number" && typeof vwap === "number" && vwap > 0) {
     const pct = (lastClose - vwap) / vwap;
     if (pct <= -0.02) {
@@ -667,7 +654,6 @@ function buildStretchScore(args: {
     details.push({ name: "VWAP dist", state: "na" });
   }
 
-  // 5) EMA20 distance (±5%)
   if (typeof lastClose === "number" && typeof ema20 === "number" && ema20 > 0) {
     const pct = (lastClose - ema20) / ema20;
     if (pct <= -0.05) {
@@ -683,7 +669,6 @@ function buildStretchScore(args: {
     details.push({ name: "EMA20 dist", state: "na" });
   }
 
-  // 6) MA50 distance (±5%)
   if (typeof lastClose === "number" && typeof ma50 === "number" && ma50 > 0) {
     const pct = (lastClose - ma50) / ma50;
     if (pct <= -0.05) {
@@ -754,7 +739,7 @@ const PRESET_TICKERS: { symbol: string; name: string }[] = [
 ].sort((a, b) => a.symbol.localeCompare(b.symbol));
 
 const TIMEFRAMES: { label: string; days: number }[] = [
-  { label: "1D", days: 30 }, // daily-only source: show ~30 days so it renders
+  { label: "1D", days: 30 },
   { label: "1W", days: 7 },
   { label: "1M", days: 30 },
   { label: "3M", days: 90 },
@@ -764,7 +749,6 @@ const TIMEFRAMES: { label: string; days: number }[] = [
   { label: "MAX", days: 4000 },
 ];
 
-// Single source of truth: everything we show in Breakdown (and therefore also in the Indicator dropdown)
 const BREAKDOWN_DEFS = [
   { key: "vwap", label: "VWAP", overlay: "VWAP" as const },
   { key: "macd", label: "MACD", overlay: "MACD(12,26,9)" as const },
@@ -773,18 +757,16 @@ const BREAKDOWN_DEFS = [
   { key: "ma200", label: "MA200", overlay: "MA200" as const },
   { key: "vol", label: "Volume", overlay: "Volume" as const },
   { key: "atr", label: "ATR", overlay: "ATR(14)" as const },
-
-  // Divergence items (still appear in Breakdown + dropdown)
   { key: "div_rsi", label: "RSI Div", overlay: "RSI(14)" as const },
   { key: "div_macd", label: "MACD Div", overlay: "MACD(12,26,9)" as const },
 ] as const;
 
-// Dropdown is derived from the above list (so it can't get out of sync)
 const INDICATORS: Overlay[] = [
   "None",
   "MA50",
   ...Array.from(new Set(BREAKDOWN_DEFS.map((d) => d.overlay))),
 ];
+
 /* ----------------------------- component ----------------------------- */
 
 export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymbol?: string }) {
@@ -798,7 +780,6 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     return saved && saved.trim() ? saved.trim().toUpperCase() : defaultSymbol;
   });
 
-  // Track a human-friendly company name for the currently selected symbol
   const [symbolName, setSymbolName] = useState<string>("");
 
   const presetNameFor = (sym: string) => {
@@ -806,7 +787,6 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     return hit ? hit.name : "";
   };
 
-  // Resolve name whenever symbol changes (preset first; otherwise try /api/symbols for exact match)
   useEffect(() => {
     const preset = presetNameFor(symbol);
     if (preset) {
@@ -836,7 +816,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
       cancelled = true;
     };
   }, [symbol]);
-  
+
   useEffect(() => {
     const urlSymbol = searchParams.get("symbol");
     const cleaned = urlSymbol ? urlSymbol.trim().toUpperCase() : "";
@@ -851,12 +831,9 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     window.localStorage.setItem("msh_last_symbol", symbol.trim().toUpperCase());
   }, [symbol]);
 
-  // Timeframe buttons (used for fetching + resetting view)
   const [tfDays, setTfDays] = useState(365);
-
-  // Zoom/Pan window (display-only; does NOT trigger refetch)
   const [windowDays, setWindowDays] = useState(365);
-  const [windowOffset, setWindowOffset] = useState(0); // 0 = most recent, higher = pan left into older data
+  const [windowOffset, setWindowOffset] = useState(0);
 
   const [indicator, setIndicator] = useState<Overlay>("None");
 
@@ -872,25 +849,18 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   const [bench, setBench] = useState<BenchPayload | null>(null);
   const [news, setNews] = useState<NewsPayload | null>(null);
 
-  // Theme (site-wide)
   const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   const COLORS = useMemo(() => {
     const isDark = theme === "dark";
     return {
       isDark,
-
-      // page
       pageBg: isDark ? "#06080d" : "#f6f7fb",
       pageFg: isDark ? "#f1f5f9" : "#0b1220",
       mutedFg: isDark ? "rgba(241,245,249,0.70)" : "rgba(11,18,32,0.65)",
-
-      // surfaces/cards
       cardBg: isDark ? "#0b1220" : "#ffffff",
       cardFg: isDark ? "#f1f5f9" : "#0b1220",
       border: isDark ? "rgba(255,255,255,0.14)" : "rgba(11,18,32,0.14)",
-
-      // controls
       controlBg: isDark ? "rgba(255,255,255,0.06)" : "rgba(11,18,32,0.04)",
       controlBgSolid: isDark ? "#0f172a" : "#ffffff",
       controlBorder: isDark ? "rgba(255,255,255,0.18)" : "rgba(11,18,32,0.18)",
@@ -898,16 +868,13 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     };
   }, [theme]);
 
-  // Large screen modal
   const [expanded, setExpanded] = useState(false);
 
-  // Reset zoom/pan when switching ticker or timeframe (better UX)
   useEffect(() => {
     setWindowDays(tfDays);
     setWindowOffset(0);
   }, [symbol, tfDays]);
 
-  // ESC closes modal
   useEffect(() => {
     if (!expanded) return;
     const onKey = (e: KeyboardEvent) => {
@@ -917,7 +884,6 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     return () => window.removeEventListener("keydown", onKey);
   }, [expanded]);
 
-  // Load quote + history
   useEffect(() => {
     let cancelled = false;
 
@@ -926,7 +892,6 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
       setErr(null);
 
       try {
-        // Ensure we always fetch enough data for MA200 etc.
         const historyDays = Math.max(tfDays, 2600);
 
         const [qRes, hRes] = await Promise.all([
@@ -971,7 +936,6 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     };
   }, [symbol, tfDays]);
 
-  // Autocomplete (debounced)
   useEffect(() => {
     let cancelled = false;
     const q = query.trim();
@@ -999,36 +963,34 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     };
   }, [query]);
 
-// Benchmarks (S&P + Nasdaq) — free, avoids TwelveData credit limits
-useEffect(() => {
-  let cancelled = false;
+  useEffect(() => {
+    let cancelled = false;
 
-  async function loadBench() {
-    try {
-      const res = await fetch("/api/benchmarks", { cache: "no-store" });
-      if (!res.ok) throw new Error("Benchmarks API failed");
+    async function loadBench() {
+      try {
+        const res = await fetch("/api/benchmarks", { cache: "no-store" });
+        if (!res.ok) throw new Error("Benchmarks API failed");
 
-      const raw = (await res.json()) as any;
+        const raw = (await res.json()) as any;
 
-      const safe: BenchPayload = {
-        updatedAt: typeof raw?.updatedAt === "string" ? raw.updatedAt : new Date().toISOString(),
-        scope: typeof raw?.scope === "string" ? raw.scope : "Benchmarks",
-        items: Array.isArray(raw?.items) ? raw.items : [],
-      };
+        const safe: BenchPayload = {
+          updatedAt: typeof raw?.updatedAt === "string" ? raw.updatedAt : new Date().toISOString(),
+          scope: typeof raw?.scope === "string" ? raw.scope : "Benchmarks",
+          items: Array.isArray(raw?.items) ? raw.items : [],
+        };
 
-      if (!cancelled) setBench(safe);
-    } catch {
-      if (!cancelled) setBench({ updatedAt: new Date().toISOString(), scope: "Benchmarks", items: [] });
+        if (!cancelled) setBench(safe);
+      } catch {
+        if (!cancelled) setBench({ updatedAt: new Date().toISOString(), scope: "Benchmarks", items: [] });
+      }
     }
-  }
 
-  loadBench();
-  return () => {
-    cancelled = true;
-  };
-}, []);
+    loadBench();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  // News (per symbol)
   useEffect(() => {
     let cancelled = false;
 
@@ -1048,7 +1010,6 @@ useEffect(() => {
     };
   }, [symbol]);
 
-  // Displayed data window (Zoom/Pan) - always at least 2 points
   const totalPoints = historyAll.length;
   const win = Math.max(windowDays, 2);
   const maxOffset = Math.max(totalPoints - win, 0);
@@ -1056,7 +1017,7 @@ useEffect(() => {
 
   const displayedHistory = useMemo(() => {
     if (!historyAll.length) return [];
-    const end = totalPoints - offset; // exclusive
+    const end = totalPoints - offset;
     const start = Math.max(0, end - win);
     const slice = historyAll.slice(start, end);
     return slice.length >= 2 ? slice : historyAll.slice(-2);
@@ -1064,7 +1025,6 @@ useEffect(() => {
 
   const n = displayedHistory.length;
 
-  // Indicators computed on FULL history for correctness
   const closesAll = useMemo(() => historyAll.map((p) => p.close), [historyAll]);
 
   const ma50Full = useMemo(() => movingAverage(closesAll, 50), [closesAll]);
@@ -1079,7 +1039,6 @@ useEffect(() => {
   const stochFull = useMemo(() => stochastic(historyAll, 14, 3), [historyAll]);
   const atr14Full = useMemo(() => atr(historyAll, 14), [historyAll]);
 
-  // IMPORTANT: slice EVERYTHING to -n (match data length)
   const ma50 = useMemo(() => ma50Full.slice(-n), [ma50Full, n]);
   const ma200 = useMemo(() => ma200Full.slice(-n), [ma200Full, n]);
 
@@ -1102,7 +1061,6 @@ useEffect(() => {
 
   const atr14Arr = useMemo(() => atr14Full.slice(-n), [atr14Full, n]);
 
-  // Volume (compute on FULL history so SMA20 works even on short display windows like 1W)
   const volumeFull = useMemo(
     () => historyAll.map((p) => (typeof p.volume === "number" && Number.isFinite(p.volume) ? p.volume : null)),
     [historyAll]
@@ -1110,11 +1068,9 @@ useEffect(() => {
 
   const volSma20Full = useMemo(() => smaNullable(volumeFull, 20), [volumeFull]);
 
-  // Slice to match displayed length (n)
   const volumeArr = useMemo(() => volumeFull.slice(-n), [volumeFull, n]);
   const volSma20Arr = useMemo(() => volSma20Full.slice(-n), [volSma20Full, n]);
 
-  // ATR SMA20: compute on FULL ATR series, then slice to -n
   const atrSma20Full = useMemo(() => smaNullable(atr14Full, 20), [atr14Full]);
   const atrSma20Arr = useMemo(() => atrSma20Full.slice(-n), [atrSma20Full, n]);
 
@@ -1148,31 +1104,28 @@ useEffect(() => {
     });
   }, [indicator, lastClose, rsi14Arr, stochK, bollUpper, bollLower, ema20Arr, vwapArr, lastMA50]);
 
-// Divergence computed on the CURRENT visible window (so what you see matches the label).
-// If you want it to match Pickers exactly, keep the chart panned to the newest bars (offset = 0).
-const divergence = useMemo<{
-  div: DivResult | null;
-  rsi: DivergenceState;
-  macd: DivergenceState;
-}>(() => {
-  if (indicator !== "None") return { div: null, rsi: "none", macd: "none" };
+  const divergence = useMemo<{
+    div: DivResult | null;
+    rsi: DivergenceState;
+    macd: DivergenceState;
+  }>(() => {
+    if (indicator !== "None") return { div: null, rsi: "none", macd: "none" };
 
-  const div = detectDivergenceFromHistory(historyAll, {
-    lookbackBars: 60,
-    leftRight: 2,
-    minPriceSwingPct: 1.2,
-    minRsiSwing: 4,
-    macdStdMult: 0.35,
-  });
+    const div = detectDivergenceFromHistory(historyAll, {
+      lookbackBars: 60,
+      leftRight: 2,
+      minPriceSwingPct: 1.2,
+      minRsiSwing: 4,
+      macdStdMult: 0.35,
+    });
 
-  const rsi = divStateForIndicator(div, "rsi");
-  const macd = divStateForIndicator(div, "macd");
+    const rsi = divStateForIndicator(div, "rsi");
+    const macd = divStateForIndicator(div, "macd");
 
-  return { div, rsi, macd };
-}, [indicator, historyAll]);
+    return { div, rsi, macd };
+  }, [indicator, historyAll]);
 
   const signal = useMemo(() => {
-    // Overview summary text (Trend + Stretch)
     if (indicator === "None") {
       if (!stretchScore || !trendScore) return { label: "Signal unavailable", detail: "No price data." };
 
@@ -1195,7 +1148,6 @@ const divergence = useMemo<{
       };
     }
 
-    // Existing single-indicator logic
     if (indicator === "MA50") return compareTo(lastClose, "MA50", typeof lastMA50 === "number" ? lastMA50 : null);
     if (indicator === "MA200") return compareTo(lastClose, "MA200", typeof lastMA200 === "number" ? lastMA200 : null);
 
@@ -1214,25 +1166,23 @@ const divergence = useMemo<{
       return compareTo(lastClose, "BB mid", typeof v === "number" ? v : null);
     }
 
-// Sub-panel indicators: interpret them directly (NOT vs MA200)
-if (indicator === "RSI(14)") return compareOscillator("RSI(14)", lastNum(rsi14Arr), 30, 70);
+    if (indicator === "RSI(14)") return compareOscillator("RSI(14)", lastNum(rsi14Arr), 30, 70);
 
-if (indicator === "Stochastic(14,3)") return compareOscillator("Stochastic %K", lastNum(stochK), 20, 80);
+    if (indicator === "Stochastic(14,3)") return compareOscillator("Stochastic %K", lastNum(stochK), 20, 80);
 
-if (indicator === "MACD(12,26,9)") {
-  return compareMacdHistogram(lastClose, lastNum(macdHist));
-}
+    if (indicator === "MACD(12,26,9)") {
+      return compareMacdHistogram(lastClose, lastNum(macdHist));
+    }
 
-if (indicator === "Volume") {
-  return compareSpike("Volume", lastNum(volumeArr), lastNum(volSma20Arr), 1.8, "higher = more activity");
-}
+    if (indicator === "Volume") {
+      return compareSpike("Volume", lastNum(volumeArr), lastNum(volSma20Arr), 1.8, "higher = more activity");
+    }
 
-if (indicator === "ATR(14)") {
-  return compareSpike("ATR(14)", lastNum(atr14Arr), lastNum(atrSma20Arr), 1.5, "higher = more volatility");
-}
+    if (indicator === "ATR(14)") {
+      return compareSpike("ATR(14)", lastNum(atr14Arr), lastNum(atrSma20Arr), 1.5, "higher = more volatility");
+    }
 
-// Safety fallback
-return { label: "Signal unavailable", detail: "Unknown indicator state." };
+    return { label: "Signal unavailable", detail: "Unknown indicator state." };
   }, [
     indicator,
     trendScore,
@@ -1252,15 +1202,12 @@ return { label: "Signal unavailable", detail: "Unknown indicator state." };
     atrSma20Arr,
   ]);
 
-    const overviewMeta = useMemo(() => {
+  const overviewMeta = useMemo(() => {
     if (indicator !== "None" || !trendScore || !stretchScore) return null;
 
-    // Tone is based on Stretch extremes (mean-reversion bias).
-    // We no longer have "spikes" in the Stretch score, so pass 0.
     const toneInfo = compositeToneFromCounts(stretchScore.overbought, stretchScore.oversold, 0);
     const toneColor = toneToColor(toneInfo.tone, COLORS.isDark);
 
-    // Market regime (simple + robust)
     const ma50v = typeof lastMA50 === "number" ? lastMA50 : null;
     const ma200v = typeof lastMA200 === "number" ? lastMA200 : null;
 
@@ -1270,7 +1217,6 @@ return { label: "Signal unavailable", detail: "Unknown indicator state." };
       else if (lastClose < ma50v && ma50v < ma200v) trend = "Downtrend";
     }
 
-    // Volatility regime using ATR ratio
     const atrv = lastNum(atr14Arr);
     const atrSma = lastNum(atrSma20Arr);
     let vol = "Normal";
@@ -1281,28 +1227,22 @@ return { label: "Signal unavailable", detail: "Unknown indicator state." };
     }
 
     return { toneColor, toneTag: toneInfo.tag, trend, vol };
-    }, [indicator, trendScore, stretchScore, COLORS.isDark, lastClose, lastMA50, lastMA200, atr14Arr, atrSma20Arr]);
+  }, [indicator, trendScore, stretchScore, COLORS.isDark, lastClose, lastMA50, lastMA200, atr14Arr, atrSma20Arr]);
 
-  
-
-    const overviewItems = useMemo<OverviewItem[]>(() => {
-    // Only show in Overview mode
+  const overviewItems = useMemo<OverviewItem[]>(() => {
     if (indicator !== "None") return [];
 
     const items: OverviewItem[] = [];
-    const isDark = COLORS.isDark;
 
-     let order = 0;
+    let order = 0;
     const push = (it: Omit<OverviewItem, "order">) => items.push({ ...it, order: order++ });
 
-    // Helper: price distance classification
     const distTone = (pctAbs: number) => {
       if (pctAbs >= 5) return "red";
       if (pctAbs >= 2) return "orange";
       return "yellow";
     };
 
-    // VWAP distance (2%)
     const vwap = lastNum(vwapArr);
     if (typeof lastClose === "number" && typeof vwap === "number" && vwap > 0) {
       const pct = ((lastClose - vwap) / vwap) * 100;
@@ -1315,10 +1255,9 @@ return { label: "Signal unavailable", detail: "Unknown indicator state." };
         severity: Math.abs(pct),
       });
     } else {
-     push({ key: "vwap", label: "VWAP", tone: "muted", valueText: "—", severity: 0 });
+      push({ key: "vwap", label: "VWAP", tone: "muted", valueText: "—", severity: 0 });
     }
 
-    // MACD histogram momentum
     const hist = lastNum(macdHist);
     if (typeof lastClose === "number" && typeof hist === "number") {
       const flat = Math.abs(lastClose) * 0.001;
@@ -1328,17 +1267,16 @@ return { label: "Signal unavailable", detail: "Unknown indicator state." };
         label: "MACD",
         tone,
         valueText: hist > flat ? "Bullish" : hist < -flat ? "Bearish" : "Flat",
-        severity: (Math.abs(hist) / Math.max(1e-9, Math.abs(lastClose))) * 100, // % of price
+        severity: (Math.abs(hist) / Math.max(1e-9, Math.abs(lastClose))) * 100,
       });
     } else {
-    push({ key: "macd", label: "MACD", tone: "muted", valueText: "—", severity: 0 });
+      push({ key: "macd", label: "MACD", tone: "muted", valueText: "—", severity: 0 });
     }
 
-    // RSI
     const rsi = lastNum(rsi14Arr);
     if (typeof rsi === "number") {
       const tone = rsi >= 70 ? "red" : rsi <= 30 ? "green" : "yellow";
-       push({
+      push({
         key: "rsi",
         label: "RSI",
         tone,
@@ -1346,10 +1284,9 @@ return { label: "Signal unavailable", detail: "Unknown indicator state." };
         severity: rsi >= 70 ? rsi - 70 : rsi <= 30 ? 30 - rsi : 0,
       });
     } else {
-    push({ key: "rsi", label: "RSI", tone: "muted", valueText: "—", severity: 0 });
+      push({ key: "rsi", label: "RSI", tone: "muted", valueText: "—", severity: 0 });
     }
 
-    // Stochastic %K
     const k = lastNum(stochK);
     if (typeof k === "number") {
       const tone = k >= 80 ? "red" : k <= 20 ? "green" : "yellow";
@@ -1361,10 +1298,9 @@ return { label: "Signal unavailable", detail: "Unknown indicator state." };
         severity: k >= 80 ? k - 80 : k <= 20 ? 20 - k : 0,
       });
     } else {
-    push({ key: "stoch", label: "Stoch", tone: "muted", valueText: "—", severity: 0 });
+      push({ key: "stoch", label: "Stoch", tone: "muted", valueText: "—", severity: 0 });
     }
 
-    // MA200 distance (5%)
     const ma200v = typeof lastMA200 === "number" ? lastMA200 : null;
     if (typeof lastClose === "number" && typeof ma200v === "number" && ma200v > 0) {
       const pct = ((lastClose - ma200v) / ma200v) * 100;
@@ -1377,16 +1313,15 @@ return { label: "Signal unavailable", detail: "Unknown indicator state." };
         severity: Math.abs(pct),
       });
     } else {
-    push({ key: "ma200", label: "MA200", tone: "muted", valueText: "—", severity: 0 });
+      push({ key: "ma200", label: "MA200", tone: "muted", valueText: "—", severity: 0 });
     }
 
-    // Volume spike vs SMA20 (1.8x)
     const vol = lastNum(volumeArr);
     const volSma = lastNum(volSma20Arr);
     if (typeof vol === "number" && typeof volSma === "number" && volSma > 0) {
       const ratio = vol / volSma;
       const tone = ratio >= 1.8 ? "orange" : "yellow";
- push({
+      push({
         key: "vol",
         label: "Volume",
         tone,
@@ -1394,10 +1329,9 @@ return { label: "Signal unavailable", detail: "Unknown indicator state." };
         severity: Math.max(0, ratio - 1),
       });
     } else {
-   push({ key: "vol", label: "Volume", tone: "muted", valueText: "—", severity: 0 });
+      push({ key: "vol", label: "Volume", tone: "muted", valueText: "—", severity: 0 });
     }
 
-    // ATR spike vs SMA20 (1.5x)
     const atrv = lastNum(atr14Arr);
     const atrSma = lastNum(atrSma20Arr);
     if (typeof atrv === "number" && typeof atrSma === "number" && atrSma > 0) {
@@ -1414,27 +1348,25 @@ return { label: "Signal unavailable", detail: "Unknown indicator state." };
       push({ key: "atr", label: "ATR", tone: "muted", valueText: "—", severity: 0 });
     }
 
-// Divergence (Last ~40 bars) — always render rows (muted if none)
-const rsiTone = divergenceTone(divergence.rsi);
-const macdTone = divergenceTone(divergence.macd);
+    const rsiTone = divergenceTone(divergence.rsi);
+    const macdTone = divergenceTone(divergence.macd);
 
-push({
-  key: "div_rsi",
-  label: "RSI Div",
-  tone: divergence.rsi === "none" ? "muted" : rsiTone,
-  valueText: divergence.rsi === "none" ? "—" : divergenceLabel(divergence.rsi),
-  severity: divergence.rsi === "none" ? 0 : divergenceSeverity(divergence.rsi),
-});
+    push({
+      key: "div_rsi",
+      label: "RSI Div",
+      tone: divergence.rsi === "none" ? "muted" : rsiTone,
+      valueText: divergence.rsi === "none" ? "—" : divergenceLabel(divergence.rsi),
+      severity: divergence.rsi === "none" ? 0 : divergenceSeverity(divergence.rsi),
+    });
 
-push({
-  key: "div_macd",
-  label: "MACD Div",
-  tone: divergence.macd === "none" ? "muted" : macdTone,
-  valueText: divergence.macd === "none" ? "—" : divergenceLabel(divergence.macd),
-  severity: divergence.macd === "none" ? 0 : divergenceSeverity(divergence.macd),
-});
+    push({
+      key: "div_macd",
+      label: "MACD Div",
+      tone: divergence.macd === "none" ? "muted" : macdTone,
+      valueText: divergence.macd === "none" ? "—" : divergenceLabel(divergence.macd),
+      severity: divergence.macd === "none" ? 0 : divergenceSeverity(divergence.macd),
+    });
 
-    // Sort: most severe first, then by tone, then stable order
     return items.sort((a, b) => {
       if (b.severity !== a.severity) return b.severity - a.severity;
       const tr = toneRank(b.tone) - toneRank(a.tone);
@@ -1443,7 +1375,6 @@ push({
     });
   }, [
     indicator,
-    COLORS.isDark,
     lastClose,
     lastMA200,
     vwapArr,
@@ -1458,7 +1389,7 @@ push({
   ]);
 
   const lastIndicatorValue = useMemo(() => {
-if (indicator === "None") {
+    if (indicator === "None") {
       return {
         label: "Stretch Score",
         value: stretchScore ? stretchScore.flagged : null,
@@ -1490,1233 +1421,1323 @@ if (indicator === "None") {
     setOpen(false);
   }
 
-function ChartCard({ height = 460 }: { height?: number | string }) {
-  return (
-    <div
-      style={{
-        border: `1px solid ${COLORS.border}`,
-        borderRadius: 14,
-        background: COLORS.cardBg,
-        color: COLORS.cardFg,
-        height,
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-        minHeight: 0,
-      }}
-    >
-      {/* Header row */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "12px 16px",
-          borderBottom: `1px solid ${COLORS.border}`,
-          gap: 12,
-        }}
-      >
-        <div style={{ fontWeight: 800, whiteSpace: "nowrap" }}>
-          Price ({indicator === "None" ? "Overview" : indicator})
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            alignItems: "center",
-            background: COLORS.controlBgSolid,
-            border: `1px solid ${COLORS.controlBorder}`,
-            borderRadius: 12,
-            padding: 6,
-          }}
-        >
-          <button
-            onClick={() => setWindowOffset((o) => Math.min(maxOffset, o + Math.max(1, Math.floor(win * 0.2))))}
-            disabled={offset >= maxOffset}
-            title="Pan left (older)"
-            style={{
-              padding: "8px 10px",
-              borderRadius: 10,
-              border: `1px solid ${COLORS.controlBorder}`,
-              background: COLORS.controlBg,
-              color: COLORS.controlFg,
-              cursor: offset >= maxOffset ? "not-allowed" : "pointer",
-              opacity: offset >= maxOffset ? 0.45 : 1,
-              fontWeight: 900,
-              fontSize: 14,
-              lineHeight: 1,
-            }}
-          >
-            ←
-          </button>
-
-          <button
-            onClick={() => setWindowOffset((o) => Math.max(0, o - Math.max(1, Math.floor(win * 0.2))))}
-            disabled={offset <= 0}
-            title="Pan right (newer)"
-            style={{
-              padding: "8px 10px",
-              borderRadius: 10,
-              border: `1px solid ${COLORS.controlBorder}`,
-              background: COLORS.controlBg,
-              color: COLORS.controlFg,
-              cursor: offset <= 0 ? "not-allowed" : "pointer",
-              opacity: offset <= 0 ? 0.45 : 1,
-              fontWeight: 900,
-              fontSize: 14,
-              lineHeight: 1,
-            }}
-          >
-            →
-          </button>
-
-          <button
-            onClick={() => {
-              setWindowDays((d) => Math.max(2, Math.floor(d * 0.8)));
-              setWindowOffset(0);
-            }}
-            title="Zoom in"
-            style={{
-              padding: "8px 10px",
-              borderRadius: 10,
-              border: `1px solid ${COLORS.controlBorder}`,
-              background: COLORS.controlBg,
-              color: COLORS.controlFg,
-              cursor: "pointer",
-              fontWeight: 900,
-              fontSize: 14,
-              lineHeight: 1,
-            }}
-          >
-            +
-          </button>
-
-          <button
-            onClick={() => {
-              setWindowDays((d) => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25)));
-              setWindowOffset(0);
-            }}
-            title="Zoom out"
-            style={{
-              padding: "8px 10px",
-              borderRadius: 10,
-              border: `1px solid ${COLORS.controlBorder}`,
-              background: COLORS.controlBg,
-              color: COLORS.controlFg,
-              cursor: "pointer",
-              fontWeight: 900,
-              fontSize: 14,
-              lineHeight: 1,
-            }}
-          >
-            −
-          </button>
-
-          <div style={{ fontSize: 12, opacity: 0.8, color: COLORS.mutedFg, whiteSpace: "nowrap", fontWeight: 700 }}>
-            {Math.min(win, totalPoints)} bars
-          </div>
-
-          <button
-            onClick={() => setExpanded(true)}
-            title="Expand chart"
-            style={{
-              padding: "8px 10px",
-              borderRadius: 10,
-              border: `1px solid ${COLORS.controlBorder}`,
-              background: COLORS.controlBg,
-              color: COLORS.controlFg,
-              cursor: "pointer",
-              fontWeight: 900,
-              fontSize: 14,
-              lineHeight: 1,
-            }}
-          >
-            ⤢
-          </button>
-        </div>
-      </div>
-
-      {/* Chart area */}
-      <div style={{ flex: 1, padding: 16, minHeight: 0 }}>
-        <PriceChart
-          data={displayedHistory}
-          ma50={ma50}
-          ma200={ma200}
-          overlay={indicator}
-          bollUpper={bollUpper}
-          bollMid={bollMid}
-          bollLower={bollLower}
-          ema20={ema20Arr}
-          vwap={vwapArr}
-          rsi14={rsi14Arr}
-          macdLine={macdLine}
-          macdSignal={macdSignal}
-          macdHist={macdHist}
-          stochK={stochK}
-          stochD={stochD}
-          atr14={atr14Arr}
-          volume={volumeArr}
-          divergence={divergence.div}
-        />
-      </div>
-    </div>
-  );
-}
-
-return (
-  <main
-    style={{
-      padding: 0,
-      fontFamily: "system-ui, Arial",
-      background: COLORS.pageBg,
-      color: COLORS.pageFg,
-      minHeight: "100vh",
-    }}
-  >
-<div className="pageWrap">
-  <div
-    style={{
-      display: "flex",
-      alignItems: "center",
-      gap: 12,
-      marginBottom: 8,
-      flexWrap: "wrap",
-    }}
-  >
-<div
-  style={{
-    width: 290,
-    height: 72,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "flex-start",
-    overflow: "visible",
-    marginRight: 8,
-    flex: "0 0 auto",
-   marginLeft: -40,
-  }}
->
-  <img
-    src="/logo.png"
-    alt="MyStockHarbor"
-    style={{
-      height: 72,
-      width: "auto",
-      objectFit: "contain",
-      display: "block",
-      transform: "scale(3.0)",
-      transformOrigin: "left center",
-    }}
-  />
-</div>
-
-
-
-<div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-  <button
-    type="button"
-    onClick={() => router.push("/learn")}
-    style={{
-      padding: "12px 16px",
-      borderRadius: 14,
-      border: `1px solid rgba(34,197,94,0.55)`,
-      background: COLORS.isDark
-        ? "linear-gradient(135deg, rgba(34,197,94,0.28), rgba(34,197,94,0.14))"
-        : "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(34,197,94,0.10))",
-      color: COLORS.controlFg,
-      textDecoration: "none",
-      fontWeight: 950,
-      fontSize: 15,
-      letterSpacing: "0.2px",
-      boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.45)" : "0 10px 26px rgba(0,0,0,0.14)",
-      display: "inline-flex",
-      alignItems: "center",
-      gap: 10,
-      cursor: "pointer",
-      opacity: 1,
-      position: "relative",
-      overflow: "hidden",
-    }}
-    title="Learn the Basics"
-  >
-    📚 Learn the Basics <span style={{ opacity: 0.9 }}>→</span>
-  </button>
-
-  <button
-    type="button"
-    onClick={() => router.push("/platforms")}
-    style={{
-      padding: "12px 16px",
-      borderRadius: 14,
-      border: `1px solid rgba(168,85,247,0.55)`,
-      background: COLORS.isDark
-        ? "linear-gradient(135deg, rgba(168,85,247,0.28), rgba(168,85,247,0.14))"
-        : "linear-gradient(135deg, rgba(168,85,247,0.18), rgba(168,85,247,0.10))",
-      color: COLORS.controlFg,
-      textDecoration: "none",
-      fontWeight: 950,
-      fontSize: 15,
-      letterSpacing: "0.2px",
-      boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.45)" : "0 10px 26px rgba(0,0,0,0.14)",
-      display: "inline-flex",
-      alignItems: "center",
-      gap: 10,
-      cursor: "pointer",
-      opacity: 1,
-      position: "relative",
-      overflow: "hidden",
-    }}
-    title="Choosing your Platform"
-  >
-    🖥️ Choosing your Platform <span style={{ opacity: 0.9 }}>→</span>
-  </button>
-
-  <button
-    type="button"
-    onClick={() => router.push("/utilities")}
-    style={{
-      padding: "12px 16px",
-      borderRadius: 14,
-      border: `1px solid rgba(234,179,8,0.55)`,
-      background: COLORS.isDark
-        ? "linear-gradient(135deg, rgba(234,179,8,0.24), rgba(249,115,22,0.16))"
-        : "linear-gradient(135deg, rgba(234,179,8,0.16), rgba(249,115,22,0.10))",
-      color: COLORS.controlFg,
-      textDecoration: "none",
-      fontWeight: 950,
-      fontSize: 15,
-      letterSpacing: "0.2px",
-      boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.45)" : "0 10px 26px rgba(0,0,0,0.14)",
-      display: "inline-flex",
-      alignItems: "center",
-      gap: 10,
-      cursor: "pointer",
-      opacity: 1,
-      position: "relative",
-      overflow: "hidden",
-    }}
-    title="Trading Utilities"
-  >
-    🧮 Trading Utilities <span style={{ opacity: 0.9 }}>→</span>
-  </button>
-
-  <button
-    type="button"
-    onClick={() => router.push("/about")}
-    style={{
-      padding: "12px 16px",
-      borderRadius: 14,
-      border: `1px solid rgba(59,130,246,0.45)`,
-      background: COLORS.isDark
-        ? "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(59,130,246,0.10))"
-        : "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(59,130,246,0.08))",
-      color: COLORS.controlFg,
-      textDecoration: "none",
-      fontWeight: 900,
-      fontSize: 15,
-      letterSpacing: "0.2px",
-      boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.35)" : "0 10px 26px rgba(0,0,0,0.12)",
-      display: "inline-flex",
-      alignItems: "center",
-      gap: 10,
-      cursor: "pointer",
-      opacity: 1,
-      position: "relative",
-      overflow: "hidden",
-    }}
-    title="About MyStockHarbor"
-  >
-    ℹ️ About
-  </button>
-
-  <button
-    type="button"
-    onClick={() => router.push("/contact")}
-    style={{
-      padding: "12px 16px",
-      borderRadius: 14,
-      border: `1px solid rgba(14,165,233,0.45)`,
-      background: COLORS.isDark
-        ? "linear-gradient(135deg, rgba(14,165,233,0.20), rgba(14,165,233,0.10))"
-        : "linear-gradient(135deg, rgba(14,165,233,0.12), rgba(14,165,233,0.06))",
-      color: COLORS.controlFg,
-      textDecoration: "none",
-      fontWeight: 900,
-      fontSize: 15,
-      letterSpacing: "0.2px",
-      boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.35)" : "0 10px 26px rgba(0,0,0,0.12)",
-      display: "inline-flex",
-      alignItems: "center",
-      gap: 10,
-      cursor: "pointer",
-      opacity: 1,
-      position: "relative",
-      overflow: "hidden",
-    }}
-    title="Contact MyStockHarbor"
-  >
-    ✉️ Contact
-  </button>
-
-  <button
-    type="button"
-    onClick={() => router.push("/risk-disclaimer")}
-    style={{
-      padding: "12px 16px",
-      borderRadius: 14,
-      border: `1px solid rgba(244,114,182,0.45)`,
-      background: COLORS.isDark
-        ? "linear-gradient(135deg, rgba(244,114,182,0.18), rgba(244,114,182,0.08))"
-        : "linear-gradient(135deg, rgba(244,114,182,0.10), rgba(244,114,182,0.05))",
-      color: COLORS.controlFg,
-      textDecoration: "none",
-      fontWeight: 900,
-      fontSize: 15,
-      letterSpacing: "0.2px",
-      boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.35)" : "0 10px 26px rgba(0,0,0,0.12)",
-      display: "inline-flex",
-      alignItems: "center",
-      gap: 10,
-      cursor: "pointer",
-      opacity: 1,
-      position: "relative",
-      overflow: "hidden",
-    }}
-    title="Risk Disclaimer"
-  >
-    ⚠️ Risk Disclaimer
-  </button>
-</div>
-
-    <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginLeft: "auto" }}>
-      <button
-        onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
-        style={{
-          padding: "10px 12px",
-          borderRadius: 12,
-          border: `1px solid ${COLORS.controlBorder}`,
-          background: COLORS.controlBg,
-          color: COLORS.controlFg,
-          cursor: "pointer",
-          fontWeight: 800,
-        }}
-        title="Toggle theme"
-      >
-        {COLORS.isDark ? "🌙 Dark" : "☀️ Light"}
-      </button>
-    </div>
-  </div>
-
-    <p
-  style={{
-    marginTop: 2,
-    opacity: 0.8,
-    color: COLORS.mutedFg,
-    fontSize: 14,
-    fontWeight: 600,
-    letterSpacing: "0.2px",
-  }}
->
-  Learn charts. Discover stocks. Trade smarter. — Version 1
-</p>
-<style>{`
-  @keyframes pickersBar {
-    0% { transform: translateX(-10%); opacity: 0.55; }
-    50% { transform: translateX(120%); opacity: 0.95; }
-    100% { transform: translateX(240%); opacity: 0.55; }
-  }
-
-  /* ---------- responsive helpers (no libraries) ---------- */
-  .pageWrap { padding: 40px; }
-  .mainGrid { margin-top: 16px; max-width: 920px; display: grid; gap: 16px; }
-  .summaryGrid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 16px; align-items: start; margin-top: 8px; }
-  .benchGrid { display: grid; grid-template-columns: repeat(2, minmax(240px, 1fr)); gap: 14px; max-width: 980px; }
-  .newsGrid { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
-
-  /* Mobile */
-  @media (max-width: 760px) {
-    .pageWrap { padding: 16px !important; }
-    .mainGrid { max-width: 100% !important; }
-    .summaryGrid { grid-template-columns: 1fr !important; }
-    .benchGrid { grid-template-columns: 1fr !important; }
-    .newsGrid { grid-template-columns: 1fr !important; }
-  }
-`}</style>
-
-      {/* Controls row */}
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginTop: 16 }}>
-        <div
-          style={{
-            display: "flex",
-            gap: 14,
-            alignItems: "flex-start",
-            flexWrap: "wrap",
-          }}
-        >
-          {/* SEARCH */}
-          <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 6 }}>
-            <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, lineHeight: 1 }}>
-              Search Any Stock
-            </div>
-
-            <input
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setOpen(true);
-              }}
-              onFocus={() => setOpen(true)}
-              onBlur={() => setTimeout(() => setOpen(false), 150)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") chooseSymbol(query);
-              }}
-              placeholder="🔎 Search ANY ticker or company"
-              style={{
-                height: 44,
-                padding: "0 14px",
-                borderRadius: 14,
-                border: "2px solid rgba(59,130,246,0.45)",
-                background: "#ffffff",
-                color: "#111",
-                width: 260,
-                fontSize: 14,
-                fontWeight: 750,
-                boxShadow: COLORS.isDark
-                  ? "0 6px 20px rgba(0,0,0,0.35)"
-                  : "0 6px 20px rgba(0,0,0,0.12)",
-                outline: "none",
-              }}
-            />
-
-            {open && results.length > 0 ? (
-              <div
-                style={{
-                  position: "absolute",
-                  top: "calc(100% + 8px)",
-                  left: 0,
-                  right: 0,
-                  border: "1px solid #3333",
-                  borderRadius: 12,
-                  background: "#fff",
-                  color: "#111",
-                  overflow: "hidden",
-                  zIndex: 9999,
-                  boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
-                  maxHeight: 340,
-                  overflowY: "auto",
-                }}
-              >
-                {results.map((r) => (
-                  <button
-                    key={`${r.symbol}-${r.exchange}`}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => chooseSymbol(r.symbol)}
-                    style={{
-                      display: "block",
-                      width: "100%",
-                      textAlign: "left",
-                      padding: "10px 12px",
-                      border: "none",
-                      background: "transparent",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <div style={{ fontWeight: 800 }}>
-                      {r.symbol} <span style={{ fontWeight: 600, opacity: 0.7 }}>({r.exchange})</span>
-                    </div>
-                    <div style={{ fontSize: 12, opacity: 0.75 }}>{r.name}</div>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-           {/* STOCK PICKERS */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <label style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, lineHeight: 1 }}>
-              Stock Pickers
-            </label>
-
-            <button
-              type="button"
-              onClick={() => {
-                if (isPicking) return;
-                startPicking(() => {
-                  router.push("/pickers");
-                });
-              }}
-              disabled={isPicking}
-              style={{
-                height: 44,
-                padding: "0 18px",
-                borderRadius: 12,
-                border: `1px solid rgba(59,130,246,0.55)`,
-                background: COLORS.isDark
-                  ? "linear-gradient(135deg, rgba(59,130,246,0.35), rgba(59,130,246,0.18))"
-                  : "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(59,130,246,0.12))",
-                color: COLORS.controlFg,
-                fontWeight: 900,
-                fontSize: 14,
-                letterSpacing: "0.2px",
-                cursor: isPicking ? "not-allowed" : "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                minWidth: 220,
-              }}
-            >
-              🔎 Find Your Next Stock →
-            </button>
-          </div>
-
-          {/* INDICATOR */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <label style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, lineHeight: 1 }}>
-              Indicator
-            </label>
-
-            <select
-              value={indicator}
-              onChange={(e) => setIndicator(e.target.value as any)}
-              style={{
-                height: 44,
-                padding: "0 12px",
-                borderRadius: 12,
-                border: `1px solid ${COLORS.controlBorder}`,
-                background: "#ffffff",
-                color: "#111",
-                fontWeight: 900,
-                minWidth: 220,
-              }}
-            >
-              {INDICATORS.map((x) => (
-                <option key={x} value={x}>
-                  {x === "None" ? "Overview" : x}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Timeframes */}
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {TIMEFRAMES.map((t) => {
-            const active = tfDays === t.days;
-
-            return (
-              <button
-                key={t.label}
-                onClick={() => {
-                  setTfDays(t.days);
-                  setWindowDays(t.days);
-                  setWindowOffset(0);
-                }}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 12,
-                  border: `1px solid ${COLORS.controlBorder}`,
-                  background: active
-                    ? COLORS.isDark
-                      ? "rgba(255,255,255,0.18)"
-                      : "rgba(0,0,0,0.08)"
-                    : COLORS.controlBg,
-                  color: COLORS.controlFg,
-                  cursor: "pointer",
-                  opacity: 1,
-                  fontWeight: active ? 900 : 750,
-                  boxShadow: active
-                    ? COLORS.isDark
-                      ? "0 10px 26px rgba(0,0,0,0.45)"
-                      : "0 10px 26px rgba(0,0,0,0.12)"
-                    : "none",
-                }}
-              >
-                {t.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-     <div className="mainGrid">
-        {/* Card 1: Summary */}
-        <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
-                    <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-            <div style={{ fontSize: 28, fontWeight: 950, letterSpacing: "-0.3px" }}>
-              {symbol}
-            </div>
-            <div style={{ fontSize: 16, fontWeight: 800, opacity: 0.85, color: COLORS.mutedFg }}>
-              {symbolName ? `— ${symbolName}` : "—"}
-            </div>
-          </div>
-
-          {loading ? (
-            <p style={{ margin: "8px 0" }}>Loading…</p>
-          ) : err ? (
-            <p style={{ margin: "8px 0" }}>{err}</p>
-          ) : (
-            <>
-              {indicator === "None" ? (
-                <>
-                  {/* ONE ROW: left column = price + big signal, right column = breakdown */}
-<div className="summaryGrid">
-                    {/* LEFT: price + dominant signal */}
-<div style={{ minWidth: 0 }}>
-  <div
-    style={{
-      border: `1px solid ${COLORS.border}`,
-      borderRadius: 14,
-      background: COLORS.controlBg,
-      padding: 16,
-    }}
-  >
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "flex-start",
-        gap: 16,
-        flexWrap: "wrap",
-      }}
-    >
-      <div style={{ minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: 30,
-            fontWeight: 950,
-            letterSpacing: "-0.4px",
-            lineHeight: 1,
-            color: COLORS.pageFg,
-          }}
-        >
-          {symbol}
-        </div>
-
-        <div
-          style={{
-            marginTop: 6,
-            fontSize: 15,
-            fontWeight: 800,
-            color: COLORS.mutedFg,
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-          }}
-        >
-          {symbolName || "Company name unavailable"}
-        </div>
-      </div>
-
-      <div style={{ textAlign: "right", minWidth: 120 }}>
-        <div
-          style={{
-            fontSize: 12,
-            fontWeight: 800,
-            color: COLORS.mutedFg,
-            textTransform: "uppercase",
-            letterSpacing: "0.5px",
-          }}
-        >
-          Last Price
-        </div>
-
-        <div
-          style={{
-            marginTop: 6,
-            fontSize: 30,
-            fontWeight: 950,
-            letterSpacing: "-0.4px",
-            color: COLORS.pageFg,
-          }}
-        >
-          {quote?.price == null ? "—" : `$${quote.price.toFixed(2)}`}
-        </div>
-      </div>
-    </div>
-
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "1fr 1fr",
-        gap: 12,
-        marginTop: 18,
-      }}
-    >
-      <div
-        style={{
-          border: `1px solid ${COLORS.border}`,
-          borderRadius: 12,
-          padding: 14,
-          background: COLORS.cardBg,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            fontSize: 14,
-            color: COLORS.mutedFg,
-            fontWeight: 850,
-          }}
-        >
-          <span
-            style={{
-              width: 10,
-              height: 10,
-              borderRadius: 999,
-              background: toneToColor(trendToneFromScore(trendScore), COLORS.isDark),
-              flex: "0 0 auto",
-            }}
-          />
-          <span>Trend Score</span>
-          <HelpTip
-            isDark={COLORS.isDark}
-            text="Trend Score measures how many bullish trend checks are currently passing, such as price vs moving averages and MACD momentum. Higher scores suggest a stronger trend structure."
-          />
-        </div>
-
-        <div
-          style={{
-            marginTop: 10,
-            fontSize: 32,
-            fontWeight: 950,
-            lineHeight: 1,
-            color: COLORS.pageFg,
-            letterSpacing: "-0.4px",
-          }}
-        >
-          {trendScore ? `${trendScore.passed}/${trendScore.total}` : "—"}
-        </div>
-
-        <div
-          style={{
-            marginTop: 4,
-            fontSize: 13,
-            fontWeight: 800,
-            color: COLORS.mutedFg,
-          }}
-        >
-          checks passing
-        </div>
-
-        {trendScore ? (
-          renderFlagsMeter({
-            flagged: trendScore.passed,
-            total: trendScore.total,
-            color: COLORS.isDark ? "#22c55e" : "#16a34a",
-            isDark: COLORS.isDark,
-          })
-        ) : null}
-      </div>
-
-      <div
-        style={{
-          border: `1px solid ${COLORS.border}`,
-          borderRadius: 12,
-          padding: 14,
-          background: COLORS.cardBg,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            fontSize: 14,
-            color: COLORS.mutedFg,
-            fontWeight: 850,
-          }}
-        >
-          <span
-            style={{
-              width: 10,
-              height: 10,
-              borderRadius: 999,
-              background: overviewMeta?.toneColor ?? (COLORS.isDark ? "#22c55e" : "#16a34a"),
-              flex: "0 0 auto",
-            }}
-          />
-          <span>Stretch Score</span>
-          <HelpTip
-            isDark={COLORS.isDark}
-            text="Stretch Score measures how many indicators suggest price may be extended, overbought, or oversold. Higher scores mean more signs that price is stretched away from normal conditions."
-          />
-        </div>
-
-        <div
-          style={{
-            marginTop: 10,
-            fontSize: 32,
-            fontWeight: 950,
-            lineHeight: 1,
-            color: overviewMeta?.toneColor ?? COLORS.pageFg,
-            letterSpacing: "-0.4px",
-          }}
-        >
-          {stretchScore ? `${stretchScore.flagged}/${stretchScore.total}` : "—"}
-        </div>
-
-        <div
-          style={{
-            marginTop: 4,
-            fontSize: 13,
-            fontWeight: 800,
-            color: COLORS.mutedFg,
-          }}
-        >
-          stretch checks
-        </div>
-
-        {stretchScore && overviewMeta ? (
-          renderFlagsMeter({
-            flagged: stretchScore.flagged,
-            total: stretchScore.total,
-            color: overviewMeta.toneColor,
-            isDark: COLORS.isDark,
-          })
-        ) : null}
-      </div>
-    </div>
-
-    {overviewMeta ? (
-      <div
-        style={{
-          marginTop: 14,
-          padding: "10px 12px",
-          borderRadius: 12,
-          background: COLORS.cardBg,
-          border: `1px solid ${COLORS.border}`,
-          fontSize: 13,
-          fontWeight: 800,
-          color: COLORS.mutedFg,
-        }}
-      >
-        Regime: {overviewMeta.trend} • Volatility: {overviewMeta.vol} • Bias: {overviewMeta.toneTag}
-      </div>
-    ) : null}
-
-    <div
-      style={{
-        marginTop: 12,
-        fontSize: 13,
-        lineHeight: 1.6,
-        color: COLORS.mutedFg,
-      }}
-    >
-      {signal.detail}
-    </div>
-
-    <div
-      style={{
-        marginTop: 14,
-        paddingTop: 12,
-        borderTop: `1px solid ${COLORS.border}`,
-        fontSize: 13,
-        color: COLORS.mutedFg,
-      }}
-    >
-      {quote?.date && quote?.time ? `As of ${quote.date} ${quote.time}` : "Timestamp unavailable"} • Source:{" "}
-      {quote?.source ?? "stooq.com"}
-    </div>
-  </div>
-</div>
-
-                    {/* RIGHT: breakdown (top aligned) */}
-<div
-  style={{
-    border: `1px solid ${COLORS.border}`,
-    borderRadius: 12,
-    padding: 12,
-    background: COLORS.controlBg,
-    marginTop: 0,
-  }}
->
-                      <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10, opacity: 0.9 }}>
-                        Breakdown
-                      </div>
-
-                      <div style={{ display: "grid", gap: 8 }}>
-{BREAKDOWN_DEFS.map((d) => {
-  const it = overviewItems.find((x) => x.key === d.key);
-  if (!it) return null;
-
-  const dot = toneToColor(it.tone, COLORS.isDark);
-
-  return (
-    <div
-      key={it.key}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 10,
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-        <span
-          style={{
-            width: 10,
-            height: 10,
-            borderRadius: 999,
-            background: dot,
-            boxShadow: COLORS.isDark ? "0 0 0 3px rgba(255,255,255,0.04)" : "0 0 0 3px rgba(0,0,0,0.03)",
-            flex: "0 0 auto",
-          }}
-        />
-        <span style={{ fontWeight: 850, fontSize: 13, whiteSpace: "nowrap" }}>{it.label}</span>
-      </div>
-
-      <span style={{ fontSize: 12, opacity: 0.85, color: COLORS.mutedFg, textAlign: "right" }}>
-        {it.valueText}
-      </span>
-    </div>
-  );
-})}
-                      </div>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <p style={{ fontSize: 20, margin: "8px 0" }}>
-                    <strong>Last price:</strong> {quote?.price == null ? "Unavailable" : `$${quote.price.toFixed(2)}`}
-                  </p>
-
-                  <p style={{ margin: "8px 0 0", opacity: 0.85 }}>
-                    <strong>Signal:</strong> {signal.label}
-                  </p>
-                  <p style={{ margin: "6px 0 0", opacity: 0.7 }}>{signal.detail}</p>
-
-                  <div style={{ marginTop: 12, fontSize: 13, opacity: 0.75 }}>
-                    <div>
-                      {lastIndicatorValue.label}:{" "}
-                      {typeof (lastIndicatorValue as any).value === "number"
-                        ? indicator === "RSI(14)" || indicator === "Stochastic(14,3)"
-                          ? `${((lastIndicatorValue as any).value as number).toFixed(2)}`
-                          : indicator === "MACD(12,26,9)"
-                            ? `${((lastIndicatorValue as any).value as number).toFixed(4)}`
-                            : indicator === "Volume"
-                              ? `${Math.round((lastIndicatorValue as any).value as number).toLocaleString()}`
-                              : `$${(((lastIndicatorValue as any).value as number) ?? 0).toFixed(2)}`
-                        : "—"}
-                    </div>
-                  </div>
-                </>
-              )}
-
-              <p style={{ marginTop: 12, opacity: 0.7 }}>
-                {quote?.date && quote?.time ? `As of ${quote.date} ${quote.time}` : "Timestamp unavailable"} • Source:{" "}
-                {quote?.source ?? "stooq.com"}
-              </p>
-            </>
-          )}
-        </div>
-
-       {/* Card 2: Chart */}
-      <ChartCard height={460} />
-
-        {/* Modal (Large screen) */}
-        {expanded ? (
-          <div
-            onMouseDown={() => setExpanded(false)}
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(0,0,0,0.55)",
-              zIndex: 99999,
-              display: "grid",
-              placeItems: "center",
-              padding: 16,
-            }}
-          >
-            <div
-              onMouseDown={(e) => e.stopPropagation()}
-              style={{
-                width: "min(1200px, 96vw)",
-                height: "min(85vh, 900px)",
-                background: "#0b1220",
-                color: "#e6e6e6",
-                borderRadius: 14,
-                border: "1px solid rgba(255,255,255,0.14)",
-                boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
-                display: "grid",
-                gridTemplateRows: "auto 1fr",
-                minHeight: 0,
-                overflow: "hidden",
-                
-              }}
-            >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: 12, borderBottom: "1px solid rgba(255,255,255,0.14)" }}>
-                <div style={{ fontWeight: 800 }}>{symbol} — Expanded Chart</div>
-                <button
-                  onClick={() => setExpanded(false)}
-                  style={{
-                    borderRadius: 10,
-                    border: "1px solid #3333",
-                    background: "#fff",
-                    padding: "8px 10px",
-                    cursor: "pointer",
-                  }}
-                >
-                  Close ✕
-                </button>
-              </div>
-
-<div
-  style={{
-    padding: 14,
-    display: "flex",
-    flexDirection: "column",
-    minHeight: 0, // ✅ allows children to take 1fr height inside grid
-  }}
->
-  <div
-    style={{
-      flex: 1,          // ✅ fill the available modal space
-      minHeight: 0,     // ✅ prevents overflow bugs
-      borderRadius: 12,
-      overflow: "hidden",
-      background: "#0b1220",
-      border: "1px solid rgba(255,255,255,0.14)",
-    }}
-  >
-    <div style={{ height: "100%", filter: "invert(1) hue-rotate(180deg)" }}>
-      <ChartCard height="100%" />
-    </div>
-  </div>
-</div>
-            </div>
-          </div>
-        ) : null}
-
-{/* Card 3: Benchmarks */}
-<div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
-  <h2 style={{ marginTop: 0 }}>Market (Benchmarks)</h2>
-
-  {(() => {
-    const items = Array.isArray(bench?.items) ? bench!.items : [];
-
-    if (!bench) {
-      return <div style={{ opacity: 0.7 }}>Market data unavailable.</div>;
-    }
-
-    if (!items.length) {
-      return <div style={{ opacity: 0.7 }}>Market data unavailable.</div>;
-    }
-
+  function ChartCard({ height = 460 }: { height?: number | string }) {
     return (
-      <>
-        <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 10 }}>
-          Updated: {new Date(bench.updatedAt).toLocaleString()} • {bench.scope}
-        </div>
-
-<div className="benchGrid">
-  {items.map((it) => {
-    const pct = typeof it.changePct === "number" ? it.changePct : null;
-    const isUp = typeof pct === "number" ? pct >= 0 : null;
-
-    const arrow = isUp == null ? "•" : isUp ? "▲" : "▼";
-    const arrowColor = isUp == null ? COLORS.mutedFg : isUp ? "#22c55e" : "#ef4444";
-
-    const pctText = pct == null ? "—" : `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
-
-    // ✅ Convert stooq ETF symbol like "spy.us" -> "SPY" for your chart
-    const chartSymbol = (it.symbol || "").split(".")[0]?.toUpperCase() || it.symbol.toUpperCase();
-
-    return (
-      <button
-        key={it.key}
-        type="button"
-        onClick={() => router.push(`/?symbol=${encodeURIComponent(chartSymbol)}`)} // ✅ click loads into chart
-        title={`Load ${chartSymbol} in chart`}
+      <div
         style={{
           border: `1px solid ${COLORS.border}`,
           borderRadius: 16,
-          padding: 14,
           background: COLORS.cardBg,
           color: COLORS.cardFg,
-          boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.35)" : "0 10px 26px rgba(0,0,0,0.12)",
-          cursor: "pointer",
-          textAlign: "left",
-          width: "100%",
+          height,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          minHeight: 0,
+          boxShadow: COLORS.isDark ? "0 14px 34px rgba(0,0,0,0.28)" : "0 14px 34px rgba(0,0,0,0.08)",
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 950, fontSize: 16, lineHeight: 1.1 }}>{it.label}</div>
-            <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
-              {it.symbol} • Click to load {chartSymbol}
-            </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "12px 16px",
+            borderBottom: `1px solid ${COLORS.border}`,
+            gap: 12,
+          }}
+        >
+          <div style={{ fontWeight: 800, whiteSpace: "nowrap" }}>
+            Price ({indicator === "None" ? "Overview" : indicator})
           </div>
 
-          <div style={{ textAlign: "right" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10 }}>
-              <span style={{ fontWeight: 950, color: arrowColor, fontSize: 16 }}>{arrow}</span>
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+              background: COLORS.controlBgSolid,
+              border: `1px solid ${COLORS.controlBorder}`,
+              borderRadius: 12,
+              padding: 6,
+              flexWrap: "wrap",
+              justifyContent: "flex-end",
+            }}
+          >
+            <button
+              onClick={() => setWindowOffset((o) => Math.min(maxOffset, o + Math.max(1, Math.floor(win * 0.2))))}
+              disabled={offset >= maxOffset}
+              title="Pan left (older)"
+              style={{
+                padding: "8px 10px",
+                borderRadius: 10,
+                border: `1px solid ${COLORS.controlBorder}`,
+                background: COLORS.controlBg,
+                color: COLORS.controlFg,
+                cursor: offset >= maxOffset ? "not-allowed" : "pointer",
+                opacity: offset >= maxOffset ? 0.45 : 1,
+                fontWeight: 900,
+                fontSize: 14,
+                lineHeight: 1,
+              }}
+            >
+              ←
+            </button>
 
-              {/* ✅ Bigger % */}
-              <span style={{ fontWeight: 950, color: arrowColor, fontSize: 22 }}>
-                {pctText}
-              </span>
+            <button
+              onClick={() => setWindowOffset((o) => Math.max(0, o - Math.max(1, Math.floor(win * 0.2))))}
+              disabled={offset <= 0}
+              title="Pan right (newer)"
+              style={{
+                padding: "8px 10px",
+                borderRadius: 10,
+                border: `1px solid ${COLORS.controlBorder}`,
+                background: COLORS.controlBg,
+                color: COLORS.controlFg,
+                cursor: offset <= 0 ? "not-allowed" : "pointer",
+                opacity: offset <= 0 ? 0.45 : 1,
+                fontWeight: 900,
+                fontSize: 14,
+                lineHeight: 1,
+              }}
+            >
+              →
+            </button>
+
+            <button
+              onClick={() => {
+                setWindowDays((d) => Math.max(2, Math.floor(d * 0.8)));
+                setWindowOffset(0);
+              }}
+              title="Zoom in"
+              style={{
+                padding: "8px 10px",
+                borderRadius: 10,
+                border: `1px solid ${COLORS.controlBorder}`,
+                background: COLORS.controlBg,
+                color: COLORS.controlFg,
+                cursor: "pointer",
+                fontWeight: 900,
+                fontSize: 14,
+                lineHeight: 1,
+              }}
+            >
+              +
+            </button>
+
+            <button
+              onClick={() => {
+                setWindowDays((d) => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25)));
+                setWindowOffset(0);
+              }}
+              title="Zoom out"
+              style={{
+                padding: "8px 10px",
+                borderRadius: 10,
+                border: `1px solid ${COLORS.controlBorder}`,
+                background: COLORS.controlBg,
+                color: COLORS.controlFg,
+                cursor: "pointer",
+                fontWeight: 900,
+                fontSize: 14,
+                lineHeight: 1,
+              }}
+            >
+              −
+            </button>
+
+            <div style={{ fontSize: 12, opacity: 0.8, color: COLORS.mutedFg, whiteSpace: "nowrap", fontWeight: 700 }}>
+              {Math.min(win, totalPoints)} bars
             </div>
 
-            <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
-              {typeof it.close === "number" ? it.close.toFixed(2) : "—"}
-            </div>
+            <button
+              onClick={() => setExpanded(true)}
+              title="Expand chart"
+              style={{
+                padding: "8px 10px",
+                borderRadius: 10,
+                border: `1px solid ${COLORS.controlBorder}`,
+                background: COLORS.controlBg,
+                color: COLORS.controlFg,
+                cursor: "pointer",
+                fontWeight: 900,
+                fontSize: 14,
+                lineHeight: 1,
+              }}
+            >
+              ⤢
+            </button>
           </div>
         </div>
 
-        <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
-          {it.date && it.time ? `As of ${it.date} ${it.time}` : "Timestamp unavailable"}
-        </div>
-      </button>
-    );
-  })}
-</div>
-      </>
-    );
-  })()}
-</div>
-
-        {/* Card 4: News */}
-        <div style={{ padding: 16, border: "1px solid #3333", borderRadius: 12 }}>
-          <h2 style={{ marginTop: 0 }}>Latest News</h2>
-
-          {news ? (
-            <div className="newsGrid">
-              {news.feeds.map((f) => (
-                <div key={f.label}>
-                  <div style={{ fontWeight: 700, marginBottom: 8 }}>{f.label}</div>
-                  <div style={{ display: "grid", gap: 10 }}>
-                    {f.items.length ? (
-                      f.items.map((it, idx) => (
-                        <a
-                          key={idx}
-                          href={it.link}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={{ textDecoration: "none", color: "inherit" }}
-                        >
-                          <div style={{ fontWeight: 650 }}>{it.title}</div>
-                          <div style={{ fontSize: 12, opacity: 0.7, marginTop: 2 }}>
-                            {(it.source ?? "Source")} {it.pubDate ? `• ${new Date(it.pubDate).toLocaleString()}` : ""}
-                          </div>
-                        </a>
-                      ))
-                    ) : (
-                      <div style={{ opacity: 0.7 }}>No headlines right now.</div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ opacity: 0.7 }}>News unavailable.</div>
-          )}
+        <div style={{ flex: 1, padding: 16, minHeight: 0 }}>
+          <PriceChart
+            data={displayedHistory}
+            ma50={ma50}
+            ma200={ma200}
+            overlay={indicator}
+            bollUpper={bollUpper}
+            bollMid={bollMid}
+            bollLower={bollLower}
+            ema20={ema20Arr}
+            vwap={vwapArr}
+            rsi14={rsi14Arr}
+            macdLine={macdLine}
+            macdSignal={macdSignal}
+            macdHist={macdHist}
+            stochK={stochK}
+            stochD={stochD}
+            atr14={atr14Arr}
+            volume={volumeArr}
+            divergence={divergence.div}
+          />
         </div>
       </div>
-    </div>
-  </main>
-);
+    );
+  }
+
+  return (
+    <main
+      style={{
+        padding: 0,
+        fontFamily: "system-ui, Arial",
+        background: COLORS.pageBg,
+        color: COLORS.pageFg,
+        minHeight: "100vh",
+      }}
+    >
+      <div className="pageWrap">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            marginBottom: 8,
+            flexWrap: "wrap",
+          }}
+        >
+          <div
+            style={{
+              width: 290,
+              height: 72,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "flex-start",
+              overflow: "visible",
+              marginRight: 8,
+              flex: "0 0 auto",
+              marginLeft: -40,
+            }}
+          >
+            <img
+              src="/logo.png"
+              alt="MyStockHarbor"
+              style={{
+                height: 72,
+                width: "auto",
+                objectFit: "contain",
+                display: "block",
+                transform: "scale(3.0)",
+                transformOrigin: "left center",
+              }}
+            />
+          </div>
+
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => router.push("/learn")}
+              style={{
+                padding: "12px 16px",
+                borderRadius: 14,
+                border: `1px solid rgba(34,197,94,0.55)`,
+                background: COLORS.isDark
+                  ? "linear-gradient(135deg, rgba(34,197,94,0.28), rgba(34,197,94,0.14))"
+                  : "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(34,197,94,0.10))",
+                color: COLORS.controlFg,
+                textDecoration: "none",
+                fontWeight: 950,
+                fontSize: 15,
+                letterSpacing: "0.2px",
+                boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.45)" : "0 10px 26px rgba(0,0,0,0.14)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 10,
+                cursor: "pointer",
+                opacity: 1,
+                position: "relative",
+                overflow: "hidden",
+              }}
+              title="Learn the Basics"
+            >
+              📚 Learn the Basics <span style={{ opacity: 0.9 }}>→</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => router.push("/platforms")}
+              style={{
+                padding: "12px 16px",
+                borderRadius: 14,
+                border: `1px solid rgba(168,85,247,0.55)`,
+                background: COLORS.isDark
+                  ? "linear-gradient(135deg, rgba(168,85,247,0.28), rgba(168,85,247,0.14))"
+                  : "linear-gradient(135deg, rgba(168,85,247,0.18), rgba(168,85,247,0.10))",
+                color: COLORS.controlFg,
+                textDecoration: "none",
+                fontWeight: 950,
+                fontSize: 15,
+                letterSpacing: "0.2px",
+                boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.45)" : "0 10px 26px rgba(0,0,0,0.14)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 10,
+                cursor: "pointer",
+                opacity: 1,
+                position: "relative",
+                overflow: "hidden",
+              }}
+              title="Choosing your Platform"
+            >
+              🖥️ Choosing your Platform <span style={{ opacity: 0.9 }}>→</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => router.push("/utilities")}
+              style={{
+                padding: "12px 16px",
+                borderRadius: 14,
+                border: `1px solid rgba(234,179,8,0.55)`,
+                background: COLORS.isDark
+                  ? "linear-gradient(135deg, rgba(234,179,8,0.24), rgba(249,115,22,0.16))"
+                  : "linear-gradient(135deg, rgba(234,179,8,0.16), rgba(249,115,22,0.10))",
+                color: COLORS.controlFg,
+                textDecoration: "none",
+                fontWeight: 950,
+                fontSize: 15,
+                letterSpacing: "0.2px",
+                boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.45)" : "0 10px 26px rgba(0,0,0,0.14)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 10,
+                cursor: "pointer",
+                opacity: 1,
+                position: "relative",
+                overflow: "hidden",
+              }}
+              title="Trading Utilities"
+            >
+              🧮 Trading Utilities <span style={{ opacity: 0.9 }}>→</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => router.push("/about")}
+              style={{
+                padding: "12px 16px",
+                borderRadius: 14,
+                border: `1px solid rgba(59,130,246,0.45)`,
+                background: COLORS.isDark
+                  ? "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(59,130,246,0.10))"
+                  : "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(59,130,246,0.08))",
+                color: COLORS.controlFg,
+                textDecoration: "none",
+                fontWeight: 900,
+                fontSize: 15,
+                letterSpacing: "0.2px",
+                boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.35)" : "0 10px 26px rgba(0,0,0,0.12)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 10,
+                cursor: "pointer",
+                opacity: 1,
+                position: "relative",
+                overflow: "hidden",
+              }}
+              title="About MyStockHarbor"
+            >
+              ℹ️ About
+            </button>
+
+            <button
+              type="button"
+              onClick={() => router.push("/contact")}
+              style={{
+                padding: "12px 16px",
+                borderRadius: 14,
+                border: `1px solid rgba(14,165,233,0.45)`,
+                background: COLORS.isDark
+                  ? "linear-gradient(135deg, rgba(14,165,233,0.20), rgba(14,165,233,0.10))"
+                  : "linear-gradient(135deg, rgba(14,165,233,0.12), rgba(14,165,233,0.06))",
+                color: COLORS.controlFg,
+                textDecoration: "none",
+                fontWeight: 900,
+                fontSize: 15,
+                letterSpacing: "0.2px",
+                boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.35)" : "0 10px 26px rgba(0,0,0,0.12)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 10,
+                cursor: "pointer",
+                opacity: 1,
+                position: "relative",
+                overflow: "hidden",
+              }}
+              title="Contact MyStockHarbor"
+            >
+              ✉️ Contact
+            </button>
+
+            <button
+              type="button"
+              onClick={() => router.push("/risk-disclaimer")}
+              style={{
+                padding: "12px 16px",
+                borderRadius: 14,
+                border: `1px solid rgba(244,114,182,0.45)`,
+                background: COLORS.isDark
+                  ? "linear-gradient(135deg, rgba(244,114,182,0.18), rgba(244,114,182,0.08))"
+                  : "linear-gradient(135deg, rgba(244,114,182,0.10), rgba(244,114,182,0.05))",
+                color: COLORS.controlFg,
+                textDecoration: "none",
+                fontWeight: 900,
+                fontSize: 15,
+                letterSpacing: "0.2px",
+                boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.35)" : "0 10px 26px rgba(0,0,0,0.12)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 10,
+                cursor: "pointer",
+                opacity: 1,
+                position: "relative",
+                overflow: "hidden",
+              }}
+              title="Risk Disclaimer"
+            >
+              ⚠️ Risk Disclaimer
+            </button>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginLeft: "auto" }}>
+            <button
+              onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+              style={{
+                padding: "10px 12px",
+                borderRadius: 12,
+                border: `1px solid ${COLORS.controlBorder}`,
+                background: COLORS.controlBg,
+                color: COLORS.controlFg,
+                cursor: "pointer",
+                fontWeight: 800,
+              }}
+              title="Toggle theme"
+            >
+              {COLORS.isDark ? "🌙 Dark" : "☀️ Light"}
+            </button>
+          </div>
+        </div>
+
+        <p
+          style={{
+            marginTop: 2,
+            opacity: 0.8,
+            color: COLORS.mutedFg,
+            fontSize: 14,
+            fontWeight: 600,
+            letterSpacing: "0.2px",
+          }}
+        >
+          Learn charts. Discover stocks. Trade smarter. — Version 1
+        </p>
+
+        <style>{`
+          @keyframes pickersBar {
+            0% { transform: translateX(-10%); opacity: 0.55; }
+            50% { transform: translateX(120%); opacity: 0.95; }
+            100% { transform: translateX(240%); opacity: 0.55; }
+          }
+
+          .pageWrap {
+            padding: 32px;
+            max-width: 1440px;
+            margin: 0 auto;
+          }
+
+          .mainGrid {
+            margin-top: 18px;
+            display: grid;
+            gap: 18px;
+          }
+
+          .dashboardTopGrid {
+            display: grid;
+            grid-template-columns: minmax(360px, 420px) minmax(0, 1fr);
+            gap: 18px;
+            align-items: start;
+          }
+
+          .summaryGrid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            align-items: start;
+            margin-top: 8px;
+          }
+
+          .marketGrid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 18px;
+            align-items: start;
+          }
+
+          .benchGrid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(220px, 1fr));
+            gap: 14px;
+          }
+
+          .newsGrid {
+            display: grid;
+            gap: 16px;
+            grid-template-columns: 1fr 1fr;
+          }
+
+          @media (max-width: 1100px) {
+            .dashboardTopGrid {
+              grid-template-columns: 1fr;
+            }
+
+            .marketGrid {
+              grid-template-columns: 1fr;
+            }
+          }
+
+          @media (max-width: 760px) {
+            .pageWrap {
+              padding: 16px !important;
+            }
+
+            .summaryGrid {
+              grid-template-columns: 1fr !important;
+            }
+
+            .benchGrid {
+              grid-template-columns: 1fr !important;
+            }
+
+            .newsGrid {
+              grid-template-columns: 1fr !important;
+            }
+          }
+        `}</style>
+
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginTop: 16 }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 14,
+              alignItems: "flex-start",
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, lineHeight: 1 }}>
+                Search Any Stock
+              </div>
+
+              <input
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setOpen(true);
+                }}
+                onFocus={() => setOpen(true)}
+                onBlur={() => setTimeout(() => setOpen(false), 150)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") chooseSymbol(query);
+                }}
+                placeholder="🔎 Search ANY ticker or company"
+                style={{
+                  height: 44,
+                  padding: "0 14px",
+                  borderRadius: 14,
+                  border: "2px solid rgba(59,130,246,0.45)",
+                  background: "#ffffff",
+                  color: "#111",
+                  width: 260,
+                  fontSize: 14,
+                  fontWeight: 750,
+                  boxShadow: COLORS.isDark
+                    ? "0 6px 20px rgba(0,0,0,0.35)"
+                    : "0 6px 20px rgba(0,0,0,0.12)",
+                  outline: "none",
+                }}
+              />
+
+              {open && results.length > 0 ? (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 8px)",
+                    left: 0,
+                    right: 0,
+                    border: "1px solid #3333",
+                    borderRadius: 12,
+                    background: "#fff",
+                    color: "#111",
+                    overflow: "hidden",
+                    zIndex: 9999,
+                    boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
+                    maxHeight: 340,
+                    overflowY: "auto",
+                  }}
+                >
+                  {results.map((r) => (
+                    <button
+                      key={`${r.symbol}-${r.exchange}`}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => chooseSymbol(r.symbol)}
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        textAlign: "left",
+                        padding: "10px 12px",
+                        border: "none",
+                        background: "transparent",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <div style={{ fontWeight: 800 }}>
+                        {r.symbol} <span style={{ fontWeight: 600, opacity: 0.7 }}>({r.exchange})</span>
+                      </div>
+                      <div style={{ fontSize: 12, opacity: 0.75 }}>{r.name}</div>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <label style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, lineHeight: 1 }}>
+                Stock Pickers
+              </label>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (isPicking) return;
+                  startPicking(() => {
+                    router.push("/pickers");
+                  });
+                }}
+                disabled={isPicking}
+                style={{
+                  height: 44,
+                  padding: "0 18px",
+                  borderRadius: 12,
+                  border: `1px solid rgba(59,130,246,0.55)`,
+                  background: COLORS.isDark
+                    ? "linear-gradient(135deg, rgba(59,130,246,0.35), rgba(59,130,246,0.18))"
+                    : "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(59,130,246,0.12))",
+                  color: COLORS.controlFg,
+                  fontWeight: 900,
+                  fontSize: 14,
+                  letterSpacing: "0.2px",
+                  cursor: isPicking ? "not-allowed" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minWidth: 220,
+                }}
+              >
+                🔎 Find Your Next Stock →
+              </button>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <label style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, lineHeight: 1 }}>
+                Indicator
+              </label>
+
+              <select
+                value={indicator}
+                onChange={(e) => setIndicator(e.target.value as any)}
+                style={{
+                  height: 44,
+                  padding: "0 12px",
+                  borderRadius: 12,
+                  border: `1px solid ${COLORS.controlBorder}`,
+                  background: "#ffffff",
+                  color: "#111",
+                  fontWeight: 900,
+                  minWidth: 220,
+                }}
+              >
+                {INDICATORS.map((x) => (
+                  <option key={x} value={x}>
+                    {x === "None" ? "Overview" : x}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {TIMEFRAMES.map((t) => {
+              const active = tfDays === t.days;
+
+              return (
+                <button
+                  key={t.label}
+                  onClick={() => {
+                    setTfDays(t.days);
+                    setWindowDays(t.days);
+                    setWindowOffset(0);
+                  }}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    border: `1px solid ${COLORS.controlBorder}`,
+                    background: active
+                      ? COLORS.isDark
+                        ? "rgba(255,255,255,0.18)"
+                        : "rgba(0,0,0,0.08)"
+                      : COLORS.controlBg,
+                    color: COLORS.controlFg,
+                    cursor: "pointer",
+                    opacity: 1,
+                    fontWeight: active ? 900 : 750,
+                    boxShadow: active
+                      ? COLORS.isDark
+                        ? "0 10px 26px rgba(0,0,0,0.45)"
+                        : "0 10px 26px rgba(0,0,0,0.12)"
+                      : "none",
+                  }}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mainGrid">
+          <div className="dashboardTopGrid">
+            <div
+              style={{
+                padding: 16,
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: 16,
+                background: COLORS.cardBg,
+                boxShadow: COLORS.isDark ? "0 14px 34px rgba(0,0,0,0.28)" : "0 14px 34px rgba(0,0,0,0.08)",
+              }}
+            >
+              {loading ? (
+                <p style={{ margin: "8px 0" }}>Loading…</p>
+              ) : err ? (
+                <p style={{ margin: "8px 0" }}>{err}</p>
+              ) : (
+                <>
+                  {indicator === "None" ? (
+                    <>
+                      <div className="summaryGrid">
+                        <div style={{ minWidth: 0, gridColumn: "1 / -1" }}>
+                          <div
+                            style={{
+                              border: `1px solid ${COLORS.border}`,
+                              borderRadius: 14,
+                              background: COLORS.controlBg,
+                              padding: 16,
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "flex-start",
+                                gap: 16,
+                                flexWrap: "wrap",
+                              }}
+                            >
+                              <div style={{ minWidth: 0 }}>
+                                <div
+                                  style={{
+                                    fontSize: 30,
+                                    fontWeight: 950,
+                                    letterSpacing: "-0.4px",
+                                    lineHeight: 1,
+                                    color: COLORS.pageFg,
+                                  }}
+                                >
+                                  {symbol}
+                                </div>
+
+                                <div
+                                  style={{
+                                    marginTop: 6,
+                                    fontSize: 15,
+                                    fontWeight: 800,
+                                    color: COLORS.mutedFg,
+                                    whiteSpace: "nowrap",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                  }}
+                                >
+                                  {symbolName || "Company name unavailable"}
+                                </div>
+                              </div>
+
+                              <div style={{ textAlign: "right", minWidth: 120 }}>
+                                <div
+                                  style={{
+                                    fontSize: 12,
+                                    fontWeight: 800,
+                                    color: COLORS.mutedFg,
+                                    textTransform: "uppercase",
+                                    letterSpacing: "0.5px",
+                                  }}
+                                >
+                                  Last Price
+                                </div>
+
+                                <div
+                                  style={{
+                                    marginTop: 6,
+                                    fontSize: 30,
+                                    fontWeight: 950,
+                                    letterSpacing: "-0.4px",
+                                    color: COLORS.pageFg,
+                                  }}
+                                >
+                                  {quote?.price == null ? "—" : `$${quote.price.toFixed(2)}`}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div
+                              style={{
+                                display: "grid",
+                                gridTemplateColumns: "1fr 1fr",
+                                gap: 12,
+                                marginTop: 18,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  border: `1px solid ${COLORS.border}`,
+                                  borderRadius: 12,
+                                  padding: 14,
+                                  background: COLORS.cardBg,
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 8,
+                                    fontSize: 14,
+                                    color: COLORS.mutedFg,
+                                    fontWeight: 850,
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      width: 10,
+                                      height: 10,
+                                      borderRadius: 999,
+                                      background: toneToColor(trendToneFromScore(trendScore), COLORS.isDark),
+                                      flex: "0 0 auto",
+                                    }}
+                                  />
+                                  <span>Trend Score</span>
+                                  <HelpTip
+                                    isDark={COLORS.isDark}
+                                    text="Trend Score measures how many bullish trend checks are currently passing, such as price vs moving averages and MACD momentum. Higher scores suggest a stronger trend structure."
+                                  />
+                                </div>
+
+                                <div
+                                  style={{
+                                    marginTop: 10,
+                                    fontSize: 32,
+                                    fontWeight: 950,
+                                    lineHeight: 1,
+                                    color: COLORS.pageFg,
+                                    letterSpacing: "-0.4px",
+                                  }}
+                                >
+                                  {trendScore ? `${trendScore.passed}/${trendScore.total}` : "—"}
+                                </div>
+
+                                <div
+                                  style={{
+                                    marginTop: 4,
+                                    fontSize: 13,
+                                    fontWeight: 800,
+                                    color: COLORS.mutedFg,
+                                  }}
+                                >
+                                  checks passing
+                                </div>
+
+                                {trendScore ? (
+                                  renderFlagsMeter({
+                                    flagged: trendScore.passed,
+                                    total: trendScore.total,
+                                    color: COLORS.isDark ? "#22c55e" : "#16a34a",
+                                    isDark: COLORS.isDark,
+                                  })
+                                ) : null}
+                              </div>
+
+                              <div
+                                style={{
+                                  border: `1px solid ${COLORS.border}`,
+                                  borderRadius: 12,
+                                  padding: 14,
+                                  background: COLORS.cardBg,
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 8,
+                                    fontSize: 14,
+                                    color: COLORS.mutedFg,
+                                    fontWeight: 850,
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      width: 10,
+                                      height: 10,
+                                      borderRadius: 999,
+                                      background: overviewMeta?.toneColor ?? (COLORS.isDark ? "#22c55e" : "#16a34a"),
+                                      flex: "0 0 auto",
+                                    }}
+                                  />
+                                  <span>Stretch Score</span>
+                                  <HelpTip
+                                    isDark={COLORS.isDark}
+                                    text="Stretch Score measures how many indicators suggest price may be extended, overbought, or oversold. Higher scores mean more signs that price is stretched away from normal conditions."
+                                  />
+                                </div>
+
+                                <div
+                                  style={{
+                                    marginTop: 10,
+                                    fontSize: 32,
+                                    fontWeight: 950,
+                                    lineHeight: 1,
+                                    color: overviewMeta?.toneColor ?? COLORS.pageFg,
+                                    letterSpacing: "-0.4px",
+                                  }}
+                                >
+                                  {stretchScore ? `${stretchScore.flagged}/${stretchScore.total}` : "—"}
+                                </div>
+
+                                <div
+                                  style={{
+                                    marginTop: 4,
+                                    fontSize: 13,
+                                    fontWeight: 800,
+                                    color: COLORS.mutedFg,
+                                  }}
+                                >
+                                  stretch checks
+                                </div>
+
+                                {stretchScore && overviewMeta ? (
+                                  renderFlagsMeter({
+                                    flagged: stretchScore.flagged,
+                                    total: stretchScore.total,
+                                    color: overviewMeta.toneColor,
+                                    isDark: COLORS.isDark,
+                                  })
+                                ) : null}
+                              </div>
+                            </div>
+
+                            {overviewMeta ? (
+                              <div
+                                style={{
+                                  marginTop: 14,
+                                  padding: "10px 12px",
+                                  borderRadius: 12,
+                                  background: COLORS.cardBg,
+                                  border: `1px solid ${COLORS.border}`,
+                                  fontSize: 13,
+                                  fontWeight: 800,
+                                  color: COLORS.mutedFg,
+                                }}
+                              >
+                                Regime: {overviewMeta.trend} • Volatility: {overviewMeta.vol} • Bias: {overviewMeta.toneTag}
+                              </div>
+                            ) : null}
+
+                            <div
+                              style={{
+                                marginTop: 12,
+                                fontSize: 13,
+                                lineHeight: 1.6,
+                                color: COLORS.mutedFg,
+                              }}
+                            >
+                              {signal.detail}
+                            </div>
+
+                            <div
+                              style={{
+                                marginTop: 14,
+                                paddingTop: 12,
+                                borderTop: `1px solid ${COLORS.border}`,
+                                fontSize: 13,
+                                color: COLORS.mutedFg,
+                              }}
+                            >
+                              {quote?.date && quote?.time ? `As of ${quote.date} ${quote.time}` : "Timestamp unavailable"} • Source:{" "}
+                              {quote?.source ?? "stooq.com"}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div
+                          style={{
+                            gridColumn: "1 / -1",
+                            border: `1px solid ${COLORS.border}`,
+                            borderRadius: 12,
+                            padding: 12,
+                            background: COLORS.controlBg,
+                            marginTop: 0,
+                          }}
+                        >
+                          <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10, opacity: 0.9 }}>
+                            Breakdown
+                          </div>
+
+                          <div style={{ display: "grid", gap: 8 }}>
+                            {BREAKDOWN_DEFS.map((d) => {
+                              const it = overviewItems.find((x) => x.key === d.key);
+                              if (!it) return null;
+
+                              const dot = toneToColor(it.tone, COLORS.isDark);
+
+                              return (
+                                <div
+                                  key={it.key}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    gap: 10,
+                                  }}
+                                >
+                                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                                    <span
+                                      style={{
+                                        width: 10,
+                                        height: 10,
+                                        borderRadius: 999,
+                                        background: dot,
+                                        boxShadow: COLORS.isDark
+                                          ? "0 0 0 3px rgba(255,255,255,0.04)"
+                                          : "0 0 0 3px rgba(0,0,0,0.03)",
+                                        flex: "0 0 auto",
+                                      }}
+                                    />
+                                    <span style={{ fontWeight: 850, fontSize: 13, whiteSpace: "nowrap" }}>{it.label}</span>
+                                  </div>
+
+                                  <span style={{ fontSize: 12, opacity: 0.85, color: COLORS.mutedFg, textAlign: "right" }}>
+                                    {it.valueText}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+                        <div style={{ fontSize: 28, fontWeight: 950, letterSpacing: "-0.3px" }}>{symbol}</div>
+                        <div style={{ fontSize: 16, fontWeight: 800, opacity: 0.85, color: COLORS.mutedFg }}>
+                          {symbolName ? `— ${symbolName}` : "—"}
+                        </div>
+                      </div>
+
+                      <p style={{ fontSize: 20, margin: "12px 0 0" }}>
+                        <strong>Last price:</strong> {quote?.price == null ? "Unavailable" : `$${quote.price.toFixed(2)}`}
+                      </p>
+
+                      <p style={{ margin: "12px 0 0", opacity: 0.85 }}>
+                        <strong>Signal:</strong> {signal.label}
+                      </p>
+                      <p style={{ margin: "6px 0 0", opacity: 0.7 }}>{signal.detail}</p>
+
+                      <div style={{ marginTop: 12, fontSize: 13, opacity: 0.75 }}>
+                        <div>
+                          {lastIndicatorValue.label}:{" "}
+                          {typeof (lastIndicatorValue as any).value === "number"
+                            ? indicator === "RSI(14)" || indicator === "Stochastic(14,3)"
+                              ? `${((lastIndicatorValue as any).value as number).toFixed(2)}`
+                              : indicator === "MACD(12,26,9)"
+                                ? `${((lastIndicatorValue as any).value as number).toFixed(4)}`
+                                : indicator === "Volume"
+                                  ? `${Math.round((lastIndicatorValue as any).value as number).toLocaleString()}`
+                                  : `$${(((lastIndicatorValue as any).value as number) ?? 0).toFixed(2)}`
+                            : "—"}
+                        </div>
+                      </div>
+
+                      <p style={{ marginTop: 12, opacity: 0.7 }}>
+                        {quote?.date && quote?.time ? `As of ${quote.date} ${quote.time}` : "Timestamp unavailable"} • Source:{" "}
+                        {quote?.source ?? "stooq.com"}
+                      </p>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div style={{ minWidth: 0 }}>
+              <ChartCard height={560} />
+            </div>
+          </div>
+
+          {expanded ? (
+            <div
+              onMouseDown={() => setExpanded(false)}
+              style={{
+                position: "fixed",
+                inset: 0,
+                background: "rgba(0,0,0,0.55)",
+                zIndex: 99999,
+                display: "grid",
+                placeItems: "center",
+                padding: 16,
+              }}
+            >
+              <div
+                onMouseDown={(e) => e.stopPropagation()}
+                style={{
+                  width: "min(1200px, 96vw)",
+                  height: "min(85vh, 900px)",
+                  background: "#0b1220",
+                  color: "#e6e6e6",
+                  borderRadius: 14,
+                  border: "1px solid rgba(255,255,255,0.14)",
+                  boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
+                  display: "grid",
+                  gridTemplateRows: "auto 1fr",
+                  minHeight: 0,
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: 12,
+                    borderBottom: "1px solid rgba(255,255,255,0.14)",
+                  }}
+                >
+                  <div style={{ fontWeight: 800 }}>{symbol} — Expanded Chart</div>
+                  <button
+                    onClick={() => setExpanded(false)}
+                    style={{
+                      borderRadius: 10,
+                      border: "1px solid #3333",
+                      background: "#fff",
+                      padding: "8px 10px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Close ✕
+                  </button>
+                </div>
+
+                <div
+                  style={{
+                    padding: 14,
+                    display: "flex",
+                    flexDirection: "column",
+                    minHeight: 0,
+                  }}
+                >
+                  <div
+                    style={{
+                      flex: 1,
+                      minHeight: 0,
+                      borderRadius: 12,
+                      overflow: "hidden",
+                      background: "#0b1220",
+                      border: "1px solid rgba(255,255,255,0.14)",
+                    }}
+                  >
+                    <div style={{ height: "100%", filter: "invert(1) hue-rotate(180deg)" }}>
+                      <ChartCard height="100%" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="marketGrid">
+            <div
+              style={{
+                padding: 16,
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: 16,
+                background: COLORS.cardBg,
+                boxShadow: COLORS.isDark ? "0 14px 34px rgba(0,0,0,0.28)" : "0 14px 34px rgba(0,0,0,0.08)",
+              }}
+            >
+              <h2 style={{ marginTop: 0 }}>Market (Benchmarks)</h2>
+
+              {(() => {
+                const items = Array.isArray(bench?.items) ? bench!.items : [];
+
+                if (!bench) {
+                  return <div style={{ opacity: 0.7 }}>Market data unavailable.</div>;
+                }
+
+                if (!items.length) {
+                  return <div style={{ opacity: 0.7 }}>Market data unavailable.</div>;
+                }
+
+                return (
+                  <>
+                    <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 10 }}>
+                      Updated: {new Date(bench.updatedAt).toLocaleString()} • {bench.scope}
+                    </div>
+
+                    <div className="benchGrid">
+                      {items.map((it) => {
+                        const pct = typeof it.changePct === "number" ? it.changePct : null;
+                        const isUp = typeof pct === "number" ? pct >= 0 : null;
+
+                        const arrow = isUp == null ? "•" : isUp ? "▲" : "▼";
+                        const arrowColor = isUp == null ? COLORS.mutedFg : isUp ? "#22c55e" : "#ef4444";
+
+                        const pctText = pct == null ? "—" : `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
+
+                        const chartSymbol = (it.symbol || "").split(".")[0]?.toUpperCase() || it.symbol.toUpperCase();
+
+                        return (
+                          <button
+                            key={it.key}
+                            type="button"
+                            onClick={() => router.push(`/?symbol=${encodeURIComponent(chartSymbol)}`)}
+                            title={`Load ${chartSymbol} in chart`}
+                            style={{
+                              border: `1px solid ${COLORS.border}`,
+                              borderRadius: 16,
+                              padding: 14,
+                              background: COLORS.controlBg,
+                              color: COLORS.cardFg,
+                              boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.22)" : "0 10px 26px rgba(0,0,0,0.06)",
+                              cursor: "pointer",
+                              textAlign: "left",
+                              width: "100%",
+                            }}
+                          >
+                            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontWeight: 950, fontSize: 16, lineHeight: 1.1 }}>{it.label}</div>
+                                <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
+                                  {it.symbol} • Click to load {chartSymbol}
+                                </div>
+                              </div>
+
+                              <div style={{ textAlign: "right" }}>
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10 }}>
+                                  <span style={{ fontWeight: 950, color: arrowColor, fontSize: 16 }}>{arrow}</span>
+
+                                  <span style={{ fontWeight: 950, color: arrowColor, fontSize: 22 }}>
+                                    {pctText}
+                                  </span>
+                                </div>
+
+                                <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
+                                  {typeof it.close === "number" ? it.close.toFixed(2) : "—"}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
+                              {it.date && it.time ? `As of ${it.date} ${it.time}` : "Timestamp unavailable"}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            <div
+              style={{
+                padding: 16,
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: 16,
+                background: COLORS.cardBg,
+                boxShadow: COLORS.isDark ? "0 14px 34px rgba(0,0,0,0.28)" : "0 14px 34px rgba(0,0,0,0.08)",
+              }}
+            >
+              <h2 style={{ marginTop: 0 }}>Latest News</h2>
+
+              {news ? (
+                <div className="newsGrid">
+                  {news.feeds.map((f) => (
+                    <div key={f.label}>
+                      <div style={{ fontWeight: 700, marginBottom: 8 }}>{f.label}</div>
+                      <div style={{ display: "grid", gap: 10 }}>
+                        {f.items.length ? (
+                          f.items.map((it, idx) => (
+                            <a
+                              key={idx}
+                              href={it.link}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{ textDecoration: "none", color: "inherit" }}
+                            >
+                              <div
+                                style={{
+                                  padding: 12,
+                                  borderRadius: 12,
+                                  border: `1px solid ${COLORS.border}`,
+                                  background: COLORS.controlBg,
+                                }}
+                              >
+                                <div style={{ fontWeight: 650 }}>{it.title}</div>
+                                <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
+                                  {(it.source ?? "Source")} {it.pubDate ? `• ${new Date(it.pubDate).toLocaleString()}` : ""}
+                                </div>
+                              </div>
+                            </a>
+                          ))
+                        ) : (
+                          <div style={{ opacity: 0.7 }}>No headlines right now.</div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ opacity: 0.7 }}>News unavailable.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
 }
