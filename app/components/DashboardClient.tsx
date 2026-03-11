@@ -1388,1356 +1388,1547 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     divergence,
   ]);
 
-  const lastIndicatorValue = useMemo(() => {
-    if (indicator === "None") {
-      return {
-        label: "Stretch Score",
-        value: stretchScore ? stretchScore.flagged : null,
-        total: stretchScore ? stretchScore.total : null,
-      };
-    }
-
-    if (indicator === "MA50") return { label: "MA50", value: lastMA50 };
-    if (indicator === "MA200") return { label: "MA200", value: lastMA200 };
-    if (indicator === "EMA20") return { label: "EMA20", value: lastNum(ema20Arr) };
-    if (indicator === "VWAP") return { label: "VWAP", value: lastNum(vwapArr) };
-    if (indicator === "Bollinger(20,2)") return { label: "BB Mid", value: lastNum(bollMid) };
-
-    if (indicator === "RSI(14)") return { label: "RSI(14)", value: lastNum(rsi14Arr) };
-    if (indicator === "MACD(12,26,9)") return { label: "MACD line", value: lastNum(macdLine) };
-    if (indicator === "Stochastic(14,3)") return { label: "%K", value: lastNum(stochK) };
-    if (indicator === "ATR(14)") return { label: "ATR(14)", value: lastNum(atr14Arr) };
-    if (indicator === "Volume") return { label: "Volume", value: lastNum(volumeArr) };
-
-    return { label: "Indicator", value: null };
-  }, [indicator, stretchScore, lastMA50, lastMA200, ema20Arr, vwapArr, bollMid, rsi14Arr, macdLine, stochK, atr14Arr, volumeArr]);
-
-  function chooseSymbol(s: string) {
-    const cleaned = s.trim().toUpperCase();
-    if (!cleaned) return;
-    setSymbol(cleaned);
-    setQuery("");
-    setResults([]);
-    setOpen(false);
+ const lastIndicatorValue = useMemo(() => {
+  if (indicator === "None") {
+    return {
+      label: "Stretch Score",
+      value: stretchScore ? stretchScore.flagged : null,
+      total: stretchScore ? stretchScore.total : null,
+    };
   }
 
-  function ChartCard({ height = 460 }: { height?: number | string }) {
-    return (
-      <div
-        style={{
-          border: `1px solid ${COLORS.border}`,
-          borderRadius: 16,
-          background: COLORS.cardBg,
-          color: COLORS.cardFg,
-          height,
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-          minHeight: 0,
-          boxShadow: COLORS.isDark ? "0 14px 34px rgba(0,0,0,0.28)" : "0 14px 34px rgba(0,0,0,0.08)",
-        }}
-      >
+  if (indicator === "MA50") return { label: "MA50", value: lastMA50 };
+  if (indicator === "MA200") return { label: "MA200", value: lastMA200 };
+  if (indicator === "EMA20") return { label: "EMA20", value: lastNum(ema20Arr) };
+  if (indicator === "VWAP") return { label: "VWAP", value: lastNum(vwapArr) };
+  if (indicator === "Bollinger(20,2)") return { label: "BB Mid", value: lastNum(bollMid) };
+  if (indicator === "RSI(14)") return { label: "RSI(14)", value: lastNum(rsi14Arr) };
+  if (indicator === "MACD(12,26,9)") return { label: "MACD line", value: lastNum(macdLine) };
+  if (indicator === "Stochastic(14,3)") return { label: "%K", value: lastNum(stochK) };
+  if (indicator === "ATR(14)") return { label: "ATR(14)", value: lastNum(atr14Arr) };
+  if (indicator === "Volume") return { label: "Volume", value: lastNum(volumeArr) };
+
+  return { label: "Indicator", value: null };
+}, [
+  indicator,
+  stretchScore,
+  lastMA50,
+  lastMA200,
+  ema20Arr,
+  vwapArr,
+  bollMid,
+  rsi14Arr,
+  macdLine,
+  stochK,
+  atr14Arr,
+  volumeArr,
+]);
+
+const [isMobile, setIsMobile] = useState(false);
+
+useEffect(() => {
+  const onResize = () => setIsMobile(window.innerWidth <= 768);
+  onResize();
+  window.addEventListener("resize", onResize);
+  return () => window.removeEventListener("resize", onResize);
+}, []);
+
+function chooseSymbol(s: string) {
+  const cleaned = s.trim().toUpperCase();
+  if (!cleaned) return;
+  setSymbol(cleaned);
+  setQuery("");
+  setResults([]);
+  setOpen(false);
+  setWindowOffset(0);
+}
+
+function prettyIndicatorName(v: Overlay) {
+  if (v === "None") return "Overview";
+  return v;
+}
+
+function selectValueFromIndicator(v: Overlay) {
+  return v === "None" ? "Overview" : v;
+}
+
+function setIndicatorFromSelect(v: string) {
+  setIndicator(v === "Overview" ? "None" : (v as Overlay));
+  setWindowOffset(0);
+}
+
+function formatMaybeNumber(v: unknown, digits = 2) {
+  return typeof v === "number" && Number.isFinite(v) ? v.toFixed(digits) : "—";
+}
+
+function formatPctFromBase(last: number | null, base: number | null) {
+  if (typeof last !== "number" || typeof base !== "number" || !Number.isFinite(last) || !Number.isFinite(base) || base === 0) {
+    return null;
+  }
+  return ((last - base) / base) * 100;
+}
+
+function chipToneColor(tone: OverviewItem["tone"]) {
+  return toneToColor(tone, COLORS.isDark);
+}
+
+function signalDotColor(label: string) {
+  if (label.includes("🔴")) return COLORS.isDark ? "#ef4444" : "#dc2626";
+  if (label.includes("🟢")) return COLORS.isDark ? "#22c55e" : "#16a34a";
+  if (label.includes("⚡")) return COLORS.isDark ? "#fb923c" : "#ea580c";
+  return COLORS.isDark ? "#eab308" : "#ca8a04";
+}
+
+const currentIndicatorName = prettyIndicatorName(indicator);
+
+const chartHeight = isMobile ? 250 : 430;
+
+const ma50Pct = formatPctFromBase(lastClose, typeof lastMA50 === "number" ? lastMA50 : null);
+const ma200Pct = formatPctFromBase(lastClose, typeof lastMA200 === "number" ? lastMA200 : null);
+const ema20Pct = formatPctFromBase(lastClose, lastNum(ema20Arr));
+const vwapPct = formatPctFromBase(lastClose, lastNum(vwapArr));
+const bbUpperLast = lastNum(bollUpper);
+const bbLowerLast = lastNum(bollLower);
+const bbMidLast = lastNum(bollMid);
+const rsiLast = lastNum(rsi14Arr);
+const stochLast = lastNum(stochK);
+const macdHistLast = lastNum(macdHist);
+const macdLineLast = lastNum(macdLine);
+const macdSignalLast = lastNum(macdSignal);
+const atrLast = lastNum(atr14Arr);
+const atrSmaLast = lastNum(atrSma20Arr);
+const volumeLast = lastNum(volumeArr);
+const volumeSmaLast = lastNum(volSma20Arr);
+
+const indicatorInsight = useMemo(() => {
+  if (indicator === "None") return null;
+
+  if (indicator === "MA50") {
+    return {
+      title: "MA50 Insight",
+      accent: compareTo(lastClose, "MA50", typeof lastMA50 === "number" ? lastMA50 : null),
+      stats: [
+        { label: "Price vs MA50", value: ma50Pct == null ? "—" : `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}%` },
+        { label: "MA50 value", value: formatMaybeNumber(lastMA50) },
+        {
+          label: "Trend slope",
+          value:
+            ma50.length >= 6 &&
+            typeof ma50[ma50.length - 1] === "number" &&
+            typeof ma50[ma50.length - 6] === "number"
+              ? (ma50[ma50.length - 1]! > ma50[ma50.length - 6]! ? "Rising" : "Falling")
+              : "—",
+        },
+        {
+          label: "Structure",
+          value:
+            typeof lastClose === "number" && typeof lastMA50 === "number"
+              ? lastClose >= lastMA50
+                ? "Above trend support"
+                : "Below trend support"
+              : "—",
+        },
+      ],
+      note:
+        typeof ma50Pct === "number"
+          ? ma50Pct > 5
+            ? "Price is stretched well above the 50-day average."
+            : ma50Pct < -5
+            ? "Price is trading notably below the 50-day average."
+            : "Price is trading close enough to the 50-day average to be considered fairly balanced."
+          : "Need more data for a clearer MA50 read.",
+    };
+  }
+
+  if (indicator === "MA200") {
+    return {
+      title: "MA200 Insight",
+      accent: compareTo(lastClose, "MA200", typeof lastMA200 === "number" ? lastMA200 : null),
+      stats: [
+        { label: "Price vs MA200", value: ma200Pct == null ? "—" : `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}%` },
+        { label: "MA200 value", value: formatMaybeNumber(lastMA200) },
+        {
+          label: "Long trend",
+          value:
+            typeof lastClose === "number" && typeof lastMA200 === "number"
+              ? lastClose >= lastMA200
+                ? "Above long-term trend"
+                : "Below long-term trend"
+              : "—",
+        },
+        {
+          label: "MA50 vs MA200",
+          value:
+            typeof lastMA50 === "number" && typeof lastMA200 === "number"
+              ? lastMA50 >= lastMA200
+                ? "Bullish stack"
+                : "Bearish stack"
+              : "—",
+        },
+      ],
+      note:
+        typeof ma200Pct === "number"
+          ? Math.abs(ma200Pct) >= 10
+            ? "This is a large long-term distance from the 200-day average."
+            : "This long-term distance is still fairly contained."
+          : "Need more data for a clearer MA200 read.",
+    };
+  }
+
+  if (indicator === "EMA20") {
+    return {
+      title: "EMA20 Insight",
+      accent: compareTo(lastClose, "EMA20", lastNum(ema20Arr)),
+      stats: [
+        { label: "Price vs EMA20", value: ema20Pct == null ? "—" : `${ema20Pct >= 0 ? "+" : ""}${ema20Pct.toFixed(2)}%` },
+        { label: "EMA20 value", value: formatMaybeNumber(lastNum(ema20Arr)) },
+        {
+          label: "Short trend",
+          value:
+            typeof lastClose === "number" && typeof lastNum(ema20Arr) === "number"
+              ? lastClose >= (lastNum(ema20Arr) as number)
+                ? "Above short trend"
+                : "Below short trend"
+              : "—",
+        },
+        {
+          label: "Use case",
+          value: "Fast trend guide",
+        },
+      ],
+      note: "EMA20 reacts faster than MA50, so it is useful for short-term trend and pullback structure.",
+    };
+  }
+
+  if (indicator === "VWAP") {
+    return {
+      title: "VWAP Insight",
+      accent: compareTo(lastClose, "VWAP", lastNum(vwapArr)),
+      stats: [
+        { label: "Price vs VWAP", value: vwapPct == null ? "—" : `${vwapPct >= 0 ? "+" : ""}${vwapPct.toFixed(2)}%` },
+        { label: "VWAP value", value: formatMaybeNumber(lastNum(vwapArr)) },
+        {
+          label: "Stretch",
+          value:
+            typeof vwapPct === "number"
+              ? Math.abs(vwapPct) >= 5
+                ? "High"
+                : Math.abs(vwapPct) >= 2
+                ? "Moderate"
+                : "Low"
+              : "—",
+        },
+        {
+          label: "Read",
+          value:
+            typeof vwapPct === "number"
+              ? vwapPct >= 0
+                ? "Trading above value"
+                : "Trading below value"
+              : "—",
+        },
+      ],
+      note: "VWAP is useful for judging whether price is extended away from a fairer average trading level.",
+    };
+  }
+
+  if (indicator === "Bollinger(20,2)") {
+    let bandRead = "Inside bands";
+    if (typeof lastClose === "number" && typeof bbUpperLast === "number" && lastClose > bbUpperLast) bandRead = "Above upper band";
+    if (typeof lastClose === "number" && typeof bbLowerLast === "number" && lastClose < bbLowerLast) bandRead = "Below lower band";
+
+    return {
+      title: "Bollinger Insight",
+      accent: compareTo(lastClose, "BB mid", bbMidLast),
+      stats: [
+        { label: "Upper band", value: formatMaybeNumber(bbUpperLast) },
+        { label: "Mid band", value: formatMaybeNumber(bbMidLast) },
+        { label: "Lower band", value: formatMaybeNumber(bbLowerLast) },
+        { label: "Band location", value: bandRead },
+      ],
+      note: "Bollinger Bands help show when price is expanding, compressing, or pushing into an extreme zone.",
+    };
+  }
+
+  if (indicator === "RSI(14)") {
+    return {
+      title: "RSI Insight",
+      accent: compareOscillator("RSI(14)", rsiLast, 30, 70),
+      stats: [
+        { label: "RSI value", value: formatMaybeNumber(rsiLast) },
+        {
+          label: "Zone",
+          value: typeof rsiLast === "number" ? (rsiLast >= 70 ? "Overbought" : rsiLast <= 30 ? "Oversold" : "Neutral") : "—",
+        },
+        { label: "Divergence", value: divergenceLabel(divergence.rsi) },
+        {
+          label: "Momentum",
+          value:
+            rsi14Arr.length >= 4 &&
+            typeof rsi14Arr[rsi14Arr.length - 1] === "number" &&
+            typeof rsi14Arr[rsi14Arr.length - 4] === "number"
+              ? rsi14Arr[rsi14Arr.length - 1]! > rsi14Arr[rsi14Arr.length - 4]!
+                ? "Improving"
+                : "Weakening"
+              : "—",
+        },
+      ],
+      note: "RSI helps show whether momentum is hot, weak, or potentially diverging from price.",
+    };
+  }
+
+  if (indicator === "MACD(12,26,9)") {
+    return {
+      title: "MACD Insight",
+      accent: compareMacdHistogram(lastClose, macdHistLast),
+      stats: [
+        { label: "MACD line", value: formatMaybeNumber(macdLineLast, 4) },
+        { label: "Signal line", value: formatMaybeNumber(macdSignalLast, 4) },
+        { label: "Histogram", value: formatMaybeNumber(macdHistLast, 4) },
+        { label: "Divergence", value: divergenceLabel(divergence.macd) },
+      ],
+      note: "MACD is best for reading directional momentum, line cross behaviour, and whether momentum is strengthening or fading.",
+    };
+  }
+
+  if (indicator === "Stochastic(14,3)") {
+    return {
+      title: "Stochastic Insight",
+      accent: compareOscillator("Stochastic %K", stochLast, 20, 80),
+      stats: [
+        { label: "%K", value: formatMaybeNumber(lastNum(stochK)) },
+        { label: "%D", value: formatMaybeNumber(lastNum(stochD)) },
+        {
+          label: "Zone",
+          value: typeof stochLast === "number" ? (stochLast >= 80 ? "Overbought" : stochLast <= 20 ? "Oversold" : "Neutral") : "—",
+        },
+        { label: "Use case", value: "Fast stretch read" },
+      ],
+      note: "Stochastic reacts quickly, so it is useful for spotting short-term stretch before price mean reverts or continues.",
+    };
+  }
+
+  if (indicator === "ATR(14)") {
+    const ratio =
+      typeof atrLast === "number" && typeof atrSmaLast === "number" && atrSmaLast > 0 ? atrLast / atrSmaLast : null;
+
+    return {
+      title: "ATR Insight",
+      accent: compareSpike("ATR(14)", atrLast, atrSmaLast, 1.5, "higher = more volatility"),
+      stats: [
+        { label: "ATR value", value: formatMaybeNumber(atrLast) },
+        { label: "ATR vs 20SMA", value: ratio == null ? "—" : `${ratio.toFixed(2)}×` },
+        {
+          label: "Volatility",
+          value: ratio == null ? "—" : ratio >= 1.5 ? "Elevated" : ratio <= 0.85 ? "Quiet" : "Normal",
+        },
+        { label: "Use case", value: "Risk / stop sizing" },
+      ],
+      note: "ATR does not tell direction. It tells how much price has been moving and whether volatility is heating up or cooling down.",
+    };
+  }
+
+  if (indicator === "Volume") {
+    const ratio =
+      typeof volumeLast === "number" && typeof volumeSmaLast === "number" && volumeSmaLast > 0
+        ? volumeLast / volumeSmaLast
+        : null;
+
+    return {
+      title: "Volume Insight",
+      accent: compareSpike("Volume", volumeLast, volumeSmaLast, 1.8, "higher = more activity"),
+      stats: [
+        { label: "Volume", value: typeof volumeLast === "number" ? volumeLast.toLocaleString() : "—" },
+        { label: "20-day avg", value: typeof volumeSmaLast === "number" ? Math.round(volumeSmaLast).toLocaleString() : "—" },
+        { label: "Volume ratio", value: ratio == null ? "—" : `${ratio.toFixed(2)}×` },
+        {
+          label: "Participation",
+          value: ratio == null ? "—" : ratio >= 1.8 ? "Heavy" : ratio <= 0.8 ? "Light" : "Normal",
+        },
+      ],
+      note: "Volume helps judge whether a move has real participation behind it or is happening on lighter activity.",
+    };
+  }
+
+  return null;
+}, [
+  indicator,
+  lastClose,
+  lastMA50,
+  lastMA200,
+  ma50Pct,
+  ma200Pct,
+  ema20Pct,
+  vwapPct,
+  ma50,
+  ema20Arr,
+  vwapArr,
+  bollUpper,
+  bollMid,
+  bollLower,
+  bbUpperLast,
+  bbLowerLast,
+  bbMidLast,
+  rsiLast,
+  rsi14Arr,
+  divergence,
+  macdHistLast,
+  macdLineLast,
+  macdSignalLast,
+  stochLast,
+  stochK,
+  stochD,
+  atrLast,
+  atrSmaLast,
+  volumeLast,
+  volumeSmaLast,
+]);
+
+function SmallNavLink(props: { href: string; children: React.ReactNode }) {
+  return (
+    <Link
+      href={props.href}
+      style={{
+        padding: "8px 12px",
+        borderRadius: 12,
+        border: `1px solid ${COLORS.controlBorder}`,
+        background: COLORS.controlBg,
+        color: COLORS.controlFg,
+        textDecoration: "none",
+        fontWeight: 800,
+        fontSize: 13,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {props.children}
+    </Link>
+  );
+}
+
+function TimeframeButton(props: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      style={{
+        padding: isMobile ? "8px 10px" : "10px 12px",
+        borderRadius: 12,
+        border: `1px solid ${props.active ? "rgba(255,255,255,0.32)" : COLORS.controlBorder}`,
+        background: props.active ? (COLORS.isDark ? "rgba(255,255,255,0.10)" : "rgba(11,18,32,0.08)") : COLORS.controlBg,
+        color: COLORS.controlFg,
+        fontWeight: 900,
+        fontSize: isMobile ? 13 : 14,
+        cursor: "pointer",
+        minWidth: isMobile ? 48 : 54,
+      }}
+    >
+      {props.label}
+    </button>
+  );
+}
+
+function SectionCard(props: {
+  title?: string;
+  right?: React.ReactNode;
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+  bodyStyle?: React.CSSProperties;
+}) {
+  return (
+    <section
+      style={{
+        border: `1px solid ${COLORS.border}`,
+        borderRadius: 18,
+        background: COLORS.cardBg,
+        color: COLORS.cardFg,
+        boxShadow: COLORS.isDark ? "0 14px 34px rgba(0,0,0,0.28)" : "0 14px 34px rgba(0,0,0,0.08)",
+        overflow: "hidden",
+        minWidth: 0,
+        ...props.style,
+      }}
+    >
+      {props.title || props.right ? (
         <div
           style={{
+            padding: "14px 16px",
+            borderBottom: `1px solid ${COLORS.border}`,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            padding: "12px 16px",
-            borderBottom: `1px solid ${COLORS.border}`,
             gap: 12,
-          }}
-        >
-          <div style={{ fontWeight: 800, whiteSpace: "nowrap" }}>
-            Price ({indicator === "None" ? "Overview" : indicator})
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              alignItems: "center",
-              background: COLORS.controlBgSolid,
-              border: `1px solid ${COLORS.controlBorder}`,
-              borderRadius: 12,
-              padding: 6,
-              flexWrap: "wrap",
-              justifyContent: "flex-end",
-            }}
-          >
-            <button
-              onClick={() => setWindowOffset((o) => Math.min(maxOffset, o + Math.max(1, Math.floor(win * 0.2))))}
-              disabled={offset >= maxOffset}
-              title="Pan left (older)"
-              style={{
-                padding: "8px 10px",
-                borderRadius: 10,
-                border: `1px solid ${COLORS.controlBorder}`,
-                background: COLORS.controlBg,
-                color: COLORS.controlFg,
-                cursor: offset >= maxOffset ? "not-allowed" : "pointer",
-                opacity: offset >= maxOffset ? 0.45 : 1,
-                fontWeight: 900,
-                fontSize: 14,
-                lineHeight: 1,
-              }}
-            >
-              ←
-            </button>
-
-            <button
-              onClick={() => setWindowOffset((o) => Math.max(0, o - Math.max(1, Math.floor(win * 0.2))))}
-              disabled={offset <= 0}
-              title="Pan right (newer)"
-              style={{
-                padding: "8px 10px",
-                borderRadius: 10,
-                border: `1px solid ${COLORS.controlBorder}`,
-                background: COLORS.controlBg,
-                color: COLORS.controlFg,
-                cursor: offset <= 0 ? "not-allowed" : "pointer",
-                opacity: offset <= 0 ? 0.45 : 1,
-                fontWeight: 900,
-                fontSize: 14,
-                lineHeight: 1,
-              }}
-            >
-              →
-            </button>
-
-            <button
-              onClick={() => {
-                setWindowDays((d) => Math.max(2, Math.floor(d * 0.8)));
-                setWindowOffset(0);
-              }}
-              title="Zoom in"
-              style={{
-                padding: "8px 10px",
-                borderRadius: 10,
-                border: `1px solid ${COLORS.controlBorder}`,
-                background: COLORS.controlBg,
-                color: COLORS.controlFg,
-                cursor: "pointer",
-                fontWeight: 900,
-                fontSize: 14,
-                lineHeight: 1,
-              }}
-            >
-              +
-            </button>
-
-            <button
-              onClick={() => {
-                setWindowDays((d) => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25)));
-                setWindowOffset(0);
-              }}
-              title="Zoom out"
-              style={{
-                padding: "8px 10px",
-                borderRadius: 10,
-                border: `1px solid ${COLORS.controlBorder}`,
-                background: COLORS.controlBg,
-                color: COLORS.controlFg,
-                cursor: "pointer",
-                fontWeight: 900,
-                fontSize: 14,
-                lineHeight: 1,
-              }}
-            >
-              −
-            </button>
-
-            <div style={{ fontSize: 12, opacity: 0.8, color: COLORS.mutedFg, whiteSpace: "nowrap", fontWeight: 700 }}>
-              {Math.min(win, totalPoints)} bars
-            </div>
-
-            <button
-              onClick={() => setExpanded(true)}
-              title="Expand chart"
-              style={{
-                padding: "8px 10px",
-                borderRadius: 10,
-                border: `1px solid ${COLORS.controlBorder}`,
-                background: COLORS.controlBg,
-                color: COLORS.controlFg,
-                cursor: "pointer",
-                fontWeight: 900,
-                fontSize: 14,
-                lineHeight: 1,
-              }}
-            >
-              ⤢
-            </button>
-          </div>
-        </div>
-
-        <div style={{ flex: 1, padding: 16, minHeight: 0 }}>
-          <PriceChart
-            data={displayedHistory}
-            ma50={ma50}
-            ma200={ma200}
-            overlay={indicator}
-            bollUpper={bollUpper}
-            bollMid={bollMid}
-            bollLower={bollLower}
-            ema20={ema20Arr}
-            vwap={vwapArr}
-            rsi14={rsi14Arr}
-            macdLine={macdLine}
-            macdSignal={macdSignal}
-            macdHist={macdHist}
-            stochK={stochK}
-            stochD={stochD}
-            atr14={atr14Arr}
-            volume={volumeArr}
-            divergence={divergence.div}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <main
-      style={{
-        padding: 0,
-        fontFamily: "system-ui, Arial",
-        background: COLORS.pageBg,
-        color: COLORS.pageFg,
-        minHeight: "100vh",
-      }}
-    >
-      <div className="pageWrap">
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            marginBottom: 8,
             flexWrap: "wrap",
           }}
         >
-          <div
-            style={{
-              width: 290,
-              height: 72,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "flex-start",
-              overflow: "visible",
-              marginRight: 8,
-              flex: "0 0 auto",
-              marginLeft: -40,
-            }}
-          >
-            <img
-              src="/logo.png"
-              alt="MyStockHarbor"
-              style={{
-                height: 72,
-                width: "auto",
-                objectFit: "contain",
-                display: "block",
-                transform: "scale(3.0)",
-                transformOrigin: "left center",
-              }}
-            />
+          <div style={{ fontWeight: 900, fontSize: 15 }}>{props.title}</div>
+          {props.right}
+        </div>
+      ) : null}
+
+      <div style={{ padding: 16, ...props.bodyStyle }}>{props.children}</div>
+    </section>
+  );
+}
+
+function ChartToolbar() {
+  return (
+    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+      <button
+        onClick={() => setWindowOffset((o) => Math.min(maxOffset, o + Math.max(1, Math.floor(win * 0.2))))}
+        disabled={offset >= maxOffset}
+        title="Pan left (older)"
+        style={{
+          padding: "8px 10px",
+          borderRadius: 10,
+          border: `1px solid ${COLORS.controlBorder}`,
+          background: COLORS.controlBg,
+          color: COLORS.controlFg,
+          cursor: offset >= maxOffset ? "not-allowed" : "pointer",
+          opacity: offset >= maxOffset ? 0.45 : 1,
+          fontWeight: 900,
+          lineHeight: 1,
+        }}
+      >
+        ←
+      </button>
+
+      <button
+        onClick={() => setWindowOffset((o) => Math.max(0, o - Math.max(1, Math.floor(win * 0.2))))}
+        disabled={offset <= 0}
+        title="Pan right (newer)"
+        style={{
+          padding: "8px 10px",
+          borderRadius: 10,
+          border: `1px solid ${COLORS.controlBorder}`,
+          background: COLORS.controlBg,
+          color: COLORS.controlFg,
+          cursor: offset <= 0 ? "not-allowed" : "pointer",
+          opacity: offset <= 0 ? 0.45 : 1,
+          fontWeight: 900,
+          lineHeight: 1,
+        }}
+      >
+        →
+      </button>
+
+      <button
+        onClick={() => {
+          setWindowDays((d) => Math.max(2, Math.floor(d * 0.8)));
+          setWindowOffset(0);
+        }}
+        title="Zoom in"
+        style={{
+          padding: "8px 10px",
+          borderRadius: 10,
+          border: `1px solid ${COLORS.controlBorder}`,
+          background: COLORS.controlBg,
+          color: COLORS.controlFg,
+          cursor: "pointer",
+          fontWeight: 900,
+          lineHeight: 1,
+        }}
+      >
+        +
+      </button>
+
+      <button
+        onClick={() => {
+          setWindowDays((d) => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25)));
+          setWindowOffset(0);
+        }}
+        title="Zoom out"
+        style={{
+          padding: "8px 10px",
+          borderRadius: 10,
+          border: `1px solid ${COLORS.controlBorder}`,
+          background: COLORS.controlBg,
+          color: COLORS.controlFg,
+          cursor: "pointer",
+          fontWeight: 900,
+          lineHeight: 1,
+        }}
+      >
+        −
+      </button>
+
+      <div
+        style={{
+          padding: "8px 10px",
+          borderRadius: 10,
+          border: `1px solid ${COLORS.controlBorder}`,
+          background: COLORS.controlBg,
+          color: COLORS.mutedFg,
+          fontSize: 12,
+          fontWeight: 800,
+        }}
+      >
+        {Math.min(win, totalPoints)} bars
+      </div>
+
+      <button
+        onClick={() => setExpanded(true)}
+        title="Expand chart"
+        style={{
+          padding: "8px 10px",
+          borderRadius: 10,
+          border: `1px solid ${COLORS.controlBorder}`,
+          background: COLORS.controlBg,
+          color: COLORS.controlFg,
+          cursor: "pointer",
+          fontWeight: 900,
+          lineHeight: 1,
+        }}
+      >
+        ⤢
+      </button>
+    </div>
+  );
+}
+
+function OverviewPanel() {
+  if (!trendScore || !stretchScore) {
+    return (
+      <SectionCard title={`${symbol} Overview`}>
+        <div style={{ opacity: 0.75 }}>Overview unavailable.</div>
+      </SectionCard>
+    );
+  }
+
+  const trendTone = trendToneFromScore(trendScore);
+  const trendColor = toneToColor(trendTone, COLORS.isDark);
+  const stretchTone = compositeToneFromCounts(stretchScore.overbought, stretchScore.oversold, 0).tone;
+  const stretchColor = toneToColor(stretchTone, COLORS.isDark);
+
+  return (
+    <SectionCard title={`${symbol} Overview`}>
+      <div style={{ display: "grid", gap: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 950, lineHeight: 1.1 }}>{symbol}</div>
+            <div style={{ marginTop: 4, color: COLORS.mutedFg, fontWeight: 700 }}>{symbolName || "—"}</div>
           </div>
 
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <button
-              type="button"
-              onClick={() => router.push("/learn")}
-              style={{
-                padding: "12px 16px",
-                borderRadius: 14,
-                border: `1px solid rgba(34,197,94,0.55)`,
-                background: COLORS.isDark
-                  ? "linear-gradient(135deg, rgba(34,197,94,0.28), rgba(34,197,94,0.14))"
-                  : "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(34,197,94,0.10))",
-                color: COLORS.controlFg,
-                textDecoration: "none",
-                fontWeight: 950,
-                fontSize: 15,
-                letterSpacing: "0.2px",
-                boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.45)" : "0 10px 26px rgba(0,0,0,0.14)",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 10,
-                cursor: "pointer",
-                opacity: 1,
-                position: "relative",
-                overflow: "hidden",
-              }}
-              title="Learn the Basics"
-            >
-              📚 Learn the Basics <span style={{ opacity: 0.9 }}>→</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => router.push("/platforms")}
-              style={{
-                padding: "12px 16px",
-                borderRadius: 14,
-                border: `1px solid rgba(168,85,247,0.55)`,
-                background: COLORS.isDark
-                  ? "linear-gradient(135deg, rgba(168,85,247,0.28), rgba(168,85,247,0.14))"
-                  : "linear-gradient(135deg, rgba(168,85,247,0.18), rgba(168,85,247,0.10))",
-                color: COLORS.controlFg,
-                textDecoration: "none",
-                fontWeight: 950,
-                fontSize: 15,
-                letterSpacing: "0.2px",
-                boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.45)" : "0 10px 26px rgba(0,0,0,0.14)",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 10,
-                cursor: "pointer",
-                opacity: 1,
-                position: "relative",
-                overflow: "hidden",
-              }}
-              title="Choosing your Platform"
-            >
-              🖥️ Choosing your Platform <span style={{ opacity: 0.9 }}>→</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => router.push("/utilities")}
-              style={{
-                padding: "12px 16px",
-                borderRadius: 14,
-                border: `1px solid rgba(234,179,8,0.55)`,
-                background: COLORS.isDark
-                  ? "linear-gradient(135deg, rgba(234,179,8,0.24), rgba(249,115,22,0.16))"
-                  : "linear-gradient(135deg, rgba(234,179,8,0.16), rgba(249,115,22,0.10))",
-                color: COLORS.controlFg,
-                textDecoration: "none",
-                fontWeight: 950,
-                fontSize: 15,
-                letterSpacing: "0.2px",
-                boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.45)" : "0 10px 26px rgba(0,0,0,0.14)",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 10,
-                cursor: "pointer",
-                opacity: 1,
-                position: "relative",
-                overflow: "hidden",
-              }}
-              title="Trading Utilities"
-            >
-              🧮 Trading Utilities <span style={{ opacity: 0.9 }}>→</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => router.push("/about")}
-              style={{
-                padding: "12px 16px",
-                borderRadius: 14,
-                border: `1px solid rgba(59,130,246,0.45)`,
-                background: COLORS.isDark
-                  ? "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(59,130,246,0.10))"
-                  : "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(59,130,246,0.08))",
-                color: COLORS.controlFg,
-                textDecoration: "none",
-                fontWeight: 900,
-                fontSize: 15,
-                letterSpacing: "0.2px",
-                boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.35)" : "0 10px 26px rgba(0,0,0,0.12)",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 10,
-                cursor: "pointer",
-                opacity: 1,
-                position: "relative",
-                overflow: "hidden",
-              }}
-              title="About MyStockHarbor"
-            >
-              ℹ️ About
-            </button>
-
-            <button
-              type="button"
-              onClick={() => router.push("/contact")}
-              style={{
-                padding: "12px 16px",
-                borderRadius: 14,
-                border: `1px solid rgba(14,165,233,0.45)`,
-                background: COLORS.isDark
-                  ? "linear-gradient(135deg, rgba(14,165,233,0.20), rgba(14,165,233,0.10))"
-                  : "linear-gradient(135deg, rgba(14,165,233,0.12), rgba(14,165,233,0.06))",
-                color: COLORS.controlFg,
-                textDecoration: "none",
-                fontWeight: 900,
-                fontSize: 15,
-                letterSpacing: "0.2px",
-                boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.35)" : "0 10px 26px rgba(0,0,0,0.12)",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 10,
-                cursor: "pointer",
-                opacity: 1,
-                position: "relative",
-                overflow: "hidden",
-              }}
-              title="Contact MyStockHarbor"
-            >
-              ✉️ Contact
-            </button>
-
-            <button
-              type="button"
-              onClick={() => router.push("/risk-disclaimer")}
-              style={{
-                padding: "12px 16px",
-                borderRadius: 14,
-                border: `1px solid rgba(244,114,182,0.45)`,
-                background: COLORS.isDark
-                  ? "linear-gradient(135deg, rgba(244,114,182,0.18), rgba(244,114,182,0.08))"
-                  : "linear-gradient(135deg, rgba(244,114,182,0.10), rgba(244,114,182,0.05))",
-                color: COLORS.controlFg,
-                textDecoration: "none",
-                fontWeight: 900,
-                fontSize: 15,
-                letterSpacing: "0.2px",
-                boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.35)" : "0 10px 26px rgba(0,0,0,0.12)",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 10,
-                cursor: "pointer",
-                opacity: 1,
-                position: "relative",
-                overflow: "hidden",
-              }}
-              title="Risk Disclaimer"
-            >
-              ⚠️ Risk Disclaimer
-            </button>
-          </div>
-
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginLeft: "auto" }}>
-            <button
-              onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 12,
-                border: `1px solid ${COLORS.controlBorder}`,
-                background: COLORS.controlBg,
-                color: COLORS.controlFg,
-                cursor: "pointer",
-                fontWeight: 800,
-              }}
-              title="Toggle theme"
-            >
-              {COLORS.isDark ? "🌙 Dark" : "☀️ Light"}
-            </button>
+          <div style={{ textAlign: "right", minWidth: 0 }}>
+            <div style={{ fontSize: 12, color: COLORS.mutedFg, fontWeight: 900, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+              Last price
+            </div>
+            <div style={{ fontSize: isMobile ? 22 : 28, fontWeight: 950 }}>
+              {quote?.price != null ? `$${quote.price.toFixed(2)}` : "—"}
+            </div>
           </div>
         </div>
 
-        <p
-          style={{
-            marginTop: 2,
-            opacity: 0.8,
-            color: COLORS.mutedFg,
-            fontSize: 14,
-            fontWeight: 600,
-            letterSpacing: "0.2px",
-          }}
-        >
-          Learn charts. Discover stocks. Trade smarter. — Version 1
-        </p>
-
-        <style>{`
-          @keyframes pickersBar {
-            0% { transform: translateX(-10%); opacity: 0.55; }
-            50% { transform: translateX(120%); opacity: 0.95; }
-            100% { transform: translateX(240%); opacity: 0.55; }
-          }
-
-          .pageWrap {
-            padding: 32px;
-            max-width: 1440px;
-            margin: 0 auto;
-          }
-
-          .mainGrid {
-            margin-top: 18px;
-            display: grid;
-            gap: 18px;
-          }
-
-          .dashboardTopGrid {
-            display: grid;
-            grid-template-columns: minmax(360px, 420px) minmax(0, 1fr);
-            gap: 18px;
-            align-items: start;
-          }
-
-          .summaryGrid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 16px;
-            align-items: start;
-            margin-top: 8px;
-          }
-
-          .marketGrid {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-            gap: 18px;
-            align-items: start;
-          }
-
-          .benchGrid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(220px, 1fr));
-            gap: 14px;
-          }
-
-          .newsGrid {
-            display: grid;
-            gap: 16px;
-            grid-template-columns: 1fr 1fr;
-          }
-
-          @media (max-width: 1100px) {
-            .dashboardTopGrid {
-              grid-template-columns: 1fr;
-            }
-
-            .marketGrid {
-              grid-template-columns: 1fr;
-            }
-          }
-
-          @media (max-width: 760px) {
-            .pageWrap {
-              padding: 16px !important;
-            }
-
-            .summaryGrid {
-              grid-template-columns: 1fr !important;
-            }
-
-            .benchGrid {
-              grid-template-columns: 1fr !important;
-            }
-
-            .newsGrid {
-              grid-template-columns: 1fr !important;
-            }
-          }
-        `}</style>
-
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginTop: 16 }}>
+        <div className="msh-score-grid">
           <div
             style={{
-              display: "flex",
-              gap: 14,
-              alignItems: "flex-start",
-              flexWrap: "wrap",
+              border: `1px solid ${COLORS.border}`,
+              borderRadius: 16,
+              padding: 16,
+              background: COLORS.controlBg,
+              minWidth: 0,
             }}
           >
-            <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 6 }}>
-              <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, lineHeight: 1 }}>
-                Search Any Stock
-              </div>
-
-              <input
-                value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  setOpen(true);
-                }}
-                onFocus={() => setOpen(true)}
-                onBlur={() => setTimeout(() => setOpen(false), 150)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") chooseSymbol(query);
-                }}
-                placeholder="🔎 Search ANY ticker or company"
-                style={{
-                  height: 44,
-                  padding: "0 14px",
-                  borderRadius: 14,
-                  border: "2px solid rgba(59,130,246,0.45)",
-                  background: "#ffffff",
-                  color: "#111",
-                  width: 260,
-                  fontSize: 14,
-                  fontWeight: 750,
-                  boxShadow: COLORS.isDark
-                    ? "0 6px 20px rgba(0,0,0,0.35)"
-                    : "0 6px 20px rgba(0,0,0,0.12)",
-                  outline: "none",
-                }}
-              />
-
-              {open && results.length > 0 ? (
-                <div
-                  style={{
-                    position: "absolute",
-                    top: "calc(100% + 8px)",
-                    left: 0,
-                    right: 0,
-                    border: "1px solid #3333",
-                    borderRadius: 12,
-                    background: "#fff",
-                    color: "#111",
-                    overflow: "hidden",
-                    zIndex: 9999,
-                    boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
-                    maxHeight: 340,
-                    overflowY: "auto",
-                  }}
-                >
-                  {results.map((r) => (
-                    <button
-                      key={`${r.symbol}-${r.exchange}`}
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => chooseSymbol(r.symbol)}
-                      style={{
-                        display: "block",
-                        width: "100%",
-                        textAlign: "left",
-                        padding: "10px 12px",
-                        border: "none",
-                        background: "transparent",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <div style={{ fontWeight: 800 }}>
-                        {r.symbol} <span style={{ fontWeight: 600, opacity: 0.7 }}>({r.exchange})</span>
-                      </div>
-                      <div style={{ fontSize: 12, opacity: 0.75 }}>{r.name}</div>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 900 }}>
+              <span style={{ color: trendColor }}>●</span>
+              <span>Trend Score</span>
+              <HelpTip text="Trend score checks price vs MA50/MA200 and MACD histogram direction." isDark={COLORS.isDark} />
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <label style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, lineHeight: 1 }}>
-                Stock Pickers
-              </label>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (isPicking) return;
-                  startPicking(() => {
-                    router.push("/pickers");
-                  });
-                }}
-                disabled={isPicking}
-                style={{
-                  height: 44,
-                  padding: "0 18px",
-                  borderRadius: 12,
-                  border: `1px solid rgba(59,130,246,0.55)`,
-                  background: COLORS.isDark
-                    ? "linear-gradient(135deg, rgba(59,130,246,0.35), rgba(59,130,246,0.18))"
-                    : "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(59,130,246,0.12))",
-                  color: COLORS.controlFg,
-                  fontWeight: 900,
-                  fontSize: 14,
-                  letterSpacing: "0.2px",
-                  cursor: isPicking ? "not-allowed" : "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  minWidth: 220,
-                }}
-              >
-                🔎 Find Your Next Stock →
-              </button>
+            <div style={{ marginTop: 8, fontSize: 20, fontWeight: 950, color: trendColor }}>
+              {trendScore.passed}/{trendScore.total}
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <label style={{ fontSize: 12, fontWeight: 850, opacity: 0.85, lineHeight: 1 }}>
-                Indicator
-              </label>
+            <div style={{ fontSize: 12, color: COLORS.mutedFg, fontWeight: 800 }}>checks passing</div>
 
-              <select
-                value={indicator}
-                onChange={(e) => setIndicator(e.target.value as any)}
-                style={{
-                  height: 44,
-                  padding: "0 12px",
-                  borderRadius: 12,
-                  border: `1px solid ${COLORS.controlBorder}`,
-                  background: "#ffffff",
-                  color: "#111",
-                  fontWeight: 900,
-                  minWidth: 220,
-                }}
-              >
-                {INDICATORS.map((x) => (
-                  <option key={x} value={x}>
-                    {x === "None" ? "Overview" : x}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {renderFlagsMeter({
+              flagged: trendScore.passed,
+              total: trendScore.total,
+              color: trendColor,
+              isDark: COLORS.isDark,
+            })}
           </div>
 
-          <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {TIMEFRAMES.map((t) => {
-              const active = tfDays === t.days;
+          <div
+            style={{
+              border: `1px solid ${COLORS.border}`,
+              borderRadius: 16,
+              padding: 16,
+              background: COLORS.controlBg,
+              minWidth: 0,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 900 }}>
+              <span style={{ color: stretchColor }}>●</span>
+              <span>Stretch Score</span>
+              <HelpTip text="Stretch score checks RSI, Stoch, Bollinger, VWAP, EMA20 and MA50 extension." isDark={COLORS.isDark} />
+            </div>
 
-              return (
-                <button
-                  key={t.label}
-                  onClick={() => {
-                    setTfDays(t.days);
-                    setWindowDays(t.days);
-                    setWindowOffset(0);
-                  }}
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: 12,
-                    border: `1px solid ${COLORS.controlBorder}`,
-                    background: active
-                      ? COLORS.isDark
-                        ? "rgba(255,255,255,0.18)"
-                        : "rgba(0,0,0,0.08)"
-                      : COLORS.controlBg,
-                    color: COLORS.controlFg,
-                    cursor: "pointer",
-                    opacity: 1,
-                    fontWeight: active ? 900 : 750,
-                    boxShadow: active
-                      ? COLORS.isDark
-                        ? "0 10px 26px rgba(0,0,0,0.45)"
-                        : "0 10px 26px rgba(0,0,0,0.12)"
-                      : "none",
-                  }}
-                >
-                  {t.label}
-                </button>
-              );
+            <div style={{ marginTop: 8, fontSize: 20, fontWeight: 950, color: stretchColor }}>
+              {stretchScore.flagged}/{stretchScore.total}
+            </div>
+
+            <div style={{ fontSize: 12, color: COLORS.mutedFg, fontWeight: 800 }}>stretch checks</div>
+
+            {renderFlagsMeter({
+              flagged: stretchScore.flagged,
+              total: stretchScore.total,
+              color: stretchColor,
+              isDark: COLORS.isDark,
             })}
           </div>
         </div>
 
-        <div className="mainGrid">
-          <div className="dashboardTopGrid">
+        {overviewMeta ? (
+          <div
+            style={{
+              border: `1px solid ${COLORS.border}`,
+              borderRadius: 14,
+              padding: 14,
+              background: COLORS.controlBg,
+              fontWeight: 800,
+              lineHeight: 1.45,
+            }}
+          >
+            Regime: {overviewMeta.trend} • Volatility: {overviewMeta.vol} • Bias:{" "}
+            <span style={{ color: overviewMeta.toneColor }}>{overviewMeta.toneTag}</span>
+          </div>
+        ) : null}
+
+        <div style={{ color: COLORS.mutedFg, lineHeight: 1.55 }}>{signal.detail}</div>
+
+        <div style={{ paddingTop: 12, borderTop: `1px solid ${COLORS.border}`, fontSize: 12, color: COLORS.mutedFg, fontWeight: 700 }}>
+          As of {quote?.date ?? "—"} {quote?.time ?? ""} • Source: {quote?.source ?? "stooq.com"}
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
+function IndicatorPanel() {
+  if (!indicatorInsight) return null;
+
+  return (
+    <SectionCard title={indicatorInsight.title}>
+      <div style={{ display: "grid", gap: 14 }}>
+        <div
+          style={{
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: 14,
+            padding: 14,
+            background: COLORS.controlBg,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <span style={{ width: 10, height: 10, borderRadius: 999, background: signalDotColor(indicatorInsight.accent.label), flex: "0 0 auto" }} />
+            <div style={{ fontWeight: 900 }}>{indicatorInsight.accent.label.replace(/[🟢🔴🟡⚡]/g, "").trim()}</div>
+          </div>
+          <div style={{ marginTop: 8, color: COLORS.mutedFg, lineHeight: 1.5 }}>{indicatorInsight.accent.detail}</div>
+        </div>
+
+        <div className="msh-info-grid">
+          {indicatorInsight.stats.map((row) => (
             <div
+              key={row.label}
               style={{
-                padding: 16,
                 border: `1px solid ${COLORS.border}`,
-                borderRadius: 16,
-                background: COLORS.cardBg,
-                boxShadow: COLORS.isDark ? "0 14px 34px rgba(0,0,0,0.28)" : "0 14px 34px rgba(0,0,0,0.08)",
+                borderRadius: 14,
+                padding: 14,
+                background: COLORS.controlBg,
+                minWidth: 0,
               }}
             >
-              {loading ? (
-                <p style={{ margin: "8px 0" }}>Loading…</p>
-              ) : err ? (
-                <p style={{ margin: "8px 0" }}>{err}</p>
-              ) : (
-                <>
-                  {indicator === "None" ? (
-                    <>
-                      <div className="summaryGrid">
-                        <div style={{ minWidth: 0, gridColumn: "1 / -1" }}>
-                          <div
-                            style={{
-                              border: `1px solid ${COLORS.border}`,
-                              borderRadius: 14,
-                              background: COLORS.controlBg,
-                              padding: 16,
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "flex-start",
-                                gap: 16,
-                                flexWrap: "wrap",
-                              }}
-                            >
-                              <div style={{ minWidth: 0 }}>
-                                <div
-                                  style={{
-                                    fontSize: 30,
-                                    fontWeight: 950,
-                                    letterSpacing: "-0.4px",
-                                    lineHeight: 1,
-                                    color: COLORS.pageFg,
-                                  }}
-                                >
-                                  {symbol}
-                                </div>
-
-                                <div
-                                  style={{
-                                    marginTop: 6,
-                                    fontSize: 15,
-                                    fontWeight: 800,
-                                    color: COLORS.mutedFg,
-                                    whiteSpace: "nowrap",
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                  }}
-                                >
-                                  {symbolName || "Company name unavailable"}
-                                </div>
-                              </div>
-
-                              <div style={{ textAlign: "right", minWidth: 120 }}>
-                                <div
-                                  style={{
-                                    fontSize: 12,
-                                    fontWeight: 800,
-                                    color: COLORS.mutedFg,
-                                    textTransform: "uppercase",
-                                    letterSpacing: "0.5px",
-                                  }}
-                                >
-                                  Last Price
-                                </div>
-
-                                <div
-                                  style={{
-                                    marginTop: 6,
-                                    fontSize: 30,
-                                    fontWeight: 950,
-                                    letterSpacing: "-0.4px",
-                                    color: COLORS.pageFg,
-                                  }}
-                                >
-                                  {quote?.price == null ? "—" : `$${quote.price.toFixed(2)}`}
-                                </div>
-                              </div>
-                            </div>
-
-                            <div
-                              style={{
-                                display: "grid",
-                                gridTemplateColumns: "1fr 1fr",
-                                gap: 12,
-                                marginTop: 18,
-                              }}
-                            >
-                              <div
-                                style={{
-                                  border: `1px solid ${COLORS.border}`,
-                                  borderRadius: 12,
-                                  padding: 14,
-                                  background: COLORS.cardBg,
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 8,
-                                    fontSize: 14,
-                                    color: COLORS.mutedFg,
-                                    fontWeight: 850,
-                                  }}
-                                >
-                                  <span
-                                    style={{
-                                      width: 10,
-                                      height: 10,
-                                      borderRadius: 999,
-                                      background: toneToColor(trendToneFromScore(trendScore), COLORS.isDark),
-                                      flex: "0 0 auto",
-                                    }}
-                                  />
-                                  <span>Trend Score</span>
-                                  <HelpTip
-                                    isDark={COLORS.isDark}
-                                    text="Trend Score measures how many bullish trend checks are currently passing, such as price vs moving averages and MACD momentum. Higher scores suggest a stronger trend structure."
-                                  />
-                                </div>
-
-                                <div
-                                  style={{
-                                    marginTop: 10,
-                                    fontSize: 32,
-                                    fontWeight: 950,
-                                    lineHeight: 1,
-                                    color: COLORS.pageFg,
-                                    letterSpacing: "-0.4px",
-                                  }}
-                                >
-                                  {trendScore ? `${trendScore.passed}/${trendScore.total}` : "—"}
-                                </div>
-
-                                <div
-                                  style={{
-                                    marginTop: 4,
-                                    fontSize: 13,
-                                    fontWeight: 800,
-                                    color: COLORS.mutedFg,
-                                  }}
-                                >
-                                  checks passing
-                                </div>
-
-                                {trendScore ? (
-                                  renderFlagsMeter({
-                                    flagged: trendScore.passed,
-                                    total: trendScore.total,
-                                    color: COLORS.isDark ? "#22c55e" : "#16a34a",
-                                    isDark: COLORS.isDark,
-                                  })
-                                ) : null}
-                              </div>
-
-                              <div
-                                style={{
-                                  border: `1px solid ${COLORS.border}`,
-                                  borderRadius: 12,
-                                  padding: 14,
-                                  background: COLORS.cardBg,
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 8,
-                                    fontSize: 14,
-                                    color: COLORS.mutedFg,
-                                    fontWeight: 850,
-                                  }}
-                                >
-                                  <span
-                                    style={{
-                                      width: 10,
-                                      height: 10,
-                                      borderRadius: 999,
-                                      background: overviewMeta?.toneColor ?? (COLORS.isDark ? "#22c55e" : "#16a34a"),
-                                      flex: "0 0 auto",
-                                    }}
-                                  />
-                                  <span>Stretch Score</span>
-                                  <HelpTip
-                                    isDark={COLORS.isDark}
-                                    text="Stretch Score measures how many indicators suggest price may be extended, overbought, or oversold. Higher scores mean more signs that price is stretched away from normal conditions."
-                                  />
-                                </div>
-
-                                <div
-                                  style={{
-                                    marginTop: 10,
-                                    fontSize: 32,
-                                    fontWeight: 950,
-                                    lineHeight: 1,
-                                    color: overviewMeta?.toneColor ?? COLORS.pageFg,
-                                    letterSpacing: "-0.4px",
-                                  }}
-                                >
-                                  {stretchScore ? `${stretchScore.flagged}/${stretchScore.total}` : "—"}
-                                </div>
-
-                                <div
-                                  style={{
-                                    marginTop: 4,
-                                    fontSize: 13,
-                                    fontWeight: 800,
-                                    color: COLORS.mutedFg,
-                                  }}
-                                >
-                                  stretch checks
-                                </div>
-
-                                {stretchScore && overviewMeta ? (
-                                  renderFlagsMeter({
-                                    flagged: stretchScore.flagged,
-                                    total: stretchScore.total,
-                                    color: overviewMeta.toneColor,
-                                    isDark: COLORS.isDark,
-                                  })
-                                ) : null}
-                              </div>
-                            </div>
-
-                            {overviewMeta ? (
-                              <div
-                                style={{
-                                  marginTop: 14,
-                                  padding: "10px 12px",
-                                  borderRadius: 12,
-                                  background: COLORS.cardBg,
-                                  border: `1px solid ${COLORS.border}`,
-                                  fontSize: 13,
-                                  fontWeight: 800,
-                                  color: COLORS.mutedFg,
-                                }}
-                              >
-                                Regime: {overviewMeta.trend} • Volatility: {overviewMeta.vol} • Bias: {overviewMeta.toneTag}
-                              </div>
-                            ) : null}
-
-                            <div
-                              style={{
-                                marginTop: 12,
-                                fontSize: 13,
-                                lineHeight: 1.6,
-                                color: COLORS.mutedFg,
-                              }}
-                            >
-                              {signal.detail}
-                            </div>
-
-                            <div
-                              style={{
-                                marginTop: 14,
-                                paddingTop: 12,
-                                borderTop: `1px solid ${COLORS.border}`,
-                                fontSize: 13,
-                                color: COLORS.mutedFg,
-                              }}
-                            >
-                              {quote?.date && quote?.time ? `As of ${quote.date} ${quote.time}` : "Timestamp unavailable"} • Source:{" "}
-                              {quote?.source ?? "stooq.com"}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div
-                          style={{
-                            gridColumn: "1 / -1",
-                            border: `1px solid ${COLORS.border}`,
-                            borderRadius: 12,
-                            padding: 12,
-                            background: COLORS.controlBg,
-                            marginTop: 0,
-                          }}
-                        >
-                          <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10, opacity: 0.9 }}>
-                            Breakdown
-                          </div>
-
-                          <div style={{ display: "grid", gap: 8 }}>
-                            {BREAKDOWN_DEFS.map((d) => {
-                              const it = overviewItems.find((x) => x.key === d.key);
-                              if (!it) return null;
-
-                              const dot = toneToColor(it.tone, COLORS.isDark);
-
-                              return (
-                                <div
-                                  key={it.key}
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "space-between",
-                                    gap: 10,
-                                  }}
-                                >
-                                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                                    <span
-                                      style={{
-                                        width: 10,
-                                        height: 10,
-                                        borderRadius: 999,
-                                        background: dot,
-                                        boxShadow: COLORS.isDark
-                                          ? "0 0 0 3px rgba(255,255,255,0.04)"
-                                          : "0 0 0 3px rgba(0,0,0,0.03)",
-                                        flex: "0 0 auto",
-                                      }}
-                                    />
-                                    <span style={{ fontWeight: 850, fontSize: 13, whiteSpace: "nowrap" }}>{it.label}</span>
-                                  </div>
-
-                                  <span style={{ fontSize: 12, opacity: 0.85, color: COLORS.mutedFg, textAlign: "right" }}>
-                                    {it.valueText}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-                        <div style={{ fontSize: 28, fontWeight: 950, letterSpacing: "-0.3px" }}>{symbol}</div>
-                        <div style={{ fontSize: 16, fontWeight: 800, opacity: 0.85, color: COLORS.mutedFg }}>
-                          {symbolName ? `— ${symbolName}` : "—"}
-                        </div>
-                      </div>
-
-                      <p style={{ fontSize: 20, margin: "12px 0 0" }}>
-                        <strong>Last price:</strong> {quote?.price == null ? "Unavailable" : `$${quote.price.toFixed(2)}`}
-                      </p>
-
-                      <p style={{ margin: "12px 0 0", opacity: 0.85 }}>
-                        <strong>Signal:</strong> {signal.label}
-                      </p>
-                      <p style={{ margin: "6px 0 0", opacity: 0.7 }}>{signal.detail}</p>
-
-                      <div style={{ marginTop: 12, fontSize: 13, opacity: 0.75 }}>
-                        <div>
-                          {lastIndicatorValue.label}:{" "}
-                          {typeof (lastIndicatorValue as any).value === "number"
-                            ? indicator === "RSI(14)" || indicator === "Stochastic(14,3)"
-                              ? `${((lastIndicatorValue as any).value as number).toFixed(2)}`
-                              : indicator === "MACD(12,26,9)"
-                                ? `${((lastIndicatorValue as any).value as number).toFixed(4)}`
-                                : indicator === "Volume"
-                                  ? `${Math.round((lastIndicatorValue as any).value as number).toLocaleString()}`
-                                  : `$${(((lastIndicatorValue as any).value as number) ?? 0).toFixed(2)}`
-                            : "—"}
-                        </div>
-                      </div>
-
-                      <p style={{ marginTop: 12, opacity: 0.7 }}>
-                        {quote?.date && quote?.time ? `As of ${quote.date} ${quote.time}` : "Timestamp unavailable"} • Source:{" "}
-                        {quote?.source ?? "stooq.com"}
-                      </p>
-                    </>
-                  )}
-                </>
-              )}
+              <div style={{ fontSize: 12, color: COLORS.mutedFg, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                {row.label}
+              </div>
+              <div style={{ marginTop: 6, fontSize: 16, fontWeight: 900, wordBreak: "break-word" }}>{row.value}</div>
             </div>
+          ))}
+        </div>
 
-            <div style={{ minWidth: 0 }}>
-              <ChartCard height={560} />
+        <div style={{ color: COLORS.mutedFg, lineHeight: 1.55 }}>{indicatorInsight.note}</div>
+
+        <div style={{ paddingTop: 12, borderTop: `1px solid ${COLORS.border}`, fontSize: 12, color: COLORS.mutedFg, fontWeight: 700 }}>
+          Current view: {currentIndicatorName}
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
+function BreakdownPanel() {
+  const rows = indicator === "None" ? overviewItems : [];
+
+  if (indicator !== "None") {
+    const focusedRows: { label: string; tone: OverviewItem["tone"]; value: string }[] = [];
+
+    if (indicator === "RSI(14)") {
+      focusedRows.push({ label: "RSI", tone: typeof rsiLast === "number" ? (rsiLast >= 70 ? "red" : rsiLast <= 30 ? "green" : "yellow") : "muted", value: typeof rsiLast === "number" ? rsiLast.toFixed(2) : "—" });
+      focusedRows.push({ label: "RSI Div", tone: divergence.rsi === "none" ? "muted" : divergenceTone(divergence.rsi), value: divergence.rsi === "none" ? "—" : divergenceLabel(divergence.rsi) });
+    } else if (indicator === "MACD(12,26,9)") {
+      focusedRows.push({ label: "Histogram", tone: typeof macdHistLast === "number" ? (macdHistLast > 0 ? "green" : macdHistLast < 0 ? "red" : "yellow") : "muted", value: typeof macdHistLast === "number" ? macdHistLast.toFixed(4) : "—" });
+      focusedRows.push({ label: "MACD Div", tone: divergence.macd === "none" ? "muted" : divergenceTone(divergence.macd), value: divergence.macd === "none" ? "—" : divergenceLabel(divergence.macd) });
+    } else if (indicator === "MA50") {
+      focusedRows.push({ label: "Distance", tone: typeof ma50Pct === "number" ? (Math.abs(ma50Pct) >= 5 ? "red" : Math.abs(ma50Pct) >= 2 ? "orange" : "yellow") : "muted", value: ma50Pct == null ? "—" : `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}%` });
+      focusedRows.push({ label: "MA50", tone: "muted", value: formatMaybeNumber(lastMA50) });
+    } else if (indicator === "MA200") {
+      focusedRows.push({ label: "Distance", tone: typeof ma200Pct === "number" ? (Math.abs(ma200Pct) >= 10 ? "red" : Math.abs(ma200Pct) >= 4 ? "orange" : "yellow") : "muted", value: ma200Pct == null ? "—" : `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}%` });
+      focusedRows.push({ label: "MA200", tone: "muted", value: formatMaybeNumber(lastMA200) });
+    } else if (indicator === "Volume") {
+      const ratio = typeof volumeLast === "number" && typeof volumeSmaLast === "number" && volumeSmaLast > 0 ? volumeLast / volumeSmaLast : null;
+      focusedRows.push({ label: "Volume ratio", tone: ratio == null ? "muted" : ratio >= 1.8 ? "orange" : "yellow", value: ratio == null ? "—" : `${ratio.toFixed(2)}×` });
+    } else if (indicator === "ATR(14)") {
+      const ratio = typeof atrLast === "number" && typeof atrSmaLast === "number" && atrSmaLast > 0 ? atrLast / atrSmaLast : null;
+      focusedRows.push({ label: "ATR ratio", tone: ratio == null ? "muted" : ratio >= 1.5 ? "orange" : "yellow", value: ratio == null ? "—" : `${ratio.toFixed(2)}×` });
+    } else if (indicator === "VWAP") {
+      focusedRows.push({ label: "Distance", tone: typeof vwapPct === "number" ? (Math.abs(vwapPct) >= 5 ? "red" : Math.abs(vwapPct) >= 2 ? "orange" : "yellow") : "muted", value: vwapPct == null ? "—" : `${vwapPct >= 0 ? "+" : ""}${vwapPct.toFixed(2)}%` });
+    } else if (indicator === "Bollinger(20,2)") {
+      focusedRows.push({ label: "Upper", tone: "muted", value: formatMaybeNumber(bbUpperLast) });
+      focusedRows.push({ label: "Lower", tone: "muted", value: formatMaybeNumber(bbLowerLast) });
+    } else if (indicator === "EMA20") {
+      focusedRows.push({ label: "Distance", tone: typeof ema20Pct === "number" ? (Math.abs(ema20Pct) >= 5 ? "red" : Math.abs(ema20Pct) >= 2 ? "orange" : "yellow") : "muted", value: ema20Pct == null ? "—" : `${ema20Pct >= 0 ? "+" : ""}${ema20Pct.toFixed(2)}%` });
+    } else if (indicator === "Stochastic(14,3)") {
+      focusedRows.push({ label: "%K", tone: typeof stochLast === "number" ? (stochLast >= 80 ? "red" : stochLast <= 20 ? "green" : "yellow") : "muted", value: typeof stochLast === "number" ? stochLast.toFixed(2) : "—" });
+      focusedRows.push({ label: "%D", tone: "muted", value: formatMaybeNumber(lastNum(stochD)) });
+    }
+
+    return (
+      <SectionCard title="Indicator Snapshot">
+        <div style={{ display: "grid", gap: 12 }}>
+          {focusedRows.length ? (
+            focusedRows.map((row) => (
+              <div key={row.label} style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 999, background: chipToneColor(row.tone), flex: "0 0 auto" }} />
+                  <span style={{ fontWeight: 900 }}>{row.label}</span>
+                </div>
+                <div style={{ color: COLORS.mutedFg, fontWeight: 800, textAlign: "right" }}>{row.value}</div>
+              </div>
+            ))
+          ) : (
+            <div style={{ opacity: 0.75 }}>No additional snapshot available.</div>
+          )}
+        </div>
+      </SectionCard>
+    );
+  }
+
+  return (
+    <SectionCard title="Breakdown">
+      <div style={{ display: "grid", gap: 12 }}>
+        {rows.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => setIndicator(item.key === "div_rsi" ? "RSI(14)" : item.key === "div_macd" ? "MACD(12,26,9)" : BREAKDOWN_DEFS.find((d) => d.key === item.key)?.overlay ?? "None")}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 12,
+              alignItems: "center",
+              padding: 0,
+              border: "none",
+              background: "transparent",
+              color: "inherit",
+              cursor: "pointer",
+              textAlign: "left",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+              <span style={{ width: 10, height: 10, borderRadius: 999, background: chipToneColor(item.tone), flex: "0 0 auto" }} />
+              <span style={{ fontWeight: 900 }}>{item.label}</span>
             </div>
+            <div style={{ color: COLORS.mutedFg, fontWeight: 800, textAlign: "right" }}>{item.valueText}</div>
+          </button>
+        ))}
+      </div>
+    </SectionCard>
+  );
+}
+
+function ChartPanel() {
+  return (
+    <SectionCard
+      title={`Price (${currentIndicatorName})`}
+      right={<ChartToolbar />}
+      bodyStyle={{ padding: 0 }}
+      style={{ minHeight: isMobile ? "auto" : 0 }}
+    >
+      <div style={{ padding: 16, borderBottom: `1px solid ${COLORS.border}` }}>
+        <div className="msh-chart-head-row">
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 12, color: COLORS.mutedFg, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Indicator
+            </div>
+            <select
+              value={selectValueFromIndicator(indicator)}
+              onChange={(e) => setIndicatorFromSelect(e.target.value)}
+              style={{
+                marginTop: 6,
+                width: isMobile ? "100%" : 240,
+                padding: "12px 14px",
+                borderRadius: 14,
+                border: `1px solid ${COLORS.controlBorder}`,
+                background: COLORS.controlBgSolid,
+                color: COLORS.controlFg,
+                fontWeight: 900,
+                fontSize: 16,
+                outline: "none",
+              }}
+            >
+              <option value="Overview">Overview</option>
+              {INDICATORS.filter((x) => x !== "None").map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
           </div>
 
-          {expanded ? (
-            <div
-              onMouseDown={() => setExpanded(false)}
-              style={{
-                position: "fixed",
-                inset: 0,
-                background: "rgba(0,0,0,0.55)",
-                zIndex: 99999,
-                display: "grid",
-                placeItems: "center",
-                padding: 16,
-              }}
-            >
-              <div
-                onMouseDown={(e) => e.stopPropagation()}
-                style={{
-                  width: "min(1200px, 96vw)",
-                  height: "min(85vh, 900px)",
-                  background: "#0b1220",
-                  color: "#e6e6e6",
-                  borderRadius: 14,
-                  border: "1px solid rgba(255,255,255,0.14)",
-                  boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
-                  display: "grid",
-                  gridTemplateRows: "auto 1fr",
-                  minHeight: 0,
-                  overflow: "hidden",
+          <div className="msh-timeframes">
+            {TIMEFRAMES.map((t) => (
+              <TimeframeButton
+                key={t.label}
+                label={t.label}
+                active={tfDays === t.days}
+                onClick={() => {
+                  setTfDays(t.days);
+                  setWindowDays(t.days);
+                  setWindowOffset(0);
                 }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    padding: 12,
-                    borderBottom: "1px solid rgba(255,255,255,0.14)",
-                  }}
-                >
-                  <div style={{ fontWeight: 800 }}>{symbol} — Expanded Chart</div>
-                  <button
-                    onClick={() => setExpanded(false)}
-                    style={{
-                      borderRadius: 10,
-                      border: "1px solid #3333",
-                      background: "#fff",
-                      padding: "8px 10px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    Close ✕
-                  </button>
-                </div>
-
-                <div
-                  style={{
-                    padding: 14,
-                    display: "flex",
-                    flexDirection: "column",
-                    minHeight: 0,
-                  }}
-                >
-                  <div
-                    style={{
-                      flex: 1,
-                      minHeight: 0,
-                      borderRadius: 12,
-                      overflow: "hidden",
-                      background: "#0b1220",
-                      border: "1px solid rgba(255,255,255,0.14)",
-                    }}
-                  >
-                    <div style={{ height: "100%", filter: "invert(1) hue-rotate(180deg)" }}>
-                      <ChartCard height="100%" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          <div className="marketGrid">
-            <div
-              style={{
-                padding: 16,
-                border: `1px solid ${COLORS.border}`,
-                borderRadius: 16,
-                background: COLORS.cardBg,
-                boxShadow: COLORS.isDark ? "0 14px 34px rgba(0,0,0,0.28)" : "0 14px 34px rgba(0,0,0,0.08)",
-              }}
-            >
-              <h2 style={{ marginTop: 0 }}>Market (Benchmarks)</h2>
-
-              {(() => {
-                const items = Array.isArray(bench?.items) ? bench!.items : [];
-
-                if (!bench) {
-                  return <div style={{ opacity: 0.7 }}>Market data unavailable.</div>;
-                }
-
-                if (!items.length) {
-                  return <div style={{ opacity: 0.7 }}>Market data unavailable.</div>;
-                }
-
-                return (
-                  <>
-                    <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 10 }}>
-                      Updated: {new Date(bench.updatedAt).toLocaleString()} • {bench.scope}
-                    </div>
-
-                    <div className="benchGrid">
-                      {items.map((it) => {
-                        const pct = typeof it.changePct === "number" ? it.changePct : null;
-                        const isUp = typeof pct === "number" ? pct >= 0 : null;
-
-                        const arrow = isUp == null ? "•" : isUp ? "▲" : "▼";
-                        const arrowColor = isUp == null ? COLORS.mutedFg : isUp ? "#22c55e" : "#ef4444";
-
-                        const pctText = pct == null ? "—" : `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
-
-                        const chartSymbol = (it.symbol || "").split(".")[0]?.toUpperCase() || it.symbol.toUpperCase();
-
-                        return (
-                          <button
-                            key={it.key}
-                            type="button"
-                            onClick={() => router.push(`/?symbol=${encodeURIComponent(chartSymbol)}`)}
-                            title={`Load ${chartSymbol} in chart`}
-                            style={{
-                              border: `1px solid ${COLORS.border}`,
-                              borderRadius: 16,
-                              padding: 14,
-                              background: COLORS.controlBg,
-                              color: COLORS.cardFg,
-                              boxShadow: COLORS.isDark ? "0 10px 26px rgba(0,0,0,0.22)" : "0 10px 26px rgba(0,0,0,0.06)",
-                              cursor: "pointer",
-                              textAlign: "left",
-                              width: "100%",
-                            }}
-                          >
-                            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
-                              <div style={{ minWidth: 0 }}>
-                                <div style={{ fontWeight: 950, fontSize: 16, lineHeight: 1.1 }}>{it.label}</div>
-                                <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
-                                  {it.symbol} • Click to load {chartSymbol}
-                                </div>
-                              </div>
-
-                              <div style={{ textAlign: "right" }}>
-                                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10 }}>
-                                  <span style={{ fontWeight: 950, color: arrowColor, fontSize: 16 }}>{arrow}</span>
-
-                                  <span style={{ fontWeight: 950, color: arrowColor, fontSize: 22 }}>
-                                    {pctText}
-                                  </span>
-                                </div>
-
-                                <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
-                                  {typeof it.close === "number" ? it.close.toFixed(2) : "—"}
-                                </div>
-                              </div>
-                            </div>
-
-                            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
-                              {it.date && it.time ? `As of ${it.date} ${it.time}` : "Timestamp unavailable"}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-
-            <div
-              style={{
-                padding: 16,
-                border: `1px solid ${COLORS.border}`,
-                borderRadius: 16,
-                background: COLORS.cardBg,
-                boxShadow: COLORS.isDark ? "0 14px 34px rgba(0,0,0,0.28)" : "0 14px 34px rgba(0,0,0,0.08)",
-              }}
-            >
-              <h2 style={{ marginTop: 0 }}>Latest News</h2>
-
-              {news ? (
-                <div className="newsGrid">
-                  {news.feeds.map((f) => (
-                    <div key={f.label}>
-                      <div style={{ fontWeight: 700, marginBottom: 8 }}>{f.label}</div>
-                      <div style={{ display: "grid", gap: 10 }}>
-                        {f.items.length ? (
-                          f.items.map((it, idx) => (
-                            <a
-                              key={idx}
-                              href={it.link}
-                              target="_blank"
-                              rel="noreferrer"
-                              style={{ textDecoration: "none", color: "inherit" }}
-                            >
-                              <div
-                                style={{
-                                  padding: 12,
-                                  borderRadius: 12,
-                                  border: `1px solid ${COLORS.border}`,
-                                  background: COLORS.controlBg,
-                                }}
-                              >
-                                <div style={{ fontWeight: 650 }}>{it.title}</div>
-                                <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
-                                  {(it.source ?? "Source")} {it.pubDate ? `• ${new Date(it.pubDate).toLocaleString()}` : ""}
-                                </div>
-                              </div>
-                            </a>
-                          ))
-                        ) : (
-                          <div style={{ opacity: 0.7 }}>No headlines right now.</div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ opacity: 0.7 }}>News unavailable.</div>
-              )}
-            </div>
+              />
+            ))}
           </div>
         </div>
       </div>
-    </main>
+
+      <div style={{ padding: 16 }}>
+        <PriceChart
+          data={displayedHistory}
+          ma50={ma50}
+          ma200={ma200}
+          overlay={indicator}
+          bollUpper={bollUpper}
+          bollMid={bollMid}
+          bollLower={bollLower}
+          ema20={ema20Arr}
+          vwap={vwapArr}
+          rsi14={rsi14Arr}
+          macdLine={macdLine}
+          macdSignal={macdSignal}
+          macdHist={macdHist}
+          stochK={stochK}
+          stochD={stochD}
+          atr14={atr14Arr}
+          volume={volumeArr}
+          divergence={divergence.div}
+          height={chartHeight}
+        />
+
+        <div style={{ marginTop: 12, color: COLORS.mutedFg, fontSize: 13, fontWeight: 700 }}>
+          {displayedHistory.length
+            ? `From ${displayedHistory[0].date} → ${displayedHistory[displayedHistory.length - 1].date}`
+            : "No chart data"}
+        </div>
+      </div>
+    </SectionCard>
   );
+}
+
+function BenchmarksPanel() {
+  return (
+    <SectionCard title="Market (Benchmarks)">
+      <div style={{ fontSize: 12, color: COLORS.mutedFg, marginBottom: 12 }}>
+        Updated:{" "}
+        {bench?.updatedAt
+          ? new Date(bench.updatedAt).toLocaleString()
+          : "—"}{" "}
+        • Benchmarks (Stooq, free)
+      </div>
+
+      <div className="msh-bench-grid">
+        {(bench?.items ?? []).map((it) => {
+          const pct = typeof it.changePct === "number" ? it.changePct : null;
+          const isUp = typeof pct === "number" ? pct >= 0 : null;
+          const arrow = isUp == null ? "•" : isUp ? "▲" : "▼";
+          const arrowColor = isUp == null ? COLORS.mutedFg : isUp ? "#22c55e" : "#ef4444";
+          const pctText = pct == null ? "—" : `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
+          const chartSymbol = (it.symbol || "").split(".")[0]?.toUpperCase() || it.symbol.toUpperCase();
+
+          return (
+            <button
+              key={it.key}
+              type="button"
+              onClick={() => router.push(`/?symbol=${encodeURIComponent(chartSymbol)}`)}
+              title={`Load ${chartSymbol} in chart`}
+              style={{
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: 16,
+                padding: 14,
+                background: COLORS.controlBg,
+                color: COLORS.cardFg,
+                cursor: "pointer",
+                textAlign: "left",
+                width: "100%",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 950, fontSize: 16, lineHeight: 1.1 }}>{it.label}</div>
+                  <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
+                    {it.symbol} • Click to load {chartSymbol}
+                  </div>
+                </div>
+
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10 }}>
+                    <span style={{ fontWeight: 950, color: arrowColor, fontSize: 16 }}>{arrow}</span>
+                    <span style={{ fontWeight: 950, color: arrowColor, fontSize: 22 }}>{pctText}</span>
+                  </div>
+                  <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
+                    {typeof it.close === "number" ? it.close.toFixed(2) : "—"}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
+                {it.date && it.time ? `As of ${it.date} ${it.time}` : "Timestamp unavailable"}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </SectionCard>
+  );
+}
+
+function NewsPanel() {
+  return (
+    <SectionCard title="Latest News">
+      {news ? (
+        <div className="msh-news-grid">
+          {news.feeds.map((f) => (
+            <div key={f.label} style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 900, marginBottom: 10 }}>{f.label}</div>
+              <div style={{ display: "grid", gap: 10 }}>
+                {f.items.length ? (
+                  f.items.map((it, idx) => (
+                    <a
+                      key={idx}
+                      href={it.link}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ textDecoration: "none", color: "inherit" }}
+                    >
+                      <div
+                        style={{
+                          padding: 12,
+                          borderRadius: 14,
+                          border: `1px solid ${COLORS.border}`,
+                          background: COLORS.controlBg,
+                        }}
+                      >
+                        <div style={{ fontWeight: 800, lineHeight: 1.45 }}>{it.title}</div>
+                        <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
+                          {(it.source ?? "Source")}
+                          {it.pubDate ? ` • ${new Date(it.pubDate).toLocaleString()}` : ""}
+                        </div>
+                      </div>
+                    </a>
+                  ))
+                ) : (
+                  <div style={{ opacity: 0.7 }}>No headlines right now.</div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ opacity: 0.7 }}>News unavailable.</div>
+      )}
+    </SectionCard>
+  );
+}
+
+return (
+  <main
+    style={{
+      padding: 0,
+      fontFamily: "system-ui, Arial",
+      background: COLORS.pageBg,
+      color: COLORS.pageFg,
+      minHeight: "100vh",
+    }}
+  >
+    <style>{`
+      .msh-page-wrap {
+        width: min(1400px, calc(100% - 24px));
+        margin: 0 auto;
+        padding: 18px 0 28px;
+      }
+
+      .msh-topbar {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 18px;
+      }
+
+      .msh-top-left {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+
+      .msh-top-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .msh-toolbar-grid {
+        display: grid;
+        grid-template-columns: 1.15fr 0.9fr auto;
+        gap: 14px;
+        align-items: end;
+        margin-bottom: 18px;
+      }
+
+      .msh-main-grid {
+        display: grid;
+        grid-template-columns: minmax(320px, 430px) minmax(0, 1fr);
+        gap: 18px;
+        align-items: start;
+      }
+
+      .msh-left-stack {
+        display: grid;
+        gap: 18px;
+      }
+
+      .msh-lower-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 18px;
+        margin-top: 18px;
+      }
+
+      .msh-chart-head-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        align-items: flex-end;
+        flex-wrap: wrap;
+      }
+
+      .msh-timeframes {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .msh-score-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .msh-info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .msh-bench-grid,
+      .msh-news-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .msh-mobile-nav {
+        display: none;
+      }
+
+      @media (max-width: 980px) {
+        .msh-toolbar-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .msh-main-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .msh-lower-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 768px) {
+        .msh-page-wrap {
+          width: min(100%, calc(100% - 16px));
+          padding-top: 12px;
+        }
+
+        .msh-topbar {
+          gap: 10px;
+          margin-bottom: 12px;
+        }
+
+        .msh-top-right {
+          display: none;
+        }
+
+        .msh-mobile-nav {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          margin-bottom: 14px;
+        }
+
+        .msh-score-grid,
+        .msh-info-grid,
+        .msh-bench-grid,
+        .msh-news-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .msh-chart-head-row {
+          align-items: stretch;
+        }
+
+        .msh-timeframes {
+          justify-content: flex-start;
+        }
+      }
+    `}</style>
+
+    <div className="msh-page-wrap">
+      <div className="msh-topbar">
+        <div className="msh-top-left">
+          <Link href="/" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none" }}>
+            <img
+              src="/logo.png"
+              alt="MyStockHarbor"
+              style={{
+                height: isMobile ? 46 : 56,
+                width: "auto",
+                objectFit: "contain",
+                display: "block",
+              }}
+            />
+          </Link>
+
+          <div>
+            <div style={{ fontWeight: 900, fontSize: isMobile ? 14 : 16 }}>Learn charts. Discover stocks. Trade smarter.</div>
+            <div style={{ color: COLORS.mutedFg, fontSize: 13, fontWeight: 700 }}>Version 1</div>
+          </div>
+        </div>
+
+        <div className="msh-top-right">
+          <SmallNavLink href="/learn">Learn</SmallNavLink>
+          <SmallNavLink href="/platforms">Platforms</SmallNavLink>
+          <SmallNavLink href="/utilities">Utilities</SmallNavLink>
+
+          <button
+            type="button"
+            onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 12,
+              border: `1px solid ${COLORS.controlBorder}`,
+              background: COLORS.controlBg,
+              color: COLORS.controlFg,
+              fontWeight: 900,
+              cursor: "pointer",
+            }}
+          >
+            {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
+          </button>
+        </div>
+      </div>
+
+      <div className="msh-mobile-nav">
+        <SmallNavLink href="/learn">Learn</SmallNavLink>
+        <SmallNavLink href="/platforms">Platforms</SmallNavLink>
+        <SmallNavLink href="/utilities">Utilities</SmallNavLink>
+
+        <button
+          type="button"
+          onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+          style={{
+            padding: "8px 12px",
+            borderRadius: 12,
+            border: `1px solid ${COLORS.controlBorder}`,
+            background: COLORS.controlBg,
+            color: COLORS.controlFg,
+            fontWeight: 900,
+            cursor: "pointer",
+          }}
+        >
+          {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
+        </button>
+      </div>
+
+      <div className="msh-toolbar-grid">
+        <div style={{ position: "relative", minWidth: 0 }}>
+          <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 6 }}>Search Any Stock</div>
+
+          <input
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setOpen(true);
+            }}
+            onFocus={() => setOpen(true)}
+            placeholder="🔎 Search ANY ticker or company"
+            style={{
+              width: "100%",
+              padding: "14px 16px",
+              borderRadius: 16,
+              border: `1px solid ${COLORS.controlBorder}`,
+              background: COLORS.controlBgSolid,
+              color: COLORS.controlFg,
+              outline: "none",
+              fontSize: 15,
+              fontWeight: 700,
+            }}
+          />
+
+          {open && results.length > 0 ? (
+            <div
+              style={{
+                position: "absolute",
+                top: "calc(100% + 8px)",
+                left: 0,
+                right: 0,
+                zIndex: 20,
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: 16,
+                background: COLORS.cardBg,
+                boxShadow: COLORS.isDark ? "0 18px 34px rgba(0,0,0,0.40)" : "0 18px 34px rgba(0,0,0,0.12)",
+                overflow: "hidden",
+              }}
+            >
+              {results.slice(0, 8).map((r) => (
+                <button
+                  key={`${r.symbol}-${r.exchange}`}
+                  type="button"
+                  onClick={() => chooseSymbol(r.symbol)}
+                  style={{
+                    width: "100%",
+                    textAlign: "left",
+                    padding: "12px 14px",
+                    border: "none",
+                    borderBottom: `1px solid ${COLORS.border}`,
+                    background: COLORS.cardBg,
+                    color: COLORS.cardFg,
+                    cursor: "pointer",
+                  }}
+                >
+                  <div style={{ fontWeight: 900 }}>{r.symbol}</div>
+                  <div style={{ fontSize: 13, color: COLORS.mutedFg }}>
+                    {r.name} {r.exchange ? `• ${r.exchange}` : ""}
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 6 }}>Stock Pickers</div>
+
+          <button
+            type="button"
+            onClick={() => router.push("/pickers")}
+            style={{
+              width: "100%",
+              padding: "14px 16px",
+              borderRadius: 16,
+              border: `1px solid rgba(59,130,246,0.45)`,
+              background: COLORS.isDark
+                ? "linear-gradient(135deg, rgba(37,99,235,0.26), rgba(29,78,216,0.16))"
+                : "linear-gradient(135deg, rgba(37,99,235,0.14), rgba(29,78,216,0.08))",
+              color: COLORS.controlFg,
+              fontWeight: 950,
+              fontSize: 15,
+              cursor: "pointer",
+              textAlign: "left",
+            }}
+          >
+            🔎 Find Your Next Stock →
+          </button>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "end", justifyContent: isMobile ? "stretch" : "flex-end" }}>
+          <button
+            type="button"
+            onClick={() => chooseSymbol(symbol)}
+            disabled={loading}
+            style={{
+              padding: "14px 16px",
+              borderRadius: 16,
+              border: `1px solid ${COLORS.controlBorder}`,
+              background: COLORS.controlBg,
+              color: COLORS.controlFg,
+              fontWeight: 900,
+              cursor: loading ? "not-allowed" : "pointer",
+              opacity: loading ? 0.7 : 1,
+              width: isMobile ? "100%" : "auto",
+            }}
+          >
+            {loading ? "Loading…" : `Load ${symbol}`}
+          </button>
+        </div>
+      </div>
+
+      {err ? (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: 14,
+            borderRadius: 14,
+            border: `1px solid rgba(239,68,68,0.35)`,
+            background: COLORS.isDark ? "rgba(127,29,29,0.28)" : "rgba(254,226,226,0.75)",
+            color: COLORS.cardFg,
+            fontWeight: 800,
+          }}
+        >
+          {err}
+        </div>
+      ) : null}
+
+      <div className="msh-main-grid">
+        <div className="msh-left-stack">
+          {indicator === "None" ? <OverviewPanel /> : <IndicatorPanel />}
+          <BreakdownPanel />
+        </div>
+
+        <div>
+          <ChartPanel />
+        </div>
+      </div>
+
+      <div className="msh-lower-grid">
+        <BenchmarksPanel />
+        <NewsPanel />
+      </div>
+
+      <footer
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
+          marginTop: 18,
+          paddingTop: 14,
+          borderTop: `1px solid ${COLORS.border}`,
+          color: COLORS.mutedFg,
+          fontSize: 13,
+          fontWeight: 700,
+        }}
+      >
+        <div>MyStockHarbor</div>
+
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <Link href="/about" style={{ color: "inherit", textDecoration: "none" }}>
+            About
+          </Link>
+          <Link href="/contact" style={{ color: "inherit", textDecoration: "none" }}>
+            Contact
+          </Link>
+          <Link href="/risk-disclaimer" style={{ color: "inherit", textDecoration: "none" }}>
+            Risk Disclaimer
+          </Link>
+        </div>
+      </footer>
+
+      {expanded ? (
+        <div
+          onClick={() => setExpanded(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.75)",
+            zIndex: 100,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 18,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "min(1280px, 100%)",
+              maxHeight: "92vh",
+              overflow: "auto",
+              borderRadius: 20,
+              border: `1px solid ${COLORS.border}`,
+              background: COLORS.cardBg,
+              boxShadow: "0 24px 60px rgba(0,0,0,0.45)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+                alignItems: "center",
+                padding: "14px 16px",
+                borderBottom: `1px solid ${COLORS.border}`,
+              }}
+            >
+              <div style={{ fontWeight: 900 }}>Expanded Chart ({currentIndicatorName})</div>
+
+              <button
+                type="button"
+                onClick={() => setExpanded(false)}
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: 10,
+                  border: `1px solid ${COLORS.controlBorder}`,
+                  background: COLORS.controlBg,
+                  color: COLORS.controlFg,
+                  fontWeight: 900,
+                  cursor: "pointer",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ padding: 16 }}>
+              <PriceChart
+                data={displayedHistory}
+                ma50={ma50}
+                ma200={ma200}
+                overlay={indicator}
+                bollUpper={bollUpper}
+                bollMid={bollMid}
+                bollLower={bollLower}
+                ema20={ema20Arr}
+                vwap={vwapArr}
+                rsi14={rsi14Arr}
+                macdLine={macdLine}
+                macdSignal={macdSignal}
+                macdHist={macdHist}
+                stochK={stochK}
+                stochD={stochD}
+                atr14={atr14Arr}
+                volume={volumeArr}
+                divergence={divergence.div}
+                height={isMobile ? 280 : 520}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  </main>
+);
 }
