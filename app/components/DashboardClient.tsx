@@ -1437,7 +1437,7 @@ function chooseSymbol(s: string) {
   const cleaned = s.trim().toUpperCase();
   if (!cleaned) return;
   setSymbol(cleaned);
-  setQuery("");
+  setQuery(cleaned);
   setResults([]);
   setOpen(false);
   setWindowOffset(0);
@@ -2001,14 +2001,37 @@ function OverviewPanel() {
   return (
     <SectionCard title={`${symbol} Overview`}>
       <div style={{ display: "grid", gap: 14 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div
+          className="msh-overview-head"
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            alignItems: isMobile ? "flex-start" : "center",
+            flexWrap: "wrap",
+          }}
+        >
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 950, lineHeight: 1.1 }}>{symbol}</div>
             <div style={{ marginTop: 4, color: COLORS.mutedFg, fontWeight: 700 }}>{symbolName || "—"}</div>
           </div>
 
-          <div style={{ textAlign: "right", minWidth: 0 }}>
-            <div style={{ fontSize: 12, color: COLORS.mutedFg, fontWeight: 900, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+          <div
+            style={{
+              textAlign: isMobile ? "left" : "right",
+              minWidth: 0,
+              marginLeft: isMobile ? 0 : "auto",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 12,
+                color: COLORS.mutedFg,
+                fontWeight: 900,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+              }}
+            >
               Last price
             </div>
             <div style={{ fontSize: isMobile ? 22 : 28, fontWeight: 950 }}>
@@ -2095,7 +2118,15 @@ function OverviewPanel() {
 
         <div style={{ color: COLORS.mutedFg, lineHeight: 1.55 }}>{signal.detail}</div>
 
-        <div style={{ paddingTop: 12, borderTop: `1px solid ${COLORS.border}`, fontSize: 12, color: COLORS.mutedFg, fontWeight: 700 }}>
+        <div
+          style={{
+            paddingTop: 12,
+            borderTop: `1px solid ${COLORS.border}`,
+            fontSize: 12,
+            color: COLORS.mutedFg,
+            fontWeight: 700,
+          }}
+        >
           As of {quote?.date ?? "—"} {quote?.time ?? ""} • Source: {quote?.source ?? "stooq.com"}
         </div>
       </div>
@@ -2161,32 +2192,76 @@ function BreakdownPanel() {
     const focusedRows: { label: string; tone: OverviewItem["tone"]; value: string }[] = [];
 
     if (indicator === "RSI(14)") {
-      focusedRows.push({ label: "RSI", tone: typeof rsiLast === "number" ? (rsiLast >= 70 ? "red" : rsiLast <= 30 ? "green" : "yellow") : "muted", value: typeof rsiLast === "number" ? rsiLast.toFixed(2) : "—" });
-      focusedRows.push({ label: "RSI Div", tone: divergence.rsi === "none" ? "muted" : divergenceTone(divergence.rsi), value: divergence.rsi === "none" ? "—" : divergenceLabel(divergence.rsi) });
+      focusedRows.push({
+        label: "RSI",
+        tone: typeof rsiLast === "number" ? (rsiLast >= 70 ? "red" : rsiLast <= 30 ? "green" : "yellow") : "muted",
+        value: typeof rsiLast === "number" ? rsiLast.toFixed(2) : "—",
+      });
+      focusedRows.push({
+        label: "RSI Div",
+        tone: divergence.rsi === "none" ? "muted" : divergenceTone(divergence.rsi),
+        value: divergence.rsi === "none" ? "—" : divergenceLabel(divergence.rsi),
+      });
     } else if (indicator === "MACD(12,26,9)") {
-      focusedRows.push({ label: "Histogram", tone: typeof macdHistLast === "number" ? (macdHistLast > 0 ? "green" : macdHistLast < 0 ? "red" : "yellow") : "muted", value: typeof macdHistLast === "number" ? macdHistLast.toFixed(4) : "—" });
-      focusedRows.push({ label: "MACD Div", tone: divergence.macd === "none" ? "muted" : divergenceTone(divergence.macd), value: divergence.macd === "none" ? "—" : divergenceLabel(divergence.macd) });
+      focusedRows.push({
+        label: "Histogram",
+        tone: typeof macdHistLast === "number" ? (macdHistLast > 0 ? "green" : macdHistLast < 0 ? "red" : "yellow") : "muted",
+        value: typeof macdHistLast === "number" ? macdHistLast.toFixed(4) : "—",
+      });
+      focusedRows.push({
+        label: "MACD Div",
+        tone: divergence.macd === "none" ? "muted" : divergenceTone(divergence.macd),
+        value: divergence.macd === "none" ? "—" : divergenceLabel(divergence.macd),
+      });
     } else if (indicator === "MA50") {
-      focusedRows.push({ label: "Distance", tone: typeof ma50Pct === "number" ? (Math.abs(ma50Pct) >= 5 ? "red" : Math.abs(ma50Pct) >= 2 ? "orange" : "yellow") : "muted", value: ma50Pct == null ? "—" : `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}%` });
+      focusedRows.push({
+        label: "Distance",
+        tone: typeof ma50Pct === "number" ? (Math.abs(ma50Pct) >= 5 ? "red" : Math.abs(ma50Pct) >= 2 ? "orange" : "yellow") : "muted",
+        value: ma50Pct == null ? "—" : `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}%`,
+      });
       focusedRows.push({ label: "MA50", tone: "muted", value: formatMaybeNumber(lastMA50) });
     } else if (indicator === "MA200") {
-      focusedRows.push({ label: "Distance", tone: typeof ma200Pct === "number" ? (Math.abs(ma200Pct) >= 10 ? "red" : Math.abs(ma200Pct) >= 4 ? "orange" : "yellow") : "muted", value: ma200Pct == null ? "—" : `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}%` });
+      focusedRows.push({
+        label: "Distance",
+        tone: typeof ma200Pct === "number" ? (Math.abs(ma200Pct) >= 10 ? "red" : Math.abs(ma200Pct) >= 4 ? "orange" : "yellow") : "muted",
+        value: ma200Pct == null ? "—" : `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}%`,
+      });
       focusedRows.push({ label: "MA200", tone: "muted", value: formatMaybeNumber(lastMA200) });
     } else if (indicator === "Volume") {
       const ratio = typeof volumeLast === "number" && typeof volumeSmaLast === "number" && volumeSmaLast > 0 ? volumeLast / volumeSmaLast : null;
-      focusedRows.push({ label: "Volume ratio", tone: ratio == null ? "muted" : ratio >= 1.8 ? "orange" : "yellow", value: ratio == null ? "—" : `${ratio.toFixed(2)}×` });
+      focusedRows.push({
+        label: "Volume ratio",
+        tone: ratio == null ? "muted" : ratio >= 1.8 ? "orange" : "yellow",
+        value: ratio == null ? "—" : `${ratio.toFixed(2)}×`,
+      });
     } else if (indicator === "ATR(14)") {
       const ratio = typeof atrLast === "number" && typeof atrSmaLast === "number" && atrSmaLast > 0 ? atrLast / atrSmaLast : null;
-      focusedRows.push({ label: "ATR ratio", tone: ratio == null ? "muted" : ratio >= 1.5 ? "orange" : "yellow", value: ratio == null ? "—" : `${ratio.toFixed(2)}×` });
+      focusedRows.push({
+        label: "ATR ratio",
+        tone: ratio == null ? "muted" : ratio >= 1.5 ? "orange" : "yellow",
+        value: ratio == null ? "—" : `${ratio.toFixed(2)}×`,
+      });
     } else if (indicator === "VWAP") {
-      focusedRows.push({ label: "Distance", tone: typeof vwapPct === "number" ? (Math.abs(vwapPct) >= 5 ? "red" : Math.abs(vwapPct) >= 2 ? "orange" : "yellow") : "muted", value: vwapPct == null ? "—" : `${vwapPct >= 0 ? "+" : ""}${vwapPct.toFixed(2)}%` });
+      focusedRows.push({
+        label: "Distance",
+        tone: typeof vwapPct === "number" ? (Math.abs(vwapPct) >= 5 ? "red" : Math.abs(vwapPct) >= 2 ? "orange" : "yellow") : "muted",
+        value: vwapPct == null ? "—" : `${vwapPct >= 0 ? "+" : ""}${vwapPct.toFixed(2)}%`,
+      });
     } else if (indicator === "Bollinger(20,2)") {
       focusedRows.push({ label: "Upper", tone: "muted", value: formatMaybeNumber(bbUpperLast) });
       focusedRows.push({ label: "Lower", tone: "muted", value: formatMaybeNumber(bbLowerLast) });
     } else if (indicator === "EMA20") {
-      focusedRows.push({ label: "Distance", tone: typeof ema20Pct === "number" ? (Math.abs(ema20Pct) >= 5 ? "red" : Math.abs(ema20Pct) >= 2 ? "orange" : "yellow") : "muted", value: ema20Pct == null ? "—" : `${ema20Pct >= 0 ? "+" : ""}${ema20Pct.toFixed(2)}%` });
+      focusedRows.push({
+        label: "Distance",
+        tone: typeof ema20Pct === "number" ? (Math.abs(ema20Pct) >= 5 ? "red" : Math.abs(ema20Pct) >= 2 ? "orange" : "yellow") : "muted",
+        value: ema20Pct == null ? "—" : `${ema20Pct >= 0 ? "+" : ""}${ema20Pct.toFixed(2)}%`,
+      });
     } else if (indicator === "Stochastic(14,3)") {
-      focusedRows.push({ label: "%K", tone: typeof stochLast === "number" ? (stochLast >= 80 ? "red" : stochLast <= 20 ? "green" : "yellow") : "muted", value: typeof stochLast === "number" ? stochLast.toFixed(2) : "—" });
+      focusedRows.push({
+        label: "%K",
+        tone: typeof stochLast === "number" ? (stochLast >= 80 ? "red" : stochLast <= 20 ? "green" : "yellow") : "muted",
+        value: typeof stochLast === "number" ? stochLast.toFixed(2) : "—",
+      });
       focusedRows.push({ label: "%D", tone: "muted", value: formatMaybeNumber(lastNum(stochD)) });
     }
 
@@ -2197,7 +2272,15 @@ function BreakdownPanel() {
             focusedRows.map((row) => (
               <div key={row.label} style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                  <span style={{ width: 10, height: 10, borderRadius: 999, background: chipToneColor(row.tone), flex: "0 0 auto" }} />
+                  <span
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 999,
+                      background: chipToneColor(row.tone),
+                      flex: "0 0 auto",
+                    }}
+                  />
                   <span style={{ fontWeight: 900 }}>{row.label}</span>
                 </div>
                 <div style={{ color: COLORS.mutedFg, fontWeight: 800, textAlign: "right" }}>{row.value}</div>
@@ -2210,6 +2293,68 @@ function BreakdownPanel() {
       </SectionCard>
     );
   }
+
+  return (
+    <SectionCard title="Breakdown">
+      <div className="msh-breakdown-grid">
+        {rows.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() =>
+              setIndicator(
+                item.key === "div_rsi"
+                  ? "RSI(14)"
+                  : item.key === "div_macd"
+                  ? "MACD(12,26,9)"
+                  : BREAKDOWN_DEFS.find((d) => d.key === item.key)?.overlay ?? "None"
+              )
+            }
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 10,
+              alignItems: "center",
+              padding: "8px 10px",
+              border: `1px solid ${COLORS.border}`,
+              borderRadius: 12,
+              background: COLORS.controlBg,
+              color: "inherit",
+              cursor: "pointer",
+              textAlign: "left",
+              minWidth: 0,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+              <span
+                style={{
+                  width: 9,
+                  height: 9,
+                  borderRadius: 999,
+                  background: chipToneColor(item.tone),
+                  flex: "0 0 auto",
+                }}
+              />
+              <span style={{ fontWeight: 900, fontSize: 14, minWidth: 0 }}>{item.label}</span>
+            </div>
+            <div
+              style={{
+                color: COLORS.mutedFg,
+                fontWeight: 800,
+                textAlign: "right",
+                fontSize: 13,
+                whiteSpace: "nowrap",
+                marginLeft: 8,
+              }}
+            >
+              {item.valueText}
+            </div>
+          </button>
+        ))}
+      </div>
+    </SectionCard>
+  );
+}
 
   return (
     <SectionCard title="Breakdown">
@@ -2335,13 +2480,9 @@ function ChartPanel() {
 
 function BenchmarksPanel() {
   return (
-    <SectionCard title="Market (Benchmarks)">
+    <SectionCard title="Market Benchmarks">
       <div style={{ fontSize: 12, color: COLORS.mutedFg, marginBottom: 12 }}>
-        Updated:{" "}
-        {bench?.updatedAt
-          ? new Date(bench.updatedAt).toLocaleString()
-          : "—"}{" "}
-        • Benchmarks (Stooq, free)
+        Updated: {bench?.updatedAt ? new Date(bench.updatedAt).toLocaleString() : "—"} • Benchmarks (Stooq, free)
       </div>
 
       <div className="msh-bench-grid">
@@ -2370,27 +2511,29 @@ function BenchmarksPanel() {
                 width: "100%",
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 950, fontSize: 16, lineHeight: 1.1 }}>{it.label}</div>
-                  <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
-                    {it.symbol} • Click to load {chartSymbol}
+              <div style={{ display: "grid", gap: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 950, fontSize: 16, lineHeight: 1.1 }}>{it.label}</div>
+                    <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
+                      {it.symbol} • Click to load {chartSymbol}
+                    </div>
+                  </div>
+
+                  <div style={{ textAlign: "right", flex: "0 0 auto" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
+                      <span style={{ fontWeight: 950, color: arrowColor, fontSize: 14 }}>{arrow}</span>
+                      <span style={{ fontWeight: 950, color: arrowColor, fontSize: 20 }}>{pctText}</span>
+                    </div>
+                    <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
+                      {typeof it.close === "number" ? it.close.toFixed(2) : "—"}
+                    </div>
                   </div>
                 </div>
 
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10 }}>
-                    <span style={{ fontWeight: 950, color: arrowColor, fontSize: 16 }}>{arrow}</span>
-                    <span style={{ fontWeight: 950, color: arrowColor, fontSize: 22 }}>{pctText}</span>
-                  </div>
-                  <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
-                    {typeof it.close === "number" ? it.close.toFixed(2) : "—"}
-                  </div>
+                <div style={{ fontSize: 12, opacity: 0.7 }}>
+                  {it.date && it.time ? `As of ${it.date} ${it.time}` : "Timestamp unavailable"}
                 </div>
-              </div>
-
-              <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
-                {it.date && it.time ? `As of ${it.date} ${it.time}` : "Timestamp unavailable"}
               </div>
             </button>
           );
@@ -2404,42 +2547,47 @@ function NewsPanel() {
   return (
     <SectionCard title="Latest News">
       {news ? (
-        <div className="msh-news-grid">
-          {news.feeds.map((f) => (
-            <div key={f.label} style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 900, marginBottom: 10 }}>{f.label}</div>
-              <div style={{ display: "grid", gap: 10 }}>
-                {f.items.length ? (
-                  f.items.map((it, idx) => (
-                    <a
-                      key={idx}
-                      href={it.link}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ textDecoration: "none", color: "inherit" }}
-                    >
-                      <div
-                        style={{
-                          padding: 12,
-                          borderRadius: 14,
-                          border: `1px solid ${COLORS.border}`,
-                          background: COLORS.controlBg,
-                        }}
-                      >
-                        <div style={{ fontWeight: 800, lineHeight: 1.45 }}>{it.title}</div>
-                        <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
-                          {(it.source ?? "Source")}
-                          {it.pubDate ? ` • ${new Date(it.pubDate).toLocaleString()}` : ""}
-                        </div>
-                      </div>
-                    </a>
-                  ))
-                ) : (
-                  <div style={{ opacity: 0.7 }}>No headlines right now.</div>
-                )}
+        <div style={{ display: "grid", gap: 14 }}>
+          <div className="msh-news-head-grid">
+            {news.feeds.map((f) => (
+              <div key={f.label} style={{ fontWeight: 950, textAlign: "center" }}>
+                {f.label}
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
+
+          <div className="msh-news-grid">
+            {news.feeds.flatMap((f) =>
+              (f.items || []).map((it, idx) => (
+                <a
+                  key={`${f.label}-${idx}-${it.link}`}
+                  href={it.link}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ textDecoration: "none", color: "inherit" }}
+                >
+                  <div
+                    style={{
+                      padding: 12,
+                      borderRadius: 14,
+                      border: `1px solid ${COLORS.border}`,
+                      background: COLORS.controlBg,
+                      height: "100%",
+                    }}
+                  >
+                    <div style={{ fontWeight: 800, lineHeight: 1.45 }}>{it.title}</div>
+                    <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
+                      <div style={{ fontWeight: 800 }}>{f.label}</div>
+                      <div>
+                        {(it.source ?? "Source")}
+                        {it.pubDate ? ` • ${new Date(it.pubDate).toLocaleString()}` : ""}
+                      </div>
+                    </div>
+                  </div>
+                </a>
+              ))
+            )}
+          </div>
         </div>
       ) : (
         <div style={{ opacity: 0.7 }}>News unavailable.</div>
@@ -2458,175 +2606,223 @@ return (
       minHeight: "100vh",
     }}
   >
-    <style>{`
-      .msh-page-wrap {
-        width: min(1400px, calc(100% - 24px));
-        margin: 0 auto;
-        padding: 18px 0 28px;
-      }
+<style>{`
+  .msh-page-wrap {
+    width: min(1480px, calc(100% - 24px));
+    margin: 0 auto;
+    padding: 18px 0 28px;
+  }
 
-      .msh-topbar {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 16px;
-        flex-wrap: wrap;
-        margin-bottom: 18px;
-      }
+  .msh-topbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+  }
 
-      .msh-top-left {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        flex-wrap: wrap;
-      }
+  .msh-top-left {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    flex-wrap: wrap;
+    position: relative;
+  }
 
-      .msh-top-right {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        flex-wrap: wrap;
-      }
+  .msh-top-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
 
-      .msh-toolbar-grid {
-        display: grid;
-        grid-template-columns: 1.15fr 0.9fr auto;
-        gap: 14px;
-        align-items: end;
-        margin-bottom: 18px;
-      }
+  .msh-toolbar-grid {
+    display: grid;
+    grid-template-columns: 1.15fr 0.9fr auto;
+    gap: 14px;
+    align-items: end;
+    margin-bottom: 18px;
+  }
 
-      .msh-main-grid {
-        display: grid;
-        grid-template-columns: minmax(320px, 430px) minmax(0, 1fr);
-        gap: 18px;
-        align-items: start;
-      }
+  .msh-main-grid {
+    display: grid;
+    grid-template-columns: minmax(320px, 430px) minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+  }
 
-      .msh-left-stack {
-        display: grid;
-        gap: 18px;
-      }
+  .msh-left-stack {
+    display: grid;
+    gap: 18px;
+  }
 
-      .msh-lower-grid {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-        gap: 18px;
-        margin-top: 18px;
-      }
+  .msh-lower-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 18px;
+    margin-top: 18px;
+  }
 
-      .msh-chart-head-row {
-        display: flex;
-        justify-content: space-between;
-        gap: 14px;
-        align-items: flex-end;
-        flex-wrap: wrap;
-      }
+  .msh-chart-head-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
 
-      .msh-timeframes {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-      }
+  .msh-timeframes {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
 
-      .msh-score-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 14px;
-      }
+  .msh-score-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
 
-      .msh-info-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 12px;
-      }
+  .msh-info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
 
-      .msh-bench-grid,
-      .msh-news-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 14px;
-      }
+  .msh-breakdown-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
 
-      .msh-mobile-nav {
-        display: none;
-      }
+  .msh-bench-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+  }
 
-      @media (max-width: 980px) {
-        .msh-toolbar-grid {
-          grid-template-columns: 1fr;
-        }
+  .msh-news-head-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
 
-        .msh-main-grid {
-          grid-template-columns: 1fr;
-        }
+  .msh-news-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+  }
 
-        .msh-lower-grid {
-          grid-template-columns: 1fr;
-        }
-      }
+  .msh-mobile-nav {
+    display: none;
+  }
 
-      @media (max-width: 768px) {
-        .msh-page-wrap {
-          width: min(100%, calc(100% - 16px));
-          padding-top: 12px;
-        }
+  @media (max-width: 1180px) {
+    .msh-bench-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 
-        .msh-topbar {
-          gap: 10px;
-          margin-bottom: 12px;
-        }
+    .msh-news-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
 
-        .msh-top-right {
-          display: none;
-        }
+  @media (max-width: 980px) {
+    .msh-toolbar-grid {
+      grid-template-columns: 1fr;
+    }
 
-        .msh-mobile-nav {
-          display: flex;
-          gap: 8px;
-          flex-wrap: wrap;
-          margin-bottom: 14px;
-        }
+    .msh-main-grid {
+      grid-template-columns: 1fr;
+    }
 
-        .msh-score-grid,
-        .msh-info-grid,
-        .msh-bench-grid,
-        .msh-news-grid {
-          grid-template-columns: 1fr;
-        }
+    .msh-score-grid,
+    .msh-info-grid,
+    .msh-breakdown-grid,
+    .msh-bench-grid,
+    .msh-news-grid,
+    .msh-news-head-grid {
+      grid-template-columns: 1fr;
+    }
+  }
 
-        .msh-chart-head-row {
-          align-items: stretch;
-        }
+  @media (max-width: 768px) {
+    .msh-page-wrap {
+      width: min(100%, calc(100% - 16px));
+      padding-top: 12px;
+    }
 
-        .msh-timeframes {
-          justify-content: flex-start;
-        }
-      }
-    `}</style>
+    .msh-topbar {
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .msh-top-right {
+      display: none;
+    }
+
+    .msh-mobile-nav {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .msh-score-grid,
+    .msh-info-grid,
+    .msh-bench-grid,
+    .msh-news-grid,
+    .msh-news-head-grid,
+    .msh-breakdown-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .msh-chart-head-row {
+      align-items: stretch;
+    }
+
+    .msh-timeframes {
+      justify-content: flex-start;
+    }
+
+    .msh-overview-head {
+      align-items: flex-start !important;
+    }
+  }
+`}</style>
 
     <div className="msh-page-wrap">
       <div className="msh-topbar">
-        <div className="msh-top-left">
-          <Link href="/" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none" }}>
-            <img
-              src="/logo.png"
-              alt="MyStockHarbor"
-              style={{
-                height: isMobile ? 46 : 56,
-                width: "auto",
-                objectFit: "contain",
-                display: "block",
-              }}
-            />
-          </Link>
+<div className="msh-top-left">
+  <Link
+    href="/"
+    style={{
+      display: "inline-flex",
+      alignItems: "center",
+      textDecoration: "none",
+      flex: "0 0 auto",
+      marginRight: isMobile ? 4 : 8,
+    }}
+  >
+    <img
+      src="/logo.png"
+      alt="MyStockHarbor"
+      style={{
+        height: isMobile ? 56 : 96,
+        width: "auto",
+        objectFit: "contain",
+        display: "block",
+      }}
+    />
+  </Link>
 
-          <div>
-            <div style={{ fontWeight: 900, fontSize: isMobile ? 14 : 16 }}>Learn charts. Discover stocks. Trade smarter.</div>
-            <div style={{ color: COLORS.mutedFg, fontSize: 13, fontWeight: 700 }}>Version 1</div>
-          </div>
-        </div>
+  <div style={{ paddingTop: isMobile ? 4 : 10 }}>
+    <div style={{ fontWeight: 900, fontSize: isMobile ? 14 : 16 }}>Learn charts. Discover stocks. Trade smarter.</div>
+    <div style={{ color: COLORS.mutedFg, fontSize: 13, fontWeight: 700 }}>Version 1</div>
+  </div>
+</div>
 
         <div className="msh-top-right">
           <SmallNavLink href="/learn">Learn</SmallNavLink>
@@ -2817,35 +3013,6 @@ return (
         <BenchmarksPanel />
         <NewsPanel />
       </div>
-
-      <footer
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 12,
-          flexWrap: "wrap",
-          marginTop: 18,
-          paddingTop: 14,
-          borderTop: `1px solid ${COLORS.border}`,
-          color: COLORS.mutedFg,
-          fontSize: 13,
-          fontWeight: 700,
-        }}
-      >
-        <div>MyStockHarbor</div>
-
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-          <Link href="/about" style={{ color: "inherit", textDecoration: "none" }}>
-            About
-          </Link>
-          <Link href="/contact" style={{ color: "inherit", textDecoration: "none" }}>
-            Contact
-          </Link>
-          <Link href="/risk-disclaimer" style={{ color: "inherit", textDecoration: "none" }}>
-            Risk Disclaimer
-          </Link>
-        </div>
-      </footer>
 
       {expanded ? (
         <div
