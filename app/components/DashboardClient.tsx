@@ -2760,12 +2760,6 @@ return (
     grid-template-columns: minmax(0, 1fr) auto;
   }
   
-.msh-top-nav-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
   @media (min-width: 761px) {
     .msh-top-nav-btn {
       min-height: 48px !important;
@@ -2917,7 +2911,27 @@ return (
 <button
   onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
   className="msh-top-nav-btn"
-  style={{ display: "flex", alignItems: "center" }}
+  style={{
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    minHeight: 42,
+    padding: "9px 13px",
+    borderRadius: 14,
+    border: `1px solid ${COLORS.controlBorder}`,
+    background: COLORS.controlBg,
+    color: COLORS.controlFg,
+    fontWeight: 900,
+    fontSize: 14,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+    boxShadow: COLORS.isDark
+      ? "0 8px 18px rgba(0,0,0,0.20)"
+      : "0 8px 18px rgba(0,0,0,0.06)",
+    transition:
+      "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
+  }}
 >
   {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
 </button>
