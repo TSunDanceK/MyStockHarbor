@@ -2954,12 +2954,12 @@ return (
     setOpen(true);
   }}
   onFocus={() => setOpen(true)}
-  onKeyDown={(e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      chooseSymbol(query);
-    }
-  }}
+onKeyDown={(e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    chooseSymbol(query || symbol);
+  }
+}}
   placeholder="🔎 Search ANY ticker or company"
   style={{
     width: "100%",
