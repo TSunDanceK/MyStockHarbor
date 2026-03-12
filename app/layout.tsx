@@ -103,6 +103,13 @@ export default function RootLayout({
                 >
                   Affiliate Disclosure
                 </Link>
+                
+                <Link
+  href="/privacy-policy"
+  style={{ color: "#93c5fd", textDecoration: "none" }}
+>
+  Privacy Policy
+</Link>
               </div>
             </div>
           </footer>
