@@ -259,66 +259,7 @@ export default function PlatformsPage() {
           }}
           className="topCompareGrid"
         >
-          <div
-            style={{
-              borderRadius: 16,
-              border: "1px solid rgba(34,197,94,0.28)",
-              background:
-                "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(59,130,246,0.08))",
-              padding: 16,
-            }}
-          >
-            <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>
-              BEST FOR CHARTING
-            </div>
-            <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900 }}>
-              TradingView
-            </div>
-            <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.55 }}>
-              Best overall if you want to learn technical analysis properly.
-            </div>
-          </div>
-
-          <div
-            style={{
-              borderRadius: 16,
-              border: "1px solid rgba(59,130,246,0.28)",
-              background:
-                "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(168,85,247,0.08))",
-              padding: 16,
-            }}
-          >
-            <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>
-              BEST FOR BEGINNERS
-            </div>
-            <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900 }}>
-              Trading 212
-            </div>
-            <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.55 }}>
-              Best if you want the simplest route to buying stocks and ETFs.
-            </div>
-          </div>
-
-          <div
-            style={{
-              borderRadius: 16,
-              border: "1px solid rgba(168,85,247,0.28)",
-              background:
-                "linear-gradient(135deg, rgba(168,85,247,0.14), rgba(59,130,246,0.08))",
-              padding: 16,
-            }}
-          >
-            <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>
-              BEST FOR SERIOUS USERS
-            </div>
-            <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900 }}>
-              Interactive Brokers
-            </div>
-            <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.55 }}>
-              Best if you want a broker you can grow into long term.
-            </div>
-          </div>
-        </div>
+        
 
         <div
           style={{
