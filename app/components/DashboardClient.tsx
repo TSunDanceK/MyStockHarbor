@@ -2524,7 +2524,7 @@ return (
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 950, fontSize: 16, lineHeight: 1.1 }}>{it.label}</div>
                     <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
-                      {it.symbol} • Click to load {chartSymbol}
+                   {it.symbol}
                     </div>
                   </div>
 
