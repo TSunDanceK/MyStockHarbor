@@ -2509,52 +2509,48 @@ function BenchmarksPanel() {
   );
 }
 
-
 function NewsPanel() {
   return (
     <SectionCard title="Latest News">
       {news ? (
-        <div style={{ display: "grid", gap: 14 }}>
-          <div className="msh-news-head-grid">
-            {news.feeds.map((f) => (
-              <div key={f.label} style={{ fontWeight: 950, textAlign: "center" }}>
-                {f.label}
-              </div>
-            ))}
-          </div>
+        <div className="msh-news-sections">
+          {news.feeds.map((f) => (
+            <div key={f.label} className="msh-news-section">
+              <div className="msh-news-section-title">{f.label}</div>
 
-          <div className="msh-news-grid">
-            {news.feeds.flatMap((f) =>
-              (f.items || []).map((it, idx) => (
-                <a
-                  key={`${f.label}-${idx}-${it.link}`}
-                  href={it.link}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{ textDecoration: "none", color: "inherit" }}
-                >
-                  <div
-                    style={{
-                      padding: 12,
-                      borderRadius: 14,
-                      border: `1px solid ${COLORS.border}`,
-                      background: COLORS.controlBg,
-                      height: "100%",
-                    }}
+              <div className="msh-news-section-grid">
+                {(f.items || []).map((it, idx) => (
+                  <a
+                    key={`${f.label}-${idx}-${it.link}`}
+                    href={it.link}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ textDecoration: "none", color: "inherit" }}
                   >
-                    <div style={{ fontWeight: 800, lineHeight: 1.45 }}>{it.title}</div>
-                    <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
-                      <div style={{ fontWeight: 800 }}>{f.label}</div>
-                      <div>
-                        {it.source ?? "Source"}
-                        {it.pubDate ? ` • ${new Date(it.pubDate).toLocaleString()}` : ""}
+                    <div
+                      style={{
+                        padding: 12,
+                        borderRadius: 14,
+                        border: `1px solid ${COLORS.border}`,
+                        background: COLORS.controlBg,
+                        height: "100%",
+                      }}
+                    >
+                      <div style={{ fontWeight: 800, lineHeight: 1.45 }}>{it.title}</div>
+
+                      <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
+                        <div style={{ fontWeight: 800 }}>{f.label}</div>
+                        <div>
+                          {(it.source ?? "Source")}
+                          {it.pubDate ? ` • ${new Date(it.pubDate).toLocaleString()}` : ""}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </a>
-              ))
-            )}
-          </div>
+                  </a>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       ) : (
         <div style={{ opacity: 0.7 }}>News unavailable.</div>
@@ -2562,6 +2558,7 @@ function NewsPanel() {
     </SectionCard>
   );
 }
+
 
 
 return (
@@ -2671,35 +2668,62 @@ return (
     gap: 14px;
   }
 
-  .msh-news-head-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
-  }
+.msh-news-head-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
 
-  .msh-news-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 14px;
-  }
+.msh-news-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
 
-  .msh-mobile-nav {
-    display: none;
-  }
+.msh-news-sections {
+  display: grid;
+  gap: 18px;
+}
+
+.msh-news-section {
+  display: grid;
+  gap: 12px;
+}
+
+.msh-news-section-title {
+  font-weight: 950;
+  text-align: center;
+}
+
+.msh-news-section-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.msh-mobile-nav {
+  display: none;
+}
 
   .msh-overview-head {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  @media (max-width: 1180px) {
-    .msh-bench-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
+@media (max-width: 1180px) {
 
-    .msh-news-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
+  .msh-bench-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .msh-news-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .msh-news-section-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+}
 
   @media (max-width: 980px) {
     .msh-toolbar-grid {
@@ -2718,6 +2742,9 @@ return (
     .msh-news-head-grid {
       grid-template-columns: 1fr;
     }
+    .msh-news-section-grid {
+  grid-template-columns: 1fr;
+}
   }
 
 
@@ -2760,6 +2787,13 @@ return (
     .msh-news-head-grid {
       display: none;
     }
+    .msh-news-section-grid {
+  grid-template-columns: 1fr;
+}
+
+.msh-news-section-title {
+  text-align: left;
+}
 
     .msh-chart-head-row {
       align-items: stretch;
