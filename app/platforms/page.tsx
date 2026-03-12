@@ -323,10 +323,10 @@ export default function PlatformsPage() {
                       flexWrap: "wrap",
                     }}
                   >
-                    <a
+                    <Link
                       href={item.affiliateHref}
-                      style={{ textDecoration: "none" }}
                       aria-label={`Visit ${item.name}`}
+                      style={{ textDecoration: "none" }}
                     >
                       <div
                         style={{
@@ -355,7 +355,7 @@ export default function PlatformsPage() {
                           }}
                         />
                       </div>
-                    </a>
+                    </Link>
 
                     <div style={{ minWidth: 0 }}>
                       <h2
@@ -385,9 +385,9 @@ export default function PlatformsPage() {
                   </p>
                 </div>
 
-                <a href={item.affiliateHref} style={affiliateBtn()}>
+                 <Link href={item.affiliateHref} style={affiliateBtn()}>
                   {item.ctaText} →
-                </a>
+                </Link>
               </div>
 
               <div
