@@ -1,25 +1,23 @@
-import { NextRequest, NextResponse } from "next/server";
+import { permanentRedirect } from "next/navigation";
+import { NextRequest } from "next/server";
 
 const affiliateLinks: Record<string, string> = {
   tradingview: "https://www.tradingview.com/partner-program/",
-  trading212: "https://helpcentre.trading212.com/hc/en-us/articles/360008095077-How-to-become-a-Trading-212-Affiliate",
+  trading212:
+    "https://helpcentre.trading212.com/hc/en-us/articles/360008095077-How-to-become-a-Trading-212-Affiliate",
   etoro: "https://www.etoro.com/partners/",
-  interactivebrokers: "https://www.interactivebrokers.com/en/general/about/affiliate-programs.php",
+  interactivebrokers:
+    "https://www.interactivebrokers.com/en/general/about/affiliate-programs.php",
   saxo: "https://www.home.saxo/en-gb/campaigns/affiliate",
 };
 
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: Promise<{ platform: string }> }
 ) {
   const { platform } = await context.params;
   const key = platform.toLowerCase();
+  const target = affiliateLinks[key] ?? "/platforms";
 
-  const target = affiliateLinks[key];
-
-  if (!target) {
-    return NextResponse.redirect(new URL("/platforms", request.url));
-  }
-
-  return NextResponse.redirect(target);
+  permanentRedirect(target);
 }
