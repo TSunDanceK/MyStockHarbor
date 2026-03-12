@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const affiliateLinks: Record<string, string> = {
   tradingview: "https://www.tradingview.com/",
@@ -7,10 +7,11 @@ const affiliateLinks: Record<string, string> = {
 };
 
 export async function GET(
-  request: Request,
-  { params }: { params: { platform: string } }
+  request: NextRequest,
+  context: { params: Promise<{ platform: string }> }
 ) {
-  const key = params.platform.toLowerCase();
+  const { platform } = await context.params;
+  const key = platform.toLowerCase();
 
   const target = affiliateLinks[key];
 
