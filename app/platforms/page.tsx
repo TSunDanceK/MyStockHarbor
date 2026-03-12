@@ -14,6 +14,7 @@ type PlatformItem = {
   ctaText: string;
   score: string;
   highlight: string;
+  recommended?: boolean;
 };
 
 const PLATFORMS: PlatformItem[] = [
@@ -44,6 +45,7 @@ const PLATFORMS: PlatformItem[] = [
     ctaText: "Visit TradingView",
     score: "9.7/10",
     highlight: "Best overall for charting",
+    recommended: true,
   },
   {
     name: "Trading 212",
@@ -71,6 +73,7 @@ const PLATFORMS: PlatformItem[] = [
     ctaText: "Visit Trading 212",
     score: "9.3/10",
     highlight: "Best for beginners",
+    recommended: true,
   },
   {
     name: "eToro",
@@ -448,15 +451,37 @@ export default function PlatformsPage() {
                     </a>
 
                     <div style={{ minWidth: 0 }}>
-                      <h2
-                        style={{
-                          margin: 0,
-                          fontSize: 28,
-                          letterSpacing: "-0.3px",
-                        }}
-                      >
-                        {item.name}
-                      </h2>
+<div>
+  {item.recommended ? (
+    <div
+      style={{
+        display: "inline-block",
+        marginBottom: 6,
+        padding: "4px 10px",
+        borderRadius: 999,
+        background:
+          "linear-gradient(135deg, rgba(250,204,21,0.25), rgba(249,115,22,0.18))",
+        border: "1px solid rgba(250,204,21,0.35)",
+        fontSize: 11,
+        fontWeight: 900,
+        color: "#fde68a",
+        letterSpacing: "0.4px",
+      }}
+    >
+      ★ RECOMMENDED
+    </div>
+  ) : null}
+
+  <h2
+    style={{
+      margin: 0,
+      fontSize: 28,
+      letterSpacing: "-0.3px",
+    }}
+  >
+    {item.name}
+  </h2>
+</div>
 
                       <div
                         style={{
@@ -551,6 +576,12 @@ export default function PlatformsPage() {
                     Why choose it
                   </div>
                   <div style={{ opacity: 0.84, lineHeight: 1.55 }}>{item.note}</div>
+
+                  <div style={{ marginTop: 14 }}>
+                    <a href={item.affiliateHref} style={ctaBtn()}>
+                      {item.ctaText} →
+                    </a>
+                  </div>
                 </div>
 
                 <div
