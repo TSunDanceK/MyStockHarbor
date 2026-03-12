@@ -2946,26 +2946,32 @@ return (
         <div style={{ position: "relative", minWidth: 0 }}>
           <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 6 }}>Search Any Stock</div>
 
-          <input
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setOpen(true);
-            }}
-            onFocus={() => setOpen(true)}
-            placeholder="🔎 Search ANY ticker or company"
-            style={{
-              width: "100%",
-              padding: "14px 16px",
-              borderRadius: 16,
-              border: `1px solid ${COLORS.controlBorder}`,
-              background: COLORS.controlBgSolid,
-              color: COLORS.controlFg,
-              outline: "none",
-              fontSize: 15,
-              fontWeight: 700,
-            }}
-          />
+<input
+  value={query}
+  onChange={(e) => {
+    setQuery(e.target.value);
+    setOpen(true);
+  }}
+  onFocus={() => setOpen(true)}
+  onKeyDown={(e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      chooseSymbol(query);
+    }
+  }}
+  placeholder="🔎 Search ANY ticker or company"
+  style={{
+    width: "100%",
+    padding: "14px 16px",
+    borderRadius: 16,
+    border: `1px solid ${COLORS.controlBorder}`,
+    background: COLORS.controlBgSolid,
+    color: COLORS.controlFg,
+    outline: "none",
+    fontSize: 15,
+    fontWeight: 700,
+  }}
+/>
 
           {open && results.length > 0 ? (
             <div
