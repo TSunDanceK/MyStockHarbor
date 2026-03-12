@@ -17,7 +17,11 @@ export async function GET(
 ) {
   const { platform } = await context.params;
   const key = platform.toLowerCase();
+
   const target = affiliateLinks[key] ?? "/platforms";
+
+  // Track clicks (for now just logs)
+  console.log("Affiliate click:", key);
 
   permanentRedirect(target);
 }
