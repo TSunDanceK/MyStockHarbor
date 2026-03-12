@@ -1436,6 +1436,7 @@ useEffect(() => {
 function chooseSymbol(s: string) {
   const cleaned = s.trim().toUpperCase();
   if (!cleaned) return;
+
   setSymbol(cleaned);
   setQuery(cleaned);
   setResults([]);
