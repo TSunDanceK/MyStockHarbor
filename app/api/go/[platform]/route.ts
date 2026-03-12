@@ -1,16 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const affiliateLinks: Record<string, string> = {
-  tradingview: "https://www.tradingview.com/",
-  trading212: "https://www.trading212.com/",
-  etoro: "https://www.etoro.com/",
-  interactivebrokers: "https://www.interactivebrokers.com/",
-  ig: "https://www.ig.com/",
-  plus500: "https://www.plus500.com/",
-  capitalcom: "https://capital.com/",
-  tradestation: "https://www.tradestation.com/",
-  binance: "https://www.binance.com/",
-  bybit: "https://www.bybit.com/",
+  tradingview: "https://www.tradingview.com/partner-program/",
+  trading212: "https://helpcentre.trading212.com/hc/en-us/articles/360008095077-How-to-become-a-Trading-212-Affiliate",
+  etoro: "https://www.etoro.com/partners/",
+  interactivebrokers: "https://www.interactivebrokers.com/en/general/about/affiliate-programs.php",
+  saxo: "https://www.home.saxo/en-gb/campaigns/affiliate",
 };
 
 export async function GET(
@@ -23,7 +18,7 @@ export async function GET(
   const target = affiliateLinks[key];
 
   if (!target) {
-    return NextResponse.redirect(new URL("/", request.url));
+    return NextResponse.redirect(new URL("/platforms", request.url));
   }
 
   return NextResponse.redirect(target);
