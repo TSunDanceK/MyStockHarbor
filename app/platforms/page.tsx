@@ -260,84 +260,150 @@ export default function PlatformsPage() {
           className="topCompareGrid"
         >
           <div
-  style={{
-    marginTop: 18,
-    borderRadius: 16,
-    border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(255,255,255,0.04)",
-    overflow: "hidden",
-  }}
->
-  <div
-    style={{
-      padding: "12px 16px",
-      fontWeight: 900,
-      borderBottom: "1px solid rgba(255,255,255,0.1)",
-      fontSize: 14,
-      letterSpacing: "0.3px",
-    }}
-  >
-    Quick platform comparison
-  </div>
+            style={{
+              borderRadius: 16,
+              border: "1px solid rgba(34,197,94,0.28)",
+              background:
+                "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(59,130,246,0.08))",
+              padding: 16,
+            }}
+          >
+            <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>
+              BEST FOR CHARTING
+            </div>
+            <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900 }}>
+              TradingView
+            </div>
+            <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.55 }}>
+              Best overall if you want to learn technical analysis properly.
+            </div>
+          </div>
 
-  <table
-    style={{
-      width: "100%",
-      borderCollapse: "collapse",
-      fontSize: 14,
-    }}
-  >
-    <thead>
-      <tr
-        style={{
-          textAlign: "left",
-          borderBottom: "1px solid rgba(255,255,255,0.08)",
-        }}
-      >
-        <th style={{ padding: 12 }}>Platform</th>
-        <th style={{ padding: 12 }}>Best For</th>
-        <th style={{ padding: 12 }}>Score</th>
-        <th style={{ padding: 12 }}></th>
-      </tr>
-    </thead>
+          <div
+            style={{
+              borderRadius: 16,
+              border: "1px solid rgba(59,130,246,0.28)",
+              background:
+                "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(168,85,247,0.08))",
+              padding: 16,
+            }}
+          >
+            <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>
+              BEST FOR BEGINNERS
+            </div>
+            <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900 }}>
+              Trading 212
+            </div>
+            <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.55 }}>
+              Best if you want the simplest route to buying stocks and ETFs.
+            </div>
+          </div>
 
-    <tbody>
-      {PLATFORMS.map((item) => (
-        <tr
-          key={item.name}
+          <div
+            style={{
+              borderRadius: 16,
+              border: "1px solid rgba(168,85,247,0.28)",
+              background:
+                "linear-gradient(135deg, rgba(168,85,247,0.14), rgba(59,130,246,0.08))",
+              padding: 16,
+            }}
+          >
+            <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>
+              BEST FOR SERIOUS USERS
+            </div>
+            <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900 }}>
+              Interactive Brokers
+            </div>
+            <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.55 }}>
+              Best if you want a broker you can grow into long term.
+            </div>
+          </div>
+        </div>
+
+        <div
           style={{
-            borderBottom: "1px solid rgba(255,255,255,0.05)",
+            marginTop: 18,
+            borderRadius: 16,
+            border: "1px solid rgba(255,255,255,0.12)",
+            background: "rgba(255,255,255,0.04)",
+            overflowX: "auto",
           }}
         >
-          <td style={{ padding: 12, fontWeight: 700 }}>{item.name}</td>
+          <div
+            style={{
+              padding: "12px 16px",
+              fontWeight: 900,
+              borderBottom: "1px solid rgba(255,255,255,0.1)",
+              fontSize: 14,
+              letterSpacing: "0.3px",
+            }}
+          >
+            Quick platform comparison
+          </div>
 
-          <td style={{ padding: 12, opacity: 0.8 }}>{item.shortLabel}</td>
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "collapse",
+              fontSize: 14,
+              minWidth: 720,
+            }}
+          >
+            <thead>
+              <tr
+                style={{
+                  textAlign: "left",
+                  borderBottom: "1px solid rgba(255,255,255,0.08)",
+                }}
+              >
+                <th style={{ padding: 12 }}>Platform</th>
+                <th style={{ padding: 12 }}>Best For</th>
+                <th style={{ padding: 12 }}>Score</th>
+                <th style={{ padding: 12 }}></th>
+              </tr>
+            </thead>
 
-          <td style={{ padding: 12, fontWeight: 900, color: "#86efac" }}>
-            {item.score}
-          </td>
+            <tbody>
+              {PLATFORMS.map((item) => (
+                <tr
+                  key={item.name}
+                  style={{
+                    borderBottom: "1px solid rgba(255,255,255,0.05)",
+                  }}
+                >
+                  <td style={{ padding: 12, fontWeight: 700 }}>{item.name}</td>
 
-          <td style={{ padding: 12 }}>
-            <a
-              href={item.affiliateHref}
-              style={{
-                padding: "6px 12px",
-                borderRadius: 8,
-                background: "rgba(34,197,94,0.15)",
-                border: "1px solid rgba(34,197,94,0.35)",
-                color: "#d1fae5",
-                textDecoration: "none",
-                fontWeight: 800,
-              }}
-            >
-              Visit →
-            </a>
-          </td>
-        </tr>
-      ))}
-    </tbody>
-  </table>
-</div>
+                  <td style={{ padding: 12, opacity: 0.8 }}>{item.shortLabel}</td>
+
+                  <td style={{ padding: 12, fontWeight: 900, color: "#86efac" }}>
+                    {item.score}
+                  </td>
+
+                  <td style={{ padding: 12 }}>
+                    <a
+                      href={item.affiliateHref}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: "8px 12px",
+                        borderRadius: 8,
+                        background: "rgba(34,197,94,0.15)",
+                        border: "1px solid rgba(34,197,94,0.35)",
+                        color: "#d1fae5",
+                        textDecoration: "none",
+                        fontWeight: 800,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Visit →
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
           <div
             style={{
               borderRadius: 16,
