@@ -76,26 +76,33 @@ export default function RootLayout({
                   fontSize: 13,
                 }}
               >
-<Link
-  href="/about"
-  style={{ color: "#93c5fd", textDecoration: "none" }}
->
-  About
-</Link>
+                <Link
+                  href="/about"
+                  style={{ color: "#93c5fd", textDecoration: "none" }}
+                >
+                  About
+                </Link>
 
-<Link
-  href="/contact"
-  style={{ color: "#93c5fd", textDecoration: "none" }}
->
-  Contact
-</Link>
+                <Link
+                  href="/contact"
+                  style={{ color: "#93c5fd", textDecoration: "none" }}
+                >
+                  Contact
+                </Link>
 
-<Link
-  href="/risk-disclaimer"
-  style={{ color: "#93c5fd", textDecoration: "none" }}
->
-  Risk Disclaimer
-</Link>
+                <Link
+                  href="/risk-disclaimer"
+                  style={{ color: "#93c5fd", textDecoration: "none" }}
+                >
+                  Risk Disclaimer
+                </Link>
+
+                <Link
+                  href="/affiliate-disclosure"
+                  style={{ color: "#93c5fd", textDecoration: "none" }}
+                >
+                  Affiliate Disclosure
+                </Link>
               </div>
             </div>
           </footer>
