@@ -1784,72 +1784,34 @@ const indicatorInsight = useMemo(() => {
   volumeSmaLast,
 ]);
 
-function SmallNavLink(props: { href: string; children: React.ReactNode }) {
-  const isLearn = props.href === "/learn";
-  const isPlatforms = props.href === "/platforms";
-  const isUtilities = props.href === "/utilities";
-
-  const icon = isLearn ? "📘" : isPlatforms ? "🏦" : isUtilities ? "🧰" : "→";
-
-  const bg = isLearn
-    ? "linear-gradient(135deg, rgba(59,130,246,0.20), rgba(37,99,235,0.10))"
-    : isPlatforms
-      ? "linear-gradient(135deg, rgba(34,197,94,0.20), rgba(16,185,129,0.10))"
-      : isUtilities
-        ? "linear-gradient(135deg, rgba(168,85,247,0.20), rgba(139,92,246,0.10))"
-        : COLORS.controlBg;
-
-  const border = isLearn
-    ? "rgba(59,130,246,0.45)"
-    : isPlatforms
-      ? "rgba(34,197,94,0.45)"
-      : isUtilities
-        ? "rgba(168,85,247,0.45)"
-        : COLORS.controlBorder;
-
-  return (
-    <Link
-      href={props.href}
-      className="msh-top-nav-btn"
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 8,
-        minHeight: 42,
-        padding: "9px 13px",
-        borderRadius: 14,
-        border: `1px solid ${border}`,
-        background: bg,
-        color: COLORS.controlFg,
-        textDecoration: "none",
-        fontWeight: 900,
-        fontSize: 14,
-        whiteSpace: "nowrap",
-        boxShadow: COLORS.isDark
-          ? "0 8px 18px rgba(0,0,0,0.20)"
-          : "0 8px 18px rgba(0,0,0,0.06)",
-        transition:
-          "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-      }}
-    >
-      <span
-        aria-hidden="true"
-        style={{
-          fontSize: 15,
-          lineHeight: 1,
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        {icon}
-      </span>
-
-      <span>{props.children}</span>
-    </Link>
-  );
-}
+<button
+  type="button"
+  onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+  className="msh-top-nav-btn"
+  style={{
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    minHeight: 42,
+    padding: "9px 13px",
+    borderRadius: 14,
+    border: `1px solid ${COLORS.controlBorder}`,
+    background: COLORS.controlBg,
+    color: COLORS.controlFg,
+    fontWeight: 900,
+    fontSize: 14,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+    boxShadow: COLORS.isDark
+      ? "0 8px 18px rgba(0,0,0,0.20)"
+      : "0 8px 18px rgba(0,0,0,0.06)",
+    transition:
+      "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
+  }}
+>
+  {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
+</button>
 
 function TimeframeButton(props: { label: string; active: boolean; onClick: () => void }) {
   return (
@@ -2908,15 +2870,6 @@ return (
           <SmallNavLink href="/platforms">Platforms</SmallNavLink>
           <SmallNavLink href="/utilities">Utilities</SmallNavLink>
 
-<SmallNavLink
-  href="#"
-  onClick={(e) => {
-    e.preventDefault();
-    setTheme((t) => (t === "dark" ? "light" : "dark"));
-  }}
->
-  {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
-</SmallNavLink>
         </div>
       </div>
 
