@@ -12,6 +12,8 @@ type PlatformItem = {
   note: string;
   affiliateHref: string;
   ctaText: string;
+  score: string;
+  highlight: string;
 };
 
 const PLATFORMS: PlatformItem[] = [
@@ -39,7 +41,9 @@ const PLATFORMS: PlatformItem[] = [
     note:
       "Best overall choice for charts. A very strong setup is: analyse on TradingView, then execute your stock trade using your broker.",
     affiliateHref: "/api/go/tradingview",
-    ctaText: "View TradingView",
+    ctaText: "Visit TradingView",
+    score: "9.7/10",
+    highlight: "Best overall for charting",
   },
   {
     name: "Trading 212",
@@ -64,7 +68,9 @@ const PLATFORMS: PlatformItem[] = [
     note:
       "A very good broker for beginners. Many users would chart on TradingView, then place the trade using Trading 212.",
     affiliateHref: "/api/go/trading212",
-    ctaText: "View Trading 212",
+    ctaText: "Visit Trading 212",
+    score: "9.3/10",
+    highlight: "Best for beginners",
   },
   {
     name: "eToro",
@@ -89,7 +95,9 @@ const PLATFORMS: PlatformItem[] = [
     note:
       "Good for users who want a simple and modern investing experience, but less ideal than TradingView for serious chart work.",
     affiliateHref: "/api/go/etoro",
-    ctaText: "View eToro",
+    ctaText: "Visit eToro",
+    score: "9.0/10",
+    highlight: "Best modern investing feel",
   },
   {
     name: "Interactive Brokers",
@@ -114,7 +122,9 @@ const PLATFORMS: PlatformItem[] = [
     note:
       "A strong broker choice for users who are becoming more serious. Many people would still prefer to chart on TradingView first.",
     affiliateHref: "/api/go/interactivebrokers",
-    ctaText: "View Interactive Brokers",
+    ctaText: "Visit Interactive Brokers",
+    score: "9.2/10",
+    highlight: "Best for serious traders",
   },
   {
     name: "Saxo",
@@ -139,7 +149,9 @@ const PLATFORMS: PlatformItem[] = [
     note:
       "A good option for users who want a more premium investing experience, though TradingView is still the better place to do chart analysis.",
     affiliateHref: "/api/go/saxo",
-    ctaText: "View Saxo",
+    ctaText: "Visit Saxo",
+    score: "8.9/10",
+    highlight: "Best premium platform feel",
   },
 ];
 
@@ -156,21 +168,22 @@ function topBtn(): React.CSSProperties {
   };
 }
 
-function affiliateBtn(): React.CSSProperties {
+function ctaBtn(): React.CSSProperties {
   return {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: "12px 16px",
+    padding: "13px 18px",
     borderRadius: 14,
-    border: "1px solid rgba(168,85,247,0.45)",
+    border: "1px solid rgba(34,197,94,0.45)",
     background:
-      "linear-gradient(135deg, rgba(168,85,247,0.22), rgba(59,130,246,0.16))",
+      "linear-gradient(135deg, rgba(34,197,94,0.22), rgba(59,130,246,0.18))",
     color: "#f8fafc",
     textDecoration: "none",
     fontWeight: 900,
     letterSpacing: "0.2px",
-    minHeight: 46,
+    minHeight: 48,
+    boxShadow: "0 10px 24px rgba(0,0,0,0.22)",
   };
 }
 
@@ -207,7 +220,7 @@ export default function PlatformsPage() {
                 letterSpacing: "-0.4px",
               }}
             >
-              Choosing your Platform
+              Best Trading Platforms for Different Types of Users
             </h1>
 
             <div
@@ -237,22 +250,70 @@ export default function PlatformsPage() {
         <div
           style={{
             marginTop: 18,
-            borderRadius: 16,
-            border: "1px solid rgba(34,197,94,0.28)",
-            background:
-              "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(59,130,246,0.08))",
-            padding: 16,
+            display: "grid",
+            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+            gap: 14,
           }}
+          className="topCompareGrid"
         >
-          <div style={{ fontWeight: 950, marginBottom: 8 }}>
-            Best starting idea
+          <div
+            style={{
+              borderRadius: 16,
+              border: "1px solid rgba(34,197,94,0.28)",
+              background:
+                "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(59,130,246,0.08))",
+              padding: 16,
+            }}
+          >
+            <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>
+              BEST FOR CHARTING
+            </div>
+            <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900 }}>
+              TradingView
+            </div>
+            <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.55 }}>
+              Best overall if you want to learn technical analysis properly.
+            </div>
           </div>
-          <div style={{ opacity: 0.84, lineHeight: 1.55 }}>
-            If you are new, a smart setup is to{" "}
-            <strong>learn charts on TradingView</strong>, then use a broker like{" "}
-            <strong>Trading 212</strong>, <strong>eToro</strong>,{" "}
-            <strong>Interactive Brokers</strong>, or <strong>Saxo</strong> to
-            place the trade.
+
+          <div
+            style={{
+              borderRadius: 16,
+              border: "1px solid rgba(59,130,246,0.28)",
+              background:
+                "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(168,85,247,0.08))",
+              padding: 16,
+            }}
+          >
+            <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>
+              BEST FOR BEGINNERS
+            </div>
+            <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900 }}>
+              Trading 212
+            </div>
+            <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.55 }}>
+              Best if you want the simplest route to buying stocks and ETFs.
+            </div>
+          </div>
+
+          <div
+            style={{
+              borderRadius: 16,
+              border: "1px solid rgba(168,85,247,0.28)",
+              background:
+                "linear-gradient(135deg, rgba(168,85,247,0.14), rgba(59,130,246,0.08))",
+              padding: 16,
+            }}
+          >
+            <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>
+              BEST FOR SERIOUS USERS
+            </div>
+            <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900 }}>
+              Interactive Brokers
+            </div>
+            <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.55 }}>
+              Best if you want a broker you can grow into long term.
+            </div>
           </div>
         </div>
 
@@ -260,19 +321,24 @@ export default function PlatformsPage() {
           style={{
             marginTop: 18,
             borderRadius: 16,
-            border: "1px solid rgba(168,85,247,0.28)",
-            background:
-              "linear-gradient(135deg, rgba(168,85,247,0.14), rgba(59,130,246,0.08))",
+            border: "1px solid rgba(255,255,255,0.12)",
+            background: "rgba(255,255,255,0.04)",
             padding: 16,
           }}
         >
           <div style={{ fontWeight: 950, marginBottom: 8 }}>
-            Affiliate links
+            Affiliate disclosure
           </div>
           <div style={{ opacity: 0.84, lineHeight: 1.55 }}>
-            These buttons now route through internal redirect links. Later, you
-            can swap the destination URLs in <strong>/app/api/go/[platform]/route.ts</strong>{" "}
-            for your real affiliate links without editing this page again.
+            Some links on this page may route through partner pages. You can
+            read more on our{" "}
+            <Link
+              href="/affiliate-disclosure"
+              style={{ color: "#93c5fd", textDecoration: "none" }}
+            >
+              Affiliate Disclosure
+            </Link>
+            .
           </div>
         </div>
 
@@ -299,19 +365,43 @@ export default function PlatformsPage() {
                 <div style={{ minWidth: 0, flex: "1 1 700px" }}>
                   <div
                     style={{
-                      display: "inline-flex",
+                      display: "flex",
                       alignItems: "center",
-                      gap: 8,
-                      padding: "6px 10px",
-                      borderRadius: 999,
-                      background: "rgba(168,85,247,0.14)",
-                      border: "1px solid rgba(168,85,247,0.22)",
-                      fontSize: 12,
-                      fontWeight: 900,
-                      letterSpacing: "0.3px",
+                      gap: 10,
+                      flexWrap: "wrap",
                     }}
                   >
-                    #{idx + 1} • {item.shortLabel}
+                    <div
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 8,
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        background: "rgba(168,85,247,0.14)",
+                        border: "1px solid rgba(168,85,247,0.22)",
+                        fontSize: 12,
+                        fontWeight: 900,
+                        letterSpacing: "0.3px",
+                      }}
+                    >
+                      #{idx + 1} • {item.shortLabel}
+                    </div>
+
+                    <div
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        background: "rgba(34,197,94,0.12)",
+                        border: "1px solid rgba(34,197,94,0.22)",
+                        fontSize: 12,
+                        fontWeight: 900,
+                      }}
+                    >
+                      {item.highlight}
+                    </div>
                   </div>
 
                   <div
@@ -330,8 +420,8 @@ export default function PlatformsPage() {
                     >
                       <div
                         style={{
-                          width: 68,
-                          height: 68,
+                          width: 76,
+                          height: 76,
                           borderRadius: 16,
                           border: "1px solid rgba(255,255,255,0.12)",
                           background: "#ffffff",
@@ -368,9 +458,33 @@ export default function PlatformsPage() {
                         {item.name}
                       </h2>
 
+                      <div
+                        style={{
+                          marginTop: 8,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 12,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: 22,
+                            fontWeight: 900,
+                            color: "#86efac",
+                          }}
+                        >
+                          {item.score}
+                        </div>
+
+                        <div style={{ opacity: 0.74, fontSize: 14 }}>
+                          MyStockHarbor platform score
+                        </div>
+                      </div>
+
                       <p
                         style={{
-                          margin: "8px 0 0",
+                          margin: "10px 0 0",
                           opacity: 0.84,
                           lineHeight: 1.6,
                         }}
@@ -380,25 +494,65 @@ export default function PlatformsPage() {
                     </div>
                   </div>
 
-                  <p style={{ margin: "14px 0 0", opacity: 0.84, lineHeight: 1.6 }}>
+                  <p
+                    style={{
+                      margin: "14px 0 0",
+                      opacity: 0.84,
+                      lineHeight: 1.6,
+                    }}
+                  >
                     {item.summary}
                   </p>
                 </div>
 
- <a href={item.affiliateHref} style={affiliateBtn()}>
-                  {item.ctaText} →
-                </a>
+                <div
+                  style={{
+                    minWidth: 220,
+                    display: "grid",
+                    gap: 10,
+                    alignContent: "start",
+                  }}
+                >
+                  <a href={item.affiliateHref} style={ctaBtn()}>
+                    {item.ctaText} →
+                  </a>
+
+                  <div
+                    style={{
+                      fontSize: 13,
+                      opacity: 0.72,
+                      lineHeight: 1.5,
+                      textAlign: "center",
+                    }}
+                  >
+                    Visit official platform page
+                  </div>
+                </div>
               </div>
 
               <div
                 style={{
                   marginTop: 18,
                   display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
+                  gridTemplateColumns: "1.1fr 1fr 1fr",
                   gap: 14,
                 }}
                 className="platformGrid"
               >
+                <div
+                  style={{
+                    borderRadius: 14,
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    background: "rgba(255,255,255,0.04)",
+                    padding: 14,
+                  }}
+                >
+                  <div style={{ fontWeight: 950, marginBottom: 8 }}>
+                    Why choose it
+                  </div>
+                  <div style={{ opacity: 0.84, lineHeight: 1.55 }}>{item.note}</div>
+                </div>
+
                 <div
                   style={{
                     borderRadius: 14,
@@ -408,7 +562,9 @@ export default function PlatformsPage() {
                   }}
                 >
                   <div style={{ fontWeight: 950, marginBottom: 8 }}>Pros</div>
-                  <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 8 }}>
+                  <ul
+                    style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 8 }}
+                  >
                     {item.pros.map((pro) => (
                       <li key={pro} style={{ opacity: 0.88, lineHeight: 1.5 }}>
                         {pro}
@@ -426,7 +582,9 @@ export default function PlatformsPage() {
                   }}
                 >
                   <div style={{ fontWeight: 950, marginBottom: 8 }}>Cons</div>
-                  <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 8 }}>
+                  <ul
+                    style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 8 }}
+                  >
                     {item.cons.map((con) => (
                       <li key={con} style={{ opacity: 0.88, lineHeight: 1.5 }}>
                         {con}
@@ -434,19 +592,6 @@ export default function PlatformsPage() {
                     ))}
                   </ul>
                 </div>
-              </div>
-
-              <div
-                style={{
-                  marginTop: 14,
-                  borderRadius: 14,
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  background: "rgba(255,255,255,0.04)",
-                  padding: 14,
-                }}
-              >
-                <div style={{ fontWeight: 900, marginBottom: 6 }}>Quick take</div>
-                <div style={{ opacity: 0.84, lineHeight: 1.55 }}>{item.note}</div>
               </div>
             </section>
           ))}
@@ -456,9 +601,13 @@ export default function PlatformsPage() {
       <style>{`
         .wrap { max-width: 1080px; margin: 0 auto; padding: 24px; }
 
+        @media (max-width: 900px) {
+          .topCompareGrid { grid-template-columns: 1fr !important; }
+          .platformGrid { grid-template-columns: 1fr !important; }
+        }
+
         @media (max-width: 760px) {
           .wrap { padding: 16px !important; }
-          .platformGrid { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </main>
