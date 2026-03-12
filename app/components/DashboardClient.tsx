@@ -1785,34 +1785,68 @@ const indicatorInsight = useMemo(() => {
 ]);
 
 function SmallNavLink(props: { href: string; children: React.ReactNode }) {
+  const isLearn = props.href === "/learn";
+  const isPlatforms = props.href === "/platforms";
+  const isUtilities = props.href === "/utilities";
+
+  const icon = isLearn ? "📘" : isPlatforms ? "🏦" : isUtilities ? "🧰" : "→";
+
+  const bg = isLearn
+    ? "linear-gradient(135deg, rgba(59,130,246,0.20), rgba(37,99,235,0.10))"
+    : isPlatforms
+      ? "linear-gradient(135deg, rgba(34,197,94,0.20), rgba(16,185,129,0.10))"
+      : isUtilities
+        ? "linear-gradient(135deg, rgba(168,85,247,0.20), rgba(139,92,246,0.10))"
+        : COLORS.controlBg;
+
+  const border = isLearn
+    ? "rgba(59,130,246,0.45)"
+    : isPlatforms
+      ? "rgba(34,197,94,0.45)"
+      : isUtilities
+        ? "rgba(168,85,247,0.45)"
+        : COLORS.controlBorder;
+
   return (
     <Link
       href={props.href}
+      className="msh-top-nav-btn"
       style={{
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
-        minHeight: isMobile ? 40 : 48,
-        padding: isMobile ? "8px 12px" : "12px 18px",
-        borderRadius: isMobile ? 12 : 14,
-        border: `1px solid ${
-          COLORS.isDark ? "rgba(255,255,255,0.18)" : "rgba(11,18,32,0.14)"
-        }`,
-        background: COLORS.isDark
-          ? "linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04))"
-          : "linear-gradient(135deg, rgba(11,18,32,0.05), rgba(11,18,32,0.02))",
+        gap: 8,
+        minHeight: 42,
+        padding: "9px 13px",
+        borderRadius: 14,
+        border: `1px solid ${border}`,
+        background: bg,
         color: COLORS.controlFg,
         textDecoration: "none",
         fontWeight: 900,
-        fontSize: isMobile ? 13 : 16,
+        fontSize: 14,
         whiteSpace: "nowrap",
         boxShadow: COLORS.isDark
-          ? "0 8px 18px rgba(0,0,0,0.22)"
+          ? "0 8px 18px rgba(0,0,0,0.20)"
           : "0 8px 18px rgba(0,0,0,0.06)",
-        transition: "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease",
+        transition:
+          "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
       }}
     >
-      {props.children}
+      <span
+        aria-hidden="true"
+        style={{
+          fontSize: 15,
+          lineHeight: 1,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {icon}
+      </span>
+
+      <span>{props.children}</span>
     </Link>
   );
 }
@@ -2607,12 +2641,40 @@ return (
     position: relative;
   }
 
-  .msh-top-right {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
+.msh-top-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+}
+.msh-top-nav-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
+@media (min-width: 761px) {
+  .msh-top-nav-btn {
+    min-height: 48px !important;
+    padding: 12px 18px !important;
+    font-size: 16px !important;
+    gap: 10px !important;
   }
+}
+
+@media (max-width: 760px) {
+  .msh-top-right {
+    gap: 8px !important;
+    flex-wrap: nowrap !important;
+  }
+
+  .msh-top-nav-btn {
+    min-height: 38px !important;
+    padding: 7px 10px !important;
+    font-size: 13px !important;
+    gap: 6px !important;
+    border-radius: 12px !important;
+  }
+}
 
   .msh-toolbar-grid {
     display: grid;
