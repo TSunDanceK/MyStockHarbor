@@ -1789,15 +1789,27 @@ function SmallNavLink(props: { href: string; children: React.ReactNode }) {
     <Link
       href={props.href}
       style={{
-        padding: "8px 12px",
-        borderRadius: 12,
-        border: `1px solid ${COLORS.controlBorder}`,
-        background: COLORS.controlBg,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: isMobile ? 40 : 48,
+        padding: isMobile ? "8px 12px" : "12px 18px",
+        borderRadius: isMobile ? 12 : 14,
+        border: `1px solid ${
+          COLORS.isDark ? "rgba(255,255,255,0.18)" : "rgba(11,18,32,0.14)"
+        }`,
+        background: COLORS.isDark
+          ? "linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04))"
+          : "linear-gradient(135deg, rgba(11,18,32,0.05), rgba(11,18,32,0.02))",
         color: COLORS.controlFg,
         textDecoration: "none",
-        fontWeight: 800,
-        fontSize: 13,
+        fontWeight: 900,
+        fontSize: isMobile ? 13 : 16,
         whiteSpace: "nowrap",
+        boxShadow: COLORS.isDark
+          ? "0 8px 18px rgba(0,0,0,0.22)"
+          : "0 8px 18px rgba(0,0,0,0.06)",
+        transition: "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease",
       }}
     >
       {props.children}
@@ -2598,7 +2610,7 @@ return (
   .msh-top-right {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
     flex-wrap: wrap;
   }
 
