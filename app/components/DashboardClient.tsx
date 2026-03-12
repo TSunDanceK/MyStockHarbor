@@ -842,7 +842,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(symbol);
   const [results, setResults] = useState<SymbolResult[]>([]);
   const [open, setOpen] = useState(false);
 
