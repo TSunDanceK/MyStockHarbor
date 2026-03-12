@@ -260,6 +260,85 @@ export default function PlatformsPage() {
           className="topCompareGrid"
         >
           <div
+  style={{
+    marginTop: 18,
+    borderRadius: 16,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.04)",
+    overflow: "hidden",
+  }}
+>
+  <div
+    style={{
+      padding: "12px 16px",
+      fontWeight: 900,
+      borderBottom: "1px solid rgba(255,255,255,0.1)",
+      fontSize: 14,
+      letterSpacing: "0.3px",
+    }}
+  >
+    Quick platform comparison
+  </div>
+
+  <table
+    style={{
+      width: "100%",
+      borderCollapse: "collapse",
+      fontSize: 14,
+    }}
+  >
+    <thead>
+      <tr
+        style={{
+          textAlign: "left",
+          borderBottom: "1px solid rgba(255,255,255,0.08)",
+        }}
+      >
+        <th style={{ padding: 12 }}>Platform</th>
+        <th style={{ padding: 12 }}>Best For</th>
+        <th style={{ padding: 12 }}>Score</th>
+        <th style={{ padding: 12 }}></th>
+      </tr>
+    </thead>
+
+    <tbody>
+      {PLATFORMS.map((item) => (
+        <tr
+          key={item.name}
+          style={{
+            borderBottom: "1px solid rgba(255,255,255,0.05)",
+          }}
+        >
+          <td style={{ padding: 12, fontWeight: 700 }}>{item.name}</td>
+
+          <td style={{ padding: 12, opacity: 0.8 }}>{item.shortLabel}</td>
+
+          <td style={{ padding: 12, fontWeight: 900, color: "#86efac" }}>
+            {item.score}
+          </td>
+
+          <td style={{ padding: 12 }}>
+            <a
+              href={item.affiliateHref}
+              style={{
+                padding: "6px 12px",
+                borderRadius: 8,
+                background: "rgba(34,197,94,0.15)",
+                border: "1px solid rgba(34,197,94,0.35)",
+                color: "#d1fae5",
+                textDecoration: "none",
+                fontWeight: 800,
+              }}
+            >
+              Visit →
+            </a>
+          </td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>
+          <div
             style={{
               borderRadius: 16,
               border: "1px solid rgba(34,197,94,0.28)",
