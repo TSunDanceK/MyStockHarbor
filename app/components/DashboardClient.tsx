@@ -2908,21 +2908,12 @@ return (
           <SmallNavLink href="/platforms">Platforms</SmallNavLink>
           <SmallNavLink href="/utilities">Utilities</SmallNavLink>
 
-          <button
-            type="button"
-            onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
-            style={{
-              padding: "8px 12px",
-              borderRadius: 12,
-              border: `1px solid ${COLORS.controlBorder}`,
-              background: COLORS.controlBg,
-              color: COLORS.controlFg,
-              fontWeight: 900,
-              cursor: "pointer",
-            }}
-          >
-            {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
-          </button>
+<button
+  onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+  className="msh-top-nav-btn"
+>
+  {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
+</button>
         </div>
       </div>
 
