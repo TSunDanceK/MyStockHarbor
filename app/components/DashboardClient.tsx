@@ -2649,13 +2649,13 @@ return (
     filter: brightness(1.05);
   }
 
-  .msh-toolbar-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.9fr) auto;
-    gap: 14px;
-    align-items: end;
-    margin-bottom: 18px;
-  }
+.msh-toolbar-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.9fr);
+  gap: 14px;
+  align-items: end;
+  margin-bottom: 18px;
+}
 
   .msh-main-grid {
     display: grid;
