@@ -2506,23 +2506,19 @@ function BenchmarksPanel() {
           const pctText = pct == null ? "—" : `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
           const chartSymbol = (it.symbol || "").split(".")[0]?.toUpperCase() || it.symbol.toUpperCase();
 
-          return (
-            <button
-              key={it.key}
-              type="button"
-              onClick={() => router.push(`/?symbol=${encodeURIComponent(chartSymbol)}`)}
-              title={`Load ${chartSymbol} in chart`}
-              style={{
-                border: `1px solid ${COLORS.border}`,
-                borderRadius: 16,
-                padding: 14,
-                background: COLORS.controlBg,
-                color: COLORS.cardFg,
-                cursor: "pointer",
-                textAlign: "left",
-                width: "100%",
-              }}
-            >
+return (
+  <div
+    key={it.key}
+    style={{
+      border: `1px solid ${COLORS.border}`,
+      borderRadius: 16,
+      padding: 14,
+      background: COLORS.controlBg,
+      color: COLORS.cardFg,
+      textAlign: "left",
+      width: "100%",
+    }}
+  >
               <div style={{ display: "grid", gap: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
                   <div style={{ minWidth: 0 }}>
@@ -2547,7 +2543,7 @@ function BenchmarksPanel() {
                   {it.date && it.time ? `As of ${it.date} ${it.time}` : "Timestamp unavailable"}
                 </div>
               </div>
-            </button>
+            </div>
           );
         })}
       </div>
