@@ -187,6 +187,23 @@ function ctaBtn(): React.CSSProperties {
     letterSpacing: "0.2px",
     minHeight: 48,
     boxShadow: "0 10px 24px rgba(0,0,0,0.22)",
+    whiteSpace: "nowrap",
+  };
+}
+
+function smallVisitBtn(): React.CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "8px 12px",
+    borderRadius: 8,
+    background: "rgba(34,197,94,0.15)",
+    border: "1px solid rgba(34,197,94,0.35)",
+    color: "#d1fae5",
+    textDecoration: "none",
+    fontWeight: 800,
+    whiteSpace: "nowrap",
   };
 }
 
@@ -259,92 +276,6 @@ export default function PlatformsPage() {
           }}
           className="topCompareGrid"
         >
-        
-
-        <div
-          style={{
-            marginTop: 18,
-            borderRadius: 16,
-            border: "1px solid rgba(255,255,255,0.12)",
-            background: "rgba(255,255,255,0.04)",
-            overflowX: "auto",
-          }}
-        >
-          <div
-            style={{
-              padding: "12px 16px",
-              fontWeight: 900,
-              borderBottom: "1px solid rgba(255,255,255,0.1)",
-              fontSize: 14,
-              letterSpacing: "0.3px",
-            }}
-          >
-            Quick platform comparison
-          </div>
-
-          <table
-            style={{
-              width: "100%",
-              borderCollapse: "collapse",
-              fontSize: 14,
-              minWidth: 720,
-            }}
-          >
-            <thead>
-              <tr
-                style={{
-                  textAlign: "left",
-                  borderBottom: "1px solid rgba(255,255,255,0.08)",
-                }}
-              >
-                <th style={{ padding: 12 }}>Platform</th>
-                <th style={{ padding: 12 }}>Best For</th>
-                <th style={{ padding: 12 }}>Score</th>
-                <th style={{ padding: 12 }}></th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {PLATFORMS.map((item) => (
-                <tr
-                  key={item.name}
-                  style={{
-                    borderBottom: "1px solid rgba(255,255,255,0.05)",
-                  }}
-                >
-                  <td style={{ padding: 12, fontWeight: 700 }}>{item.name}</td>
-
-                  <td style={{ padding: 12, opacity: 0.8 }}>{item.shortLabel}</td>
-
-                  <td style={{ padding: 12, fontWeight: 900, color: "#86efac" }}>
-                    {item.score}
-                  </td>
-
-                  <td style={{ padding: 12 }}>
-                    <a
-                      href={item.affiliateHref}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        padding: "8px 12px",
-                        borderRadius: 8,
-                        background: "rgba(34,197,94,0.15)",
-                        border: "1px solid rgba(34,197,94,0.35)",
-                        color: "#d1fae5",
-                        textDecoration: "none",
-                        fontWeight: 800,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      Visit →
-                    </a>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
           <div
             style={{
               borderRadius: 16,
@@ -404,6 +335,73 @@ export default function PlatformsPage() {
               Best if you want a broker you can grow into long term.
             </div>
           </div>
+        </div>
+
+        <div
+          style={{
+            marginTop: 18,
+            borderRadius: 16,
+            border: "1px solid rgba(255,255,255,0.12)",
+            background: "rgba(255,255,255,0.04)",
+            overflowX: "auto",
+          }}
+        >
+          <div
+            style={{
+              padding: "12px 16px",
+              fontWeight: 900,
+              borderBottom: "1px solid rgba(255,255,255,0.1)",
+              fontSize: 14,
+              letterSpacing: "0.3px",
+            }}
+          >
+            Quick platform comparison
+          </div>
+
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "collapse",
+              fontSize: 14,
+              minWidth: 720,
+            }}
+          >
+            <thead>
+              <tr
+                style={{
+                  textAlign: "left",
+                  borderBottom: "1px solid rgba(255,255,255,0.08)",
+                }}
+              >
+                <th style={{ padding: 12 }}>Platform</th>
+                <th style={{ padding: 12 }}>Best For</th>
+                <th style={{ padding: 12 }}>Score</th>
+                <th style={{ padding: 12 }}>Visit</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {PLATFORMS.map((item) => (
+                <tr
+                  key={item.name}
+                  style={{
+                    borderBottom: "1px solid rgba(255,255,255,0.05)",
+                  }}
+                >
+                  <td style={{ padding: 12, fontWeight: 700 }}>{item.name}</td>
+                  <td style={{ padding: 12, opacity: 0.8 }}>{item.shortLabel}</td>
+                  <td style={{ padding: 12, fontWeight: 900, color: "#86efac" }}>
+                    {item.score}
+                  </td>
+                  <td style={{ padding: 12 }}>
+                    <a href={item.affiliateHref} style={smallVisitBtn()}>
+                      Visit →
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
         <div
@@ -537,37 +535,35 @@ export default function PlatformsPage() {
                     </a>
 
                     <div style={{ minWidth: 0 }}>
-<div>
-  {item.recommended ? (
-    <div
-      style={{
-        display: "inline-block",
-        marginBottom: 6,
-        padding: "4px 10px",
-        borderRadius: 999,
-        background:
-          "linear-gradient(135deg, rgba(250,204,21,0.25), rgba(249,115,22,0.18))",
-        border: "1px solid rgba(250,204,21,0.35)",
-        fontSize: 11,
-        fontWeight: 900,
-        color: "#fde68a",
-        letterSpacing: "0.4px",
-      }}
-    >
-      ★ RECOMMENDED
-    </div>
-  ) : null}
+                      {item.recommended ? (
+                        <div
+                          style={{
+                            display: "inline-block",
+                            marginBottom: 6,
+                            padding: "4px 10px",
+                            borderRadius: 999,
+                            background:
+                              "linear-gradient(135deg, rgba(250,204,21,0.25), rgba(249,115,22,0.18))",
+                            border: "1px solid rgba(250,204,21,0.35)",
+                            fontSize: 11,
+                            fontWeight: 900,
+                            color: "#fde68a",
+                            letterSpacing: "0.4px",
+                          }}
+                        >
+                          ★ RECOMMENDED
+                        </div>
+                      ) : null}
 
-  <h2
-    style={{
-      margin: 0,
-      fontSize: 28,
-      letterSpacing: "-0.3px",
-    }}
-  >
-    {item.name}
-  </h2>
-</div>
+                      <h2
+                        style={{
+                          margin: 0,
+                          fontSize: 28,
+                          letterSpacing: "-0.3px",
+                        }}
+                      >
+                        {item.name}
+                      </h2>
 
                       <div
                         style={{
@@ -716,15 +712,26 @@ export default function PlatformsPage() {
       </div>
 
       <style>{`
-        .wrap { max-width: 1080px; margin: 0 auto; padding: 24px; }
+        .wrap {
+          max-width: 1080px;
+          margin: 0 auto;
+          padding: 24px;
+        }
 
         @media (max-width: 900px) {
-          .topCompareGrid { grid-template-columns: 1fr !important; }
-          .platformGrid { grid-template-columns: 1fr !important; }
+          .topCompareGrid {
+            grid-template-columns: 1fr !important;
+          }
+
+          .platformGrid {
+            grid-template-columns: 1fr !important;
+          }
         }
 
         @media (max-width: 760px) {
-          .wrap { padding: 16px !important; }
+          .wrap {
+            padding: 16px !important;
+          }
         }
       `}</style>
     </main>
