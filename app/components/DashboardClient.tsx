@@ -2759,6 +2759,12 @@ return (
   .msh-overview-head {
     grid-template-columns: minmax(0, 1fr) auto;
   }
+  
+.msh-top-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 
   @media (min-width: 761px) {
     .msh-top-nav-btn {
@@ -2911,6 +2917,7 @@ return (
 <button
   onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
   className="msh-top-nav-btn"
+  style={{ display: "flex", alignItems: "center" }}
 >
   {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
 </button>
