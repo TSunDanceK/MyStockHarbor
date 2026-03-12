@@ -2678,7 +2678,7 @@ return (
 
   .msh-toolbar-grid {
     display: grid;
-    grid-template-columns: 1.15fr 0.9fr auto;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.9fr);
     gap: 14px;
     align-items: end;
     margin-bottom: 18px;
@@ -2799,10 +2799,11 @@ return (
 
 }
 
-  @media (max-width: 980px) {
-    .msh-toolbar-grid {
-      grid-template-columns: 1fr;
-    }
+@media (max-width: 980px) {
+  .msh-toolbar-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
 
     .msh-main-grid {
       grid-template-columns: 1fr;
@@ -2838,6 +2839,11 @@ return (
       gap: 10px;
       margin-bottom: 12px;
     }
+    .msh-toolbar-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+  gap: 10px !important;
+  align-items: end !important;
+}
 
     .msh-top-right {
       display: none;
@@ -2943,21 +2949,6 @@ return (
         <SmallNavLink href="/platforms">Platforms</SmallNavLink>
         <SmallNavLink href="/utilities">Utilities</SmallNavLink>
 
-        <button
-          type="button"
-          onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
-          style={{
-            padding: "8px 12px",
-            borderRadius: 12,
-            border: `1px solid ${COLORS.controlBorder}`,
-            background: COLORS.controlBg,
-            color: COLORS.controlFg,
-            fontWeight: 900,
-            cursor: "pointer",
-          }}
-        >
-          {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
-        </button>
       </div>
 
       <div className="msh-toolbar-grid">
@@ -3051,26 +3042,6 @@ return (
           </button>
         </div>
 
-        <div style={{ display: "flex", alignItems: "end", justifyContent: isMobile ? "stretch" : "flex-end" }}>
-          <button
-            type="button"
-            onClick={() => chooseSymbol(symbol)}
-            disabled={loading}
-            style={{
-              padding: "14px 16px",
-              borderRadius: 16,
-              border: `1px solid ${COLORS.controlBorder}`,
-              background: COLORS.controlBg,
-              color: COLORS.controlFg,
-              fontWeight: 900,
-              cursor: loading ? "not-allowed" : "pointer",
-              opacity: loading ? 0.7 : 1,
-              width: isMobile ? "100%" : "auto",
-            }}
-          >
-            {loading ? "Loading…" : `Load ${symbol}`}
-          </button>
-        </div>
       </div>
 
       {err ? (
