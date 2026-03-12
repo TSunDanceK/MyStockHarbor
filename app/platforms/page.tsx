@@ -38,7 +38,7 @@ const PLATFORMS: PlatformItem[] = [
     ],
     note:
       "Best overall choice for charts. A very strong setup is: analyse on TradingView, then execute your stock trade using your broker.",
-    affiliateHref: "#",
+    affiliateHref: "/api/go/tradingview",
     ctaText: "View TradingView",
   },
   {
@@ -63,7 +63,7 @@ const PLATFORMS: PlatformItem[] = [
     ],
     note:
       "A very good broker for beginners. Many users would chart on TradingView, then place the trade using Trading 212.",
-    affiliateHref: "#",
+    affiliateHref: "/api/go/trading212",
     ctaText: "View Trading 212",
   },
   {
@@ -88,7 +88,7 @@ const PLATFORMS: PlatformItem[] = [
     ],
     note:
       "Good for users who want a simple and modern investing experience, but less ideal than TradingView for serious chart work.",
-    affiliateHref: "#",
+    affiliateHref: "/api/go/etoro",
     ctaText: "View eToro",
   },
   {
@@ -113,7 +113,7 @@ const PLATFORMS: PlatformItem[] = [
     ],
     note:
       "A strong broker choice for users who are becoming more serious. Many people would still prefer to chart on TradingView first.",
-    affiliateHref: "#",
+    affiliateHref: "/api/go/interactivebrokers",
     ctaText: "View Interactive Brokers",
   },
   {
@@ -138,7 +138,7 @@ const PLATFORMS: PlatformItem[] = [
     ],
     note:
       "A good option for users who want a more premium investing experience, though TradingView is still the better place to do chart analysis.",
-    affiliateHref: "#",
+    affiliateHref: "/api/go/saxo",
     ctaText: "View Saxo",
   },
 ];
@@ -164,7 +164,8 @@ function affiliateBtn(): React.CSSProperties {
     padding: "12px 16px",
     borderRadius: 14,
     border: "1px solid rgba(168,85,247,0.45)",
-    background: "linear-gradient(135deg, rgba(168,85,247,0.22), rgba(59,130,246,0.16))",
+    background:
+      "linear-gradient(135deg, rgba(168,85,247,0.22), rgba(59,130,246,0.16))",
     color: "#f8fafc",
     textDecoration: "none",
     fontWeight: 900,
@@ -199,13 +200,27 @@ export default function PlatformsPage() {
               PLATFORM GUIDE
             </div>
 
-            <h1 style={{ margin: "6px 0 0", fontSize: 34, letterSpacing: "-0.4px" }}>
+            <h1
+              style={{
+                margin: "6px 0 0",
+                fontSize: 34,
+                letterSpacing: "-0.4px",
+              }}
+            >
               Choosing your Platform
             </h1>
 
-            <div style={{ marginTop: 8, opacity: 0.78, lineHeight: 1.55, maxWidth: 860 }}>
-              The best setup for many people is simple: use <strong>TradingView</strong> for charting and analysis,
-              then choose a broker platform below to actually buy and sell stocks.
+            <div
+              style={{
+                marginTop: 8,
+                opacity: 0.78,
+                lineHeight: 1.55,
+                maxWidth: 860,
+              }}
+            >
+              The best setup for many people is simple: use{" "}
+              <strong>TradingView</strong> for charting and analysis, then
+              choose a broker platform below to actually buy and sell stocks.
             </div>
           </div>
 
@@ -224,15 +239,20 @@ export default function PlatformsPage() {
             marginTop: 18,
             borderRadius: 16,
             border: "1px solid rgba(34,197,94,0.28)",
-            background: "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(59,130,246,0.08))",
+            background:
+              "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(59,130,246,0.08))",
             padding: 16,
           }}
         >
-          <div style={{ fontWeight: 950, marginBottom: 8 }}>Best starting idea</div>
+          <div style={{ fontWeight: 950, marginBottom: 8 }}>
+            Best starting idea
+          </div>
           <div style={{ opacity: 0.84, lineHeight: 1.55 }}>
-            If you are new, a smart setup is to <strong>learn charts on TradingView</strong>, then use a broker like{" "}
-            <strong>Trading 212</strong>, <strong>eToro</strong>, <strong>Interactive Brokers</strong>, or{" "}
-            <strong>Saxo</strong> to place the trade.
+            If you are new, a smart setup is to{" "}
+            <strong>learn charts on TradingView</strong>, then use a broker like{" "}
+            <strong>Trading 212</strong>, <strong>eToro</strong>,{" "}
+            <strong>Interactive Brokers</strong>, or <strong>Saxo</strong> to
+            place the trade.
           </div>
         </div>
 
@@ -241,14 +261,18 @@ export default function PlatformsPage() {
             marginTop: 18,
             borderRadius: 16,
             border: "1px solid rgba(168,85,247,0.28)",
-            background: "linear-gradient(135deg, rgba(168,85,247,0.14), rgba(59,130,246,0.08))",
+            background:
+              "linear-gradient(135deg, rgba(168,85,247,0.14), rgba(59,130,246,0.08))",
             padding: 16,
           }}
         >
-          <div style={{ fontWeight: 950, marginBottom: 8 }}>Important before you publish</div>
+          <div style={{ fontWeight: 950, marginBottom: 8 }}>
+            Affiliate links
+          </div>
           <div style={{ opacity: 0.84, lineHeight: 1.55 }}>
-            Replace each placeholder affiliate link in this page before publishing. Right now the buttons are ready,
-            but the links are set to <strong>#</strong>.
+            These buttons now route through internal redirect links. Later, you
+            can swap the destination URLs in <strong>/app/api/go/[platform]/route.ts</strong>{" "}
+            for your real affiliate links without editing this page again.
           </div>
         </div>
 
@@ -299,39 +323,58 @@ export default function PlatformsPage() {
                       flexWrap: "wrap",
                     }}
                   >
-                    <div
-                      style={{
-                        width: 68,
-                        height: 68,
-                        borderRadius: 16,
-                        border: "1px solid rgba(255,255,255,0.12)",
-                        background: "#ffffff",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        padding: 10,
-                        overflow: "hidden",
-                        flex: "0 0 auto",
-                      }}
+                    <a
+                      href={item.affiliateHref}
+                      style={{ textDecoration: "none" }}
+                      aria-label={`Visit ${item.name}`}
                     >
-                      <img
-                        src={item.logoSrc}
-                        alt={item.logoAlt}
+                      <div
                         style={{
-                          maxWidth: "100%",
-                          maxHeight: "100%",
-                          objectFit: "contain",
-                          display: "block",
+                          width: 68,
+                          height: 68,
+                          borderRadius: 16,
+                          border: "1px solid rgba(255,255,255,0.12)",
+                          background: "#ffffff",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          padding: 10,
+                          overflow: "hidden",
+                          flex: "0 0 auto",
+                          cursor: "pointer",
                         }}
-                      />
-                    </div>
+                      >
+                        <img
+                          src={item.logoSrc}
+                          alt={item.logoAlt}
+                          style={{
+                            maxWidth: "100%",
+                            maxHeight: "100%",
+                            objectFit: "contain",
+                            display: "block",
+                          }}
+                        />
+                      </div>
+                    </a>
 
                     <div style={{ minWidth: 0 }}>
-                      <h2 style={{ margin: 0, fontSize: 28, letterSpacing: "-0.3px" }}>
+                      <h2
+                        style={{
+                          margin: 0,
+                          fontSize: 28,
+                          letterSpacing: "-0.3px",
+                        }}
+                      >
                         {item.name}
                       </h2>
 
-                      <p style={{ margin: "8px 0 0", opacity: 0.84, lineHeight: 1.6 }}>
+                      <p
+                        style={{
+                          margin: "8px 0 0",
+                          opacity: 0.84,
+                          lineHeight: 1.6,
+                        }}
+                      >
                         <strong>Best for:</strong> {item.bestFor}
                       </p>
                     </div>
