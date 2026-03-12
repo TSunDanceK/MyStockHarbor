@@ -46,7 +46,49 @@ export default function LearnPage() {
           </div>
         </div>
 
-        <div style={{ marginTop: 22, display: "grid", gap: 18 }}>
+        <div
+  style={{
+    marginTop: 22,
+    borderRadius: 16,
+    border: "1px solid rgba(34,197,94,0.28)",
+    background:
+      "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(59,130,246,0.08))",
+    padding: 18,
+  }}
+>
+  <div style={{ fontWeight: 950, marginBottom: 6 }}>
+    New to trading?
+  </div>
+
+  <div style={{ opacity: 0.85, lineHeight: 1.55 }}>
+    Before learning indicators and chart patterns, it's helpful to choose a
+    trading platform. Most people analyse charts using <strong>TradingView</strong>{" "}
+    and place trades using a broker like Trading 212 or Interactive Brokers.
+  </div>
+
+  <div style={{ marginTop: 12 }}>
+    <Link
+      href="/platforms"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "10px 14px",
+        borderRadius: 12,
+        border: "1px solid rgba(34,197,94,0.45)",
+        background:
+          "linear-gradient(135deg, rgba(34,197,94,0.22), rgba(59,130,246,0.18))",
+        color: "#f8fafc",
+        textDecoration: "none",
+        fontWeight: 900,
+      }}
+    >
+      Choose Your Trading Platform →
+    </Link>
+  </div>
+</div>
+
+<div style={{ marginTop: 22, display: "grid", gap: 18 }}>
           <Section title="BASICS" items={basics} />
           <Section title="INDICATORS" items={indicators} />
           <Section title="DIVERGENCIES" items={divergencies} />
