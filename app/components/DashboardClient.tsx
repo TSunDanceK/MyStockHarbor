@@ -2921,20 +2921,24 @@ return (
       text-align: left;
     }
 
-    .msh-chart-head-row {
-      align-items: stretch;
-    }
+.msh-chart-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
 
-    .msh-timeframes {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 8px;
-      justify-content: stretch;
-    }
+.msh-timeframes {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
+}
 
-    .msh-timeframes > * {
-      width: 100%;
-    }
+.msh-timeframes > * {
+  width: 100%;
+  padding: 6px 0;
+  font-size: 12px;
+}
 
     .msh-overview-head {
       grid-template-columns: minmax(0, 1fr) auto !important;
