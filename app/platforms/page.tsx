@@ -1,4 +1,11 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "Best Trading Platforms for Beginners, Chart Analysis, and Serious Traders | MyStockHarbor",
+  description:
+    "Compare the best trading platforms for beginners, chart analysis, and serious traders, including TradingView, Trading 212, eToro, Interactive Brokers, and Saxo.",
+};
 
 type PlatformItem = {
   name: string;
