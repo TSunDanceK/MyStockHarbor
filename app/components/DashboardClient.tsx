@@ -2413,7 +2413,15 @@ function ChartPanel() {
       <div style={{ padding: 16, borderBottom: `1px solid ${COLORS.border}` }}>
         <div className="msh-chart-head-row">
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 12, color: COLORS.mutedFg, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            <div
+              style={{
+                fontSize: 12,
+                color: COLORS.mutedFg,
+                fontWeight: 900,
+                textTransform: "uppercase",
+                letterSpacing: "0.04em",
+              }}
+            >
               Indicator
             </div>
             <select
@@ -2481,48 +2489,48 @@ function ChartPanel() {
           height={chartHeight}
         />
 
-<div
-  style={{
-    marginTop: 12,
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12,
-    flexWrap: "wrap",
-    fontSize: 13,
-    fontWeight: 700,
-    color: COLORS.mutedFg,
-  }}
->
-  <div>
-    {displayedHistory.length
-      ? `From ${displayedHistory[0].date} → ${displayedHistory[displayedHistory.length - 1].date}`
-      : "No chart data"}
-  </div>
+        <div
+          style={{
+            marginTop: 12,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+            fontSize: 13,
+            fontWeight: 700,
+            color: COLORS.mutedFg,
+          }}
+        >
+          <div>
+            {displayedHistory.length
+              ? `From ${displayedHistory[0].date} → ${displayedHistory[displayedHistory.length - 1].date}`
+              : "No chart data"}
+          </div>
 
-<Link
-  href="/platforms"
-  style={{
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "6px 12px",
-    borderRadius: 10,
-    border: `1px solid rgba(59,130,246,0.45)`,
-    background: COLORS.isDark
-      ? "linear-gradient(135deg, rgba(37,99,235,0.25), rgba(29,78,216,0.15))"
-      : "linear-gradient(135deg, rgba(37,99,235,0.12), rgba(29,78,216,0.06))",
-    color: "#3b82f6",
-    fontWeight: 900,
-    fontSize: 13,
-    textDecoration: "none",
-    whiteSpace: "nowrap",
-    transition: "transform 120ms ease, filter 120ms ease",
-  }}
->
-  Trade this setup →
-</Link>
-
+          <Link
+            href="/platforms"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "6px 12px",
+              borderRadius: 10,
+              border: `1px solid rgba(59,130,246,0.45)`,
+              background: COLORS.isDark
+                ? "linear-gradient(135deg, rgba(37,99,235,0.25), rgba(29,78,216,0.15))"
+                : "linear-gradient(135deg, rgba(37,99,235,0.12), rgba(29,78,216,0.06))",
+              color: "#3b82f6",
+              fontWeight: 900,
+              fontSize: 13,
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+              transition: "transform 120ms ease, filter 120ms ease",
+            }}
+          >
+            Trade this setup →
+          </Link>
+        </div>
       </div>
     </SectionCard>
   );
