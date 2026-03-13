@@ -2940,6 +2940,11 @@ return (
   font-size: 12px;
 }
 
+.msh-timeframes button:nth-child(4),
+.msh-timeframes button:nth-child(5) {
+  display: none;
+}
+
     .msh-overview-head {
       grid-template-columns: minmax(0, 1fr) auto !important;
       align-items: center !important;
