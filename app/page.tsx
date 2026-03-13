@@ -1,5 +1,12 @@
-import DashboardClient from "./components/DashboardClient";
+import type { Metadata } from "next";
 import { Suspense } from "react";
+import DashboardClient from "./components/DashboardClient";
+
+export const metadata: Metadata = {
+  title: "MyStockHarbor — Stock Analysis Dashboard for Trend, Momentum, and Market Context",
+  description:
+    "Analyse any stock quickly using chart indicators, trend signals, stretch signals, and market context. Built to help beginner and intermediate traders understand price action.",
+};
 
 export default function Page() {
   return (
