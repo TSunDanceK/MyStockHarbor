@@ -424,31 +424,38 @@ export default function PlatformsPage() {
           </table>
         </div>
 
-        <div
-          style={{
-            marginTop: 18,
-            borderRadius: 16,
-            border: "1px solid rgba(255,255,255,0.12)",
-            background: "rgba(255,255,255,0.04)",
-            padding: 16,
-          }}
-        >
-          <div style={{ fontWeight: 950, marginBottom: 8 }}>
-            Affiliate disclosure
-          </div>
-          <div style={{ opacity: 0.84, lineHeight: 1.55 }}>
-            Some links on this page may route through partner pages. You can
-            read more on our{" "}
-            <Link
-              href="/affiliate-disclosure"
-              style={{ color: "#93c5fd", textDecoration: "none" }}
-            >
-              Affiliate Disclosure
-            </Link>
-            .
-          </div>
-        </div>
+      <div
+  style={{
+    marginTop: 18,
+    borderRadius: 16,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.04)",
+    padding: 16,
+  }}
+>
+  <div style={{ fontWeight: 950, marginBottom: 10 }}>
+    How to choose a platform
+  </div>
 
+  <div
+    style={{
+      display: "grid",
+      gap: 10,
+    }}
+  >
+    <div style={{ opacity: 0.86, lineHeight: 1.55 }}>
+      <strong>If you are brand new:</strong> start with <strong>Trading 212</strong> for the easiest route to buying stocks and ETFs.
+    </div>
+
+    <div style={{ opacity: 0.86, lineHeight: 1.55 }}>
+      <strong>If you want the best charts:</strong> use <strong>TradingView</strong> for analysis and chart reading.
+    </div>
+
+    <div style={{ opacity: 0.86, lineHeight: 1.55 }}>
+      <strong>If you want a more serious broker:</strong> choose <strong>Interactive Brokers</strong> for a stronger long-term platform.
+    </div>
+  </div>
+</div>
         <div style={{ marginTop: 22, display: "grid", gap: 16 }}>
           {PLATFORMS.map((item, idx) => (
             <section
