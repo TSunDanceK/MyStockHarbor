@@ -2850,10 +2850,19 @@ return (
 }
 
 @media (max-width: 768px) {
-  .msh-page-wrap {
-    width: min(100%, calc(100% - 16px));
-    padding-top: 12px;
+  .msh-toolbar-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
   }
+}
+
+/* wider mobile phones */
+@media (min-width: 380px) and (max-width: 768px) {
+  .msh-toolbar-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+}
 
   .msh-topbar {
     gap: 10px;
