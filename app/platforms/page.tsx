@@ -240,7 +240,7 @@ export default function PlatformsPage() {
                 letterSpacing: "-0.4px",
               }}
             >
-              Best Trading Platforms for Different Types of Users
+              Best Trading Platforms for Beginners, Chart Analysis, and Serious Traders
             </h1>
 
             <div
