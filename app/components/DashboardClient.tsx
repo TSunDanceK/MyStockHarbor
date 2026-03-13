@@ -2910,12 +2910,12 @@ return (
     text-align: left;
   }
 
-  .msh-chart-head-row {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 12px;
-    align-items: stretch;
-  }
+.msh-chart-head-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
 
 .msh-timeframes {
   display: flex;
