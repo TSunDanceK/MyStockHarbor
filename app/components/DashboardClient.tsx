@@ -2405,66 +2405,85 @@ function BreakdownPanel() {
 function ChartPanel() {
   return (
     <SectionCard
-      title={`Price (${currentIndicatorName})`}
-      right={<ChartToolbar />}
+      title=""
+    right={null}
       bodyStyle={{ padding: 0 }}
       style={{ minHeight: isMobile ? "auto" : 0 }}
     >
-      <div style={{ padding: 16, borderBottom: `1px solid ${COLORS.border}` }}>
-        <div className="msh-chart-head-row">
-          <div style={{ minWidth: 0 }}>
-            <div
-              style={{
-                fontSize: 12,
-                color: COLORS.mutedFg,
-                fontWeight: 900,
-                textTransform: "uppercase",
-                letterSpacing: "0.04em",
-              }}
-            >
-              Indicator
-            </div>
-            <select
-              value={selectValueFromIndicator(indicator)}
-              onChange={(e) => setIndicatorFromSelect(e.target.value)}
-              style={{
-                marginTop: 6,
-                width: isMobile ? "100%" : 240,
-                padding: "12px 14px",
-                borderRadius: 14,
-                border: `1px solid ${COLORS.controlBorder}`,
-                background: COLORS.controlBgSolid,
-                color: COLORS.controlFg,
-                fontWeight: 900,
-                fontSize: 16,
-                outline: "none",
-              }}
-            >
-              <option value="Overview">Overview</option>
-              {INDICATORS.filter((x) => x !== "None").map((opt) => (
-                <option key={opt} value={opt}>
-                  {opt}
-                </option>
-              ))}
-            </select>
-          </div>
+<div style={{ padding: 16, borderBottom: `1px solid ${COLORS.border}` }}>
+  <div
+    style={{
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+      flexWrap: "wrap",
+    }}
+  >
+    <div style={{ fontWeight: 900, fontSize: 15 }}>Price ({currentIndicatorName})</div>
 
-          <div className="msh-timeframes">
-            {TIMEFRAMES.map((t) => (
-              <TimeframeButton
-                key={t.label}
-                label={t.label}
-                active={tfDays === t.days}
-                onClick={() => {
-                  setTfDays(t.days);
-                  setWindowDays(t.days);
-                  setWindowOffset(0);
-                }}
-              />
-            ))}
-          </div>
-        </div>
+    <div className="msh-timeframes">
+      {TIMEFRAMES.map((t) => (
+        <TimeframeButton
+          key={t.label}
+          label={t.label}
+          active={tfDays === t.days}
+          onClick={() => {
+            setTfDays(t.days);
+            setWindowDays(t.days);
+            setWindowOffset(0);
+          }}
+        />
+      ))}
+    </div>
+  </div>
+
+  <div
+    className="msh-chart-head-row"
+    style={{
+      marginTop: 14,
+    }}
+  >
+    <div style={{ minWidth: 0 }}>
+      <div
+        style={{
+          fontSize: 12,
+          color: COLORS.mutedFg,
+          fontWeight: 900,
+          textTransform: "uppercase",
+          letterSpacing: "0.04em",
+        }}
+      >
+        Indicator
       </div>
+      <select
+        value={selectValueFromIndicator(indicator)}
+        onChange={(e) => setIndicatorFromSelect(e.target.value)}
+        style={{
+          marginTop: 6,
+          width: isMobile ? "100%" : 240,
+          padding: "12px 14px",
+          borderRadius: 14,
+          border: `1px solid ${COLORS.controlBorder}`,
+          background: COLORS.controlBgSolid,
+          color: COLORS.controlFg,
+          fontWeight: 900,
+          fontSize: 16,
+          outline: "none",
+        }}
+      >
+        <option value="Overview">Overview</option>
+        {INDICATORS.filter((x) => x !== "None").map((opt) => (
+          <option key={opt} value={opt}>
+            {opt}
+          </option>
+        ))}
+      </select>
+    </div>
+
+    <ChartToolbar />
+  </div>
+</div>
 
       <div style={{ padding: 16 }}>
         <PriceChart
