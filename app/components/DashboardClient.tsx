@@ -2527,28 +2527,33 @@ function ChartPanel() {
               : "No chart data"}
           </div>
 
-          <Link
-            href="/platforms"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: "6px 12px",
-              borderRadius: 10,
-              border: `1px solid rgba(59,130,246,0.45)`,
-              background: COLORS.isDark
-                ? "linear-gradient(135deg, rgba(37,99,235,0.25), rgba(29,78,216,0.15))"
-                : "linear-gradient(135deg, rgba(37,99,235,0.12), rgba(29,78,216,0.06))",
-              color: "#3b82f6",
-              fontWeight: 900,
-              fontSize: 13,
-              textDecoration: "none",
-              whiteSpace: "nowrap",
-              transition: "transform 120ms ease, filter 120ms ease",
-            }}
-          >
-            Trade {symbol} →
-          </Link>
+         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+  <Link
+    href="/platforms"
+    style={{
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "6px 12px",
+      borderRadius: 10,
+      border: `1px solid rgba(59,130,246,0.45)`,
+      background: COLORS.isDark
+        ? "linear-gradient(135deg, rgba(37,99,235,0.25), rgba(29,78,216,0.15))"
+        : "linear-gradient(135deg, rgba(37,99,235,0.12), rgba(29,78,216,0.06))",
+      color: "#3b82f6",
+      fontWeight: 900,
+      fontSize: 13,
+      textDecoration: "none",
+      whiteSpace: "nowrap",
+    }}
+  >
+    Trade {symbol} →
+  </Link>
+
+  <span style={{ fontSize: 12, color: COLORS.mutedFg }}>
+    Compare platforms
+  </span>
+</div>
         </div>
       </div>
     </SectionCard>
