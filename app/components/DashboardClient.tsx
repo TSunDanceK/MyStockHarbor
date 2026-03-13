@@ -2481,11 +2481,47 @@ function ChartPanel() {
           height={chartHeight}
         />
 
-        <div style={{ marginTop: 12, color: COLORS.mutedFg, fontSize: 13, fontWeight: 700 }}>
-          {displayedHistory.length
-            ? `From ${displayedHistory[0].date} → ${displayedHistory[displayedHistory.length - 1].date}`
-            : "No chart data"}
-        </div>
+<div style={{ marginTop: 12, color: COLORS.mutedFg, fontSize: 13, fontWeight: 700 }}>
+  {displayedHistory.length
+    ? `From ${displayedHistory[0].date} → ${displayedHistory[displayedHistory.length - 1].date}`
+    : "No chart data"}
+</div>
+
+<div
+  style={{
+    marginTop: 16,
+    padding: "14px 16px",
+    borderRadius: 14,
+    border: `1px solid rgba(59,130,246,0.35)`,
+    background: COLORS.isDark
+      ? "linear-gradient(135deg, rgba(37,99,235,0.18), rgba(29,78,216,0.10))"
+      : "linear-gradient(135deg, rgba(37,99,235,0.10), rgba(29,78,216,0.06))",
+  }}
+>
+  <div style={{ fontWeight: 900, marginBottom: 6 }}>
+    Ready to trade this stock?
+  </div>
+
+  <div style={{ fontSize: 13, color: COLORS.mutedFg, marginBottom: 10 }}>
+    Compare the best trading platforms for your strategy.
+  </div>
+
+  <Link
+    href="/platforms"
+    style={{
+      display: "inline-block",
+      padding: "10px 14px",
+      borderRadius: 10,
+      fontWeight: 900,
+      textDecoration: "none",
+      background: "#2563eb",
+      color: "#ffffff",
+      fontSize: 14,
+    }}
+  >
+    View Trading Platforms →
+  </Link>
+</div>
       </div>
     </SectionCard>
   );
