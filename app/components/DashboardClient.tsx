@@ -2825,21 +2825,29 @@ return (
     }
   }
 
-  @media (max-width: 980px) {
-    .msh-main-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .msh-score-grid,
-    .msh-info-grid,
-    .msh-breakdown-grid,
-    .msh-bench-grid,
-    .msh-news-grid,
-    .msh-news-head-grid,
-    .msh-news-section-grid {
-      grid-template-columns: 1fr;
-    }
+@media (max-width: 980px) {
+  .msh-main-grid {
+    grid-template-columns: 1fr;
   }
+
+  .msh-mobile-primary {
+    order: 1;
+  }
+
+  .msh-mobile-secondary {
+    order: 2;
+  }
+
+  .msh-score-grid,
+  .msh-info-grid,
+  .msh-breakdown-grid,
+  .msh-bench-grid,
+  .msh-news-grid,
+  .msh-news-head-grid,
+  .msh-news-section-grid {
+    grid-template-columns: 1fr;
+  }
+}
 
 @media (max-width: 768px) {
   .msh-page-wrap {
@@ -3143,16 +3151,16 @@ onKeyDown={(e) => {
         </div>
       ) : null}
 
-      <div className="msh-main-grid">
-        <div className="msh-left-stack">
-          {indicator === "None" ? <OverviewPanel /> : <IndicatorPanel />}
-          <BreakdownPanel />
-        </div>
+<div className="msh-main-grid">
+  <div className="msh-left-stack msh-mobile-secondary">
+    {indicator === "None" ? <OverviewPanel /> : <IndicatorPanel />}
+    <BreakdownPanel />
+  </div>
 
-        <div>
-          <ChartPanel />
-        </div>
-      </div>
+  <div className="msh-mobile-primary">
+    <ChartPanel />
+  </div>
+</div>
 
       <div className="msh-lower-grid">
         <BenchmarksPanel />
