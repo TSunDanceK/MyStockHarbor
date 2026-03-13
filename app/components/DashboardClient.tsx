@@ -2499,11 +2499,11 @@ function ChartPanel() {
   }}
 >
   <div style={{ fontWeight: 900, marginBottom: 6 }}>
-    Ready to trade this stock?
+    Ready to act on this setup?
   </div>
 
   <div style={{ fontSize: 13, color: COLORS.mutedFg, marginBottom: 10 }}>
-    Compare the best trading platforms for your strategy.
+    Compare beginner-friendly trading platforms, charting tools, and brokers.
   </div>
 
   <Link
