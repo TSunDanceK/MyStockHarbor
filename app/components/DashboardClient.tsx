@@ -2487,41 +2487,7 @@ function ChartPanel() {
     : "No chart data"}
 </div>
 
-<div
-  style={{
-    marginTop: 16,
-    padding: "14px 16px",
-    borderRadius: 14,
-    border: `1px solid rgba(59,130,246,0.35)`,
-    background: COLORS.isDark
-      ? "linear-gradient(135deg, rgba(37,99,235,0.18), rgba(29,78,216,0.10))"
-      : "linear-gradient(135deg, rgba(37,99,235,0.10), rgba(29,78,216,0.06))",
-  }}
->
-  <div style={{ fontWeight: 900, marginBottom: 6 }}>
-    Ready to act on this setup?
-  </div>
 
-  <div style={{ fontSize: 13, color: COLORS.mutedFg, marginBottom: 10 }}>
-    Compare beginner-friendly trading platforms, charting tools, and brokers.
-  </div>
-
-  <Link
-    href="/platforms"
-    style={{
-      display: "inline-block",
-      padding: "10px 14px",
-      borderRadius: 10,
-      fontWeight: 900,
-      textDecoration: "none",
-      background: "#2563eb",
-      color: "#ffffff",
-      fontSize: 14,
-    }}
-  >
-    View Trading Platforms →
-  </Link>
-</div>
       </div>
     </SectionCard>
   );
@@ -3134,6 +3100,41 @@ onKeyDown={(e) => {
           <ChartPanel />
         </div>
       </div>
+      <div
+  style={{
+    marginTop: 18,
+    padding: "16px 18px",
+    borderRadius: 16,
+    border: `1px solid rgba(59,130,246,0.35)`,
+    background: COLORS.isDark
+      ? "linear-gradient(135deg, rgba(37,99,235,0.18), rgba(29,78,216,0.10))"
+      : "linear-gradient(135deg, rgba(37,99,235,0.10), rgba(29,78,216,0.06))",
+  }}
+>
+  <div style={{ fontWeight: 900, marginBottom: 6 }}>
+    Ready to act on this setup?
+  </div>
+
+  <div style={{ fontSize: 13, color: COLORS.mutedFg, marginBottom: 10 }}>
+    Compare beginner-friendly trading platforms, charting tools, and brokers.
+  </div>
+
+  <Link
+    href="/platforms"
+    style={{
+      display: "inline-block",
+      padding: "10px 14px",
+      borderRadius: 10,
+      fontWeight: 900,
+      textDecoration: "none",
+      background: "#2563eb",
+      color: "#ffffff",
+      fontSize: 14,
+    }}
+  >
+    View Trading Platforms →
+  </Link>
+</div>
 
       <div className="msh-lower-grid">
         <BenchmarksPanel />
