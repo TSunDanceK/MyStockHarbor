@@ -296,25 +296,45 @@ export default function PlatformsPage() {
             </div>
           </div>
 
-          <div
-            style={{
-              borderRadius: 16,
-              border: "1px solid rgba(59,130,246,0.28)",
-              background:
-                "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(168,85,247,0.08))",
-              padding: 16,
-            }}
-          >
-            <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>
-              BEST FOR BEGINNERS
-            </div>
-            <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900 }}>
-              Trading 212
-            </div>
-            <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.55 }}>
-              Best if you want the simplest route to buying stocks and ETFs.
-            </div>
-          </div>
+<div
+  style={{
+    borderRadius: 16,
+    border: "1px solid rgba(59,130,246,0.28)",
+    background:
+      "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(168,85,247,0.08))",
+    padding: 16,
+    position: "relative",
+    overflow: "hidden",
+  }}
+>
+  <div
+    style={{
+      display: "inline-flex",
+      alignItems: "center",
+      padding: "5px 10px",
+      borderRadius: 999,
+      background: "rgba(250,204,21,0.18)",
+      border: "1px solid rgba(250,204,21,0.30)",
+      color: "#fde68a",
+      fontSize: 11,
+      fontWeight: 900,
+      letterSpacing: "0.35px",
+      marginBottom: 10,
+    }}
+  >
+    ★ MOST BEGINNER-FRIENDLY
+  </div>
+
+  <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>
+    BEST FOR BEGINNERS
+  </div>
+  <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900 }}>
+    Trading 212
+  </div>
+  <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.55 }}>
+    Best if you want the simplest route to buying stocks and ETFs.
+  </div>
+</div>
 
           <div
             style={{
