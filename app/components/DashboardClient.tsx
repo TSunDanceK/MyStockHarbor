@@ -2481,12 +2481,38 @@ function ChartPanel() {
           height={chartHeight}
         />
 
-<div style={{ marginTop: 12, color: COLORS.mutedFg, fontSize: 13, fontWeight: 700 }}>
-  {displayedHistory.length
-    ? `From ${displayedHistory[0].date} → ${displayedHistory[displayedHistory.length - 1].date}`
-    : "No chart data"}
-</div>
+<div
+  style={{
+    marginTop: 12,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+    flexWrap: "wrap",
+    fontSize: 13,
+    fontWeight: 700,
+    color: COLORS.mutedFg,
+  }}
+>
+  <div>
+    {displayedHistory.length
+      ? `From ${displayedHistory[0].date} → ${displayedHistory[displayedHistory.length - 1].date}`
+      : "No chart data"}
+  </div>
 
+  <Link
+    href="/platforms"
+    style={{
+      fontWeight: 900,
+      fontSize: 13,
+      textDecoration: "none",
+      color: "#3b82f6",
+      whiteSpace: "nowrap",
+    }}
+  >
+    Trade this setup →
+  </Link>
+</div>
 
       </div>
     </SectionCard>
