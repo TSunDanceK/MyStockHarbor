@@ -2924,15 +2924,19 @@ return (
   justify-content: space-between;
 }
 
-.msh-timeframes {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-  justify-content: stretch;
-}
+@media (max-width: 768px) {
 
-.msh-timeframes > * {
-  width: 100%;
+  .msh-timeframes {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    justify-content: stretch;
+  }
+
+  .msh-timeframes > * {
+    width: 100%;
+  }
+
 }
 
   .msh-overview-head {
