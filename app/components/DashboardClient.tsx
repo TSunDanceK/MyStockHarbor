@@ -2908,12 +2908,20 @@ return (
     align-items: stretch;
   }
 
-  .msh-timeframes {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 8px;
-    justify-content: stretch;
-  }
+.msh-timeframes {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  justify-content: space-between;
+}
+
+.msh-timeframes button {
+  flex: 1;
+  height: 36px;
+  padding: 0;
+  font-size: 12px;
+  border-radius: 10px;
+}
 
   .msh-timeframes > * {
     width: 100%;
