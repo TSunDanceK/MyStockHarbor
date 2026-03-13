@@ -2924,17 +2924,16 @@ return (
   justify-content: space-between;
 }
 
-.msh-timeframes button {
-  flex: 1;
-  height: 36px;
-  padding: 0;
-  font-size: 12px;
-  border-radius: 10px;
+.msh-timeframes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  justify-content: stretch;
 }
 
-  .msh-timeframes > * {
-    width: 100%;
-  }
+.msh-timeframes > * {
+  width: 100%;
+}
 
   .msh-overview-head {
     grid-template-columns: minmax(0, 1fr) auto !important;
