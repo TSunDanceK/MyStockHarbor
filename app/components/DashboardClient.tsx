@@ -2547,7 +2547,7 @@ function ChartPanel() {
               transition: "transform 120ms ease, filter 120ms ease",
             }}
           >
-            Trade this setup →
+            Trade {symbol} →
           </Link>
         </div>
       </div>
