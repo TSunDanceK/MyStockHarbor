@@ -25,9 +25,22 @@ export default function Page() {
         Educational stock dashboard and market research tools.
       </div>
 
-      <Suspense fallback={<div style={{ padding: 40, fontFamily: "system-ui" }}>Loading dashboard…</div>}>
-        <DashboardClient />
-      </Suspense>
+<Suspense fallback={<div style={{ padding: 40, fontFamily: "system-ui" }}>Loading dashboard…</div>}>
+  <script
+    type="application/ld+json"
+    dangerouslySetInnerHTML={{
+      __html: JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        name: "MyStockHarbor",
+        url: "https://www.mystockharbor.com",
+        description:
+          "Stock analysis dashboard for understanding trend, momentum, stretch, and market context.",
+      }),
+    }}
+  />
+  <DashboardClient />
+</Suspense>
     </>
   );
 }
