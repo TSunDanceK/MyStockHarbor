@@ -243,18 +243,20 @@ export default function PlatformsPage() {
               Best Trading Platforms for Beginners, Chart Analysis, and Serious Traders
             </h1>
 
-            <div
-              style={{
-                marginTop: 8,
-                opacity: 0.78,
-                lineHeight: 1.55,
-                maxWidth: 860,
-              }}
-            >
-              The best setup for many people is simple: use{" "}
-              <strong>TradingView</strong> for charting and analysis, then
-              choose a broker platform below to actually buy and sell stocks.
-            </div>
+<div
+  style={{
+    marginTop: 8,
+    opacity: 0.78,
+    lineHeight: 1.55,
+    maxWidth: 860,
+  }}
+>
+  Looking for the best trading platform for beginners, better stock chart analysis,
+  or a stronger long-term broker? This guide compares the best trading platforms
+  for different types of users, including <strong>TradingView</strong> for charting,
+  <strong> Trading 212</strong> for beginners, and <strong>Interactive Brokers</strong>
+  for more serious traders.
+</div>
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
