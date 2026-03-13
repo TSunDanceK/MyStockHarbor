@@ -454,6 +454,17 @@ export default function PlatformsPage() {
     <div style={{ opacity: 0.86, lineHeight: 1.55 }}>
       <strong>If you want a more serious broker:</strong> choose <strong>Interactive Brokers</strong> for a stronger long-term platform.
     </div>
+    <div
+  style={{
+    marginTop: 6,
+    paddingTop: 10,
+    borderTop: "1px solid rgba(255,255,255,0.1)",
+    opacity: 0.9,
+    lineHeight: 1.55,
+  }}
+>
+  <strong>Most people do this:</strong> analyse stocks on <strong>TradingView</strong>, then place the trade using a broker like <strong>Trading 212</strong> or <strong>Interactive Brokers</strong>.
+</div>
   </div>
 </div>
         <div style={{ marginTop: 22, display: "grid", gap: 16 }}>
