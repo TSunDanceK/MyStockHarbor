@@ -76,8 +76,40 @@ function calculatorPanelStyle(): React.CSSProperties {
     border: "1px solid rgba(59,130,246,0.22)",
     borderRadius: 18,
     padding: 18,
-    background: "linear-gradient(180deg, rgba(8,22,45,0.92), rgba(7,18,36,0.98))",
+    background: "linear-gradient(180deg, rgba(8,22,45,0.88), rgba(7,18,36,0.96))",
     boxShadow: "0 0 0 1px rgba(59,130,246,0.05) inset",
+  };
+}
+
+function badgeStyle(type: "blue" | "green"): React.CSSProperties {
+  if (type === "green") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 8,
+      padding: "6px 10px",
+      borderRadius: 999,
+      background: "#0f2c24",
+      border: "1px solid rgba(34,197,94,0.24)",
+      fontSize: 12,
+      fontWeight: 900,
+      letterSpacing: "0.3px",
+      color: "#f8fafc",
+    };
+  }
+
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "6px 10px",
+    borderRadius: 999,
+    background: "#102a52",
+    border: "1px solid rgba(59,130,246,0.24)",
+    fontSize: 12,
+    fontWeight: 900,
+    letterSpacing: "0.3px",
+    color: "#f8fafc",
   };
 }
 
@@ -88,7 +120,7 @@ function inputStyle(): React.CSSProperties {
     padding: "0 14px",
     borderRadius: 12,
     border: "1px solid rgba(255,255,255,0.14)",
-    background: "#1b2944",
+    background: "#1a2742",
     color: "#f8fafc",
     outline: "none",
     fontSize: 14,
@@ -104,7 +136,7 @@ function selectStyle(): React.CSSProperties {
     padding: "0 14px",
     borderRadius: 12,
     border: "1px solid rgba(255,255,255,0.14)",
-    background: "#1b2944",
+    background: "#1a2742",
     color: "#f8fafc",
     outline: "none",
     fontSize: 14,
@@ -117,7 +149,7 @@ function baseResultBoxStyle(): React.CSSProperties {
   return {
     borderRadius: 14,
     border: "1px solid rgba(255,255,255,0.12)",
-    background: "#15243d",
+    background: "#13233b",
     padding: 14,
   };
 }
@@ -126,7 +158,7 @@ function infoCardStyle(): React.CSSProperties {
   return {
     borderRadius: 14,
     border: "1px solid rgba(255,255,255,0.12)",
-    background: "#15243d",
+    background: "#13233b",
     padding: 14,
   };
 }
@@ -221,8 +253,8 @@ function tintBox(
   if (type === "green") {
     return {
       ...base,
-      border: "1px solid rgba(34,197,94,0.45)",
-      background: "linear-gradient(135deg, rgba(22,101,52,0.22), #15243d)",
+      border: "1px solid rgba(34,197,94,0.44)",
+      background: "linear-gradient(135deg, rgba(11,61,44,0.95), #13233b)",
       boxShadow: emphasize ? "0 0 0 1px rgba(34,197,94,0.10) inset" : "none",
     };
   }
@@ -231,7 +263,7 @@ function tintBox(
     return {
       ...base,
       border: "1px solid rgba(234,179,8,0.42)",
-      background: "linear-gradient(135deg, rgba(133,77,14,0.22), #15243d)",
+      background: "linear-gradient(135deg, rgba(78,56,12,0.95), #13233b)",
     };
   }
 
@@ -239,7 +271,7 @@ function tintBox(
     return {
       ...base,
       border: "1px solid rgba(239,68,68,0.46)",
-      background: "linear-gradient(135deg, rgba(127,29,29,0.24), #15243d)",
+      background: "linear-gradient(135deg, rgba(83,22,22,0.95), #13233b)",
     };
   }
 
@@ -473,22 +505,7 @@ export default function UtilitiesClientPage() {
 
         <div style={{ marginTop: 22 }} className="grid2">
           <section style={calculatorPanelStyle()}>
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "6px 10px",
-                borderRadius: 999,
-                background: "rgba(59,130,246,0.14)",
-                border: "1px solid rgba(59,130,246,0.22)",
-                fontSize: 12,
-                fontWeight: 900,
-                letterSpacing: "0.3px",
-              }}
-            >
-              MARGIN TOOL
-            </div>
+            <div style={badgeStyle("blue")}>MARGIN TOOL</div>
 
             <h2
               style={{
@@ -628,22 +645,7 @@ export default function UtilitiesClientPage() {
           </section>
 
           <section style={calculatorPanelStyle()}>
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "6px 10px",
-                borderRadius: 999,
-                background: "rgba(34,197,94,0.14)",
-                border: "1px solid rgba(34,197,94,0.22)",
-                fontSize: 12,
-                fontWeight: 900,
-                letterSpacing: "0.3px",
-              }}
-            >
-              RISK TOOL
-            </div>
+            <div style={badgeStyle("green")}>RISK TOOL</div>
 
             <h2
               style={{
