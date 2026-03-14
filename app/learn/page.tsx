@@ -113,53 +113,24 @@ export default function LearnPage() {
         gap: 12,
       }}
     >
-      <Link
-        href="/how-to-read-stock-charts"
-        style={learnGuideCard()}
-      >
+      <Link href="/how-to-read-stock-charts" style={learnGuideCard()}>
         <div style={{ fontWeight: 900, fontSize: 16 }}>How to Read Stock Charts</div>
         <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
           A beginner-friendly guide to trend, support, resistance, and chart context.
         </div>
       </Link>
 
-      <Link
-        href="/best-stock-indicators-for-beginners"
-        style={learnGuideCard()}
-      >
+      <Link href="/best-stock-indicators-for-beginners" style={learnGuideCard()}>
         <div style={{ fontWeight: 900, fontSize: 16 }}>Best Stock Indicators for Beginners</div>
         <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
           Learn which indicators matter most when you are just starting out.
         </div>
       </Link>
 
-      <Link
-        href="/what-is-rsi-indicator"
-        style={learnGuideCard()}
-      >
-        <div style={{ fontWeight: 900, fontSize: 16 }}>What Is RSI Indicator?</div>
+      <Link href="/how-to-identify-stock-trends" style={learnGuideCard()}>
+        <div style={{ fontWeight: 900, fontSize: 16 }}>How to Identify Stock Trends</div>
         <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
-          Understand overbought, oversold, and how RSI helps read momentum.
-        </div>
-      </Link>
-
-      <Link
-        href="/what-is-macd-indicator"
-        style={learnGuideCard()}
-      >
-        <div style={{ fontWeight: 900, fontSize: 16 }}>What Is MACD Indicator?</div>
-        <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
-          Learn how MACD helps confirm momentum and possible trend shifts.
-        </div>
-      </Link>
-
-      <Link
-        href="/what-is-vwap-indicator"
-        style={learnGuideCard()}
-      >
-        <div style={{ fontWeight: 900, fontSize: 16 }}>What Is VWAP Indicator?</div>
-        <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
-          Learn how traders use VWAP to judge fair value and price stretch.
+          Learn how to recognise uptrends, downtrends, and sideways markets.
         </div>
       </Link>
     </div>
