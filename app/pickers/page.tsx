@@ -208,24 +208,24 @@ export default function PickersPage() {
     display: "grid",
     placeItems: "center",
     textAlign: "center",
-    minHeight: 110,
+    minHeight: 100,
   }}
 >
   <div
     style={{
-      fontSize: 14,
+      fontSize: 13,
       fontWeight: 800,
-      letterSpacing: "0.04em",
-      color: "rgba(219,234,254,0.92)",
+      letterSpacing: "0.06em",
+      color: "rgba(219,234,254,0.85)",
       textTransform: "uppercase",
     }}
   >
-    See screened stocks below
+    Screened stocks below
   </div>
 
   <div
     style={{
-      marginTop: 10,
+      marginTop: 8,
       fontSize: 24,
       lineHeight: 1,
       color: "rgba(96,165,250,0.9)",
