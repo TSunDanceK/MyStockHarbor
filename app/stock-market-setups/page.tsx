@@ -163,9 +163,7 @@ export default function StockMarketSetupsPage() {
                 display: "block",
               }}
             >
-              <div style={{ fontWeight: 900, fontSize: 18 }}>
-                {setup.title}
-              </div>
+              <div style={{ fontWeight: 900, fontSize: 18 }}>{setup.title}</div>
 
               <p
                 style={{
