@@ -1798,18 +1798,22 @@ const icon =
   isUtilities ? "🧮" :
   "→";
 
-  const bg = isLearn
-    ? "linear-gradient(135deg, rgba(59,130,246,0.20), rgba(37,99,235,0.10))"
-    : isPlatforms
-      ? "linear-gradient(135deg, rgba(34,197,94,0.20), rgba(16,185,129,0.10))"
+const bg = isLearn
+  ? "linear-gradient(135deg, rgba(59,130,246,0.20), rgba(37,99,235,0.10))"
+  : isPlatforms
+    ? "linear-gradient(135deg, rgba(34,197,94,0.20), rgba(16,185,129,0.10))"
+    : isPickers
+      ? "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.10))"
       : isUtilities
         ? "linear-gradient(135deg, rgba(168,85,247,0.20), rgba(139,92,246,0.10))"
         : COLORS.controlBg;
 
-  const border = isLearn
-    ? "rgba(59,130,246,0.45)"
-    : isPlatforms
-      ? "rgba(34,197,94,0.45)"
+const border = isLearn
+  ? "rgba(59,130,246,0.45)"
+  : isPlatforms
+    ? "rgba(34,197,94,0.45)"
+    : isPickers
+      ? "rgba(239,68,68,0.45)"
       : isUtilities
         ? "rgba(168,85,247,0.45)"
         : COLORS.controlBorder;
@@ -1828,7 +1832,7 @@ const icon =
         borderRadius: 14,
         border: `1px solid ${border}`,
         background: bg,
-        color: COLORS.controlFg,
+        color: isPickers ? "#fef2f2" : COLORS.controlFg,
         textDecoration: "none",
         fontWeight: 900,
         fontSize: 14,
