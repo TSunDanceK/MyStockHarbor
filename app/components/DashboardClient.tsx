@@ -2996,7 +2996,7 @@ return (
         <div className="msh-top-right">
           <SmallNavLink href="/learn">Learn</SmallNavLink>
           <SmallNavLink href="/platforms">Platforms</SmallNavLink>
-          <SmallNavLink href="/utilities">Utilities</SmallNavLink>
+          <SmallNavLink href="/utilities">Calculators</SmallNavLink>
           <button
   type="button"
   onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
@@ -3032,7 +3032,7 @@ return (
       <div className="msh-mobile-nav">
         <SmallNavLink href="/learn">Learn</SmallNavLink>
         <SmallNavLink href="/platforms">Platforms</SmallNavLink>
-        <SmallNavLink href="/utilities">Utilities</SmallNavLink>
+        <SmallNavLink href="/utilities">Calculators</SmallNavLink>
 
         <button
           type="button"
