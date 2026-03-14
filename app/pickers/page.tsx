@@ -288,9 +288,9 @@ export default function PickersPage() {
   </div>
 </section>
 
-        <div style={{ marginTop: 36 }}>
-          <PickersClient />
-        </div>
+<div style={{ marginTop: 36, maxWidth: 980 }}>
+  <PickersClient />
+</div>
 
         <section style={greySectionStyle}>
           <h2
@@ -385,50 +385,51 @@ export default function PickersPage() {
           </div>
         </section>
 
-        <section
-          style={{
-            marginTop: 24,
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-            gap: 14,
-          }}
-        >
-          <Link href="/learn" style={linkCardStyle}>
-            <div style={{ fontSize: 18, fontWeight: 950 }}>Learn the setups</div>
-            <div style={{ marginTop: 8, fontSize: 14, opacity: 0.78, lineHeight: 1.6 }}>
-              Visit the Learn hub to understand RSI, MACD, VWAP, ATR,
-              divergence and other chart concepts behind these filters.
-            </div>
-          </Link>
+<section
+  style={{
+    marginTop: 24,
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: 14,
+    maxWidth: 980,
+  }}
+>
+  <Link href="/learn" style={linkCardStyle}>
+    <div style={{ fontSize: 18, fontWeight: 950 }}>Learn the setups</div>
+    <div style={{ marginTop: 8, fontSize: 14, opacity: 0.78, lineHeight: 1.6 }}>
+      Visit the Learn hub to understand RSI, MACD, VWAP, ATR,
+      divergence and other chart concepts behind these filters.
+    </div>
+  </Link>
 
-          <Link href="/what-is-rsi-indicator" style={linkCardStyle}>
-            <div style={{ fontSize: 18, fontWeight: 950 }}>Understand RSI</div>
-            <div style={{ marginTop: 8, fontSize: 14, opacity: 0.78, lineHeight: 1.6 }}>
-              Read how RSI can help identify oversold and overbought zones when
-              reviewing stock ideas from this page.
-            </div>
-          </Link>
+  <Link href="/what-is-rsi-indicator" style={linkCardStyle}>
+    <div style={{ fontSize: 18, fontWeight: 950 }}>Understand RSI</div>
+    <div style={{ marginTop: 8, fontSize: 14, opacity: 0.78, lineHeight: 1.6 }}>
+      Read how RSI can help identify oversold and overbought zones when
+      reviewing stock ideas from this page.
+    </div>
+  </Link>
 
-          <Link href="/what-is-macd-indicator" style={linkCardStyle}>
-            <div style={{ fontSize: 18, fontWeight: 950 }}>
-              Learn MACD divergence
-            </div>
-            <div style={{ marginTop: 8, fontSize: 14, opacity: 0.78, lineHeight: 1.6 }}>
-              MACD can help confirm momentum shifts, trend strength and
-              divergence setups that appear in live scans.
-            </div>
-          </Link>
+  <Link href="/what-is-macd-indicator" style={linkCardStyle}>
+    <div style={{ fontSize: 18, fontWeight: 950 }}>
+      Learn MACD divergence
+    </div>
+    <div style={{ marginTop: 8, fontSize: 14, opacity: 0.78, lineHeight: 1.6 }}>
+      MACD can help confirm momentum shifts, trend strength and
+      divergence setups that appear in live scans.
+    </div>
+  </Link>
 
-          <Link href="/" style={linkCardStyle}>
-            <div style={{ fontSize: 18, fontWeight: 950 }}>
-              Open the full dashboard
-            </div>
-            <div style={{ marginTop: 8, fontSize: 14, opacity: 0.78, lineHeight: 1.6 }}>
-              Use the dashboard to inspect price action, overlays and technical
-              indicators for any symbol you find here.
-            </div>
-          </Link>
-        </section>
+  <Link href="/" style={linkCardStyle}>
+    <div style={{ fontSize: 18, fontWeight: 950 }}>
+      Open the full dashboard
+    </div>
+    <div style={{ marginTop: 8, fontSize: 14, opacity: 0.78, lineHeight: 1.6 }}>
+      Use the dashboard to inspect price action, overlays and technical
+      indicators for any symbol you find here.
+    </div>
+  </Link>
+</section>
 
         <section style={greySectionStyle}>
           <h2
