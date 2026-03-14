@@ -334,20 +334,61 @@ function learnCardHref(slug: string) {
 function Section(props: { title: string; items: { slug: string; title: string; summary: string }[] }) {
   const { title, items } = props;
 
+  const sectionTint =
+    title === "BASICS"
+      ? {
+          border: "1px solid rgba(59,130,246,0.22)",
+          background: "linear-gradient(180deg, rgba(10,18,34,0.96), rgba(7,12,24,0.98))",
+          labelBg: "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
+          labelBorder: "1px solid rgba(59,130,246,0.34)",
+          labelColor: "#dbeafe",
+        }
+      : title === "INDICATORS"
+      ? {
+          border: "1px solid rgba(168,85,247,0.22)",
+          background: "linear-gradient(180deg, rgba(12,16,34,0.96), rgba(8,11,24,0.98))",
+          labelBg: "linear-gradient(135deg, rgba(168,85,247,0.18), rgba(139,92,246,0.10))",
+          labelBorder: "1px solid rgba(168,85,247,0.34)",
+          labelColor: "#f3e8ff",
+        }
+      : {
+          border: "1px solid rgba(234,179,8,0.22)",
+          background: "linear-gradient(180deg, rgba(18,16,10,0.96), rgba(12,10,7,0.98))",
+          labelBg: "linear-gradient(135deg, rgba(234,179,8,0.18), rgba(202,138,4,0.10))",
+          labelBorder: "1px solid rgba(234,179,8,0.34)",
+          labelColor: "#fef3c7",
+        };
+
   return (
     <section
       style={{
-        border: "1px solid rgba(255,255,255,0.14)",
-        borderRadius: 16,
-        padding: 16,
-        background: "rgba(255,255,255,0.03)",
+        border: sectionTint.border,
+        borderRadius: 18,
+        padding: 18,
+        background: sectionTint.background,
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
       }}
     >
-      <div style={{ fontWeight: 950, letterSpacing: "0.6px", opacity: 0.9 }}>{title}</div>
+      <div
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          padding: "7px 12px",
+          borderRadius: 999,
+          background: sectionTint.labelBg,
+          border: sectionTint.labelBorder,
+          color: sectionTint.labelColor,
+          fontWeight: 950,
+          letterSpacing: "0.08em",
+          fontSize: 12,
+        }}
+      >
+        {title}
+      </div>
 
       <div
         style={{
-          marginTop: 12,
+          marginTop: 14,
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
           gap: 12,
@@ -365,7 +406,7 @@ function Section(props: { title: string; items: { slug: string; title: string; s
               color: "#f1f5f9",
               textDecoration: "none",
               display: "block",
-              transition: "transform 120ms ease, background 120ms ease",
+              transition: "transform 120ms ease, background 120ms ease, border-color 120ms ease",
             }}
           >
             <div style={{ fontWeight: 900, fontSize: 16 }}>{it.title}</div>
