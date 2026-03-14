@@ -30,7 +30,18 @@ const seoGuides = [
   "/bearish-divergence-stocks",
   "/overbought-stocks",
   "/stock-market-setups",
-   "/stock-screener-for-breakouts",
+  "/stock-screener-for-breakouts",
+  "/stock-screener-for-oversold-stocks",
+  "/stocks-down-20-percent",
+  "/best-free-stock-screener",
+  "/how-to-find-buy-the-dip-stocks",
+  "/bullish-divergence-explained",
+  "/bearish-divergence-explained",
+  "/best-indicators-for-swing-trading",
+  "/how-to-scan-stocks",
+  "/stocks-ready-to-break-out",
+  "/best-charting-platforms",
+  "/how-to-analyse-stocks",
 ];
 
   const stocks = [
