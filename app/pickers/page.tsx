@@ -177,6 +177,64 @@ export default function PickersPage() {
                   tint="amber"
                 />
               </div>
+              <div
+  style={{
+    marginTop: 18,
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: 10,
+    maxWidth: 560,
+  }}
+>
+  <MiniStat
+    label="Results"
+    value="Data-Driven Screening"
+    tint="green"
+  />
+  <MiniStat
+    label="Use Case"
+    value="Find Trade Ideas Faster"
+    tint="amber"
+  />
+</div>
+
+<div
+  style={{
+    marginTop: 20,
+    borderRadius: 18,
+    border: "1px dashed rgba(59,130,246,0.22)",
+    background: "rgba(59,130,246,0.04)",
+    padding: "18px 16px",
+    display: "grid",
+    placeItems: "center",
+    textAlign: "center",
+    minHeight: 110,
+  }}
+>
+  <div
+    style={{
+      fontSize: 14,
+      fontWeight: 800,
+      letterSpacing: "0.04em",
+      color: "rgba(219,234,254,0.92)",
+      textTransform: "uppercase",
+    }}
+  >
+    See screened stocks below
+  </div>
+
+  <div
+    style={{
+      marginTop: 10,
+      fontSize: 24,
+      lineHeight: 1,
+      color: "rgba(96,165,250,0.9)",
+      letterSpacing: "0.25em",
+    }}
+  >
+    ↓ ↓ ↓
+  </div>
+</div>
             </section>
 
             <section
