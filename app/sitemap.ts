@@ -24,6 +24,7 @@ const seoGuides = [
   "/what-is-vwap-indicator",
   "/stocks-down-from-highs",
   "/oversold-stocks",
+  "/breakout-stocks",
 ];
 
   const stocks = [
