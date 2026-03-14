@@ -44,6 +44,16 @@ const greySectionStyle: React.CSSProperties = {
   maxWidth: 980,
 };
 
+const signalCardBaseStyle: React.CSSProperties = {
+  borderRadius: 14,
+  padding: "16px 18px",
+  minHeight: 104,
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "center",
+  textAlign: "left",
+};
+
 export default function PickersPage() {
   return (
     <main
@@ -139,72 +149,138 @@ export default function PickersPage() {
             borderRadius: 18,
             padding: 18,
             background:
-              "linear-gradient(180deg, rgba(15,23,42,0.92), rgba(11,18,32,0.96))",
+              "linear-gradient(180deg, rgba(12,18,32,0.96), rgba(8,12,24,0.98))",
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
           }}
         >
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
               gap: 12,
+              alignItems: "stretch",
             }}
           >
             <div
               style={{
-                border: "1px solid rgba(34,197,94,0.22)",
-                background: "rgba(34,197,94,0.08)",
-                borderRadius: 14,
-                padding: 14,
+                ...signalCardBaseStyle,
+                border: "1px solid rgba(34,197,94,0.35)",
+                background:
+                  "linear-gradient(180deg, rgba(6,78,59,0.34), rgba(6,46,33,0.5))",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
               }}
             >
-              <div style={{ fontWeight: 900, fontSize: 15 }}>
+              <div
+                style={{
+                  fontWeight: 900,
+                  fontSize: 15,
+                  color: "#ecfdf5",
+                }}
+              >
                 Green Overall Signal
               </div>
-              <div style={{ marginTop: 6, fontSize: 13, opacity: 0.76 }}>
+              <div
+                style={{
+                  marginTop: 6,
+                  fontSize: 13,
+                  lineHeight: 1.55,
+                  color: "rgba(236,253,245,0.84)",
+                  maxWidth: 260,
+                }}
+              >
                 Oversold-leaning stocks that may be setting up for a rebound.
               </div>
             </div>
 
             <div
               style={{
-                border: "1px solid rgba(239,68,68,0.22)",
-                background: "rgba(239,68,68,0.08)",
-                borderRadius: 14,
-                padding: 14,
+                ...signalCardBaseStyle,
+                border: "1px solid rgba(239,68,68,0.35)",
+                background:
+                  "linear-gradient(180deg, rgba(127,29,29,0.3), rgba(69,10,10,0.5))",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
               }}
             >
-              <div style={{ fontWeight: 900, fontSize: 15 }}>
+              <div
+                style={{
+                  fontWeight: 900,
+                  fontSize: 15,
+                  color: "#fef2f2",
+                }}
+              >
                 Red Overall Signal
               </div>
-              <div style={{ marginTop: 6, fontSize: 13, opacity: 0.76 }}>
+              <div
+                style={{
+                  marginTop: 6,
+                  fontSize: 13,
+                  lineHeight: 1.55,
+                  color: "rgba(254,242,242,0.84)",
+                  maxWidth: 260,
+                }}
+              >
                 Overbought-leaning stocks that may be stretched or vulnerable.
               </div>
             </div>
 
             <div
               style={{
-                border: "1px solid rgba(250,204,21,0.22)",
-                background: "rgba(250,204,21,0.08)",
-                borderRadius: 14,
-                padding: 14,
+                ...signalCardBaseStyle,
+                border: "1px solid rgba(234,179,8,0.34)",
+                background:
+                  "linear-gradient(180deg, rgba(113,63,18,0.28), rgba(66,32,6,0.48))",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
               }}
             >
-              <div style={{ fontWeight: 900, fontSize: 15 }}>Divergences</div>
-              <div style={{ marginTop: 6, fontSize: 13, opacity: 0.76 }}>
+              <div
+                style={{
+                  fontWeight: 900,
+                  fontSize: 15,
+                  color: "#fefce8",
+                }}
+              >
+                Divergences
+              </div>
+              <div
+                style={{
+                  marginTop: 6,
+                  fontSize: 13,
+                  lineHeight: 1.55,
+                  color: "rgba(254,252,232,0.84)",
+                  maxWidth: 260,
+                }}
+              >
                 Stocks showing possible momentum disagreement versus price.
               </div>
             </div>
 
             <div
               style={{
-                border: "1px solid rgba(59,130,246,0.22)",
-                background: "rgba(59,130,246,0.08)",
-                borderRadius: 14,
-                padding: 14,
+                ...signalCardBaseStyle,
+                border: "1px solid rgba(59,130,246,0.35)",
+                background:
+                  "linear-gradient(180deg, rgba(30,64,175,0.28), rgba(17,37,84,0.5))",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
               }}
             >
-              <div style={{ fontWeight: 900, fontSize: 15 }}>Breakouts</div>
-              <div style={{ marginTop: 6, fontSize: 13, opacity: 0.76 }}>
+              <div
+                style={{
+                  fontWeight: 900,
+                  fontSize: 15,
+                  color: "#eff6ff",
+                }}
+              >
+                Breakouts
+              </div>
+              <div
+                style={{
+                  marginTop: 6,
+                  fontSize: 13,
+                  lineHeight: 1.55,
+                  color: "rgba(239,246,255,0.84)",
+                  maxWidth: 260,
+                }}
+              >
                 Stocks pressing into strength, new highs or fresh momentum.
               </div>
             </div>
