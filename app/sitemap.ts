@@ -45,6 +45,7 @@ const seoGuides = [
   "/how-to-analyse-stocks",
   "/stocks-with-high-rsi",
   "/stocks-with-low-rsi",
+  "/stocks-with-unusual-volume",
 ];
 
   const stocks = [
