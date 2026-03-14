@@ -219,102 +219,129 @@ export default async function LessonPage({ params }: Props) {
       }}
     >
       <div className="wrap">
-        {/* Top header */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 800 }}>
-              {lesson.category.toUpperCase()}
-            </div>
+        <div style={{ display: "grid", gap: 12 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+              gap: 16,
+              flexWrap: "nowrap",
+            }}
+          >
+            <div style={{ minWidth: 0 }} />
 
-            <h1 style={{ margin: "6px 0 0", fontSize: 34, letterSpacing: "-0.4px" }}>
-              {lesson.title}
-            </h1>
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+                justifyContent: "flex-end",
+                alignItems: "flex-start",
+                flex: "0 0 auto",
+                marginLeft: "auto",
+              }}
+            >
+              <Link href="/" style={topNavBtnStyle("dashboard")}>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    fontSize: 15,
+                    lineHeight: 1,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {topNavIcon("dashboard")}
+                </span>
+                <span>Dashboard</span>
+              </Link>
 
-            <div style={{ marginTop: 8, opacity: 0.78, lineHeight: 1.5 }}>
-              {lesson.summary}
+              <Link href="/platforms" style={topNavBtnStyle("platforms")}>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    fontSize: 15,
+                    lineHeight: 1,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {topNavIcon("platforms")}
+                </span>
+                <span>Platforms</span>
+              </Link>
+
+              <Link href="/pickers" style={topNavBtnStyle("pickers")}>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    fontSize: 15,
+                    lineHeight: 1,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {topNavIcon("pickers")}
+                </span>
+                <span>Stock Pickers</span>
+              </Link>
+
+              <Link href="/utilities" style={topNavBtnStyle("calculators")}>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    fontSize: 15,
+                    lineHeight: 1,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {topNavIcon("calculators")}
+                </span>
+                <span>Calculators</span>
+              </Link>
             </div>
           </div>
 
           <div
             style={{
-              display: "flex",
-              gap: 10,
-              flexWrap: "wrap",
-              justifyContent: "flex-end",
-              alignItems: "flex-start",
+              fontSize: 12,
+              opacity: 0.72,
+              fontWeight: 800,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
             }}
           >
-            <Link href="/" style={topNavBtnStyle("dashboard")}>
-              <span
-                aria-hidden="true"
-                style={{
-                  fontSize: 15,
-                  lineHeight: 1,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {topNavIcon("dashboard")}
-              </span>
-              <span>Dashboard</span>
-            </Link>
+            {lesson.category}
+          </div>
 
-            <Link href="/platforms" style={topNavBtnStyle("platforms")}>
-              <span
-                aria-hidden="true"
-                style={{
-                  fontSize: 15,
-                  lineHeight: 1,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {topNavIcon("platforms")}
-              </span>
-              <span>Platforms</span>
-            </Link>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 34,
+              lineHeight: 1.15,
+              letterSpacing: "-0.4px",
+              maxWidth: 760,
+            }}
+          >
+            {lesson.title}
+          </h1>
 
-            <Link href="/pickers" style={topNavBtnStyle("pickers")}>
-              <span
-                aria-hidden="true"
-                style={{
-                  fontSize: 15,
-                  lineHeight: 1,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {topNavIcon("pickers")}
-              </span>
-              <span>Stock Pickers</span>
-            </Link>
-
-            <Link href="/utilities" style={topNavBtnStyle("calculators")}>
-              <span
-                aria-hidden="true"
-                style={{
-                  fontSize: 15,
-                  lineHeight: 1,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {topNavIcon("calculators")}
-              </span>
-              <span>Calculators</span>
-            </Link>
+          <div
+            style={{
+              margin: 0,
+              opacity: 0.78,
+              lineHeight: 1.6,
+              maxWidth: 760,
+              fontSize: 17,
+            }}
+          >
+            {lesson.summary}
           </div>
         </div>
 
