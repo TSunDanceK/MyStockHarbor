@@ -58,8 +58,9 @@ function HelpTip({ text }: { text: string }) {
   );
 }
 
-function topNavBtnStyle(type: "learn" | "pickers" | "calculators" | "dashboard"): React.CSSProperties {
-  if (type === "learn") {
+function topNavBtnStyle(type: "learn" | "pickers" | "dashboard"): React.CSSProperties {
+
+  if (type === "dashboard") {
     return {
       display: "inline-flex",
       alignItems: "center",
@@ -68,9 +69,9 @@ function topNavBtnStyle(type: "learn" | "pickers" | "calculators" | "dashboard")
       minHeight: 42,
       padding: "9px 13px",
       borderRadius: 14,
-      border: "1px solid rgba(59,130,246,0.45)",
-      background: "linear-gradient(135deg, rgba(59,130,246,0.20), rgba(37,99,235,0.10))",
-      color: "#f1f5f9",
+      border: "1px solid rgba(250,204,21,0.45)",
+      background: "linear-gradient(135deg, rgba(250,204,21,0.20), rgba(202,138,4,0.10))",
+      color: "#fefce8",
       textDecoration: "none",
       fontWeight: 900,
       fontSize: 14,
@@ -89,30 +90,9 @@ function topNavBtnStyle(type: "learn" | "pickers" | "calculators" | "dashboard")
       minHeight: 42,
       padding: "9px 13px",
       borderRadius: 14,
-      border: "1px solid rgba(255,255,255,0.16)",
-      background: "rgba(255,255,255,0.06)",
-      color: "#f1f5f9",
-      textDecoration: "none",
-      fontWeight: 900,
-      fontSize: 14,
-      whiteSpace: "nowrap",
-      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-      transition: "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-    };
-  }
-
-  if (type === "calculators") {
-    return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-      minHeight: 42,
-      padding: "9px 13px",
-      borderRadius: 14,
-      border: "1px solid rgba(168,85,247,0.45)",
-      background: "linear-gradient(135deg, rgba(168,85,247,0.20), rgba(139,92,246,0.10))",
-      color: "#f1f5f9",
+      border: "1px solid rgba(239,68,68,0.45)",
+      background: "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.10))",
+      color: "#fef2f2",
       textDecoration: "none",
       fontWeight: 900,
       fontSize: 14,
@@ -130,8 +110,8 @@ function topNavBtnStyle(type: "learn" | "pickers" | "calculators" | "dashboard")
     minHeight: 42,
     padding: "9px 13px",
     borderRadius: 14,
-    border: "1px solid rgba(255,255,255,0.14)",
-    background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(59,130,246,0.45)",
+    background: "linear-gradient(135deg, rgba(59,130,246,0.20), rgba(37,99,235,0.10))",
     color: "#f1f5f9",
     textDecoration: "none",
     fontWeight: 900,
@@ -142,11 +122,10 @@ function topNavBtnStyle(type: "learn" | "pickers" | "calculators" | "dashboard")
   };
 }
 
-function topNavIcon(type: "learn" | "pickers" | "calculators" | "dashboard") {
+function topNavIcon(type: "learn" | "pickers" | "dashboard") {
   if (type === "learn") return "📘";
   if (type === "pickers") return "📊";
-  if (type === "calculators") return "🧮";
-  return "←";
+  if (type === "dashboard") return "📈";
 }
 
 function calculatorPanelStyle(): React.CSSProperties {
