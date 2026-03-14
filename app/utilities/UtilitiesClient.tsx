@@ -377,13 +377,19 @@ export default function UtilitiesClientPage() {
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <Link href="/" style={topBtn()}>
-              ← Dashboard
-            </Link>
-            <Link href="/learn" style={topBtn()}>
-              Learn →
-            </Link>
+<div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+  <Link href="/" style={topBtn()}>
+    ← Dashboard
+  </Link>
+
+  <Link href="/pickers" style={topBtn()}>
+    Find Stocks →
+  </Link>
+
+  <Link href="/learn" style={topBtn()}>
+    Learn →
+  </Link>
+</div>
           </div>
         </div>
 
