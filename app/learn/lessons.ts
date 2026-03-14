@@ -41,56 +41,6 @@ export const LESSONS: Lesson[] = [
           "If a level breaks, price often moves faster because the “wall” is gone.",
         ],
       },
-        {
-    slug: "how-to-identify-stock-trends",
-    title: "How to Identify Stock Trends",
-    category: "Basics",
-    summary: "Learn how to recognise uptrends, downtrends, and sideways markets using price structure and moving averages.",
-    sections: [
-      {
-        heading: "What it is",
-        body: [
-          "Trend is the overall direction price is moving over time.",
-          "An uptrend usually means higher highs and higher lows.",
-          "A downtrend usually means lower highs and lower lows.",
-          "A sideways market means price is ranging without a clear direction.",
-        ],
-      },
-      {
-        heading: "How to identify it",
-        body: [
-          "Start with price structure first: higher highs and higher lows usually signal an uptrend.",
-          "Use moving averages like MA50 and MA200 to help simplify the chart.",
-          "Check whether momentum indicators like RSI or MACD agree with the move.",
-          "Use higher timeframes for the bigger picture before focusing on lower timeframes.",
-        ],
-      },
-      {
-        heading: "What it means",
-        body: [
-          "A strong trend gives context to the rest of the chart.",
-          "It helps you judge whether pullbacks are normal or whether the move may be weakening.",
-          "Trend direction can shape how you interpret indicators, support, and resistance.",
-        ],
-      },
-      {
-        heading: "Common mistakes",
-        body: [
-          "Trying to call reversals too early before the chart structure has changed.",
-          "Using indicators before understanding the underlying price trend.",
-          "Ignoring the wider market context when judging a stock move.",
-        ],
-      },
-      {
-        heading: "Why it’s useful",
-        body: [
-          "Trend is one of the most important building blocks in chart reading.",
-          "It helps traders align with stronger moves instead of fighting them.",
-          "It makes signals from indicators and levels much easier to interpret.",
-        ],
-      },
-    ],
-  },
       {
         heading: "Common mistakes",
         body: [
@@ -110,6 +60,56 @@ export const LESSONS: Lesson[] = [
       },
     ],
   },
+  {
+  slug: "how-to-identify-stock-trends",
+  title: "How to Identify Stock Trends",
+  category: "Basics",
+  summary: "Learn how to recognise uptrends, downtrends, and sideways markets using price structure and moving averages.",
+  sections: [
+    {
+      heading: "What it is",
+      body: [
+        "Trend is the overall direction price is moving over time.",
+        "An uptrend usually means higher highs and higher lows.",
+        "A downtrend usually means lower highs and lower lows.",
+        "A sideways market means price is ranging without a clear direction.",
+      ],
+    },
+    {
+      heading: "How to identify it",
+      body: [
+        "Start with price structure first: higher highs and higher lows usually signal an uptrend.",
+        "Use moving averages like MA50 and MA200 to help simplify the chart.",
+        "Check whether momentum indicators like RSI or MACD agree with the move.",
+        "Use higher timeframes for the bigger picture before focusing on lower timeframes.",
+      ],
+    },
+    {
+      heading: "What it means",
+      body: [
+        "A strong trend gives context to the rest of the chart.",
+        "It helps you judge whether pullbacks are normal or whether the move may be weakening.",
+        "Trend direction can shape how you interpret indicators, support, and resistance.",
+      ],
+    },
+    {
+      heading: "Common mistakes",
+      body: [
+        "Trying to call reversals too early before the chart structure has changed.",
+        "Using indicators before understanding the underlying price trend.",
+        "Ignoring the wider market context when judging a stock move.",
+      ],
+    },
+    {
+      heading: "Why it’s useful",
+      body: [
+        "Trend is one of the most important building blocks in chart reading.",
+        "It helps traders align with stronger moves instead of fighting them.",
+        "It makes signals from indicators and levels much easier to interpret.",
+      ],
+    },
+  ],
+},
   {
     slug: "timeframes",
     title: "Timeframes",
