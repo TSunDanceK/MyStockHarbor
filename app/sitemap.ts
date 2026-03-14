@@ -46,6 +46,7 @@ const seoGuides = [
   "/stocks-with-high-rsi",
   "/stocks-with-low-rsi",
   "/stocks-with-unusual-volume",
+  "/stocks-above-200-day-moving-average",
 ];
 
   const stocks = [
