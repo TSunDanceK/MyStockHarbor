@@ -234,38 +234,76 @@ export default function BestStockIndicatorsForBeginnersPage() {
               "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(59,130,246,0.08))",
           }}
         >
-          <div style={{ fontWeight: 900, fontSize: 20 }}>
-            Try these indicators on MyStockHarbor
-          </div>
+<div style={{ fontWeight: 900, fontSize: 20 }}>
+  Try these indicators on MyStockHarbor
+</div>
 
-          <p style={{ marginTop: 10, opacity: 0.86, lineHeight: 1.6 }}>
-            The MyStockHarbor dashboard helps you quickly check trend,
-            divergence, momentum, and stretch across multiple indicators in one
-            place.
-          </p>
+<p style={{ marginTop: 10, opacity: 0.86, lineHeight: 1.6 }}>
+  The MyStockHarbor dashboard helps you quickly check trend,
+  divergence, momentum, and stretch across multiple indicators in one
+  place.
+</p>
 
-          <div style={{ marginTop: 14 }}>
-            <Link
-              href="/"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "13px 18px",
-                borderRadius: 14,
-                border: "1px solid rgba(34,197,94,0.45)",
-                background:
-                  "linear-gradient(135deg, rgba(34,197,94,0.22), rgba(59,130,246,0.18))",
-                color: "#f8fafc",
-                textDecoration: "none",
-                fontWeight: 900,
-                minHeight: 48,
-                whiteSpace: "nowrap",
-              }}
-            >
-              Open the Dashboard →
-            </Link>
-          </div>
+<p style={{ marginTop: 12, opacity: 0.86, lineHeight: 1.7 }}>
+  If you want to practise using these ideas with real chart examples,
+  explore the{" "}
+  <Link
+    href="/pickers"
+    style={{
+      color: "#60a5fa",
+      fontWeight: 800,
+      textDecoration: "none",
+    }}
+  >
+    Find Your Next Stock
+  </Link>{" "}
+  page. It groups live stocks into categories like oversold setups,
+  divergence signals, buy-the-dip candidates and breakout stocks so you
+  can quickly open charts and study the setup in more detail.
+</p>
+
+<div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
+  <Link
+    href="/"
+    style={{
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "13px 18px",
+      borderRadius: 14,
+      border: "1px solid rgba(34,197,94,0.45)",
+      background:
+        "linear-gradient(135deg, rgba(34,197,94,0.22), rgba(59,130,246,0.18))",
+      color: "#f8fafc",
+      textDecoration: "none",
+      fontWeight: 900,
+      minHeight: 48,
+      whiteSpace: "nowrap",
+    }}
+  >
+    Open the Dashboard →
+  </Link>
+
+  <Link
+    href="/pickers"
+    style={{
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "13px 18px",
+      borderRadius: 14,
+      border: "1px solid rgba(255,255,255,0.14)",
+      background: "rgba(255,255,255,0.06)",
+      color: "#f8fafc",
+      textDecoration: "none",
+      fontWeight: 900,
+      minHeight: 48,
+      whiteSpace: "nowrap",
+    }}
+  >
+    Browse Stock Ideas →
+  </Link>
+</div>
         </div>
       </div>
     </main>
