@@ -177,26 +177,7 @@ export default function PickersPage() {
                   tint="amber"
                 />
               </div>
-              <div
-  style={{
-    marginTop: 18,
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-    gap: 10,
-    maxWidth: 560,
-  }}
->
-  <MiniStat
-    label="Results"
-    value="Data-Driven Screening"
-    tint="green"
-  />
-  <MiniStat
-    label="Use Case"
-    value="Find Trade Ideas Faster"
-    tint="amber"
-  />
-</div>
+              
 
 <div
   style={{
