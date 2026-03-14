@@ -34,6 +34,8 @@ const linkCardStyle: React.CSSProperties = {
   textDecoration: "none",
   color: "#f1f5f9",
   display: "block",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+  transition: "transform 120ms ease, filter 120ms ease, background 120ms ease",
 };
 
 const greySectionStyle: React.CSSProperties = {
@@ -41,12 +43,13 @@ const greySectionStyle: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.12)",
   borderRadius: 18,
   padding: 22,
-  background: "rgba(255,255,255,0.03)",
+  background: "linear-gradient(180deg, rgba(11,18,32,0.96), rgba(8,12,20,0.98))",
   maxWidth: 980,
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
 };
 
 const signalCardBaseStyle: React.CSSProperties = {
-  borderRadius: 14,
+  borderRadius: 16,
   padding: "16px 18px",
   minHeight: 104,
   display: "flex",
@@ -59,24 +62,74 @@ export default function PickersPage() {
   return (
     <main
       style={{
-        padding: "40px 20px 72px",
+        padding: 0,
         fontFamily: "system-ui, Arial",
         background: "#06080d",
         color: "#f1f5f9",
         minHeight: "100vh",
       }}
     >
-      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            gap: 16,
-            flexWrap: "wrap",
-          }}
-        >
-          <div style={{ maxWidth: 760 }}>
+      <div className="wrap">
+        <div style={{ display: "grid", gap: 14 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              alignItems: "flex-start",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
+            <Link href="/" style={topNavBtnStyle("dashboard")}>
+              <span
+                aria-hidden="true"
+                style={{
+                  fontSize: 15,
+                  lineHeight: 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {topNavIcon("dashboard")}
+              </span>
+              <span>Dashboard</span>
+            </Link>
+
+            <Link href="/platforms" style={topNavBtnStyle("platforms")}>
+              <span
+                aria-hidden="true"
+                style={{
+                  fontSize: 15,
+                  lineHeight: 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {topNavIcon("platforms")}
+              </span>
+              <span>Platforms</span>
+            </Link>
+
+            <Link href="/learn" style={topNavBtnStyle("learn")}>
+              <span
+                aria-hidden="true"
+                style={{
+                  fontSize: 15,
+                  lineHeight: 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {topNavIcon("learn")}
+              </span>
+              <span>Learn</span>
+            </Link>
+          </div>
+
+          <div style={{ maxWidth: 780 }}>
             <div
               style={{
                 display: "inline-flex",
@@ -84,23 +137,24 @@ export default function PickersPage() {
                 gap: 8,
                 padding: "8px 12px",
                 borderRadius: 999,
-                border: "1px solid rgba(255,255,255,0.14)",
-                background: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(239,68,68,0.28)",
+                background:
+                  "linear-gradient(135deg, rgba(239,68,68,0.16), rgba(127,29,29,0.08))",
                 fontSize: 12,
-                fontWeight: 900,
-                letterSpacing: "0.04em",
+                fontWeight: 950,
+                letterSpacing: "0.08em",
                 textTransform: "uppercase",
-                opacity: 0.9,
+                color: "#fee2e2",
               }}
             >
-              Stock Ideas Scanner
+              STOCK IDEAS SCANNER
             </div>
 
             <h1
               style={{
-                margin: "16px 0 0",
-                fontSize: 40,
-                lineHeight: 1.05,
+                margin: "14px 0 0 0",
+                fontSize: 42,
+                lineHeight: 1.06,
                 letterSpacing: "-0.04em",
               }}
             >
@@ -123,30 +177,12 @@ export default function PickersPage() {
               the chart in more detail.
             </p>
           </div>
-
-          <Link
-            href="/"
-            style={{
-              padding: "12px 14px",
-              borderRadius: 14,
-              border: "1px solid rgba(255,255,255,0.18)",
-              textDecoration: "none",
-              color: "#f1f5f9",
-              fontWeight: 900,
-              background: "rgba(255,255,255,0.06)",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
-            ← Back to Dashboard
-          </Link>
         </div>
 
         <section
           style={{
             marginTop: 24,
-            border: "1px solid rgba(255,255,255,0.12)",
+            border: "1px solid rgba(59,130,246,0.18)",
             borderRadius: 18,
             padding: 18,
             background:
@@ -294,15 +330,33 @@ export default function PickersPage() {
         </div>
 
         <section style={greySectionStyle}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "7px 12px",
+              borderRadius: 999,
+              background:
+                "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
+              border: "1px solid rgba(59,130,246,0.32)",
+              color: "#dbeafe",
+              fontWeight: 950,
+              letterSpacing: "0.08em",
+              fontSize: 12,
+            }}
+          >
+            UNDERSTAND THE SIGNALS
+          </div>
+
           <h2
             style={{
-              margin: 0,
+              margin: "14px 0 0 0",
               fontSize: 24,
               lineHeight: 1.15,
               letterSpacing: "-0.03em",
             }}
           >
-            Understand these stock signals
+            Learn what these stock signals actually mean
           </h2>
 
           <p
@@ -558,9 +612,27 @@ export default function PickersPage() {
         </section>
 
         <section style={greySectionStyle}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "7px 12px",
+              borderRadius: 999,
+              background:
+                "linear-gradient(135deg, rgba(168,85,247,0.18), rgba(139,92,246,0.10))",
+              border: "1px solid rgba(168,85,247,0.32)",
+              color: "#f3e8ff",
+              fontWeight: 950,
+              letterSpacing: "0.08em",
+              fontSize: 12,
+            }}
+          >
+            MORE SCREENER IDEAS
+          </div>
+
           <h2
             style={{
-              margin: 0,
+              margin: "14px 0 0 0",
               fontSize: 24,
               lineHeight: 1.15,
               letterSpacing: "-0.03em",
@@ -665,9 +737,27 @@ export default function PickersPage() {
         </section>
 
         <section style={greySectionStyle}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "7px 12px",
+              borderRadius: 999,
+              background:
+                "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(16,185,129,0.10))",
+              border: "1px solid rgba(34,197,94,0.32)",
+              color: "#dcfce7",
+              fontWeight: 950,
+              letterSpacing: "0.08em",
+              fontSize: 12,
+            }}
+          >
+            LEARN TO SCAN
+          </div>
+
           <h2
             style={{
-              margin: 0,
+              margin: "14px 0 0 0",
               fontSize: 24,
               lineHeight: 1.15,
               letterSpacing: "-0.03em",
@@ -905,15 +995,33 @@ export default function PickersPage() {
         </section>
 
         <section style={greySectionStyle}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "7px 12px",
+              borderRadius: 999,
+              background:
+                "linear-gradient(135deg, rgba(250,204,21,0.18), rgba(202,138,4,0.10))",
+              border: "1px solid rgba(250,204,21,0.32)",
+              color: "#fef3c7",
+              fontWeight: 950,
+              letterSpacing: "0.08em",
+              fontSize: 12,
+            }}
+          >
+            FAQ
+          </div>
+
           <h2
             style={{
-              margin: 0,
+              margin: "14px 0 0 0",
               fontSize: 24,
               lineHeight: 1.15,
               letterSpacing: "-0.03em",
             }}
           >
-            FAQ
+            Frequently asked questions
           </h2>
 
           <div style={{ marginTop: 16, display: "grid", gap: 16 }}>
@@ -956,6 +1064,102 @@ export default function PickersPage() {
           </div>
         </section>
       </div>
+
+      <style>{`
+        .wrap {
+          max-width: 1100px;
+          margin: 0 auto;
+          padding: 28px 20px 40px;
+        }
+
+        a:hover {
+          filter: brightness(1.05);
+          transform: translateY(-1px);
+        }
+
+        @media (max-width: 760px) {
+          .wrap {
+            padding: 18px 16px 34px !important;
+          }
+        }
+      `}</style>
     </main>
   );
+}
+
+function topNavBtnStyle(
+  type: "dashboard" | "platforms" | "learn"
+): React.CSSProperties {
+  if (type === "dashboard") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      minHeight: 42,
+      padding: "9px 13px",
+      borderRadius: 14,
+      border: "1px solid rgba(250,204,21,0.45)",
+      background:
+        "linear-gradient(135deg, rgba(250,204,21,0.20), rgba(202,138,4,0.10))",
+      color: "#fefce8",
+      textDecoration: "none",
+      fontWeight: 900,
+      fontSize: 14,
+      whiteSpace: "nowrap",
+      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+      transition:
+        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
+    };
+  }
+
+  if (type === "platforms") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      minHeight: 42,
+      padding: "9px 13px",
+      borderRadius: 14,
+      border: "1px solid rgba(34,197,94,0.45)",
+      background:
+        "linear-gradient(135deg, rgba(34,197,94,0.20), rgba(16,185,129,0.10))",
+      color: "#f0fdf4",
+      textDecoration: "none",
+      fontWeight: 900,
+      fontSize: 14,
+      whiteSpace: "nowrap",
+      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+      transition:
+        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
+    };
+  }
+
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    minHeight: 42,
+    padding: "9px 13px",
+    borderRadius: 14,
+    border: "1px solid rgba(59,130,246,0.45)",
+    background:
+      "linear-gradient(135deg, rgba(59,130,246,0.20), rgba(37,99,235,0.10))",
+    color: "#eff6ff",
+    textDecoration: "none",
+    fontWeight: 900,
+    fontSize: 14,
+    whiteSpace: "nowrap",
+    boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+    transition:
+      "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
+  };
+}
+
+function topNavIcon(type: "dashboard" | "platforms" | "learn") {
+  if (type === "dashboard") return "📈";
+  if (type === "platforms") return "🏦";
+  return "📘";
 }
