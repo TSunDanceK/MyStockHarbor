@@ -325,64 +325,90 @@ export default function PickersPage() {
               gap: 12,
             }}
           >
-            <Link href="/stock-market-setups" style={linkCardStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>
-                Stock Market Setups
-              </div>
-              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
-                Overview of the main setups used across MyStockHarbor.
-              </div>
-            </Link>
+<div
+  style={{
+    marginTop: 16,
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: 12,
+  }}
+>
+  <Link
+    href="/trading-setups"
+    style={{
+      ...linkCardStyle,
+      border: "1px solid rgba(239,68,68,0.24)",
+      background:
+        "linear-gradient(135deg, rgba(239,68,68,0.10), rgba(127,29,29,0.06))",
+    }}
+  >
+    <div style={{ fontSize: 17, fontWeight: 950 }}>
+      Trading Setups Hub
+    </div>
+    <div style={{ marginTop: 8, fontSize: 13, opacity: 0.82, lineHeight: 1.6 }}>
+      Explore the full hub for breakouts, oversold stocks, overbought setups,
+      dip buys and bullish or bearish divergence.
+    </div>
+  </Link>
 
-            <Link href="/oversold-stocks" style={linkCardStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>Oversold Stocks</div>
-              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
-                Learn how traders review stretched downside conditions.
-              </div>
-            </Link>
+  <Link href="/stock-market-setups" style={linkCardStyle}>
+    <div style={{ fontSize: 17, fontWeight: 950 }}>
+      Stock Market Setups
+    </div>
+    <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+      Overview of the main setups used across MyStockHarbor.
+    </div>
+  </Link>
 
-            <Link href="/overbought-stocks" style={linkCardStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>Overbought Stocks</div>
-              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
-                Understand when price may be stretched to the upside.
-              </div>
-            </Link>
+  <Link href="/oversold-stocks" style={linkCardStyle}>
+    <div style={{ fontSize: 17, fontWeight: 950 }}>Oversold Stocks</div>
+    <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+      Learn how traders review stretched downside conditions.
+    </div>
+  </Link>
 
-            <Link href="/breakout-stocks" style={linkCardStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>Breakout Stocks</div>
-              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
-                See how traders identify stocks pushing through resistance.
-              </div>
-            </Link>
+  <Link href="/overbought-stocks" style={linkCardStyle}>
+    <div style={{ fontSize: 17, fontWeight: 950 }}>Overbought Stocks</div>
+    <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+      Understand when price may be stretched to the upside.
+    </div>
+  </Link>
 
-            <Link href="/buy-the-dip-stocks" style={linkCardStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>Buy The Dip Stocks</div>
-              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
-                Review pullback setups that may still fit a healthy trend.
-              </div>
-            </Link>
+  <Link href="/breakout-stocks" style={linkCardStyle}>
+    <div style={{ fontSize: 17, fontWeight: 950 }}>Breakout Stocks</div>
+    <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+      See how traders identify stocks pushing through resistance.
+    </div>
+  </Link>
 
-            <Link href="/stocks-down-from-highs" style={linkCardStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>Stocks Down From Highs</div>
-              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
-                Explore stocks that have pulled back from recent highs.
-              </div>
-            </Link>
+  <Link href="/buy-the-dip-stocks" style={linkCardStyle}>
+    <div style={{ fontSize: 17, fontWeight: 950 }}>Buy The Dip Stocks</div>
+    <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+      Review pullback setups that may still fit a healthy trend.
+    </div>
+  </Link>
 
-            <Link href="/bullish-divergence-stocks" style={linkCardStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>Bullish Divergence</div>
-              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
-                Learn how fading downside momentum can hint at reversal risk.
-              </div>
-            </Link>
+  <Link href="/stocks-down-from-highs" style={linkCardStyle}>
+    <div style={{ fontSize: 17, fontWeight: 950 }}>Stocks Down From Highs</div>
+    <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+      Explore stocks that have pulled back from recent highs.
+    </div>
+  </Link>
 
-            <Link href="/bearish-divergence-stocks" style={linkCardStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>Bearish Divergence</div>
-              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
-                Understand when upside momentum may be losing strength.
-              </div>
-            </Link>
-          </div>
+  <Link href="/bullish-divergence-stocks" style={linkCardStyle}>
+    <div style={{ fontSize: 17, fontWeight: 950 }}>Bullish Divergence</div>
+    <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+      Learn how fading downside momentum can hint at reversal risk.
+    </div>
+  </Link>
+
+  <Link href="/bearish-divergence-stocks" style={linkCardStyle}>
+    <div style={{ fontSize: 17, fontWeight: 950 }}>Bearish Divergence</div>
+    <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+      Understand when upside momentum may be losing strength.
+    </div>
+  </Link>
+</div>
         </section>
 
 <section
@@ -430,7 +456,78 @@ export default function PickersPage() {
     </div>
   </Link>
 </section>
+          
+<section style={greySectionStyle}>
+  <h2
+    style={{
+      margin: 0,
+      fontSize: 24,
+      lineHeight: 1.15,
+      letterSpacing: "-0.03em",
+    }}
+  >
+    More stock screener ideas
+  </h2>
 
+  <p
+    style={{
+      margin: "10px 0 0",
+      lineHeight: 1.7,
+      opacity: 0.82,
+      maxWidth: 860,
+    }}
+  >
+    These are additional stock screener ideas traders often search for when
+    narrowing down charts. They are closely related to the filters on this page
+    and help connect indicator-based searches with setup-based scans.
+  </p>
+
+  <div
+    style={{
+      marginTop: 16,
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+      gap: 12,
+    }}
+  >
+    <Link href="/stocks-with-high-rsi" style={linkCardStyle}>
+      <div style={{ fontSize: 17, fontWeight: 950 }}>
+        Stocks With High RSI
+      </div>
+      <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+        Learn what high RSI can mean and how traders review overextended momentum.
+      </div>
+    </Link>
+
+    <Link href="/stocks-with-low-rsi" style={linkCardStyle}>
+      <div style={{ fontSize: 17, fontWeight: 950 }}>
+        Stocks With Low RSI
+      </div>
+      <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+        Explore how traders use low RSI readings to look for stretched downside moves.
+      </div>
+    </Link>
+
+    <Link href="/stocks-with-unusual-volume" style={linkCardStyle}>
+      <div style={{ fontSize: 17, fontWeight: 950 }}>
+        Stocks With Unusual Volume
+      </div>
+      <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+        See why unusual volume can matter when reviewing breakouts and momentum.
+      </div>
+    </Link>
+
+    <Link href="/stocks-above-200-day-moving-average" style={linkCardStyle}>
+      <div style={{ fontSize: 17, fontWeight: 950 }}>
+        Stocks Above 200 Day Moving Average
+      </div>
+      <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+        Understand how traders use the 200-day moving average as a long-term trend filter.
+      </div>
+    </Link>
+  </div>
+</section>
+          
         <section style={greySectionStyle}>
           <h2
             style={{
