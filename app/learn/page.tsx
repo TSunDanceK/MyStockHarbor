@@ -135,6 +135,89 @@ export default function LearnPage() {
       </Link>
     </div>
   </section>
+  </section>
+
+{/* TRADING SETUPS */}
+
+<section
+  style={{
+    border: "1px solid rgba(255,255,255,0.14)",
+    borderRadius: 16,
+    padding: 16,
+    background: "rgba(255,255,255,0.03)",
+  }}
+>
+  <div style={{ fontWeight: 950, letterSpacing: "0.6px", opacity: 0.9 }}>
+    TRADING SETUPS
+  </div>
+
+  <div
+    style={{
+      marginTop: 12,
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+      gap: 12,
+    }}
+  >
+    <Link href="/stock-market-setups" style={learnGuideCard()}>
+      <div style={{ fontWeight: 900, fontSize: 16 }}>Stock Market Setups</div>
+      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75 }}>
+        Overview of common trading setups including dips, breakouts and divergences.
+      </div>
+    </Link>
+
+    <Link href="/oversold-stocks" style={learnGuideCard()}>
+      <div style={{ fontWeight: 900, fontSize: 16 }}>Oversold Stocks</div>
+      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75 }}>
+        Learn how traders identify stretched downside moves.
+      </div>
+    </Link>
+
+    <Link href="/overbought-stocks" style={learnGuideCard()}>
+      <div style={{ fontWeight: 900, fontSize: 16 }}>Overbought Stocks</div>
+      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75 }}>
+        Understand when stocks may be stretched to the upside.
+      </div>
+    </Link>
+
+    <Link href="/breakout-stocks" style={learnGuideCard()}>
+      <div style={{ fontWeight: 900, fontSize: 16 }}>Breakout Stocks</div>
+      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75 }}>
+        Learn how traders identify strong momentum breakouts.
+      </div>
+    </Link>
+
+    <Link href="/buy-the-dip-stocks" style={learnGuideCard()}>
+      <div style={{ fontWeight: 900, fontSize: 16 }}>Buy The Dip Stocks</div>
+      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75 }}>
+        Explore pullback opportunities within strong trends.
+      </div>
+    </Link>
+
+    <Link href="/stocks-down-from-highs" style={learnGuideCard()}>
+      <div style={{ fontWeight: 900, fontSize: 16 }}>Stocks Down From Highs</div>
+      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75 }}>
+        Review stocks that have pulled back significantly from recent highs.
+      </div>
+    </Link>
+
+    <Link href="/bullish-divergence-stocks" style={learnGuideCard()}>
+      <div style={{ fontWeight: 900, fontSize: 16 }}>Bullish Divergence</div>
+      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75 }}>
+        Learn how divergence can signal weakening downside momentum.
+      </div>
+    </Link>
+
+    <Link href="/bearish-divergence-stocks" style={learnGuideCard()}>
+      <div style={{ fontWeight: 900, fontSize: 16 }}>Bearish Divergence</div>
+      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75 }}>
+        Understand when momentum may be weakening in rising stocks.
+      </div>
+    </Link>
+  </div>
+</section>
+
+</div>
 </div>
       </div>
 
