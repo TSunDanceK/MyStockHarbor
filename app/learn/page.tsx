@@ -27,14 +27,22 @@ export default function LearnPage() {
     flexWrap: "wrap",
   }}
 >
-  <div style={{ minWidth: 0, flex: "1 1 380px", maxWidth: 520 }}>
-    <h1 style={{ margin: 0, fontSize: 34, letterSpacing: "-0.4px" }}>
-      Learn the Basics
-    </h1>
-    <p style={{ margin: "8px 0 0", opacity: 0.75, lineHeight: 1.5 }}>
-      Short lessons on reading charts, key concepts, and the indicators used in MyStockHarbor.
-    </p>
-  </div>
+<div style={{ minWidth: 0 }}>
+  <h1 style={{ margin: 0, fontSize: 34, letterSpacing: "-0.4px" }}>
+    Learn the Basics
+  </h1>
+</div>
+
+  <p
+  style={{
+    margin: "10px 0 0",
+    opacity: 0.75,
+    lineHeight: 1.5,
+    maxWidth: 620,
+  }}
+>
+  Short lessons on reading charts, key concepts, and the indicators used in MyStockHarbor.
+</p>
 
   <div
     style={{
