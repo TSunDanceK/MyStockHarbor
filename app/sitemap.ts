@@ -43,6 +43,7 @@ const seoGuides = [
   "/stocks-ready-to-break-out",
   "/best-charting-platforms",
   "/how-to-analyse-stocks",
+  "/stocks-with-high-rsi",
 ];
 
   const stocks = [
