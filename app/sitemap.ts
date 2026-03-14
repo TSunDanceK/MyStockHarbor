@@ -44,6 +44,7 @@ const seoGuides = [
   "/best-charting-platforms",
   "/how-to-analyse-stocks",
   "/stocks-with-high-rsi",
+  "/stocks-with-low-rsi",
 ];
 
   const stocks = [
