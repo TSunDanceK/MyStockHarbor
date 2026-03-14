@@ -30,6 +30,7 @@ const seoGuides = [
   "/bearish-divergence-stocks",
   "/overbought-stocks",
   "/stock-market-setups",
+"/trading-setups",
   "/stock-screener-for-breakouts",
   "/stock-screener-for-oversold-stocks",
   "/stocks-down-20-percent",
