@@ -8,17 +8,105 @@ type Props = {
   params: { slug: string };
 };
 
-function btn(): React.CSSProperties {
+function topNavBtnStyle(
+  type: "dashboard" | "platforms" | "pickers" | "calculators"
+): React.CSSProperties {
+  if (type === "dashboard") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      minHeight: 42,
+      padding: "9px 13px",
+      borderRadius: 14,
+      border: "1px solid rgba(250,204,21,0.45)",
+      background:
+        "linear-gradient(135deg, rgba(250,204,21,0.20), rgba(202,138,4,0.10))",
+      color: "#fefce8",
+      textDecoration: "none",
+      fontWeight: 900,
+      fontSize: 14,
+      whiteSpace: "nowrap",
+      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+      transition:
+        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
+    };
+  }
+
+  if (type === "platforms") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      minHeight: 42,
+      padding: "9px 13px",
+      borderRadius: 14,
+      border: "1px solid rgba(34,197,94,0.45)",
+      background:
+        "linear-gradient(135deg, rgba(34,197,94,0.20), rgba(16,185,129,0.10))",
+      color: "#f0fdf4",
+      textDecoration: "none",
+      fontWeight: 900,
+      fontSize: 14,
+      whiteSpace: "nowrap",
+      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+      transition:
+        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
+    };
+  }
+
+  if (type === "pickers") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      minHeight: 42,
+      padding: "9px 13px",
+      borderRadius: 14,
+      border: "1px solid rgba(239,68,68,0.45)",
+      background:
+        "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.10))",
+      color: "#fef2f2",
+      textDecoration: "none",
+      fontWeight: 900,
+      fontSize: 14,
+      whiteSpace: "nowrap",
+      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+      transition:
+        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
+    };
+  }
+
   return {
-    padding: "10px 12px",
-    borderRadius: 12,
-    border: "1px solid rgba(255,255,255,0.14)",
-    background: "rgba(255,255,255,0.06)",
-    color: "#f1f5f9",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    minHeight: 42,
+    padding: "9px 13px",
+    borderRadius: 14,
+    border: "1px solid rgba(168,85,247,0.45)",
+    background:
+      "linear-gradient(135deg, rgba(168,85,247,0.20), rgba(139,92,246,0.10))",
+    color: "#faf5ff",
     textDecoration: "none",
-    fontWeight: 850,
+    fontWeight: 900,
+    fontSize: 14,
     whiteSpace: "nowrap",
+    boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+    transition:
+      "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
   };
+}
+
+function topNavIcon(type: "dashboard" | "platforms" | "pickers" | "calculators") {
+  if (type === "dashboard") return "📈";
+  if (type === "platforms") return "🏦";
+  if (type === "pickers") return "📊";
+  return "🧮";
 }
 
 function TipBox(props: { title: string; children: React.ReactNode }) {
@@ -98,10 +186,24 @@ export default async function LessonPage({ params }: Props) {
           </div>
         </div>
 
-        <style>{`
-          .wrap { max-width: 920px; margin: 0 auto; padding: 24px; }
-          @media (max-width: 760px) { .wrap { padding: 16px !important; } }
-        `}</style>
+<style>{`
+  .wrap {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+
+  a:hover {
+    filter: brightness(1.05);
+    transform: translateY(-1px);
+  }
+
+  @media (max-width: 760px) {
+    .wrap {
+      padding: 16px !important;
+    }
+  }
+`}</style>
       </main>
     );
   }
@@ -141,12 +243,77 @@ export default async function LessonPage({ params }: Props) {
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <Link href="/learn" style={btn()}>
-              ← Learn
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              flexWrap: "wrap",
+              justifyContent: "flex-end",
+              alignItems: "flex-start",
+            }}
+          >
+            <Link href="/" style={topNavBtnStyle("dashboard")}>
+              <span
+                aria-hidden="true"
+                style={{
+                  fontSize: 15,
+                  lineHeight: 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {topNavIcon("dashboard")}
+              </span>
+              <span>Dashboard</span>
             </Link>
-            <Link href="/" style={btn()}>
-              Dashboard →
+
+            <Link href="/platforms" style={topNavBtnStyle("platforms")}>
+              <span
+                aria-hidden="true"
+                style={{
+                  fontSize: 15,
+                  lineHeight: 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {topNavIcon("platforms")}
+              </span>
+              <span>Platforms</span>
+            </Link>
+
+            <Link href="/pickers" style={topNavBtnStyle("pickers")}>
+              <span
+                aria-hidden="true"
+                style={{
+                  fontSize: 15,
+                  lineHeight: 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {topNavIcon("pickers")}
+              </span>
+              <span>Stock Pickers</span>
+            </Link>
+
+            <Link href="/utilities" style={topNavBtnStyle("calculators")}>
+              <span
+                aria-hidden="true"
+                style={{
+                  fontSize: 15,
+                  lineHeight: 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {topNavIcon("calculators")}
+              </span>
+              <span>Calculators</span>
             </Link>
           </div>
         </div>
@@ -264,10 +431,24 @@ export default async function LessonPage({ params }: Props) {
         )}
       </div>
 
-      <style>{`
-        .wrap { max-width: 920px; margin: 0 auto; padding: 24px; }
-        @media (max-width: 760px) { .wrap { padding: 16px !important; } }
-      `}</style>
+<style>{`
+  .wrap {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+
+  a:hover {
+    filter: brightness(1.05);
+    transform: translateY(-1px);
+  }
+
+  @media (max-width: 760px) {
+    .wrap {
+      padding: 16px !important;
+    }
+  }
+`}</style>
     </main>
   );
 }
