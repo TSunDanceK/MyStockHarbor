@@ -209,7 +209,11 @@ export default function PickersPage() {
         <section
           style={{
             marginTop: 18,
-            maxWidth: 900,
+            border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: 18,
+            padding: 18,
+            background: "rgba(255,255,255,0.03)",
+            maxWidth: 980,
           }}
         >
           <div
@@ -226,10 +230,10 @@ export default function PickersPage() {
 
           <p
             style={{
-              margin: "8px 0 0",
+              margin: "10px 0 0",
               fontSize: 14,
               lineHeight: 1.7,
-              opacity: 0.76,
+              opacity: 0.8,
               maxWidth: 760,
             }}
           >
