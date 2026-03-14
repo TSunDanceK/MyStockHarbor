@@ -253,6 +253,107 @@ export default function PickersPage() {
 
         <section
           style={{
+            marginTop: 24,
+            border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: 18,
+            padding: 22,
+            background: "#0b1220",
+            maxWidth: 980,
+          }}
+        >
+          <h2
+            style={{
+              margin: 0,
+              fontSize: 24,
+              lineHeight: 1.15,
+              letterSpacing: "-0.03em",
+            }}
+          >
+            Learn about these setups
+          </h2>
+
+          <p
+            style={{
+              margin: "10px 0 0",
+              lineHeight: 1.7,
+              opacity: 0.82,
+              maxWidth: 820,
+            }}
+          >
+            If you want to understand what these stock ideas actually mean, use
+            these beginner-friendly setup guides. They explain oversold stocks,
+            overbought conditions, breakouts, dip-buy setups and divergence in a
+            simpler way.
+          </p>
+
+          <div
+            style={{
+              marginTop: 16,
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: 12,
+            }}
+          >
+            <Link href="/stock-market-setups" style={linkCardStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>Stock Market Setups</div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+                Overview of the main setups used across MyStockHarbor.
+              </div>
+            </Link>
+
+            <Link href="/oversold-stocks" style={linkCardStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>Oversold Stocks</div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+                Learn how traders review stretched downside conditions.
+              </div>
+            </Link>
+
+            <Link href="/overbought-stocks" style={linkCardStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>Overbought Stocks</div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+                Understand when price may be stretched to the upside.
+              </div>
+            </Link>
+
+            <Link href="/breakout-stocks" style={linkCardStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>Breakout Stocks</div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+                See how traders identify stocks pushing through resistance.
+              </div>
+            </Link>
+
+            <Link href="/buy-the-dip-stocks" style={linkCardStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>Buy The Dip Stocks</div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+                Review pullback setups that may still fit a healthy trend.
+              </div>
+            </Link>
+
+            <Link href="/stocks-down-from-highs" style={linkCardStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>Stocks Down From Highs</div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+                Explore stocks that have pulled back from recent highs.
+              </div>
+            </Link>
+
+            <Link href="/bullish-divergence-stocks" style={linkCardStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>Bullish Divergence</div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+                Learn how fading downside momentum can hint at reversal risk.
+              </div>
+            </Link>
+
+            <Link href="/bearish-divergence-stocks" style={linkCardStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>Bearish Divergence</div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+                Understand when upside momentum may be losing strength.
+              </div>
+            </Link>
+          </div>
+        </section>
+
+        <section
+          style={{
             marginTop: 34,
             border: "1px solid rgba(255,255,255,0.12)",
             borderRadius: 18,
