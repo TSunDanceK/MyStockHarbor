@@ -327,6 +327,137 @@ export default function BreakoutStocksPage() {
             on the chart before acting.
           </p>
         </section>
+        <section
+  style={{
+    marginTop: 28,
+    border: "1px solid rgba(255,255,255,0.12)",
+    borderRadius: 18,
+    padding: 22,
+    background: "#0b1220",
+  }}
+>
+  <h2
+    style={{
+      margin: 0,
+      fontSize: 24,
+      lineHeight: 1.15,
+      letterSpacing: "-0.03em",
+    }}
+  >
+    Related stock setups
+  </h2>
+
+  <p
+    style={{
+      margin: "10px 0 0",
+      lineHeight: 1.7,
+      opacity: 0.82,
+      maxWidth: 760,
+    }}
+  >
+    Breakouts are easier to understand when you compare them with other common
+    setups like oversold conditions, dip-buy pullbacks and divergence signals.
+  </p>
+
+  <div
+    style={{
+      marginTop: 16,
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+      gap: 12,
+    }}
+  >
+    <Link
+      href="/stock-market-setups"
+      style={{
+        border: "1px solid rgba(255,255,255,0.14)",
+        borderRadius: 16,
+        padding: 16,
+        background: "rgba(255,255,255,0.04)",
+        textDecoration: "none",
+        color: "#f1f5f9",
+        display: "block",
+      }}
+    >
+      <div style={{ fontSize: 17, fontWeight: 950 }}>Stock Market Setups</div>
+      <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+        Explore the main setup hub covering dips, breakouts and divergence.
+      </div>
+    </Link>
+
+    <Link
+      href="/oversold-stocks"
+      style={{
+        border: "1px solid rgba(255,255,255,0.14)",
+        borderRadius: 16,
+        padding: 16,
+        background: "rgba(255,255,255,0.04)",
+        textDecoration: "none",
+        color: "#f1f5f9",
+        display: "block",
+      }}
+    >
+      <div style={{ fontSize: 17, fontWeight: 950 }}>Oversold Stocks</div>
+      <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+        Learn how traders review stretched downside conditions and rebound setups.
+      </div>
+    </Link>
+
+    <Link
+      href="/buy-the-dip-stocks"
+      style={{
+        border: "1px solid rgba(255,255,255,0.14)",
+        borderRadius: 16,
+        padding: 16,
+        background: "rgba(255,255,255,0.04)",
+        textDecoration: "none",
+        color: "#f1f5f9",
+        display: "block",
+      }}
+    >
+      <div style={{ fontSize: 17, fontWeight: 950 }}>Buy The Dip Stocks</div>
+      <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+        Review pullback setups that may still fit a constructive trend.
+      </div>
+    </Link>
+
+    <Link
+      href="/bullish-divergence-stocks"
+      style={{
+        border: "1px solid rgba(255,255,255,0.14)",
+        borderRadius: 16,
+        padding: 16,
+        background: "rgba(255,255,255,0.04)",
+        textDecoration: "none",
+        color: "#f1f5f9",
+        display: "block",
+      }}
+    >
+      <div style={{ fontSize: 17, fontWeight: 950 }}>Bullish Divergence</div>
+      <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+        Understand how fading downside momentum can hint at a reversal setup.
+      </div>
+    </Link>
+
+    <Link
+      href="/pickers"
+      style={{
+        border: "1px solid rgba(255,255,255,0.14)",
+        borderRadius: 16,
+        padding: 16,
+        background: "rgba(255,255,255,0.04)",
+        textDecoration: "none",
+        color: "#f1f5f9",
+        display: "block",
+      }}
+    >
+      <div style={{ fontSize: 17, fontWeight: 950 }}>Find Your Next Stock</div>
+      <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+        Browse live stock ideas by setup and open charts directly in the dashboard.
+      </div>
+    </Link>
+  </div>
+</section>
 
         <div
           style={{
