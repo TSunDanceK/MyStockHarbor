@@ -27,6 +27,8 @@ const seoGuides = [
   "/breakout-stocks",
   "/buy-the-dip-stocks",
   "/bullish-divergence-stocks",
+  "/bearish-divergence-stocks",
+  "/overbought-stocks",
 ];
 
   const stocks = [
