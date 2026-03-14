@@ -81,30 +81,21 @@ export default function PickersPage() {
             }}
           >
             <Link href="/" style={topNavBtnStyle("dashboard")}>
-              <span
-                aria-hidden="true"
-                style={topNavIconWrapStyle}
-              >
+              <span aria-hidden="true" style={topNavIconWrapStyle}>
                 {topNavIcon("dashboard")}
               </span>
               <span>Dashboard</span>
             </Link>
 
             <Link href="/platforms" style={topNavBtnStyle("platforms")}>
-              <span
-                aria-hidden="true"
-                style={topNavIconWrapStyle}
-              >
+              <span aria-hidden="true" style={topNavIconWrapStyle}>
                 {topNavIcon("platforms")}
               </span>
               <span>Platforms</span>
             </Link>
 
             <Link href="/learn" style={topNavBtnStyle("learn")}>
-              <span
-                aria-hidden="true"
-                style={topNavIconWrapStyle}
-              >
+              <span aria-hidden="true" style={topNavIconWrapStyle}>
                 {topNavIcon("learn")}
               </span>
               <span>Learn</span>
@@ -112,9 +103,10 @@ export default function PickersPage() {
           </div>
 
           <div
+            className="heroGrid"
             style={{
               display: "grid",
-              gridTemplateColumns: "minmax(0, 1.4fr) minmax(280px, 0.8fr)",
+              gridTemplateColumns: "minmax(0, 1.45fr) minmax(280px, 0.8fr)",
               gap: 16,
               alignItems: "stretch",
             }}
@@ -170,7 +162,7 @@ export default function PickersPage() {
                   maxWidth: 760,
                 }}
               >
-                This is the live stock ideas scanner inside MyStockHarbor. Use it to
+                This is the stock scanner workspace inside MyStockHarbor. Use it to
                 search for oversold stocks, overbought stocks, divergence setups,
                 buy-the-dip candidates and breakout stocks, then open any symbol
                 directly in the dashboard to inspect the chart in more detail.
@@ -190,18 +182,18 @@ export default function PickersPage() {
                   tint="blue"
                 />
                 <MiniStat
-                  label="Best Use"
-                  value="Build a Shortlist"
+                  label="Results"
+                  value="Data-Driven"
                   tint="green"
+                />
+                <MiniStat
+                  label="Use"
+                  value="Build a Shortlist"
+                  tint="amber"
                 />
                 <MiniStat
                   label="Next Step"
                   value="Open Dashboard"
-                  tint="amber"
-                />
-                <MiniStat
-                  label="Signals"
-                  value="Live Ideas"
                   tint="red"
                 />
               </div>
@@ -441,7 +433,7 @@ export default function PickersPage() {
                 fontSize: 12,
               }}
             >
-              LIVE STOCK PICKERS
+              DATA-DRIVEN SCREENED RESULTS
             </div>
 
             <h2
@@ -452,7 +444,7 @@ export default function PickersPage() {
                 letterSpacing: "-0.03em",
               }}
             >
-              Scan by setup and open any chart instantly
+              Technical setups detected across the market
             </h2>
 
             <p
@@ -463,8 +455,22 @@ export default function PickersPage() {
                 maxWidth: 860,
               }}
             >
-              The live picker area below is the main tool. Use it to load symbols by
-              setup, then jump straight into the dashboard for a deeper review.
+              Browse stock ideas generated from technical market scans such as
+              oversold conditions, divergence signals, breakout setups and
+              pullbacks. These are data-driven screened results, not random stock
+              suggestions.
+            </p>
+
+            <p
+              style={{
+                margin: "8px 0 0 0",
+                lineHeight: 1.65,
+                opacity: 0.7,
+                maxWidth: 860,
+                fontSize: 14,
+              }}
+            >
+              Open any symbol in the dashboard to inspect the chart and indicators.
             </p>
           </div>
 
@@ -649,7 +655,7 @@ export default function PickersPage() {
             </div>
             <div style={midCardTextStyle}>
               MACD can help confirm momentum shifts, trend strength and divergence
-              setups that appear in live scans.
+              setups that appear in screened results.
             </div>
           </Link>
 
@@ -1013,7 +1019,7 @@ export default function PickersPage() {
         }
 
         @media (max-width: 860px) {
-          .wrap > div > div:nth-child(2) {
+          .heroGrid {
             grid-template-columns: 1fr !important;
           }
         }
