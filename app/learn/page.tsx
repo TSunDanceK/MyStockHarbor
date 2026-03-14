@@ -135,7 +135,6 @@ export default function LearnPage() {
       </Link>
     </div>
   </section>
-  </section>
 
 {/* TRADING SETUPS */}
 
