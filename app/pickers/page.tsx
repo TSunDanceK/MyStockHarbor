@@ -352,6 +352,159 @@ export default function PickersPage() {
           </div>
         </section>
 
+                <section
+          style={{
+            marginTop: 24,
+            border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: 18,
+            padding: 22,
+            background: "#0b1220",
+            maxWidth: 980,
+          }}
+        >
+          <h2
+            style={{
+              margin: 0,
+              fontSize: 24,
+              lineHeight: 1.15,
+              letterSpacing: "-0.03em",
+            }}
+          >
+            Learn how to find stock ideas
+          </h2>
+
+          <p
+            style={{
+              margin: "10px 0 0",
+              lineHeight: 1.7,
+              opacity: 0.82,
+              maxWidth: 860,
+            }}
+          >
+            These guides go one level deeper than the setup pages. They explain
+            how traders scan stocks, compare charting tools, look for breakout
+            candidates, analyse pullbacks and use indicators when reviewing
+            possible stock ideas.
+          </p>
+
+          <div
+            style={{
+              marginTop: 16,
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: 12,
+            }}
+          >
+            <Link href="/stock-screener-for-breakouts" style={linkCardStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Stock Screener for Breakouts
+              </div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+                Learn how traders scan for stocks approaching breakout levels.
+              </div>
+            </Link>
+
+            <Link href="/stock-screener-for-oversold-stocks" style={linkCardStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Stock Screener for Oversold Stocks
+              </div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+                Understand how traders search for oversold and rebound candidates.
+              </div>
+            </Link>
+
+            <Link href="/stocks-down-20-percent" style={linkCardStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Stocks Down 20 Percent
+              </div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+                Learn how traders review bigger pullbacks before calling them opportunities.
+              </div>
+            </Link>
+
+            <Link href="/best-free-stock-screener" style={linkCardStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Best Free Stock Screener
+              </div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+                See what traders actually want from stock scanning tools.
+              </div>
+            </Link>
+
+            <Link href="/how-to-find-buy-the-dip-stocks" style={linkCardStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                How to Find Buy the Dip Stocks
+              </div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+                Learn how traders search for pullbacks inside stronger trends.
+              </div>
+            </Link>
+
+            <Link href="/bullish-divergence-explained" style={linkCardStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Bullish Divergence Explained
+              </div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+                Understand how weakening downside momentum can show up on charts.
+              </div>
+            </Link>
+
+            <Link href="/bearish-divergence-explained" style={linkCardStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Bearish Divergence Explained
+              </div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+                Learn how fading upside momentum can warn of a weaker move.
+              </div>
+            </Link>
+
+            <Link href="/best-indicators-for-swing-trading" style={linkCardStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Best Indicators for Swing Trading
+              </div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+                Explore common indicators traders use when reviewing swing setups.
+              </div>
+            </Link>
+
+            <Link href="/how-to-scan-stocks" style={linkCardStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                How to Scan Stocks
+              </div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+                Learn the basic process traders use to scan the market for ideas.
+              </div>
+            </Link>
+
+            <Link href="/stocks-ready-to-break-out" style={linkCardStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Stocks Ready to Break Out
+              </div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+                See what traders look for when a stock approaches resistance.
+              </div>
+            </Link>
+
+            <Link href="/best-charting-platforms" style={linkCardStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Best Charting Platforms
+              </div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+                Compare the kinds of charting tools traders use to analyse stocks.
+              </div>
+            </Link>
+
+            <Link href="/how-to-analyse-stocks" style={linkCardStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                How to Analyse Stocks
+              </div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+                Read the broader guide to charts, indicators and stock analysis.
+              </div>
+            </Link>
+          </div>
+        </section>
+
         <section
           style={{
             marginTop: 34,
