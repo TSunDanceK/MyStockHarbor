@@ -18,98 +18,100 @@ export default function LearnPage() {
       }}
     >
       <div className="wrap">
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
-<div style={{ minWidth: 0, maxWidth: 680 }}>
-  <h1 style={{ margin: 0, fontSize: 34, letterSpacing: "-0.4px" }}>
-    Learn the Basics
-  </h1>
-  <p style={{ margin: "8px 0 0", opacity: 0.75, lineHeight: 1.5 }}>
-    Short lessons on reading charts, key concepts, and the indicators used in MyStockHarbor.
-  </p>
-</div>
-
 <div
   style={{
     display: "flex",
-    gap: 10,
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 16,
     flexWrap: "wrap",
-    justifyContent: "flex-end",
-    alignSelf: "flex-start",
   }}
 >
-  <Link href="/" style={topNavBtnStyle("dashboard")}>
-    <span
-      aria-hidden="true"
-      style={{
-        fontSize: 15,
-        lineHeight: 1,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      {topNavIcon("dashboard")}
-    </span>
-    <span>Dashboard</span>
-  </Link>
+  <div style={{ minWidth: 0, flex: "1 1 380px", maxWidth: 520 }}>
+    <h1 style={{ margin: 0, fontSize: 34, letterSpacing: "-0.4px" }}>
+      Learn the Basics
+    </h1>
+    <p style={{ margin: "8px 0 0", opacity: 0.75, lineHeight: 1.5 }}>
+      Short lessons on reading charts, key concepts, and the indicators used in MyStockHarbor.
+    </p>
+  </div>
 
-  <Link href="/platforms" style={topNavBtnStyle("platforms")}>
-    <span
-      aria-hidden="true"
-      style={{
-        fontSize: 15,
-        lineHeight: 1,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      {topNavIcon("platforms")}
-    </span>
-    <span>Platforms</span>
-  </Link>
+  <div
+    style={{
+      display: "flex",
+      gap: 10,
+      flexWrap: "wrap",
+      justifyContent: "flex-end",
+      alignItems: "flex-start",
+      flex: "0 1 auto",
+      marginLeft: "auto",
+    }}
+  >
+    <Link href="/" style={topNavBtnStyle("dashboard")}>
+      <span
+        aria-hidden="true"
+        style={{
+          fontSize: 15,
+          lineHeight: 1,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {topNavIcon("dashboard")}
+      </span>
+      <span>Dashboard</span>
+    </Link>
 
-  <Link href="/pickers" style={topNavBtnStyle("pickers")}>
-    <span
-      aria-hidden="true"
-      style={{
-        fontSize: 15,
-        lineHeight: 1,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      {topNavIcon("pickers")}
-    </span>
-    <span>Stock Pickers</span>
-  </Link>
+    <Link href="/platforms" style={topNavBtnStyle("platforms")}>
+      <span
+        aria-hidden="true"
+        style={{
+          fontSize: 15,
+          lineHeight: 1,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {topNavIcon("platforms")}
+      </span>
+      <span>Platforms</span>
+    </Link>
 
-  <Link href="/utilities" style={topNavBtnStyle("calculators")}>
-    <span
-      aria-hidden="true"
-      style={{
-        fontSize: 15,
-        lineHeight: 1,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      {topNavIcon("calculators")}
-    </span>
-    <span>Calculators</span>
-  </Link>
+    <Link href="/pickers" style={topNavBtnStyle("pickers")}>
+      <span
+        aria-hidden="true"
+        style={{
+          fontSize: 15,
+          lineHeight: 1,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {topNavIcon("pickers")}
+      </span>
+      <span>Stock Pickers</span>
+    </Link>
+
+    <Link href="/utilities" style={topNavBtnStyle("calculators")}>
+      <span
+        aria-hidden="true"
+        style={{
+          fontSize: 15,
+          lineHeight: 1,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {topNavIcon("calculators")}
+      </span>
+      <span>Calculators</span>
+    </Link>
+  </div>
 </div>
-        </div>
 
         <div
           style={{
