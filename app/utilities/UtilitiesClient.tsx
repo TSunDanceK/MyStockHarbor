@@ -411,13 +411,16 @@ export default function UtilitiesClientPage() {
 
         <div style={{ marginTop: 22 }} className="grid2">
           <section
-            style={{
-              border: "1px solid rgba(255,255,255,0.14)",
-              borderRadius: 18,
-              padding: 18,
-              background: "rgba(255,255,255,0.03)",
-            }}
-          >
+<section
+  style={{
+    border: "1px solid rgba(59,130,246,0.35)",
+    borderRadius: 18,
+    padding: 18,
+    background:
+      "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(15,23,42,0.92))",
+    boxShadow: "0 0 0 1px rgba(59,130,246,0.10) inset",
+  }}
+>
             <div
               style={{
                 display: "inline-flex",
@@ -542,14 +545,16 @@ export default function UtilitiesClientPage() {
             </div>
           </section>
 
-          <section
-            style={{
-              border: "1px solid rgba(255,255,255,0.14)",
-              borderRadius: 18,
-              padding: 18,
-              background: "rgba(255,255,255,0.03)",
-            }}
-          >
+<section
+  style={{
+    border: "1px solid rgba(59,130,246,0.35)",
+    borderRadius: 18,
+    padding: 18,
+    background:
+      "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(15,23,42,0.92))",
+    boxShadow: "0 0 0 1px rgba(59,130,246,0.10) inset",
+  }}
+>
             <div
               style={{
                 display: "inline-flex",
