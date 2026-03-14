@@ -27,10 +27,10 @@ export const metadata: Metadata = {
 };
 
 const linkCardStyle: React.CSSProperties = {
-  border: "1px solid rgba(255,255,255,0.12)",
+  border: "1px solid rgba(255,255,255,0.10)",
   borderRadius: 16,
   padding: 16,
-  background: "rgba(255,255,255,0.035)",
+  background: "rgba(255,255,255,0.03)",
   textDecoration: "none",
   color: "#f1f5f9",
   display: "block",
@@ -40,22 +40,12 @@ const linkCardStyle: React.CSSProperties = {
 
 const seoSectionStyle: React.CSSProperties = {
   marginTop: 22,
-  border: "1px solid rgba(255,255,255,0.08)",
+  border: "1px solid rgba(255,255,255,0.07)",
   borderRadius: 18,
   padding: 20,
-  background: "linear-gradient(180deg, rgba(10,14,22,0.92), rgba(8,11,18,0.96))",
+  background: "linear-gradient(180deg, rgba(9,13,20,0.92), rgba(7,10,16,0.96))",
   maxWidth: 980,
   boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
-};
-
-const signalCardBaseStyle: React.CSSProperties = {
-  borderRadius: 16,
-  padding: "16px 18px",
-  minHeight: 112,
-  display: "flex",
-  flexDirection: "column",
-  justifyContent: "center",
-  textAlign: "left",
 };
 
 export default function PickersPage() {
@@ -106,18 +96,18 @@ export default function PickersPage() {
             className="heroGrid"
             style={{
               display: "grid",
-              gridTemplateColumns: "minmax(0, 1.45fr) minmax(280px, 0.8fr)",
+              gridTemplateColumns: "minmax(0, 1.35fr) minmax(320px, 0.95fr)",
               gap: 16,
               alignItems: "stretch",
             }}
           >
             <section
               style={{
-                border: "1px solid rgba(239,68,68,0.22)",
+                border: "1px solid rgba(239,68,68,0.20)",
                 borderRadius: 22,
-                padding: 22,
+                padding: 18,
                 background:
-                  "linear-gradient(135deg, rgba(14,18,34,0.98), rgba(10,14,26,0.98))",
+                  "linear-gradient(135deg, rgba(13,17,31,0.98), rgba(9,13,24,0.98))",
                 boxShadow:
                   "inset 0 1px 0 rgba(255,255,255,0.05), 0 14px 34px rgba(0,0,0,0.30)",
               }}
@@ -157,43 +147,35 @@ export default function PickersPage() {
                 style={{
                   marginTop: 14,
                   fontSize: 17,
-                  lineHeight: 1.7,
-                  opacity: 0.86,
-                  maxWidth: 760,
+                  lineHeight: 1.65,
+                  opacity: 0.84,
+                  maxWidth: 700,
                 }}
               >
-                This is the stock scanner workspace inside MyStockHarbor. The tool scans
-                the market for technical setups such as oversold rebounds,
-                overbought extensions, divergence signals, buy-the-dip opportunities
-                and breakout candidates.
-              </p>
-
-              <p
-                style={{
-                  marginTop: 10,
-                  fontSize: 16,
-                  lineHeight: 1.7,
-                  opacity: 0.78,
-                  maxWidth: 760,
-                }}
-              >
-                Use it to quickly generate a shortlist of charts worth reviewing,
-                then open any symbol directly in the dashboard to inspect price
-                structure, indicators and trend conditions in more detail.
+                Scan the market for oversold rebounds, overbought setups,
+                divergence, dip buys and breakout candidates, then open any
+                symbol in the dashboard to review the chart in more detail.
               </p>
 
               <div
                 style={{
                   marginTop: 18,
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
                   gap: 10,
+                  maxWidth: 560,
                 }}
               >
-                <MiniStat label="Scanner Type" value="Technical Setup Scanner" tint="blue" />
-                <MiniStat label="Results" value="Data-Driven Screening" tint="green" />
-                <MiniStat label="Use Case" value="Find Trade Ideas Faster" tint="amber" />
-                <MiniStat label="Next Step" value="Open Charts In Dashboard" tint="red" />
+                <MiniStat
+                  label="Results"
+                  value="Data-Driven Screening"
+                  tint="green"
+                />
+                <MiniStat
+                  label="Use Case"
+                  value="Find Trade Ideas Faster"
+                  tint="amber"
+                />
               </div>
             </section>
 
@@ -201,9 +183,9 @@ export default function PickersPage() {
               style={{
                 border: "1px solid rgba(59,130,246,0.20)",
                 borderRadius: 22,
-                padding: 20,
+                padding: 18,
                 background:
-                  "linear-gradient(180deg, rgba(9,16,32,0.98), rgba(7,11,20,0.98))",
+                  "linear-gradient(180deg, rgba(8,14,28,0.98), rgba(6,10,18,0.98))",
                 boxShadow:
                   "inset 0 1px 0 rgba(255,255,255,0.05), 0 14px 34px rgba(0,0,0,0.28)",
               }}
@@ -226,22 +208,37 @@ export default function PickersPage() {
                 REAL SCREENED SETUPS
               </div>
 
-              <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
-                <ToolBullet
-                  title="Real screened oversold stocks"
-                  text="Stocks showing downside stretch that may be setting up for a potential rebound worth reviewing."
+              <div
+                style={{
+                  marginTop: 14,
+                  display: "grid",
+                  gap: 10,
+                }}
+              >
+                <SignalCard
+                  title="Oversold Rebound Signals"
+                  text="Downside stretch with possible rebound potential."
+                  tint="green"
                 />
-                <ToolBullet
-                  title="Real screened overbought stocks"
-                  text="Stocks that may be extended after strong upside moves and could deserve closer chart review."
+                <SignalCard
+                  title="Extended Strength Signals"
+                  text="Extended upside moves worth reviewing closely."
+                  tint="red"
                 />
-                <ToolBullet
-                  title="Real screened divergence setups"
-                  text="Charts where momentum indicators may be disagreeing with price action, sometimes signalling a potential shift."
+                <SignalCard
+                  title="Divergence Signals"
+                  text="Momentum and price may be starting to disagree."
+                  tint="amber"
                 />
-                <ToolBullet
-                  title="Real screened breakout stocks"
-                  text="Stocks pressing into strength, approaching resistance or showing fresh momentum expansion."
+                <SignalCard
+                  title="Buy-the-Dip Setups"
+                  text="Pullback setups that may still fit a stronger trend."
+                  tint="teal"
+                />
+                <SignalCard
+                  title="Breakout Setups"
+                  text="Strength, resistance pressure or momentum expansion."
+                  tint="blue"
                 />
               </div>
             </section>
@@ -251,186 +248,6 @@ export default function PickersPage() {
         <section
           style={{
             marginTop: 24,
-            border: "1px solid rgba(255,255,255,0.10)",
-            borderRadius: 20,
-            padding: 18,
-            background:
-              "linear-gradient(180deg, rgba(10,16,30,0.98), rgba(8,12,22,0.98))",
-            boxShadow:
-              "inset 0 1px 0 rgba(255,255,255,0.04), 0 16px 36px rgba(0,0,0,0.30)",
-            maxWidth: 1040,
-          }}
-        >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: 12,
-              alignItems: "stretch",
-            }}
-          >
-            <div
-              style={{
-                ...signalCardBaseStyle,
-                border: "1px solid rgba(34,197,94,0.35)",
-                background:
-                  "linear-gradient(180deg, rgba(6,78,59,0.34), rgba(6,46,33,0.52))",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-              }}
-            >
-              <div
-                style={{
-                  fontWeight: 900,
-                  fontSize: 15,
-                  color: "#ecfdf5",
-                }}
-              >
-                Oversold Rebound Signals
-              </div>
-              <div
-                style={{
-                  marginTop: 6,
-                  fontSize: 13,
-                  lineHeight: 1.55,
-                  color: "rgba(236,253,245,0.84)",
-                  maxWidth: 260,
-                }}
-              >
-                Screened results highlighting stocks that may be stretched to the
-                downside and worth a rebound review.
-              </div>
-            </div>
-
-            <div
-              style={{
-                ...signalCardBaseStyle,
-                border: "1px solid rgba(239,68,68,0.35)",
-                background:
-                  "linear-gradient(180deg, rgba(127,29,29,0.30), rgba(69,10,10,0.52))",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-              }}
-            >
-              <div
-                style={{
-                  fontWeight: 900,
-                  fontSize: 15,
-                  color: "#fef2f2",
-                }}
-              >
-                Extended Strength Signals
-              </div>
-              <div
-                style={{
-                  marginTop: 6,
-                  fontSize: 13,
-                  lineHeight: 1.55,
-                  color: "rgba(254,242,242,0.84)",
-                  maxWidth: 260,
-                }}
-              >
-                Screened results showing stocks that may be extended after strong
-                upside momentum.
-              </div>
-            </div>
-
-            <div
-              style={{
-                ...signalCardBaseStyle,
-                border: "1px solid rgba(234,179,8,0.34)",
-                background:
-                  "linear-gradient(180deg, rgba(113,63,18,0.28), rgba(66,32,6,0.50))",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-              }}
-            >
-              <div
-                style={{
-                  fontWeight: 900,
-                  fontSize: 15,
-                  color: "#fefce8",
-                }}
-              >
-                Divergence Signals
-              </div>
-              <div
-                style={{
-                  marginTop: 6,
-                  fontSize: 13,
-                  lineHeight: 1.55,
-                  color: "rgba(254,252,232,0.84)",
-                  maxWidth: 260,
-                }}
-              >
-                Charts where price and momentum may be starting to disagree.
-              </div>
-            </div>
-
-            <div
-              style={{
-                ...signalCardBaseStyle,
-                border: "1px solid rgba(16,185,129,0.34)",
-                background:
-                  "linear-gradient(180deg, rgba(4,120,87,0.26), rgba(4,47,46,0.50))",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-              }}
-            >
-              <div
-                style={{
-                  fontWeight: 900,
-                  fontSize: 15,
-                  color: "#ecfdf5",
-                }}
-              >
-                Buy-the-Dip Setups
-              </div>
-              <div
-                style={{
-                  marginTop: 6,
-                  fontSize: 13,
-                  lineHeight: 1.55,
-                  color: "rgba(236,253,245,0.84)",
-                  maxWidth: 260,
-                }}
-              >
-                Pullback setups that may still fit a stronger trend worth checking.
-              </div>
-            </div>
-
-            <div
-              style={{
-                ...signalCardBaseStyle,
-                border: "1px solid rgba(59,130,246,0.35)",
-                background:
-                  "linear-gradient(180deg, rgba(30,64,175,0.28), rgba(17,37,84,0.52))",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-              }}
-            >
-              <div
-                style={{
-                  fontWeight: 900,
-                  fontSize: 15,
-                  color: "#eff6ff",
-                }}
-              >
-                Breakout Setups
-              </div>
-              <div
-                style={{
-                  marginTop: 6,
-                  fontSize: 13,
-                  lineHeight: 1.55,
-                  color: "rgba(239,246,255,0.84)",
-                  maxWidth: 260,
-                }}
-              >
-                Stocks pressing into strength, resistance or fresh momentum expansion.
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section
-          style={{
-            marginTop: 28,
             maxWidth: 1040,
             borderRadius: 22,
             border: "1px solid rgba(59,130,246,0.35)",
@@ -486,47 +303,21 @@ export default function PickersPage() {
                 letterSpacing: "-0.03em",
               }}
             >
-              Technical setups detected across the market
+              Screened setups across the market
             </h2>
 
             <p
               style={{
-                margin: "8px 0 0 0",
+                margin: "10px 0 0 0",
                 lineHeight: 1.65,
-                opacity: 0.78,
-                maxWidth: 860,
+                opacity: 0.82,
+                maxWidth: 820,
                 fontSize: 15,
               }}
             >
-              Designed to help traders find potential opportunities faster without
-              manually scanning hundreds of charts.
-            </p>
-
-            <p
-              style={{
-                margin: "10px 0 0 0",
-                lineHeight: 1.7,
-                opacity: 0.82,
-                maxWidth: 860,
-              }}
-            >
-              Browse stock ideas generated from technical market scans including
-              oversold conditions, divergence signals, breakout setups and pullback
-              opportunities. These are data-driven screened results based on real
-              market conditions, not random stock suggestions.
-            </p>
-
-            <p
-              style={{
-                margin: "8px 0 0 0",
-                lineHeight: 1.65,
-                opacity: 0.7,
-                maxWidth: 860,
-                fontSize: 14,
-              }}
-            >
-              Click any symbol to open the chart instantly in the MyStockHarbor
-              dashboard and review the full setup.
+              Data-driven screened results based on real market conditions, not
+              random stock suggestions. Click any symbol to open the full chart
+              in the dashboard.
             </p>
           </div>
 
@@ -569,13 +360,13 @@ export default function PickersPage() {
             style={{
               margin: "10px 0 0",
               lineHeight: 1.7,
-              opacity: 0.76,
+              opacity: 0.74,
               maxWidth: 820,
             }}
           >
-            These guides explain the main technical ideas behind the signals on this
-            page, including oversold conditions, overbought conditions, breakouts,
-            dip-buy setups and divergence.
+            These guides explain the main technical ideas behind the signals on
+            this page, including oversold conditions, overbought conditions,
+            breakouts, dip-buy setups and divergence.
           </p>
 
           <div
@@ -692,8 +483,8 @@ export default function PickersPage() {
               Learn the setups
             </div>
             <div style={midCardTextStyle}>
-              Visit the Learn hub to understand RSI, MACD, VWAP, ATR, divergence
-              and other chart concepts behind these filters.
+              Visit the Learn hub to understand RSI, MACD, VWAP, ATR,
+              divergence and other chart concepts behind these filters.
             </div>
           </Link>
 
@@ -710,8 +501,8 @@ export default function PickersPage() {
               Learn MACD divergence
             </div>
             <div style={midCardTextStyle}>
-              MACD can help confirm momentum shifts, trend strength and divergence
-              setups that appear in screened results.
+              MACD can help confirm momentum shifts, trend strength and
+              divergence setups that appear in screened results.
             </div>
           </Link>
 
@@ -760,13 +551,13 @@ export default function PickersPage() {
             style={{
               margin: "10px 0 0",
               lineHeight: 1.7,
-              opacity: 0.76,
+              opacity: 0.74,
               maxWidth: 860,
             }}
           >
-            These are additional stock screener ideas traders often search for when
-            narrowing down charts. They connect indicator-based searches with
-            setup-based scans.
+            These are additional stock screener ideas traders often search for
+            when narrowing down charts. They connect indicator-based searches
+            with setup-based scans.
           </p>
 
           <div
@@ -815,8 +606,8 @@ export default function PickersPage() {
                 Stocks Above 200 Day Moving Average
               </div>
               <div style={smallCardTextStyle}>
-                Understand how traders use the 200-day moving average as a long-term
-                trend filter.
+                Understand how traders use the 200-day moving average as a
+                long-term trend filter.
               </div>
             </Link>
           </div>
@@ -856,14 +647,14 @@ export default function PickersPage() {
             style={{
               margin: "10px 0 0",
               lineHeight: 1.7,
-              opacity: 0.76,
+              opacity: 0.74,
               maxWidth: 860,
             }}
           >
-            These guides go one level deeper than the setup pages. They explain how
-            traders scan stocks, compare charting tools, look for breakout
-            candidates, analyse pullbacks and use indicators when reviewing possible
-            stock ideas.
+            These guides go one level deeper than the setup pages. They explain
+            how traders scan stocks, compare charting tools, look for breakout
+            candidates, analyse pullbacks and use indicators when reviewing
+            possible stock ideas.
           </p>
 
           <div
@@ -891,7 +682,8 @@ export default function PickersPage() {
                 Stock Screener for Oversold Stocks
               </div>
               <div style={smallCardTextStyle}>
-                Understand how traders search for oversold and rebound candidates.
+                Understand how traders search for oversold and rebound
+                candidates.
               </div>
             </Link>
 
@@ -928,7 +720,8 @@ export default function PickersPage() {
                 Bullish Divergence Explained
               </div>
               <div style={smallCardTextStyle}>
-                Understand how weakening downside momentum can show up on charts.
+                Understand how weakening downside momentum can show up on
+                charts.
               </div>
             </Link>
 
@@ -949,7 +742,8 @@ export default function PickersPage() {
                 Best Indicators for Swing Trading
               </div>
               <div style={smallCardTextStyle}>
-                Explore common indicators traders use when reviewing swing setups.
+                Explore common indicators traders use when reviewing swing
+                setups.
               </div>
             </Link>
 
@@ -958,7 +752,8 @@ export default function PickersPage() {
                 How to Scan Stocks
               </div>
               <div style={smallCardTextStyle}>
-                Learn the basic process traders use to scan the market for ideas.
+                Learn the basic process traders use to scan the market for
+                ideas.
               </div>
             </Link>
 
@@ -976,7 +771,8 @@ export default function PickersPage() {
                 Best Charting Platforms
               </div>
               <div style={smallCardTextStyle}>
-                Compare the kinds of charting tools traders use to analyse stocks.
+                Compare the kinds of charting tools traders use to analyse
+                stocks.
               </div>
             </Link>
 
@@ -985,7 +781,8 @@ export default function PickersPage() {
                 How to Analyse Stocks
               </div>
               <div style={smallCardTextStyle}>
-                Read the broader guide to charts, indicators and stock analysis.
+                Read the broader guide to charts, indicators and stock
+                analysis.
               </div>
             </Link>
           </div>
@@ -1026,10 +823,10 @@ export default function PickersPage() {
               <h3 style={{ margin: 0, fontSize: 17 }}>
                 Is this a stock screener?
               </h3>
-              <p style={{ margin: "8px 0 0", lineHeight: 1.7, opacity: 0.78 }}>
+              <p style={{ margin: "8px 0 0", lineHeight: 1.7, opacity: 0.76 }}>
                 Yes. It works like a stock idea screener built around technical
-                setups such as oversold conditions, divergence, dip-buy setups and
-                breakouts.
+                setups such as oversold conditions, divergence, dip-buy setups
+                and breakouts.
               </p>
             </div>
 
@@ -1037,9 +834,9 @@ export default function PickersPage() {
               <h3 style={{ margin: 0, fontSize: 17 }}>
                 Are these buy or sell recommendations?
               </h3>
-              <p style={{ margin: "8px 0 0", lineHeight: 1.7, opacity: 0.78 }}>
-                No. These are idea filters only. They help you narrow down charts to
-                review, but they are not personal financial advice.
+              <p style={{ margin: "8px 0 0", lineHeight: 1.7, opacity: 0.76 }}>
+                No. These are idea filters only. They help you narrow down
+                charts to review, but they are not personal financial advice.
               </p>
             </div>
 
@@ -1047,7 +844,7 @@ export default function PickersPage() {
               <h3 style={{ margin: 0, fontSize: 17 }}>
                 What should I do after clicking a stock?
               </h3>
-              <p style={{ margin: "8px 0 0", lineHeight: 1.7, opacity: 0.78 }}>
+              <p style={{ margin: "8px 0 0", lineHeight: 1.7, opacity: 0.76 }}>
                 Open it in the dashboard, review the chart structure, check key
                 indicators and confirm whether the setup still makes sense.
               </p>
@@ -1091,35 +888,21 @@ function MiniStat({
 }: {
   label: string;
   value: string;
-  tint: "blue" | "green" | "amber" | "red";
+  tint: "green" | "amber";
 }) {
   const styles =
-    tint === "blue"
-      ? {
-          border: "1px solid rgba(59,130,246,0.24)",
-          background:
-            "linear-gradient(180deg, rgba(10,18,34,0.94), rgba(7,12,24,0.98))",
-          labelColor: "#bfdbfe",
-        }
-      : tint === "green"
+    tint === "green"
       ? {
           border: "1px solid rgba(34,197,94,0.24)",
           background:
             "linear-gradient(180deg, rgba(9,18,16,0.94), rgba(7,12,11,0.98))",
           labelColor: "#bbf7d0",
         }
-      : tint === "amber"
-      ? {
+      : {
           border: "1px solid rgba(234,179,8,0.24)",
           background:
             "linear-gradient(180deg, rgba(18,16,10,0.94), rgba(12,10,7,0.98))",
           labelColor: "#fde68a",
-        }
-      : {
-          border: "1px solid rgba(239,68,68,0.24)",
-          background:
-            "linear-gradient(180deg, rgba(24,12,12,0.94), rgba(14,7,7,0.98))",
-          labelColor: "#fecaca",
         };
 
   return (
@@ -1157,23 +940,81 @@ function MiniStat({
   );
 }
 
-function ToolBullet({ title, text }: { title: string; text: string }) {
+function SignalCard({
+  title,
+  text,
+  tint,
+}: {
+  title: string;
+  text: string;
+  tint: "green" | "red" | "amber" | "teal" | "blue";
+}) {
+  const styles =
+    tint === "green"
+      ? {
+          border: "1px solid rgba(34,197,94,0.35)",
+          background:
+            "linear-gradient(180deg, rgba(6,78,59,0.30), rgba(6,46,33,0.48))",
+          titleColor: "#ecfdf5",
+          textColor: "rgba(236,253,245,0.84)",
+        }
+      : tint === "red"
+      ? {
+          border: "1px solid rgba(239,68,68,0.35)",
+          background:
+            "linear-gradient(180deg, rgba(127,29,29,0.28), rgba(69,10,10,0.48))",
+          titleColor: "#fef2f2",
+          textColor: "rgba(254,242,242,0.84)",
+        }
+      : tint === "amber"
+      ? {
+          border: "1px solid rgba(234,179,8,0.34)",
+          background:
+            "linear-gradient(180deg, rgba(113,63,18,0.28), rgba(66,32,6,0.46))",
+          titleColor: "#fefce8",
+          textColor: "rgba(254,252,232,0.84)",
+        }
+      : tint === "teal"
+      ? {
+          border: "1px solid rgba(20,184,166,0.34)",
+          background:
+            "linear-gradient(180deg, rgba(17,94,89,0.28), rgba(4,47,46,0.46))",
+          titleColor: "#ecfeff",
+          textColor: "rgba(236,254,255,0.84)",
+        }
+      : {
+          border: "1px solid rgba(59,130,246,0.35)",
+          background:
+            "linear-gradient(180deg, rgba(30,64,175,0.28), rgba(17,37,84,0.48))",
+          titleColor: "#eff6ff",
+          textColor: "rgba(239,246,255,0.84)",
+        };
+
   return (
     <div
       style={{
-        borderRadius: 14,
-        border: "1px solid rgba(255,255,255,0.10)",
-        background: "rgba(255,255,255,0.04)",
-        padding: "12px 14px",
+        border: styles.border,
+        background: styles.background,
+        borderRadius: 16,
+        padding: "14px 16px",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
       }}
     >
-      <div style={{ fontWeight: 900, fontSize: 15 }}>{title}</div>
       <div
         style={{
-          marginTop: 5,
+          fontWeight: 900,
+          fontSize: 15,
+          color: styles.titleColor,
+        }}
+      >
+        {title}
+      </div>
+      <div
+        style={{
+          marginTop: 6,
           fontSize: 13,
           lineHeight: 1.55,
-          opacity: 0.8,
+          color: styles.textColor,
         }}
       >
         {text}
@@ -1185,14 +1026,14 @@ function ToolBullet({ title, text }: { title: string; text: string }) {
 const smallCardTextStyle: React.CSSProperties = {
   marginTop: 8,
   fontSize: 13,
-  opacity: 0.74,
+  opacity: 0.72,
   lineHeight: 1.6,
 };
 
 const midCardTextStyle: React.CSSProperties = {
   marginTop: 8,
   fontSize: 14,
-  opacity: 0.76,
+  opacity: 0.74,
   lineHeight: 1.6,
 };
 
