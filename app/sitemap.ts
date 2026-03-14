@@ -15,14 +15,15 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: "/risk-disclaimer", changeFrequency: "monthly" as const, priority: 0.4 },
   ];
 
-  const seoGuides = [
-    "/how-to-read-stock-charts",
-    "/best-stock-indicators-for-beginners",
-    "/how-to-identify-stock-trends",
-    "/what-is-rsi-indicator",
-    "/what-is-macd-indicator",
-    "/what-is-vwap-indicator",
-  ];
+const seoGuides = [
+  "/how-to-read-stock-charts",
+  "/best-stock-indicators-for-beginners",
+  "/how-to-identify-stock-trends",
+  "/what-is-rsi-indicator",
+  "/what-is-macd-indicator",
+  "/what-is-vwap-indicator",
+  "/stocks-down-from-highs",
+];
 
   const stocks = [
     "aapl",
