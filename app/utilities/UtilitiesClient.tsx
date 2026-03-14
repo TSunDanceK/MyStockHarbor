@@ -58,17 +58,95 @@ function HelpTip({ text }: { text: string }) {
   );
 }
 
-function topBtn(): React.CSSProperties {
+function topNavBtnStyle(type: "learn" | "pickers" | "calculators" | "dashboard"): React.CSSProperties {
+  if (type === "learn") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      minHeight: 42,
+      padding: "9px 13px",
+      borderRadius: 14,
+      border: "1px solid rgba(59,130,246,0.45)",
+      background: "linear-gradient(135deg, rgba(59,130,246,0.20), rgba(37,99,235,0.10))",
+      color: "#f1f5f9",
+      textDecoration: "none",
+      fontWeight: 900,
+      fontSize: 14,
+      whiteSpace: "nowrap",
+      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+      transition: "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
+    };
+  }
+
+  if (type === "pickers") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      minHeight: 42,
+      padding: "9px 13px",
+      borderRadius: 14,
+      border: "1px solid rgba(255,255,255,0.16)",
+      background: "rgba(255,255,255,0.06)",
+      color: "#f1f5f9",
+      textDecoration: "none",
+      fontWeight: 900,
+      fontSize: 14,
+      whiteSpace: "nowrap",
+      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+      transition: "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
+    };
+  }
+
+  if (type === "calculators") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      minHeight: 42,
+      padding: "9px 13px",
+      borderRadius: 14,
+      border: "1px solid rgba(168,85,247,0.45)",
+      background: "linear-gradient(135deg, rgba(168,85,247,0.20), rgba(139,92,246,0.10))",
+      color: "#f1f5f9",
+      textDecoration: "none",
+      fontWeight: 900,
+      fontSize: 14,
+      whiteSpace: "nowrap",
+      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+      transition: "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
+    };
+  }
+
   return {
-    padding: "10px 12px",
-    borderRadius: 12,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    minHeight: 42,
+    padding: "9px 13px",
+    borderRadius: 14,
     border: "1px solid rgba(255,255,255,0.14)",
     background: "rgba(255,255,255,0.06)",
     color: "#f1f5f9",
     textDecoration: "none",
-    fontWeight: 850,
+    fontWeight: 900,
+    fontSize: 14,
     whiteSpace: "nowrap",
+    boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+    transition: "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
   };
+}
+
+function topNavIcon(type: "learn" | "pickers" | "calculators" | "dashboard") {
+  if (type === "learn") return "📘";
+  if (type === "pickers") return "📊";
+  if (type === "calculators") return "🧮";
+  return "←";
 }
 
 function calculatorPanelStyle(): React.CSSProperties {
@@ -454,19 +532,55 @@ export default function UtilitiesClientPage() {
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <Link href="/" style={topBtn()}>
-              ← Dashboard
-            </Link>
+<div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+  <Link href="/" style={topNavBtnStyle("dashboard")}>
+    <span
+      aria-hidden="true"
+      style={{
+        fontSize: 15,
+        lineHeight: 1,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      {topNavIcon("dashboard")}
+    </span>
+    <span>Dashboard</span>
+  </Link>
 
-            <Link href="/pickers" style={topBtn()}>
-              Find Stocks →
-            </Link>
+  <Link href="/pickers" style={topNavBtnStyle("pickers")}>
+    <span
+      aria-hidden="true"
+      style={{
+        fontSize: 15,
+        lineHeight: 1,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      {topNavIcon("pickers")}
+    </span>
+    <span>Stock Pickers</span>
+  </Link>
 
-            <Link href="/learn" style={topBtn()}>
-              Learn →
-            </Link>
-          </div>
+  <Link href="/learn" style={topNavBtnStyle("learn")}>
+    <span
+      aria-hidden="true"
+      style={{
+        fontSize: 15,
+        lineHeight: 1,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      {topNavIcon("learn")}
+    </span>
+    <span>Learn</span>
+  </Link>
+</div>
         </div>
 
         <section style={infoSectionStyle()}>
@@ -909,31 +1023,36 @@ export default function UtilitiesClientPage() {
         </section>
       </div>
 
-      <style jsx>{`
-        .wrap {
-          max-width: 1180px;
-          margin: 0 auto;
-          padding: 24px;
-        }
+<style jsx>{`
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 24px;
+  }
 
-        .grid2 {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 16px;
-        }
+  .grid2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
 
-        @media (max-width: 900px) {
-          .grid2 {
-            grid-template-columns: 1fr !important;
-          }
-        }
+  a:hover {
+    filter: brightness(1.05);
+    transform: translateY(-1px);
+  }
 
-        @media (max-width: 760px) {
-          .wrap {
-            padding: 16px !important;
-          }
-        }
-      `}</style>
+  @media (max-width: 900px) {
+    .grid2 {
+      grid-template-columns: 1fr !important;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .wrap {
+      padding: 16px !important;
+    }
+  }
+`}</style>
     </main>
   );
 }
