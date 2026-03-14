@@ -77,9 +77,9 @@ function inputStyle(): React.CSSProperties {
     height: 44,
     padding: "0 12px",
     borderRadius: 12,
-    border: "1px solid rgba(255,255,255,0.14)",
-    background: "rgba(255,255,255,0.06)",
-    color: "#f1f5f9",
+    border: "1px solid rgba(255,255,255,0.16)",
+    background: "#1a2742",
+    color: "#f8fafc",
     outline: "none",
     fontSize: 14,
     fontWeight: 700,
@@ -93,9 +93,9 @@ function selectStyle(): React.CSSProperties {
     height: 44,
     padding: "0 12px",
     borderRadius: 12,
-    border: "1px solid rgba(255,255,255,0.14)",
-    background: "#161b22",
-    color: "#f1f5f9",
+    border: "1px solid rgba(255,255,255,0.16)",
+    background: "#1a2742",
+    color: "#f8fafc",
     outline: "none",
     fontSize: 14,
     fontWeight: 700,
@@ -107,7 +107,7 @@ function baseResultBoxStyle(): React.CSSProperties {
   return {
     borderRadius: 14,
     border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(255,255,255,0.04)",
+    background: "#14233b",
     padding: 14,
   };
 }
@@ -199,17 +199,17 @@ function tintBox(type: "neutral" | "green" | "yellow" | "red", emphasize = false
   if (type === "green") {
     return {
       ...base,
-      border: "1px solid rgba(34,197,94,0.32)",
-      background: "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(255,255,255,0.04))",
-      boxShadow: emphasize ? "0 0 0 1px rgba(34,197,94,0.10) inset" : "none",
+      border: "1px solid rgba(34,197,94,0.36)",
+      background: "linear-gradient(135deg, rgba(22,101,52,0.30), #14233b)",
+      boxShadow: emphasize ? "0 0 0 1px rgba(34,197,94,0.08) inset" : "none",
     };
   }
 
   if (type === "yellow") {
     return {
       ...base,
-      border: "1px solid rgba(234,179,8,0.32)",
-      background: "linear-gradient(135deg, rgba(234,179,8,0.12), rgba(255,255,255,0.04))",
+      border: "1px solid rgba(234,179,8,0.34)",
+      background: "linear-gradient(135deg, rgba(133,77,14,0.28), #14233b)",
     };
   }
 
@@ -217,7 +217,7 @@ function tintBox(type: "neutral" | "green" | "yellow" | "red", emphasize = false
     return {
       ...base,
       border: "1px solid rgba(239,68,68,0.34)",
-      background: "linear-gradient(135deg, rgba(239,68,68,0.14), rgba(255,255,255,0.04))",
+      background: "linear-gradient(135deg, rgba(127,29,29,0.30), #14233b)",
     };
   }
 
