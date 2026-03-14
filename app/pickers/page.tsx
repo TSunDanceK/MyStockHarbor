@@ -35,6 +35,15 @@ const linkCardStyle: React.CSSProperties = {
   display: "block",
 };
 
+const greySectionStyle: React.CSSProperties = {
+  marginTop: 24,
+  border: "1px solid rgba(255,255,255,0.12)",
+  borderRadius: 18,
+  padding: 22,
+  background: "rgba(255,255,255,0.03)",
+  maxWidth: 980,
+};
+
 export default function PickersPage() {
   return (
     <main
@@ -206,127 +215,7 @@ export default function PickersPage() {
           <PickersClient />
         </div>
 
-        <section
-          style={{
-            marginTop: 18,
-            border: "1px solid rgba(255,255,255,0.12)",
-            borderRadius: 18,
-            padding: 18,
-            background: "rgba(255,255,255,0.03)",
-            maxWidth: 980,
-          }}
-        >
-          <div
-            style={{
-              fontWeight: 950,
-              fontSize: 15,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              opacity: 0.84,
-            }}
-          >
-            How to use these stock filters
-          </div>
-
-          <p
-            style={{
-              margin: "10px 0 0",
-              fontSize: 14,
-              lineHeight: 1.7,
-              opacity: 0.8,
-              maxWidth: 760,
-            }}
-          >
-            Fresh ATH breakouts. If more than 10 stocks qualify, ranked by volume
-            spike first. Top traded names are prioritised.
-          </p>
-        </section>
-
-        <section
-          style={{
-            marginTop: 26,
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-            gap: 14,
-          }}
-        >
-          <Link href="/learn" style={linkCardStyle}>
-            <div style={{ fontSize: 18, fontWeight: 950 }}>
-              Learn the setups
-            </div>
-            <div
-              style={{
-                marginTop: 8,
-                fontSize: 14,
-                opacity: 0.78,
-                lineHeight: 1.6,
-              }}
-            >
-              Visit the Learn hub to understand RSI, MACD, VWAP, ATR,
-              divergence and other chart concepts behind these filters.
-            </div>
-          </Link>
-
-          <Link href="/what-is-rsi-indicator" style={linkCardStyle}>
-            <div style={{ fontSize: 18, fontWeight: 950 }}>Understand RSI</div>
-            <div
-              style={{
-                marginTop: 8,
-                fontSize: 14,
-                opacity: 0.78,
-                lineHeight: 1.6,
-              }}
-            >
-              Read how RSI can help identify oversold and overbought zones when
-              reviewing stock ideas from this page.
-            </div>
-          </Link>
-
-          <Link href="/what-is-macd-indicator" style={linkCardStyle}>
-            <div style={{ fontSize: 18, fontWeight: 950 }}>
-              Learn MACD divergence
-            </div>
-            <div
-              style={{
-                marginTop: 8,
-                fontSize: 14,
-                opacity: 0.78,
-                lineHeight: 1.6,
-              }}
-            >
-              MACD can help confirm momentum shifts, trend strength and
-              divergence setups that appear in live scans.
-            </div>
-          </Link>
-
-          <Link href="/" style={linkCardStyle}>
-            <div style={{ fontSize: 18, fontWeight: 950 }}>
-              Open the full dashboard
-            </div>
-            <div
-              style={{
-                marginTop: 8,
-                fontSize: 14,
-                opacity: 0.78,
-                lineHeight: 1.6,
-              }}
-            >
-              Use the dashboard to inspect price action, overlays and technical
-              indicators for any symbol you find here.
-            </div>
-          </Link>
-        </section>
-
-        <section
-          style={{
-            marginTop: 24,
-            border: "1px solid rgba(255,255,255,0.12)",
-            borderRadius: 18,
-            padding: 22,
-            background: "#0b1220",
-            maxWidth: 980,
-          }}
-        >
+        <section style={greySectionStyle}>
           <h2
             style={{
               margin: 0,
@@ -363,126 +252,56 @@ export default function PickersPage() {
               <div style={{ fontSize: 17, fontWeight: 950 }}>
                 Stock Market Setups
               </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 13,
-                  opacity: 0.78,
-                  lineHeight: 1.6,
-                }}
-              >
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
                 Overview of the main setups used across MyStockHarbor.
               </div>
             </Link>
 
             <Link href="/oversold-stocks" style={linkCardStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>
-                Oversold Stocks
-              </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 13,
-                  opacity: 0.78,
-                  lineHeight: 1.6,
-                }}
-              >
+              <div style={{ fontSize: 17, fontWeight: 950 }}>Oversold Stocks</div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
                 Learn how traders review stretched downside conditions.
               </div>
             </Link>
 
             <Link href="/overbought-stocks" style={linkCardStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>
-                Overbought Stocks
-              </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 13,
-                  opacity: 0.78,
-                  lineHeight: 1.6,
-                }}
-              >
+              <div style={{ fontSize: 17, fontWeight: 950 }}>Overbought Stocks</div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
                 Understand when price may be stretched to the upside.
               </div>
             </Link>
 
             <Link href="/breakout-stocks" style={linkCardStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>
-                Breakout Stocks
-              </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 13,
-                  opacity: 0.78,
-                  lineHeight: 1.6,
-                }}
-              >
+              <div style={{ fontSize: 17, fontWeight: 950 }}>Breakout Stocks</div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
                 See how traders identify stocks pushing through resistance.
               </div>
             </Link>
 
             <Link href="/buy-the-dip-stocks" style={linkCardStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>
-                Buy The Dip Stocks
-              </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 13,
-                  opacity: 0.78,
-                  lineHeight: 1.6,
-                }}
-              >
+              <div style={{ fontSize: 17, fontWeight: 950 }}>Buy The Dip Stocks</div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
                 Review pullback setups that may still fit a healthy trend.
               </div>
             </Link>
 
             <Link href="/stocks-down-from-highs" style={linkCardStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>
-                Stocks Down From Highs
-              </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 13,
-                  opacity: 0.78,
-                  lineHeight: 1.6,
-                }}
-              >
+              <div style={{ fontSize: 17, fontWeight: 950 }}>Stocks Down From Highs</div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
                 Explore stocks that have pulled back from recent highs.
               </div>
             </Link>
 
             <Link href="/bullish-divergence-stocks" style={linkCardStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>
-                Bullish Divergence
-              </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 13,
-                  opacity: 0.78,
-                  lineHeight: 1.6,
-                }}
-              >
+              <div style={{ fontSize: 17, fontWeight: 950 }}>Bullish Divergence</div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
                 Learn how fading downside momentum can hint at reversal risk.
               </div>
             </Link>
 
             <Link href="/bearish-divergence-stocks" style={linkCardStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>
-                Bearish Divergence
-              </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 13,
-                  opacity: 0.78,
-                  lineHeight: 1.6,
-                }}
-              >
+              <div style={{ fontSize: 17, fontWeight: 950 }}>Bearish Divergence</div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
                 Understand when upside momentum may be losing strength.
               </div>
             </Link>
@@ -492,13 +311,49 @@ export default function PickersPage() {
         <section
           style={{
             marginTop: 24,
-            border: "1px solid rgba(255,255,255,0.12)",
-            borderRadius: 18,
-            padding: 22,
-            background: "#0b1220",
-            maxWidth: 980,
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+            gap: 14,
           }}
         >
+          <Link href="/learn" style={linkCardStyle}>
+            <div style={{ fontSize: 18, fontWeight: 950 }}>Learn the setups</div>
+            <div style={{ marginTop: 8, fontSize: 14, opacity: 0.78, lineHeight: 1.6 }}>
+              Visit the Learn hub to understand RSI, MACD, VWAP, ATR,
+              divergence and other chart concepts behind these filters.
+            </div>
+          </Link>
+
+          <Link href="/what-is-rsi-indicator" style={linkCardStyle}>
+            <div style={{ fontSize: 18, fontWeight: 950 }}>Understand RSI</div>
+            <div style={{ marginTop: 8, fontSize: 14, opacity: 0.78, lineHeight: 1.6 }}>
+              Read how RSI can help identify oversold and overbought zones when
+              reviewing stock ideas from this page.
+            </div>
+          </Link>
+
+          <Link href="/what-is-macd-indicator" style={linkCardStyle}>
+            <div style={{ fontSize: 18, fontWeight: 950 }}>
+              Learn MACD divergence
+            </div>
+            <div style={{ marginTop: 8, fontSize: 14, opacity: 0.78, lineHeight: 1.6 }}>
+              MACD can help confirm momentum shifts, trend strength and
+              divergence setups that appear in live scans.
+            </div>
+          </Link>
+
+          <Link href="/" style={linkCardStyle}>
+            <div style={{ fontSize: 18, fontWeight: 950 }}>
+              Open the full dashboard
+            </div>
+            <div style={{ marginTop: 8, fontSize: 14, opacity: 0.78, lineHeight: 1.6 }}>
+              Use the dashboard to inspect price action, overlays and technical
+              indicators for any symbol you find here.
+            </div>
+          </Link>
+        </section>
+
+        <section style={greySectionStyle}>
           <h2
             style={{
               margin: 0,
@@ -536,14 +391,7 @@ export default function PickersPage() {
               <div style={{ fontSize: 17, fontWeight: 950 }}>
                 Stock Screener for Breakouts
               </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 13,
-                  opacity: 0.78,
-                  lineHeight: 1.6,
-                }}
-              >
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
                 Learn how traders scan for stocks approaching breakout levels.
               </div>
             </Link>
@@ -552,16 +400,8 @@ export default function PickersPage() {
               <div style={{ fontSize: 17, fontWeight: 950 }}>
                 Stock Screener for Oversold Stocks
               </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 13,
-                  opacity: 0.78,
-                  lineHeight: 1.6,
-                }}
-              >
-                Understand how traders search for oversold and rebound
-                candidates.
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+                Understand how traders search for oversold and rebound candidates.
               </div>
             </Link>
 
@@ -569,16 +409,8 @@ export default function PickersPage() {
               <div style={{ fontSize: 17, fontWeight: 950 }}>
                 Stocks Down 20 Percent
               </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 13,
-                  opacity: 0.78,
-                  lineHeight: 1.6,
-                }}
-              >
-                Learn how traders review bigger pullbacks before calling them
-                opportunities.
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+                Learn how traders review bigger pullbacks before calling them opportunities.
               </div>
             </Link>
 
@@ -586,14 +418,7 @@ export default function PickersPage() {
               <div style={{ fontSize: 17, fontWeight: 950 }}>
                 Best Free Stock Screener
               </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 13,
-                  opacity: 0.78,
-                  lineHeight: 1.6,
-                }}
-              >
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
                 See what traders actually want from stock scanning tools.
               </div>
             </Link>
@@ -602,14 +427,7 @@ export default function PickersPage() {
               <div style={{ fontSize: 17, fontWeight: 950 }}>
                 How to Find Buy the Dip Stocks
               </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 13,
-                  opacity: 0.78,
-                  lineHeight: 1.6,
-                }}
-              >
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
                 Learn how traders search for pullbacks inside stronger trends.
               </div>
             </Link>
@@ -618,14 +436,7 @@ export default function PickersPage() {
               <div style={{ fontSize: 17, fontWeight: 950 }}>
                 Bullish Divergence Explained
               </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 13,
-                  opacity: 0.78,
-                  lineHeight: 1.6,
-                }}
-              >
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
                 Understand how weakening downside momentum can show up on charts.
               </div>
             </Link>
@@ -634,14 +445,7 @@ export default function PickersPage() {
               <div style={{ fontSize: 17, fontWeight: 950 }}>
                 Bearish Divergence Explained
               </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 13,
-                  opacity: 0.78,
-                  lineHeight: 1.6,
-                }}
-              >
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
                 Learn how fading upside momentum can warn of a weaker move.
               </div>
             </Link>
@@ -650,16 +454,8 @@ export default function PickersPage() {
               <div style={{ fontSize: 17, fontWeight: 950 }}>
                 Best Indicators for Swing Trading
               </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 13,
-                  opacity: 0.78,
-                  lineHeight: 1.6,
-                }}
-              >
-                Explore common indicators traders use when reviewing swing
-                setups.
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+                Explore common indicators traders use when reviewing swing setups.
               </div>
             </Link>
 
@@ -667,16 +463,8 @@ export default function PickersPage() {
               <div style={{ fontSize: 17, fontWeight: 950 }}>
                 How to Scan Stocks
               </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 13,
-                  opacity: 0.78,
-                  lineHeight: 1.6,
-                }}
-              >
-                Learn the basic process traders use to scan the market for
-                ideas.
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+                Learn the basic process traders use to scan the market for ideas.
               </div>
             </Link>
 
@@ -684,14 +472,7 @@ export default function PickersPage() {
               <div style={{ fontSize: 17, fontWeight: 950 }}>
                 Stocks Ready to Break Out
               </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 13,
-                  opacity: 0.78,
-                  lineHeight: 1.6,
-                }}
-              >
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
                 See what traders look for when a stock approaches resistance.
               </div>
             </Link>
@@ -700,16 +481,8 @@ export default function PickersPage() {
               <div style={{ fontSize: 17, fontWeight: 950 }}>
                 Best Charting Platforms
               </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 13,
-                  opacity: 0.78,
-                  lineHeight: 1.6,
-                }}
-              >
-                Compare the kinds of charting tools traders use to analyse
-                stocks.
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
+                Compare the kinds of charting tools traders use to analyse stocks.
               </div>
             </Link>
 
@@ -717,30 +490,14 @@ export default function PickersPage() {
               <div style={{ fontSize: 17, fontWeight: 950 }}>
                 How to Analyse Stocks
               </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 13,
-                  opacity: 0.78,
-                  lineHeight: 1.6,
-                }}
-              >
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.6 }}>
                 Read the broader guide to charts, indicators and stock analysis.
               </div>
             </Link>
           </div>
         </section>
 
-        <section
-          style={{
-            marginTop: 24,
-            border: "1px solid rgba(255,255,255,0.12)",
-            borderRadius: 18,
-            padding: 22,
-            background: "#0b1220",
-            maxWidth: 980,
-          }}
-        >
+        <section style={greySectionStyle}>
           <h2
             style={{
               margin: 0,
