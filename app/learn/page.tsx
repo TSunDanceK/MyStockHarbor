@@ -179,6 +179,7 @@ export default function LearnPage() {
 function learnCardHref(slug: string) {
   if (slug === "macd-divergence") return "/learn/macd";
   if (slug === "rsi-divergence") return "/learn/rsi";
+  if (slug === "how-to-identify-stock-trends") return "/how-to-identify-stock-trends";
   return `/learn/${encodeURIComponent(slug)}`;
 }
 function Section(props: { title: string; items: { slug: string; title: string; summary: string }[] }) {
