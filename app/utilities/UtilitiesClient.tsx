@@ -765,16 +765,29 @@ export default function UtilitiesClientPage() {
         </section>
       </div>
 
-      <style>{`
-        .wrap { max-width: 1180px; margin: 0 auto; padding: 24px; }
-        .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+      <style jsx>{`
+        .wrap {
+          max-width: 1180px;
+          margin: 0 auto;
+          padding: 24px;
+        }
+
+        .grid2 {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 16px;
+        }
 
         @media (max-width: 900px) {
-          .grid2 { grid-template-columns: 1fr !important; }
+          .grid2 {
+            grid-template-columns: 1fr !important;
+          }
         }
 
         @media (max-width: 760px) {
-          .wrap { padding: 16px !important; }
+          .wrap {
+            padding: 16px !important;
+          }
         }
       `}</style>
     </main>
