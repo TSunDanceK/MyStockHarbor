@@ -390,7 +390,6 @@ export default function UtilitiesClientPage() {
     Learn →
   </Link>
 </div>
-          </div>
         </div>
 
         <section style={infoSectionStyle()}>
