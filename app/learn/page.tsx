@@ -171,19 +171,33 @@ export default function LearnPage() {
 
           <section
             style={{
-              border: "1px solid rgba(255,255,255,0.14)",
-              borderRadius: 16,
-              padding: 16,
-              background: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(34,197,94,0.22)",
+              borderRadius: 18,
+              padding: 18,
+              background: "linear-gradient(180deg, rgba(9,18,16,0.96), rgba(7,12,11,0.98))",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
             }}
           >
-            <div style={{ fontWeight: 950, letterSpacing: "0.6px", opacity: 0.9 }}>
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "7px 12px",
+                borderRadius: 999,
+                background: "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(16,185,129,0.10))",
+                border: "1px solid rgba(34,197,94,0.34)",
+                color: "#dcfce7",
+                fontWeight: 950,
+                letterSpacing: "0.08em",
+                fontSize: 12,
+              }}
+            >
               EXTRA GUIDES
             </div>
 
             <div
               style={{
-                marginTop: 12,
+                marginTop: 14,
                 display: "grid",
                 gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
                 gap: 12,
