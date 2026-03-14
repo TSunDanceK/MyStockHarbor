@@ -1786,11 +1786,11 @@ const indicatorInsight = useMemo(() => {
 ]);
 
 function SmallNavLink(props: { href: string; children: React.ReactNode }) {
-  const isLearn = props.href === "/learn";
-  const isPlatforms = props.href === "/platforms";
-  const isUtilities = props.href === "/utilities";
+const isLearn = props.href === "/learn";
+const isPlatforms = props.href === "/platforms";
+const isUtilities = props.href === "/utilities";
 
-  const icon = isLearn ? "📘" : isPlatforms ? "🏦" : isUtilities ? "🧰" : "→";
+const icon = isLearn ? "📘" : isPlatforms ? "🏦" : isUtilities ? "🧮" : "→";
 
   const bg = isLearn
     ? "linear-gradient(135deg, rgba(59,130,246,0.20), rgba(37,99,235,0.10))"
