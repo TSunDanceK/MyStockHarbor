@@ -175,11 +175,29 @@ export default function HowToReadStockChartsPage() {
               "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(59,130,246,0.08))",
           }}
         >
-          <div style={{ fontWeight: 900, fontSize: 20 }}>Use MyStockHarbor to practise</div>
-          <p style={{ margin: "10px 0 0", opacity: 0.86, lineHeight: 1.65 }}>
-            MyStockHarbor was built to make chart reading easier for beginner and intermediate users.
-            You can quickly check trend, stretch, momentum, divergence, and market context in one place.
-          </p>
+<div style={{ fontWeight: 900, fontSize: 20 }}>Use MyStockHarbor to practise</div>
+
+<p style={{ margin: "10px 0 0", opacity: 0.86, lineHeight: 1.65 }}>
+  MyStockHarbor was built to make chart reading easier for beginner and intermediate users.
+  You can quickly check trend, stretch, momentum, divergence, and market context in one place.
+</p>
+
+<p style={{ marginTop: 12, opacity: 0.86, lineHeight: 1.7 }}>
+  If you want to practise reading charts using real examples, you can explore the{" "}
+  <Link
+    href="/pickers"
+    style={{
+      color: "#60a5fa",
+      fontWeight: 800,
+      textDecoration: "none",
+    }}
+  >
+    Find Your Next Stock
+  </Link>{" "}
+  page. It groups live stocks into categories like oversold setups, divergence signals,
+  buy-the-dip candidates and breakout stocks so you can quickly open charts and practise
+  analysing them.
+</p>
 
           <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
             <Link
