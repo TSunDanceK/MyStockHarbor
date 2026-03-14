@@ -1,213 +1,374 @@
-"use client";
-
-import React, { useEffect, useMemo, useState } from "react";
+import type { Metadata } from "next";
 import Link from "next/link";
+import PickersClient from "./PickersClient";
 
-type PickerItem = {
-  symbol: string;
-  note?: string;
-  tone?: "green" | "yellow" | "orange" | "red";
+export const metadata: Metadata = {
+  title: "Stock Screener Ideas: Oversold, Overbought, Divergence, Dip Buys & Breakouts | MyStockHarbor",
+  description:
+    "Find stock ideas using signal-based filters including oversold setups, overbought setups, divergence scans, buy-the-dip candidates and breakout stocks. Open any symbol directly in the MyStockHarbor dashboard.",
+  alternates: {
+    canonical: "/pickers",
+  },
+  openGraph: {
+    title: "Stock Screener Ideas | MyStockHarbor",
+    description:
+      "Browse stock ideas by setup: oversold, overbought, divergence, dip buys and breakouts.",
+    url: "/pickers",
+    siteName: "MyStockHarbor",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Stock Screener Ideas | MyStockHarbor",
+    description:
+      "Browse stock ideas by setup: oversold, overbought, divergence, dip buys and breakouts.",
+  },
 };
 
-type PickerSection = {
-  title: string;
-  description?: string;
-  items: PickerItem[];
+const linkCardStyle: React.CSSProperties = {
+  border: "1px solid rgba(255,255,255,0.14)",
+  borderRadius: 16,
+  padding: 16,
+  background: "rgba(255,255,255,0.04)",
+  textDecoration: "none",
+  color: "#f1f5f9",
+  display: "block",
 };
-
-function toneDot(tone?: string) {
-  if (tone === "green") return "#22c55e";
-  if (tone === "yellow") return "#eab308";
-  if (tone === "orange") return "#fb923c";
-  if (tone === "red") return "#ef4444";
-  return "rgba(255,255,255,0.35)";
-}
 
 export default function PickersPage() {
-  const [sections, setSections] = useState<PickerSection[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      setLoading(true);
-      setErr(null);
-
-      try {
-        const res = await fetch("/api/pickers", { cache: "no-store" });
-        if (!res.ok) throw new Error("Pickers API failed");
-
-        const data = (await res.json()) as any;
-
-        // ✅ hard safety: never allow undefined into render
-        const safeSections: PickerSection[] = Array.isArray(data?.sections) ? data.sections : [];
-
-        if (!cancelled) setSections(safeSections);
-      } catch (e: any) {
-        if (!cancelled) {
-          setErr("Failed to load pickers.");
-          setSections([]);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const safeSections = useMemo(() => (Array.isArray(sections) ? sections : []), [sections]);
-
   return (
     <main
       style={{
-        padding: 40,
+        padding: "40px 20px 72px",
         fontFamily: "system-ui, Arial",
         background: "#06080d",
         color: "#f1f5f9",
         minHeight: "100vh",
       }}
     >
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16 }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 32, letterSpacing: "-0.3px" }}>Find Your Next Stock</h1>
-          <p style={{ marginTop: 10, opacity: 0.75 }}>
-            Pick a style → click a stock → jump straight into the dashboard.
-          </p>
-        </div>
-
-<Link
-  href="/"
-  style={{
-    padding: "10px 12px",
-    borderRadius: 12,
-    border: "1px solid rgba(255,255,255,0.18)",
-    textDecoration: "none",
-    color: "#f1f5f9",
-    fontWeight: 800,
-    background: "rgba(255,255,255,0.06)",
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 8,
-  }}
->
-  ← Back to Dashboard
-</Link>
-      </div>
-
-        <div style={{ marginTop: 18, maxWidth: 980 }}>
-        {loading ? (
-          <>
-            <div style={{ fontSize: 22, fontWeight: 950, letterSpacing: "-0.2px" }}>
-              We are gathering stocks for you, please wait…
-            </div>
-            <div style={{ marginTop: 8, opacity: 0.75 }}>
-              First load can take ~10–15 seconds (cached loads are much faster).
-            </div>
-
-            {/* Loading bar */}
+      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 16,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ maxWidth: 760 }}>
             <div
               style={{
-                marginTop: 14,
-                width: 420,
-                maxWidth: "100%",
-                height: 10,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "8px 12px",
                 borderRadius: 999,
-                overflow: "hidden",
-                background: "rgba(255,255,255,0.08)",
-                border: "1px solid rgba(255,255,255,0.16)",
+                border: "1px solid rgba(255,255,255,0.14)",
+                background: "rgba(255,255,255,0.05)",
+                fontSize: 12,
+                fontWeight: 900,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                opacity: 0.9,
               }}
             >
-              <div
-                style={{
-                  height: "100%",
-                  width: "35%",
-                  borderRadius: 999,
-                  background: "rgba(59,130,246,0.95)",
-                  animation: "pickersBar 1.1s linear infinite",
-                }}
-              />
+              Stock Ideas Scanner
             </div>
 
-            {/* Keyframes MUST be inside returned JSX */}
-            <style>{`
-              @keyframes pickersBar {
-                0% { transform: translateX(-60%); opacity: 0.55; }
-                50% { transform: translateX(140%); opacity: 0.95; }
-                100% { transform: translateX(320%); opacity: 0.55; }
-              }
-            `}</style>
-          </>
-        ) : null}
-
-        {err ? <div style={{ opacity: 0.75 }}>{err}</div> : null}
-      </div>
-
-      <div style={{ marginTop: 20, display: "grid", gap: 16, maxWidth: 980 }}>
-        {safeSections.map((sec) => {
-          const items = Array.isArray(sec.items) ? sec.items : [];
-
-          return (
-            <section
-              key={sec.title}
+            <h1
               style={{
-                border: "1px solid rgba(255,255,255,0.14)",
-                borderRadius: 14,
-                padding: 16,
-                background: "#0b1220",
+                margin: "16px 0 0",
+                fontSize: 40,
+                lineHeight: 1.05,
+                letterSpacing: "-0.04em",
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
-                <div>
-                  <div style={{ fontSize: 18, fontWeight: 950 }}>{sec.title}</div>
-                  {sec.description ? <div style={{ marginTop: 6, fontSize: 13, opacity: 0.7 }}>{sec.description}</div> : null}
-                </div>
+              Find Your Next Stock
+            </h1>
 
-                <div style={{ fontSize: 12, opacity: 0.7 }}>{items.length ? `${items.length} stocks` : "No matches yet"}</div>
-              </div>
+            <p
+              style={{
+                marginTop: 14,
+                fontSize: 17,
+                lineHeight: 1.7,
+                opacity: 0.86,
+                maxWidth: 760,
+              }}
+            >
+              This page groups live stock ideas by technical setup so you can
+              quickly scan for oversold stocks, overbought stocks, divergence
+              setups, buy-the-dip candidates and breakout stocks. Click any
+              symbol to open it inside the MyStockHarbor dashboard and review
+              the chart in more detail.
+            </p>
+          </div>
 
-              <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-                {items.map((it) => (
-                  <a
-                    key={it.symbol}
-                    href={`/?symbol=${encodeURIComponent(it.symbol)}`}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 8,
-                      padding: "10px 12px",
-                      borderRadius: 999,
-                      border: "1px solid rgba(255,255,255,0.14)",
-                      background: "rgba(255,255,255,0.06)",
-                      color: "#f1f5f9",
-                      textDecoration: "none",
-                      fontWeight: 900,
-                    }}
-                    title={it.note ?? "Open in dashboard"}
-                  >
-                    <span
-                      style={{
-                        width: 10,
-                        height: 10,
-                        borderRadius: 999,
-                        background: toneDot(it.tone),
-                        boxShadow: "0 0 0 3px rgba(255,255,255,0.04)",
-                        flex: "0 0 auto",
-                      }}
-                    />
-                    {it.symbol}
-                    {it.note ? <span style={{ fontSize: 12, opacity: 0.65, fontWeight: 700 }}>{it.note}</span> : null}
-                  </a>
-                ))}
+          <Link
+            href="/"
+            style={{
+              padding: "12px 14px",
+              borderRadius: 14,
+              border: "1px solid rgba(255,255,255,0.18)",
+              textDecoration: "none",
+              color: "#f1f5f9",
+              fontWeight: 900,
+              background: "rgba(255,255,255,0.06)",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            ← Back to Dashboard
+          </Link>
+        </div>
+
+        <section
+          style={{
+            marginTop: 24,
+            border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: 18,
+            padding: 18,
+            background:
+              "linear-gradient(180deg, rgba(15,23,42,0.92), rgba(11,18,32,0.96))",
+          }}
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+              gap: 12,
+            }}
+          >
+            <div
+              style={{
+                border: "1px solid rgba(34,197,94,0.22)",
+                background: "rgba(34,197,94,0.08)",
+                borderRadius: 14,
+                padding: 14,
+              }}
+            >
+              <div style={{ fontWeight: 900, fontSize: 15 }}>
+                Green Overall Signal
               </div>
-            </section>
-          );
-        })}
+              <div style={{ marginTop: 6, fontSize: 13, opacity: 0.76 }}>
+                Oversold-leaning stocks that may be setting up for a rebound.
+              </div>
+            </div>
+
+            <div
+              style={{
+                border: "1px solid rgba(239,68,68,0.22)",
+                background: "rgba(239,68,68,0.08)",
+                borderRadius: 14,
+                padding: 14,
+              }}
+            >
+              <div style={{ fontWeight: 900, fontSize: 15 }}>
+                Red Overall Signal
+              </div>
+              <div style={{ marginTop: 6, fontSize: 13, opacity: 0.76 }}>
+                Overbought-leaning stocks that may be stretched or vulnerable.
+              </div>
+            </div>
+
+            <div
+              style={{
+                border: "1px solid rgba(250,204,21,0.22)",
+                background: "rgba(250,204,21,0.08)",
+                borderRadius: 14,
+                padding: 14,
+              }}
+            >
+              <div style={{ fontWeight: 900, fontSize: 15 }}>Divergences</div>
+              <div style={{ marginTop: 6, fontSize: 13, opacity: 0.76 }}>
+                Stocks showing possible momentum disagreement versus price.
+              </div>
+            </div>
+
+            <div
+              style={{
+                border: "1px solid rgba(59,130,246,0.22)",
+                background: "rgba(59,130,246,0.08)",
+                borderRadius: 14,
+                padding: 14,
+              }}
+            >
+              <div style={{ fontWeight: 900, fontSize: 15 }}>Breakouts</div>
+              <div style={{ marginTop: 6, fontSize: 13, opacity: 0.76 }}>
+                Stocks pressing into strength, new highs or fresh momentum.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div style={{ marginTop: 26 }}>
+          <PickersClient />
+        </div>
+
+        <section
+          style={{
+            marginTop: 32,
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+            gap: 14,
+          }}
+        >
+          <Link href="/learn" style={linkCardStyle}>
+            <div style={{ fontSize: 18, fontWeight: 950 }}>Learn the setups</div>
+            <div style={{ marginTop: 8, fontSize: 14, opacity: 0.78, lineHeight: 1.6 }}>
+              Visit the Learn hub to understand RSI, MACD, VWAP, ATR,
+              divergence and other chart concepts behind these filters.
+            </div>
+          </Link>
+
+          <Link href="/what-is-rsi-indicator" style={linkCardStyle}>
+            <div style={{ fontSize: 18, fontWeight: 950 }}>Understand RSI</div>
+            <div style={{ marginTop: 8, fontSize: 14, opacity: 0.78, lineHeight: 1.6 }}>
+              Read how RSI can help identify oversold and overbought zones when
+              reviewing stock ideas from this page.
+            </div>
+          </Link>
+
+          <Link href="/what-is-macd-indicator" style={linkCardStyle}>
+            <div style={{ fontSize: 18, fontWeight: 950 }}>
+              Learn MACD divergence
+            </div>
+            <div style={{ marginTop: 8, fontSize: 14, opacity: 0.78, lineHeight: 1.6 }}>
+              MACD can help confirm momentum shifts, trend strength and
+              divergence setups that appear in live scans.
+            </div>
+          </Link>
+
+          <Link href="/" style={linkCardStyle}>
+            <div style={{ fontSize: 18, fontWeight: 950 }}>
+              Open the full dashboard
+            </div>
+            <div style={{ marginTop: 8, fontSize: 14, opacity: 0.78, lineHeight: 1.6 }}>
+              Use the dashboard to inspect price action, overlays and technical
+              indicators for any symbol you find here.
+            </div>
+          </Link>
+        </section>
+
+        <section
+          style={{
+            marginTop: 34,
+            border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: 18,
+            padding: 22,
+            background: "#0b1220",
+            maxWidth: 980,
+          }}
+        >
+          <h2
+            style={{
+              margin: 0,
+              fontSize: 28,
+              lineHeight: 1.15,
+              letterSpacing: "-0.03em",
+            }}
+          >
+            How to use these stock filters
+          </h2>
+
+          <div style={{ marginTop: 16, display: "grid", gap: 18 }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 18 }}>Green Overall Signal</h3>
+              <p style={{ margin: "8px 0 0", lineHeight: 1.75, opacity: 0.82 }}>
+                These are stocks that look more oversold than overbought based
+                on the site’s internal signal mix. They can be useful for traders
+                looking for bounce candidates, but they still need chart review,
+                trend context and risk management.
+              </p>
+            </div>
+
+            <div>
+              <h3 style={{ margin: 0, fontSize: 18 }}>Red Overall Signal</h3>
+              <p style={{ margin: "8px 0 0", lineHeight: 1.75, opacity: 0.82 }}>
+                These are stocks that appear more overbought or stretched. That
+                does not automatically mean they must fall, but it can highlight
+                names worth checking for exhaustion, failed follow-through or
+                riskier entries.
+              </p>
+            </div>
+
+            <div>
+              <h3 style={{ margin: 0, fontSize: 18 }}>Divergences</h3>
+              <p style={{ margin: "8px 0 0", lineHeight: 1.75, opacity: 0.82 }}>
+                Divergence happens when price and momentum stop confirming each
+                other. That can sometimes hint at weakening trend strength or an
+                early reversal setup. It works best when combined with support,
+                resistance and volume.
+              </p>
+            </div>
+
+            <div>
+              <h3 style={{ margin: 0, fontSize: 18 }}>Buy The Dip and Breakouts</h3>
+              <p style={{ margin: "8px 0 0", lineHeight: 1.75, opacity: 0.82 }}>
+                Buy-the-dip candidates can help you find stocks pulling back
+                from stronger trends, while breakout candidates can help you spot
+                names pushing into fresh momentum. Both setups are most useful
+                when you confirm them on the chart before acting.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section
+          style={{
+            marginTop: 24,
+            border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: 18,
+            padding: 22,
+            background: "#0b1220",
+            maxWidth: 980,
+          }}
+        >
+          <h2
+            style={{
+              margin: 0,
+              fontSize: 24,
+              lineHeight: 1.15,
+              letterSpacing: "-0.03em",
+            }}
+          >
+            FAQ
+          </h2>
+
+          <div style={{ marginTop: 16, display: "grid", gap: 16 }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 17 }}>
+                Is this a stock screener?
+              </h3>
+              <p style={{ margin: "8px 0 0", lineHeight: 1.7, opacity: 0.82 }}>
+                Yes. It works like a stock idea screener built around technical
+                setups such as oversold conditions, divergence, dip-buy setups
+                and breakouts.
+              </p>
+            </div>
+
+            <div>
+              <h3 style={{ margin: 0, fontSize: 17 }}>
+                Are these buy or sell recommendations?
+              </h3>
+              <p style={{ margin: "8px 0 0", lineHeight: 1.7, opacity: 0.82 }}>
+                No. These are idea filters only. They help you narrow down
+                charts to review, but they are not personal financial advice.
+              </p>
+            </div>
+
+            <div>
+              <h3 style={{ margin: 0, fontSize: 17 }}>
+                What should I do after clicking a stock?
+              </h3>
+              <p style={{ margin: "8px 0 0", lineHeight: 1.7, opacity: 0.82 }}>
+                Open it in the dashboard, review the chart structure, check key
+                indicators and confirm whether the setup still makes sense.
+              </p>
+            </div>
+          </div>
+        </section>
       </div>
     </main>
   );
