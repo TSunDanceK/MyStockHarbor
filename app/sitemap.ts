@@ -23,6 +23,7 @@ const seoGuides = [
   "/what-is-macd-indicator",
   "/what-is-vwap-indicator",
   "/stocks-down-from-highs",
+  "/oversold-stocks",
 ];
 
   const stocks = [
