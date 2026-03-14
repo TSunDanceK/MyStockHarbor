@@ -71,14 +71,24 @@ function topBtn(): React.CSSProperties {
   };
 }
 
+function calculatorPanelStyle(): React.CSSProperties {
+  return {
+    border: "1px solid rgba(59,130,246,0.22)",
+    borderRadius: 18,
+    padding: 18,
+    background: "linear-gradient(180deg, rgba(8,22,45,0.92), rgba(7,18,36,0.98))",
+    boxShadow: "0 0 0 1px rgba(59,130,246,0.05) inset",
+  };
+}
+
 function inputStyle(): React.CSSProperties {
   return {
     width: "100%",
     height: 44,
-    padding: "0 12px",
+    padding: "0 14px",
     borderRadius: 12,
-    border: "1px solid rgba(255,255,255,0.16)",
-    background: "#1a2742",
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "#1b2944",
     color: "#f8fafc",
     outline: "none",
     fontSize: 14,
@@ -91,10 +101,10 @@ function selectStyle(): React.CSSProperties {
   return {
     width: "100%",
     height: 44,
-    padding: "0 12px",
+    padding: "0 14px",
     borderRadius: 12,
-    border: "1px solid rgba(255,255,255,0.16)",
-    background: "#1a2742",
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "#1b2944",
     color: "#f8fafc",
     outline: "none",
     fontSize: 14,
@@ -107,7 +117,16 @@ function baseResultBoxStyle(): React.CSSProperties {
   return {
     borderRadius: 14,
     border: "1px solid rgba(255,255,255,0.12)",
-    background: "#14233b",
+    background: "#15243d",
+    padding: 14,
+  };
+}
+
+function infoCardStyle(): React.CSSProperties {
+  return {
+    borderRadius: 14,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "#15243d",
     padding: 14,
   };
 }
@@ -116,7 +135,7 @@ function labelStyle(): React.CSSProperties {
   return {
     fontSize: 12,
     fontWeight: 850,
-    color: "rgba(241,245,249,0.85)",
+    color: "rgba(241,245,249,0.90)",
     marginBottom: 6,
     display: "flex",
     alignItems: "center",
@@ -128,7 +147,7 @@ function labelStyle(): React.CSSProperties {
 function resultLabelStyle(): React.CSSProperties {
   return {
     fontSize: 12,
-    color: "rgba(241,245,249,0.75)",
+    color: "rgba(241,245,249,0.82)",
     fontWeight: 850,
     display: "flex",
     alignItems: "center",
@@ -193,31 +212,34 @@ function getRRColor(rr: number | null) {
   return "red";
 }
 
-function tintBox(type: "neutral" | "green" | "yellow" | "red", emphasize = false): React.CSSProperties {
+function tintBox(
+  type: "neutral" | "green" | "yellow" | "red",
+  emphasize = false
+): React.CSSProperties {
   const base = baseResultBoxStyle();
 
   if (type === "green") {
     return {
       ...base,
-      border: "1px solid rgba(34,197,94,0.36)",
-      background: "linear-gradient(135deg, rgba(22,101,52,0.30), #14233b)",
-      boxShadow: emphasize ? "0 0 0 1px rgba(34,197,94,0.08) inset" : "none",
+      border: "1px solid rgba(34,197,94,0.45)",
+      background: "linear-gradient(135deg, rgba(22,101,52,0.22), #15243d)",
+      boxShadow: emphasize ? "0 0 0 1px rgba(34,197,94,0.10) inset" : "none",
     };
   }
 
   if (type === "yellow") {
     return {
       ...base,
-      border: "1px solid rgba(234,179,8,0.34)",
-      background: "linear-gradient(135deg, rgba(133,77,14,0.28), #14233b)",
+      border: "1px solid rgba(234,179,8,0.42)",
+      background: "linear-gradient(135deg, rgba(133,77,14,0.22), #15243d)",
     };
   }
 
   if (type === "red") {
     return {
       ...base,
-      border: "1px solid rgba(239,68,68,0.34)",
-      background: "linear-gradient(135deg, rgba(127,29,29,0.30), #14233b)",
+      border: "1px solid rgba(239,68,68,0.46)",
+      background: "linear-gradient(135deg, rgba(127,29,29,0.24), #15243d)",
     };
   }
 
@@ -340,8 +362,17 @@ export default function UtilitiesClientPage() {
     };
   }, [riskAmount, riskEntry, riskStop, riskTarget]);
 
-  const liquidationColor = getLiquidationColor(marginCalc.distancePct) as "neutral" | "green" | "yellow" | "red";
-  const rrColor = getRRColor(riskCalc.rr) as "neutral" | "green" | "yellow" | "red";
+  const liquidationColor = getLiquidationColor(marginCalc.distancePct) as
+    | "neutral"
+    | "green"
+    | "yellow"
+    | "red";
+
+  const rrColor = getRRColor(riskCalc.rr) as
+    | "neutral"
+    | "green"
+    | "yellow"
+    | "red";
 
   return (
     <main
@@ -368,28 +399,42 @@ export default function UtilitiesClientPage() {
               TRADING UTILITIES
             </div>
 
-            <h1 style={{ margin: "6px 0 0", fontSize: 34, letterSpacing: "-0.4px" }}>
+            <h1
+              style={{
+                margin: "6px 0 0",
+                fontSize: 34,
+                letterSpacing: "-0.4px",
+              }}
+            >
               Risk Tools & Calculators
             </h1>
 
-            <div style={{ marginTop: 8, opacity: 0.78, lineHeight: 1.55, maxWidth: 860 }}>
-              Practical tools to help you manage risk, size positions properly, and avoid costly trading mistakes.
+            <div
+              style={{
+                marginTop: 8,
+                opacity: 0.78,
+                lineHeight: 1.55,
+                maxWidth: 860,
+              }}
+            >
+              Practical tools to help you manage risk, size positions properly,
+              and avoid costly trading mistakes.
             </div>
           </div>
 
-<div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-  <Link href="/" style={topBtn()}>
-    ← Dashboard
-  </Link>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <Link href="/" style={topBtn()}>
+              ← Dashboard
+            </Link>
 
-  <Link href="/pickers" style={topBtn()}>
-    Find Stocks →
-  </Link>
+            <Link href="/pickers" style={topBtn()}>
+              Find Stocks →
+            </Link>
 
-  <Link href="/learn" style={topBtn()}>
-    Learn →
-  </Link>
-</div>
+            <Link href="/learn" style={topBtn()}>
+              Learn →
+            </Link>
+          </div>
         </div>
 
         <section style={infoSectionStyle()}>
@@ -397,28 +442,37 @@ export default function UtilitiesClientPage() {
             Free trading calculators for risk management
           </h2>
 
-          <p style={{ margin: "10px 0 0", opacity: 0.84, lineHeight: 1.7, maxWidth: 980 }}>
-            These trading calculators are designed to help you manage risk before you enter a position. Use the
-            liquidation calculator to estimate where leverage could become dangerous, and use the position size
-            calculator to work out how many shares fit your stop loss and risk amount.
+          <p
+            style={{
+              margin: "10px 0 0",
+              opacity: 0.84,
+              lineHeight: 1.7,
+              maxWidth: 980,
+            }}
+          >
+            These trading calculators are designed to help you manage risk before
+            you enter a position. Use the liquidation calculator to estimate
+            where leverage could become dangerous, and use the position size
+            calculator to work out how many shares fit your stop loss and risk
+            amount.
           </p>
 
-          <p style={{ margin: "10px 0 0", opacity: 0.84, lineHeight: 1.7, maxWidth: 980 }}>
-            Traders often focus too much on entries and not enough on downside control. These tools help you plan trade
-            size, stop distance and risk-reward more clearly before putting capital at risk.
+          <p
+            style={{
+              margin: "10px 0 0",
+              opacity: 0.84,
+              lineHeight: 1.7,
+              maxWidth: 980,
+            }}
+          >
+            Traders often focus too much on entries and not enough on downside
+            control. These tools help you plan trade size, stop distance and
+            risk-reward more clearly before putting capital at risk.
           </p>
         </section>
 
         <div style={{ marginTop: 22 }} className="grid2">
-          <section
-            style={{
-              border: "1px solid rgba(59,130,246,0.42)",
-              borderRadius: 18,
-              padding: 18,
-              background: "#08162d",
-              boxShadow: "0 0 0 1px rgba(59,130,246,0.08) inset",
-            }}
-          >
+          <section style={calculatorPanelStyle()}>
             <div
               style={{
                 display: "inline-flex",
@@ -436,12 +490,19 @@ export default function UtilitiesClientPage() {
               MARGIN TOOL
             </div>
 
-            <h2 style={{ margin: "12px 0 0", fontSize: 28, letterSpacing: "-0.3px" }}>
+            <h2
+              style={{
+                margin: "12px 0 0",
+                fontSize: 28,
+                letterSpacing: "-0.3px",
+              }}
+            >
               Margin / Liquidation Calculator
             </h2>
 
             <p style={{ margin: "10px 0 0", opacity: 0.84, lineHeight: 1.6 }}>
-              Estimate where your trade could be liquidated if the market moves against you while using leverage.
+              Estimate where your trade could be liquidated if the market moves
+              against you while using leverage.
             </p>
 
             <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
@@ -452,7 +513,9 @@ export default function UtilitiesClientPage() {
                 </div>
                 <select
                   value={marginSide}
-                  onChange={(e) => setMarginSide(e.target.value as "long" | "short")}
+                  onChange={(e) =>
+                    setMarginSide(e.target.value as "long" | "short")
+                  }
                   style={selectStyle()}
                 >
                   <option value="long">Long</option>
@@ -503,7 +566,15 @@ export default function UtilitiesClientPage() {
                   Liquidation Price
                   <HelpTip text="Estimated liquidation price only. Some brokers may calculate liquidation differently." />
                   {liquidationColor === "red" ? (
-                    <span style={{ marginLeft: "auto", color: "#ef4444", fontWeight: 900 }}>⚠</span>
+                    <span
+                      style={{
+                        marginLeft: "auto",
+                        color: "#ef4444",
+                        fontWeight: 900,
+                      }}
+                    >
+                      ⚠
+                    </span>
                   ) : null}
                 </div>
                 <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
@@ -516,7 +587,15 @@ export default function UtilitiesClientPage() {
                   Distance to Liquidation
                   <HelpTip text="Shows how far price can move against your trade before estimated liquidation. Some brokers may calculate liquidation differently." />
                   {liquidationColor === "red" ? (
-                    <span style={{ marginLeft: "auto", color: "#ef4444", fontWeight: 900 }}>⚠</span>
+                    <span
+                      style={{
+                        marginLeft: "auto",
+                        color: "#ef4444",
+                        fontWeight: 900,
+                      }}
+                    >
+                      ⚠
+                    </span>
                   ) : null}
                 </div>
                 <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
@@ -525,33 +604,30 @@ export default function UtilitiesClientPage() {
               </div>
             </div>
 
-            <div style={{ marginTop: 18, ...baseResultBoxStyle() }}>
-              <div style={{ fontWeight: 900, marginBottom: 6 }}>What this tool does</div>
+            <div style={{ marginTop: 18, ...infoCardStyle() }}>
+              <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                What this tool does
+              </div>
               <div style={{ opacity: 0.84, lineHeight: 1.6 }}>
-                This calculator estimates the price at which your broker could automatically close your position due to
-                insufficient margin.
+                This calculator estimates the price at which your broker could
+                automatically close your position due to insufficient margin.
               </div>
             </div>
 
-            <div style={{ marginTop: 14, ...baseResultBoxStyle() }}>
-              <div style={{ fontWeight: 900, marginBottom: 6 }}>Why it matters</div>
+            <div style={{ marginTop: 14, ...infoCardStyle() }}>
+              <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                Why it matters
+              </div>
               <div style={{ opacity: 0.84, lineHeight: 1.6 }}>
-                If you use leverage without understanding liquidation, even a relatively small move against your trade
-                can cause forced selling. This tool helps you understand how close danger may be before entering a
-                trade.
+                If you use leverage without understanding liquidation, even a
+                relatively small move against your trade can cause forced
+                selling. This tool helps you understand how close danger may be
+                before entering a trade.
               </div>
             </div>
           </section>
 
-  <section
-            style={{
-              border: "1px solid rgba(59,130,246,0.42)",
-              borderRadius: 18,
-              padding: 18,
-              background: "#08162d",
-              boxShadow: "0 0 0 1px rgba(59,130,246,0.08) inset",
-            }}
-          >
+          <section style={calculatorPanelStyle()}>
             <div
               style={{
                 display: "inline-flex",
@@ -569,12 +645,19 @@ export default function UtilitiesClientPage() {
               RISK TOOL
             </div>
 
-            <h2 style={{ margin: "12px 0 0", fontSize: 28, letterSpacing: "-0.3px" }}>
+            <h2
+              style={{
+                margin: "12px 0 0",
+                fontSize: 28,
+                letterSpacing: "-0.3px",
+              }}
+            >
               Position Size / Stop Loss Calculator
             </h2>
 
             <p style={{ margin: "10px 0 0", opacity: 0.84, lineHeight: 1.6 }}>
-              Work out how many shares you can buy while keeping your loss within a sensible risk limit.
+              Work out how many shares you can buy while keeping your loss
+              within a sensible risk limit.
             </p>
 
             <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
@@ -657,7 +740,15 @@ export default function UtilitiesClientPage() {
                   Risk / Reward
                   <HelpTip text="Compares your potential reward to your potential loss. Higher is usually better." />
                   {rrColor === "red" ? (
-                    <span style={{ marginLeft: "auto", color: "#ef4444", fontWeight: 900 }}>⚠</span>
+                    <span
+                      style={{
+                        marginLeft: "auto",
+                        color: "#ef4444",
+                        fontWeight: 900,
+                      }}
+                    >
+                      ⚠
+                    </span>
                   ) : null}
                 </div>
                 <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
@@ -666,19 +757,25 @@ export default function UtilitiesClientPage() {
               </div>
             </div>
 
-            <div style={{ marginTop: 18, ...baseResultBoxStyle() }}>
-              <div style={{ fontWeight: 900, marginBottom: 6 }}>What this tool does</div>
+            <div style={{ marginTop: 18, ...infoCardStyle() }}>
+              <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                What this tool does
+              </div>
               <div style={{ opacity: 0.84, lineHeight: 1.6 }}>
-                This calculator helps you decide how many shares to buy based on the amount you are prepared to lose if
-                your stop loss is hit.
+                This calculator helps you decide how many shares to buy based on
+                the amount you are prepared to lose if your stop loss is hit.
               </div>
             </div>
 
-            <div style={{ marginTop: 14, ...baseResultBoxStyle() }}>
-              <div style={{ fontWeight: 900, marginBottom: 6 }}>Why it matters</div>
+            <div style={{ marginTop: 14, ...infoCardStyle() }}>
+              <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                Why it matters
+              </div>
               <div style={{ opacity: 0.84, lineHeight: 1.6 }}>
-                Good traders control their risk before entering a trade. Position sizing helps prevent one bad trade
-                from doing serious damage to your account and keeps your trading more disciplined over time.
+                Good traders control their risk before entering a trade.
+                Position sizing helps prevent one bad trade from doing serious
+                damage to your account and keeps your trading more disciplined
+                over time.
               </div>
             </div>
           </section>
@@ -698,39 +795,80 @@ export default function UtilitiesClientPage() {
             }}
           >
             <Link href="/how-to-read-stock-charts" style={guideCardStyle()}>
-              <div style={{ fontWeight: 900, fontSize: 16 }}>How to Read Stock Charts</div>
-              <div style={{ marginTop: 6, opacity: 0.76, lineHeight: 1.55, fontSize: 13 }}>
-                Learn the chart basics before using stop losses and trade planning tools.
+              <div style={{ fontWeight: 900, fontSize: 16 }}>
+                How to Read Stock Charts
+              </div>
+              <div
+                style={{
+                  marginTop: 6,
+                  opacity: 0.76,
+                  lineHeight: 1.55,
+                  fontSize: 13,
+                }}
+              >
+                Learn the chart basics before using stop losses and trade
+                planning tools.
               </div>
             </Link>
 
-            <Link href="/best-indicators-for-swing-trading" style={guideCardStyle()}>
-              <div style={{ fontWeight: 900, fontSize: 16 }}>Best Indicators for Swing Trading</div>
-              <div style={{ marginTop: 6, opacity: 0.76, lineHeight: 1.55, fontSize: 13 }}>
-                See how traders combine indicators with risk planning and position sizing.
+            <Link
+              href="/best-indicators-for-swing-trading"
+              style={guideCardStyle()}
+            >
+              <div style={{ fontWeight: 900, fontSize: 16 }}>
+                Best Indicators for Swing Trading
+              </div>
+              <div
+                style={{
+                  marginTop: 6,
+                  opacity: 0.76,
+                  lineHeight: 1.55,
+                  fontSize: 13,
+                }}
+              >
+                See how traders combine indicators with risk planning and
+                position sizing.
               </div>
             </Link>
 
             <Link href="/how-to-analyse-stocks" style={guideCardStyle()}>
-              <div style={{ fontWeight: 900, fontSize: 16 }}>How to Analyse Stocks</div>
-              <div style={{ marginTop: 6, opacity: 0.76, lineHeight: 1.55, fontSize: 13 }}>
-                Understand the wider process of reviewing stocks before entering trades.
+              <div style={{ fontWeight: 900, fontSize: 16 }}>
+                How to Analyse Stocks
+              </div>
+              <div
+                style={{
+                  marginTop: 6,
+                  opacity: 0.76,
+                  lineHeight: 1.55,
+                  fontSize: 13,
+                }}
+              >
+                Understand the wider process of reviewing stocks before entering
+                trades.
               </div>
             </Link>
 
             <Link href="/pickers" style={guideCardStyle()}>
-              <div style={{ fontWeight: 900, fontSize: 16 }}>Find Stock Ideas</div>
-              <div style={{ marginTop: 6, opacity: 0.76, lineHeight: 1.55, fontSize: 13 }}>
-                Use the stock pickers to find setups, then come back here to plan risk properly.
+              <div style={{ fontWeight: 900, fontSize: 16 }}>
+                Find Stock Ideas
+              </div>
+              <div
+                style={{
+                  marginTop: 6,
+                  opacity: 0.76,
+                  lineHeight: 1.55,
+                  fontSize: 13,
+                }}
+              >
+                Use the stock pickers to find setups, then come back here to
+                plan risk properly.
               </div>
             </Link>
           </div>
         </section>
 
         <section style={infoSectionStyle()}>
-          <h2 style={{ margin: 0, fontSize: 24, lineHeight: 1.2 }}>
-            FAQ
-          </h2>
+          <h2 style={{ margin: 0, fontSize: 24, lineHeight: 1.2 }}>FAQ</h2>
 
           <div style={{ marginTop: 16, display: "grid", gap: 16 }}>
             <div>
@@ -738,8 +876,9 @@ export default function UtilitiesClientPage() {
                 What is a liquidation calculator?
               </h3>
               <p style={{ margin: "8px 0 0", lineHeight: 1.7, opacity: 0.82 }}>
-                A liquidation calculator estimates the price where a leveraged position may be forcibly closed if price
-                moves too far against you.
+                A liquidation calculator estimates the price where a leveraged
+                position may be forcibly closed if price moves too far against
+                you.
               </p>
             </div>
 
@@ -748,8 +887,9 @@ export default function UtilitiesClientPage() {
                 What is a position size calculator?
               </h3>
               <p style={{ margin: "8px 0 0", lineHeight: 1.7, opacity: 0.82 }}>
-                A position size calculator helps you work out how many shares to buy based on your entry, stop loss and
-                maximum acceptable dollar risk.
+                A position size calculator helps you work out how many shares to
+                buy based on your entry, stop loss and maximum acceptable dollar
+                risk.
               </p>
             </div>
 
@@ -758,8 +898,9 @@ export default function UtilitiesClientPage() {
                 Why does risk-reward matter?
               </h3>
               <p style={{ margin: "8px 0 0", lineHeight: 1.7, opacity: 0.82 }}>
-                Risk-reward helps traders compare the possible upside of a trade with the downside they are accepting.
-                It is one of the basic ways to judge whether a setup is worth taking.
+                Risk-reward helps traders compare the possible upside of a trade
+                with the downside they are accepting. It is one of the basic
+                ways to judge whether a setup is worth taking.
               </p>
             </div>
           </div>
