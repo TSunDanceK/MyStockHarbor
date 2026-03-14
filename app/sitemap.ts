@@ -25,6 +25,7 @@ const seoGuides = [
   "/stocks-down-from-highs",
   "/oversold-stocks",
   "/breakout-stocks",
+  "/buy-the-dip-stocks",
 ];
 
   const stocks = [
