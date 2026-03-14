@@ -162,10 +162,24 @@ export default function PickersPage() {
                   maxWidth: 760,
                 }}
               >
-                This is the stock scanner workspace inside MyStockHarbor. Use it to
-                search for oversold stocks, overbought stocks, divergence setups,
-                buy-the-dip candidates and breakout stocks, then open any symbol
-                directly in the dashboard to inspect the chart in more detail.
+                This is the stock scanner workspace inside MyStockHarbor. The tool scans
+                the market for technical setups such as oversold rebounds,
+                overbought extensions, divergence signals, buy-the-dip opportunities
+                and breakout candidates.
+              </p>
+
+              <p
+                style={{
+                  marginTop: 10,
+                  fontSize: 16,
+                  lineHeight: 1.7,
+                  opacity: 0.78,
+                  maxWidth: 760,
+                }}
+              >
+                Use it to quickly generate a shortlist of charts worth reviewing,
+                then open any symbol directly in the dashboard to inspect price
+                structure, indicators and trend conditions in more detail.
               </p>
 
               <div
@@ -176,26 +190,10 @@ export default function PickersPage() {
                   gap: 10,
                 }}
               >
-                <MiniStat
-                  label="Scanner Type"
-                  value="Setup-Based"
-                  tint="blue"
-                />
-                <MiniStat
-                  label="Results"
-                  value="Data-Driven"
-                  tint="green"
-                />
-                <MiniStat
-                  label="Use"
-                  value="Build a Shortlist"
-                  tint="amber"
-                />
-                <MiniStat
-                  label="Next Step"
-                  value="Open Dashboard"
-                  tint="red"
-                />
+                <MiniStat label="Scanner Type" value="Technical Setup Scanner" tint="blue" />
+                <MiniStat label="Results" value="Data-Driven Screening" tint="green" />
+                <MiniStat label="Use Case" value="Find Trade Ideas Faster" tint="amber" />
+                <MiniStat label="Next Step" value="Open Charts In Dashboard" tint="red" />
               </div>
             </section>
 
@@ -225,25 +223,25 @@ export default function PickersPage() {
                   fontSize: 12,
                 }}
               >
-                WHAT YOU CAN SCAN
+                REAL SCREENED SETUPS
               </div>
 
               <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
                 <ToolBullet
-                  title="Oversold ideas"
-                  text="Stocks that may be stretched to the downside and worth reviewing."
+                  title="Real screened oversold stocks"
+                  text="Stocks showing downside stretch that may be setting up for a potential rebound worth reviewing."
                 />
                 <ToolBullet
-                  title="Overbought ideas"
-                  text="Stocks that may be extended after strong moves higher."
+                  title="Real screened overbought stocks"
+                  text="Stocks that may be extended after strong upside moves and could deserve closer chart review."
                 />
                 <ToolBullet
-                  title="Divergence setups"
-                  text="Charts where momentum may be disagreeing with price."
+                  title="Real screened divergence setups"
+                  text="Charts where momentum indicators may be disagreeing with price action, sometimes signalling a potential shift."
                 />
                 <ToolBullet
-                  title="Breakout candidates"
-                  text="Stocks pressing into strength, highs or fresh momentum."
+                  title="Real screened breakout stocks"
+                  text="Stocks pressing into strength, approaching resistance or showing fresh momentum expansion."
                 />
               </div>
             </section>
@@ -287,7 +285,7 @@ export default function PickersPage() {
                   color: "#ecfdf5",
                 }}
               >
-                Green Overall Signal
+                Oversold Rebound Signals
               </div>
               <div
                 style={{
@@ -298,7 +296,8 @@ export default function PickersPage() {
                   maxWidth: 260,
                 }}
               >
-                Oversold-leaning stocks that may be setting up for a rebound.
+                Screened results highlighting stocks that may be stretched to the
+                downside and worth a rebound review.
               </div>
             </div>
 
@@ -318,7 +317,7 @@ export default function PickersPage() {
                   color: "#fef2f2",
                 }}
               >
-                Red Overall Signal
+                Extended Strength Signals
               </div>
               <div
                 style={{
@@ -329,7 +328,8 @@ export default function PickersPage() {
                   maxWidth: 260,
                 }}
               >
-                Overbought-leaning stocks that may be stretched or vulnerable.
+                Screened results showing stocks that may be extended after strong
+                upside momentum.
               </div>
             </div>
 
@@ -349,7 +349,7 @@ export default function PickersPage() {
                   color: "#fefce8",
                 }}
               >
-                Divergences
+                Divergence Signals
               </div>
               <div
                 style={{
@@ -360,7 +360,38 @@ export default function PickersPage() {
                   maxWidth: 260,
                 }}
               >
-                Stocks showing possible momentum disagreement versus price.
+                Charts where price and momentum may be starting to disagree.
+              </div>
+            </div>
+
+            <div
+              style={{
+                ...signalCardBaseStyle,
+                border: "1px solid rgba(16,185,129,0.34)",
+                background:
+                  "linear-gradient(180deg, rgba(4,120,87,0.26), rgba(4,47,46,0.50))",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+              }}
+            >
+              <div
+                style={{
+                  fontWeight: 900,
+                  fontSize: 15,
+                  color: "#ecfdf5",
+                }}
+              >
+                Buy-the-Dip Setups
+              </div>
+              <div
+                style={{
+                  marginTop: 6,
+                  fontSize: 13,
+                  lineHeight: 1.55,
+                  color: "rgba(236,253,245,0.84)",
+                  maxWidth: 260,
+                }}
+              >
+                Pullback setups that may still fit a stronger trend worth checking.
               </div>
             </div>
 
@@ -380,7 +411,7 @@ export default function PickersPage() {
                   color: "#eff6ff",
                 }}
               >
-                Breakouts
+                Breakout Setups
               </div>
               <div
                 style={{
@@ -391,7 +422,7 @@ export default function PickersPage() {
                   maxWidth: 260,
                 }}
               >
-                Stocks pressing into strength, new highs or fresh momentum.
+                Stocks pressing into strength, resistance or fresh momentum expansion.
               </div>
             </div>
           </div>
@@ -399,23 +430,34 @@ export default function PickersPage() {
 
         <section
           style={{
-            marginTop: 26,
+            marginTop: 28,
             maxWidth: 1040,
             borderRadius: 22,
-            border: "1px solid rgba(59,130,246,0.22)",
+            border: "1px solid rgba(59,130,246,0.35)",
             background:
-              "linear-gradient(180deg, rgba(8,15,30,0.99), rgba(6,10,18,1))",
+              "linear-gradient(180deg, rgba(6,12,24,1), rgba(4,8,16,1))",
             boxShadow:
-              "inset 0 1px 0 rgba(255,255,255,0.05), 0 18px 40px rgba(0,0,0,0.34)",
+              "0 0 0 1px rgba(59,130,246,0.15), 0 24px 60px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06)",
             overflow: "hidden",
+            position: "relative",
           }}
         >
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              pointerEvents: "none",
+              borderRadius: 22,
+              boxShadow: "0 0 40px rgba(59,130,246,0.18)",
+            }}
+          />
+
           <div
             style={{
               padding: 18,
               borderBottom: "1px solid rgba(255,255,255,0.08)",
               background:
-                "linear-gradient(135deg, rgba(59,130,246,0.10), rgba(15,23,42,0.20))",
+                "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(15,23,42,0.28))",
             }}
           >
             <div
@@ -449,16 +491,29 @@ export default function PickersPage() {
 
             <p
               style={{
+                margin: "8px 0 0 0",
+                lineHeight: 1.65,
+                opacity: 0.78,
+                maxWidth: 860,
+                fontSize: 15,
+              }}
+            >
+              Designed to help traders find potential opportunities faster without
+              manually scanning hundreds of charts.
+            </p>
+
+            <p
+              style={{
                 margin: "10px 0 0 0",
                 lineHeight: 1.7,
                 opacity: 0.82,
                 maxWidth: 860,
               }}
             >
-              Browse stock ideas generated from technical market scans such as
-              oversold conditions, divergence signals, breakout setups and
-              pullbacks. These are data-driven screened results, not random stock
-              suggestions.
+              Browse stock ideas generated from technical market scans including
+              oversold conditions, divergence signals, breakout setups and pullback
+              opportunities. These are data-driven screened results based on real
+              market conditions, not random stock suggestions.
             </p>
 
             <p
@@ -470,7 +525,8 @@ export default function PickersPage() {
                 fontSize: 14,
               }}
             >
-              Open any symbol in the dashboard to inspect the chart and indicators.
+              Click any symbol to open the chart instantly in the MyStockHarbor
+              dashboard and review the full setup.
             </p>
           </div>
 
