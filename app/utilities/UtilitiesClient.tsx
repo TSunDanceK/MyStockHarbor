@@ -411,7 +411,6 @@ export default function UtilitiesClientPage() {
 
         <div style={{ marginTop: 22 }} className="grid2">
           <section
-  <section
             style={{
               border: "1px solid rgba(59,130,246,0.42)",
               borderRadius: 18,
