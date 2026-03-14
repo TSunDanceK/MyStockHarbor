@@ -89,10 +89,82 @@ export default function LearnPage() {
 </div>
 
 <div style={{ marginTop: 22, display: "grid", gap: 18 }}>
-          <Section title="BASICS" items={basics} />
-          <Section title="INDICATORS" items={indicators} />
-          <Section title="DIVERGENCIES" items={divergencies} />
+  <Section title="BASICS" items={basics} />
+  <Section title="INDICATORS" items={indicators} />
+  <Section title="DIVERGENCIES" items={divergencies} />
+
+  <section
+    style={{
+      border: "1px solid rgba(255,255,255,0.14)",
+      borderRadius: 16,
+      padding: 16,
+      background: "rgba(255,255,255,0.03)",
+    }}
+  >
+    <div style={{ fontWeight: 950, letterSpacing: "0.6px", opacity: 0.9 }}>
+      EXTRA GUIDES
+    </div>
+
+    <div
+      style={{
+        marginTop: 12,
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+        gap: 12,
+      }}
+    >
+      <Link
+        href="/how-to-read-stock-charts"
+        style={learnGuideCard()}
+      >
+        <div style={{ fontWeight: 900, fontSize: 16 }}>How to Read Stock Charts</div>
+        <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
+          A beginner-friendly guide to trend, support, resistance, and chart context.
         </div>
+      </Link>
+
+      <Link
+        href="/best-stock-indicators-for-beginners"
+        style={learnGuideCard()}
+      >
+        <div style={{ fontWeight: 900, fontSize: 16 }}>Best Stock Indicators for Beginners</div>
+        <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
+          Learn which indicators matter most when you are just starting out.
+        </div>
+      </Link>
+
+      <Link
+        href="/what-is-rsi-indicator"
+        style={learnGuideCard()}
+      >
+        <div style={{ fontWeight: 900, fontSize: 16 }}>What Is RSI Indicator?</div>
+        <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
+          Understand overbought, oversold, and how RSI helps read momentum.
+        </div>
+      </Link>
+
+      <Link
+        href="/what-is-macd-indicator"
+        style={learnGuideCard()}
+      >
+        <div style={{ fontWeight: 900, fontSize: 16 }}>What Is MACD Indicator?</div>
+        <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
+          Learn how MACD helps confirm momentum and possible trend shifts.
+        </div>
+      </Link>
+
+      <Link
+        href="/what-is-vwap-indicator"
+        style={learnGuideCard()}
+      >
+        <div style={{ fontWeight: 900, fontSize: 16 }}>What Is VWAP Indicator?</div>
+        <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
+          Learn how traders use VWAP to judge fair value and price stretch.
+        </div>
+      </Link>
+    </div>
+  </section>
+</div>
       </div>
 
       <style>{`
@@ -165,5 +237,17 @@ function btn(): React.CSSProperties {
     textDecoration: "none",
     fontWeight: 850,
     whiteSpace: "nowrap",
+  };
+}
+function learnGuideCard(): React.CSSProperties {
+  return {
+    border: "1px solid rgba(255,255,255,0.14)",
+    borderRadius: 14,
+    padding: 14,
+    background: "rgba(255,255,255,0.06)",
+    color: "#f1f5f9",
+    textDecoration: "none",
+    display: "block",
+    transition: "transform 120ms ease, background 120ms ease",
   };
 }
