@@ -1788,9 +1788,15 @@ const indicatorInsight = useMemo(() => {
 function SmallNavLink(props: { href: string; children: React.ReactNode }) {
 const isLearn = props.href === "/learn";
 const isPlatforms = props.href === "/platforms";
+const isPickers = props.href === "/pickers";
 const isUtilities = props.href === "/utilities";
 
-const icon = isLearn ? "📘" : isPlatforms ? "🏦" : isUtilities ? "🧮" : "→";
+const icon =
+  isLearn ? "📘" :
+  isPlatforms ? "🏦" :
+  isPickers ? "📊" :
+  isUtilities ? "🧮" :
+  "→";
 
   const bg = isLearn
     ? "linear-gradient(135deg, rgba(59,130,246,0.20), rgba(37,99,235,0.10))"
@@ -2994,9 +3000,10 @@ return (
 </div>
 
         <div className="msh-top-right">
-          <SmallNavLink href="/learn">Learn</SmallNavLink>
-          <SmallNavLink href="/platforms">Platforms</SmallNavLink>
-          <SmallNavLink href="/utilities">Calculators</SmallNavLink>
+<SmallNavLink href="/learn">Learn</SmallNavLink>
+<SmallNavLink href="/platforms">Platforms</SmallNavLink>
+<SmallNavLink href="/pickers">Stock Pickers</SmallNavLink>
+<SmallNavLink href="/utilities">Calculators</SmallNavLink>
           <button
   type="button"
   onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
@@ -3030,9 +3037,10 @@ return (
       </div>
 
       <div className="msh-mobile-nav">
-        <SmallNavLink href="/learn">Learn</SmallNavLink>
-        <SmallNavLink href="/platforms">Platforms</SmallNavLink>
-        <SmallNavLink href="/utilities">Calculators</SmallNavLink>
+<SmallNavLink href="/learn">Learn</SmallNavLink>
+<SmallNavLink href="/platforms">Platforms</SmallNavLink>
+<SmallNavLink href="/pickers">Stock Pickers</SmallNavLink>
+<SmallNavLink href="/utilities">Calculators</SmallNavLink>
 
         <button
           type="button"
