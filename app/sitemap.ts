@@ -2,16 +2,26 @@ import type { MetadataRoute } from "next";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const baseUrl = "https://mystockharbor.com";
+  const now = new Date();
 
-  const staticPages = [
-    "",
-    "/learn",
-    "/pickers",
-    "/platforms",
-    "/utilities",
-    "/about",
-    "/contact",
-    "/risk-disclaimer",
+  const mainPages = [
+    { path: "", changeFrequency: "daily" as const, priority: 1 },
+    { path: "/learn", changeFrequency: "weekly" as const, priority: 0.9 },
+    { path: "/pickers", changeFrequency: "daily" as const, priority: 0.9 },
+    { path: "/platforms", changeFrequency: "weekly" as const, priority: 0.8 },
+    { path: "/utilities", changeFrequency: "weekly" as const, priority: 0.7 },
+    { path: "/about", changeFrequency: "monthly" as const, priority: 0.5 },
+    { path: "/contact", changeFrequency: "monthly" as const, priority: 0.5 },
+    { path: "/risk-disclaimer", changeFrequency: "monthly" as const, priority: 0.4 },
+  ];
+
+  const seoGuides = [
+    "/how-to-read-stock-charts",
+    "/best-stock-indicators-for-beginners",
+    "/how-to-identify-stock-trends",
+    "/what-is-rsi-indicator",
+    "/what-is-macd-indicator",
+    "/what-is-vwap-indicator",
   ];
 
   const stocks = [
@@ -24,7 +34,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "tsla",
     "brk.b",
     "avgo",
-    "ll y",
+    "lly",
     "jpm",
     "v",
     "ma",
@@ -36,7 +46,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "cvx",
     "mrk",
     "abbv",
-    "pe p",
+    "pep",
     "ko",
     "wmt",
     "t",
@@ -48,7 +58,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "intc",
     "amd",
     "qcom",
-    "tx n",
+    "txn",
     "mcd",
     "sbux",
     "pypl",
@@ -77,26 +87,38 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "slv",
   ];
 
-  const stockPages = stocks.map((symbol) => ({
-    url: `${baseUrl}/stocks/${symbol}`,
-    lastModified: new Date(),
-    changeFrequency: "daily" as const,
-    priority: 0.8,
+  const mainPageEntries = mainPages.map((page) => ({
+    url: `${baseUrl}${page.path}`,
+    lastModified: now,
+    changeFrequency: page.changeFrequency,
+    priority: page.priority,
   }));
 
-  const etfPages = etfs.map((symbol) => ({
-    url: `${baseUrl}/stocks/${symbol}`,
-    lastModified: new Date(),
-    changeFrequency: "daily" as const,
-    priority: 0.8,
-  }));
-
-  const mainPages = staticPages.map((path) => ({
+  const seoGuideEntries = seoGuides.map((path) => ({
     url: `${baseUrl}${path}`,
-    lastModified: new Date(),
+    lastModified: now,
     changeFrequency: "weekly" as const,
-    priority: path === "" ? 1 : 0.7,
+    priority: 0.8,
   }));
 
-  return [...mainPages, ...stockPages, ...etfPages];
+  const stockEntries = stocks.map((symbol) => ({
+    url: `${baseUrl}/stocks/${symbol}`,
+    lastModified: now,
+    changeFrequency: "daily" as const,
+    priority: 0.8,
+  }));
+
+  const etfEntries = etfs.map((symbol) => ({
+    url: `${baseUrl}/stocks/${symbol}`,
+    lastModified: now,
+    changeFrequency: "daily" as const,
+    priority: 0.8,
+  }));
+
+  return [
+    ...mainPageEntries,
+    ...seoGuideEntries,
+    ...stockEntries,
+    ...etfEntries,
+  ];
 }
