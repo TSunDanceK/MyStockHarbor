@@ -777,34 +777,54 @@ export default function PlatformsPage() {
 
 <div
   style={{
-    minWidth: 220,
+    minWidth: 260,
+    maxWidth: 300,
     display: "grid",
-    gap: 10,
+    gap: 12,
     alignContent: "start",
   }}
 >
-  <a href={item.affiliateHref} style={ctaBtn()}>
-    {item.ctaText} →
-  </a>
-
   {item.name === "TradingView" && (
     <div
       style={{
-        fontSize: 13,
-        color: "#bfdbfe",
-        fontWeight: 800,
-        textAlign: "center",
-        lineHeight: 1.45,
-        padding: "8px 10px",
-        borderRadius: 12,
-        border: "1px solid rgba(59,130,246,0.30)",
+        borderRadius: 18,
+        border: "1px solid rgba(59,130,246,0.34)",
         background:
-          "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(37,99,235,0.08))",
+          "linear-gradient(135deg, rgba(37,99,235,0.22), rgba(30,41,59,0.22))",
+        padding: 18,
+        boxShadow: "0 12px 28px rgba(0,0,0,0.22)",
       }}
     >
-      Includes $15 toward a new TradingView plan for eligible new users
+      <div
+        style={{
+          fontSize: 34,
+          lineHeight: 1,
+          fontWeight: 950,
+          letterSpacing: "-1px",
+          color: "#dbeafe",
+        }}
+      >
+        $15 OFF
+      </div>
+
+      <div
+        style={{
+          marginTop: 10,
+          fontSize: 14,
+          lineHeight: 1.55,
+          opacity: 0.88,
+          color: "#e2e8f0",
+        }}
+      >
+        Eligible new users get $15 toward a new TradingView plan when signing up
+        through this page.
+      </div>
     </div>
   )}
+
+  <a href={item.affiliateHref} style={ctaBtn()}>
+    {item.ctaText} →
+  </a>
 
   {item.name === "Trading 212" && (
     <div
