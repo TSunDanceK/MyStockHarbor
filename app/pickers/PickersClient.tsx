@@ -26,6 +26,9 @@ export default function PickersClient() {
   const [sections, setSections] = useState<PickerSection[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [universeSize, setUniverseSize] = useState<number | null>(null);
+  const [estimatedApiCalls, setEstimatedApiCalls] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,16 +41,33 @@ export default function PickersClient() {
         const res = await fetch("/api/pickers", { cache: "no-store" });
         if (!res.ok) throw new Error("Pickers API failed");
 
-        const data = (await res.json()) as { sections?: PickerSection[] };
+        const data = (await res.json()) as {
+          updatedAt?: string;
+          universeSize?: number;
+          estimatedApiCalls?: number;
+          sections?: PickerSection[];
+        };
         const safeSections = Array.isArray(data?.sections) ? data.sections : [];
 
         if (!cancelled) {
           setSections(safeSections);
+          setUpdatedAt(typeof data?.updatedAt === "string" ? data.updatedAt : null);
+          setUniverseSize(
+            typeof data?.universeSize === "number" ? data.universeSize : null
+          );
+          setEstimatedApiCalls(
+            typeof data?.estimatedApiCalls === "number"
+              ? data.estimatedApiCalls
+              : null
+          );
         }
       } catch {
         if (!cancelled) {
           setErr("Failed to load stock ideas.");
           setSections([]);
+          setUpdatedAt(null);
+          setUniverseSize(null);
+          setEstimatedApiCalls(null);
         }
       } finally {
         if (!cancelled) {
@@ -134,7 +154,14 @@ export default function PickersClient() {
         </div>
       ) : null}
 
-      <div style={{ marginTop: loading || err ? 20 : 0, display: "grid", gap: 16, maxWidth: 980 }}>
+      <div
+        style={{
+          marginTop: loading || err ? 20 : 0,
+          display: "grid",
+          gap: 16,
+          maxWidth: 980,
+        }}
+      >
         {safeSections.map((sec) => {
           const items = Array.isArray(sec.items) ? sec.items : [];
 
@@ -158,11 +185,25 @@ export default function PickersClient() {
                 }}
               >
                 <div>
-                  <h2 style={{ margin: 0, fontSize: 22, fontWeight: 950, letterSpacing: "-0.02em" }}>
+                  <h2
+                    style={{
+                      margin: 0,
+                      fontSize: 22,
+                      fontWeight: 950,
+                      letterSpacing: "-0.02em",
+                    }}
+                  >
                     {sec.title}
                   </h2>
                   {sec.description ? (
-                    <p style={{ margin: "8px 0 0", fontSize: 14, opacity: 0.72, lineHeight: 1.6 }}>
+                    <p
+                      style={{
+                        margin: "8px 0 0",
+                        fontSize: 14,
+                        opacity: 0.72,
+                        lineHeight: 1.6,
+                      }}
+                    >
                       {sec.description}
                     </p>
                   ) : null}
@@ -173,7 +214,14 @@ export default function PickersClient() {
                 </div>
               </div>
 
-              <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <div
+                style={{
+                  marginTop: 14,
+                  display: "flex",
+                  gap: 10,
+                  flexWrap: "wrap",
+                }}
+              >
                 {items.map((it) => (
                   <a
                     key={it.symbol}
@@ -204,7 +252,13 @@ export default function PickersClient() {
                     />
                     <span>{it.symbol}</span>
                     {it.note ? (
-                      <span style={{ fontSize: 12, opacity: 0.65, fontWeight: 700 }}>
+                      <span
+                        style={{
+                          fontSize: 12,
+                          opacity: 0.65,
+                          fontWeight: 700,
+                        }}
+                      >
                         {it.note}
                       </span>
                     ) : null}
@@ -214,6 +268,31 @@ export default function PickersClient() {
             </section>
           );
         })}
+
+        {!loading && !err && (updatedAt || universeSize || estimatedApiCalls) ? (
+          <div
+            style={{
+              marginTop: 4,
+              paddingTop: 6,
+              fontSize: 11,
+              lineHeight: 1.6,
+              opacity: 0.48,
+              textAlign: "right",
+            }}
+          >
+            {updatedAt ? (
+              <div>
+                Last picker refresh: {new Date(updatedAt).toLocaleString()}
+              </div>
+            ) : null}
+            {universeSize != null ? (
+              <div>Universe scanned: {universeSize} stocks</div>
+            ) : null}
+            {estimatedApiCalls != null ? (
+              <div>Estimated calls used on refresh: {estimatedApiCalls}</div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </section>
   );
