@@ -17,6 +17,8 @@ export default function LearnPage() {
         minHeight: "100vh",
       }}
     >
+    >
+      <div className="wrap">
         <div style={{ display: "grid", gap: 12 }}>
           <div
             style={{
