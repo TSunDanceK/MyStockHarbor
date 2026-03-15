@@ -876,10 +876,9 @@ export default function UtilitiesClientPage() {
           </section>
         </div>
 
-        <section style={infoSectionStyle()}>
-          <h2 style={{ margin: 0, fontSize: 24, lineHeight: 1.2 }}>
-            Related trading guides
-          </h2>
+<h2 style={{ margin: 0, fontSize: 24, lineHeight: 1.2 }}>
+  Related risk management guides
+</h2>
 
           <div
             style={{
@@ -889,76 +888,107 @@ export default function UtilitiesClientPage() {
               gap: 12,
             }}
           >
-            <Link href="/how-to-read-stock-charts" style={guideCardStyle()}>
-              <div style={{ fontWeight: 900, fontSize: 16 }}>
-                How to Read Stock Charts
-              </div>
-              <div
-                style={{
-                  marginTop: 6,
-                  opacity: 0.76,
-                  lineHeight: 1.55,
-                  fontSize: 13,
-                }}
-              >
-                Learn the chart basics before using stop losses and trade
-                planning tools.
-              </div>
-            </Link>
+<Link href="/position-sizing-guide" style={guideCardStyle()}>
+  <div style={{ fontWeight: 900, fontSize: 16 }}>
+    Position Sizing Guide
+  </div>
+  <div
+    style={{
+      marginTop: 6,
+      opacity: 0.76,
+      lineHeight: 1.55,
+      fontSize: 13,
+    }}
+  >
+    Learn how traders calculate the correct trade size based on risk
+    and stop loss distance.
+  </div>
+</Link>
 
-            <Link
-              href="/best-indicators-for-swing-trading"
-              style={guideCardStyle()}
-            >
-              <div style={{ fontWeight: 900, fontSize: 16 }}>
-                Best Indicators for Swing Trading
-              </div>
-              <div
-                style={{
-                  marginTop: 6,
-                  opacity: 0.76,
-                  lineHeight: 1.55,
-                  fontSize: 13,
-                }}
-              >
-                See how traders combine indicators with risk planning and
-                position sizing.
-              </div>
-            </Link>
+<Link href="/stop-loss-strategy" style={guideCardStyle()}>
+  <div style={{ fontWeight: 900, fontSize: 16 }}>
+    Stop Loss Strategy
+  </div>
+  <div
+    style={{
+      marginTop: 6,
+      opacity: 0.76,
+      lineHeight: 1.55,
+      fontSize: 13,
+    }}
+  >
+    Understand how stop losses help control downside risk and protect
+    trading capital.
+  </div>
+</Link>
 
-            <Link href="/how-to-analyse-stocks" style={guideCardStyle()}>
-              <div style={{ fontWeight: 900, fontSize: 16 }}>
-                How to Analyse Stocks
-              </div>
-              <div
-                style={{
-                  marginTop: 6,
-                  opacity: 0.76,
-                  lineHeight: 1.55,
-                  fontSize: 13,
-                }}
-              >
-                Understand the wider process of reviewing stocks before entering
-                trades.
-              </div>
-            </Link>
+<Link href="/trading-risk-management" style={guideCardStyle()}>
+  <div style={{ fontWeight: 900, fontSize: 16 }}>
+    Trading Risk Management
+  </div>
+  <div
+    style={{
+      marginTop: 6,
+      opacity: 0.76,
+      lineHeight: 1.55,
+      fontSize: 13,
+    }}
+  >
+    Explore the core principles traders use to control losses and
+    manage overall portfolio risk.
+  </div>
+</Link>
 
-            <Link href="/pickers" style={guideCardStyle()}>
-              <div style={{ fontWeight: 900, fontSize: 16 }}>
-                Find Stock Ideas
-              </div>
-              <div
-                style={{
-                  marginTop: 6,
-                  opacity: 0.76,
-                  lineHeight: 1.55,
-                  fontSize: 13,
-                }}
-              >
-                Use the stock pickers to find setups, then come back here to
-                plan risk properly.
-              </div>
-            </Link>
+<Link href="/risk-reward-ratio" style={guideCardStyle()}>
+  <div style={{ fontWeight: 900, fontSize: 16 }}>
+    Risk Reward Ratio
+  </div>
+  <div
+    style={{
+      marginTop: 6,
+      opacity: 0.76,
+      lineHeight: 1.55,
+      fontSize: 13,
+    }}
+  >
+    Learn how traders compare potential upside and downside before
+    entering a trade.
+  </div>
+</Link>
+
+<Link href="/margin-trading-explained" style={guideCardStyle()}>
+  <div style={{ fontWeight: 900, fontSize: 16 }}>
+    Margin Trading Explained
+  </div>
+  <div
+    style={{
+      marginTop: 6,
+      opacity: 0.76,
+      lineHeight: 1.55,
+      fontSize: 13,
+    }}
+  >
+    Understand how leverage works and why liquidation risk matters
+    when trading on margin.
+  </div>
+</Link>
+
+<Link href="/pickers" style={guideCardStyle()}>
+  <div style={{ fontWeight: 900, fontSize: 16 }}>
+    Find Stock Ideas
+  </div>
+  <div
+    style={{
+      marginTop: 6,
+      opacity: 0.76,
+      lineHeight: 1.55,
+      fontSize: 13,
+    }}
+  >
+    Use the stock pickers to find setups, then return here to plan
+    trade size and risk.
+  </div>
+</Link>
           </div>
         </section>
 
