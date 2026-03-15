@@ -2704,8 +2704,11 @@ function BenchmarksPanel() {
           const chartSymbol = (it.symbol || "").split(".")[0]?.toUpperCase() || it.symbol.toUpperCase();
 
 return (
-  <div
+  <button
     key={it.key}
+    type="button"
+    onClick={() => chooseSymbol(chartSymbol)}
+    title={`Open ${chartSymbol} on chart`}
     style={{
       border: `1px solid ${COLORS.border}`,
       borderRadius: 16,
@@ -2714,34 +2717,35 @@ return (
       color: COLORS.cardFg,
       textAlign: "left",
       width: "100%",
+      cursor: "pointer",
+      transition: "transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease, filter 120ms ease",
+      boxShadow: COLORS.isDark ? "0 8px 18px rgba(0,0,0,0.14)" : "0 8px 18px rgba(0,0,0,0.04)",
     }}
   >
-              <div style={{ display: "grid", gap: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 950, fontSize: 16, lineHeight: 1.1 }}>{it.label}</div>
-                    <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
-                   {it.symbol}
-                    </div>
-                  </div>
+    <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 950, fontSize: 16, lineHeight: 1.1 }}>{it.label}</div>
+          <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>{it.symbol}</div>
+        </div>
 
-                  <div style={{ textAlign: "right", flex: "0 0 auto" }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
-                      <span style={{ fontWeight: 950, color: arrowColor, fontSize: 14 }}>{arrow}</span>
-                      <span style={{ fontWeight: 950, color: arrowColor, fontSize: 20 }}>{pctText}</span>
-                    </div>
-                    <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
-                      {typeof it.close === "number" ? it.close.toFixed(2) : "—"}
-                    </div>
-                  </div>
-                </div>
+        <div style={{ textAlign: "right", flex: "0 0 auto" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
+            <span style={{ fontWeight: 950, color: arrowColor, fontSize: 14 }}>{arrow}</span>
+            <span style={{ fontWeight: 950, color: arrowColor, fontSize: 20 }}>{pctText}</span>
+          </div>
+          <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
+            {typeof it.close === "number" ? it.close.toFixed(2) : "—"}
+          </div>
+        </div>
+      </div>
 
-                <div style={{ fontSize: 12, opacity: 0.7 }}>
-                  {it.date && it.time ? `As of ${it.date} ${it.time}` : "Timestamp unavailable"}
-                </div>
-              </div>
-            </div>
-          );
+      <div style={{ fontSize: 12, opacity: 0.7 }}>
+        {it.date && it.time ? `As of ${it.date} ${it.time}` : "Timestamp unavailable"}
+      </div>
+    </div>
+  </button>
+);
         })}
       </div>
     </SectionCard>
