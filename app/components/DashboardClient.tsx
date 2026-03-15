@@ -2136,7 +2136,7 @@ function OverviewPanel() {
   const stretchColor = toneToColor(stretchTone, COLORS.isDark);
 
   return (
-    <SectionCard title={`${symbol} Overview`}>
+    <SectionCard title={`${symbol} Overview`} allowOverflow>
       <div style={{ display: "grid", gap: 14 }}>
         <div
           className="msh-overview-head"
