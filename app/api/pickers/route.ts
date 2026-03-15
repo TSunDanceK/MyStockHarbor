@@ -677,7 +677,7 @@ if (bo) {
     symbol,
     tone: "orange",
     note: `ATH + vol ${volSpike ? `${volSpike.toFixed(2)}×` : "—"}`,
-    // Score: top50 boost + volume spike dominates + tiny recency nudge
+    // Score: dynamic universe boost + volume spike dominates + tiny recency nudge
     _score: dynamicBoost(symbol) + volSpike * 1000 + 1,
   });
 }
@@ -750,11 +750,10 @@ const takeTop = (arr: PickerItem[], n: number, opts?: { volumeFirstIfMany?: bool
   return {
     updatedAt: new Date().toISOString(),
     universeSize: universe.length,
-    top100Count: top100.length,
+    dynamicUniverseCount: dynamicUniverse.length,
     estimatedApiCalls: universe.length + 1,
     sections,
   };
-}
 
 /* -------------------------------- GET -------------------------------- */
 
