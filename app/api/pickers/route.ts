@@ -591,13 +591,28 @@ const PRESET_UNIVERSE: string[] = [
 
 async function buildPickersPayload(origin: string) {
   const market = await fetchMarket(origin);
-  const topTraded = (market?.topTraded ?? []).map((x) => x.symbol).filter(Boolean);
 
-  // Top 100 always prioritized first
-  const top100 = Array.from(new Set(topTraded)).slice(0, 100);
+  const topTraded = (market?.topTraded ?? [])
+    .map((x) => x.symbol)
+    .filter(Boolean);
 
-  // Wider universe to fill remaining slots
-  const universe = Array.from(new Set([...top100, ...PRESET_UNIVERSE]));
+  const topMovers = (market?.topMovers ?? [])
+    .map((x) => x.symbol)
+    .filter(Boolean);
+
+  const topRanges = (market?.topRanges ?? [])
+    .map((x) => x.symbol)
+    .filter(Boolean);
+
+  // Dynamic live universe from multiple market views
+  const dynamicUniverse = Array.from(
+    new Set([...topTraded, ...topMovers, ...topRanges])
+  );
+
+  // Keep a fallback preset list so the universe is still healthy on quieter days
+  const universe = Array.from(
+    new Set([...dynamicUniverse, ...PRESET_UNIVERSE])
+  ).slice(0, 100);
 
   const limit = pLimit(8); // concurrency cap
   const days = 2600; // enough history for MA200-ish signals
@@ -608,9 +623,9 @@ async function buildPickersPayload(origin: string) {
   const breakouts: PickerItem[] = [];
   const divergences: PickerItem[] = [];
 
-  // helper for “top100 first” scoring
-  const isTop100 = (sym: string) => top100.includes(sym);
-  const top100Boost = (sym: string) => (isTop100(sym) ? 1000 : 0);
+  // helper for prioritising symbols coming from the live market lists
+  const isDynamicUniverse = (sym: string) => dynamicUniverse.includes(sym);
+  const dynamicBoost = (sym: string) => (isDynamicUniverse(sym) ? 1000 : 0);
 
   await Promise.all(
     universe.map((symbol) =>
@@ -628,7 +643,7 @@ async function buildPickersPayload(origin: string) {
                 symbol,
                 tone: "green",
                 note: `${comp.oversold} oversold • ${comp.flagged}/${comp.total} checks`,
-               _score: top100Boost(symbol) + comp.oversold * 50 + comp.flagged * 10,
+               _score: dynamicBoost(symbol) + comp.oversold * 50 + comp.flagged * 10,
               });
             }
 
@@ -637,7 +652,7 @@ async function buildPickersPayload(origin: string) {
                 symbol,
                 tone: "red",
                 note: `${comp.overbought} overbought • ${comp.flagged}/${comp.total} checks`,
-                _score: top100Boost(symbol) + comp.overbought * 50 + comp.flagged * 10,
+                _score: dynamicBoost(symbol) + comp.overbought * 50 + comp.flagged * 10,
               });
             }
           }
@@ -649,7 +664,7 @@ async function buildPickersPayload(origin: string) {
               symbol,
               tone: "yellow",
               note: `Down ${dip.drawdownPct.toFixed(1)}% from recent ATH`,
-              _score: top100Boost(symbol) + dip.drawdownPct,
+              _score: dynamicBoost(symbol) + dip.drawdownPct,
             });
           }
 
@@ -663,7 +678,7 @@ if (bo) {
     tone: "orange",
     note: `ATH + vol ${volSpike ? `${volSpike.toFixed(2)}×` : "—"}`,
     // Score: top50 boost + volume spike dominates + tiny recency nudge
-    _score: top100Boost(symbol) + volSpike * 1000 + 1,
+    _score: dynamicBoost(symbol) + volSpike * 1000 + 1,
   });
 }
 
@@ -680,7 +695,7 @@ const div = detectDivergenceFromHistory(pts, {
               symbol,
               tone: div.kind === "bullish" ? "green" : "red",
               note: div.note,
-              _score: top100Boost(symbol) + div.score,
+              _score: dynamicBoost(symbol) + div.score,
             });
           }
         } catch {
