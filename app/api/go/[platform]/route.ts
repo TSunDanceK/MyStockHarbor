@@ -12,15 +12,24 @@ const affiliateLinks: Record<string, string> = {
 };
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   context: { params: Promise<{ platform: string }> }
 ) {
   const { platform } = await context.params;
   const key = platform.toLowerCase();
 
-  const target = affiliateLinks[key] ?? "/platforms";
+  let target = affiliateLinks[key] ?? "/platforms";
 
-  // Track clicks (for now just logs)
+  if (key === "tradingview") {
+    const rawSymbol = request.nextUrl.searchParams.get("symbol")?.trim();
+
+    if (rawSymbol) {
+      target = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(
+        rawSymbol.toUpperCase()
+      )}&aff_id=164495`;
+    }
+  }
+
   console.log("Affiliate click:", key);
 
   permanentRedirect(target);
