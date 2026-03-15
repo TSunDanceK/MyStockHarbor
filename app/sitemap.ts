@@ -51,6 +51,7 @@ const seoGuides = [
 "/stop-loss-strategy",
 "/risk-reward-ratio",
 "/margin-trading-explained",
+  "/trading-risk-management",
 ];
 
   const stocks = [
