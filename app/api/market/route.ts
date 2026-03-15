@@ -23,7 +23,7 @@ type Row = {
   volume: number | null;
 };
 
-const CACHE_MS = 60_000; // 1 minute
+const CACHE_MS = 3_600_000; // 1 hour
 let cache: { at: number; payload: any } | null = null;
 
 /**
@@ -229,17 +229,17 @@ export async function GET() {
   const topTraded = [...rows]
     .filter((r) => r.volume != null)
     .sort((a, b) => (b.volume! - a.volume!))
-    .slice(0, 10);
+    .slice(0, 30);
 
   const topMovers = [...rows]
     .filter((r) => r.changePct != null)
     .sort((a, b) => Math.abs(b.changePct!) - Math.abs(a.changePct!))
-    .slice(0, 5);
+    .slice(0, 20);
 
   const topRanges = [...rows]
     .filter((r) => r.rangePct != null)
     .sort((a, b) => b.rangePct! - a.rangePct!)
-    .slice(0, 10);
+    .slice(0, 30);
 
 const isRateLimited =
     Array.isArray(debug.errors) &&
