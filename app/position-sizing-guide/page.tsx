@@ -250,3 +250,371 @@ export default function PositionSizingGuidePage() {
     </main>
   );
 }
+function topNavBtnStyle(
+  type: "dashboard" | "learn" | "pickers" | "calculators"
+): React.CSSProperties {
+  if (type === "dashboard") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      minHeight: 42,
+      padding: "9px 13px",
+      borderRadius: 14,
+      border: "1px solid rgba(250,204,21,0.45)",
+      background:
+        "linear-gradient(135deg, rgba(250,204,21,0.20), rgba(202,138,4,0.10))",
+      color: "#fefce8",
+      textDecoration: "none",
+      fontWeight: 900,
+      fontSize: 14,
+      whiteSpace: "nowrap",
+      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+      transition:
+        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
+    };
+  }
+
+  if (type === "learn") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      minHeight: 42,
+      padding: "9px 13px",
+      borderRadius: 14,
+      border: "1px solid rgba(59,130,246,0.45)",
+      background:
+        "linear-gradient(135deg, rgba(59,130,246,0.20), rgba(37,99,235,0.10))",
+      color: "#dbeafe",
+      textDecoration: "none",
+      fontWeight: 900,
+      fontSize: 14,
+      whiteSpace: "nowrap",
+      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+      transition:
+        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
+    };
+  }
+
+  if (type === "pickers") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      minHeight: 42,
+      padding: "9px 13px",
+      borderRadius: 14,
+      border: "1px solid rgba(239,68,68,0.45)",
+      background:
+        "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.10))",
+      color: "#fef2f2",
+      textDecoration: "none",
+      fontWeight: 900,
+      fontSize: 14,
+      whiteSpace: "nowrap",
+      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+      transition:
+        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
+    };
+  }
+
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    minHeight: 42,
+    padding: "9px 13px",
+    borderRadius: 14,
+    border: "1px solid rgba(168,85,247,0.45)",
+    background:
+      "linear-gradient(135deg, rgba(168,85,247,0.20), rgba(139,92,246,0.10))",
+    color: "#faf5ff",
+    textDecoration: "none",
+    fontWeight: 900,
+    fontSize: 14,
+    whiteSpace: "nowrap",
+    boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+    transition:
+      "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
+  };
+}
+
+function topNavIcon(
+  type: "dashboard" | "learn" | "pickers" | "calculators"
+) {
+  if (type === "dashboard") return "📈";
+  if (type === "learn") return "📘";
+  if (type === "pickers") return "📊";
+  return "🧮";
+}
+
+function highlightBoxStyle(): React.CSSProperties {
+  return {
+    marginTop: 24,
+    padding: 20,
+    borderRadius: 18,
+    border: "1px solid rgba(168,85,247,0.28)",
+    background:
+      "linear-gradient(135deg, rgba(168,85,247,0.14), rgba(59,130,246,0.08))",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+  };
+}
+
+function highlightLabelStyle(): React.CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "7px 12px",
+    borderRadius: 999,
+    background:
+      "linear-gradient(135deg, rgba(168,85,247,0.18), rgba(59,130,246,0.10))",
+    border: "1px solid rgba(168,85,247,0.32)",
+    color: "#f3e8ff",
+    fontWeight: 950,
+    letterSpacing: "0.08em",
+    fontSize: 12,
+  };
+}
+
+function highlightTitleStyle(): React.CSSProperties {
+  return {
+    marginTop: 12,
+    fontSize: 28,
+    fontWeight: 950,
+    lineHeight: 1.15,
+    letterSpacing: "-0.5px",
+  };
+}
+
+function highlightGridStyle(): React.CSSProperties {
+  return {
+    marginTop: 14,
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: 12,
+  };
+}
+
+function bulletGridStyle(): React.CSSProperties {
+  return {
+    marginTop: 14,
+    display: "grid",
+    gap: 10,
+  };
+}
+
+function ctaBoxStyle(): React.CSSProperties {
+  return {
+    marginTop: 28,
+    padding: 20,
+    borderRadius: 18,
+    border: "1px solid rgba(34,197,94,0.28)",
+    background:
+      "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(59,130,246,0.08))",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+  };
+}
+
+function ctaPrimaryStyle(): React.CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "13px 18px",
+    borderRadius: 14,
+    border: "1px solid rgba(168,85,247,0.42)",
+    background:
+      "linear-gradient(135deg, rgba(168,85,247,0.22), rgba(59,130,246,0.18))",
+    color: "#f8fafc",
+    textDecoration: "none",
+    fontWeight: 900,
+    minHeight: 48,
+    whiteSpace: "nowrap",
+  };
+}
+
+function ctaSecondaryStyle(): React.CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "13px 18px",
+    borderRadius: 14,
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "rgba(255,255,255,0.06)",
+    color: "#f8fafc",
+    textDecoration: "none",
+    fontWeight: 900,
+    minHeight: 48,
+    whiteSpace: "nowrap",
+  };
+}
+
+function ContentSection({
+  number,
+  title,
+  tint,
+  children,
+}: {
+  number: string;
+  title: string;
+  tint: "blue" | "green" | "purple" | "amber";
+  children: React.ReactNode;
+}) {
+  const styles =
+    tint === "blue"
+      ? {
+          border: "1px solid rgba(59,130,246,0.22)",
+          background:
+            "linear-gradient(180deg, rgba(10,18,34,0.96), rgba(7,12,24,0.98))",
+          badgeBg:
+            "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
+          badgeBorder: "1px solid rgba(59,130,246,0.34)",
+          badgeColor: "#dbeafe",
+        }
+      : tint === "green"
+      ? {
+          border: "1px solid rgba(34,197,94,0.22)",
+          background:
+            "linear-gradient(180deg, rgba(9,18,16,0.96), rgba(7,12,11,0.98))",
+          badgeBg:
+            "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(16,185,129,0.10))",
+          badgeBorder: "1px solid rgba(34,197,94,0.34)",
+          badgeColor: "#dcfce7",
+        }
+      : tint === "amber"
+      ? {
+          border: "1px solid rgba(234,179,8,0.22)",
+          background:
+            "linear-gradient(180deg, rgba(18,16,10,0.96), rgba(12,10,7,0.98))",
+          badgeBg:
+            "linear-gradient(135deg, rgba(234,179,8,0.18), rgba(202,138,4,0.10))",
+          badgeBorder: "1px solid rgba(234,179,8,0.34)",
+          badgeColor: "#fef3c7",
+        }
+      : {
+          border: "1px solid rgba(168,85,247,0.22)",
+          background:
+            "linear-gradient(180deg, rgba(12,16,34,0.96), rgba(8,11,24,0.98))",
+          badgeBg:
+            "linear-gradient(135deg, rgba(168,85,247,0.18), rgba(139,92,246,0.10))",
+          badgeBorder: "1px solid rgba(168,85,247,0.34)",
+          badgeColor: "#f3e8ff",
+        };
+
+  return (
+    <section
+      style={{
+        marginTop: 24,
+        border: styles.border,
+        borderRadius: 18,
+        padding: 20,
+        background: styles.background,
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+      }}
+    >
+      <div
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          padding: "7px 12px",
+          borderRadius: 999,
+          background: styles.badgeBg,
+          border: styles.badgeBorder,
+          color: styles.badgeColor,
+          fontWeight: 950,
+          letterSpacing: "0.08em",
+          fontSize: 12,
+        }}
+      >
+        SECTION {number}
+      </div>
+
+      <h2
+        style={{
+          margin: "14px 0 0",
+          fontSize: 26,
+          lineHeight: 1.2,
+          letterSpacing: "-0.4px",
+        }}
+      >
+        {title}
+      </h2>
+
+      <div style={{ marginTop: 12 }}>{children}</div>
+    </section>
+  );
+}
+
+function HighlightCard({
+  title,
+  text,
+  tint,
+}: {
+  title: string;
+  text: string;
+  tint: "blue" | "green" | "red";
+}) {
+  const styles =
+    tint === "blue"
+      ? {
+          border: "1px solid rgba(59,130,246,0.24)",
+          background:
+            "linear-gradient(180deg, rgba(10,18,34,0.94), rgba(7,12,24,0.98))",
+        }
+      : tint === "green"
+      ? {
+          border: "1px solid rgba(34,197,94,0.24)",
+          background:
+            "linear-gradient(180deg, rgba(9,18,16,0.94), rgba(7,12,11,0.98))",
+        }
+      : {
+          border: "1px solid rgba(239,68,68,0.24)",
+          background:
+            "linear-gradient(180deg, rgba(24,12,12,0.94), rgba(14,7,7,0.98))",
+        };
+
+  return (
+    <div
+      style={{
+        ...styles,
+        borderRadius: 16,
+        padding: 16,
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+      }}
+    >
+      <div style={{ fontWeight: 900, fontSize: 15 }}>{title}</div>
+      <div style={{ marginTop: 6, opacity: 0.84, lineHeight: 1.55 }}>
+        {text}
+      </div>
+    </div>
+  );
+}
+
+function BulletRow({ text }: { text: string }) {
+  return (
+    <div
+      style={{
+        borderRadius: 14,
+        border: "1px solid rgba(255,255,255,0.10)",
+        background: "rgba(255,255,255,0.04)",
+        padding: "12px 14px",
+        lineHeight: 1.55,
+        opacity: 0.9,
+      }}
+    >
+      {text}
+    </div>
+  );
+}
+
+const paragraphStyle: React.CSSProperties = {
+  marginTop: 12,
+  opacity: 0.86,
+  lineHeight: 1.7,
+};
