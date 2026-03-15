@@ -3275,26 +3275,39 @@ onKeyDown={(e) => {
         <div>
           <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 6 }}>Stock Pickers</div>
 
-          <button
-            type="button"
-            onClick={() => router.push("/pickers")}
-            style={{
-              width: "100%",
-              padding: "14px 16px",
-              borderRadius: 16,
-              border: `1px solid rgba(59,130,246,0.45)`,
-              background: COLORS.isDark
-                ? "linear-gradient(135deg, rgba(37,99,235,0.26), rgba(29,78,216,0.16))"
-                : "linear-gradient(135deg, rgba(37,99,235,0.14), rgba(29,78,216,0.08))",
-              color: COLORS.controlFg,
-              fontWeight: 950,
-              fontSize: 15,
-              cursor: "pointer",
-              textAlign: "left",
-            }}
-          >
-            🔎 Find Your Next Stock →
-          </button>
+<button
+  type="button"
+  onClick={() => router.push("/pickers")}
+  className="msh-stock-picker-cta"
+  style={{
+    width: "100%",
+    padding: "14px 16px",
+    borderRadius: 16,
+    border: `1px solid rgba(59,130,246,0.45)`,
+    background: COLORS.isDark
+      ? "linear-gradient(135deg, rgba(37,99,235,0.26), rgba(29,78,216,0.16))"
+      : "linear-gradient(135deg, rgba(37,99,235,0.14), rgba(29,78,216,0.08))",
+    color: COLORS.controlFg,
+    fontWeight: 950,
+    fontSize: 15,
+    cursor: "pointer",
+    textAlign: "left",
+    transition: "transform 120ms ease, filter 120ms ease, border-color 120ms ease",
+  }}
+>
+  <span
+    style={{
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 6,
+    }}
+  >
+    <span>🔎 Scan for Stock Ideas</span>
+    <span className="msh-stock-picker-cta-arrow" aria-hidden="true">
+      →
+    </span>
+  </span>
+</button>
         </div>
 
       </div>
