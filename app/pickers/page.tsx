@@ -637,51 +637,27 @@ export default function PickersPage() {
             </Link>
           </div>
         </section>
-
-        <section style={panelStyle}>
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              padding: "7px 12px",
-              borderRadius: 999,
-              background:
-                "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(16,185,129,0.08))",
-              border: "1px solid rgba(34,197,94,0.26)",
-              color: "#dcfce7",
-              fontWeight: 950,
-              letterSpacing: "0.08em",
-              fontSize: 12,
-            }}
-          >
-            UNDERSTAND THE INDICATORS
-          </div>
-
-          <h2
-            style={{
-              margin: "14px 0 0 0",
-              fontSize: 24,
-              lineHeight: 1.15,
-              letterSpacing: "-0.03em",
-            }}
-          >
-            Understand the indicators behind these signals
-          </h2>
-
-          <p
-            style={{
-              margin: "10px 0 0",
-              lineHeight: 1.7,
-              opacity: 0.74,
-              maxWidth: 860,
-            }}
-          >
-            These indicator pages support the signals on this page and help
-            explain why traders pay attention to momentum, overextension and
-            unusual activity when reviewing stock charts.
-          </p>
-
+  
+               <section style={panelStyle}>
           <div style={bundleGridStyle}>
+            <Link
+              href="/stock-indicators"
+              style={{
+                ...compactLinkStyle,
+                border: "1px solid rgba(34,197,94,0.20)",
+                background:
+                  "linear-gradient(135deg, rgba(34,197,94,0.08), rgba(16,185,129,0.04))",
+              }}
+            >
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Understand the indicators behind these signals
+              </div>
+              <div style={smallLinkTextStyle}>
+                Start with the indicators hub, then go deeper into RSI, MACD,
+                volume and moving average guides.
+              </div>
+            </Link>
+
             <Link href="/what-is-rsi-indicator" style={compactLinkStyle}>
               <div style={{ fontSize: 17, fontWeight: 950 }}>Understand RSI</div>
               <div style={smallLinkTextStyle}>
@@ -741,26 +717,8 @@ export default function PickersPage() {
               </div>
             </Link>
           </div>
-        </section>
-
-        <Link
-  href="/stock-indicators"
-  style={{
-    ...compactLinkStyle,
-    border: "1px solid rgba(34,197,94,0.20)",
-    background:
-      "linear-gradient(135deg, rgba(34,197,94,0.08), rgba(16,185,129,0.04))",
-  }}
->
-  <div style={{ fontSize: 17, fontWeight: 950 }}>
-    Understand the indicators behind these signals
-  </div>
-  <div style={smallLinkTextStyle}>
-    Start with the indicators hub, then go deeper into RSI, MACD, volume and
-    moving average guides.
-  </div>
-</Link>
-
+        </section>         
+      
         <section
           style={{
             marginTop: 22,
