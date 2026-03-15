@@ -168,6 +168,77 @@ export default function LearnPage() {
           <Section title="BASICS" items={basics} />
           <Section title="INDICATORS" items={indicators} />
           <Section title="DIVERGENCIES" items={divergencies} />
+          <section
+  style={{
+    border: "1px solid rgba(34,197,94,0.22)",
+    borderRadius: 18,
+    padding: 18,
+    background: "linear-gradient(180deg, rgba(9,18,16,0.96), rgba(7,12,11,0.98))",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+  }}
+>
+  <div
+    style={{
+      display: "inline-flex",
+      alignItems: "center",
+      padding: "7px 12px",
+      borderRadius: 999,
+      background:
+        "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(16,185,129,0.10))",
+      border: "1px solid rgba(34,197,94,0.34)",
+      color: "#dcfce7",
+      fontWeight: 950,
+      letterSpacing: "0.08em",
+      fontSize: 12,
+    }}
+  >
+    RISK MANAGEMENT
+  </div>
+
+  <div
+    style={{
+      marginTop: 14,
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+      gap: 12,
+    }}
+  >
+    <Link href="/position-sizing-guide" style={learnGuideCard()}>
+      <div style={{ fontWeight: 900, fontSize: 16 }}>Position Sizing Guide</div>
+      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
+        Learn how traders size positions based on stop loss distance and account risk.
+      </div>
+    </Link>
+
+    <Link href="/stop-loss-strategy" style={learnGuideCard()}>
+      <div style={{ fontWeight: 900, fontSize: 16 }}>Stop Loss Strategy</div>
+      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
+        Understand how stop losses help limit downside and improve trade discipline.
+      </div>
+    </Link>
+
+    <Link href="/trading-risk-management" style={learnGuideCard()}>
+      <div style={{ fontWeight: 900, fontSize: 16 }}>Trading Risk Management</div>
+      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
+        Explore the core principles traders use to protect capital and manage losses.
+      </div>
+    </Link>
+
+    <Link href="/risk-reward-ratio" style={learnGuideCard()}>
+      <div style={{ fontWeight: 900, fontSize: 16 }}>Risk Reward Ratio</div>
+      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
+        Learn how traders compare potential reward against possible downside before entering.
+      </div>
+    </Link>
+
+    <Link href="/margin-trading-explained" style={learnGuideCard()}>
+      <div style={{ fontWeight: 900, fontSize: 16 }}>Margin Trading Explained</div>
+      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
+        Understand leverage, liquidation risk and why margin needs careful control.
+      </div>
+    </Link>
+  </div>
+</section>
 
           <section
             style={{
