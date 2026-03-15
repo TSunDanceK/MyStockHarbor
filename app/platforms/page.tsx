@@ -166,17 +166,6 @@ const PLATFORMS: PlatformItem[] = [
 ];
 
 function topBtn(): React.CSSProperties {
-  return {
-    padding: "10px 12px",
-    borderRadius: 12,
-    border: "1px solid rgba(255,255,255,0.14)",
-    background: "rgba(255,255,255,0.06)",
-    color: "#f1f5f9",
-    textDecoration: "none",
-    fontWeight: 850,
-    whiteSpace: "nowrap",
-  };
-}
 
 function ctaBtn(): React.CSSProperties {
   return {
@@ -266,15 +255,45 @@ export default function PlatformsPage() {
 </div>
           </div>
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <Link href="/" style={topBtn()}>
-              ← Dashboard
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              flexWrap: "wrap",
+              justifyContent: "flex-end",
+              alignItems: "flex-start",
+              flex: "0 0 auto",
+              marginLeft: "auto",
+            }}
+          >
+            <Link href="/" style={topNavBtnStyle("dashboard")}>
+              <span aria-hidden="true" style={topNavIconWrapStyle}>
+                {topNavIcon("dashboard")}
+              </span>
+              <span>Dashboard</span>
             </Link>
-            <Link href="/learn" style={topBtn()}>
-              Learn →
+
+            <Link href="/learn" style={topNavBtnStyle("learn")}>
+              <span aria-hidden="true" style={topNavIconWrapStyle}>
+                {topNavIcon("learn")}
+              </span>
+              <span>Learn</span>
+            </Link>
+
+            <Link href="/pickers" style={topNavBtnStyle("pickers")}>
+              <span aria-hidden="true" style={topNavIconWrapStyle}>
+                {topNavIcon("pickers")}
+              </span>
+              <span>Stock Pickers</span>
+            </Link>
+
+            <Link href="/utilities" style={topNavBtnStyle("calculators")}>
+              <span aria-hidden="true" style={topNavIconWrapStyle}>
+                {topNavIcon("calculators")}
+              </span>
+              <span>Calculators</span>
             </Link>
           </div>
-        </div>
 
         <div
           style={{
