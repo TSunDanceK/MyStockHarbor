@@ -787,6 +787,25 @@ export default function PlatformsPage() {
     {item.ctaText} →
   </a>
 
+  {item.name === "TradingView" && (
+    <div
+      style={{
+        fontSize: 13,
+        color: "#bfdbfe",
+        fontWeight: 800,
+        textAlign: "center",
+        lineHeight: 1.45,
+        padding: "8px 10px",
+        borderRadius: 12,
+        border: "1px solid rgba(59,130,246,0.30)",
+        background:
+          "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(37,99,235,0.08))",
+      }}
+    >
+      Includes $15 toward a new TradingView plan for eligible new users
+    </div>
+  )}
+
   {item.name === "Trading 212" && (
     <div
       style={{
