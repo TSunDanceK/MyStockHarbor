@@ -753,7 +753,8 @@ const takeTop = (arr: PickerItem[], n: number, opts?: { volumeFirstIfMany?: bool
     dynamicUniverseCount: dynamicUniverse.length,
     estimatedApiCalls: universe.length + 1,
     sections,
-  };
+   };
+  }
 
 /* -------------------------------- GET -------------------------------- */
 
