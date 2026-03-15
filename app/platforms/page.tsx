@@ -663,39 +663,51 @@ export default function PlatformsPage() {
                       flexWrap: "wrap",
                     }}
                   >
-                    <a
-                      href={item.affiliateHref}
-                      aria-label={`Visit ${item.name}`}
-                      style={{ textDecoration: "none" }}
-                    >
-                      <div
-                        style={{
-                          width: 76,
-                          height: 76,
-                          borderRadius: 16,
-                          border: "1px solid rgba(255,255,255,0.12)",
-                          background: "#ffffff",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          padding: 10,
-                          overflow: "hidden",
-                          flex: "0 0 auto",
-                          cursor: "pointer",
-                        }}
-                      >
-                        <img
-                          src={item.logoSrc}
-                          alt={item.logoAlt}
-                          style={{
-                            maxWidth: "100%",
-                            maxHeight: "100%",
-                            objectFit: "contain",
-                            display: "block",
-                          }}
-                        />
-                      </div>
-                    </a>
+<a
+  href={item.affiliateHref}
+  aria-label={`Visit ${item.name}`}
+  style={{ textDecoration: "none" }}
+>
+  <div
+    style={{
+      width: item.name === "TradingView" ? 148 : 76,
+      height: item.name === "TradingView" ? 68 : 76,
+      borderRadius: item.name === "TradingView" ? 18 : 16,
+      border:
+        item.name === "TradingView"
+          ? "1px solid rgba(59,130,246,0.26)"
+          : "1px solid rgba(255,255,255,0.12)",
+      background:
+        item.name === "TradingView"
+          ? "linear-gradient(135deg, rgba(255,255,255,0.98), rgba(241,245,249,0.96))"
+          : "#ffffff",
+      boxShadow:
+        item.name === "TradingView"
+          ? "0 10px 24px rgba(0,0,0,0.22)"
+          : "none",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: item.name === "TradingView" ? "10px 16px" : 10,
+      overflow: "hidden",
+      flex: "0 0 auto",
+      cursor: "pointer",
+    }}
+  >
+    <img
+      src={item.logoSrc}
+      alt={item.logoAlt}
+      style={{
+        width: item.name === "TradingView" ? "100%" : "100%",
+        height: item.name === "TradingView" ? "auto" : "100%",
+        maxWidth: "100%",
+        maxHeight: "100%",
+        objectFit: "contain",
+        display: "block",
+      }}
+    />
+  </div>
+</a>
 
                     <div style={{ minWidth: 0 }}>
                       {item.recommended ? (
