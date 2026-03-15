@@ -395,7 +395,8 @@ export default function PickersPage() {
             <PickersClient />
           </div>
         </section>
-        <section style={panelStyle}>
+ 
+          <section style={panelStyle}>
           <div
             style={{
               display: "inline-flex",
@@ -411,7 +412,7 @@ export default function PickersPage() {
               fontSize: 12,
             }}
           >
-            LEARN THE SETUPS & INDICATORS
+            LEARN MORE
           </div>
 
           <h2
@@ -422,7 +423,7 @@ export default function PickersPage() {
               letterSpacing: "-0.03em",
             }}
           >
-            Learn the trading setups and indicators behind these ideas
+            Learn the setups, indicators and scanning methods behind these ideas
           </h2>
 
           <p
@@ -433,9 +434,10 @@ export default function PickersPage() {
               maxWidth: 860,
             }}
           >
-            Start with the Trading Setups hub or explore the Indicators Hub.
-            These pages explain the patterns, momentum shifts and technical
-            clues traders review when analysing stock charts.
+            Start with the Trading Setups Hub, Indicators Hub or Stock
+            Scanners Hub. These pages explain the patterns, momentum shifts,
+            chart signals and screening methods traders review when analysing
+            stock charts.
           </p>
 
           <div style={bundleGridStyle}>
@@ -474,129 +476,26 @@ export default function PickersPage() {
                 used when reviewing stock charts.
               </div>
             </Link>
-          </div>
-        </section>
-
-        <section style={panelStyle}>
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              padding: "7px 12px",
-              borderRadius: 999,
-              background:
-                "linear-gradient(135deg, rgba(168,85,247,0.16), rgba(139,92,246,0.08))",
-              border: "1px solid rgba(168,85,247,0.26)",
-              color: "#f3e8ff",
-              fontWeight: 950,
-              letterSpacing: "0.08em",
-              fontSize: 12,
-            }}
-          >
-            LEARN HOW TO SCAN
-          </div>
-
-          <h2
-            style={{
-              margin: "14px 0 0 0",
-              fontSize: 24,
-              lineHeight: 1.15,
-              letterSpacing: "-0.03em",
-            }}
-          >
-            Learn how traders scan for stock ideas
-          </h2>
-
-          <p
-            style={{
-              margin: "10px 0 0",
-              lineHeight: 1.7,
-              opacity: 0.74,
-              maxWidth: 860,
-            }}
-          >
-            These guides explain how traders search for stock ideas, compare
-            charting tools, review pullbacks, and use screeners to narrow down
-            charts worth a closer look.
-          </p>
-
-          <div style={bundleGridStyle}>
-            <Link href="/how-to-scan-stocks" style={compactLinkStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>
-                How to Scan Stocks
-              </div>
-              <div style={smallLinkTextStyle}>
-                Learn the basic process traders use to scan the market for
-                ideas.
-              </div>
-            </Link>
-
-            <Link href="/best-free-stock-screener" style={compactLinkStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>
-                Best Free Stock Screener
-              </div>
-              <div style={smallLinkTextStyle}>
-                See what traders usually want from stock scanning tools.
-              </div>
-            </Link>
-
-            <Link href="/stock-screener-for-breakouts" style={compactLinkStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>
-                Stock Screener for Breakouts
-              </div>
-              <div style={smallLinkTextStyle}>
-                Learn how traders scan for stocks approaching breakout levels.
-              </div>
-            </Link>
 
             <Link
-              href="/stock-screener-for-oversold-stocks"
-              style={compactLinkStyle}
+              href="/stock-scanners"
+              style={{
+                ...compactLinkStyle,
+                border: "1px solid rgba(168,85,247,0.20)",
+                background:
+                  "linear-gradient(135deg, rgba(168,85,247,0.08), rgba(139,92,246,0.04))",
+              }}
             >
               <div style={{ fontSize: 17, fontWeight: 950 }}>
-                Stock Screener for Oversold Stocks
+                Stock Scanners Hub
               </div>
               <div style={smallLinkTextStyle}>
-                Understand how traders search for oversold and rebound
-                candidates.
-              </div>
-            </Link>
-
-            <Link
-              href="/best-indicators-for-swing-trading"
-              style={compactLinkStyle}
-            >
-              <div style={{ fontSize: 17, fontWeight: 950 }}>
-                Best Indicators for Swing Trading
-              </div>
-              <div style={smallLinkTextStyle}>
-                Explore common indicators traders use when reviewing swing
-                setups.
-              </div>
-            </Link>
-
-            <Link href="/best-charting-platforms" style={compactLinkStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>
-                Best Charting Platforms
-              </div>
-              <div style={smallLinkTextStyle}>
-                Compare the kinds of charting tools traders use to analyse
-                stocks.
-              </div>
-            </Link>
-
-            <Link href="/how-to-analyse-stocks" style={compactLinkStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>
-                How to Analyse Stocks
-              </div>
-              <div style={smallLinkTextStyle}>
-                Read the broader guide to charts, indicators and stock
-                analysis.
+                Learn how traders scan for stock ideas, compare tools and turn
+                market noise into clearer charts to review.
               </div>
             </Link>
           </div>
         </section>
-  
      
         <section
           style={{
