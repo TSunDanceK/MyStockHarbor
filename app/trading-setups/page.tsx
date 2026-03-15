@@ -1,6 +1,73 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import PickersClient from "./PickersClient";
 
-export default function TradingSetupsPage() {
+export const metadata: Metadata = {
+  title:
+    "Stock Screener Ideas: Oversold, Overbought, Divergence, Dip Buys & Breakouts | MyStockHarbor",
+  description:
+    "Find stock ideas using signal-based filters including oversold setups, overbought setups, divergence scans, buy-the-dip candidates and breakout stocks. Open any symbol directly in the MyStockHarbor dashboard.",
+  alternates: {
+    canonical: "/pickers",
+  },
+  openGraph: {
+    title: "Stock Screener Ideas | MyStockHarbor",
+    description:
+      "Browse stock ideas by setup: oversold, overbought, divergence, dip buys and breakouts.",
+    url: "/pickers",
+    siteName: "MyStockHarbor",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Stock Screener Ideas | MyStockHarbor",
+    description:
+      "Browse stock ideas by setup: oversold, overbought, divergence, dip buys and breakouts.",
+  },
+};
+
+const panelStyle: React.CSSProperties = {
+  marginTop: 22,
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 20,
+  padding: 20,
+  background: "linear-gradient(180deg, rgba(9,13,20,0.92), rgba(7,10,16,0.96))",
+  maxWidth: 980,
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+};
+
+const bundleGridStyle: React.CSSProperties = {
+  marginTop: 16,
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 12,
+};
+
+const compactLinkStyle: React.CSSProperties = {
+  display: "block",
+  textDecoration: "none",
+  color: "#f1f5f9",
+  borderRadius: 14,
+  padding: 14,
+  border: "1px solid rgba(255,255,255,0.10)",
+  background: "rgba(255,255,255,0.03)",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+  transition: "transform 120ms ease, filter 120ms ease, background 120ms ease",
+};
+
+const supportCardStyle: React.CSSProperties = {
+  border: "1px solid rgba(255,255,255,0.10)",
+  borderRadius: 16,
+  padding: 16,
+  background: "rgba(255,255,255,0.03)",
+  textDecoration: "none",
+  color: "#f1f5f9",
+  display: "block",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+  transition: "transform 120ms ease, filter 120ms ease, background 120ms ease",
+};
+
+export default function PickersPage() {
   return (
     <main
       style={{
@@ -23,71 +90,261 @@ export default function TradingSetupsPage() {
             }}
           >
             <Link href="/" style={topNavBtnStyle("dashboard")}>
-              <span
-                aria-hidden="true"
-                style={{
-                  fontSize: 15,
-                  lineHeight: 1,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
+              <span aria-hidden="true" style={topNavIconWrapStyle}>
                 {topNavIcon("dashboard")}
               </span>
               <span>Dashboard</span>
             </Link>
 
             <Link href="/platforms" style={topNavBtnStyle("platforms")}>
-              <span
-                aria-hidden="true"
-                style={{
-                  fontSize: 15,
-                  lineHeight: 1,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
+              <span aria-hidden="true" style={topNavIconWrapStyle}>
                 {topNavIcon("platforms")}
               </span>
               <span>Platforms</span>
             </Link>
 
-            <Link href="/pickers" style={topNavBtnStyle("pickers")}>
-              <span
-                aria-hidden="true"
-                style={{
-                  fontSize: 15,
-                  lineHeight: 1,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {topNavIcon("pickers")}
+            <Link href="/learn" style={topNavBtnStyle("learn")}>
+              <span aria-hidden="true" style={topNavIconWrapStyle}>
+                {topNavIcon("learn")}
               </span>
-              <span>Stock Pickers</span>
+              <span>Learn</span>
             </Link>
 
             <Link href="/utilities" style={topNavBtnStyle("calculators")}>
-              <span
-                aria-hidden="true"
-                style={{
-                  fontSize: 15,
-                  lineHeight: 1,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
+              <span aria-hidden="true" style={topNavIconWrapStyle}>
                 {topNavIcon("calculators")}
               </span>
               <span>Calculators</span>
             </Link>
           </div>
 
-          <div style={{ maxWidth: 760 }}>
+          <div
+            className="heroGrid"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1.35fr) minmax(300px, 0.95fr)",
+              gap: 16,
+              alignItems: "stretch",
+            }}
+          >
+            <section
+              style={{
+                border: "1px solid rgba(59,130,246,0.20)",
+                borderRadius: 22,
+                padding: 18,
+                background:
+                  "linear-gradient(135deg, rgba(10,16,32,0.98), rgba(7,11,22,0.98))",
+                boxShadow:
+                  "inset 0 1px 0 rgba(255,255,255,0.05), 0 14px 34px rgba(0,0,0,0.30)",
+              }}
+            >
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(59,130,246,0.32)",
+                  background:
+                    "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(37,99,235,0.08))",
+                  fontSize: 12,
+                  fontWeight: 950,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "#dbeafe",
+                }}
+              >
+                STOCK PICKERS
+              </div>
+
+              <h1
+                className="pickersHeroTitle"
+                style={{
+                  margin: "14px 0 0 0",
+                  fontSize: 44,
+                  lineHeight: 1.04,
+                  letterSpacing: "-0.05em",
+                }}
+              >
+                Find Your Next Stock
+              </h1>
+
+              <p
+                className="pickersHeroText"
+                style={{
+                  marginTop: 12,
+                  fontSize: 17,
+                  lineHeight: 1.65,
+                  opacity: 0.84,
+                  maxWidth: 700,
+                }}
+              >
+                Browse screened stock ideas across oversold rebounds, extended
+                strength, divergence, dip-buy setups and breakout candidates,
+                then open any symbol in the dashboard to review the chart in
+                more detail.
+              </p>
+
+              <div
+                style={{
+                  marginTop: 18,
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                  gap: 10,
+                  maxWidth: 560,
+                }}
+              >
+                <MiniStat
+                  label="Results"
+                  value="Screened Market Setups"
+                  tint="green"
+                />
+                <MiniStat
+                  label="Use Case"
+                  value="Find Trade Ideas Faster"
+                  tint="amber"
+                />
+              </div>
+
+              <div
+                style={{
+                  marginTop: 18,
+                  borderRadius: 18,
+                  border: "1px dashed rgba(59,130,246,0.24)",
+                  background:
+                    "linear-gradient(180deg, rgba(59,130,246,0.05), rgba(15,23,42,0.10))",
+                  padding: "18px 16px",
+                  display: "grid",
+                  placeItems: "center",
+                  textAlign: "center",
+                  minHeight: 96,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 900,
+                    letterSpacing: "0.06em",
+                    color: "rgba(219,234,254,0.88)",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Screened stocks below
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: 24,
+                    lineHeight: 1,
+                    color: "rgba(96,165,250,0.9)",
+                    letterSpacing: "0.25em",
+                  }}
+                >
+                  ↓ ↓ ↓
+                </div>
+              </div>
+            </section>
+
+            <section
+              style={{
+                border: "1px solid rgba(59,130,246,0.20)",
+                borderRadius: 22,
+                padding: 18,
+                background:
+                  "linear-gradient(180deg, rgba(8,14,28,0.98), rgba(6,10,18,0.98))",
+                boxShadow:
+                  "inset 0 1px 0 rgba(255,255,255,0.05), 0 14px 34px rgba(0,0,0,0.28)",
+              }}
+            >
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  padding: "7px 12px",
+                  borderRadius: 999,
+                  background:
+                    "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
+                  border: "1px solid rgba(59,130,246,0.32)",
+                  color: "#dbeafe",
+                  fontWeight: 950,
+                  letterSpacing: "0.08em",
+                  fontSize: 12,
+                }}
+              >
+                REAL SCREENED SETUPS
+              </div>
+
+              <div
+                style={{
+                  marginTop: 14,
+                  display: "grid",
+                  gap: 10,
+                }}
+              >
+                <SignalCard
+                  title="Oversold Rebound Signals"
+                  text="Downside stretch with possible rebound potential."
+                  tint="green"
+                />
+                <SignalCard
+                  title="Extended Strength Signals"
+                  text="Extended upside moves worth reviewing closely."
+                  tint="red"
+                />
+                <SignalCard
+                  title="Divergence Signals"
+                  text="Momentum and price may be starting to disagree."
+                  tint="amber"
+                />
+                <SignalCard
+                  title="Buy-the-Dip Setups"
+                  text="Pullback setups that may still fit a stronger trend."
+                  tint="teal"
+                />
+                <SignalCard
+                  title="Breakout Setups"
+                  text="Strength, resistance pressure or momentum expansion."
+                  tint="blue"
+                />
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <section
+          style={{
+            marginTop: 24,
+            maxWidth: 1040,
+            borderRadius: 22,
+            border: "1px solid rgba(59,130,246,0.35)",
+            background:
+              "linear-gradient(180deg, rgba(6,12,24,1), rgba(4,8,16,1))",
+            boxShadow:
+              "0 0 0 1px rgba(59,130,246,0.15), 0 24px 60px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06)",
+            overflow: "hidden",
+            position: "relative",
+          }}
+        >
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              pointerEvents: "none",
+              borderRadius: 22,
+              boxShadow: "0 0 40px rgba(59,130,246,0.18)",
+            }}
+          />
+
+          <div
+            style={{
+              padding: 18,
+              borderBottom: "1px solid rgba(255,255,255,0.08)",
+              background:
+                "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(15,23,42,0.28))",
+            }}
+          >
             <div
               style={{
                 display: "inline-flex",
@@ -95,141 +352,50 @@ export default function TradingSetupsPage() {
                 padding: "7px 12px",
                 borderRadius: 999,
                 background:
-                  "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.12))",
-                border: "1px solid rgba(239,68,68,0.34)",
-                color: "#fee2e2",
+                  "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
+                border: "1px solid rgba(59,130,246,0.32)",
+                color: "#dbeafe",
                 fontWeight: 950,
                 letterSpacing: "0.08em",
                 fontSize: 12,
               }}
             >
-              TRADING SETUPS
+              DATA-DRIVEN SCREENED RESULTS
             </div>
 
-            <h1
+            <h2
               style={{
                 margin: "14px 0 0 0",
-                fontSize: 42,
-                lineHeight: 1.08,
-                letterSpacing: "-0.6px",
+                fontSize: 28,
+                lineHeight: 1.12,
+                letterSpacing: "-0.03em",
               }}
             >
-              Trading Setups
-            </h1>
+              Screened setups across the market
+            </h2>
 
             <p
               style={{
-                margin: "12px 0 0 0",
-                opacity: 0.8,
-                lineHeight: 1.6,
-                fontSize: 17,
+                margin: "10px 0 0 0",
+                lineHeight: 1.65,
+                opacity: 0.82,
+                maxWidth: 820,
+                fontSize: 15,
               }}
             >
-              Trading setups help traders spot repeatable opportunities in the stock
-              market. Explore common setups like breakouts, oversold reversals, buy the
-              dip ideas and bullish or bearish divergence so you can recognise what the
-              chart is trying to tell you.
+              These screened results are designed to help you find charts worth
+              reviewing. They are starting points for analysis, not buy or sell
+              recommendations. Click any symbol to open the full chart in the
+              dashboard.
             </p>
           </div>
-        </div>
 
-        <section
-          style={{
-            marginTop: 24,
-            borderRadius: 18,
-            border: "1px solid rgba(59,130,246,0.24)",
-            background:
-              "linear-gradient(135deg, rgba(11,27,56,0.92), rgba(8,30,32,0.88))",
-            padding: 20,
-            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-          }}
-        >
-          <div style={{ fontWeight: 950, fontSize: 24 }}>How to use this page</div>
-
-          <div
-            style={{
-              marginTop: 8,
-              opacity: 0.86,
-              lineHeight: 1.6,
-              maxWidth: 860,
-            }}
-          >
-            Start with the setup you see most often on charts. Learn the basic idea,
-            then compare it against live stocks using the Dashboard or Stock Pickers.
-            The goal is not to memorise everything at once, but to build pattern
-            recognition through repetition.
+          <div style={{ padding: 18 }}>
+            <PickersClient />
           </div>
         </section>
 
-        <div
-          style={{
-            marginTop: 24,
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            gap: 14,
-          }}
-        >
-          <SetupCard
-            href="/breakout-stocks"
-            title="Breakout Stocks"
-            desc="Stocks pushing above resistance with strong momentum and price expansion."
-            tint="red"
-          />
-
-          <SetupCard
-            href="/oversold-stocks"
-            title="Oversold Stocks"
-            desc="Stocks that may be stretched to the downside after heavy selling."
-            tint="blue"
-          />
-
-          <SetupCard
-            href="/overbought-stocks"
-            title="Overbought Stocks"
-            desc="Stocks that may be stretched after strong upside moves and fast rallies."
-            tint="amber"
-          />
-
-          <SetupCard
-            href="/buy-the-dip-stocks"
-            title="Buy The Dip"
-            desc="Pullback opportunities within stronger trends where buyers may step back in."
-            tint="green"
-          />
-
-          <SetupCard
-            href="/stocks-down-from-highs"
-            title="Stocks Down From Highs"
-            desc="Stocks that have pulled back significantly from recent highs and may be worth reviewing."
-            tint="purple"
-          />
-
-          <SetupCard
-            href="/bullish-divergence-stocks"
-            title="Bullish Divergence"
-            desc="When momentum starts improving even while price still looks weak."
-            tint="green"
-          />
-
-          <SetupCard
-            href="/bearish-divergence-stocks"
-            title="Bearish Divergence"
-            desc="When momentum starts weakening during rising prices and trend exhaustion may be building."
-            tint="red"
-          />
-        </div>
-
-        <section
-          style={{
-            marginTop: 24,
-            border: "1px solid rgba(34,197,94,0.22)",
-            borderRadius: 18,
-            padding: 20,
-            background:
-              "linear-gradient(180deg, rgba(8,20,16,0.96), rgba(7,12,11,0.98))",
-            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-          }}
-        >
+        <section style={panelStyle}>
           <div
             style={{
               display: "inline-flex",
@@ -237,88 +403,453 @@ export default function TradingSetupsPage() {
               padding: "7px 12px",
               borderRadius: 999,
               background:
-                "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(16,185,129,0.10))",
-              border: "1px solid rgba(34,197,94,0.34)",
+                "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(37,99,235,0.08))",
+              border: "1px solid rgba(59,130,246,0.26)",
+              color: "#dbeafe",
+              fontWeight: 950,
+              letterSpacing: "0.08em",
+              fontSize: 12,
+            }}
+          >
+            LEARN THE SETUPS
+          </div>
+
+          <h2
+            style={{
+              margin: "14px 0 0 0",
+              fontSize: 24,
+              lineHeight: 1.15,
+              letterSpacing: "-0.03em",
+            }}
+          >
+            Learn the trading setups behind these ideas
+          </h2>
+
+          <p
+            style={{
+              margin: "10px 0 0",
+              lineHeight: 1.7,
+              opacity: 0.74,
+              maxWidth: 860,
+            }}
+          >
+            Start with the main Trading Setups hub, then go deeper into the
+            specific patterns you see in the screened results below. This keeps
+            the Pickers page focused on finding ideas while the setup pages
+            handle the deeper education.
+          </p>
+
+          <div style={bundleGridStyle}>
+            <Link
+              href="/trading-setups"
+              style={{
+                ...compactLinkStyle,
+                border: "1px solid rgba(239,68,68,0.20)",
+                background:
+                  "linear-gradient(135deg, rgba(239,68,68,0.08), rgba(127,29,29,0.04))",
+              }}
+            >
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Trading Setups Hub
+              </div>
+              <div style={smallLinkTextStyle}>
+                Explore the main hub for breakouts, oversold setups, dip buys
+                and divergence ideas.
+              </div>
+            </Link>
+
+            <Link href="/oversold-stocks" style={compactLinkStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Oversold Stocks
+              </div>
+              <div style={smallLinkTextStyle}>
+                Learn how traders review stretched downside conditions and
+                rebound potential.
+              </div>
+            </Link>
+
+            <Link href="/overbought-stocks" style={compactLinkStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Overbought Stocks
+              </div>
+              <div style={smallLinkTextStyle}>
+                Understand when price may be stretched after strong upside
+                momentum.
+              </div>
+            </Link>
+
+            <Link href="/breakout-stocks" style={compactLinkStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Breakout Stocks
+              </div>
+              <div style={smallLinkTextStyle}>
+                See how traders identify stocks pushing through resistance with
+                strength.
+              </div>
+            </Link>
+
+            <Link href="/buy-the-dip-stocks" style={compactLinkStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Buy The Dip Stocks
+              </div>
+              <div style={smallLinkTextStyle}>
+                Review pullback setups that may still fit a stronger trend.
+              </div>
+            </Link>
+
+            <Link href="/bullish-divergence-stocks" style={compactLinkStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Bullish Divergence
+              </div>
+              <div style={smallLinkTextStyle}>
+                Learn how fading downside momentum can hint at reversal risk.
+              </div>
+            </Link>
+
+            <Link href="/bearish-divergence-stocks" style={compactLinkStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Bearish Divergence
+              </div>
+              <div style={smallLinkTextStyle}>
+                Understand when upside momentum may be losing strength.
+              </div>
+            </Link>
+          </div>
+        </section>
+
+        <section style={panelStyle}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "7px 12px",
+              borderRadius: 999,
+              background:
+                "linear-gradient(135deg, rgba(168,85,247,0.16), rgba(139,92,246,0.08))",
+              border: "1px solid rgba(168,85,247,0.26)",
+              color: "#f3e8ff",
+              fontWeight: 950,
+              letterSpacing: "0.08em",
+              fontSize: 12,
+            }}
+          >
+            LEARN HOW TO SCAN
+          </div>
+
+          <h2
+            style={{
+              margin: "14px 0 0 0",
+              fontSize: 24,
+              lineHeight: 1.15,
+              letterSpacing: "-0.03em",
+            }}
+          >
+            Learn how traders scan for stock ideas
+          </h2>
+
+          <p
+            style={{
+              margin: "10px 0 0",
+              lineHeight: 1.7,
+              opacity: 0.74,
+              maxWidth: 860,
+            }}
+          >
+            These guides explain how traders search for stock ideas, compare
+            charting tools, review pullbacks, and use screeners to narrow down
+            charts worth a closer look.
+          </p>
+
+          <div style={bundleGridStyle}>
+            <Link href="/how-to-scan-stocks" style={compactLinkStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                How to Scan Stocks
+              </div>
+              <div style={smallLinkTextStyle}>
+                Learn the basic process traders use to scan the market for
+                ideas.
+              </div>
+            </Link>
+
+            <Link href="/best-free-stock-screener" style={compactLinkStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Best Free Stock Screener
+              </div>
+              <div style={smallLinkTextStyle}>
+                See what traders usually want from stock scanning tools.
+              </div>
+            </Link>
+
+            <Link href="/stock-screener-for-breakouts" style={compactLinkStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Stock Screener for Breakouts
+              </div>
+              <div style={smallLinkTextStyle}>
+                Learn how traders scan for stocks approaching breakout levels.
+              </div>
+            </Link>
+
+            <Link
+              href="/stock-screener-for-oversold-stocks"
+              style={compactLinkStyle}
+            >
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Stock Screener for Oversold Stocks
+              </div>
+              <div style={smallLinkTextStyle}>
+                Understand how traders search for oversold and rebound
+                candidates.
+              </div>
+            </Link>
+
+            <Link
+              href="/best-indicators-for-swing-trading"
+              style={compactLinkStyle}
+            >
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Best Indicators for Swing Trading
+              </div>
+              <div style={smallLinkTextStyle}>
+                Explore common indicators traders use when reviewing swing
+                setups.
+              </div>
+            </Link>
+
+            <Link href="/best-charting-platforms" style={compactLinkStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Best Charting Platforms
+              </div>
+              <div style={smallLinkTextStyle}>
+                Compare the kinds of charting tools traders use to analyse
+                stocks.
+              </div>
+            </Link>
+
+            <Link href="/how-to-analyse-stocks" style={compactLinkStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                How to Analyse Stocks
+              </div>
+              <div style={smallLinkTextStyle}>
+                Read the broader guide to charts, indicators and stock
+                analysis.
+              </div>
+            </Link>
+          </div>
+        </section>
+
+        <section style={panelStyle}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "7px 12px",
+              borderRadius: 999,
+              background:
+                "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(16,185,129,0.08))",
+              border: "1px solid rgba(34,197,94,0.26)",
               color: "#dcfce7",
               fontWeight: 950,
               letterSpacing: "0.08em",
               fontSize: 12,
             }}
           >
-            NEXT STEP
+            UNDERSTAND THE INDICATORS
           </div>
 
-          <h2 style={{ margin: "14px 0 0 0", fontSize: 26, letterSpacing: "-0.4px" }}>
-            Turn these lessons into live chart practice
+          <h2
+            style={{
+              margin: "14px 0 0 0",
+              fontSize: 24,
+              lineHeight: 1.15,
+              letterSpacing: "-0.03em",
+            }}
+          >
+            Understand the indicators behind these signals
           </h2>
 
           <p
             style={{
-              margin: "10px 0 0 0",
-              opacity: 0.82,
-              lineHeight: 1.6,
+              margin: "10px 0 0",
+              lineHeight: 1.7,
+              opacity: 0.74,
               maxWidth: 860,
             }}
           >
-            Once you understand a setup in theory, the next step is seeing it on real
-            stocks. Use the Dashboard to inspect charts and use Stock Pickers to search
-            for ideas that match the setup you are learning.
+            These indicator pages support the signals on this page and help
+            explain why traders pay attention to momentum, overextension and
+            unusual activity when reviewing stock charts.
           </p>
 
-          <div
-            style={{
-              marginTop: 14,
-              display: "flex",
-              gap: 12,
-              flexWrap: "wrap",
-            }}
-          >
-            <Link
-              href="/"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "11px 15px",
-                borderRadius: 12,
-                border: "1px solid rgba(250,204,21,0.42)",
-                background:
-                  "linear-gradient(135deg, rgba(250,204,21,0.22), rgba(202,138,4,0.12))",
-                color: "#fefce8",
-                textDecoration: "none",
-                fontWeight: 900,
-              }}
-            >
-              Open the Dashboard →
+          <div style={bundleGridStyle}>
+            <Link href="/what-is-rsi-indicator" style={compactLinkStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>Understand RSI</div>
+              <div style={smallLinkTextStyle}>
+                Read how RSI can help identify oversold and overbought zones.
+              </div>
+            </Link>
+
+            <Link href="/what-is-macd-indicator" style={compactLinkStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Learn MACD Divergence
+              </div>
+              <div style={smallLinkTextStyle}>
+                MACD can help confirm momentum shifts, trend strength and
+                divergence.
+              </div>
+            </Link>
+
+            <Link href="/stocks-with-high-rsi" style={compactLinkStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Stocks With High RSI
+              </div>
+              <div style={smallLinkTextStyle}>
+                Learn what high RSI can mean when momentum becomes extended.
+              </div>
+            </Link>
+
+            <Link href="/stocks-with-low-rsi" style={compactLinkStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Stocks With Low RSI
+              </div>
+              <div style={smallLinkTextStyle}>
+                Explore how traders use low RSI readings to review stretched
+                downside moves.
+              </div>
+            </Link>
+
+            <Link href="/stocks-with-unusual-volume" style={compactLinkStyle}>
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Stocks With Unusual Volume
+              </div>
+              <div style={smallLinkTextStyle}>
+                See why unusual volume can matter when reviewing breakouts and
+                momentum.
+              </div>
             </Link>
 
             <Link
-              href="/pickers"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "11px 15px",
-                borderRadius: 12,
-                border: "1px solid rgba(239,68,68,0.38)",
-                background:
-                  "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.10))",
-                color: "#fef2f2",
-                textDecoration: "none",
-                fontWeight: 900,
-              }}
+              href="/stocks-above-200-day-moving-average"
+              style={compactLinkStyle}
             >
-              Explore Stock Pickers →
+              <div style={{ fontSize: 17, fontWeight: 950 }}>
+                Stocks Above 200 Day Moving Average
+              </div>
+              <div style={smallLinkTextStyle}>
+                Understand how traders use the 200-day moving average as a
+                long-term trend filter.
+              </div>
             </Link>
+          </div>
+        </section>
+
+        <section
+          style={{
+            marginTop: 22,
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: 14,
+            maxWidth: 980,
+          }}
+        >
+          <Link href="/" style={supportCardStyle}>
+            <div style={{ fontSize: 18, fontWeight: 950 }}>
+              Open the full dashboard
+            </div>
+            <div style={midCardTextStyle}>
+              Review price structure, overlays and indicators for any symbol you
+              find on this page.
+            </div>
+          </Link>
+
+          <Link href="/learn" style={supportCardStyle}>
+            <div style={{ fontSize: 18, fontWeight: 950 }}>Visit the Learn hub</div>
+            <div style={midCardTextStyle}>
+              Explore the main education hub for chart concepts, setups and
+              beginner-friendly guides.
+            </div>
+          </Link>
+
+          <Link href="/platforms" style={supportCardStyle}>
+            <div style={{ fontSize: 18, fontWeight: 950 }}>
+              Compare trading platforms
+            </div>
+            <div style={midCardTextStyle}>
+              Review charting and broker platform options after narrowing down
+              your ideas.
+            </div>
+          </Link>
+        </section>
+
+        <section style={panelStyle}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "7px 12px",
+              borderRadius: 999,
+              background:
+                "linear-gradient(135deg, rgba(250,204,21,0.16), rgba(202,138,4,0.08))",
+              border: "1px solid rgba(250,204,21,0.26)",
+              color: "#fef3c7",
+              fontWeight: 950,
+              letterSpacing: "0.08em",
+              fontSize: 12,
+            }}
+          >
+            FAQ
+          </div>
+
+          <h2
+            style={{
+              margin: "14px 0 0 0",
+              fontSize: 24,
+              lineHeight: 1.15,
+              letterSpacing: "-0.03em",
+            }}
+          >
+            Frequently asked questions
+          </h2>
+
+          <div style={{ marginTop: 16, display: "grid", gap: 16 }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 17 }}>
+                Is this a stock screener?
+              </h3>
+              <p style={{ margin: "8px 0 0", lineHeight: 1.7, opacity: 0.76 }}>
+                Yes. It works like a stock idea screener built around technical
+                setups such as oversold conditions, divergence, dip-buy setups
+                and breakouts.
+              </p>
+            </div>
+
+            <div>
+              <h3 style={{ margin: 0, fontSize: 17 }}>
+                Are these buy or sell recommendations?
+              </h3>
+              <p style={{ margin: "8px 0 0", lineHeight: 1.7, opacity: 0.76 }}>
+                No. These are idea filters only. They help you narrow down
+                charts to review, but they are not personal financial advice.
+              </p>
+            </div>
+
+            <div>
+              <h3 style={{ margin: 0, fontSize: 17 }}>
+                What should I do after clicking a stock?
+              </h3>
+              <p style={{ margin: "8px 0 0", lineHeight: 1.7, opacity: 0.76 }}>
+                Open it in the dashboard, review the chart structure, check key
+                indicators and confirm whether the setup still makes sense.
+              </p>
+            </div>
           </div>
         </section>
       </div>
 
       <style>{`
         .wrap {
-          max-width: 1000px;
+          max-width: 1100px;
           margin: 0 auto;
-          padding: 24px;
+          padding: 28px 20px 40px;
         }
 
         a:hover {
@@ -326,9 +857,34 @@ export default function TradingSetupsPage() {
           transform: translateY(-1px);
         }
 
-        @media (max-width: 760px) {
+        @media (max-width: 900px) {
           .wrap {
-            padding: 16px !important;
+            padding: 18px 16px 34px !important;
+          }
+        }
+
+        @media (max-width: 860px) {
+          .heroGrid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .pickersHeroTitle {
+            font-size: 34px !important;
+            line-height: 1.06 !important;
+            letter-spacing: -0.04em !important;
+          }
+
+          .pickersHeroText {
+            font-size: 15px !important;
+            line-height: 1.65 !important;
+          }
+        }
+
+        @media (max-width: 420px) {
+          .pickersHeroTitle {
+            font-size: 30px !important;
           }
         }
       `}</style>
@@ -336,81 +892,172 @@ export default function TradingSetupsPage() {
   );
 }
 
-function SetupCard({
-  href,
-  title,
-  desc,
+function MiniStat({
+  label,
+  value,
   tint,
 }: {
-  href: string;
-  title: string;
-  desc: string;
-  tint: "blue" | "green" | "red" | "amber" | "purple";
+  label: string;
+  value: string;
+  tint: "green" | "amber";
 }) {
   const styles =
-    tint === "blue"
-      ? {
-          border: "1px solid rgba(59,130,246,0.24)",
-          background:
-            "linear-gradient(180deg, rgba(10,18,34,0.96), rgba(7,12,24,0.98))",
-        }
-      : tint === "green"
+    tint === "green"
       ? {
           border: "1px solid rgba(34,197,94,0.24)",
           background:
-            "linear-gradient(180deg, rgba(9,18,16,0.96), rgba(7,12,11,0.98))",
-        }
-      : tint === "red"
-      ? {
-          border: "1px solid rgba(239,68,68,0.24)",
-          background:
-            "linear-gradient(180deg, rgba(24,12,12,0.96), rgba(14,7,7,0.98))",
-        }
-      : tint === "amber"
-      ? {
-          border: "1px solid rgba(234,179,8,0.24)",
-          background:
-            "linear-gradient(180deg, rgba(18,16,10,0.96), rgba(12,10,7,0.98))",
+            "linear-gradient(180deg, rgba(9,18,16,0.94), rgba(7,12,11,0.98))",
+          labelColor: "#bbf7d0",
         }
       : {
-          border: "1px solid rgba(168,85,247,0.24)",
+          border: "1px solid rgba(234,179,8,0.24)",
           background:
-            "linear-gradient(180deg, rgba(14,11,24,0.96), rgba(9,8,16,0.98))",
+            "linear-gradient(180deg, rgba(18,16,10,0.94), rgba(12,10,7,0.98))",
+          labelColor: "#fde68a",
         };
 
   return (
-    <Link
-      href={href}
+    <div
       style={{
-        ...styles,
+        border: styles.border,
+        background: styles.background,
         borderRadius: 16,
-        padding: 16,
-        textDecoration: "none",
-        color: "#f1f5f9",
-        display: "block",
+        padding: 14,
         boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-        transition:
-          "transform 120ms ease, filter 120ms ease, border-color 120ms ease, background 120ms ease",
       }}
     >
-      <div style={{ fontWeight: 900, fontSize: 17 }}>{title}</div>
-
       <div
         style={{
-          marginTop: 7,
-          fontSize: 13,
-          opacity: 0.78,
-          lineHeight: 1.55,
+          fontSize: 12,
+          fontWeight: 900,
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+          color: styles.labelColor,
         }}
       >
-        {desc}
+        {label}
       </div>
-    </Link>
+      <div
+        style={{
+          marginTop: 6,
+          fontSize: 16,
+          fontWeight: 900,
+          lineHeight: 1.35,
+        }}
+      >
+        {value}
+      </div>
+    </div>
   );
 }
 
+function SignalCard({
+  title,
+  text,
+  tint,
+}: {
+  title: string;
+  text: string;
+  tint: "green" | "red" | "amber" | "teal" | "blue";
+}) {
+  const styles =
+    tint === "green"
+      ? {
+          border: "1px solid rgba(34,197,94,0.35)",
+          background:
+            "linear-gradient(180deg, rgba(6,78,59,0.30), rgba(6,46,33,0.48))",
+          titleColor: "#ecfdf5",
+          textColor: "rgba(236,253,245,0.84)",
+        }
+      : tint === "red"
+      ? {
+          border: "1px solid rgba(239,68,68,0.35)",
+          background:
+            "linear-gradient(180deg, rgba(127,29,29,0.28), rgba(69,10,10,0.48))",
+          titleColor: "#fef2f2",
+          textColor: "rgba(254,242,242,0.84)",
+        }
+      : tint === "amber"
+      ? {
+          border: "1px solid rgba(234,179,8,0.34)",
+          background:
+            "linear-gradient(180deg, rgba(113,63,18,0.28), rgba(66,32,6,0.46))",
+          titleColor: "#fefce8",
+          textColor: "rgba(254,252,232,0.84)",
+        }
+      : tint === "teal"
+      ? {
+          border: "1px solid rgba(20,184,166,0.34)",
+          background:
+            "linear-gradient(180deg, rgba(17,94,89,0.28), rgba(4,47,46,0.46))",
+          titleColor: "#ecfeff",
+          textColor: "rgba(236,254,255,0.84)",
+        }
+      : {
+          border: "1px solid rgba(59,130,246,0.35)",
+          background:
+            "linear-gradient(180deg, rgba(30,64,175,0.28), rgba(17,37,84,0.48))",
+          titleColor: "#eff6ff",
+          textColor: "rgba(239,246,255,0.84)",
+        };
+
+  return (
+    <div
+      style={{
+        border: styles.border,
+        background: styles.background,
+        borderRadius: 16,
+        padding: "14px 16px",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+      }}
+    >
+      <div
+        style={{
+          fontWeight: 900,
+          fontSize: 15,
+          color: styles.titleColor,
+        }}
+      >
+        {title}
+      </div>
+      <div
+        style={{
+          marginTop: 6,
+          fontSize: 13,
+          lineHeight: 1.55,
+          color: styles.textColor,
+        }}
+      >
+        {text}
+      </div>
+    </div>
+  );
+}
+
+const smallLinkTextStyle: React.CSSProperties = {
+  marginTop: 8,
+  fontSize: 13,
+  opacity: 0.72,
+  lineHeight: 1.6,
+};
+
+const midCardTextStyle: React.CSSProperties = {
+  marginTop: 8,
+  fontSize: 14,
+  opacity: 0.74,
+  lineHeight: 1.6,
+};
+
+const topNavIconWrapStyle: React.CSSProperties = {
+  fontSize: 15,
+  lineHeight: 1,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
 function topNavBtnStyle(
-  type: "dashboard" | "platforms" | "pickers" | "calculators"
+  type: "dashboard" | "platforms" | "learn" | "calculators"
 ): React.CSSProperties {
   if (type === "dashboard") {
     return {
@@ -422,7 +1069,8 @@ function topNavBtnStyle(
       padding: "9px 13px",
       borderRadius: 14,
       border: "1px solid rgba(250,204,21,0.45)",
-      background: "linear-gradient(135deg, rgba(250,204,21,0.20), rgba(202,138,4,0.10))",
+      background:
+        "linear-gradient(135deg, rgba(250,204,21,0.20), rgba(202,138,4,0.10))",
       color: "#fefce8",
       textDecoration: "none",
       fontWeight: 900,
@@ -444,7 +1092,8 @@ function topNavBtnStyle(
       padding: "9px 13px",
       borderRadius: 14,
       border: "1px solid rgba(34,197,94,0.45)",
-      background: "linear-gradient(135deg, rgba(34,197,94,0.20), rgba(16,185,129,0.10))",
+      background:
+        "linear-gradient(135deg, rgba(34,197,94,0.20), rgba(16,185,129,0.10))",
       color: "#f0fdf4",
       textDecoration: "none",
       fontWeight: 900,
@@ -456,7 +1105,7 @@ function topNavBtnStyle(
     };
   }
 
-  if (type === "pickers") {
+  if (type === "calculators") {
     return {
       display: "inline-flex",
       alignItems: "center",
@@ -465,9 +1114,10 @@ function topNavBtnStyle(
       minHeight: 42,
       padding: "9px 13px",
       borderRadius: 14,
-      border: "1px solid rgba(239,68,68,0.45)",
-      background: "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.10))",
-      color: "#fef2f2",
+      border: "1px solid rgba(168,85,247,0.45)",
+      background:
+        "linear-gradient(135deg, rgba(168,85,247,0.20), rgba(139,92,246,0.10))",
+      color: "#faf5ff",
       textDecoration: "none",
       fontWeight: 900,
       fontSize: 14,
@@ -486,9 +1136,10 @@ function topNavBtnStyle(
     minHeight: 42,
     padding: "9px 13px",
     borderRadius: 14,
-    border: "1px solid rgba(168,85,247,0.45)",
-    background: "linear-gradient(135deg, rgba(168,85,247,0.20), rgba(139,92,246,0.10))",
-    color: "#faf5ff",
+    border: "1px solid rgba(59,130,246,0.45)",
+    background:
+      "linear-gradient(135deg, rgba(59,130,246,0.20), rgba(37,99,235,0.10))",
+    color: "#eff6ff",
     textDecoration: "none",
     fontWeight: 900,
     fontSize: 14,
@@ -499,9 +1150,9 @@ function topNavBtnStyle(
   };
 }
 
-function topNavIcon(type: "dashboard" | "platforms" | "pickers" | "calculators") {
+function topNavIcon(type: "dashboard" | "platforms" | "learn" | "calculators") {
   if (type === "dashboard") return "📈";
   if (type === "platforms") return "🏦";
-  if (type === "pickers") return "📊";
-  return "🧮";
+  if (type === "calculators") return "🧮";
+  return "📘";
 }
