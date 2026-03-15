@@ -350,8 +350,8 @@ function HelpTip(props: { text: string; isDark: boolean }) {
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
-        width: 16,
-        height: 16,
+        width: 18,
+        height: 18,
         borderRadius: "50%",
         background: props.isDark ? "rgba(255,255,255,0.15)" : "rgba(11,18,32,0.12)",
         color: props.isDark ? "#fff" : "#0b1220",
@@ -360,6 +360,7 @@ function HelpTip(props: { text: string; isDark: boolean }) {
         cursor: "pointer",
         marginLeft: 6,
         flex: "0 0 auto",
+        zIndex: 6,
       }}
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
@@ -370,12 +371,14 @@ function HelpTip(props: { text: string; isDark: boolean }) {
         <div
           style={{
             position: "absolute",
-            bottom: 22,
-            left: "50%",
-            transform: "translateX(-50%)",
-            width: 240,
-            padding: 10,
-            borderRadius: 10,
+            top: "calc(100% + 10px)",
+            right: 0,
+            left: "auto",
+            transform: "none",
+            width: 260,
+            maxWidth: "min(260px, calc(100vw - 32px))",
+            padding: 12,
+            borderRadius: 12,
             backgroundColor: props.isDark ? "#0f172a" : "#ffffff",
             border: props.isDark
               ? "1px solid rgba(255,255,255,0.14)"
@@ -384,9 +387,10 @@ function HelpTip(props: { text: string; isDark: boolean }) {
             fontSize: 12,
             lineHeight: 1.5,
             fontWeight: 600,
-            zIndex: 50,
-            boxShadow: "0 10px 24px rgba(0,0,0,0.18)",
+            zIndex: 80,
+            boxShadow: "0 10px 24px rgba(0,0,0,0.28)",
             pointerEvents: "none",
+            whiteSpace: "normal",
           }}
         >
           {props.text}
@@ -1479,6 +1483,85 @@ function signalDotColor(label: string) {
   if (label.includes("⚡")) return COLORS.isDark ? "#fb923c" : "#ea580c";
   return COLORS.isDark ? "#eab308" : "#ca8a04";
 }
+  function indicatorLearnHref(indicatorName: string) {
+  if (indicatorName === "MA50") return "/learn/moving-averages";
+  if (indicatorName === "MA200") return "/learn/moving-averages";
+  if (indicatorName === "EMA20") return "/learn/moving-averages";
+  if (indicatorName === "VWAP") return "/learn/vwap";
+  if (indicatorName === "Bollinger(20,2)") return "/learn/bollinger-bands";
+  if (indicatorName === "RSI(14)") return "/learn/rsi";
+  if (indicatorName === "MACD(12,26,9)") return "/learn/macd";
+  if (indicatorName === "Stochastic(14,3)") return "/learn/stochastic";
+  if (indicatorName === "ATR(14)") return "/learn/atr";
+  if (indicatorName === "Volume") return "/learn/volume";
+  return "/learn";
+}
+
+function indicatorHelpText(indicatorName: string) {
+  if (indicatorName === "MA50") {
+    return "MA50 shows the medium-term trend and helps spot whether price is trading above or below that trend.";
+  }
+  if (indicatorName === "MA200") {
+    return "MA200 shows the long-term trend and helps judge whether a stock is in a stronger or weaker structure.";
+  }
+  if (indicatorName === "EMA20") {
+    return "EMA20 is a faster moving average used to read short-term trend and pullbacks.";
+  }
+  if (indicatorName === "VWAP") {
+    return "VWAP helps show whether price is stretched away from a fairer average trading level.";
+  }
+  if (indicatorName === "Bollinger(20,2)") {
+    return "Bollinger Bands help show when price is near its normal range or stretching to extremes.";
+  }
+  if (indicatorName === "RSI(14)") {
+    return "RSI measures momentum and highlights potential overbought or oversold conditions.";
+  }
+  if (indicatorName === "MACD(12,26,9)") {
+    return "MACD helps read momentum direction and whether it is strengthening or weakening.";
+  }
+  if (indicatorName === "Stochastic(14,3)") {
+    return "Stochastic is a fast momentum indicator used to identify short-term stretch.";
+  }
+  if (indicatorName === "ATR(14)") {
+    return "ATR measures volatility and helps judge how large price movements are.";
+  }
+  if (indicatorName === "Volume") {
+    return "Volume shows how much participation is behind a price move.";
+  }
+
+  return "This indicator helps interpret trend, momentum, volatility, or stretch conditions.";
+}
+
+function BreakdownHelpButton(props: { indicator: Overlay }) {
+  const isOverview = props.indicator === "None";
+
+  const helpText = isOverview
+    ? "Breakdown shows the main dashboard indicators including trend, momentum, stretch, volatility and divergence clues."
+    : indicatorHelpText(props.indicator);
+
+  const learnHref = isOverview
+    ? "/learn"
+    : indicatorLearnHref(props.indicator);
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <HelpTip text={helpText} isDark={COLORS.isDark} />
+
+      <Link
+        href={learnHref}
+        style={{
+          color: COLORS.isDark ? "#93c5fd" : "#2563eb",
+          textDecoration: "none",
+          fontWeight: 800,
+          fontSize: 12,
+          whiteSpace: "nowrap",
+        }}
+      >
+        Learn more →
+      </Link>
+    </div>
+  );
+}
 
 const currentIndicatorName = prettyIndicatorName(indicator);
 
@@ -1890,6 +1973,7 @@ function SectionCard(props: {
   children: React.ReactNode;
   style?: React.CSSProperties;
   bodyStyle?: React.CSSProperties;
+  allowOverflow?: boolean;
 }) {
   return (
     <section
@@ -1899,7 +1983,7 @@ function SectionCard(props: {
         background: COLORS.cardBg,
         color: COLORS.cardFg,
         boxShadow: COLORS.isDark ? "0 14px 34px rgba(0,0,0,0.28)" : "0 14px 34px rgba(0,0,0,0.08)",
-        overflow: "hidden",
+        overflow: props.allowOverflow ? "visible" : "hidden",
         minWidth: 0,
         ...props.style,
       }}
@@ -2044,7 +2128,7 @@ function ChartToolbar() {
 function OverviewPanel() {
   if (!trendScore || !stretchScore) {
     return (
-      <SectionCard title={`${symbol} Overview`}>
+      <SectionCard title={`${symbol} Overview`} allowOverflow>
         <div style={{ opacity: 0.75 }}>Overview unavailable.</div>
       </SectionCard>
     );
@@ -2321,7 +2405,11 @@ function BreakdownPanel() {
     }
 
     return (
-      <SectionCard title="Indicator Snapshot">
+      <SectionCard
+        title="Indicator Snapshot"
+        right={<BreakdownHelpButton indicator={indicator} />}
+        allowOverflow
+      >
         <div style={{ display: "grid", gap: 12 }}>
           {focusedRows.length ? (
             focusedRows.map((row) => (
@@ -2344,13 +2432,43 @@ function BreakdownPanel() {
           ) : (
             <div style={{ opacity: 0.75 }}>No additional snapshot available.</div>
           )}
+
+          <button
+            type="button"
+            onClick={() => {
+              setIndicator("None");
+              setWindowOffset(0);
+            }}
+            style={{
+              marginTop: 4,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "9px 12px",
+              borderRadius: 12,
+              border: `1px solid ${COLORS.controlBorder}`,
+              background: COLORS.controlBg,
+              color: COLORS.controlFg,
+              fontWeight: 900,
+              fontSize: 13,
+              cursor: "pointer",
+              width: "fit-content",
+            }}
+          >
+            ← Back to Overview
+          </button>
         </div>
       </SectionCard>
     );
   }
 
   return (
-    <SectionCard title="Breakdown">
+  return (
+    <SectionCard
+      title="Breakdown"
+      right={<BreakdownHelpButton indicator="None" />}
+      allowOverflow
+    >
       <div className="msh-breakdown-grid">
         {rows.map((item) => (
           <button
