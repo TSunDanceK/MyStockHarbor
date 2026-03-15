@@ -506,28 +506,156 @@ export default function PickersPage() {
             maxWidth: 980,
           }}
         >
-          <Link href="/" style={supportCardStyle}>
-            <div style={{ fontSize: 18, fontWeight: 950 }}>
-              Open the full dashboard
+          <Link
+            href="/"
+            style={{
+              ...supportCardStyle,
+              border: "1px solid rgba(250,204,21,0.22)",
+              background:
+                "linear-gradient(180deg, rgba(24,20,8,0.92), rgba(14,11,5,0.96))",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+              }}
+            >
+              <span
+                aria-hidden="true"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 28,
+                  height: 28,
+                  borderRadius: 10,
+                  border: "1px solid rgba(250,204,21,0.30)",
+                  background:
+                    "linear-gradient(135deg, rgba(250,204,21,0.18), rgba(202,138,4,0.08))",
+                  fontSize: 14,
+                  flex: "0 0 auto",
+                }}
+              >
+                📈
+              </span>
+
+              <div
+                style={{
+                  fontSize: 18,
+                  fontWeight: 950,
+                  color: "#fefce8",
+                }}
+              >
+                Open the full dashboard
+              </div>
             </div>
+
             <div style={midCardTextStyle}>
               Review price structure, overlays and indicators for any symbol you
               find on this page.
             </div>
           </Link>
 
-          <Link href="/learn" style={supportCardStyle}>
-            <div style={{ fontSize: 18, fontWeight: 950 }}>Visit the Learn hub</div>
+          <Link
+            href="/learn"
+            style={{
+              ...supportCardStyle,
+              border: "1px solid rgba(59,130,246,0.22)",
+              background:
+                "linear-gradient(180deg, rgba(8,16,30,0.92), rgba(6,10,20,0.96))",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+              }}
+            >
+              <span
+                aria-hidden="true"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 28,
+                  height: 28,
+                  borderRadius: 10,
+                  border: "1px solid rgba(59,130,246,0.30)",
+                  background:
+                    "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.08))",
+                  fontSize: 14,
+                  flex: "0 0 auto",
+                }}
+              >
+                📘
+              </span>
+
+              <div
+                style={{
+                  fontSize: 18,
+                  fontWeight: 950,
+                  color: "#eff6ff",
+                }}
+              >
+                Visit the Learn hub
+              </div>
+            </div>
+
             <div style={midCardTextStyle}>
               Explore the main education hub for chart concepts, setups and
               beginner-friendly guides.
             </div>
           </Link>
 
-          <Link href="/platforms" style={supportCardStyle}>
-            <div style={{ fontSize: 18, fontWeight: 950 }}>
-              Compare trading platforms
+          <Link
+            href="/platforms"
+            style={{
+              ...supportCardStyle,
+              border: "1px solid rgba(34,197,94,0.22)",
+              background:
+                "linear-gradient(180deg, rgba(8,20,16,0.92), rgba(6,12,10,0.96))",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+              }}
+            >
+              <span
+                aria-hidden="true"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 28,
+                  height: 28,
+                  borderRadius: 10,
+                  border: "1px solid rgba(34,197,94,0.30)",
+                  background:
+                    "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(16,185,129,0.08))",
+                  fontSize: 14,
+                  flex: "0 0 auto",
+                }}
+              >
+                🏦
+              </span>
+
+              <div
+                style={{
+                  fontSize: 18,
+                  fontWeight: 950,
+                  color: "#f0fdf4",
+                }}
+              >
+                Compare trading platforms
+              </div>
             </div>
+
             <div style={midCardTextStyle}>
               Review charting and broker platform options after narrowing down
               your ideas.
