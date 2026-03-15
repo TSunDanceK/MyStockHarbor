@@ -2,7 +2,7 @@ import { permanentRedirect } from "next/navigation";
 import { NextRequest } from "next/server";
 
 const affiliateLinks: Record<string, string> = {
-  tradingview: "https://www.tradingview.com/partner-program/",
+  tradingview: "https://www.tradingview.com/?aff_id=164495",
   trading212:
     "https://helpcentre.trading212.com/hc/en-us/articles/360008095077-How-to-become-a-Trading-212-Affiliate",
   etoro: "https://www.etoro.com/partners/",
