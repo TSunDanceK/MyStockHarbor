@@ -58,7 +58,9 @@ function HelpTip({ text }: { text: string }) {
   );
 }
 
-function topNavBtnStyle(type: "learn" | "pickers" | "dashboard"): React.CSSProperties {
+function topNavBtnStyle(
+  type: "learn" | "pickers" | "dashboard" | "platforms"
+): React.CSSProperties {
 
   if (type === "dashboard") {
     return {
@@ -101,6 +103,27 @@ function topNavBtnStyle(type: "learn" | "pickers" | "dashboard"): React.CSSPrope
       transition: "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
     };
   }
+  
+    if (type === "platforms") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      minHeight: 42,
+      padding: "9px 13px",
+      borderRadius: 14,
+      border: "1px solid rgba(34,197,94,0.45)",
+      background: "linear-gradient(135deg, rgba(34,197,94,0.20), rgba(16,185,129,0.10))",
+      color: "#f0fdf4",
+      textDecoration: "none",
+      fontWeight: 900,
+      fontSize: 14,
+      whiteSpace: "nowrap",
+      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+      transition: "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
+    };
+  }
 
   return {
     display: "inline-flex",
@@ -122,10 +145,11 @@ function topNavBtnStyle(type: "learn" | "pickers" | "dashboard"): React.CSSPrope
   };
 }
 
-function topNavIcon(type: "learn" | "pickers" | "dashboard") {
+function topNavIcon(type: "learn" | "pickers" | "dashboard" | "platforms") {
   if (type === "learn") return "📘";
   if (type === "pickers") return "📊";
   if (type === "dashboard") return "📈";
+  return "🏦";
 }
 
 function calculatorPanelStyle(): React.CSSProperties {
@@ -526,6 +550,22 @@ export default function UtilitiesClientPage() {
       {topNavIcon("dashboard")}
     </span>
     <span>Dashboard</span>
+  </Link>
+
+  <Link href="/platforms" style={topNavBtnStyle("platforms")}>
+    <span
+      aria-hidden="true"
+      style={{
+        fontSize: 15,
+        lineHeight: 1,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      {topNavIcon("platforms")}
+    </span>
+    <span>Platforms</span>
   </Link>
 
   <Link href="/pickers" style={topNavBtnStyle("pickers")}>
