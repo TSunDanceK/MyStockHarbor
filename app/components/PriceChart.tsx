@@ -508,43 +508,97 @@ export default function PriceChart(props: Props) {
         <circle cx={x(series.length - 1)} cy={yMain(last.close)} r="3.5" fill="currentColor" opacity="0.9" />
       </svg>
 
-      <div
+<div
+  style={{
+    marginTop: 8,
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+  }}
+>
+  <div
+    style={{
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      flexWrap: "wrap",
+      gap: 12,
+    }}
+  >
+    <div style={{ fontSize: 12, opacity: 0.7 }}>
+      From {series[0].date} → {series[series.length - 1].date}
+    </div>
+
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        flexWrap: "wrap",
+      }}
+    >
+      <a
+        href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`}
+        target="_blank"
+        rel="noopener noreferrer"
         style={{
-          marginTop: 8,
-          display: "flex",
+          display: "inline-flex",
           alignItems: "center",
-          justifyContent: "space-between",
-          gap: 14,
-          flexWrap: "wrap",
+          justifyContent: "center",
+          padding: "8px 12px",
+          borderRadius: 10,
+          border: "1px solid rgba(59,130,246,0.40)",
+          background:
+            "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
+          color: "#dbeafe",
+          textDecoration: "none",
+          fontWeight: 800,
+          fontSize: 12,
+          whiteSpace: "nowrap",
         }}
       >
-        <div style={{ fontSize: 12, opacity: 0.7 }}>
-          From {series[0].date} → {series[series.length - 1].date}
-        </div>
+        Open in TradingView ↗
+      </a>
 
-        <a
-          href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "8px 12px",
-            borderRadius: 10,
-            border: "1px solid rgba(59,130,246,0.32)",
-            background:
-              "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(37,99,235,0.08))",
-            color: "#dbeafe",
-            textDecoration: "none",
-            fontWeight: 800,
-            fontSize: 12,
-            whiteSpace: "nowrap",
-          }}
-        >
-          Open in TradingView ↗
-        </a>
-      </div>
+      <a
+        href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "8px 14px",
+          borderRadius: 10,
+          border: "1px solid rgba(37,99,235,0.55)",
+          background:
+            "linear-gradient(135deg, rgba(37,99,235,0.95), rgba(29,78,216,0.85))",
+          color: "#ffffff",
+          textDecoration: "none",
+          fontWeight: 900,
+          fontSize: 12,
+          whiteSpace: "nowrap",
+          boxShadow: "0 6px 14px rgba(0,0,0,0.25)",
+        }}
+      >
+        Trade {symbol} →
+      </a>
+    </div>
+  </div>
+
+  <a
+    href="/platforms"
+    style={{
+      fontSize: 12,
+      color: "#93c5fd",
+      textDecoration: "none",
+      fontWeight: 700,
+      opacity: 0.85,
+    }}
+  >
+    Compare trading platforms →
+  </a>
+</div>
     </div>
   );
 }
