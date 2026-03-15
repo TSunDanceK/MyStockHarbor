@@ -26,7 +26,15 @@ export async function GET(req: Request) {
     const text = await res.text();
 
     const lines = text.trim().split("\n");
-    if (lines.length < 3) return NextResponse.json({ symbol, points: [] as Point[] });
+   if (lines.length < 3)
+  return NextResponse.json(
+    { symbol, points: [] as Point[] },
+    {
+      headers: {
+        "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+      },
+    }
+  );
 
     const points: Point[] = [];
     for (let i = 1; i < lines.length; i++) {
