@@ -1139,13 +1139,13 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
         .map((d) => d.name)
         .join(", ");
 
-      return {
-        label: `Stretch Score: ${stretchScore.flagged}/${stretchScore.total}`,
-        detail:
-          `Trend Score: ${trendScore.passed} of ${trendScore.total} checks passing. ` +
-          `${stretchScore.flagged} stretch signals elevated. ` +
-          (detailList ? `Top stretch signals: ${detailList}.` : ""),
-      };
+return {
+  label: `Stretch Score: ${stretchScore.flagged}/${stretchScore.total}`,
+  detail:
+    `Trend Score: ${trendScore.passed} of ${trendScore.total} checks passing.\n` +
+    `${stretchScore.flagged} stretch signals elevated.\n` +
+    (detailList ? `Top stretch signals: ${detailList}.` : "Top stretch signals: None."),
+};
     }
 
     if (indicator === "MA50") return compareTo(lastClose, "MA50", typeof lastMA50 === "number" ? lastMA50 : null);
@@ -2248,7 +2248,15 @@ function OverviewPanel() {
           </div>
         ) : null}
 
-        <div style={{ color: COLORS.mutedFg, lineHeight: 1.55 }}>{signal.detail}</div>
+        <div
+  style={{
+    color: COLORS.mutedFg,
+    lineHeight: 1.55,
+    whiteSpace: "pre-line",
+  }}
+>
+  {signal.detail}
+</div>
 
         <div
           style={{
