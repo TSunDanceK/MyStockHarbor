@@ -165,8 +165,6 @@ const PLATFORMS: PlatformItem[] = [
   },
 ];
 
-function topBtn(): React.CSSProperties {
-
 function ctaBtn(): React.CSSProperties {
   return {
     display: "inline-flex",
