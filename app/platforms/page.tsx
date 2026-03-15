@@ -321,55 +321,14 @@ export default function PlatformsPage() {
       }}
     >
       <div className="wrap">
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 800 }}>
-              PLATFORM GUIDE
-            </div>
-
-            <h1
-              style={{
-                margin: "6px 0 0",
-                fontSize: 34,
-                letterSpacing: "-0.4px",
-              }}
-            >
-              Best Trading Platforms for Beginners, Chart Analysis, and Serious Traders
-            </h1>
-
-<div
-  style={{
-    marginTop: 8,
-    opacity: 0.78,
-    lineHeight: 1.55,
-    maxWidth: 860,
-  }}
->
-  Looking for the best trading platform for beginners, better stock chart analysis,
-  or a stronger long-term broker? This guide compares the best trading platforms
-  for different types of users, including <strong>TradingView</strong> for charting,
-  <strong> Trading 212</strong> for beginners, and <strong>Interactive Brokers</strong>
-  for more serious traders.
-</div>
-          </div>
-
+        <div style={{ display: "grid", gap: 14 }}>
           <div
             style={{
               display: "flex",
-              gap: 10,
-              flexWrap: "wrap",
               justifyContent: "flex-end",
               alignItems: "flex-start",
-              flex: "0 0 auto",
-              marginLeft: "auto",
+              gap: 10,
+              flexWrap: "wrap",
             }}
           >
             <Link href="/" style={topNavBtnStyle("dashboard")}>
@@ -399,6 +358,37 @@ export default function PlatformsPage() {
               </span>
               <span>Calculators</span>
             </Link>
+          </div>
+
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 800 }}>
+              PLATFORM GUIDE
+            </div>
+
+            <h1
+              style={{
+                margin: "6px 0 0",
+                fontSize: 34,
+                letterSpacing: "-0.4px",
+              }}
+            >
+              Best Trading Platforms for Beginners, Chart Analysis, and Serious Traders
+            </h1>
+
+            <div
+              style={{
+                marginTop: 8,
+                opacity: 0.78,
+                lineHeight: 1.55,
+                maxWidth: 860,
+              }}
+            >
+              Looking for the best trading platform for beginners, better stock chart analysis,
+              or a stronger long-term broker? This guide compares the best trading platforms
+              for different types of users, including <strong>TradingView</strong> for charting,
+              <strong> Trading 212</strong> for beginners, and <strong>Interactive Brokers</strong>
+              for more serious traders.
+            </div>
           </div>
         </div>
 
