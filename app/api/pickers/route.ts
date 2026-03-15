@@ -736,6 +736,7 @@ const takeTop = (arr: PickerItem[], n: number, opts?: { volumeFirstIfMany?: bool
     updatedAt: new Date().toISOString(),
     universeSize: universe.length,
     top100Count: top100.length,
+    estimatedApiCalls: universe.length + 1,
     sections,
   };
 }
