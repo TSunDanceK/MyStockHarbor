@@ -63,9 +63,9 @@ let memo:
     }
   | null = null;
 
-const CACHE_SECONDS = 60; // CDN cache
-const STALE_SECONDS = 300; // allow stale while revalidate
-const MEMORY_CACHE_MS = 30_000; // 30s in-memory cache (warm)
+const CACHE_SECONDS = 3600; // 1 hour CDN cache
+const STALE_SECONDS = 7200; // allow stale for 2 hours while revalidating
+const MEMORY_CACHE_MS = 3_600_000; // 1 hour in-memory cache
 
 /* ------------------------ small util helpers ------------------------ */
 
@@ -593,11 +593,11 @@ async function buildPickersPayload(origin: string) {
   const market = await fetchMarket(origin);
   const topTraded = (market?.topTraded ?? []).map((x) => x.symbol).filter(Boolean);
 
-  // Top 50 always prioritized first
-  const top50 = Array.from(new Set(topTraded)).slice(0, 50);
+  // Top 100 always prioritized first
+  const top100 = Array.from(new Set(topTraded)).slice(0, 100);
 
   // Wider universe to fill remaining slots
-  const universe = Array.from(new Set([...top50, ...PRESET_UNIVERSE]));
+  const universe = Array.from(new Set([...top100, ...PRESET_UNIVERSE]));
 
   const limit = pLimit(8); // concurrency cap
   const days = 2600; // enough history for MA200-ish signals
@@ -608,9 +608,9 @@ async function buildPickersPayload(origin: string) {
   const breakouts: PickerItem[] = [];
   const divergences: PickerItem[] = [];
 
-  // helper for “top50 first” scoring
-  const isTop50 = (sym: string) => top50.includes(sym);
-  const top50Boost = (sym: string) => (isTop50(sym) ? 1000 : 0);
+  // helper for “top100 first” scoring
+  const isTop100 = (sym: string) => top100.includes(sym);
+  const top100Boost = (sym: string) => (isTop100(sym) ? 1000 : 0);
 
   await Promise.all(
     universe.map((symbol) =>
@@ -628,7 +628,7 @@ async function buildPickersPayload(origin: string) {
                 symbol,
                 tone: "green",
                 note: `${comp.oversold} oversold • ${comp.flagged}/${comp.total} checks`,
-                _score: top50Boost(symbol) + comp.oversold * 50 + comp.flagged * 10,
+               _score: top100Boost(symbol) + comp.oversold * 50 + comp.flagged * 10,
               });
             }
 
@@ -637,7 +637,7 @@ async function buildPickersPayload(origin: string) {
                 symbol,
                 tone: "red",
                 note: `${comp.overbought} overbought • ${comp.flagged}/${comp.total} checks`,
-                _score: top50Boost(symbol) + comp.overbought * 50 + comp.flagged * 10,
+                _score: top100Boost(symbol) + comp.overbought * 50 + comp.flagged * 10,
               });
             }
           }
@@ -649,7 +649,7 @@ async function buildPickersPayload(origin: string) {
               symbol,
               tone: "yellow",
               note: `Down ${dip.drawdownPct.toFixed(1)}% from recent ATH`,
-              _score: top50Boost(symbol) + dip.drawdownPct,
+              _score: top100Boost(symbol) + dip.drawdownPct,
             });
           }
 
@@ -663,7 +663,7 @@ if (bo) {
     tone: "orange",
     note: `ATH + vol ${volSpike ? `${volSpike.toFixed(2)}×` : "—"}`,
     // Score: top50 boost + volume spike dominates + tiny recency nudge
-    _score: top50Boost(symbol) + volSpike * 1000 + 1,
+    _score: top100Boost(symbol) + volSpike * 1000 + 1,
   });
 }
 
@@ -680,7 +680,7 @@ const div = detectDivergenceFromHistory(pts, {
               symbol,
               tone: div.kind === "bullish" ? "green" : "red",
               note: div.note,
-              _score: top50Boost(symbol) + div.score,
+              _score: top100Boost(symbol) + div.score,
             });
           }
         } catch {
@@ -735,7 +735,7 @@ const takeTop = (arr: PickerItem[], n: number, opts?: { volumeFirstIfMany?: bool
   return {
     updatedAt: new Date().toISOString(),
     universeSize: universe.length,
-    top50Count: top50.length,
+    top100Count: top100.length,
     sections,
   };
 }
