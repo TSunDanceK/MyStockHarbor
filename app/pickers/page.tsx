@@ -164,7 +164,7 @@ export default function PickersPage() {
                   gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
                   gap: 10,
                   maxWidth: 560,
-                }}
+                }} 
               >
                 <MiniStat
                   label="Results"
