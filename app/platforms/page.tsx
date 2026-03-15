@@ -292,6 +292,7 @@ export default function PlatformsPage() {
               <span>Calculators</span>
             </Link>
           </div>
+        </div>
 
         <div
           style={{
