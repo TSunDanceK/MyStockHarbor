@@ -395,7 +395,6 @@ export default function PickersPage() {
             <PickersClient />
           </div>
         </section>
-
         <section style={panelStyle}>
           <div
             style={{
@@ -415,16 +414,16 @@ export default function PickersPage() {
             LEARN THE SETUPS & INDICATORS
           </div>
 
-<h2
-  style={{
-    margin: "14px 0 0 0",
-    fontSize: 24,
-    lineHeight: 1.15,
-    letterSpacing: "-0.03em",
-  }}
->
-  Learn the trading setups and indicators behind these ideas
-</h2>
+          <h2
+            style={{
+              margin: "14px 0 0 0",
+              fontSize: 24,
+              lineHeight: 1.15,
+              letterSpacing: "-0.03em",
+            }}
+          >
+            Learn the trading setups and indicators behind these ideas
+          </h2>
 
           <p
             style={{
@@ -434,9 +433,9 @@ export default function PickersPage() {
               maxWidth: 860,
             }}
           >
- Start with the Trading Setups hub or explore the indicator guides
-  behind these signals. These pages explain the patterns, momentum
-  shifts and technical clues traders review when analysing stock
+            Start with the Trading Setups hub or explore the Indicators Hub.
+            These pages explain the patterns, momentum shifts and technical
+            clues traders review when analysing stock charts.
           </p>
 
           <div style={bundleGridStyle}>
@@ -458,82 +457,23 @@ export default function PickersPage() {
               </div>
             </Link>
 
-            <Link href="/oversold-stocks" style={compactLinkStyle}>
+            <Link
+              href="/stock-indicators"
+              style={{
+                ...compactLinkStyle,
+                border: "1px solid rgba(34,197,94,0.20)",
+                background:
+                  "linear-gradient(135deg, rgba(34,197,94,0.08), rgba(16,185,129,0.04))",
+              }}
+            >
               <div style={{ fontSize: 17, fontWeight: 950 }}>
-                Oversold Stocks
+                Indicators Hub
               </div>
               <div style={smallLinkTextStyle}>
-                Learn how traders review stretched downside conditions and
-                rebound potential.
+                Understand RSI, MACD, unusual volume and moving average signals
+                used when reviewing stock charts.
               </div>
             </Link>
-
-            <Link href="/overbought-stocks" style={compactLinkStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>
-                Overbought Stocks
-              </div>
-              <div style={smallLinkTextStyle}>
-                Understand when price may be stretched after strong upside
-                momentum.
-              </div>
-            </Link>
-
-            <Link href="/breakout-stocks" style={compactLinkStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>
-                Breakout Stocks
-              </div>
-              <div style={smallLinkTextStyle}>
-                See how traders identify stocks pushing through resistance with
-                strength.
-              </div>
-            </Link>
-
-            <Link href="/buy-the-dip-stocks" style={compactLinkStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>
-                Buy The Dip Stocks
-              </div>
-              <div style={smallLinkTextStyle}>
-                Review pullback setups that may still fit a stronger trend.
-              </div>
-            </Link>
-
-            <Link href="/bullish-divergence-stocks" style={compactLinkStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>
-                Bullish Divergence
-              </div>
-              <div style={smallLinkTextStyle}>
-                Learn how fading downside momentum can hint at reversal risk.
-              </div>
-            </Link>
-
-            <Link href="/bearish-divergence-stocks" style={compactLinkStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>
-                Bearish Divergence
-              </div>
-              <div style={smallLinkTextStyle}>
-                Understand when upside momentum may be losing strength.
-              </div>
-            </Link>
-            
-<Link
-  href="/stock-indicators"
-  style={{
-    ...compactLinkStyle,
-    border: "1px solid rgba(34,197,94,0.20)",
-    background:
-      "linear-gradient(135deg, rgba(34,197,94,0.08), rgba(16,185,129,0.04))",
-  }}
->
-  <div style={{ fontSize: 17, fontWeight: 950 }}>
-    Indicators Hub
-  </div>
-  <div style={smallLinkTextStyle}>
-    Understand RSI, MACD, unusual volume and moving average signals
-    used when reviewing stock charts.
-  </div>
-</Link>
-            
-            
           </div>
         </section>
 
@@ -657,29 +597,7 @@ export default function PickersPage() {
           </div>
         </section>
   
-        <section style={panelStyle}>
-          <div style={{ maxWidth: 420 }}>
-            <Link
-              href="/stock-indicators"
-              style={{
-                ...compactLinkStyle,
-                display: "block",
-                border: "1px solid rgba(34,197,94,0.20)",
-                background:
-                  "linear-gradient(135deg, rgba(34,197,94,0.08), rgba(16,185,129,0.04))",
-              }}
-            >
-              <div style={{ fontSize: 17, fontWeight: 950 }}>
-                Understand the indicators behind these signals
-              </div>
-              <div style={smallLinkTextStyle}>
-                Start with the indicators hub, then go deeper into RSI, MACD,
-                volume and moving average guides.
-              </div>
-            </Link>
-          </div>
-        </section>    
-      
+     
         <section
           style={{
             marginTop: 22,
