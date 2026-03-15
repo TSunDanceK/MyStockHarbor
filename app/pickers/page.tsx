@@ -412,19 +412,19 @@ export default function PickersPage() {
               fontSize: 12,
             }}
           >
-            LEARN THE SETUPS
+            LEARN THE SETUPS & INDICATORS
           </div>
 
-          <h2
-            style={{
-              margin: "14px 0 0 0",
-              fontSize: 24,
-              lineHeight: 1.15,
-              letterSpacing: "-0.03em",
-            }}
-          >
-            Learn the trading setups behind these ideas
-          </h2>
+<h2
+  style={{
+    margin: "14px 0 0 0",
+    fontSize: 24,
+    lineHeight: 1.15,
+    letterSpacing: "-0.03em",
+  }}
+>
+  Learn the trading setups and indicators behind these ideas
+</h2>
 
           <p
             style={{
@@ -434,10 +434,9 @@ export default function PickersPage() {
               maxWidth: 860,
             }}
           >
-            Start with the main Trading Setups hub, then go deeper into the
-            specific patterns you see in the screened results below. This keeps
-            the Pickers page focused on finding ideas while the setup pages
-            handle the deeper education.
+ Start with the Trading Setups hub or explore the indicator guides
+  behind these signals. These pages explain the patterns, momentum
+  shifts and technical clues traders review when analysing stock
           </p>
 
           <div style={bundleGridStyle}>
@@ -515,6 +514,26 @@ export default function PickersPage() {
                 Understand when upside momentum may be losing strength.
               </div>
             </Link>
+            
+<Link
+  href="/stock-indicators"
+  style={{
+    ...compactLinkStyle,
+    border: "1px solid rgba(34,197,94,0.20)",
+    background:
+      "linear-gradient(135deg, rgba(34,197,94,0.08), rgba(16,185,129,0.04))",
+  }}
+>
+  <div style={{ fontSize: 17, fontWeight: 950 }}>
+    Indicators Hub
+  </div>
+  <div style={smallLinkTextStyle}>
+    Understand RSI, MACD, unusual volume and moving average signals
+    used when reviewing stock charts.
+  </div>
+</Link>
+            
+            
           </div>
         </section>
 
