@@ -17,32 +17,20 @@ export default function LearnPage() {
         minHeight: "100vh",
       }}
     >
-      <div className="wrap">
-        <div style={{ display: "grid", gap: 10 }}>
+        <div style={{ display: "grid", gap: 12 }}>
           <div
             style={{
               display: "flex",
+              justifyContent: "flex-end",
               alignItems: "flex-start",
-              justifyContent: "space-between",
-              gap: 16,
-              flexWrap: "nowrap",
             }}
           >
-            <div style={{ minWidth: 0 }}>
-              <h1 style={{ margin: 0, fontSize: 34, letterSpacing: "-0.4px" }}>
-                Learn the Basics
-              </h1>
-            </div>
-
             <div
               style={{
                 display: "flex",
                 gap: 10,
                 flexWrap: "wrap",
                 justifyContent: "flex-end",
-                alignItems: "flex-start",
-                flex: "0 0 auto",
-                marginLeft: "auto",
               }}
             >
               <Link href="/" style={topNavBtnStyle("dashboard")}>
@@ -111,17 +99,42 @@ export default function LearnPage() {
             </div>
           </div>
 
-          <p
-            style={{
-              margin: 0,
-              opacity: 0.75,
-              lineHeight: 1.5,
-              maxWidth: 760,
-            }}
-          >
-            Short lessons on reading charts, key concepts, and the indicators used in
-            MyStockHarbor.
-          </p>
+          <div style={{ minWidth: 0 }}>
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "7px 12px",
+                borderRadius: 999,
+                background:
+                  "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
+                border: "1px solid rgba(59,130,246,0.34)",
+                color: "#dbeafe",
+                fontWeight: 950,
+                letterSpacing: "0.08em",
+                fontSize: 12,
+                marginBottom: 10,
+              }}
+            >
+              LEARN
+            </div>
+
+            <h1 style={{ margin: 0, fontSize: 34, letterSpacing: "-0.4px" }}>
+              Learn the Basics
+            </h1>
+
+            <p
+              style={{
+                margin: "10px 0 0 0",
+                opacity: 0.75,
+                lineHeight: 1.5,
+                maxWidth: 760,
+              }}
+            >
+              Short lessons on reading charts, key concepts, and the indicators used in
+              MyStockHarbor.
+            </p>
+          </div>
         </div>
 
         <div
