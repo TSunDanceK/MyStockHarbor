@@ -638,12 +638,13 @@ export default function PickersPage() {
           </div>
         </section>
   
-               <section style={panelStyle}>
-          <div style={bundleGridStyle}>
+        <section style={panelStyle}>
+          <div style={{ maxWidth: 420 }}>
             <Link
               href="/stock-indicators"
               style={{
                 ...compactLinkStyle,
+                display: "block",
                 border: "1px solid rgba(34,197,94,0.20)",
                 background:
                   "linear-gradient(135deg, rgba(34,197,94,0.08), rgba(16,185,129,0.04))",
@@ -657,67 +658,8 @@ export default function PickersPage() {
                 volume and moving average guides.
               </div>
             </Link>
-
-            <Link href="/what-is-rsi-indicator" style={compactLinkStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>Understand RSI</div>
-              <div style={smallLinkTextStyle}>
-                Read how RSI can help identify oversold and overbought zones.
-              </div>
-            </Link>
-
-            <Link href="/what-is-macd-indicator" style={compactLinkStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>
-                Learn MACD Divergence
-              </div>
-              <div style={smallLinkTextStyle}>
-                MACD can help confirm momentum shifts, trend strength and
-                divergence.
-              </div>
-            </Link>
-
-            <Link href="/stocks-with-high-rsi" style={compactLinkStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>
-                Stocks With High RSI
-              </div>
-              <div style={smallLinkTextStyle}>
-                Learn what high RSI can mean when momentum becomes extended.
-              </div>
-            </Link>
-
-            <Link href="/stocks-with-low-rsi" style={compactLinkStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>
-                Stocks With Low RSI
-              </div>
-              <div style={smallLinkTextStyle}>
-                Explore how traders use low RSI readings to review stretched
-                downside moves.
-              </div>
-            </Link>
-
-            <Link href="/stocks-with-unusual-volume" style={compactLinkStyle}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>
-                Stocks With Unusual Volume
-              </div>
-              <div style={smallLinkTextStyle}>
-                See why unusual volume can matter when reviewing breakouts and
-                momentum.
-              </div>
-            </Link>
-
-            <Link
-              href="/stocks-above-200-day-moving-average"
-              style={compactLinkStyle}
-            >
-              <div style={{ fontSize: 17, fontWeight: 950 }}>
-                Stocks Above 200 Day Moving Average
-              </div>
-              <div style={smallLinkTextStyle}>
-                Understand how traders use the 200-day moving average as a
-                long-term trend filter.
-              </div>
-            </Link>
           </div>
-        </section>         
+        </section>    
       
         <section
           style={{
