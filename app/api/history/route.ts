@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 
 export const runtime = "edge";
 
+const CACHE_SECONDS = 3600; // 1 hour
+const STALE_SECONDS = 7200; // 2 hours stale while revalidating
+
 type Point = {
   date: string;
   close: number;
@@ -19,7 +22,7 @@ export async function GET(req: Request) {
   const url = `https://stooq.com/q/d/l/?s=${stooqSymbol}&i=d`;
 
   try {
-    const res = await fetch(url, { cache: "no-store" });
+   const res = await fetch(url, { cache: "force-cache" });
     const text = await res.text();
 
     const lines = text.trim().split("\n");
@@ -47,8 +50,22 @@ export async function GET(req: Request) {
       });
     }
 
-    return NextResponse.json({ symbol, points: points.slice(-days) });
+     return NextResponse.json(
+      { symbol, points: points.slice(-days) },
+      {
+        headers: {
+          "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+        },
+      }
+    );
   } catch {
-    return NextResponse.json({ symbol, points: [] as Point[] });
+      return NextResponse.json(
+      { symbol, points: [] as Point[] },
+      {
+        headers: {
+          "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+        },
+      }
+    );
   }
 }
