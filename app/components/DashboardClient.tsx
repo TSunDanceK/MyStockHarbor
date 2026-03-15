@@ -2851,6 +2851,19 @@ return (
     transform: translateY(-1px);
     filter: brightness(1.05);
   }
+    .msh-stock-picker-cta:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.04);
+  }
+
+  .msh-stock-picker-cta-arrow {
+    display: inline-block;
+    transition: transform 140ms ease;
+  }
+
+  .msh-stock-picker-cta:hover .msh-stock-picker-cta-arrow {
+    transform: translateX(4px);
+  }
 
   .msh-toolbar-grid {
     display: grid;
