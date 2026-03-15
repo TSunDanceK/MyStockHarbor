@@ -560,29 +560,26 @@ export default function PriceChart(props: Props) {
         Open in TradingView ↗
       </a>
 
-      <a
-        href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "8px 14px",
-          borderRadius: 10,
-          border: "1px solid rgba(37,99,235,0.55)",
-          background:
-            "linear-gradient(135deg, rgba(37,99,235,0.95), rgba(29,78,216,0.85))",
-          color: "#ffffff",
-          textDecoration: "none",
-          fontWeight: 900,
-          fontSize: 12,
-          whiteSpace: "nowrap",
-          boxShadow: "0 6px 14px rgba(0,0,0,0.25)",
-        }}
-      >
-        Trade {symbol} →
-      </a>
+<a
+  href="/platforms"
+  style={{
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "8px 12px",
+    borderRadius: 10,
+    border: "1px solid rgba(34,197,94,0.40)",
+    background:
+      "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))",
+    color: "#dcfce7",
+    textDecoration: "none",
+    fontWeight: 800,
+    fontSize: 12,
+    whiteSpace: "nowrap",
+  }}
+>
+  Trade {symbol} →
+</a>
     </div>
   </div>
 
