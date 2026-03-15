@@ -1092,7 +1092,7 @@ const topNavIconWrapStyle: React.CSSProperties = {
 };
 
 function topNavBtnStyle(
-  type: "dashboard" | "platforms" | "learn"
+  type: "dashboard" | "platforms" | "learn" | "calculators"
 ): React.CSSProperties {
   if (type === "dashboard") {
     return {
@@ -1140,6 +1140,29 @@ function topNavBtnStyle(
     };
   }
 
+  if (type === "calculators") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      minHeight: 42,
+      padding: "9px 13px",
+      borderRadius: 14,
+      border: "1px solid rgba(168,85,247,0.45)",
+      background:
+        "linear-gradient(135deg, rgba(168,85,247,0.20), rgba(139,92,246,0.10))",
+      color: "#faf5ff",
+      textDecoration: "none",
+      fontWeight: 900,
+      fontSize: 14,
+      whiteSpace: "nowrap",
+      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+      transition:
+        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
+    };
+  }
+
   return {
     display: "inline-flex",
     alignItems: "center",
@@ -1162,8 +1185,9 @@ function topNavBtnStyle(
   };
 }
 
-function topNavIcon(type: "dashboard" | "platforms" | "learn") {
+function topNavIcon(type: "dashboard" | "platforms" | "learn" | "calculators") {
   if (type === "dashboard") return "📈";
   if (type === "platforms") return "🏦";
+  if (type === "calculators") return "🧮";
   return "📘";
 }
