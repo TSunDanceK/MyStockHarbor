@@ -1143,14 +1143,13 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
         .map((d) => d.name)
         .join(", ");
 
-      return {
-        label: `Stretch Score: ${stretchScore.flagged}/${stretchScore.total} checks`,
-        detail:
-          `Trend Score: ${trendScore.passed}/${trendScore.total}. ` +
-          (parts.length ? `${parts.join(" • ")}.` : "No strong stretch extremes detected.") +
-          (detailList ? ` Top stretch checks: ${detailList}.` : ""),
-      };
-    }
+return {
+  label: `Stretch Score: ${stretchScore.flagged}/${stretchScore.total}`,
+  detail:
+    `Trend Score: ${trendScore.passed} of ${trendScore.total} checks passing. ` +
+    `${stretchScore.flagged} stretch signals elevated. ` +
+    (detailList ? `Top stretch signals: ${detailList}.` : ""),
+};
 
     if (indicator === "MA50") return compareTo(lastClose, "MA50", typeof lastMA50 === "number" ? lastMA50 : null);
     if (indicator === "MA200") return compareTo(lastClose, "MA200", typeof lastMA200 === "number" ? lastMA200 : null);
@@ -2199,8 +2198,6 @@ function OverviewPanel() {
               {trendScore.passed}/{trendScore.total}
             </div>
 
-            <div style={{ fontSize: 12, color: COLORS.mutedFg, fontWeight: 800 }}>checks passing</div>
-
             {renderFlagsMeter({
               flagged: trendScore.passed,
               total: trendScore.total,
@@ -2228,8 +2225,7 @@ function OverviewPanel() {
               {stretchScore.flagged}/{stretchScore.total}
             </div>
 
-            <div style={{ fontSize: 12, color: COLORS.mutedFg, fontWeight: 800 }}>stretch checks</div>
-
+        
             {renderFlagsMeter({
               flagged: stretchScore.flagged,
               total: stretchScore.total,
