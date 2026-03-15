@@ -90,6 +90,13 @@ export default function PickersPage() {
               </span>
               <span>Learn</span>
             </Link>
+
+            <Link href="/utilities" style={topNavBtnStyle("calculators")}>
+              <span aria-hidden="true" style={topNavIconWrapStyle}>
+                {topNavIcon("calculators")}
+              </span>
+              <span>Calculators</span>
+            </Link>
           </div>
 
           <div
