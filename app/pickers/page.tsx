@@ -743,6 +743,24 @@ export default function PickersPage() {
           </div>
         </section>
 
+        <Link
+  href="/stock-indicators"
+  style={{
+    ...compactLinkStyle,
+    border: "1px solid rgba(34,197,94,0.20)",
+    background:
+      "linear-gradient(135deg, rgba(34,197,94,0.08), rgba(16,185,129,0.04))",
+  }}
+>
+  <div style={{ fontSize: 17, fontWeight: 950 }}>
+    Understand the indicators behind these signals
+  </div>
+  <div style={smallLinkTextStyle}>
+    Start with the indicators hub, then go deeper into RSI, MACD, volume and
+    moving average guides.
+  </div>
+</Link>
+
         <section
           style={{
             marginTop: 22,
