@@ -125,6 +125,7 @@ export default function PickersPage() {
               gridTemplateColumns: "minmax(0, 1.35fr) minmax(300px, 0.95fr)",
               gap: 16,
               alignItems: "stretch",
+              maxWidth: 980,
             }}
           >
             <section
@@ -316,7 +317,7 @@ export default function PickersPage() {
         <section
           style={{
             marginTop: 24,
-            maxWidth: 1040,
+            maxWidth: 980,
             borderRadius: 22,
             border: "1px solid rgba(59,130,246,0.35)",
             background:
