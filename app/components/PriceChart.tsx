@@ -53,12 +53,12 @@ function minMax(arr: Array<number | null>) {
 }
 
 type Props = {
+  symbol: string;
   data: Point[];
   ma50: (number | null)[];
   ma200: (number | null)[];
   overlay?: Overlay;
 
-  // NEW
   divergence?: DivResult | null;
 
   bollUpper?: (number | null)[];
@@ -82,6 +82,7 @@ type Props = {
 
 export default function PriceChart(props: Props) {
   const {
+    symbol,
     data,
     ma50,
     ma200,
@@ -507,10 +508,42 @@ export default function PriceChart(props: Props) {
         <circle cx={x(series.length - 1)} cy={yMain(last.close)} r="3.5" fill="currentColor" opacity="0.9" />
       </svg>
 
-      <div style={{ marginTop: 8, fontSize: 12, opacity: 0.7, display: "flex", gap: 14, flexWrap: "wrap" }}>
-        <span>
+      <div
+        style={{
+          marginTop: 8,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 14,
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ fontSize: 12, opacity: 0.7 }}>
           From {series[0].date} → {series[series.length - 1].date}
-        </span>
+        </div>
+
+        <a
+          href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "8px 12px",
+            borderRadius: 10,
+            border: "1px solid rgba(59,130,246,0.32)",
+            background:
+              "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(37,99,235,0.08))",
+            color: "#dbeafe",
+            textDecoration: "none",
+            fontWeight: 800,
+            fontSize: 12,
+            whiteSpace: "nowrap",
+          }}
+        >
+          Open in TradingView ↗
+        </a>
       </div>
     </div>
   );
