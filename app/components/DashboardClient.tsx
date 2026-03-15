@@ -2463,7 +2463,6 @@ function BreakdownPanel() {
   }
 
   return (
-  return (
     <SectionCard
       title="Breakdown"
       right={<BreakdownHelpButton indicator="None" />}
