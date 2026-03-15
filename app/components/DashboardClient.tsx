@@ -2614,27 +2614,28 @@ function ChartPanel() {
 </div>
 
       <div style={{ padding: 16 }}>
-        <PriceChart
-          data={displayedHistory}
-          ma50={ma50}
-          ma200={ma200}
-          overlay={indicator}
-          bollUpper={bollUpper}
-          bollMid={bollMid}
-          bollLower={bollLower}
-          ema20={ema20Arr}
-          vwap={vwapArr}
-          rsi14={rsi14Arr}
-          macdLine={macdLine}
-          macdSignal={macdSignal}
-          macdHist={macdHist}
-          stochK={stochK}
-          stochD={stochD}
-          atr14={atr14Arr}
-          volume={volumeArr}
-          divergence={divergence.div}
-          height={chartHeight}
-        />
+<PriceChart
+  symbol={symbol}
+  data={displayedHistory}
+  ma50={ma50}
+  ma200={ma200}
+  overlay={indicator}
+  bollUpper={bollUpper}
+  bollMid={bollMid}
+  bollLower={bollLower}
+  ema20={ema20Arr}
+  vwap={vwapArr}
+  rsi14={rsi14Arr}
+  macdLine={macdLine}
+  macdSignal={macdSignal}
+  macdHist={macdHist}
+  stochK={stochK}
+  stochD={stochD}
+  atr14={atr14Arr}
+  volume={volumeArr}
+  divergence={divergence.div}
+  height={chartHeight}
+/>
 
         <div
           style={{
@@ -3413,27 +3414,28 @@ onKeyDown={(e) => {
             </div>
 
             <div style={{ padding: 16 }}>
-              <PriceChart
-                data={displayedHistory}
-                ma50={ma50}
-                ma200={ma200}
-                overlay={indicator}
-                bollUpper={bollUpper}
-                bollMid={bollMid}
-                bollLower={bollLower}
-                ema20={ema20Arr}
-                vwap={vwapArr}
-                rsi14={rsi14Arr}
-                macdLine={macdLine}
-                macdSignal={macdSignal}
-                macdHist={macdHist}
-                stochK={stochK}
-                stochD={stochD}
-                atr14={atr14Arr}
-                volume={volumeArr}
-                divergence={divergence.div}
-                height={isMobile ? 280 : 520}
-              />
+<PriceChart
+  symbol={symbol}
+  data={displayedHistory}
+  ma50={ma50}
+  ma200={ma200}
+  overlay={indicator}
+  bollUpper={bollUpper}
+  bollMid={bollMid}
+  bollLower={bollLower}
+  ema20={ema20Arr}
+  vwap={vwapArr}
+  rsi14={rsi14Arr}
+  macdLine={macdLine}
+  macdSignal={macdSignal}
+  macdHist={macdHist}
+  stochK={stochK}
+  stochD={stochD}
+  atr14={atr14Arr}
+  volume={volumeArr}
+  divergence={divergence.div}
+  height={isMobile ? 280 : 520}
+/>
             </div>
           </div>
         </div>
