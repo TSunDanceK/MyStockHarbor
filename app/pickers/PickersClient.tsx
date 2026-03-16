@@ -916,119 +916,122 @@ export default function PickersClient() {
             )}
           </section>
         ) : (
-displaySections.map((sec) => {
-  const items = Array.isArray(sec.items) ? sec.items.slice(0, 10) : [];
+          <>
+            {displaySections.map((sec) => {
+              const items = Array.isArray(sec.items) ? sec.items.slice(0, 10) : [];
 
-  return ((
-              <section
-                key={sec.title}
-                style={{
-                  border: "1px solid rgba(255,255,255,0.14)",
-                  borderRadius: 16,
-                  padding: 16,
-                  background: "#0b1220",
-                  boxSizing: "border-box",
-                  overflow: "hidden",
-                }}
-              >
-                <div
+              return (
+                <section
+                  key={sec.title}
                   style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 12,
-                    alignItems: "baseline",
-                    flexWrap: "wrap",
+                    border: "1px solid rgba(255,255,255,0.14)",
+                    borderRadius: 16,
+                    padding: 16,
+                    background: "#0b1220",
+                    boxSizing: "border-box",
+                    overflow: "hidden",
                   }}
                 >
-                  <div style={{ minWidth: 0 }}>
-                    <h2
-                      style={{
-                        margin: 0,
-                        fontSize: 22,
-                        fontWeight: 950,
-                        letterSpacing: "-0.02em",
-                      }}
-                    >
-                      {sec.title}
-                    </h2>
-                    {sec.description ? (
-                      <p
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      alignItems: "baseline",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <h2
                         style={{
-                          margin: "8px 0 0",
-                          fontSize: 14,
-                          opacity: 0.72,
-                          lineHeight: 1.6,
+                          margin: 0,
+                          fontSize: 22,
+                          fontWeight: 950,
+                          letterSpacing: "-0.02em",
                         }}
                       >
-                        {sec.description}
-                      </p>
-                    ) : null}
-                  </div>
+                        {sec.title}
+                      </h2>
 
-                  <div style={{ fontSize: 12, opacity: 0.7 }}>
-                    {items.length ? `${items.length} stocks` : "No matches yet"}
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    marginTop: 14,
-                    display: "flex",
-                    gap: 10,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  {items.map((it) => (
-                    <a
-                      key={it.symbol}
-                      href={`/?symbol=${encodeURIComponent(it.symbol)}`}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 8,
-                        maxWidth: "100%",
-                        minWidth: 0,
-                        padding: "10px 12px",
-                        borderRadius: 999,
-                        border: "1px solid rgba(255,255,255,0.14)",
-                        background: "rgba(255,255,255,0.06)",
-                        color: "#f1f5f9",
-                        textDecoration: "none",
-                        fontWeight: 900,
-                        boxSizing: "border-box",
-                      }}
-                      title={it.note ?? "Open in dashboard"}
-                    >
-                      <span
-                        style={{
-                          width: 10,
-                          height: 10,
-                          borderRadius: 999,
-                          background: toneDot(it.tone),
-                          boxShadow: "0 0 0 3px rgba(255,255,255,0.04)",
-                          flex: "0 0 auto",
-                        }}
-                      />
-                      <span style={{ minWidth: 0 }}>{it.symbol}</span>
-                      {it.note ? (
-                        <span
+                      {sec.description ? (
+                        <p
                           style={{
-                            fontSize: 12,
-                            opacity: 0.65,
-                            fontWeight: 700,
-                            minWidth: 0,
-                            wordBreak: "break-word",
+                            margin: "8px 0 0",
+                            fontSize: 14,
+                            opacity: 0.72,
+                            lineHeight: 1.6,
                           }}
                         >
-                          {it.note}
-                        </span>
+                          {sec.description}
+                        </p>
                       ) : null}
-                    </a>
-                  ))}
-                </div>
-              </section>
-            );
-          })
+                    </div>
+
+                    <div style={{ fontSize: 12, opacity: 0.7 }}>
+                      {items.length ? `${items.length} stocks` : "No matches yet"}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 14,
+                      display: "flex",
+                      gap: 10,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    {items.map((it) => (
+                      <a
+                        key={it.symbol}
+                        href={`/?symbol=${encodeURIComponent(it.symbol)}`}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 8,
+                          maxWidth: "100%",
+                          minWidth: 0,
+                          padding: "10px 12px",
+                          borderRadius: 999,
+                          border: "1px solid rgba(255,255,255,0.14)",
+                          background: "rgba(255,255,255,0.06)",
+                          color: "#f1f5f9",
+                          textDecoration: "none",
+                          fontWeight: 900,
+                          boxSizing: "border-box",
+                        }}
+                        title={it.note ?? "Open in dashboard"}
+                      >
+                        <span
+                          style={{
+                            width: 10,
+                            height: 10,
+                            borderRadius: 999,
+                            background: toneDot(it.tone),
+                            boxShadow: "0 0 0 3px rgba(255,255,255,0.04)",
+                            flex: "0 0 auto",
+                          }}
+                        />
+                        <span style={{ minWidth: 0 }}>{it.symbol}</span>
+                        {it.note ? (
+                          <span
+                            style={{
+                              fontSize: 12,
+                              opacity: 0.65,
+                              fontWeight: 700,
+                              minWidth: 0,
+                              wordBreak: "break-word",
+                            }}
+                          >
+                            {it.note}
+                          </span>
+                        ) : null}
+                      </a>
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
+          </>
         )}
 
         {!loading &&
