@@ -317,10 +317,19 @@ export default function PickersClient() {
   const displaySections = useMemo(() => {
     const out: PickerSection[] = [];
 
+    const buyTheDipSection = safeSections.find(
+      (section) => section.title === "Buy-the-Dip Setups"
+    );
+
+    const otherSections = safeSections.filter(
+      (section) => section.title !== "Buy-the-Dip Setups"
+    );
+
     if (topBuySection) out.push(topBuySection);
     if (topSellSection) out.push(topSellSection);
+    if (buyTheDipSection) out.push(buyTheDipSection);
 
-    return [...out, ...safeSections];
+    return [...out, ...otherSections];
   }, [safeSections, topBuySection, topSellSection]);
 
   const customMode = selectedFilters.length > 0;
