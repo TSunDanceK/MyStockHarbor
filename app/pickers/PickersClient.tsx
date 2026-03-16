@@ -907,10 +907,10 @@ export default function PickersClient() {
             )}
           </section>
         ) : (
-          displaySections.map((sec) => {
-            const items = Array.isArray(sec.items) ? sec.items : [];
+displaySections.map((sec) => {
+  const items = Array.isArray(sec.items) ? sec.items.slice(0, 10) : [];
 
-            return (
+  return ((
               <section
                 key={sec.title}
                 style={{
