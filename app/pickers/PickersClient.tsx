@@ -399,10 +399,11 @@ export default function PickersClient() {
         <section
           className="pickers-shell"
           style={{
-            border: "1px solid rgba(59,130,246,0.24)",
+            border: "1px solid rgba(34,197,94,0.26)",
             borderRadius: 18,
             padding: 16,
-            background: "linear-gradient(180deg, rgba(11,18,32,1), rgba(8,12,22,1))",
+            background:
+  "linear-gradient(180deg, rgba(8,18,12,0.96), rgba(8,12,22,1))",
             marginBottom: 18,
             boxSizing: "border-box",
             overflow: "hidden",
