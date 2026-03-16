@@ -120,7 +120,10 @@ function matchedSignalsForRecord(record: SignalRecord): FilterKey[] {
   return out;
 }
 
-function chooseCardTone(record: SignalRecord, matchedFilters: FilterKey[]): PickerTone | undefined {
+function chooseCardTone(
+  record: SignalRecord,
+  matchedFilters: FilterKey[]
+): PickerTone | undefined {
   for (const key of matchedFilters) {
     const def = FILTER_DEFS.find((f) => f.key === key);
     if (!def) continue;
@@ -146,6 +149,7 @@ export default function PickersClient() {
   const [sections, setSections] = useState<PickerSection[]>([]);
   const [signalRecords, setSignalRecords] = useState<SignalRecord[]>([]);
   const [selectedFilters, setSelectedFilters] = useState<FilterKey[]>([]);
+  const [screenerOpen, setScreenerOpen] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -168,7 +172,9 @@ export default function PickersClient() {
 
         const data = (await res.json()) as PickersPayload;
         const safeSections = Array.isArray(data?.sections) ? data.sections : [];
-        const safeSignalRecords = Array.isArray(data?.signalRecords) ? data.signalRecords : [];
+        const safeSignalRecords = Array.isArray(data?.signalRecords)
+          ? data.signalRecords
+          : [];
 
         if (!cancelled) {
           setSections(safeSections);
@@ -176,13 +182,19 @@ export default function PickersClient() {
           setUpdatedAt(typeof data?.updatedAt === "string" ? data.updatedAt : null);
           setUniverseSize(typeof data?.universeSize === "number" ? data.universeSize : null);
           setDynamicUniverseCount(
-            typeof data?.dynamicUniverseCount === "number" ? data.dynamicUniverseCount : null
+            typeof data?.dynamicUniverseCount === "number"
+              ? data.dynamicUniverseCount
+              : null
           );
           setDynamicUniversePreview(
-            Array.isArray(data?.dynamicUniversePreview) ? data.dynamicUniversePreview : null
+            Array.isArray(data?.dynamicUniversePreview)
+              ? data.dynamicUniversePreview
+              : null
           );
           setEstimatedApiCalls(
-            typeof data?.estimatedApiCalls === "number" ? data.estimatedApiCalls : null
+            typeof data?.estimatedApiCalls === "number"
+              ? data.estimatedApiCalls
+              : null
           );
         }
       } catch {
@@ -226,7 +238,9 @@ export default function PickersClient() {
     return safeSignalRecords
       .filter((record) => selectedFilters.every((filter) => record[filter] === true))
       .map((record) => {
-        const matchedSignals = matchedSignalsForRecord(record).filter((key) => selectedFilters.includes(key));
+        const matchedSignals = matchedSignalsForRecord(record).filter((key) =>
+          selectedFilters.includes(key)
+        );
 
         return {
           ...record,
@@ -252,23 +266,92 @@ export default function PickersClient() {
     setSelectedFilters([]);
   }
 
+  function handleScreenerButton() {
+    setScreenerOpen((prev) => !prev);
+  }
+
+  const actionButtonStyle: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
+    padding: "10px 16px",
+    borderRadius: 12,
+    fontWeight: 900,
+    fontSize: 14,
+    cursor: "pointer",
+    transition: "all 0.2s ease",
+    whiteSpace: "nowrap",
+  };
+
   return (
-    <section aria-label="Live stock idea results">
+    <section
+      aria-label="Live stock idea results"
+      style={{
+        width: "100%",
+        minWidth: 0,
+      }}
+    >
+      <style>{`
+        @keyframes pickersBar {
+          0% { transform: translateX(-60%); opacity: 0.55; }
+          50% { transform: translateX(140%); opacity: 0.95; }
+          100% { transform: translateX(320%); opacity: 0.55; }
+        }
+
+        .pickers-shell {
+          width: 100%;
+          max-width: 980px;
+          min-width: 0;
+        }
+
+        .pickers-filter-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+          gap: 10px;
+        }
+
+        .pickers-card-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+          gap: 12px;
+        }
+
+        @media (max-width: 820px) {
+          .pickers-filter-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
+          .pickers-card-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+
+        @media (max-width: 640px) {
+          .pickers-filter-grid,
+          .pickers-card-grid {
+            grid-template-columns: minmax(0, 1fr);
+          }
+        }
+      `}</style>
+
       {loading ? (
         <div
+          className="pickers-shell"
           style={{
             border: "1px solid rgba(255,255,255,0.12)",
             borderRadius: 18,
             padding: 18,
             background: "#0b1220",
-            maxWidth: 980,
+            boxSizing: "border-box",
           }}
         >
           <div style={{ fontSize: 22, fontWeight: 950, letterSpacing: "-0.2px" }}>
             We are gathering stocks for you, please wait…
           </div>
           <div style={{ marginTop: 8, opacity: 0.75 }}>
-            First load can take around 10–15 seconds. Cached loads are usually much faster.
+            First load can take around 10–15 seconds. Cached loads are usually much
+            faster.
           </div>
 
           <div
@@ -293,26 +376,19 @@ export default function PickersClient() {
               }}
             />
           </div>
-
-          <style>{`
-            @keyframes pickersBar {
-              0% { transform: translateX(-60%); opacity: 0.55; }
-              50% { transform: translateX(140%); opacity: 0.95; }
-              100% { transform: translateX(320%); opacity: 0.55; }
-            }
-          `}</style>
         </div>
       ) : null}
 
       {err ? (
         <div
+          className="pickers-shell"
           style={{
             border: "1px solid rgba(239,68,68,0.18)",
             borderRadius: 16,
             padding: 16,
             background: "rgba(239,68,68,0.08)",
             color: "#fecaca",
-            maxWidth: 980,
+            boxSizing: "border-box",
           }}
         >
           {err}
@@ -321,13 +397,15 @@ export default function PickersClient() {
 
       {!loading && !err ? (
         <section
+          className="pickers-shell"
           style={{
             border: "1px solid rgba(59,130,246,0.24)",
             borderRadius: 18,
             padding: 16,
             background: "linear-gradient(180deg, rgba(11,18,32,1), rgba(8,12,22,1))",
-            maxWidth: 980,
             marginBottom: 18,
+            boxSizing: "border-box",
+            overflow: "hidden",
           }}
         >
           <div
@@ -339,29 +417,10 @@ export default function PickersClient() {
               flexWrap: "wrap",
             }}
           >
-            <div>
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  padding: "7px 12px",
-                  borderRadius: 999,
-                  background:
-                    "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
-                  border: "1px solid rgba(59,130,246,0.28)",
-                  color: "#dbeafe",
-                  fontWeight: 950,
-                  letterSpacing: "0.08em",
-                  fontSize: 12,
-                  textTransform: "uppercase",
-                }}
-              >
-                Custom Screener
-              </div>
-
+            <div style={{ minWidth: 0 }}>
               <h3
                 style={{
-                  margin: "12px 0 0 0",
+                  margin: 0,
                   fontSize: 24,
                   lineHeight: 1.1,
                   letterSpacing: "-0.03em",
@@ -379,146 +438,185 @@ export default function PickersClient() {
                   maxWidth: 760,
                 }}
               >
-                Choose multiple technical conditions and we will only show stocks matching all
-                selected filters.
+                Choose multiple technical conditions and we will only show stocks
+                matching all selected filters.
               </p>
             </div>
 
-            {customMode ? (
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+                alignItems: "center",
+              }}
+            >
               <button
                 type="button"
-                onClick={clearFilters}
+                onClick={handleScreenerButton}
                 style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: "10px 14px",
-                  borderRadius: 12,
-                  border: "1px solid rgba(255,255,255,0.16)",
-                  background: "rgba(255,255,255,0.05)",
-                  color: "#f1f5f9",
-                  fontWeight: 900,
-                  cursor: "pointer",
+                  ...actionButtonStyle,
+                  border: "1px solid rgba(34,197,94,0.34)",
+                  background:
+                    "linear-gradient(180deg, rgba(20,83,45,0.98), rgba(21,128,61,0.88))",
+                  color: "#dcfce7",
+                  boxShadow: screenerOpen
+                    ? "0 0 0 1px rgba(34,197,94,0.16), 0 10px 24px rgba(22,101,52,0.18)"
+                    : "none",
                 }}
               >
-                Clear Custom Filters
+                {screenerOpen ? "Hide Custom Screener" : "Custom Screener"}
               </button>
-            ) : null}
+
+              {customMode ? (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  style={{
+                    ...actionButtonStyle,
+                    border: "1px solid rgba(239,68,68,0.34)",
+                    background:
+                      "linear-gradient(180deg, rgba(127,29,29,0.98), rgba(185,28,28,0.88))",
+                    color: "#fee2e2",
+                    boxShadow: "0 10px 24px rgba(127,29,29,0.16)",
+                  }}
+                >
+                  Clear Filters
+                </button>
+              ) : null}
+            </div>
           </div>
 
           <div
             style={{
-              marginTop: 16,
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
-              gap: 10,
+              marginTop: screenerOpen ? 16 : 0,
+              maxHeight: screenerOpen ? 1200 : 0,
+              opacity: screenerOpen ? 1 : 0,
+              overflow: "hidden",
+              transform: screenerOpen ? "translateY(0)" : "translateY(-8px)",
+              transition:
+                "max-height 0.38s ease, opacity 0.24s ease, transform 0.28s ease, margin-top 0.28s ease",
             }}
           >
-            {FILTER_DEFS.map((filter) => {
-              const active = selectedFilters.includes(filter.key);
+            <div className="pickers-filter-grid">
+              {FILTER_DEFS.map((filter) => {
+                const active = selectedFilters.includes(filter.key);
 
-              return (
-                <button
-                  key={filter.key}
-                  type="button"
-                  onClick={() => toggleFilter(filter.key)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    padding: "12px 14px",
-                    borderRadius: 14,
-                    border: active
-                      ? `1px solid ${toneDot(filter.tone)}`
-                      : "1px solid rgba(255,255,255,0.14)",
-                    background: active
-                      ? "rgba(255,255,255,0.08)"
-                      : "rgba(255,255,255,0.04)",
-                    color: "#f1f5f9",
-                    textAlign: "left",
-                    fontWeight: 850,
-                    cursor: "pointer",
-                  }}
-                >
-                  <span
+                return (
+                  <button
+                    key={filter.key}
+                    type="button"
+                    onClick={() => toggleFilter(filter.key)}
                     style={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: 999,
-                      background: toneDot(filter.tone),
-                      flex: "0 0 auto",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      padding: "12px 14px",
+                      minWidth: 0,
+                      borderRadius: 14,
+                      border: active
+                        ? `1px solid ${toneDot(filter.tone)}`
+                        : "1px solid rgba(255,255,255,0.14)",
+                      background: active
+                        ? "rgba(255,255,255,0.08)"
+                        : "rgba(255,255,255,0.04)",
+                      color: "#f1f5f9",
+                      textAlign: "left",
+                      fontWeight: 850,
+                      cursor: "pointer",
+                      boxSizing: "border-box",
                     }}
-                  />
-                  <span>{filter.label}</span>
-                </button>
-              );
-            })}
-          </div>
+                  >
+                    <span
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: 999,
+                        background: toneDot(filter.tone),
+                        flex: "0 0 auto",
+                      }}
+                    />
+                    <span style={{ minWidth: 0 }}>{filter.label}</span>
+                  </button>
+                );
+              })}
+            </div>
 
-          {customMode ? (
-            <div
-              style={{
-                marginTop: 16,
-                padding: 14,
-                borderRadius: 14,
-                border: "1px solid rgba(255,255,255,0.10)",
-                background: "rgba(255,255,255,0.04)",
-              }}
-            >
-              <div style={{ fontSize: 12, opacity: 0.72, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Active Custom Setup
-              </div>
-
+            {customMode ? (
               <div
                 style={{
-                  marginTop: 10,
-                  display: "flex",
-                  gap: 8,
-                  flexWrap: "wrap",
+                  marginTop: 16,
+                  padding: 14,
+                  borderRadius: 14,
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  background: "rgba(255,255,255,0.04)",
+                  boxSizing: "border-box",
                 }}
               >
-                {selectedFilters.map((filter) => {
-                  const def = FILTER_DEFS.find((f) => f.key === filter);
+                <div
+                  style={{
+                    fontSize: 12,
+                    opacity: 0.72,
+                    fontWeight: 900,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                  }}
+                >
+                  Active Custom Setup
+                </div>
 
-                  return (
-                    <span
-                      key={filter}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 8,
-                        padding: "8px 10px",
-                        borderRadius: 999,
-                        border: "1px solid rgba(255,255,255,0.14)",
-                        background: "rgba(255,255,255,0.06)",
-                        fontSize: 12,
-                        fontWeight: 900,
-                      }}
-                    >
+                <div
+                  style={{
+                    marginTop: 10,
+                    display: "flex",
+                    gap: 8,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  {selectedFilters.map((filter) => {
+                    const def = FILTER_DEFS.find((f) => f.key === filter);
+
+                    return (
                       <span
+                        key={filter}
                         style={{
-                          width: 8,
-                          height: 8,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "8px 10px",
                           borderRadius: 999,
-                          background: toneDot(def?.tone),
+                          border: "1px solid rgba(255,255,255,0.14)",
+                          background: "rgba(255,255,255,0.06)",
+                          fontSize: 12,
+                          fontWeight: 900,
                         }}
-                      />
-                      {getFilterLabel(filter)}
-                    </span>
-                  );
-                })}
+                      >
+                        <span
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: 999,
+                            background: toneDot(def?.tone),
+                          }}
+                        />
+                        {getFilterLabel(filter)}
+                      </span>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </section>
       ) : null}
 
       <div
+        className="pickers-shell"
         style={{
           marginTop: loading || err ? 20 : 0,
           display: "grid",
           gap: 16,
-          maxWidth: 980,
+          boxSizing: "border-box",
         }}
       >
         {customMode ? (
@@ -528,6 +626,8 @@ export default function PickersClient() {
               borderRadius: 16,
               padding: 16,
               background: "#0b1220",
+              boxSizing: "border-box",
+              overflow: "hidden",
             }}
           >
             <div
@@ -539,7 +639,7 @@ export default function PickersClient() {
                 flexWrap: "wrap",
               }}
             >
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <h2
                   style={{
                     margin: 0,
@@ -569,11 +669,9 @@ export default function PickersClient() {
 
             {customMatches.length ? (
               <div
+                className="pickers-card-grid"
                 style={{
                   marginTop: 14,
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-                  gap: 12,
                 }}
               >
                 {customMatches.map((item) => (
@@ -582,12 +680,14 @@ export default function PickersClient() {
                     href={`/?symbol=${encodeURIComponent(item.symbol)}`}
                     style={{
                       display: "block",
+                      minWidth: 0,
                       textDecoration: "none",
                       color: "#f1f5f9",
                       border: "1px solid rgba(255,255,255,0.14)",
                       borderRadius: 16,
                       padding: 14,
                       background: "rgba(255,255,255,0.04)",
+                      boxSizing: "border-box",
                     }}
                     title={item.note ?? "Open in dashboard"}
                   >
@@ -599,12 +699,13 @@ export default function PickersClient() {
                         alignItems: "flex-start",
                       }}
                     >
-                      <div>
+                      <div style={{ minWidth: 0 }}>
                         <div
                           style={{
                             display: "flex",
                             alignItems: "center",
                             gap: 8,
+                            minWidth: 0,
                           }}
                         >
                           <span
@@ -617,7 +718,9 @@ export default function PickersClient() {
                               flex: "0 0 auto",
                             }}
                           />
-                          <div style={{ fontSize: 20, fontWeight: 950 }}>{item.symbol}</div>
+                          <div style={{ fontSize: 20, fontWeight: 950, minWidth: 0 }}>
+                            {item.symbol}
+                          </div>
                         </div>
 
                         {item.note ? (
@@ -627,6 +730,7 @@ export default function PickersClient() {
                               fontSize: 13,
                               lineHeight: 1.55,
                               opacity: 0.72,
+                              wordBreak: "break-word",
                             }}
                           >
                             {item.note}
@@ -640,6 +744,7 @@ export default function PickersClient() {
                           opacity: 0.72,
                           fontWeight: 800,
                           whiteSpace: "nowrap",
+                          flex: "0 0 auto",
                         }}
                       >
                         Open chart →
@@ -670,6 +775,7 @@ export default function PickersClient() {
                               background: "rgba(255,255,255,0.05)",
                               fontSize: 11,
                               fontWeight: 900,
+                              minWidth: 0,
                             }}
                           >
                             <span
@@ -678,9 +784,10 @@ export default function PickersClient() {
                                 height: 7,
                                 borderRadius: 999,
                                 background: toneDot(def?.tone),
+                                flex: "0 0 auto",
                               }}
                             />
-                            {getFilterLabel(signal)}
+                            <span style={{ minWidth: 0 }}>{getFilterLabel(signal)}</span>
                           </span>
                         );
                       })}
@@ -698,9 +805,11 @@ export default function PickersClient() {
                   background: "rgba(255,255,255,0.04)",
                   lineHeight: 1.6,
                   opacity: 0.82,
+                  boxSizing: "border-box",
                 }}
               >
-                No stocks currently match all selected filters. Try removing one condition or using a broader setup.
+                No stocks currently match all selected filters. Try removing one
+                condition or using a broader setup.
               </div>
             )}
           </section>
@@ -716,6 +825,8 @@ export default function PickersClient() {
                   borderRadius: 16,
                   padding: 16,
                   background: "#0b1220",
+                  boxSizing: "border-box",
+                  overflow: "hidden",
                 }}
               >
                 <div
@@ -727,7 +838,7 @@ export default function PickersClient() {
                     flexWrap: "wrap",
                   }}
                 >
-                  <div>
+                  <div style={{ minWidth: 0 }}>
                     <h2
                       style={{
                         margin: 0,
@@ -773,6 +884,8 @@ export default function PickersClient() {
                         display: "inline-flex",
                         alignItems: "center",
                         gap: 8,
+                        maxWidth: "100%",
+                        minWidth: 0,
                         padding: "10px 12px",
                         borderRadius: 999,
                         border: "1px solid rgba(255,255,255,0.14)",
@@ -780,6 +893,7 @@ export default function PickersClient() {
                         color: "#f1f5f9",
                         textDecoration: "none",
                         fontWeight: 900,
+                        boxSizing: "border-box",
                       }}
                       title={it.note ?? "Open in dashboard"}
                     >
@@ -793,13 +907,15 @@ export default function PickersClient() {
                           flex: "0 0 auto",
                         }}
                       />
-                      <span>{it.symbol}</span>
+                      <span style={{ minWidth: 0 }}>{it.symbol}</span>
                       {it.note ? (
                         <span
                           style={{
                             fontSize: 12,
                             opacity: 0.65,
                             fontWeight: 700,
+                            minWidth: 0,
+                            wordBreak: "break-word",
                           }}
                         >
                           {it.note}
@@ -815,7 +931,11 @@ export default function PickersClient() {
 
         {!loading &&
         !err &&
-        (updatedAt || universeSize || dynamicUniverseCount || dynamicUniversePreview || estimatedApiCalls) ? (
+        (updatedAt ||
+          universeSize ||
+          dynamicUniverseCount ||
+          dynamicUniversePreview ||
+          estimatedApiCalls) ? (
           <div
             style={{
               marginTop: 4,
@@ -827,9 +947,7 @@ export default function PickersClient() {
             }}
           >
             {updatedAt ? (
-              <div>
-                Last picker refresh: {new Date(updatedAt).toLocaleString()}
-              </div>
+              <div>Last picker refresh: {new Date(updatedAt).toLocaleString()}</div>
             ) : null}
             {universeSize != null ? <div>Universe scanned: {universeSize} stocks</div> : null}
             {dynamicUniverseCount != null ? (
