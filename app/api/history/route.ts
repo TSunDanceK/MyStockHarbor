@@ -22,22 +22,32 @@ function getEasternParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
     weekday: "short",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
   }).formatToParts(date);
 
   const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
+  const year = Number(parts.find((p) => p.type === "year")?.value ?? "0");
+  const month = Number(parts.find((p) => p.type === "month")?.value ?? "0");
+  const day = Number(parts.find((p) => p.type === "day")?.value ?? "0");
   const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
   const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
 
-  return { weekday, hour, minute };
+  return { weekday, year, month, day, hour, minute };
+}
+
+function isWeekendEastern(weekday: string) {
+  return weekday === "Sat" || weekday === "Sun";
 }
 
 function isActiveMarketWindow(date = new Date()) {
   const { weekday, hour, minute } = getEasternParts(date);
 
-  if (weekday === "Sat" || weekday === "Sun") return false;
+  if (isWeekendEastern(weekday)) return false;
 
   const totalMinutes = hour * 60 + minute;
 
@@ -48,14 +58,38 @@ function isActiveMarketWindow(date = new Date()) {
   return totalMinutes >= start && totalMinutes <= end;
 }
 
-function getCacheControlHeader() {
-  const isActive = isActiveMarketWindow();
+function secondsUntilNextActiveWindow(date = new Date()) {
+  const { weekday, hour, minute } = getEasternParts(date);
 
-  if (isActive) {
+  const totalMinutes = hour * 60 + minute;
+  const activeStart = 8 * 60 + 30;
+
+  if (weekday === "Sat") {
+    return 60 * 60 * 48;
+  }
+
+  if (weekday === "Sun") {
+    return 60 * 60 * 24;
+  }
+
+  if (weekday === "Fri" && totalMinutes > 17 * 60) {
+    return 60 * 60 * 63;
+  }
+
+  if (totalMinutes < activeStart) {
+    return Math.max(60, (activeStart - totalMinutes) * 60);
+  }
+
+  return QUIET_CACHE_SECONDS;
+}
+
+function getCacheControlHeader() {
+  if (isActiveMarketWindow()) {
     return `public, s-maxage=${ACTIVE_CACHE_SECONDS}, stale-while-revalidate=${ACTIVE_STALE_SECONDS}`;
   }
 
-  return `public, s-maxage=${QUIET_CACHE_SECONDS}, stale-while-revalidate=${QUIET_STALE_SECONDS}`;
+  const quietSeconds = Math.max(QUIET_CACHE_SECONDS, secondsUntilNextActiveWindow());
+  return `public, s-maxage=${quietSeconds}, stale-while-revalidate=${QUIET_STALE_SECONDS}`;
 }
 
 export async function GET(req: Request) {
