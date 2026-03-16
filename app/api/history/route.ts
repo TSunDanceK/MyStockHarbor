@@ -2,8 +2,13 @@ import { NextResponse } from "next/server";
 
 export const runtime = "edge";
 
-const CACHE_SECONDS = 3600; // 1 hour
-const STALE_SECONDS = 7200; // 2 hours stale while revalidating
+const ACTIVE_CACHE_SECONDS = 3600; // 1 hour during market activity
+const ACTIVE_STALE_SECONDS = 7200; // 2 hours stale while revalidating
+
+const QUIET_CACHE_SECONDS = 60 * 60 * 14; // 14 hours outside active market window
+const QUIET_STALE_SECONDS = 60 * 60 * 6; // 6 extra stale hours
+
+
 
 type Point = {
   date: string;
@@ -12,6 +17,46 @@ type Point = {
   low?: number;
   volume?: number;
 };
+
+function getEasternParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+
+  const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+
+  return { weekday, hour, minute };
+}
+
+function isActiveMarketWindow(date = new Date()) {
+  const { weekday, hour, minute } = getEasternParts(date);
+
+  if (weekday === "Sat" || weekday === "Sun") return false;
+
+  const totalMinutes = hour * 60 + minute;
+
+  // 8:30 AM to 5:00 PM Eastern
+  const start = 8 * 60 + 30;
+  const end = 17 * 60;
+
+  return totalMinutes >= start && totalMinutes <= end;
+}
+
+function getCacheControlHeader() {
+  const isActive = isActiveMarketWindow();
+
+  if (isActive) {
+    return `public, s-maxage=${ACTIVE_CACHE_SECONDS}, stale-while-revalidate=${ACTIVE_STALE_SECONDS}`;
+  }
+
+  return `public, s-maxage=${QUIET_CACHE_SECONDS}, stale-while-revalidate=${QUIET_STALE_SECONDS}`;
+}
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -31,7 +76,7 @@ export async function GET(req: Request) {
     { symbol, points: [] as Point[] },
     {
       headers: {
-        "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+        "Cache-Control": getCacheControlHeader(),
       },
     }
   );
@@ -62,7 +107,7 @@ export async function GET(req: Request) {
       { symbol, points: points.slice(-days) },
       {
         headers: {
-          "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+          "Cache-Control": getCacheControlHeader(),
         },
       }
     );
@@ -71,7 +116,7 @@ export async function GET(req: Request) {
       { symbol, points: [] as Point[] },
       {
         headers: {
-          "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+          "Cache-Control": getCacheControlHeader(),
         },
       }
     );
