@@ -751,10 +751,11 @@ const takeTop = (arr: PickerItem[], n: number, opts?: { volumeFirstIfMany?: bool
     updatedAt: new Date().toISOString(),
     universeSize: universe.length,
     dynamicUniverseCount: dynamicUniverse.length,
+    dynamicUniversePreview: dynamicUniverse.slice(0, 20),
     estimatedApiCalls: universe.length + 1,
     sections,
-   };
-  }
+  };
+}
 
 /* -------------------------------- GET -------------------------------- */
 
