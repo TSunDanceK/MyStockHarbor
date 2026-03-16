@@ -63,9 +63,9 @@ let memo:
     }
   | null = null;
 
-const CACHE_SECONDS = 3600; // 1 hour CDN cache
-const STALE_SECONDS = 7200; // allow stale for 2 hours while revalidating
-const MEMORY_CACHE_MS = 3_600_000; // 1 hour in-memory cache
+const CACHE_SECONDS = 300; // 5 minutes CDN cache
+const STALE_SECONDS = 600; // allow stale for 10 minutes while revalidating
+const MEMORY_CACHE_MS = 300_000; // 5 minutes in-memory cache
 
 /* ------------------------ small util helpers ------------------------ */
 
