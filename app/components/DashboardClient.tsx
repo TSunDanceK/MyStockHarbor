@@ -50,6 +50,11 @@ type NewsPayload = {
   }[];
 };
 
+type CachedSymbolData = {
+  quote: Quote | null;
+  history: Point[];
+};
+
 /* ----------------------- indicator math helpers ----------------------- */
 
 function movingAverage(values: number[], window: number): (number | null)[] {
@@ -843,6 +848,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
 
   const [quote, setQuote] = useState<Quote | null>(null);
   const [historyAll, setHistoryAll] = useState<Point[]>([]);
+  const [symbolCache, setSymbolCache] = useState<Record<string, CachedSymbolData>>({});
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -892,11 +898,21 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     let cancelled = false;
 
     async function load() {
+   const cacheHit = symbolCache[symbol];
+
+      if (cacheHit) {
+        setErr(null);
+        setQuote(cacheHit.quote);
+        setHistoryAll(cacheHit.history);
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       setErr(null);
 
       try {
-        const historyDays = Math.max(tfDays, 2600);
+        const historyDays = 2600;
 
         const [qRes, hRes] = await Promise.all([
           fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" }),
@@ -924,6 +940,14 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
 
         setQuote(q);
         setHistoryAll(pts);
+
+        setSymbolCache((prev) => ({
+          ...prev,
+          [symbol]: {
+            quote: q,
+            history: pts,
+          },
+        }));
       } catch {
         if (cancelled) return;
         setErr("Failed to load data (try another ticker).");
@@ -938,7 +962,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     return () => {
       cancelled = true;
     };
-  }, [symbol, tfDays]);
+  }, [symbol]);
 
   useEffect(() => {
     let cancelled = false;
