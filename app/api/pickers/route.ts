@@ -54,7 +54,30 @@ type CompositeResult = {
   tag: string;
 };
 
+type SignalRecord = {
+  symbol: string;
+  note?: string;
+  tone?: PickerTone;
+
+  oversold: boolean;
+  overbought: boolean;
+  buyTheDip: boolean;
+  breakout: boolean;
+  volumeSpike: boolean;
+  atrSpike: boolean;
+  aboveMA50: boolean;
+  belowMA50: boolean;
+  aboveMA200: boolean;
+  belowMA200: boolean;
+
+  bullishRsiDivergence: boolean;
+  bearishRsiDivergence: boolean;
+  bullishMacdDivergence: boolean;
+  bearishMacdDivergence: boolean;
+};
+
 /* ----------------------------- caching ------------------------------ */
+
 
 let memo:
   | {
@@ -622,6 +645,7 @@ async function buildPickersPayload(origin: string) {
   const dips: PickerItem[] = [];
   const breakouts: PickerItem[] = [];
   const divergences: PickerItem[] = [];
+  const signalRecords: SignalRecord[] = [];
 
   // helper for prioritising symbols coming from the live market lists
   const isDynamicUniverse = (sym: string) => dynamicUniverse.includes(sym);
@@ -747,14 +771,15 @@ const takeTop = (arr: PickerItem[], n: number, opts?: { volumeFirstIfMany?: bool
 },
   ];
 
-  return {
-    updatedAt: new Date().toISOString(),
-    universeSize: universe.length,
-    dynamicUniverseCount: dynamicUniverse.length,
-    dynamicUniversePreview: dynamicUniverse.slice(0, 20),
-    estimatedApiCalls: universe.length + 1,
-    sections,
-  };
+return {
+  updatedAt: new Date().toISOString(),
+  universeSize: universe.length,
+  dynamicUniverseCount: dynamicUniverse.length,
+  dynamicUniversePreview: dynamicUniverse.slice(0, 20),
+  estimatedApiCalls: universe.length + 1,
+  sections,
+  signalRecords,
+};
 }
 
 /* -------------------------------- GET -------------------------------- */
