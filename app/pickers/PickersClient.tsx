@@ -28,6 +28,8 @@ export default function PickersClient() {
   const [err, setErr] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [universeSize, setUniverseSize] = useState<number | null>(null);
+  const [dynamicUniverseCount, setDynamicUniverseCount] = useState<number | null>(null);
+  const [dynamicUniversePreview, setDynamicUniversePreview] = useState<string[] | null>(null);
   const [estimatedApiCalls, setEstimatedApiCalls] = useState<number | null>(null);
 
   useEffect(() => {
@@ -41,19 +43,31 @@ export default function PickersClient() {
         const res = await fetch("/api/pickers", { cache: "no-store" });
         if (!res.ok) throw new Error("Pickers API failed");
 
-        const data = (await res.json()) as {
-          updatedAt?: string;
-          universeSize?: number;
-          estimatedApiCalls?: number;
-          sections?: PickerSection[];
-        };
+const data = (await res.json()) as {
+  updatedAt?: string;
+  universeSize?: number;
+  dynamicUniverseCount?: number;
+  dynamicUniversePreview?: string[];
+  estimatedApiCalls?: number;
+  sections?: PickerSection[];
+};
         const safeSections = Array.isArray(data?.sections) ? data.sections : [];
 
-        if (!cancelled) {
+  if (!cancelled) {
           setSections(safeSections);
           setUpdatedAt(typeof data?.updatedAt === "string" ? data.updatedAt : null);
           setUniverseSize(
             typeof data?.universeSize === "number" ? data.universeSize : null
+          );
+          setDynamicUniverseCount(
+            typeof data?.dynamicUniverseCount === "number"
+              ? data.dynamicUniverseCount
+              : null
+          );
+          setDynamicUniversePreview(
+            Array.isArray(data?.dynamicUniversePreview)
+              ? data.dynamicUniversePreview
+              : null
           );
           setEstimatedApiCalls(
             typeof data?.estimatedApiCalls === "number"
@@ -62,11 +76,13 @@ export default function PickersClient() {
           );
         }
       } catch {
-        if (!cancelled) {
+    if (!cancelled) {
           setErr("Failed to load stock ideas.");
           setSections([]);
           setUpdatedAt(null);
           setUniverseSize(null);
+          setDynamicUniverseCount(null);
+          setDynamicUniversePreview(null);
           setEstimatedApiCalls(null);
         }
       } finally {
@@ -269,7 +285,9 @@ export default function PickersClient() {
           );
         })}
 
-        {!loading && !err && (updatedAt || universeSize || estimatedApiCalls) ? (
+   {!loading &&
+        !err &&
+        (updatedAt || universeSize || dynamicUniverseCount || dynamicUniversePreview || estimatedApiCalls) ? (
           <div
             style={{
               marginTop: 4,
@@ -287,6 +305,14 @@ export default function PickersClient() {
             ) : null}
             {universeSize != null ? (
               <div>Universe scanned: {universeSize} stocks</div>
+            ) : null}
+            {dynamicUniverseCount != null ? (
+              <div>Dynamic symbols detected: {dynamicUniverseCount}</div>
+            ) : null}
+            {dynamicUniversePreview ? (
+              <div style={{ opacity: 0.7 }}>
+                Dynamic preview: {dynamicUniversePreview.join(", ")}
+              </div>
             ) : null}
             {estimatedApiCalls != null ? (
               <div>Estimated calls used on refresh: {estimatedApiCalls}</div>
