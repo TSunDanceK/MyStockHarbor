@@ -145,6 +145,34 @@ function chooseCardTone(
   return record.tone;
 }
 
+function getBuySignalCount(record: SignalRecord) {
+  let count = 0;
+
+  if (record.oversold) count += 1;
+  if (record.buyTheDip) count += 1;
+  if (record.breakout) count += 1;
+  if (record.volumeSpike) count += 1;
+  if (record.atrSpike) count += 1;
+  if (record.aboveMA50) count += 1;
+  if (record.aboveMA200) count += 1;
+  if (record.bullishRsiDivergence) count += 1;
+  if (record.bullishMacdDivergence) count += 1;
+
+  return count;
+}
+
+function getSellSignalCount(record: SignalRecord) {
+  let count = 0;
+
+  if (record.overbought) count += 1;
+  if (record.belowMA50) count += 1;
+  if (record.belowMA200) count += 1;
+  if (record.bearishRsiDivergence) count += 1;
+  if (record.bearishMacdDivergence) count += 1;
+
+  return count;
+}
+
 export default function PickersClient() {
   const [sections, setSections] = useState<PickerSection[]>([]);
   const [signalRecords, setSignalRecords] = useState<SignalRecord[]>([]);
@@ -229,6 +257,71 @@ export default function PickersClient() {
   const safeSignalRecords = useMemo(() => {
     return Array.isArray(signalRecords) ? signalRecords : [];
   }, [signalRecords]);
+
+  const topBuySection = useMemo<PickerSection | null>(() => {
+    const items = safeSignalRecords
+      .map((record) => ({
+        symbol: record.symbol,
+        buyCount: getBuySignalCount(record),
+      }))
+      .filter((item) => item.buyCount > 0)
+      .sort((a, b) => {
+        if (b.buyCount !== a.buyCount) return b.buyCount - a.buyCount;
+        return a.symbol.localeCompare(b.symbol);
+      })
+      .slice(0, 3)
+      .map((item) => ({
+        symbol: item.symbol,
+        note: `${item.buyCount} buy signal${item.buyCount === 1 ? "" : "s"}`,
+        tone: "green" as PickerTone,
+      }));
+
+    if (!items.length) return null;
+
+    return {
+      title: "Stocks with the MOST BUY signals",
+      description:
+        "The strongest bullish-leaning setups right now, ranked by how many buy signals they currently show.",
+      items,
+    };
+  }, [safeSignalRecords]);
+
+  const topSellSection = useMemo<PickerSection | null>(() => {
+    const items = safeSignalRecords
+      .map((record) => ({
+        symbol: record.symbol,
+        sellCount: getSellSignalCount(record),
+      }))
+      .filter((item) => item.sellCount > 0)
+      .sort((a, b) => {
+        if (b.sellCount !== a.sellCount) return b.sellCount - a.sellCount;
+        return a.symbol.localeCompare(b.symbol);
+      })
+      .slice(0, 3)
+      .map((item) => ({
+        symbol: item.symbol,
+        note: `${item.sellCount} sell signal${item.sellCount === 1 ? "" : "s"}`,
+        tone: "red" as PickerTone,
+      }));
+
+    if (!items.length) return null;
+
+    return {
+      title: "Stocks with the most Sell signals",
+      description:
+        "The strongest bearish-leaning setups right now, ranked by how many sell signals they currently show.",
+      items,
+    };
+  }, [safeSignalRecords]);
+
+  const displaySections = useMemo(() => {
+    const out: PickerSection[] = [];
+
+    if (topBuySection) out.push(topBuySection);
+    if (topSellSection) out.push(topSellSection);
+
+    return [...out, ...safeSections];
+  }, [safeSections, topBuySection, topSellSection]);
 
   const customMode = selectedFilters.length > 0;
 
@@ -402,8 +495,7 @@ export default function PickersClient() {
             border: "1px solid rgba(34,197,94,0.26)",
             borderRadius: 18,
             padding: 16,
-            background:
-  "linear-gradient(180deg, rgba(8,18,12,0.96), rgba(8,12,22,1))",
+            background: "linear-gradient(180deg, rgba(8,18,12,0.96), rgba(8,12,22,1))",
             marginBottom: 18,
             boxSizing: "border-box",
             overflow: "hidden",
@@ -815,7 +907,7 @@ export default function PickersClient() {
             )}
           </section>
         ) : (
-          safeSections.map((sec) => {
+          displaySections.map((sec) => {
             const items = Array.isArray(sec.items) ? sec.items : [];
 
             return (
