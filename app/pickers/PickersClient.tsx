@@ -173,6 +173,92 @@ function getSellSignalCount(record: SignalRecord) {
   return count;
 }
 
+function getHeaderHelp(title: string) {
+  if (title.includes("BUY")) {
+    return "These highlight strong trend setups. Stocks here may already be trending strongly and could be extended. Trend traders sometimes buy these moves, while dip traders may prefer to wait for pullbacks.";
+  }
+
+  if (title.includes("Sell")) {
+    return "These highlight bearish or stretched conditions. Some traders review these for potential pullbacks or short opportunities.";
+  }
+
+  if (title.includes("Oversold")) {
+    return "Oversold signals highlight stocks that have dropped or stretched downward. Some traders review these for rebound or dip-buy setups.";
+  }
+
+  if (title.includes("Overbought")) {
+    return "Overbought signals highlight stocks that may be extended after strong moves and could experience pullbacks.";
+  }
+
+  if (title.includes("Divergence")) {
+    return "Divergence occurs when price and momentum indicators move differently, which can sometimes signal weakening trends or possible reversals.";
+  }
+
+  if (title.includes("Buy-the-Dip")) {
+    return "These setups are more about pullbacks inside a broader trend. Traders often review these when looking for dip entries rather than buying pure strength near the top.";
+  }
+
+  if (title.includes("Breakout")) {
+    return "Breakout setups focus on strength and expansion. These can work in trending markets, but some breakouts can also fail if the move is already overextended.";
+  }
+
+  return "These stocks match multiple technical signals worth reviewing on the chart.";
+}
+
+function HelpTip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <span
+      style={{
+        position: "relative",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: 16,
+        height: 16,
+        borderRadius: "50%",
+        background: "rgba(255,255,255,0.15)",
+        color: "#fff",
+        fontSize: 11,
+        fontWeight: 900,
+        cursor: "pointer",
+        marginLeft: 2,
+        flex: "0 0 auto",
+      }}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onClick={() => setOpen((v) => !v)}
+    >
+      ?
+      {open ? (
+        <span
+          style={{
+            position: "absolute",
+            top: "calc(100% + 8px)",
+            left: 0,
+            zIndex: 50,
+            width: 260,
+            maxWidth: "min(260px, 78vw)",
+            padding: "10px 12px",
+            borderRadius: 12,
+            background: "#0f172a",
+            border: "1px solid rgba(255,255,255,0.14)",
+            color: "#e5e7eb",
+            fontSize: 12,
+            lineHeight: 1.5,
+            fontWeight: 700,
+            boxShadow: "0 14px 30px rgba(0,0,0,0.35)",
+            textAlign: "left",
+          }}
+        >
+          {text}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 export default function PickersClient() {
   const [sections, setSections] = useState<PickerSection[]>([]);
   const [signalRecords, setSignalRecords] = useState<SignalRecord[]>([]);
@@ -948,9 +1034,14 @@ export default function PickersClient() {
                           fontSize: 22,
                           fontWeight: 950,
                           letterSpacing: "-0.02em",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          flexWrap: "wrap",
                         }}
                       >
                         {sec.title}
+                        <HelpTip text={getHeaderHelp(sec.title)} />
                       </h2>
 
                       {sec.description ? (
