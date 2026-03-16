@@ -23,25 +23,56 @@ type Row = {
   volume: number | null;
 };
 
-const CACHE_MS = 3_600_000; // 1 hour
-let cache: { at: number; payload: any } | null = null;
+type DynamicQuoteRecord = {
+  quote: Quote;
+  discoveredAt: number;
+};
 
-/**
- * ✅ Universe
- * Right now we’ll keep your “Curated Universe” approach:
- * - your dropdown tickers
- * - your pickers universe extras (keep it reasonable)
- *
- * You can expand later, but we must chunk requests anyway.
- */
+const PAYLOAD_CACHE_MS = 60 * 1000;
+const DISCOVERY_INTERVAL_MS = 4 * 60 * 1000;
+const DYNAMIC_TTL_MS = 60 * 60 * 1000;
+const DYNAMIC_MAX_SIZE = 120;
+const DISCOVERY_BATCH_SIZE = 8;
+
+let payloadCache: { at: number; payload: any } | null = null;
+
+let discoveryState: {
+  pointer: number;
+  lastDiscoveryAt: number;
+  dynamic: Map<string, DynamicQuoteRecord>;
+} = {
+  pointer: 0,
+  lastDiscoveryAt: 0,
+  dynamic: new Map<string, DynamicQuoteRecord>(),
+};
+
 const CURATED_UNIVERSE: string[] = [
-  // Dashboard dropdown (your presets)
   "AAPL","ABBV","ABT","ADBE","AMZN","AVGO","BAC","BRK.B","COST","CRM","CSCO","CVX","DIS","GOOGL","HD",
   "INTC","JNJ","JPM","KO","LLY","MA","MCD","META","MRK","MSFT","NFLX","NVDA","ORCL","PEP","PG","PYPL",
   "QCOM","SBUX","T","TGT","TSLA","TXN","UNH","V","VZ","WFC","WMT","XOM",
+  "AMD","GE","AMAT","CAT","LOW","IBM","NOW","PM","NKE","DHR","LIN",
+].filter(Boolean);
 
-  // Extras (example – keep these aligned with what you added)
-  "AMD","GE","AMAT","CAT","LOW","IBM","NOW","PM","NKE","DHR","TXN","ABT","LIN","CVX","XOM",
+const DISCOVERY_MASTER_LIST: string[] = [
+  "A","AAL","AAP","ABC","ABNB","ADI","ADM","AEE","AEP","AES","AFL","AIG","AKAM","ALB","ALLE","AMCR",
+  "AME","ANET","AON","APA","APD","APH","APTV","ARE","ATO","AXP","AZO","BALL","BAX","BBY","BDX","BEN",
+  "BIIB","BK","BKNG","BKR","BLK","BMY","BSX","BWA","C","CAG","CAH","CCI","CDNS","CE","CHD","CHRW",
+  "CI","CL","CLX","CMCSA","CME","CMG","CMI","CMS","CNC","CNP","COF","COO","COP","CPB","CPRT","CRL",
+  "CSGP","CTAS","CTRA","CTSH","CVS","DAL","DAY","DD","DE","DG","DGX","DLR","DLTR","DOC","DOV","DOW",
+  "DPZ","DRI","DUK","DVN","DXCM","EA","EBAY","ECL","ED","EFX","EIX","EL","EMN","EMR","EOG","EPAM",
+  "EQIX","EQR","EQT","ES","ESS","ETN","ETR","EVRG","EXC","EXPD","F","FANG","FAST","FCX","FDX","FI",
+  "FITB","FMC","FOX","FOXA","FRT","GD","GILD","GIS","GL","GLW","GM","GNRC","GPC","GPN","GRMN","GS",
+  "GWW","HAL","HAS","HCA","HES","HIG","HPE","HPQ","HRL","HSIC","HST","HSY","HUM","HWM","IDXX","IEX",
+  "IFF","ILMN","INCY","IP","IPG","IRM","ISRG","IT","ITW","IVZ","J","JBHT","JBL","JKHY","K","KDP",
+  "KEY","KHC","KIM","KKR","KLAC","KMB","KMI","KR","L","LDOS","LEN","LH","LHX","LKQ","LMT","LNT",
+  "LRCX","LULU","LVS","LYB","MCHP","MCK","MDLZ","MDT","MET","MGM","MKC","MKTX","MLM","MMC","MMM","MO",
+  "MOS","MPC","MPWR","MRNA","MS","MSI","MTB","MU","NDAQ","NEE","NEM","NI","NOC","NRG","NSC","NTAP",
+  "NTRS","ODFL","OKE","OMC","ON","OTIS","OXY","PANW","PAYX","PCAR","PEG","PFE","PH","PHM","PKG","PLD",
+  "PNC","PNR","PPG","PPL","PRU","PSA","PSX","PTC","PXD","RCL","REG","REGN","RF","RHI","RJF","RL","RMD",
+  "ROK","ROL","ROP","ROST","RSG","RTX","SBAC","SCHW","SHW","SJM","SLB","SNA","SNPS","SO","SPG","SPGI",
+  "STE","STT","STX","STZ","SWK","SWKS","SYF","SYK","SYY","TEL","TER","TFC","TFX","TJX","TMO","TMUS",
+  "TPR","TRMB","TROW","TRV","TT","TTWO","TXT","TYL","UAL","UDR","UHS","ULTA","UPS","URI","USB","VFC",
+  "VICI","VLO","VMC","VRSK","VRSN","VRTX","WAB","WBA","WDAY","WEC","WELL","WY","YUM","ZBH","ZBRA","ZS",
 ].filter(Boolean);
 
 /* ------------------------- small helpers ------------------------- */
@@ -64,44 +95,53 @@ function uniqUpper(arr: string[]) {
   return out;
 }
 
-function chunk<T>(arr: T[], size: number) {
-  const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
+function getEasternParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+
+  const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+
+  return { weekday, hour, minute };
 }
 
-/**
- * TwelveData returns batch quote in several shapes.
- * This parser tries hard to recover quote objects.
- */
+function isDiscoveryWindowOpen(date = new Date()) {
+  const { weekday, hour, minute } = getEasternParts(date);
+
+  if (weekday === "Sat" || weekday === "Sun") return false;
+
+  const totalMinutes = hour * 60 + minute;
+  const start = 9 * 60;
+  const end = 17 * 60;
+
+  return totalMinutes >= start && totalMinutes <= end;
+}
+
 function extractQuotesFromBatch(json: any): Quote[] {
   if (!json || typeof json !== "object") return [];
 
-  // common error shapes
-  // { status:"error", message:"..." }
-  // { code: 4xx, message:"..." }
   if (json.status === "error") return [];
   if (typeof json.code === "number" && json.message) return [];
 
-  // Sometimes: { data: [...] }
   if (Array.isArray(json.data)) return json.data as Quote[];
-
-  // Sometimes already array
   if (Array.isArray(json)) return json as Quote[];
 
-  // Most common batch: { "AAPL": {...}, "MSFT": {...} }
   const out: Quote[] = [];
   for (const [, v] of Object.entries(json)) {
     if (!v || typeof v !== "object") continue;
     const vv: any = v;
 
-    // request wrapper { status:"ok", data:{...} }
     if (vv.status === "ok" && vv.data && typeof vv.data === "object") {
       if (typeof vv.data.symbol === "string") out.push(vv.data as Quote);
       continue;
     }
 
-    // direct quote object
     if (typeof vv.symbol === "string") {
       if (vv.status === "error") continue;
       out.push(vv as Quote);
@@ -111,8 +151,6 @@ function extractQuotesFromBatch(json: any): Quote[] {
 
   return out;
 }
-
-/* --------------------------- fetcher --------------------------- */
 
 async function fetchQuoteBatch(symbols: string[], apiKey: string) {
   const list = symbols.join(",");
@@ -124,89 +162,55 @@ async function fetchQuoteBatch(symbols: string[], apiKey: string) {
   return { ok: res.ok, status: res.status, json, url };
 }
 
-/* ----------------------------- GET ----------------------------- */
-
-export async function GET() {
-  const apiKey = process.env.TWELVEDATA_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ error: "Missing TWELVEDATA_API_KEY env var." }, { status: 500 });
-  }
-
-  if (cache && Date.now() - cache.at < CACHE_MS) {
-    return NextResponse.json(cache.payload);
-  }
-
-  const universe = uniqUpper(CURATED_UNIVERSE);
-
-  /**
-   * ✅ IMPORTANT:
-   * TwelveData batch quote often breaks / errors once the symbol list gets large.
-   * So we chunk and merge.
-   *
-   * You can tune BATCH_SIZE:
-   * - 10–25 tends to be safe
-   * - 50 can work for some accounts, but not always
-   */
-  const MARKET_SYMBOL_LIMIT = 8;
-  const BATCH_SIZE = 8;
-
-  const limitedUniverse = universe.slice(0, MARKET_SYMBOL_LIMIT);
-  const batches = chunk(limitedUniverse, BATCH_SIZE);
-
-  const allQuotes: Quote[] = [];
-  const debug: any = {
- universeSize: limitedUniverse.length,
-    batchSize: BATCH_SIZE,
-    batches: batches.length,
-    gotQuotes: 0,
-    errors: [] as any[],
-  };
-
-  for (let i = 0; i < batches.length; i++) {
-    try {
-      const r = await fetchQuoteBatch(batches[i], apiKey);
-      const quotes = extractQuotesFromBatch(r.json);
-
-      allQuotes.push(...quotes);
-      debug.gotQuotes = allQuotes.length;
-
-      // If batch returned 0 quotes, capture the error shape for diagnosis
-      if (!quotes.length) {
-        const msg =
-          (r.json && (r.json.message || r.json.error)) ||
-          (r.json && r.json.status === "error" ? "status:error" : null) ||
-          null;
-
-        debug.errors.push({
-          batchIndex: i,
-          httpOk: r.ok,
-          httpStatus: r.status,
-          message: msg,
-          sampleKeys: r.json && typeof r.json === "object" ? Object.keys(r.json).slice(0, 8) : null,
-        });
-      }
-    } catch (e: any) {
-      debug.errors.push({
-        batchIndex: i,
-        httpOk: false,
-        httpStatus: null,
-        message: e?.message ? String(e.message) : "fetch failed",
-        sampleKeys: null,
-      });
+function pruneDynamicCache(now: number) {
+  for (const [symbol, record] of discoveryState.dynamic.entries()) {
+    if (now - record.discoveredAt > DYNAMIC_TTL_MS) {
+      discoveryState.dynamic.delete(symbol);
     }
   }
 
-  // Deduplicate by symbol (keep last occurrence)
-  const bySym = new Map<string, Quote>();
-  for (const q of allQuotes) {
-    const s = (q.symbol ?? "").toUpperCase();
-    if (!s) continue;
-    bySym.set(s, q);
+  if (discoveryState.dynamic.size <= DYNAMIC_MAX_SIZE) return;
+
+  const sorted = Array.from(discoveryState.dynamic.entries()).sort(
+    (a, b) => a[1].discoveredAt - b[1].discoveredAt
+  );
+
+  const toRemove = sorted.slice(0, Math.max(0, sorted.length - DYNAMIC_MAX_SIZE));
+  for (const [symbol] of toRemove) {
+    discoveryState.dynamic.delete(symbol);
+  }
+}
+
+function getNextDiscoveryBatch() {
+  const curatedSet = new Set(uniqUpper(CURATED_UNIVERSE));
+  const master = uniqUpper(DISCOVERY_MASTER_LIST);
+
+  if (!master.length) return [];
+
+  const picked: string[] = [];
+  let checked = 0;
+
+  while (picked.length < DISCOVERY_BATCH_SIZE && checked < master.length) {
+    const idx = discoveryState.pointer % master.length;
+    const symbol = master[idx];
+
+    discoveryState.pointer = (idx + 1) % master.length;
+    checked++;
+
+    if (!symbol) continue;
+    if (curatedSet.has(symbol)) continue;
+
+    const existing = discoveryState.dynamic.get(symbol);
+    if (existing) continue;
+
+    picked.push(symbol);
   }
 
-  const quotes = Array.from(bySym.values());
+  return picked;
+}
 
-  const rows: Row[] = quotes
+function buildRowsFromQuotes(quotes: Quote[]): Row[] {
+  return quotes
     .map((q) => {
       const open = toNum(q.open);
       const high = toNum(q.high);
@@ -228,10 +232,83 @@ export async function GET() {
       };
     })
     .filter((r) => r.symbol && (r.last != null || r.changePct != null || r.rangePct != null || r.volume != null));
+}
+
+/* ----------------------------- GET ----------------------------- */
+
+export async function GET() {
+  const apiKey = process.env.TWELVEDATA_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json({ error: "Missing TWELVEDATA_API_KEY env var." }, { status: 500 });
+  }
+
+  const now = Date.now();
+  pruneDynamicCache(now);
+
+  const allowDiscoveryNow =
+    now - discoveryState.lastDiscoveryAt >= DISCOVERY_INTERVAL_MS &&
+    (isDiscoveryWindowOpen() || discoveryState.dynamic.size === 0);
+
+  const debugErrors: any[] = [];
+
+  if (allowDiscoveryNow) {
+    const nextSymbols = getNextDiscoveryBatch();
+
+    if (nextSymbols.length > 0) {
+      try {
+        const r = await fetchQuoteBatch(nextSymbols, apiKey);
+        const quotes = extractQuotesFromBatch(r.json);
+
+        for (const q of quotes) {
+          const symbol = String(q.symbol ?? "").toUpperCase();
+          if (!symbol) continue;
+
+          discoveryState.dynamic.set(symbol, {
+            quote: q,
+            discoveredAt: now,
+          });
+        }
+
+        if (!quotes.length) {
+          const msg =
+            (r.json && (r.json.message || r.json.error)) ||
+            (r.json && r.json.status === "error" ? "status:error" : null) ||
+            null;
+
+          debugErrors.push({
+            httpOk: r.ok,
+            httpStatus: r.status,
+            message: msg,
+            sampleKeys: r.json && typeof r.json === "object" ? Object.keys(r.json).slice(0, 8) : null,
+            attemptedSymbols: nextSymbols,
+          });
+        }
+      } catch (e: any) {
+        debugErrors.push({
+          httpOk: false,
+          httpStatus: null,
+          message: e?.message ? String(e.message) : "fetch failed",
+          sampleKeys: null,
+          attemptedSymbols: nextSymbols,
+        });
+      }
+    }
+
+    discoveryState.lastDiscoveryAt = now;
+    pruneDynamicCache(now);
+    payloadCache = null;
+  }
+
+  if (payloadCache && now - payloadCache.at < PAYLOAD_CACHE_MS) {
+    return NextResponse.json(payloadCache.payload);
+  }
+
+  const quotes = Array.from(discoveryState.dynamic.values()).map((r) => r.quote);
+  const rows = buildRowsFromQuotes(quotes);
 
   const topTraded = [...rows]
     .filter((r) => r.volume != null)
-    .sort((a, b) => (b.volume! - a.volume!))
+    .sort((a, b) => b.volume! - a.volume!)
     .slice(0, 30);
 
   const topMovers = [...rows]
@@ -244,27 +321,41 @@ export async function GET() {
     .sort((a, b) => b.rangePct! - a.rangePct!)
     .slice(0, 30);
 
-const isRateLimited =
-    Array.isArray(debug.errors) &&
-    debug.errors.some((e: any) => typeof e?.message === "string" && e.message.toLowerCase().includes("run out of api credits"));
+  const isRateLimited =
+    debugErrors.some(
+      (e) => typeof e?.message === "string" && e.message.toLowerCase().includes("run out of api credits")
+    );
 
   const payload = {
     updatedAt: new Date().toISOString(),
-    scope: "Curated Universe (Dashboard + Pickers + Extras)",
-    universeSize: universe.length,
+    scope: "Rolling Dynamic Discovery Universe",
+    provider: "twelvedata",
+    curatedUniverseSize: uniqUpper(CURATED_UNIVERSE).length,
+    masterListSize: uniqUpper(DISCOVERY_MASTER_LIST).length,
+    dynamicUniverseSize: discoveryState.dynamic.size,
     quotesReturned: quotes.length,
     rowsBuilt: rows.length,
-
     rateLimited: isRateLimited,
-    provider: "twelvedata",
 
     topTraded,
     topMovers,
     topRanges,
 
-    debug,
+    debug: {
+      discoveryIntervalMinutes: DISCOVERY_INTERVAL_MS / 60000,
+      discoveryBatchSize: DISCOVERY_BATCH_SIZE,
+      dynamicTtlMinutes: DYNAMIC_TTL_MS / 60000,
+      dynamicMaxSize: DYNAMIC_MAX_SIZE,
+      discoveryWindowOpen: isDiscoveryWindowOpen(),
+      pointer: discoveryState.pointer,
+      lastDiscoveryAt:
+        discoveryState.lastDiscoveryAt > 0
+          ? new Date(discoveryState.lastDiscoveryAt).toISOString()
+          : null,
+      errors: debugErrors,
+    },
   };
 
-  cache = { at: Date.now(), payload };
+  payloadCache = { at: now, payload };
   return NextResponse.json(payload);
 }
