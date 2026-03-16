@@ -722,6 +722,89 @@ const div = detectDivergenceFromHistory(pts, {
               _score: dynamicBoost(symbol) + div.score,
             });
           }
+
+          const closes = pts.map((p) => p.close).filter((x) => Number.isFinite(x));
+          const ma50Arr = closes.length ? movingAverage(closes, 50) : [];
+          const ma200Arr = closes.length ? movingAverage(closes, 200) : [];
+          const atrArr = pts.length ? atr(pts, 14) : [];
+
+          const volumeArr: (number | null)[] = pts.map((p) =>
+            typeof p.volume === "number" && Number.isFinite(p.volume) ? p.volume : null
+          );
+
+          const volSma20Arr = smaNullable(volumeArr, 20);
+          const atrSma20Arr = smaNullable(atrArr, 20);
+
+          const lastClose = closes.length ? closes[closes.length - 1] : null;
+          const lastMA50 = lastNum(ma50Arr);
+          const lastMA200 = lastNum(ma200Arr);
+          const lastVol = lastNum(volumeArr);
+          const lastVolSma20 = lastNum(volSma20Arr);
+          const lastAtr = lastNum(atrArr);
+          const lastAtrSma20 = lastNum(atrSma20Arr);
+
+          const oversold = !!comp && comp.oversold >= 2 && comp.oversold > comp.overbought;
+          const overbought = !!comp && comp.overbought >= 2 && comp.overbought > comp.oversold;
+
+          const buyTheDip = !!dip;
+          const breakout = !!bo;
+
+          const volumeSpike =
+            typeof lastVol === "number" &&
+            typeof lastVolSma20 === "number" &&
+            lastVolSma20 > 0 &&
+            lastVol >= lastVolSma20 * 1.8;
+
+          const atrSpike =
+            typeof lastAtr === "number" &&
+            typeof lastAtrSma20 === "number" &&
+            lastAtrSma20 > 0 &&
+            lastAtr >= lastAtrSma20 * 1.5;
+
+          const aboveMA50 =
+            typeof lastClose === "number" &&
+            typeof lastMA50 === "number" &&
+            lastClose > lastMA50;
+
+          const belowMA50 =
+            typeof lastClose === "number" &&
+            typeof lastMA50 === "number" &&
+            lastClose < lastMA50;
+
+          const aboveMA200 =
+            typeof lastClose === "number" &&
+            typeof lastMA200 === "number" &&
+            lastClose > lastMA200;
+
+          const belowMA200 =
+            typeof lastClose === "number" &&
+            typeof lastMA200 === "number" &&
+            lastClose < lastMA200;
+
+          const bullishRsiDivergence = !!div && div.kind === "bullish" && div.hasRsi;
+          const bearishRsiDivergence = !!div && div.kind === "bearish" && div.hasRsi;
+          const bullishMacdDivergence = !!div && div.kind === "bullish" && div.hasMacd;
+          const bearishMacdDivergence = !!div && div.kind === "bearish" && div.hasMacd;
+
+          signalRecords.push({
+            symbol,
+            note: comp ? `${comp.flagged}/${comp.total} checks • ${comp.tag}` : undefined,
+            tone: comp?.tone,
+            oversold,
+            overbought,
+            buyTheDip,
+            breakout,
+            volumeSpike,
+            atrSpike,
+            aboveMA50,
+            belowMA50,
+            aboveMA200,
+            belowMA200,
+            bullishRsiDivergence,
+            bearishRsiDivergence,
+            bullishMacdDivergence,
+            bearishMacdDivergence,
+          });
         } catch {
           // ignore per-symbol failures
         }
