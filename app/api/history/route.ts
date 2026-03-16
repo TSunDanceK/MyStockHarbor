@@ -22,7 +22,7 @@ export async function GET(req: Request) {
   const url = `https://stooq.com/q/d/l/?s=${stooqSymbol}&i=d`;
 
   try {
-   const res = await fetch(url, { cache: "force-cache" });
+   const res = await fetch(url);
     const text = await res.text();
 
     const lines = text.trim().split("\n");
