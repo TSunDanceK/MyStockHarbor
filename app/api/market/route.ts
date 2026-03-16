@@ -147,12 +147,15 @@ export async function GET() {
    * - 10–25 tends to be safe
    * - 50 can work for some accounts, but not always
    */
-  const BATCH_SIZE = 20;
-  const batches = chunk(universe, BATCH_SIZE);
+  const MARKET_SYMBOL_LIMIT = 8;
+  const BATCH_SIZE = 8;
+
+  const limitedUniverse = universe.slice(0, MARKET_SYMBOL_LIMIT);
+  const batches = chunk(limitedUniverse, BATCH_SIZE);
 
   const allQuotes: Quote[] = [];
   const debug: any = {
-    universeSize: universe.length,
+ universeSize: limitedUniverse.length,
     batchSize: BATCH_SIZE,
     batches: batches.length,
     gotQuotes: 0,
