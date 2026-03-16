@@ -34,6 +34,8 @@ const panelStyle: React.CSSProperties = {
   background: "linear-gradient(180deg, rgba(9,13,20,0.92), rgba(7,10,16,0.96))",
   maxWidth: 980,
   boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+  boxSizing: "border-box",
+  width: "100%",
 };
 
 const bundleGridStyle: React.CSSProperties = {
@@ -53,6 +55,8 @@ const compactLinkStyle: React.CSSProperties = {
   background: "rgba(255,255,255,0.03)",
   boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
   transition: "transform 120ms ease, filter 120ms ease, background 120ms ease",
+  minWidth: 0,
+  boxSizing: "border-box",
 };
 
 const supportCardStyle: React.CSSProperties = {
@@ -65,6 +69,8 @@ const supportCardStyle: React.CSSProperties = {
   display: "block",
   boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
   transition: "transform 120ms ease, filter 120ms ease, background 120ms ease",
+  minWidth: 0,
+  boxSizing: "border-box",
 };
 
 export default function PickersPage() {
@@ -81,12 +87,14 @@ export default function PickersPage() {
       <div className="wrap">
         <div style={{ display: "grid", gap: 14 }}>
           <div
+            className="topNavRow"
             style={{
               display: "flex",
               justifyContent: "flex-end",
               alignItems: "flex-start",
               gap: 10,
               flexWrap: "wrap",
+              minWidth: 0,
             }}
           >
             <Link href="/" style={topNavBtnStyle("dashboard")}>
@@ -122,13 +130,16 @@ export default function PickersPage() {
             className="heroGrid"
             style={{
               display: "grid",
-              gridTemplateColumns: "minmax(0, 1.35fr) minmax(300px, 0.95fr)",
+              gridTemplateColumns: "minmax(0, 1.35fr) minmax(280px, 0.95fr)",
               gap: 16,
               alignItems: "stretch",
               maxWidth: 980,
+              minWidth: 0,
+              width: "100%",
             }}
           >
             <section
+              className="heroPanel"
               style={{
                 border: "1px solid rgba(59,130,246,0.20)",
                 borderRadius: 22,
@@ -137,6 +148,10 @@ export default function PickersPage() {
                   "linear-gradient(135deg, rgba(10,16,32,0.98), rgba(7,11,22,0.98))",
                 boxShadow:
                   "inset 0 1px 0 rgba(255,255,255,0.05), 0 14px 34px rgba(0,0,0,0.30)",
+                minWidth: 0,
+                width: "100%",
+                boxSizing: "border-box",
+                overflow: "hidden",
               }}
             >
               <div
@@ -154,6 +169,8 @@ export default function PickersPage() {
                   letterSpacing: "0.08em",
                   textTransform: "uppercase",
                   color: "#dbeafe",
+                  maxWidth: "100%",
+                  boxSizing: "border-box",
                 }}
               >
                 STOCK PICKERS
@@ -188,12 +205,14 @@ export default function PickersPage() {
               </p>
 
               <div
+                className="heroMiniStats"
                 style={{
                   marginTop: 18,
                   display: "grid",
                   gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
                   gap: 10,
                   maxWidth: 560,
+                  minWidth: 0,
                 }}
               >
                 <MiniStat
@@ -220,6 +239,8 @@ export default function PickersPage() {
                   placeItems: "center",
                   textAlign: "center",
                   minHeight: 96,
+                  minWidth: 0,
+                  boxSizing: "border-box",
                 }}
               >
                 <div
@@ -249,6 +270,7 @@ export default function PickersPage() {
             </section>
 
             <section
+              className="heroPanel"
               style={{
                 border: "1px solid rgba(59,130,246,0.20)",
                 borderRadius: 22,
@@ -257,6 +279,10 @@ export default function PickersPage() {
                   "linear-gradient(180deg, rgba(8,14,28,0.98), rgba(6,10,18,0.98))",
                 boxShadow:
                   "inset 0 1px 0 rgba(255,255,255,0.05), 0 14px 34px rgba(0,0,0,0.28)",
+                minWidth: 0,
+                width: "100%",
+                boxSizing: "border-box",
+                overflow: "hidden",
               }}
             >
               <div
@@ -272,16 +298,20 @@ export default function PickersPage() {
                   fontWeight: 950,
                   letterSpacing: "0.08em",
                   fontSize: 12,
+                  maxWidth: "100%",
+                  boxSizing: "border-box",
                 }}
               >
                 REAL SCREENED SETUPS
               </div>
 
               <div
+                className="heroSignalStack"
                 style={{
                   marginTop: 14,
                   display: "grid",
                   gap: 10,
+                  minWidth: 0,
                 }}
               >
                 <SignalCard
@@ -318,6 +348,7 @@ export default function PickersPage() {
           style={{
             marginTop: 24,
             maxWidth: 980,
+            width: "100%",
             borderRadius: 22,
             border: "1px solid rgba(59,130,246,0.35)",
             background:
@@ -326,6 +357,7 @@ export default function PickersPage() {
               "0 0 0 1px rgba(59,130,246,0.15), 0 24px 60px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06)",
             overflow: "hidden",
             position: "relative",
+            boxSizing: "border-box",
           }}
         >
           <div
@@ -344,6 +376,7 @@ export default function PickersPage() {
               borderBottom: "1px solid rgba(255,255,255,0.08)",
               background:
                 "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(15,23,42,0.28))",
+              boxSizing: "border-box",
             }}
           >
             <div
@@ -359,6 +392,8 @@ export default function PickersPage() {
                 fontWeight: 950,
                 letterSpacing: "0.08em",
                 fontSize: 12,
+                maxWidth: "100%",
+                boxSizing: "border-box",
               }}
             >
               DATA-DRIVEN SCREENED RESULTS
@@ -391,12 +426,12 @@ export default function PickersPage() {
             </p>
           </div>
 
-          <div style={{ padding: 18 }}>
+          <div style={{ padding: 18, boxSizing: "border-box" }}>
             <PickersClient />
           </div>
         </section>
- 
-          <section style={panelStyle}>
+
+        <section style={panelStyle}>
           <div
             style={{
               display: "inline-flex",
@@ -410,6 +445,8 @@ export default function PickersPage() {
               fontWeight: 950,
               letterSpacing: "0.08em",
               fontSize: 12,
+              maxWidth: "100%",
+              boxSizing: "border-box",
             }}
           >
             LEARN MORE
@@ -496,7 +533,7 @@ export default function PickersPage() {
             </Link>
           </div>
         </section>
-     
+
         <section
           style={{
             marginTop: 22,
@@ -504,6 +541,8 @@ export default function PickersPage() {
             gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
             gap: 14,
             maxWidth: 980,
+            width: "100%",
+            boxSizing: "border-box",
           }}
         >
           <Link
@@ -677,6 +716,8 @@ export default function PickersPage() {
               fontWeight: 950,
               letterSpacing: "0.08em",
               fontSize: 12,
+              maxWidth: "100%",
+              boxSizing: "border-box",
             }}
           >
             FAQ
@@ -733,6 +774,7 @@ export default function PickersPage() {
           max-width: 1100px;
           margin: 0 auto;
           padding: 28px 20px 40px;
+          box-sizing: border-box;
         }
 
         a:hover {
@@ -753,6 +795,30 @@ export default function PickersPage() {
         }
 
         @media (max-width: 640px) {
+          .wrap {
+            padding-left: 12px !important;
+            padding-right: 12px !important;
+          }
+
+          .heroPanel {
+            padding: 14px !important;
+            border-radius: 18px !important;
+            min-width: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            overflow: hidden !important;
+            box-sizing: border-box !important;
+          }
+
+          .heroMiniStats {
+            grid-template-columns: minmax(0, 1fr) !important;
+            max-width: 100% !important;
+          }
+
+          .heroSignalStack {
+            gap: 8px !important;
+          }
+
           .pickersHeroTitle {
             font-size: 34px !important;
             line-height: 1.06 !important;
@@ -766,8 +832,17 @@ export default function PickersPage() {
         }
 
         @media (max-width: 420px) {
+          .wrap {
+            padding-left: 10px !important;
+            padding-right: 10px !important;
+          }
+
           .pickersHeroTitle {
             font-size: 30px !important;
+          }
+
+          .heroPanel {
+            padding: 12px !important;
           }
         }
       `}</style>
@@ -807,6 +882,8 @@ function MiniStat({
         borderRadius: 16,
         padding: 14,
         boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+        minWidth: 0,
+        boxSizing: "border-box",
       }}
     >
       <div
@@ -892,6 +969,8 @@ function SignalCard({
         borderRadius: 16,
         padding: "14px 16px",
         boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+        minWidth: 0,
+        boxSizing: "border-box",
       }}
     >
       <div
