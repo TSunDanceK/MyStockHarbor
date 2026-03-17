@@ -924,18 +924,46 @@ export default function PickersClient() {
                             {item.note}
                           </div>
                         ) : null}
-                      </div>
-
                       <div
                         style={{
-                          fontSize: 12,
-                          opacity: 0.72,
-                          fontWeight: 800,
-                          whiteSpace: "nowrap",
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "flex-end",
+                          gap: 8,
                           flex: "0 0 auto",
                         }}
                       >
-                        Open chart →
+                        <div
+                          style={{
+                            fontSize: 12,
+                            opacity: 0.72,
+                            fontWeight: 800,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Open chart →
+                        </div>
+
+                        <a
+                          href={`/stock/${encodeURIComponent(item.symbol)}`}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: "7px 10px",
+                            borderRadius: 10,
+                            border: "1px solid rgba(59,130,246,0.24)",
+                            background: "rgba(59,130,246,0.08)",
+                            color: "#dbeafe",
+                            textDecoration: "none",
+                            fontSize: 11,
+                            fontWeight: 900,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Stock page ↗
+                        </a>
                       </div>
                     </div>
 
@@ -1066,57 +1094,88 @@ export default function PickersClient() {
                   <div
                     style={{
                       marginTop: 14,
-                      display: "flex",
+                      display: "grid",
                       gap: 10,
-                      flexWrap: "wrap",
                     }}
                   >
                     {items.map((it) => (
-                      <a
+                      <div
                         key={it.symbol}
-                        href={`/?symbol=${encodeURIComponent(it.symbol)}`}
                         style={{
-                          display: "inline-flex",
+                          display: "flex",
                           alignItems: "center",
-                          gap: 8,
-                          maxWidth: "100%",
-                          minWidth: 0,
-                          padding: "10px 12px",
-                          borderRadius: 999,
+                          justifyContent: "space-between",
+                          gap: 10,
+                          flexWrap: "wrap",
                           border: "1px solid rgba(255,255,255,0.14)",
-                          background: "rgba(255,255,255,0.06)",
-                          color: "#f1f5f9",
-                          textDecoration: "none",
-                          fontWeight: 900,
+                          borderRadius: 16,
+                          padding: 12,
+                          background: "rgba(255,255,255,0.04)",
                           boxSizing: "border-box",
                         }}
-                        title={it.note ?? "Open in dashboard"}
                       >
-                        <span
+                        <a
+                          href={`/?symbol=${encodeURIComponent(it.symbol)}`}
                           style={{
-                            width: 10,
-                            height: 10,
-                            borderRadius: 999,
-                            background: toneDot(it.tone),
-                            boxShadow: "0 0 0 3px rgba(255,255,255,0.04)",
-                            flex: "0 0 auto",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 8,
+                            minWidth: 0,
+                            maxWidth: "100%",
+                            color: "#f1f5f9",
+                            textDecoration: "none",
+                            fontWeight: 900,
                           }}
-                        />
-                        <span style={{ minWidth: 0 }}>{it.symbol}</span>
-                        {it.note ? (
+                          title={it.note ?? "Open in dashboard"}
+                        >
                           <span
                             style={{
-                              fontSize: 12,
-                              opacity: 0.65,
-                              fontWeight: 700,
-                              minWidth: 0,
-                              wordBreak: "break-word",
+                              width: 10,
+                              height: 10,
+                              borderRadius: 999,
+                              background: toneDot(it.tone),
+                              boxShadow: "0 0 0 3px rgba(255,255,255,0.04)",
+                              flex: "0 0 auto",
                             }}
-                          >
-                            {it.note}
-                          </span>
-                        ) : null}
-                      </a>
+                          />
+                          <span style={{ minWidth: 0 }}>{it.symbol}</span>
+                          {it.note ? (
+                            <span
+                              style={{
+                                fontSize: 12,
+                                opacity: 0.65,
+                                fontWeight: 700,
+                                minWidth: 0,
+                                wordBreak: "break-word",
+                              }}
+                            >
+                              {it.note}
+                            </span>
+                          ) : null}
+                        </a>
+
+                        <a
+                          href={`/stock/${encodeURIComponent(it.symbol)}`}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: "8px 11px",
+                            borderRadius: 10,
+                            border: "1px solid rgba(59,130,246,0.24)",
+                            background: "rgba(59,130,246,0.08)",
+                            color: "#dbeafe",
+                            textDecoration: "none",
+                            fontSize: 12,
+                            fontWeight: 900,
+                            whiteSpace: "nowrap",
+                            flex: "0 0 auto",
+                          }}
+                          title={`Open ${it.symbol} stock page`}
+                        >
+                          Stock page ↗
+                        </a>
+                      </div>
                     ))}
                   </div>
                 </section>
