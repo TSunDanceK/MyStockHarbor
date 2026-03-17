@@ -355,7 +355,7 @@ export default function PickersClient() {
         if (b.buyCount !== a.buyCount) return b.buyCount - a.buyCount;
         return a.symbol.localeCompare(b.symbol);
       })
-      .slice(0, 3)
+      .slice(0, 4)
       .map((item) => ({
         symbol: item.symbol,
         note: `${item.buyCount} buy signal${item.buyCount === 1 ? "" : "s"}`,
@@ -383,7 +383,7 @@ export default function PickersClient() {
         if (b.sellCount !== a.sellCount) return b.sellCount - a.sellCount;
         return a.symbol.localeCompare(b.symbol);
       })
-      .slice(0, 3)
+      .slice(0, 4)
       .map((item) => ({
         symbol: item.symbol,
         note: `${item.sellCount} sell signal${item.sellCount === 1 ? "" : "s"}`,
@@ -505,6 +505,12 @@ export default function PickersClient() {
           gap: 12px;
         }
 
+        .pickers-section-results-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+        }
+
         @media (max-width: 820px) {
           .pickers-filter-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -515,9 +521,16 @@ export default function PickersClient() {
           }
         }
 
+        .pickers-section-results-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+        }
+
         @media (max-width: 640px) {
           .pickers-filter-grid,
-          .pickers-card-grid {
+          .pickers-card-grid,
+          .pickers-section-results-grid {
             grid-template-columns: minmax(0, 1fr);
           }
         }
@@ -1100,10 +1113,9 @@ export default function PickersClient() {
                   </div>
 
                   <div
+                    className="pickers-section-results-grid"
                     style={{
                       marginTop: 14,
-                      display: "grid",
-                      gap: 10,
                     }}
                   >
                     {items.map((it) => (
