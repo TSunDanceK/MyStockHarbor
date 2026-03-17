@@ -5,6 +5,27 @@ import type { DivResult } from "../../lib/ta/divergence";
 
 type Point = { date: string; close: number };
 
+const CHART_COLORS = {
+  price: "rgba(241,245,249,0.96)",
+  ma50: "#60a5fa",
+  ma200: "#f59e0b",
+  bollUpper: "rgba(167,139,250,0.55)",
+  bollMid: "rgba(196,181,253,0.72)",
+  bollLower: "rgba(167,139,250,0.55)",
+  ema20: "#22d3ee",
+  vwap: "#14b8a6",
+  rsi: "#a78bfa",
+  macdLine: "#22c55e",
+  macdSignal: "#f59e0b",
+  macdHist: "rgba(148,163,184,0.34)",
+  macdDivBull: "#22c55e",
+  macdDivBear: "#ef4444",
+  stochK: "#38bdf8",
+  stochD: "#f59e0b",
+  atr: "#fb923c",
+  volume: "rgba(96,165,250,0.34)",
+};
+
 export type Overlay =
   | "None"
   | "MA50"
@@ -398,22 +419,91 @@ export default function PriceChart(props: Props) {
         ))}
 
         {/* price line */}
-        <path d={closePath} fill="none" stroke="currentColor" strokeWidth="2.25" opacity="0.95" />
+                <path
+          d={closePath}
+          fill="none"
+          stroke={CHART_COLORS.price}
+          strokeWidth="2.25"
+          opacity="1"
+        />
 
         {/* price overlays */}
-        {overlay === "MA50" && ma50Path ? <path d={ma50Path} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.55" strokeDasharray="6 4" /> : null}
-        {overlay === "MA200" && ma200Path ? <path d={ma200Path} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.35" strokeDasharray="2 6" /> : null}
+        {overlay === "MA50" && ma50Path ? (
+          <path
+            d={ma50Path}
+            fill="none"
+            stroke={CHART_COLORS.ma50}
+            strokeWidth="2.1"
+            opacity="0.92"
+            strokeDasharray="6 4"
+          />
+        ) : null}
+
+        {overlay === "MA200" && ma200Path ? (
+          <path
+            d={ma200Path}
+            fill="none"
+            stroke={CHART_COLORS.ma200}
+            strokeWidth="2.1"
+            opacity="0.9"
+            strokeDasharray="2 6"
+          />
+        ) : null}
 
         {overlay === "Bollinger(20,2)" ? (
           <>
-            {bollUPath ? <path d={bollUPath} fill="none" stroke="currentColor" strokeWidth="1.75" opacity="0.30" /> : null}
-            {bollMPath ? <path d={bollMPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.45" strokeDasharray="6 4" /> : null}
-            {bollLPath ? <path d={bollLPath} fill="none" stroke="currentColor" strokeWidth="1.75" opacity="0.30" /> : null}
+            {bollUPath ? (
+              <path
+                d={bollUPath}
+                fill="none"
+                stroke={CHART_COLORS.bollUpper}
+                strokeWidth="1.75"
+                opacity="1"
+              />
+            ) : null}
+            {bollMPath ? (
+              <path
+                d={bollMPath}
+                fill="none"
+                stroke={CHART_COLORS.bollMid}
+                strokeWidth="2"
+                opacity="1"
+                strokeDasharray="6 4"
+              />
+            ) : null}
+            {bollLPath ? (
+              <path
+                d={bollLPath}
+                fill="none"
+                stroke={CHART_COLORS.bollLower}
+                strokeWidth="1.75"
+                opacity="1"
+              />
+            ) : null}
           </>
         ) : null}
 
-        {overlay === "EMA20" && ema20Path ? <path d={ema20Path} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.45" strokeDasharray="5 5" /> : null}
-        {overlay === "VWAP" && vwapPath ? <path d={vwapPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.45" strokeDasharray="3 4" /> : null}
+        {overlay === "EMA20" && ema20Path ? (
+          <path
+            d={ema20Path}
+            fill="none"
+            stroke={CHART_COLORS.ema20}
+            strokeWidth="2"
+            opacity="0.95"
+            strokeDasharray="5 5"
+          />
+        ) : null}
+
+        {overlay === "VWAP" && vwapPath ? (
+          <path
+            d={vwapPath}
+            fill="none"
+            stroke={CHART_COLORS.vwap}
+            strokeWidth="2"
+            opacity="0.95"
+            strokeDasharray="3 4"
+          />
+        ) : null}
 
         {/* SUB PANEL */}
         {wantsSubPanel ? (
@@ -425,7 +515,15 @@ export default function PriceChart(props: Props) {
               <>
                 <line x1={padL} y1={ySub(70)} x2={width - padR} y2={ySub(70)} stroke="currentColor" opacity="0.10" />
                 <line x1={padL} y1={ySub(30)} x2={width - padR} y2={ySub(30)} stroke="currentColor" opacity="0.10" />
-                {rsiPath ? <path d={rsiPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.55" /> : null}
+                                {rsiPath ? (
+                  <path
+                    d={rsiPath}
+                    fill="none"
+                    stroke={CHART_COLORS.rsi}
+                    strokeWidth="2"
+                    opacity="0.95"
+                  />
+                ) : null}
               </>
             ) : null}
 
@@ -444,13 +542,38 @@ export default function PriceChart(props: Props) {
                       const yv = ySub(v);
                       const h = Math.abs(yv - y0);
                       return (
-                        <rect key={i} x={x0 - barW / 2} y={Math.min(y0, yv)} width={barW} height={h} fill="currentColor" opacity="0.18" />
+                                                <rect
+                          key={i}
+                          x={x0 - barW / 2}
+                          y={Math.min(y0, yv)}
+                          width={barW}
+                          height={h}
+                          fill={CHART_COLORS.macdHist}
+                          opacity="1"
+                        />
                       );
                     })
                   : null}
 
-                {macdLinePath ? <path d={macdLinePath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.55" /> : null}
-                {macdSignalPath ? <path d={macdSignalPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.35" strokeDasharray="6 4" /> : null}
+                {macdLinePath ? (
+                  <path
+                    d={macdLinePath}
+                    fill="none"
+                    stroke={CHART_COLORS.macdLine}
+                    strokeWidth="2"
+                    opacity="0.95"
+                  />
+                ) : null}
+                {macdSignalPath ? (
+                  <path
+                    d={macdSignalPath}
+                    fill="none"
+                    stroke={CHART_COLORS.macdSignal}
+                    strokeWidth="2"
+                    opacity="0.95"
+                    strokeDasharray="6 4"
+                  />
+                ) : null}
 
                 {/* Divergence line on MACD (matches pivots) */}
                 {macdDivLine ? (
@@ -459,7 +582,11 @@ export default function PriceChart(props: Props) {
                     y1={macdDivLine.y1}
                     x2={macdDivLine.x2}
                     y2={macdDivLine.y2}
-                    stroke="currentColor"
+                    stroke={
+                      divergence?.kind === "bullish"
+                        ? CHART_COLORS.macdDivBull
+                        : CHART_COLORS.macdDivBear
+                    }
                     strokeWidth={3.5}
                     opacity={0.9}
                     strokeLinecap="round"
@@ -474,13 +601,42 @@ export default function PriceChart(props: Props) {
               <>
                 <line x1={padL} y1={ySub(80)} x2={width - padR} y2={ySub(80)} stroke="currentColor" opacity="0.10" />
                 <line x1={padL} y1={ySub(20)} x2={width - padR} y2={ySub(20)} stroke="currentColor" opacity="0.10" />
-                {stochKPath ? <path d={stochKPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.55" /> : null}
-                {stochDPath ? <path d={stochDPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.35" strokeDasharray="6 4" /> : null}
+                {stochKPath ? (
+                  <path
+                    d={stochKPath}
+                    fill="none"
+                    stroke={CHART_COLORS.stochK}
+                    strokeWidth="2"
+                    opacity="0.95"
+                  />
+                ) : null}
+                {stochDPath ? (
+                  <path
+                    d={stochDPath}
+                    fill="none"
+                    stroke={CHART_COLORS.stochD}
+                    strokeWidth="2"
+                    opacity="0.95"
+                    strokeDasharray="6 4"
+                  />
+                ) : null}
               </>
             ) : null}
 
             {/* ATR */}
-            {overlay === "ATR(14)" ? <>{atrPath ? <path d={atrPath} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.55" /> : null}</> : null}
+                      {overlay === "ATR(14)" ? (
+              <>
+                {atrPath ? (
+                  <path
+                    d={atrPath}
+                    fill="none"
+                    stroke={CHART_COLORS.atr}
+                    strokeWidth="2"
+                    opacity="0.95"
+                  />
+                ) : null}
+              </>
+            ) : null}
 
             {/* Volume */}
             {overlay === "Volume" ? (
@@ -495,7 +651,15 @@ export default function PriceChart(props: Props) {
                       const yv = ySub(v);
                       const h = Math.abs(yv - y0);
                       return (
-                        <rect key={i} x={x0 - barW / 2} y={Math.min(y0, yv)} width={barW} height={h} fill="currentColor" opacity="0.25" />
+                                                <rect
+                          key={i}
+                          x={x0 - barW / 2}
+                          y={Math.min(y0, yv)}
+                          width={barW}
+                          height={h}
+                          fill={CHART_COLORS.volume}
+                          opacity="1"
+                        />
                       );
                     })
                   : null}
@@ -505,7 +669,13 @@ export default function PriceChart(props: Props) {
         ) : null}
 
         {/* last point */}
-        <circle cx={x(series.length - 1)} cy={yMain(last.close)} r="3.5" fill="currentColor" opacity="0.9" />
+                <circle
+          cx={x(series.length - 1)}
+          cy={yMain(last.close)}
+          r="3.5"
+          fill={CHART_COLORS.price}
+          opacity="1"
+        />
       </svg>
 
 <div
