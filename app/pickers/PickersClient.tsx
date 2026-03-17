@@ -410,23 +410,32 @@ export default function PickersClient() {
     };
   }, [safeSignalRecords]);
 
-  const displaySections = useMemo(() => {
-    const out: PickerSection[] = [];
+const displaySections = useMemo(() => {
+  const out: PickerSection[] = [];
 
-    const buyTheDipSection = safeSections.find(
-      (section) => section.title === "Buy-the-Dip Setups"
-    );
+  const buyTheDipSection = safeSections.find(
+    (section) => section.title === "Buy-the-Dip Setups"
+  );
 
-    const otherSections = safeSections.filter(
-      (section) => section.title !== "Buy-the-Dip Setups"
-    );
+  const oversoldSection = safeSections.find((section) =>
+    section.title.toLowerCase().includes("oversold")
+  );
 
-    if (topBuySection) out.push(topBuySection);
-    if (topSellSection) out.push(topSellSection);
-    if (buyTheDipSection) out.push(buyTheDipSection);
+  const otherSections = safeSections.filter(
+    (section) =>
+      section !== buyTheDipSection &&
+      section !== oversoldSection
+  );
 
-    return [...out, ...otherSections];
-  }, [safeSections, topBuySection, topSellSection]);
+  if (topBuySection) out.push(topBuySection);
+  if (topSellSection) out.push(topSellSection);
+
+  if (buyTheDipSection) out.push(buyTheDipSection);
+
+  if (oversoldSection) out.push(oversoldSection);
+
+  return [...out, ...otherSections];
+}, [safeSections, topBuySection, topSellSection]);
 
   const customMode = selectedFilters.length > 0;
 
