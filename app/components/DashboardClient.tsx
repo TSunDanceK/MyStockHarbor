@@ -909,14 +909,18 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     };
   }, [symbol]);
 
-  useEffect(() => {
-    const urlSymbol = searchParams.get("symbol");
-    const cleaned = urlSymbol ? urlSymbol.trim().toUpperCase() : "";
+useEffect(() => {
+  const urlSymbol = searchParams.get("symbol");
+  const cleaned = urlSymbol ? urlSymbol.trim().toUpperCase() : "";
 
-    if (cleaned && cleaned !== symbol) {
-      setSymbol(cleaned);
-    }
-  }, [searchParams, symbol]);
+  if (!cleaned) return;
+
+  setSymbol(cleaned);
+  setQuery(cleaned);
+  setResults([]);
+  setOpen(false);
+  setWindowOffset(0);
+}, [searchParams]);
 
   useEffect(() => {
     if (!symbol || !symbol.trim()) return;
