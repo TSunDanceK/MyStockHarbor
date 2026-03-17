@@ -46,6 +46,8 @@ type RedisDiscoveryState = {
   pointer: number;
   lastDiscoveryAt: number;
   dynamic: Record<string, DynamicQuoteRecord>;
+  shuffledMasterList: string[];
+  shuffleDayKey: string | null;
 };
 
 function emptyDiscoveryState(): RedisDiscoveryState {
@@ -53,6 +55,8 @@ function emptyDiscoveryState(): RedisDiscoveryState {
     pointer: 0,
     lastDiscoveryAt: 0,
     dynamic: {},
+    shuffledMasterList: [],
+    shuffleDayKey: null,
   };
 }
 
@@ -74,6 +78,11 @@ async function loadDiscoveryState(): Promise<RedisDiscoveryState> {
     pointer: state.pointer,
     lastDiscoveryAt: state.lastDiscoveryAt,
     dynamic: state.dynamic,
+    shuffledMasterList: Array.isArray(state.shuffledMasterList)
+      ? state.shuffledMasterList.map((x) => String(x).trim().toUpperCase()).filter(Boolean)
+      : [],
+    shuffleDayKey:
+      typeof state.shuffleDayKey === "string" ? state.shuffleDayKey : null,
   };
 }
 
@@ -144,6 +153,47 @@ function getEasternParts(date = new Date()) {
   const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
 
   return { weekday, hour, minute };
+}
+
+function getEasternDayKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const year = parts.find((p) => p.type === "year")?.value ?? "0000";
+  const month = parts.find((p) => p.type === "month")?.value ?? "00";
+  const day = parts.find((p) => p.type === "day")?.value ?? "00";
+
+  return `${year}-${month}-${day}`;
+}
+
+function shuffleArray<T>(arr: T[]) {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+function ensureDailyShuffledMasterList(state: RedisDiscoveryState) {
+  const todayKey = getEasternDayKey();
+  const cleanMaster = uniqUpper(DISCOVERY_MASTER_LIST);
+
+  if (
+    state.shuffleDayKey === todayKey &&
+    Array.isArray(state.shuffledMasterList) &&
+    state.shuffledMasterList.length > 0
+  ) {
+    return;
+  }
+
+  state.shuffledMasterList = shuffleArray(cleanMaster);
+  state.shuffleDayKey = todayKey;
+  state.pointer = 0;
 }
 
 function isDiscoveryWindowOpen(date = new Date()) {
@@ -219,7 +269,9 @@ function pruneDynamicCache(state: RedisDiscoveryState, now: number) {
 
 function getNextDiscoveryBatch(state: RedisDiscoveryState) {
   const curatedSet = new Set(uniqUpper(CURATED_UNIVERSE));
-  const master = uniqUpper(DISCOVERY_MASTER_LIST);
+  const master = Array.isArray(state.shuffledMasterList)
+    ? state.shuffledMasterList
+    : [];
 
   if (!master.length) return [];
 
@@ -279,6 +331,7 @@ export async function GET() {
   const now = Date.now();
 
   let state = await loadDiscoveryState();
+  ensureDailyShuffledMasterList(state);
 
   pruneDynamicCache(state, now);
 
