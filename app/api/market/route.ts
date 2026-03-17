@@ -29,10 +29,12 @@ type DynamicQuoteRecord = {
 };
 
 const PAYLOAD_CACHE_MS = 60 * 1000;
-const DISCOVERY_INTERVAL_MS = 4 * 60 * 1000;
-const DYNAMIC_TTL_MS = 60 * 60 * 1000;
-const DYNAMIC_MAX_SIZE = 120;
-const DISCOVERY_BATCH_SIZE = 8;
+
+const DISCOVERY_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const OPEN_MARKET_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
+const CLOSED_MARKET_TTL_MS = 16 * 60 * 60 * 1000; // 16 hours
+const DYNAMIC_MAX_SIZE = 96; // effectively your natural rolling pool target for now
+const DISCOVERY_BATCH_SIZE = 4; // 4 symbols per cycle
 
 let payloadCache: { at: number; payload: any } | null = null;
 
@@ -163,8 +165,10 @@ async function fetchQuoteBatch(symbols: string[], apiKey: string) {
 }
 
 function pruneDynamicCache(now: number) {
+  const ttlMs = isDiscoveryWindowOpen() ? OPEN_MARKET_TTL_MS : CLOSED_MARKET_TTL_MS;
+
   for (const [symbol, record] of discoveryState.dynamic.entries()) {
-    if (now - record.discoveredAt > DYNAMIC_TTL_MS) {
+    if (now - record.discoveredAt > ttlMs) {
       discoveryState.dynamic.delete(symbol);
     }
   }
