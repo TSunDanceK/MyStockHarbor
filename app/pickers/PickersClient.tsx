@@ -1053,7 +1053,26 @@ export default function PickersClient() {
         ) : (
           <>
             {displaySections.map((sec) => {
-              const items = Array.isArray(sec.items) ? sec.items.slice(0, 10) : [];
+              const items = Array.isArray(sec.items)
+  ? sec.items
+      .map((it) => {
+        const record = safeSignalRecords.find((r) => r.symbol === it.symbol);
+
+        const checkCount = record
+          ? matchedSignalsForRecord(record).length
+          : 0;
+
+        return {
+          ...it,
+          checkCount,
+        };
+      })
+      .sort((a, b) => {
+        if (b.checkCount !== a.checkCount) return b.checkCount - a.checkCount;
+        return a.symbol.localeCompare(b.symbol);
+      })
+      .slice(0, 10)
+  : [];
 
               return (
                 <section
