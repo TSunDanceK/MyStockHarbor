@@ -276,72 +276,68 @@ export async function GET() {
     return NextResponse.json({ error: "Missing TWELVEDATA_API_KEY env var." }, { status: 500 });
   }
 
-const now = Date.now();
+  const now = Date.now();
 
-let state = await loadDiscoveryState();
-
-pruneDynamicCache(state, now);
-
-const allowDiscoveryNow =
-  now - state.lastDiscoveryAt >= DISCOVERY_INTERVAL_MS &&
-  (isDiscoveryWindowOpen() || Object.keys(state.dynamic).length === 0);
-
-const debugErrors: any[] = [];
-
-if (allowDiscoveryNow) {
-  const nextSymbols = getNextDiscoveryBatch(state);
-
-  if (nextSymbols.length > 0) {
-    try {
-      const r = await fetchQuoteBatch(nextSymbols, apiKey);
-      const quotes = extractQuotesFromBatch(r.json);
-
-      for (const q of quotes) {
-        const symbol = String(q.symbol ?? "").toUpperCase();
-        if (!symbol) continue;
-
-        state.dynamic[symbol] = {
-          quote: q,
-          discoveredAt: now,
-        };
-      }
-
-      if (!quotes.length) {
-        const msg =
-          (r.json && (r.json.message || r.json.error)) ||
-          (r.json && r.json.status === "error" ? "status:error" : null) ||
-          null;
-
-        debugErrors.push({
-          httpOk: r.ok,
-          httpStatus: r.status,
-          message: msg,
-          sampleKeys: r.json && typeof r.json === "object" ? Object.keys(r.json).slice(0, 8) : null,
-          attemptedSymbols: nextSymbols,
-        });
-      }
-    } catch (e: any) {
-      debugErrors.push({
-        httpOk: false,
-        httpStatus: null,
-        message: e?.message ? String(e.message) : "fetch failed",
-        sampleKeys: null,
-        attemptedSymbols: nextSymbols,
-      });
-    }
-  }
-
-  state.lastDiscoveryAt = now;
+  let state = await loadDiscoveryState();
 
   pruneDynamicCache(state, now);
 
-  await saveDiscoveryState(state);
+  const allowDiscoveryNow =
+    now - state.lastDiscoveryAt >= DISCOVERY_INTERVAL_MS &&
+    (isDiscoveryWindowOpen() || Object.keys(state.dynamic).length === 0);
 
-  payloadCache = null;
-}
+  const debugErrors: any[] = [];
 
-    discoveryState.lastDiscoveryAt = now;
-    pruneDynamicCache(now);
+  if (allowDiscoveryNow) {
+    const nextSymbols = getNextDiscoveryBatch(state);
+
+    if (nextSymbols.length > 0) {
+      try {
+        const r = await fetchQuoteBatch(nextSymbols, apiKey);
+        const quotes = extractQuotesFromBatch(r.json);
+
+        for (const q of quotes) {
+          const symbol = String(q.symbol ?? "").toUpperCase();
+          if (!symbol) continue;
+
+          state.dynamic[symbol] = {
+            quote: q,
+            discoveredAt: now,
+          };
+        }
+
+        if (!quotes.length) {
+          const msg =
+            (r.json && (r.json.message || r.json.error)) ||
+            (r.json && r.json.status === "error" ? "status:error" : null) ||
+            null;
+
+          debugErrors.push({
+            httpOk: r.ok,
+            httpStatus: r.status,
+            message: msg,
+            sampleKeys:
+              r.json && typeof r.json === "object" ? Object.keys(r.json).slice(0, 8) : null,
+            attemptedSymbols: nextSymbols,
+          });
+        }
+      } catch (e: any) {
+        debugErrors.push({
+          httpOk: false,
+          httpStatus: null,
+          message: e?.message ? String(e.message) : "fetch failed",
+          sampleKeys: null,
+          attemptedSymbols: nextSymbols,
+        });
+      }
+    }
+
+    state.lastDiscoveryAt = now;
+
+    pruneDynamicCache(state, now);
+
+    await saveDiscoveryState(state);
+
     payloadCache = null;
   }
 
@@ -367,10 +363,11 @@ if (allowDiscoveryNow) {
     .sort((a, b) => b.rangePct! - a.rangePct!)
     .slice(0, 30);
 
-  const isRateLimited =
-    debugErrors.some(
-      (e) => typeof e?.message === "string" && e.message.toLowerCase().includes("run out of api credits")
-    );
+  const isRateLimited = debugErrors.some(
+    (e) =>
+      typeof e?.message === "string" &&
+      e.message.toLowerCase().includes("run out of api credits")
+  );
 
   const dynamicSymbols = Object.keys(state.dynamic);
 
@@ -397,10 +394,10 @@ if (allowDiscoveryNow) {
       closedMarketTtlMinutes: CLOSED_MARKET_TTL_MS / 60000,
       dynamicMaxSize: DYNAMIC_MAX_SIZE,
       discoveryWindowOpen: isDiscoveryWindowOpen(),
-      pointer: discoveryState.pointer,
+      pointer: state.pointer,
       lastDiscoveryAt:
-        discoveryState.lastDiscoveryAt > 0
-          ? new Date(discoveryState.lastDiscoveryAt).toISOString()
+        state.lastDiscoveryAt > 0
+          ? new Date(state.lastDiscoveryAt).toISOString()
           : null,
       errors: debugErrors,
     },
