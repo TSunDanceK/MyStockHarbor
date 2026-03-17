@@ -1,11 +1,10 @@
 "use client";
 
-import React, { useEffect, useMemo, useState, useTransition } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import PriceChart, { type Overlay } from "./PriceChart";
 import { detectDivergenceFromHistory } from "../../lib/ta/divergence";
-import type { DivResult } from "../../lib/ta/divergence";
 
 type Quote = {
   symbol: string;
@@ -55,21 +54,49 @@ type CachedSymbolData = {
   history: Point[];
 };
 
+type DivergenceState = "bullish" | "bearish" | "none";
+
+type OverviewItem = {
+  key: string;
+  label: string;
+  tone: "green" | "yellow" | "orange" | "red" | "muted";
+  valueText: string;
+  severity: number;
+  order: number;
+};
+
+type TrendScore = {
+  total: number;
+  passed: number;
+  details: { name: string; ok: boolean | null }[];
+};
+
+type StretchScore = {
+  total: number;
+  flagged: number;
+  oversold: number;
+  overbought: number;
+  details: { name: string; state: "oversold" | "overbought" | "neutral" | "na" }[];
+};
+
 /* ----------------------- indicator math helpers ----------------------- */
 
 function movingAverage(values: number[], window: number): (number | null)[] {
   const out: (number | null)[] = Array(values.length).fill(null);
   let sum = 0;
+
   for (let i = 0; i < values.length; i++) {
     sum += values[i];
     if (i >= window) sum -= values[i - window];
     if (i >= window - 1) out[i] = sum / window;
   }
+
   return out;
 }
 
 function rollingStd(values: number[], window: number): (number | null)[] {
   const out: (number | null)[] = Array(values.length).fill(null);
+
   for (let i = window - 1; i < values.length; i++) {
     let mean = 0;
     for (let j = i - window + 1; j <= i; j++) mean += values[j];
@@ -84,6 +111,7 @@ function rollingStd(values: number[], window: number): (number | null)[] {
 
     out[i] = Math.sqrt(variance);
   }
+
   return out;
 }
 
@@ -97,7 +125,7 @@ function bollinger(values: number[], window = 20, k = 2) {
 
 function ema(values: number[], period: number): (number | null)[] {
   const out: (number | null)[] = Array(values.length).fill(null);
-  if (values.length === 0) return out;
+  if (!values.length) return out;
 
   const k = 2 / (period + 1);
   let emaPrev: number | null = null;
@@ -171,7 +199,9 @@ function macd(values: number[], fast = 12, slow = 26, signal = 9) {
   const sigAll = ema(lineForEma, signal);
 
   const sig: (number | null)[] = sigAll.map((v, i) => (line[i] == null ? null : v));
-  const hist: (number | null)[] = line.map((v, i) => (v == null || sig[i] == null ? null : v - sig[i]!));
+  const hist: (number | null)[] = line.map((v, i) =>
+    v == null || sig[i] == null ? null : v - sig[i]!
+  );
 
   return { line, signal: sig, hist };
 }
@@ -214,6 +244,7 @@ function stochastic(points: Point[], kPeriod = 14, dPeriod = 3) {
     for (let j = i - kPeriod + 1; j <= i; j++) {
       const hh = points[j].high;
       const ll = points[j].low;
+
       if (typeof hh !== "number" || !Number.isFinite(hh)) {
         highestHigh = NaN;
         break;
@@ -222,6 +253,7 @@ function stochastic(points: Point[], kPeriod = 14, dPeriod = 3) {
         lowestLow = NaN;
         break;
       }
+
       if (hh > highestHigh) highestHigh = hh;
       if (ll < lowestLow) lowestLow = ll;
     }
@@ -234,9 +266,10 @@ function stochastic(points: Point[], kPeriod = 14, dPeriod = 3) {
     k[i] = ((points[i].close - lowestLow) / denom) * 100;
   }
 
-  const d = movingAverage(k.map((v) => (typeof v === "number" ? v : 0)), dPeriod).map((v, i) =>
-    k[i] == null ? null : v
-  );
+  const d = movingAverage(
+    k.map((v) => (typeof v === "number" ? v : 0)),
+    dPeriod
+  ).map((v, i) => (k[i] == null ? null : v));
 
   return { k, d };
 }
@@ -290,126 +323,39 @@ function atr(points: Point[], period = 14): (number | null)[] {
   return out;
 }
 
-/* ----------------------------- UI helpers ---------------------------- */
+function smaNullable(values: (number | null)[], window: number): (number | null)[] {
+  const out: (number | null)[] = Array(values.length).fill(null);
+  if (window <= 0) return out;
 
-function compareTo(lastClose: number | null, name: string, v: number | null) {
-  if (lastClose == null) return { label: "Signal unavailable", detail: "No price data." };
-  if (v == null) return { label: "Signal unavailable", detail: `Need enough data for ${name}.` };
+  for (let i = window - 1; i < values.length; i++) {
+    let sum = 0;
+    let ok = true;
 
-  const diff = (lastClose - v) / v;
-  if (diff <= -0.05)
-    return { label: "Undervalued-ish 🟢", detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% below ${name}.` };
-  if (diff < 0.05)
-    return { label: "Fair-ish 🟡", detail: `Price is ${Math.abs(diff * 100).toFixed(1)}% from ${name}.` };
-  return { label: "Overextended 🔴", detail: `Price is ${(diff * 100).toFixed(1)}% above ${name}.` };
-}
+    for (let j = i - window + 1; j <= i; j++) {
+      const v = values[j];
+      if (typeof v !== "number" || !Number.isFinite(v)) {
+        ok = false;
+        break;
+      }
+      sum += v;
+    }
 
-function compareOscillator(name: string, v: number | null, low: number, high: number) {
-  if (v == null) return { label: "Signal unavailable", detail: `Need enough data for ${name}.` };
-
-  if (v >= high) return { label: "Overbought 🔴", detail: `${name} is ${v.toFixed(2)} (≥ ${high}).` };
-  if (v <= low) return { label: "Oversold 🟢", detail: `${name} is ${v.toFixed(2)} (≤ ${low}).` };
-  return { label: "Neutral-ish 🟡", detail: `${name} is ${v.toFixed(2)}.` };
-}
-
-function compareMacdHistogram(lastClose: number | null, hist: number | null) {
-  if (lastClose == null) return { label: "Signal unavailable", detail: "No price data." };
-  if (hist == null) return { label: "Signal unavailable", detail: "Need enough data for MACD." };
-
-  const flat = Math.abs(lastClose) * 0.001;
-
-  if (hist > flat) return { label: "Bullish momentum 🟢", detail: `MACD histogram is positive (${hist.toFixed(4)}).` };
-  if (hist < -flat) return { label: "Bearish momentum 🔴", detail: `MACD histogram is negative (${hist.toFixed(4)}).` };
-  return { label: "Flat momentum 🟡", detail: `MACD histogram near zero (${hist.toFixed(4)}).` };
-}
-
-function compareSpike(name: string, v: number | null, sma: number | null, spikeMult: number, unit?: string) {
-  if (v == null || sma == null || sma <= 0) return { label: "Signal unavailable", detail: `Need enough data for ${name}.` };
-
-  const ratio = v / sma;
-
-  if (ratio >= spikeMult) {
-    return {
-      label: "Spike ⚡",
-      detail: `${name} is ${ratio.toFixed(2)}× its 20SMA.${unit ? ` (${unit})` : ""}`,
-    };
+    out[i] = ok ? sum / window : null;
   }
 
-  return {
-    label: "Normal range 🟡",
-    detail: `${name} is ${ratio.toFixed(2)}× its 20SMA.${unit ? ` (${unit})` : ""}`,
-  };
+  return out;
 }
 
 function lastNum(arr: (number | null)[]) {
   return arr.length ? arr[arr.length - 1] : null;
 }
 
-function HelpTip(props: { text: string; isDark: boolean }) {
-  const [open, setOpen] = React.useState(false);
+/* ----------------------------- helpers ----------------------------- */
 
-  return (
-    <span
-      style={{
-        position: "relative",
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        width: 18,
-        height: 18,
-        borderRadius: "50%",
-        background: props.isDark ? "rgba(255,255,255,0.15)" : "rgba(11,18,32,0.12)",
-        color: props.isDark ? "#fff" : "#0b1220",
-        fontSize: 11,
-        fontWeight: 900,
-        cursor: "pointer",
-        marginLeft: 6,
-        flex: "0 0 auto",
-        zIndex: 6,
-      }}
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-      onClick={() => setOpen((v) => !v)}
-    >
-      ?
-      {open ? (
-        <div
-          style={{
-            position: "absolute",
-            top: "calc(100% + 10px)",
-            right: 0,
-            left: "auto",
-            transform: "none",
-            width: 260,
-            maxWidth: "min(260px, calc(100vw - 32px))",
-            padding: 12,
-            borderRadius: 12,
-            backgroundColor: props.isDark ? "#0f172a" : "#ffffff",
-            border: props.isDark
-              ? "1px solid rgba(255,255,255,0.14)"
-              : "1px solid rgba(11,18,32,0.14)",
-            color: props.isDark ? "#f1f5f9" : "#0b1220",
-            fontSize: 12,
-            lineHeight: 1.5,
-            fontWeight: 600,
-            zIndex: 80,
-            boxShadow: "0 10px 24px rgba(0,0,0,0.28)",
-            pointerEvents: "none",
-            whiteSpace: "normal",
-          }}
-        >
-          {props.text}
-        </div>
-      ) : null}
-    </span>
-  );
-}
-
-/* ----------------------- divergence (shared engine) ----------------------- */
-
-type DivergenceState = "bullish" | "bearish" | "none";
-
-function divStateForIndicator(div: DivResult | null, which: "rsi" | "macd"): DivergenceState {
+function divStateForIndicator(
+  div: ReturnType<typeof detectDivergenceFromHistory> | null,
+  which: "rsi" | "macd"
+): DivergenceState {
   if (!div) return "none";
   if (which === "rsi" && !div.hasRsi) return "none";
   if (which === "macd" && !div.hasMacd) return "none";
@@ -417,30 +363,16 @@ function divStateForIndicator(div: DivResult | null, which: "rsi" | "macd"): Div
 }
 
 function divergenceLabel(state: DivergenceState) {
-  if (state === "bullish") return "Bullish 🟢";
-  if (state === "bearish") return "Bearish 🔴";
-  return "None 🟡";
+  if (state === "bullish") return "Bullish";
+  if (state === "bearish") return "Bearish";
+  return "—";
 }
 
 function divergenceTone(state: DivergenceState): OverviewItem["tone"] {
   if (state === "bullish") return "green";
   if (state === "bearish") return "red";
-  return "yellow";
+  return "muted";
 }
-
-function divergenceSeverity(state: DivergenceState) {
-  if (state === "bearish" || state === "bullish") return 100;
-  return 5;
-}
-
-type OverviewItem = {
-  key: string;
-  label: string;
-  tone: "green" | "yellow" | "orange" | "red" | "muted";
-  valueText: string;
-  severity: number;
-  order: number;
-};
 
 function toneToColor(tone: OverviewItem["tone"], isDark: boolean) {
   if (tone === "green") return isDark ? "#22c55e" : "#16a34a";
@@ -448,6 +380,14 @@ function toneToColor(tone: OverviewItem["tone"], isDark: boolean) {
   if (tone === "orange") return isDark ? "#fb923c" : "#ea580c";
   if (tone === "red") return isDark ? "#ef4444" : "#dc2626";
   return isDark ? "rgba(241,245,249,0.45)" : "rgba(11,18,32,0.45)";
+}
+
+function toneRank(tone: OverviewItem["tone"]) {
+  if (tone === "red") return 4;
+  if (tone === "orange") return 3;
+  if (tone === "yellow") return 2;
+  if (tone === "green") return 1;
+  return 0;
 }
 
 function renderFlagsMeter(opts: {
@@ -473,7 +413,9 @@ function renderFlagsMeter(opts: {
                 height: 6,
                 borderRadius: 999,
                 background: on ? color : isDark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)",
-                border: isDark ? "1px solid rgba(255,255,255,0.14)" : "1px solid rgba(0,0,0,0.10)",
+                border: isDark
+                  ? "1px solid rgba(255,255,255,0.14)"
+                  : "1px solid rgba(0,0,0,0.10)",
               }}
             />
           );
@@ -487,77 +429,43 @@ function renderFlagsMeter(opts: {
   );
 }
 
-function toneRank(tone: OverviewItem["tone"]) {
-  if (tone === "red") return 4;
-  if (tone === "orange") return 3;
-  if (tone === "yellow") return 2;
-  if (tone === "green") return 1;
-  return 0;
-}
-
 function compositeToneFromCounts(overbought: number, oversold: number, spikes: number) {
   const net = overbought - oversold;
   const intensity = overbought + oversold + spikes;
 
   if (intensity <= 1) return { tone: "yellow" as const, tag: "Calm" };
-
   if (net >= 2) return { tone: intensity >= 5 ? ("red" as const) : ("orange" as const), tag: "Overbought-leaning" };
   if (net === 1) return { tone: "orange" as const, tag: "Slightly overbought" };
-
   if (net <= -2) return { tone: intensity >= 5 ? ("green" as const) : ("yellow" as const), tag: "Oversold-leaning" };
   if (net === -1) return { tone: "yellow" as const, tag: "Slightly oversold" };
-
   return { tone: intensity >= 5 ? ("orange" as const) : ("yellow" as const), tag: "Mixed" };
 }
 
 function trendToneFromScore(ts: TrendScore | null): OverviewItem["tone"] {
   if (!ts) return "muted";
-
   const ratio = ts.total > 0 ? ts.passed / ts.total : 0;
-
   if (ratio >= 0.75) return "green";
   if (ratio >= 0.5) return "yellow";
   if (ratio >= 0.25) return "orange";
   return "red";
 }
 
-function clampNum(v: number, lo: number, hi: number) {
-  return Math.min(hi, Math.max(lo, v));
+function formatMaybeNumber(v: unknown, digits = 2) {
+  return typeof v === "number" && Number.isFinite(v) ? v.toFixed(digits) : "—";
 }
 
-function smaNullable(values: (number | null)[], window: number): (number | null)[] {
-  const out: (number | null)[] = Array(values.length).fill(null);
-  if (window <= 0) return out;
-
-  for (let i = window - 1; i < values.length; i++) {
-    let sum = 0;
-    let ok = true;
-    for (let j = i - window + 1; j <= i; j++) {
-      const v = values[j];
-      if (typeof v !== "number" || !Number.isFinite(v)) {
-        ok = false;
-        break;
-      }
-      sum += v;
-    }
-    out[i] = ok ? sum / window : null;
+function formatPctFromBase(last: number | null, base: number | null) {
+  if (
+    typeof last !== "number" ||
+    typeof base !== "number" ||
+    !Number.isFinite(last) ||
+    !Number.isFinite(base) ||
+    base === 0
+  ) {
+    return null;
   }
-  return out;
+  return ((last - base) / base) * 100;
 }
-
-type TrendScore = {
-  total: number;
-  passed: number;
-  details: { name: string; ok: boolean | null }[];
-};
-
-type StretchScore = {
-  total: number;
-  flagged: number;
-  oversold: number;
-  overbought: number;
-  details: { name: string; state: "oversold" | "overbought" | "neutral" | "na" }[];
-};
 
 function buildTrendScore(args: {
   lastClose: number | null;
@@ -693,93 +601,13 @@ function buildStretchScore(args: {
     details.push({ name: "MA50 dist", state: "na" });
   }
 
-  const total = 6;
-  const flagged = oversold + overbought;
-
-  return { total, flagged, oversold, overbought, details };
-}
-
-function buildAutoSummary(args: {
-  symbol: string;
-  trendScore: TrendScore | null;
-  stretchScore: StretchScore | null;
-  lastClose: number | null;
-  ma50: number | null;
-  ma200: number | null;
-  rsi: number | null;
-  rsiDiv: DivergenceState;
-  macdDiv: DivergenceState;
-}) {
-  const {
-    symbol,
-    trendScore,
-    stretchScore,
-    lastClose,
-    ma50,
-    ma200,
-    rsi,
-    rsiDiv,
-    macdDiv,
-  } = args;
-
-  if (
-    !trendScore ||
-    !stretchScore ||
-    typeof lastClose !== "number" ||
-    !Number.isFinite(lastClose)
-  ) {
-    return `${symbol} does not currently have enough signal data for a summary.`;
-  }
-
-  const oversoldCount = stretchScore.oversold;
-  const overboughtCount = stretchScore.overbought;
-
-  let trendText = "mixed structure";
-  if (
-    typeof ma50 === "number" &&
-    Number.isFinite(ma50) &&
-    typeof ma200 === "number" &&
-    Number.isFinite(ma200)
-  ) {
-    if (lastClose > ma50 && ma50 > ma200) {
-      trendText = "stronger bullish structure";
-    } else if (lastClose < ma50 && ma50 < ma200) {
-      trendText = "weaker bearish structure";
-    } else if (lastClose > ma50) {
-      trendText = "mildly constructive structure";
-    } else if (lastClose < ma50) {
-      trendText = "softer short-term structure";
-    }
-  }
-
-  let stretchText = "limited stretch signals";
-  if (overboughtCount >= 3) {
-    stretchText = "several overbought-style stretch signals";
-  } else if (oversoldCount >= 3) {
-    stretchText = "several oversold-style stretch signals";
-  } else if (stretchScore.flagged >= 2) {
-    stretchText = "some mixed stretch signals";
-  }
-
-  let momentumText = "";
-  if (typeof rsi === "number" && Number.isFinite(rsi)) {
-    if (rsi >= 70) {
-      momentumText = ` RSI is ${rsi.toFixed(1)} and overbought.`;
-    } else if (rsi <= 30) {
-      momentumText = ` RSI is ${rsi.toFixed(1)} and oversold.`;
-    } else {
-      momentumText = ` RSI is ${rsi.toFixed(1)} and neutral.`;
-    }
-  }
-
-  let divergenceText = "";
-  if (rsiDiv === "bullish" || macdDiv === "bullish") {
-    divergenceText = " Bullish divergence is present.";
-  } else if (rsiDiv === "bearish" || macdDiv === "bearish") {
-    divergenceText = " Bearish divergence is present.";
-  }
-
-  return `${symbol} is showing ${trendText} with ${stretchText}.${momentumText}${divergenceText}`;
+  return {
+    total: 6,
+    flagged: oversold + overbought,
+    oversold,
+    overbought,
+    details,
+  };
 }
 
 /* ----------------------------- constants ----------------------------- */
@@ -841,24 +669,6 @@ const TIMEFRAMES: { label: string; days: number }[] = [
   { label: "MAX", days: 4000 },
 ];
 
-const BREAKDOWN_DEFS = [
-  { key: "vwap", label: "VWAP", overlay: "VWAP" as const },
-  { key: "macd", label: "MACD", overlay: "MACD(12,26,9)" as const },
-  { key: "rsi", label: "RSI", overlay: "RSI(14)" as const },
-  { key: "stoch", label: "Stoch", overlay: "Stochastic(14,3)" as const },
-  { key: "ma200", label: "MA200", overlay: "MA200" as const },
-  { key: "vol", label: "Volume", overlay: "Volume" as const },
-  { key: "atr", label: "ATR", overlay: "ATR(14)" as const },
-  { key: "div_rsi", label: "RSI Div", overlay: "RSI(14)" as const },
-  { key: "div_macd", label: "MACD Div", overlay: "MACD(12,26,9)" as const },
-] as const;
-
-const INDICATORS: Overlay[] = [
-  "None",
-  "MA50",
-  ...Array.from(new Set(BREAKDOWN_DEFS.map((d) => d.overlay))),
-];
-
 const PRICE_OVERLAY_OPTIONS: Overlay[] = [
   "MA50",
   "MA200",
@@ -879,16 +689,11 @@ function isLowerOverlay(v: Overlay) {
   return LOWER_OVERLAY_OPTIONS.includes(v);
 }
 
-function isPriceOverlay(v: Overlay) {
-  return PRICE_OVERLAY_OPTIONS.includes(v);
-}
-
 /* ----------------------------- component ----------------------------- */
 
 export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymbol?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [isPicking, startPicking] = useTransition();
 
   const [symbol, setSymbol] = useState(() => {
     if (typeof window === "undefined") return defaultSymbol;
@@ -896,17 +701,107 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     return saved && saved.trim() ? saved.trim().toUpperCase() : defaultSymbol;
   });
 
-  const [symbolName, setSymbolName] = useState<string>("");
+  const [symbolName, setSymbolName] = useState("");
+  const [tfDays, setTfDays] = useState(365);
+  const [windowDays, setWindowDays] = useState(365);
+  const [windowOffset, setWindowOffset] = useState(0);
 
-  const presetNameFor = (sym: string) => {
-    const hit = PRESET_TICKERS.find((t) => t.symbol === sym);
-    return hit ? hit.name : "";
-  };
+  const [indicator, setIndicator] = useState<Overlay>("None");
+  const [selectedIndicators, setSelectedIndicators] = useState<Overlay[]>([]);
+  const [indicatorMenuOpen, setIndicatorMenuOpen] = useState(false);
+  const indicatorMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [historyAll, setHistoryAll] = useState<Point[]>([]);
+  const [symbolCache, setSymbolCache] = useState<Record<string, CachedSymbolData>>({});
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const [query, setQuery] = useState(symbol);
+  const [results, setResults] = useState<SymbolResult[]>([]);
+  const [open, setOpen] = useState(false);
+
+  const [bench, setBench] = useState<BenchPayload | null>(null);
+  const [news, setNews] = useState<NewsPayload | null>(null);
+
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [expanded, setExpanded] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  const COLORS = useMemo(() => {
+    const isDark = theme === "dark";
+    return {
+      isDark,
+      pageBg: isDark ? "#06080d" : "#f6f7fb",
+      pageFg: isDark ? "#f1f5f9" : "#0b1220",
+      mutedFg: isDark ? "rgba(241,245,249,0.70)" : "rgba(11,18,32,0.65)",
+      cardBg: isDark ? "#0b1220" : "#ffffff",
+      cardFg: isDark ? "#f1f5f9" : "#0b1220",
+      border: isDark ? "rgba(255,255,255,0.14)" : "rgba(11,18,32,0.14)",
+      controlBg: isDark ? "rgba(255,255,255,0.06)" : "rgba(11,18,32,0.04)",
+      controlBgSolid: isDark ? "#0f172a" : "#ffffff",
+      controlBorder: isDark ? "rgba(255,255,255,0.18)" : "rgba(11,18,32,0.18)",
+      controlFg: isDark ? "#f1f5f9" : "#0b1220",
+      yellowBorder: isDark ? "rgba(234,179,8,0.38)" : "rgba(202,138,4,0.35)",
+      yellowBg: isDark ? "rgba(234,179,8,0.10)" : "rgba(250,204,21,0.14)",
+      yellowText: isDark ? "#fde68a" : "#854d0e",
+    };
+  }, [theme]);
 
   useEffect(() => {
-    const preset = presetNameFor(symbol);
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  useEffect(() => {
+    setWindowDays(tfDays);
+    setWindowOffset(0);
+  }, [symbol, tfDays]);
+
+  useEffect(() => {
+    const urlSymbol = searchParams.get("symbol");
+    const cleaned = urlSymbol ? urlSymbol.trim().toUpperCase() : "";
+    if (!cleaned) return;
+
+    setSymbol(cleaned);
+    setQuery(cleaned);
+    setResults([]);
+    setOpen(false);
+    setWindowOffset(0);
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!symbol.trim()) return;
+    window.localStorage.setItem("msh_last_symbol", symbol.trim().toUpperCase());
+  }, [symbol]);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setExpanded(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [expanded]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (!indicatorMenuRef.current) return;
+      if (!indicatorMenuRef.current.contains(e.target as Node)) {
+        setIndicatorMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const preset = PRESET_TICKERS.find((t) => t.symbol === symbol);
     if (preset) {
-      setSymbolName(preset);
+      setSymbolName(preset.name);
       return;
     }
 
@@ -933,99 +828,11 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     };
   }, [symbol]);
 
-useEffect(() => {
-  const urlSymbol = searchParams.get("symbol");
-  const cleaned = urlSymbol ? urlSymbol.trim().toUpperCase() : "";
-
-  if (!cleaned) return;
-
-  setSymbol(cleaned);
-  setQuery(cleaned);
-  setResults([]);
-  setOpen(false);
-  setWindowOffset(0);
-}, [searchParams]);
-
-  useEffect(() => {
-    if (!symbol || !symbol.trim()) return;
-    window.localStorage.setItem("msh_last_symbol", symbol.trim().toUpperCase());
-  }, [symbol]);
-
-  const [tfDays, setTfDays] = useState(365);
-  const [windowDays, setWindowDays] = useState(365);
-  const [windowOffset, setWindowOffset] = useState(0);
-
-  const [indicator, setIndicator] = useState<Overlay>("None");
-  const [selectedIndicators, setSelectedIndicators] = useState<Overlay[]>([]);
-  const [indicatorMenuOpen, setIndicatorMenuOpen] = useState(false);
-  const indicatorMenuRef = React.useRef<HTMLDivElement | null>(null);
-
-  const [quote, setQuote] = useState<Quote | null>(null);
-  const [historyAll, setHistoryAll] = useState<Point[]>([]);
-  const [symbolCache, setSymbolCache] = useState<Record<string, CachedSymbolData>>({});
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  const [query, setQuery] = useState(symbol);
-  const [results, setResults] = useState<SymbolResult[]>([]);
-  const [open, setOpen] = useState(false);
-
-  const [bench, setBench] = useState<BenchPayload | null>(null);
-  const [news, setNews] = useState<NewsPayload | null>(null);
-
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
-
-  const COLORS = useMemo(() => {
-    const isDark = theme === "dark";
-    return {
-      isDark,
-      pageBg: isDark ? "#06080d" : "#f6f7fb",
-      pageFg: isDark ? "#f1f5f9" : "#0b1220",
-      mutedFg: isDark ? "rgba(241,245,249,0.70)" : "rgba(11,18,32,0.65)",
-      cardBg: isDark ? "#0b1220" : "#ffffff",
-      cardFg: isDark ? "#f1f5f9" : "#0b1220",
-      border: isDark ? "rgba(255,255,255,0.14)" : "rgba(11,18,32,0.14)",
-      controlBg: isDark ? "rgba(255,255,255,0.06)" : "rgba(11,18,32,0.04)",
-      controlBgSolid: isDark ? "#0f172a" : "#ffffff",
-      controlBorder: isDark ? "rgba(255,255,255,0.18)" : "rgba(11,18,32,0.18)",
-      controlFg: isDark ? "#f1f5f9" : "#0b1220",
-    };
-  }, [theme]);
-
-  const [expanded, setExpanded] = useState(false);
-
-  useEffect(() => {
-    setWindowDays(tfDays);
-    setWindowOffset(0);
-  }, [symbol, tfDays]);
-
-  useEffect(() => {
-    if (!expanded) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setExpanded(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [expanded]);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (!indicatorMenuRef.current) return;
-      if (!indicatorMenuRef.current.contains(e.target as Node)) {
-        setIndicatorMenuOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
-   const cacheHit = symbolCache[symbol];
-
+      const cacheHit = symbolCache[symbol];
       if (cacheHit) {
         setErr(null);
         setQuote(cacheHit.quote);
@@ -1042,14 +849,16 @@ useEffect(() => {
 
         const [qRes, hRes] = await Promise.all([
           fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" }),
-          fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=${historyDays}`, { cache: "no-store" }),
+          fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=${historyDays}`, {
+            cache: "no-store",
+          }),
         ]);
 
         if (!qRes.ok) throw new Error("Quote fetch failed");
         if (!hRes.ok) throw new Error("History fetch failed");
 
         const q = (await qRes.json()) as Quote;
-        const h = (await hRes.json()) as { symbol: string; points: any[] };
+        const h = (await hRes.json()) as { points: any[] };
 
         if (cancelled) return;
 
@@ -1088,7 +897,7 @@ useEffect(() => {
     return () => {
       cancelled = true;
     };
-  }, [symbol]);
+  }, [symbol, symbolCache]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1135,7 +944,13 @@ useEffect(() => {
 
         if (!cancelled) setBench(safe);
       } catch {
-        if (!cancelled) setBench({ updatedAt: new Date().toISOString(), scope: "Benchmarks", items: [] });
+        if (!cancelled) {
+          setBench({
+            updatedAt: new Date().toISOString(),
+            scope: "Benchmarks",
+            items: [],
+          });
+        }
       }
     }
 
@@ -1150,7 +965,9 @@ useEffect(() => {
 
     async function loadNews() {
       try {
-        const res = await fetch(`/api/news?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" });
+        const res = await fetch(`/api/news?symbol=${encodeURIComponent(symbol)}`, {
+          cache: "no-store",
+        });
         const data = (await res.json()) as NewsPayload;
         if (!cancelled) setNews(data);
       } catch {
@@ -1178,53 +995,43 @@ useEffect(() => {
   }, [historyAll, totalPoints, offset, win]);
 
   const n = displayedHistory.length;
-
   const closesAll = useMemo(() => historyAll.map((p) => p.close), [historyAll]);
 
   const ma50Full = useMemo(() => movingAverage(closesAll, 50), [closesAll]);
   const ma200Full = useMemo(() => movingAverage(closesAll, 200), [closesAll]);
-
   const ema20Full = useMemo(() => ema(closesAll, 20), [closesAll]);
   const bbFull = useMemo(() => bollinger(closesAll, 20, 2), [closesAll]);
   const rsi14Full = useMemo(() => rsiWilder(closesAll, 14), [closesAll]);
   const macdFull = useMemo(() => macd(closesAll, 12, 26, 9), [closesAll]);
-
   const vwapFull = useMemo(() => vwapFromPoints(historyAll), [historyAll]);
   const stochFull = useMemo(() => stochastic(historyAll, 14, 3), [historyAll]);
   const atr14Full = useMemo(() => atr(historyAll, 14), [historyAll]);
 
   const ma50 = useMemo(() => ma50Full.slice(-n), [ma50Full, n]);
   const ma200 = useMemo(() => ma200Full.slice(-n), [ma200Full, n]);
-
   const ema20Arr = useMemo(() => ema20Full.slice(-n), [ema20Full, n]);
-
   const bollUpper = useMemo(() => bbFull.upper.slice(-n), [bbFull, n]);
   const bollMid = useMemo(() => bbFull.mid.slice(-n), [bbFull, n]);
   const bollLower = useMemo(() => bbFull.lower.slice(-n), [bbFull, n]);
-
   const rsi14Arr = useMemo(() => rsi14Full.slice(-n), [rsi14Full, n]);
-
   const macdLine = useMemo(() => macdFull.line.slice(-n), [macdFull, n]);
   const macdSignal = useMemo(() => macdFull.signal.slice(-n), [macdFull, n]);
   const macdHist = useMemo(() => macdFull.hist.slice(-n), [macdFull, n]);
-
   const vwapArr = useMemo(() => vwapFull.slice(-n), [vwapFull, n]);
-
   const stochK = useMemo(() => stochFull.k.slice(-n), [stochFull, n]);
   const stochD = useMemo(() => stochFull.d.slice(-n), [stochFull, n]);
-
   const atr14Arr = useMemo(() => atr14Full.slice(-n), [atr14Full, n]);
 
   const volumeFull = useMemo(
-    () => historyAll.map((p) => (typeof p.volume === "number" && Number.isFinite(p.volume) ? p.volume : null)),
+    () =>
+      historyAll.map((p) =>
+        typeof p.volume === "number" && Number.isFinite(p.volume) ? p.volume : null
+      ),
     [historyAll]
   );
-
   const volSma20Full = useMemo(() => smaNullable(volumeFull, 20), [volumeFull]);
-
   const volumeArr = useMemo(() => volumeFull.slice(-n), [volumeFull, n]);
   const volSma20Arr = useMemo(() => volSma20Full.slice(-n), [volSma20Full, n]);
-
   const atrSma20Full = useMemo(() => smaNullable(atr14Full, 20), [atr14Full]);
   const atrSma20Arr = useMemo(() => atrSma20Full.slice(-n), [atrSma20Full, n]);
 
@@ -1232,39 +1039,47 @@ useEffect(() => {
   const lastMA50 = lastNum(ma50);
   const lastMA200 = lastNum(ma200);
 
-  const trendScore = useMemo(() => {
-    if (indicator !== "None") return null;
+  const ma50Pct = formatPctFromBase(lastClose, typeof lastMA50 === "number" ? lastMA50 : null);
+  const ma200Pct = formatPctFromBase(lastClose, typeof lastMA200 === "number" ? lastMA200 : null);
+  const ema20Pct = formatPctFromBase(lastClose, lastNum(ema20Arr));
+  const vwapPct = formatPctFromBase(lastClose, lastNum(vwapArr));
+  const bbUpperLast = lastNum(bollUpper);
+  const bbLowerLast = lastNum(bollLower);
+  const rsiLast = lastNum(rsi14Arr);
+  const stochLast = lastNum(stochK);
+  const macdHistLast = lastNum(macdHist);
+  const atrLast = lastNum(atr14Arr);
+  const atrSmaLast = lastNum(atrSma20Arr);
+  const volumeLast = lastNum(volumeArr);
+  const volumeSmaLast = lastNum(volSma20Arr);
 
-    return buildTrendScore({
-      lastClose,
-      ma50: typeof lastMA50 === "number" ? lastMA50 : null,
-      ma200: typeof lastMA200 === "number" ? lastMA200 : null,
-      macdHist: lastNum(macdHist),
-    });
-  }, [indicator, lastClose, lastMA50, lastMA200, macdHist]);
+  const trendScore = useMemo(
+    () =>
+      buildTrendScore({
+        lastClose,
+        ma50: typeof lastMA50 === "number" ? lastMA50 : null,
+        ma200: typeof lastMA200 === "number" ? lastMA200 : null,
+        macdHist: lastNum(macdHist),
+      }),
+    [lastClose, lastMA50, lastMA200, macdHist]
+  );
 
-  const stretchScore = useMemo(() => {
-    if (indicator !== "None") return null;
+  const stretchScore = useMemo(
+    () =>
+      buildStretchScore({
+        lastClose,
+        rsi14: lastNum(rsi14Arr),
+        stochK: lastNum(stochK),
+        bollUpper: lastNum(bollUpper),
+        bollLower: lastNum(bollLower),
+        ema20: lastNum(ema20Arr),
+        vwap: lastNum(vwapArr),
+        ma50: typeof lastMA50 === "number" ? lastMA50 : null,
+      }),
+    [lastClose, rsi14Arr, stochK, bollUpper, bollLower, ema20Arr, vwapArr, lastMA50]
+  );
 
-    return buildStretchScore({
-      lastClose,
-      rsi14: lastNum(rsi14Arr),
-      stochK: lastNum(stochK),
-      bollUpper: lastNum(bollUpper),
-      bollLower: lastNum(bollLower),
-      ema20: lastNum(ema20Arr),
-      vwap: lastNum(vwapArr),
-      ma50: typeof lastMA50 === "number" ? lastMA50 : null,
-    });
-  }, [indicator, lastClose, rsi14Arr, stochK, bollUpper, bollLower, ema20Arr, vwapArr, lastMA50]);
-
-  const divergence = useMemo<{
-    div: DivResult | null;
-    rsi: DivergenceState;
-    macd: DivergenceState;
-  }>(() => {
-    if (indicator !== "None") return { div: null, rsi: "none", macd: "none" };
-
+  const divergence = useMemo(() => {
     const div = detectDivergenceFromHistory(historyAll, {
       lookbackBars: 60,
       leftRight: 2,
@@ -1273,88 +1088,14 @@ useEffect(() => {
       macdStdMult: 0.35,
     });
 
-    const rsi = divStateForIndicator(div, "rsi");
-    const macd = divStateForIndicator(div, "macd");
-
-    return { div, rsi, macd };
-  }, [indicator, historyAll]);
-
-  const signal = useMemo(() => {
-    if (indicator === "None") {
-      if (!stretchScore || !trendScore) return { label: "Signal unavailable", detail: "No price data." };
-
-      const detailList = stretchScore.details
-        .filter((d) => d.state === "oversold" || d.state === "overbought")
-        .slice(0, 4)
-        .map((d) => d.name)
-        .join(", ");
-
-return {
-  label: `Stretch Score: ${stretchScore.flagged}/${stretchScore.total}`,
-  detail:
-    `Trend Score: ${trendScore.passed} of ${trendScore.total} checks passing.\n` +
-    `${stretchScore.flagged} stretch signals elevated.\n` +
-    (detailList ? `Top stretch signals: ${detailList}.` : "Top stretch signals: None."),
-};
-    }
-
-    if (indicator === "MA50") return compareTo(lastClose, "MA50", typeof lastMA50 === "number" ? lastMA50 : null);
-    if (indicator === "MA200") return compareTo(lastClose, "MA200", typeof lastMA200 === "number" ? lastMA200 : null);
-
-    if (indicator === "EMA20") {
-      const v = lastNum(ema20Arr);
-      return compareTo(lastClose, "EMA20", typeof v === "number" ? v : null);
-    }
-
-    if (indicator === "VWAP") {
-      const v = lastNum(vwapArr);
-      return compareTo(lastClose, "VWAP", typeof v === "number" ? v : null);
-    }
-
-    if (indicator === "Bollinger(20,2)") {
-      const v = lastNum(bollMid);
-      return compareTo(lastClose, "BB mid", typeof v === "number" ? v : null);
-    }
-
-    if (indicator === "RSI(14)") return compareOscillator("RSI(14)", lastNum(rsi14Arr), 30, 70);
-
-    if (indicator === "Stochastic(14,3)") return compareOscillator("Stochastic %K", lastNum(stochK), 20, 80);
-
-    if (indicator === "MACD(12,26,9)") {
-      return compareMacdHistogram(lastClose, lastNum(macdHist));
-    }
-
-    if (indicator === "Volume") {
-      return compareSpike("Volume", lastNum(volumeArr), lastNum(volSma20Arr), 1.8, "higher = more activity");
-    }
-
-    if (indicator === "ATR(14)") {
-      return compareSpike("ATR(14)", lastNum(atr14Arr), lastNum(atrSma20Arr), 1.5, "higher = more volatility");
-    }
-
-    return { label: "Signal unavailable", detail: "Unknown indicator state." };
-  }, [
-    indicator,
-    trendScore,
-    stretchScore,
-    lastClose,
-    lastMA50,
-    lastMA200,
-    ema20Arr,
-    vwapArr,
-    bollMid,
-    rsi14Arr,
-    stochK,
-    macdHist,
-    volumeArr,
-    volSma20Arr,
-    atr14Arr,
-    atrSma20Arr,
-  ]);
+    return {
+      div,
+      rsi: divStateForIndicator(div, "rsi"),
+      macd: divStateForIndicator(div, "macd"),
+    };
+  }, [historyAll]);
 
   const overviewMeta = useMemo(() => {
-    if (indicator !== "None" || !trendScore || !stretchScore) return null;
-
     const toneInfo = compositeToneFromCounts(stretchScore.overbought, stretchScore.oversold, 0);
     const toneColor = toneToColor(toneInfo.tone, COLORS.isDark);
 
@@ -1377,56 +1118,452 @@ return {
     }
 
     return { toneColor, toneTag: toneInfo.tag, trend, vol };
-  }, [indicator, trendScore, stretchScore, COLORS.isDark, lastClose, lastMA50, lastMA200, atr14Arr, atrSma20Arr]);
+  }, [stretchScore, COLORS.isDark, lastClose, lastMA50, lastMA200, atr14Arr, atrSma20Arr]);
 
-  const autoSummary = useMemo(() => {
-  if (indicator !== "None") return null;
+  const customMode = selectedIndicators.length > 0;
 
-  return buildAutoSummary({
+  function chartIndicatorLabel(values: Overlay[]) {
+    if (!values.length) return "Overview";
+    return values.join(", ");
+  }
+
+  function chooseSymbol(s: string) {
+    const cleaned = s.trim().toUpperCase();
+    if (!cleaned) return;
+
+    setSymbol(cleaned);
+    setQuery(cleaned);
+    setResults([]);
+    setOpen(false);
+    setWindowOffset(0);
+  }
+
+  function clearIndicatorSelection() {
+    setSelectedIndicators([]);
+    setIndicator("None");
+    setWindowOffset(0);
+    setIndicatorMenuOpen(false);
+  }
+
+  function getNextFocusedIndicator(values: Overlay[]) {
+    const activeLower = values.find((v) => isLowerOverlay(v));
+    if (activeLower) return activeLower;
+    if (values.length) return values[values.length - 1];
+    return "None" as Overlay;
+  }
+
+  function toggleIndicatorSelection(next: Overlay) {
+    if (next === "None") {
+      clearIndicatorSelection();
+      return;
+    }
+
+    setSelectedIndicators((prev) => {
+      const alreadyOn = prev.includes(next);
+      let nextValues: Overlay[];
+
+      if (isLowerOverlay(next)) {
+        nextValues = alreadyOn
+          ? prev.filter((v) => v !== next)
+          : [...prev.filter((v) => !isLowerOverlay(v)), next];
+      } else {
+        nextValues = alreadyOn ? prev.filter((v) => v !== next) : [...prev, next];
+      }
+
+      setIndicator(getNextFocusedIndicator(nextValues));
+      return nextValues;
+    });
+
+    setWindowOffset(0);
+  }
+
+  const chartIndicatorName = chartIndicatorLabel(selectedIndicators);
+
+  const chartSummaryText = useMemo(() => {
+    if (!customMode) {
+      let trendText = "mixed structure";
+
+      if (
+        typeof lastClose === "number" &&
+        typeof lastMA50 === "number" &&
+        typeof lastMA200 === "number"
+      ) {
+        if (lastClose > lastMA50 && lastMA50 > lastMA200) {
+          trendText = "stronger bullish structure";
+        } else if (lastClose < lastMA50 && lastMA50 < lastMA200) {
+          trendText = "weaker bearish structure";
+        } else if (lastClose > lastMA50) {
+          trendText = "mildly constructive structure";
+        } else if (lastClose < lastMA50) {
+          trendText = "softer short-term structure";
+        }
+      }
+
+      let stretchText = "limited stretch signals";
+      if (stretchScore.overbought >= 3) {
+        stretchText = "several overbought-style stretch signals";
+      } else if (stretchScore.oversold >= 3) {
+        stretchText = "several oversold-style stretch signals";
+      } else if (stretchScore.flagged >= 2) {
+        stretchText = "some mixed stretch signals";
+      }
+
+      let momentumText = "";
+      if (typeof rsiLast === "number") {
+        if (rsiLast >= 70) momentumText = ` RSI is ${rsiLast.toFixed(1)} and overbought.`;
+        else if (rsiLast <= 30) momentumText = ` RSI is ${rsiLast.toFixed(1)} and oversold.`;
+        else momentumText = ` RSI is ${rsiLast.toFixed(1)} and neutral.`;
+      }
+
+      let divergenceText = "";
+      if (divergence.rsi === "bullish" || divergence.macd === "bullish") {
+        divergenceText = " Bullish divergence is present.";
+      } else if (divergence.rsi === "bearish" || divergence.macd === "bearish") {
+        divergenceText = " Bearish divergence is present.";
+      }
+
+      return `${symbol} is showing ${trendText} with ${stretchText}.${momentumText}${divergenceText}`;
+    }
+
+    const parts: string[] = [];
+
+    selectedIndicators.forEach((ind) => {
+      if (ind === "MA50") {
+        parts.push(
+          ma50Pct == null
+            ? "MA50 needs more data."
+            : `Price is ${ma50Pct >= 0 ? `${ma50Pct.toFixed(1)}% above` : `${Math.abs(ma50Pct).toFixed(1)}% below`} MA50.`
+        );
+      }
+
+      if (ind === "MA200") {
+        parts.push(
+          ma200Pct == null
+            ? "MA200 needs more data."
+            : `Price is ${ma200Pct >= 0 ? `${ma200Pct.toFixed(1)}% above` : `${Math.abs(ma200Pct).toFixed(1)}% below`} MA200.`
+        );
+      }
+
+      if (ind === "EMA20") {
+        parts.push(
+          ema20Pct == null
+            ? "EMA20 needs more data."
+            : `Price is ${ema20Pct >= 0 ? `${ema20Pct.toFixed(1)}% above` : `${Math.abs(ema20Pct).toFixed(1)}% below`} EMA20.`
+        );
+      }
+
+      if (ind === "VWAP") {
+        parts.push(
+          vwapPct == null
+            ? "VWAP needs more data."
+            : `Price is ${vwapPct >= 0 ? `${vwapPct.toFixed(1)}% above` : `${Math.abs(vwapPct).toFixed(1)}% below`} VWAP.`
+        );
+      }
+
+      if (ind === "Bollinger(20,2)") {
+        if (
+          typeof lastClose === "number" &&
+          typeof bbUpperLast === "number" &&
+          typeof bbLowerLast === "number"
+        ) {
+          if (lastClose > bbUpperLast) parts.push("Price is above the upper Bollinger Band.");
+          else if (lastClose < bbLowerLast) parts.push("Price is below the lower Bollinger Band.");
+          else parts.push("Price is trading inside the Bollinger Bands.");
+        } else {
+          parts.push("Bollinger Bands need more data.");
+        }
+      }
+
+      if (ind === "RSI(14)") {
+        if (typeof rsiLast === "number") {
+          if (rsiLast >= 70) parts.push(`RSI is ${rsiLast.toFixed(1)} and overbought.`);
+          else if (rsiLast <= 30) parts.push(`RSI is ${rsiLast.toFixed(1)} and oversold.`);
+          else parts.push(`RSI is ${rsiLast.toFixed(1)} and neutral.`);
+        } else {
+          parts.push("RSI needs more data.");
+        }
+      }
+
+      if (ind === "MACD(12,26,9)") {
+        if (typeof macdHistLast === "number") {
+          if (macdHistLast > 0) parts.push("MACD momentum is bullish.");
+          else if (macdHistLast < 0) parts.push("MACD momentum is bearish.");
+          else parts.push("MACD momentum is flat.");
+        } else {
+          parts.push("MACD needs more data.");
+        }
+      }
+
+      if (ind === "Stochastic(14,3)") {
+        if (typeof stochLast === "number") {
+          if (stochLast >= 80) parts.push(`Stochastic is ${stochLast.toFixed(1)} and overbought.`);
+          else if (stochLast <= 20) parts.push(`Stochastic is ${stochLast.toFixed(1)} and oversold.`);
+          else parts.push(`Stochastic is ${stochLast.toFixed(1)} and neutral.`);
+        } else {
+          parts.push("Stochastic needs more data.");
+        }
+      }
+
+      if (ind === "ATR(14)") {
+        if (typeof atrLast === "number" && typeof atrSmaLast === "number" && atrSmaLast > 0) {
+          const ratio = atrLast / atrSmaLast;
+          parts.push(`ATR is running at ${ratio.toFixed(2)}× its 20-day average.`);
+        } else {
+          parts.push("ATR needs more data.");
+        }
+      }
+
+      if (ind === "Volume") {
+        if (
+          typeof volumeLast === "number" &&
+          typeof volumeSmaLast === "number" &&
+          volumeSmaLast > 0
+        ) {
+          const ratio = volumeLast / volumeSmaLast;
+          parts.push(`Volume is running at ${ratio.toFixed(2)}× its 20-day average.`);
+        } else {
+          parts.push("Volume needs more data.");
+        }
+      }
+    });
+
+    return parts.length
+      ? parts.join(" ")
+      : "Custom indicator view is active.";
+  }, [
+    customMode,
     symbol,
-    trendScore,
-    stretchScore,
+    selectedIndicators,
     lastClose,
-    ma50: typeof lastMA50 === "number" ? lastMA50 : null,
-    ma200: typeof lastMA200 === "number" ? lastMA200 : null,
-    rsi: lastNum(rsi14Arr),
-    rsiDiv: divergence.rsi,
-    macdDiv: divergence.macd,
-  });
-}, [
-  indicator,
-  symbol,
-  trendScore,
-  stretchScore,
-  lastClose,
-  lastMA50,
-  lastMA200,
-  rsi14Arr,
-  divergence,
-]);
+    lastMA50,
+    lastMA200,
+    ma50Pct,
+    ma200Pct,
+    ema20Pct,
+    vwapPct,
+    bbUpperLast,
+    bbLowerLast,
+    rsiLast,
+    stochLast,
+    macdHistLast,
+    atrLast,
+    atrSmaLast,
+    volumeLast,
+    volumeSmaLast,
+    stretchScore,
+    divergence,
+  ]);
+
+  const selectedBreakdownRows = useMemo(() => {
+    const rows: { label: string; tone: OverviewItem["tone"]; value: string }[] = [];
+
+    selectedIndicators.forEach((ind) => {
+      if (ind === "MA50") {
+        rows.push({
+          label: "MA50 Distance",
+          tone:
+            typeof ma50Pct === "number"
+              ? Math.abs(ma50Pct) >= 5
+                ? "red"
+                : Math.abs(ma50Pct) >= 2
+                ? "orange"
+                : "yellow"
+              : "muted",
+          value: ma50Pct == null ? "—" : `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}%`,
+        });
+      }
+
+      if (ind === "MA200") {
+        rows.push({
+          label: "MA200 Distance",
+          tone:
+            typeof ma200Pct === "number"
+              ? Math.abs(ma200Pct) >= 10
+                ? "red"
+                : Math.abs(ma200Pct) >= 4
+                ? "orange"
+                : "yellow"
+              : "muted",
+          value: ma200Pct == null ? "—" : `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}%`,
+        });
+      }
+
+      if (ind === "EMA20") {
+        rows.push({
+          label: "EMA20 Distance",
+          tone:
+            typeof ema20Pct === "number"
+              ? Math.abs(ema20Pct) >= 5
+                ? "red"
+                : Math.abs(ema20Pct) >= 2
+                ? "orange"
+                : "yellow"
+              : "muted",
+          value: ema20Pct == null ? "—" : `${ema20Pct >= 0 ? "+" : ""}${ema20Pct.toFixed(2)}%`,
+        });
+      }
+
+      if (ind === "VWAP") {
+        rows.push({
+          label: "VWAP Distance",
+          tone:
+            typeof vwapPct === "number"
+              ? Math.abs(vwapPct) >= 5
+                ? "red"
+                : Math.abs(vwapPct) >= 2
+                ? "orange"
+                : "yellow"
+              : "muted",
+          value: vwapPct == null ? "—" : `${vwapPct >= 0 ? "+" : ""}${vwapPct.toFixed(2)}%`,
+        });
+      }
+
+      if (ind === "Bollinger(20,2)") {
+        let value = "—";
+        let tone: OverviewItem["tone"] = "muted";
+
+        if (
+          typeof lastClose === "number" &&
+          typeof bbUpperLast === "number" &&
+          typeof bbLowerLast === "number"
+        ) {
+          if (lastClose > bbUpperLast) {
+            value = "Above upper band";
+            tone = "red";
+          } else if (lastClose < bbLowerLast) {
+            value = "Below lower band";
+            tone = "green";
+          } else {
+            value = "Inside bands";
+            tone = "yellow";
+          }
+        }
+
+        rows.push({
+          label: "Bollinger",
+          tone,
+          value,
+        });
+      }
+
+      if (ind === "RSI(14)") {
+        rows.push({
+          label: "RSI",
+          tone:
+            typeof rsiLast === "number"
+              ? rsiLast >= 70
+                ? "red"
+                : rsiLast <= 30
+                ? "green"
+                : "yellow"
+              : "muted",
+          value: typeof rsiLast === "number" ? rsiLast.toFixed(2) : "—",
+        });
+
+        rows.push({
+          label: "RSI Div",
+          tone: divergenceTone(divergence.rsi),
+          value: divergenceLabel(divergence.rsi),
+        });
+      }
+
+      if (ind === "MACD(12,26,9)") {
+        rows.push({
+          label: "MACD Hist",
+          tone:
+            typeof macdHistLast === "number"
+              ? macdHistLast > 0
+                ? "green"
+                : macdHistLast < 0
+                ? "red"
+                : "yellow"
+              : "muted",
+          value: typeof macdHistLast === "number" ? macdHistLast.toFixed(4) : "—",
+        });
+
+        rows.push({
+          label: "MACD Div",
+          tone: divergenceTone(divergence.macd),
+          value: divergenceLabel(divergence.macd),
+        });
+      }
+
+      if (ind === "Stochastic(14,3)") {
+        rows.push({
+          label: "Stoch",
+          tone:
+            typeof stochLast === "number"
+              ? stochLast >= 80
+                ? "red"
+                : stochLast <= 20
+                ? "green"
+                : "yellow"
+              : "muted",
+          value: typeof stochLast === "number" ? stochLast.toFixed(2) : "—",
+        });
+      }
+
+      if (ind === "ATR(14)") {
+        const ratio =
+          typeof atrLast === "number" && typeof atrSmaLast === "number" && atrSmaLast > 0
+            ? atrLast / atrSmaLast
+            : null;
+
+        rows.push({
+          label: "ATR Ratio",
+          tone: ratio == null ? "muted" : ratio >= 1.5 ? "orange" : "yellow",
+          value: ratio == null ? "—" : `${ratio.toFixed(2)}×`,
+        });
+      }
+
+      if (ind === "Volume") {
+        const ratio =
+          typeof volumeLast === "number" &&
+          typeof volumeSmaLast === "number" &&
+          volumeSmaLast > 0
+            ? volumeLast / volumeSmaLast
+            : null;
+
+        rows.push({
+          label: "Volume Ratio",
+          tone: ratio == null ? "muted" : ratio >= 1.8 ? "orange" : "yellow",
+          value: ratio == null ? "—" : `${ratio.toFixed(2)}×`,
+        });
+      }
+    });
+
+    return rows;
+  }, [
+    selectedIndicators,
+    ma50Pct,
+    ma200Pct,
+    ema20Pct,
+    vwapPct,
+    lastClose,
+    bbUpperLast,
+    bbLowerLast,
+    rsiLast,
+    stochLast,
+    macdHistLast,
+    atrLast,
+    atrSmaLast,
+    volumeLast,
+    volumeSmaLast,
+    divergence,
+  ]);
 
   const overviewItems = useMemo<OverviewItem[]>(() => {
-    if (indicator !== "None") return [];
-
     const items: OverviewItem[] = [];
-
     let order = 0;
     const push = (it: Omit<OverviewItem, "order">) => items.push({ ...it, order: order++ });
-
-    const distTone = (pctAbs: number) => {
-      if (pctAbs >= 5) return "red";
-      if (pctAbs >= 2) return "orange";
-      return "yellow";
-    };
 
     const vwap = lastNum(vwapArr);
     if (typeof lastClose === "number" && typeof vwap === "number" && vwap > 0) {
       const pct = ((lastClose - vwap) / vwap) * 100;
-      const tone = pct >= 2 || pct <= -2 ? (Math.abs(pct) >= 5 ? "red" : "orange") : "yellow";
       push({
         key: "vwap",
         label: "VWAP",
-        tone,
+        tone: pct >= 2 || pct <= -2 ? (Math.abs(pct) >= 5 ? "red" : "orange") : "yellow",
         valueText: `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`,
         severity: Math.abs(pct),
       });
@@ -1434,73 +1571,64 @@ return {
       push({ key: "vwap", label: "VWAP", tone: "muted", valueText: "—", severity: 0 });
     }
 
-    const hist = lastNum(macdHist);
-    if (typeof lastClose === "number" && typeof hist === "number") {
-      const flat = Math.abs(lastClose) * 0.001;
-      const tone = hist > flat ? "green" : hist < -flat ? "red" : "yellow";
+    if (typeof macdHistLast === "number") {
       push({
         key: "macd",
         label: "MACD",
-        tone,
-        valueText: hist > flat ? "Bullish" : hist < -flat ? "Bearish" : "Flat",
-        severity: (Math.abs(hist) / Math.max(1e-9, Math.abs(lastClose))) * 100,
+        tone: macdHistLast > 0 ? "green" : macdHistLast < 0 ? "red" : "yellow",
+        valueText: macdHistLast > 0 ? "Bullish" : macdHistLast < 0 ? "Bearish" : "Flat",
+        severity: Math.abs(macdHistLast),
       });
     } else {
       push({ key: "macd", label: "MACD", tone: "muted", valueText: "—", severity: 0 });
     }
 
-    const rsi = lastNum(rsi14Arr);
-    if (typeof rsi === "number") {
-      const tone = rsi >= 70 ? "red" : rsi <= 30 ? "green" : "yellow";
+    if (typeof rsiLast === "number") {
       push({
         key: "rsi",
         label: "RSI",
-        tone,
-        valueText: rsi >= 70 ? "Overbought" : rsi <= 30 ? "Oversold" : "Neutral",
-        severity: rsi >= 70 ? rsi - 70 : rsi <= 30 ? 30 - rsi : 0,
+        tone: rsiLast >= 70 ? "red" : rsiLast <= 30 ? "green" : "yellow",
+        valueText: rsiLast >= 70 ? "Overbought" : rsiLast <= 30 ? "Oversold" : "Neutral",
+        severity: rsiLast >= 70 ? rsiLast - 70 : rsiLast <= 30 ? 30 - rsiLast : 0,
       });
     } else {
       push({ key: "rsi", label: "RSI", tone: "muted", valueText: "—", severity: 0 });
     }
 
-    const k = lastNum(stochK);
-    if (typeof k === "number") {
-      const tone = k >= 80 ? "red" : k <= 20 ? "green" : "yellow";
+    if (typeof stochLast === "number") {
       push({
         key: "stoch",
         label: "Stoch",
-        tone,
-        valueText: k >= 80 ? "Overbought" : k <= 20 ? "Oversold" : "Neutral",
-        severity: k >= 80 ? k - 80 : k <= 20 ? 20 - k : 0,
+        tone: stochLast >= 80 ? "red" : stochLast <= 20 ? "green" : "yellow",
+        valueText: stochLast >= 80 ? "Overbought" : stochLast <= 20 ? "Oversold" : "Neutral",
+        severity: stochLast >= 80 ? stochLast - 80 : stochLast <= 20 ? 20 - stochLast : 0,
       });
     } else {
       push({ key: "stoch", label: "Stoch", tone: "muted", valueText: "—", severity: 0 });
     }
 
-    const ma200v = typeof lastMA200 === "number" ? lastMA200 : null;
-    if (typeof lastClose === "number" && typeof ma200v === "number" && ma200v > 0) {
-      const pct = ((lastClose - ma200v) / ma200v) * 100;
-      const tone = distTone(Math.abs(pct)) as OverviewItem["tone"];
+    if (typeof ma200Pct === "number") {
       push({
         key: "ma200",
         label: "MA200",
-        tone,
-        valueText: `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`,
-        severity: Math.abs(pct),
+        tone: Math.abs(ma200Pct) >= 5 ? "red" : Math.abs(ma200Pct) >= 2 ? "orange" : "yellow",
+        valueText: `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}%`,
+        severity: Math.abs(ma200Pct),
       });
     } else {
       push({ key: "ma200", label: "MA200", tone: "muted", valueText: "—", severity: 0 });
     }
 
-    const vol = lastNum(volumeArr);
-    const volSma = lastNum(volSma20Arr);
-    if (typeof vol === "number" && typeof volSma === "number" && volSma > 0) {
-      const ratio = vol / volSma;
-      const tone = ratio >= 1.8 ? "orange" : "yellow";
+    if (
+      typeof volumeLast === "number" &&
+      typeof volumeSmaLast === "number" &&
+      volumeSmaLast > 0
+    ) {
+      const ratio = volumeLast / volumeSmaLast;
       push({
         key: "vol",
         label: "Volume",
-        tone,
+        tone: ratio >= 1.8 ? "orange" : "yellow",
         valueText: ratio >= 1.8 ? `Spike ${ratio.toFixed(2)}×` : `Normal ${ratio.toFixed(2)}×`,
         severity: Math.max(0, ratio - 1),
       });
@@ -1508,15 +1636,12 @@ return {
       push({ key: "vol", label: "Volume", tone: "muted", valueText: "—", severity: 0 });
     }
 
-    const atrv = lastNum(atr14Arr);
-    const atrSma = lastNum(atrSma20Arr);
-    if (typeof atrv === "number" && typeof atrSma === "number" && atrSma > 0) {
-      const ratio = atrv / atrSma;
-      const tone = ratio >= 1.5 ? "orange" : "yellow";
+    if (typeof atrLast === "number" && typeof atrSmaLast === "number" && atrSmaLast > 0) {
+      const ratio = atrLast / atrSmaLast;
       push({
         key: "atr",
         label: "ATR",
-        tone,
+        tone: ratio >= 1.5 ? "orange" : "yellow",
         valueText: ratio >= 1.5 ? `Spike ${ratio.toFixed(2)}×` : `Normal ${ratio.toFixed(2)}×`,
         severity: Math.max(0, ratio - 1),
       });
@@ -1524,23 +1649,20 @@ return {
       push({ key: "atr", label: "ATR", tone: "muted", valueText: "—", severity: 0 });
     }
 
-    const rsiTone = divergenceTone(divergence.rsi);
-    const macdTone = divergenceTone(divergence.macd);
-
     push({
       key: "div_rsi",
       label: "RSI Div",
-      tone: divergence.rsi === "none" ? "muted" : rsiTone,
-      valueText: divergence.rsi === "none" ? "—" : divergenceLabel(divergence.rsi),
-      severity: divergence.rsi === "none" ? 0 : divergenceSeverity(divergence.rsi),
+      tone: divergenceTone(divergence.rsi),
+      valueText: divergenceLabel(divergence.rsi),
+      severity: divergence.rsi === "none" ? 0 : 100,
     });
 
     push({
       key: "div_macd",
       label: "MACD Div",
-      tone: divergence.macd === "none" ? "muted" : macdTone,
-      valueText: divergence.macd === "none" ? "—" : divergenceLabel(divergence.macd),
-      severity: divergence.macd === "none" ? 0 : divergenceSeverity(divergence.macd),
+      tone: divergenceTone(divergence.macd),
+      valueText: divergenceLabel(divergence.macd),
+      severity: divergence.macd === "none" ? 0 : 100,
     });
 
     return items.sort((a, b) => {
@@ -1550,1007 +1672,511 @@ return {
       return a.order - b.order;
     });
   }, [
-    indicator,
     lastClose,
-    lastMA200,
     vwapArr,
-    macdHist,
-    rsi14Arr,
-    stochK,
-    volumeArr,
-    volSma20Arr,
-    atr14Arr,
-    atrSma20Arr,
+    macdHistLast,
+    rsiLast,
+    stochLast,
+    ma200Pct,
+    volumeLast,
+    volumeSmaLast,
+    atrLast,
+    atrSmaLast,
     divergence,
   ]);
 
- const lastIndicatorValue = useMemo(() => {
-  if (indicator === "None") {
-    return {
-      label: "Stretch Score",
-      value: stretchScore ? stretchScore.flagged : null,
-      total: stretchScore ? stretchScore.total : null,
-    };
+  function chipToneColor(tone: OverviewItem["tone"]) {
+    return toneToColor(tone, COLORS.isDark);
   }
 
-  if (indicator === "MA50") return { label: "MA50", value: lastMA50 };
-  if (indicator === "MA200") return { label: "MA200", value: lastMA200 };
-  if (indicator === "EMA20") return { label: "EMA20", value: lastNum(ema20Arr) };
-  if (indicator === "VWAP") return { label: "VWAP", value: lastNum(vwapArr) };
-  if (indicator === "Bollinger(20,2)") return { label: "BB Mid", value: lastNum(bollMid) };
-  if (indicator === "RSI(14)") return { label: "RSI(14)", value: lastNum(rsi14Arr) };
-  if (indicator === "MACD(12,26,9)") return { label: "MACD line", value: lastNum(macdLine) };
-  if (indicator === "Stochastic(14,3)") return { label: "%K", value: lastNum(stochK) };
-  if (indicator === "ATR(14)") return { label: "ATR(14)", value: lastNum(atr14Arr) };
-  if (indicator === "Volume") return { label: "Volume", value: lastNum(volumeArr) };
+  function HelpTip(props: { text: string; isDark: boolean }) {
+    const [openTip, setOpenTip] = useState(false);
 
-  return { label: "Indicator", value: null };
-}, [
-  indicator,
-  stretchScore,
-  lastMA50,
-  lastMA200,
-  ema20Arr,
-  vwapArr,
-  bollMid,
-  rsi14Arr,
-  macdLine,
-  stochK,
-  atr14Arr,
-  volumeArr,
-]);
-
-const [isMobile, setIsMobile] = useState(false);
-
-useEffect(() => {
-  const onResize = () => setIsMobile(window.innerWidth <= 768);
-  onResize();
-  window.addEventListener("resize", onResize);
-  return () => window.removeEventListener("resize", onResize);
-}, []);
-
-function chooseSymbol(s: string) {
-  const cleaned = s.trim().toUpperCase();
-  if (!cleaned) return;
-
-  setSymbol(cleaned);
-  setQuery(cleaned);
-  setResults([]);
-  setOpen(false);
-  setWindowOffset(0);
-}
-
-function prettyIndicatorName(v: Overlay) {
-  if (v === "None") return "Overview";
-  return v;
-}
-
-function chartIndicatorLabel(values: Overlay[]) {
-  if (!values.length) return "Overview";
-  return values.join(", ");
-}
-
-function getNextFocusedIndicator(values: Overlay[]) {
-  const activeLower = values.find((v) => isLowerOverlay(v));
-  if (activeLower) return activeLower;
-  if (values.length) return values[values.length - 1];
-  return "None" as Overlay;
-}
-
-function clearIndicatorSelection() {
-  setSelectedIndicators([]);
-  setIndicator("None");
-  setWindowOffset(0);
-  setIndicatorMenuOpen(false);
-}
-
-function toggleIndicatorSelection(next: Overlay) {
-  if (next === "None") {
-    clearIndicatorSelection();
-    return;
-  }
-
-  setSelectedIndicators((prev) => {
-    const alreadyOn = prev.includes(next);
-
-    let nextValues: Overlay[];
-
-    if (isLowerOverlay(next)) {
-      nextValues = alreadyOn
-        ? prev.filter((v) => v !== next)
-        : [...prev.filter((v) => !isLowerOverlay(v)), next];
-    } else {
-      nextValues = alreadyOn
-        ? prev.filter((v) => v !== next)
-        : [...prev, next];
-    }
-
-    setIndicator(getNextFocusedIndicator(nextValues));
-    return nextValues;
-  });
-
-  setWindowOffset(0);
-}
-
-function focusIndicator(next: Overlay) {
-  if (next === "None") {
-    clearIndicatorSelection();
-    return;
-  }
-
-  if (isLowerOverlay(next)) {
-    setSelectedIndicators((prev) => {
-      const nextValues = [...prev.filter((v) => !isLowerOverlay(v)), next];
-      return nextValues;
-    });
-  } else if (isPriceOverlay(next)) {
-    setSelectedIndicators((prev) => {
-      if (prev.includes(next)) return prev;
-      return [...prev, next];
-    });
-  }
-
-  setIndicator(next);
-  setWindowOffset(0);
-}
-
-function formatMaybeNumber(v: unknown, digits = 2) {
-  return typeof v === "number" && Number.isFinite(v) ? v.toFixed(digits) : "—";
-}
-
-function formatPctFromBase(last: number | null, base: number | null) {
-  if (typeof last !== "number" || typeof base !== "number" || !Number.isFinite(last) || !Number.isFinite(base) || base === 0) {
-    return null;
-  }
-  return ((last - base) / base) * 100;
-}
-
-function chipToneColor(tone: OverviewItem["tone"]) {
-  return toneToColor(tone, COLORS.isDark);
-}
-
-function signalDotColor(label: string) {
-  if (label.includes("🔴")) return COLORS.isDark ? "#ef4444" : "#dc2626";
-  if (label.includes("🟢")) return COLORS.isDark ? "#22c55e" : "#16a34a";
-  if (label.includes("⚡")) return COLORS.isDark ? "#fb923c" : "#ea580c";
-  return COLORS.isDark ? "#eab308" : "#ca8a04";
-}
-  function indicatorLearnHref(indicatorName: string) {
-  if (indicatorName === "MA50") return "/learn/moving-averages";
-  if (indicatorName === "MA200") return "/learn/moving-averages";
-  if (indicatorName === "EMA20") return "/learn/moving-averages";
-  if (indicatorName === "VWAP") return "/learn/vwap";
-  if (indicatorName === "Bollinger(20,2)") return "/learn/bollinger-bands";
-  if (indicatorName === "RSI(14)") return "/learn/rsi";
-  if (indicatorName === "MACD(12,26,9)") return "/learn/macd";
-  if (indicatorName === "Stochastic(14,3)") return "/learn/stochastic";
-  if (indicatorName === "ATR(14)") return "/learn/atr";
-  if (indicatorName === "Volume") return "/learn/volume";
-  return "/learn";
-}
-
-function indicatorHelpText(indicatorName: string) {
-  if (indicatorName === "MA50") {
-    return "MA50 shows the medium-term trend and helps spot whether price is trading above or below that trend.";
-  }
-  if (indicatorName === "MA200") {
-    return "MA200 shows the long-term trend and helps judge whether a stock is in a stronger or weaker structure.";
-  }
-  if (indicatorName === "EMA20") {
-    return "EMA20 is a faster moving average used to read short-term trend and pullbacks.";
-  }
-  if (indicatorName === "VWAP") {
-    return "VWAP helps show whether price is stretched away from a fairer average trading level.";
-  }
-  if (indicatorName === "Bollinger(20,2)") {
-    return "Bollinger Bands help show when price is near its normal range or stretching to extremes.";
-  }
-  if (indicatorName === "RSI(14)") {
-    return "RSI measures momentum and highlights potential overbought or oversold conditions.";
-  }
-  if (indicatorName === "MACD(12,26,9)") {
-    return "MACD helps read momentum direction and whether it is strengthening or weakening.";
-  }
-  if (indicatorName === "Stochastic(14,3)") {
-    return "Stochastic is a fast momentum indicator used to identify short-term stretch.";
-  }
-  if (indicatorName === "ATR(14)") {
-    return "ATR measures volatility and helps judge how large price movements are.";
-  }
-  if (indicatorName === "Volume") {
-    return "Volume shows how much participation is behind a price move.";
-  }
-
-  return "This indicator helps interpret trend, momentum, volatility, or stretch conditions.";
-}
-
-function BreakdownHelpButton(props: { indicator: Overlay }) {
-  const isOverview = props.indicator === "None";
-
-  const helpText = isOverview
-    ? "Breakdown shows the main dashboard indicators including trend, momentum, stretch, volatility and divergence clues."
-    : indicatorHelpText(props.indicator);
-
-  const learnHref = isOverview
-    ? "/learn"
-    : indicatorLearnHref(props.indicator);
-
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-      <HelpTip text={helpText} isDark={COLORS.isDark} />
-
-      <Link
-        href={learnHref}
-        style={{
-          color: COLORS.isDark ? "#93c5fd" : "#2563eb",
-          textDecoration: "none",
-          fontWeight: 800,
-          fontSize: 12,
-          whiteSpace: "nowrap",
-        }}
-      >
-        Learn more →
-      </Link>
-    </div>
-  );
-}
-
-const currentIndicatorName = prettyIndicatorName(indicator);
-const chartIndicatorName = chartIndicatorLabel(selectedIndicators);
-
-const chartHeight = isMobile ? 250 : 430;
-
-const ma50Pct = formatPctFromBase(lastClose, typeof lastMA50 === "number" ? lastMA50 : null);
-const ma200Pct = formatPctFromBase(lastClose, typeof lastMA200 === "number" ? lastMA200 : null);
-const ema20Pct = formatPctFromBase(lastClose, lastNum(ema20Arr));
-const vwapPct = formatPctFromBase(lastClose, lastNum(vwapArr));
-const bbUpperLast = lastNum(bollUpper);
-const bbLowerLast = lastNum(bollLower);
-const bbMidLast = lastNum(bollMid);
-const rsiLast = lastNum(rsi14Arr);
-const stochLast = lastNum(stochK);
-const macdHistLast = lastNum(macdHist);
-const macdLineLast = lastNum(macdLine);
-const macdSignalLast = lastNum(macdSignal);
-const atrLast = lastNum(atr14Arr);
-const atrSmaLast = lastNum(atrSma20Arr);
-const volumeLast = lastNum(volumeArr);
-const volumeSmaLast = lastNum(volSma20Arr);
-  const panelIndicators = useMemo(() => {
-  if (selectedIndicators.length) return selectedIndicators;
-  if (indicator !== "None") return [indicator];
-  return [];
-}, [selectedIndicators, indicator]);
-
-const selectedIndicatorsText = panelIndicators.length
-  ? panelIndicators.join(", ")
-  : "Overview";
-  
-const indicatorInsights = useMemo(() => {
-  if (!panelIndicators.length) return [];
-
-  return panelIndicators
-    .map((indicatorName) => {
-      if (indicatorName === "MA50") {
-        return {
-          key: "MA50",
-          title: "MA50 Insight",
-          accent: compareTo(lastClose, "MA50", typeof lastMA50 === "number" ? lastMA50 : null),
-          stats: [
-            { label: "Price vs MA50", value: ma50Pct == null ? "—" : `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}%` },
-            { label: "MA50 value", value: formatMaybeNumber(lastMA50) },
-            {
-              label: "Trend slope",
-              value:
-                ma50.length >= 6 &&
-                typeof ma50[ma50.length - 1] === "number" &&
-                typeof ma50[ma50.length - 6] === "number"
-                  ? ma50[ma50.length - 1]! > ma50[ma50.length - 6]!
-                    ? "Rising"
-                    : "Falling"
-                  : "—",
-            },
-            {
-              label: "Structure",
-              value:
-                typeof lastClose === "number" && typeof lastMA50 === "number"
-                  ? lastClose >= lastMA50
-                    ? "Above trend support"
-                    : "Below trend support"
-                  : "—",
-            },
-          ],
-          note:
-            typeof ma50Pct === "number"
-              ? ma50Pct > 5
-                ? "Price is stretched well above the 50-day average."
-                : ma50Pct < -5
-                ? "Price is trading notably below the 50-day average."
-                : "Price is trading close enough to the 50-day average to be considered fairly balanced."
-              : "Need more data for a clearer MA50 read.",
-        };
-      }
-
-      if (indicatorName === "MA200") {
-        return {
-          key: "MA200",
-          title: "MA200 Insight",
-          accent: compareTo(lastClose, "MA200", typeof lastMA200 === "number" ? lastMA200 : null),
-          stats: [
-            { label: "Price vs MA200", value: ma200Pct == null ? "—" : `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}%` },
-            { label: "MA200 value", value: formatMaybeNumber(lastMA200) },
-            {
-              label: "Long trend",
-              value:
-                typeof lastClose === "number" && typeof lastMA200 === "number"
-                  ? lastClose >= lastMA200
-                    ? "Above long-term trend"
-                    : "Below long-term trend"
-                  : "—",
-            },
-            {
-              label: "MA50 vs MA200",
-              value:
-                typeof lastMA50 === "number" && typeof lastMA200 === "number"
-                  ? lastMA50 >= lastMA200
-                    ? "Bullish stack"
-                    : "Bearish stack"
-                  : "—",
-            },
-          ],
-          note:
-            typeof ma200Pct === "number"
-              ? Math.abs(ma200Pct) >= 10
-                ? "This is a large long-term distance from the 200-day average."
-                : "This long-term distance is still fairly contained."
-              : "Need more data for a clearer MA200 read.",
-        };
-      }
-
-      if (indicatorName === "EMA20") {
-        return {
-          key: "EMA20",
-          title: "EMA20 Insight",
-          accent: compareTo(lastClose, "EMA20", lastNum(ema20Arr)),
-          stats: [
-            { label: "Price vs EMA20", value: ema20Pct == null ? "—" : `${ema20Pct >= 0 ? "+" : ""}${ema20Pct.toFixed(2)}%` },
-            { label: "EMA20 value", value: formatMaybeNumber(lastNum(ema20Arr)) },
-            {
-              label: "Short trend",
-              value:
-                typeof lastClose === "number" && typeof lastNum(ema20Arr) === "number"
-                  ? lastClose >= (lastNum(ema20Arr) as number)
-                    ? "Above short trend"
-                    : "Below short trend"
-                  : "—",
-            },
-            { label: "Use case", value: "Fast trend guide" },
-          ],
-          note: "EMA20 reacts faster than MA50, so it is useful for short-term trend and pullback structure.",
-        };
-      }
-
-      if (indicatorName === "VWAP") {
-        return {
-          key: "VWAP",
-          title: "VWAP Insight",
-          accent: compareTo(lastClose, "VWAP", lastNum(vwapArr)),
-          stats: [
-            { label: "Price vs VWAP", value: vwapPct == null ? "—" : `${vwapPct >= 0 ? "+" : ""}${vwapPct.toFixed(2)}%` },
-            { label: "VWAP value", value: formatMaybeNumber(lastNum(vwapArr)) },
-            {
-              label: "Stretch",
-              value:
-                typeof vwapPct === "number"
-                  ? Math.abs(vwapPct) >= 5
-                    ? "High"
-                    : Math.abs(vwapPct) >= 2
-                    ? "Moderate"
-                    : "Low"
-                  : "—",
-            },
-            {
-              label: "Read",
-              value:
-                typeof vwapPct === "number"
-                  ? vwapPct >= 0
-                    ? "Trading above value"
-                    : "Trading below value"
-                  : "—",
-            },
-          ],
-          note: "VWAP is useful for judging whether price is extended away from a fairer average trading level.",
-        };
-      }
-
-      if (indicatorName === "Bollinger(20,2)") {
-        let bandRead = "Inside bands";
-        if (typeof lastClose === "number" && typeof bbUpperLast === "number" && lastClose > bbUpperLast) bandRead = "Above upper band";
-        if (typeof lastClose === "number" && typeof bbLowerLast === "number" && lastClose < bbLowerLast) bandRead = "Below lower band";
-
-        return {
-          key: "Bollinger(20,2)",
-          title: "Bollinger Insight",
-          accent: compareTo(lastClose, "BB mid", bbMidLast),
-          stats: [
-            { label: "Upper band", value: formatMaybeNumber(bbUpperLast) },
-            { label: "Mid band", value: formatMaybeNumber(bbMidLast) },
-            { label: "Lower band", value: formatMaybeNumber(bbLowerLast) },
-            { label: "Band location", value: bandRead },
-          ],
-          note: "Bollinger Bands help show when price is expanding, compressing, or pushing into an extreme zone.",
-        };
-      }
-
-      if (indicatorName === "RSI(14)") {
-        return {
-          key: "RSI(14)",
-          title: "RSI Insight",
-          accent: compareOscillator("RSI(14)", rsiLast, 30, 70),
-          stats: [
-            { label: "RSI value", value: formatMaybeNumber(rsiLast) },
-            {
-              label: "Zone",
-              value:
-                typeof rsiLast === "number"
-                  ? rsiLast >= 70
-                    ? "Overbought"
-                    : rsiLast <= 30
-                    ? "Oversold"
-                    : "Neutral"
-                  : "—",
-            },
-            { label: "Divergence", value: divergenceLabel(divergence.rsi) },
-            {
-              label: "Momentum",
-              value:
-                rsi14Arr.length >= 4 &&
-                typeof rsi14Arr[rsi14Arr.length - 1] === "number" &&
-                typeof rsi14Arr[rsi14Arr.length - 4] === "number"
-                  ? rsi14Arr[rsi14Arr.length - 1]! > rsi14Arr[rsi14Arr.length - 4]!
-                    ? "Improving"
-                    : "Weakening"
-                  : "—",
-            },
-          ],
-          note: "RSI helps show whether momentum is hot, weak, or potentially diverging from price.",
-        };
-      }
-
-      if (indicatorName === "MACD(12,26,9)") {
-        return {
-          key: "MACD(12,26,9)",
-          title: "MACD Insight",
-          accent: compareMacdHistogram(lastClose, macdHistLast),
-          stats: [
-            { label: "MACD line", value: formatMaybeNumber(macdLineLast, 4) },
-            { label: "Signal line", value: formatMaybeNumber(macdSignalLast, 4) },
-            { label: "Histogram", value: formatMaybeNumber(macdHistLast, 4) },
-            { label: "Divergence", value: divergenceLabel(divergence.macd) },
-          ],
-          note: "MACD is best for reading directional momentum, line cross behaviour, and whether momentum is strengthening or fading.",
-        };
-      }
-
-      if (indicatorName === "Stochastic(14,3)") {
-        return {
-          key: "Stochastic(14,3)",
-          title: "Stochastic Insight",
-          accent: compareOscillator("Stochastic %K", stochLast, 20, 80),
-          stats: [
-            { label: "%K", value: formatMaybeNumber(lastNum(stochK)) },
-            { label: "%D", value: formatMaybeNumber(lastNum(stochD)) },
-            {
-              label: "Zone",
-              value:
-                typeof stochLast === "number"
-                  ? stochLast >= 80
-                    ? "Overbought"
-                    : stochLast <= 20
-                    ? "Oversold"
-                    : "Neutral"
-                  : "—",
-            },
-            { label: "Use case", value: "Fast stretch read" },
-          ],
-          note: "Stochastic reacts quickly, so it is useful for spotting short-term stretch before price mean reverts or continues.",
-        };
-      }
-
-      if (indicatorName === "ATR(14)") {
-        const ratio =
-          typeof atrLast === "number" && typeof atrSmaLast === "number" && atrSmaLast > 0
-            ? atrLast / atrSmaLast
-            : null;
-
-        return {
-          key: "ATR(14)",
-          title: "ATR Insight",
-          accent: compareSpike("ATR(14)", atrLast, atrSmaLast, 1.5, "higher = more volatility"),
-          stats: [
-            { label: "ATR value", value: formatMaybeNumber(atrLast) },
-            { label: "ATR vs 20SMA", value: ratio == null ? "—" : `${ratio.toFixed(2)}×` },
-            {
-              label: "Volatility",
-              value: ratio == null ? "—" : ratio >= 1.5 ? "Elevated" : ratio <= 0.85 ? "Quiet" : "Normal",
-            },
-            { label: "Use case", value: "Risk / stop sizing" },
-          ],
-          note: "ATR does not tell direction. It tells how much price has been moving and whether volatility is heating up or cooling down.",
-        };
-      }
-
-      if (indicatorName === "Volume") {
-        const ratio =
-          typeof volumeLast === "number" && typeof volumeSmaLast === "number" && volumeSmaLast > 0
-            ? volumeLast / volumeSmaLast
-            : null;
-
-        return {
-          key: "Volume",
-          title: "Volume Insight",
-          accent: compareSpike("Volume", volumeLast, volumeSmaLast, 1.8, "higher = more activity"),
-          stats: [
-            { label: "Volume", value: typeof volumeLast === "number" ? volumeLast.toLocaleString() : "—" },
-            { label: "20-day avg", value: typeof volumeSmaLast === "number" ? Math.round(volumeSmaLast).toLocaleString() : "—" },
-            { label: "Volume ratio", value: ratio == null ? "—" : `${ratio.toFixed(2)}×` },
-            {
-              label: "Participation",
-              value: ratio == null ? "—" : ratio >= 1.8 ? "Heavy" : ratio <= 0.8 ? "Light" : "Normal",
-            },
-          ],
-          note: "Volume helps judge whether a move has real participation behind it or is happening on lighter activity.",
-        };
-      }
-
-      return null;
-    })
-    .filter(Boolean) as Array<{
-      key: string;
-      title: string;
-      accent: { label: string; detail: string };
-      stats: { label: string; value: string }[];
-      note: string;
-    }>;
-}, [
-  panelIndicators,
-  lastClose,
-  lastMA50,
-  lastMA200,
-  ma50Pct,
-  ma200Pct,
-  ema20Pct,
-  vwapPct,
-  ma50,
-  ema20Arr,
-  vwapArr,
-  bbUpperLast,
-  bbLowerLast,
-  bbMidLast,
-  rsiLast,
-  rsi14Arr,
-  divergence,
-  macdHistLast,
-  macdLineLast,
-  macdSignalLast,
-  stochLast,
-  stochK,
-  stochD,
-  atrLast,
-  atrSmaLast,
-  volumeLast,
-  volumeSmaLast,
-]);
-
-
-function SmallNavLink(props: { href: string; children: React.ReactNode }) {
-const isLearn = props.href === "/learn";
-const isPlatforms = props.href === "/platforms";
-const isPickers = props.href === "/pickers";
-const isUtilities = props.href === "/utilities";
-
-const icon =
-  isLearn ? "📘" :
-  isPlatforms ? "🏦" :
-  isPickers ? "📊" :
-  isUtilities ? "🧮" :
-  "→";
-
-const bg = isLearn
-  ? "linear-gradient(135deg, rgba(59,130,246,0.20), rgba(37,99,235,0.10))"
-  : isPlatforms
-    ? "linear-gradient(135deg, rgba(34,197,94,0.20), rgba(16,185,129,0.10))"
-    : isPickers
-      ? "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.10))"
-      : isUtilities
-        ? "linear-gradient(135deg, rgba(168,85,247,0.20), rgba(139,92,246,0.10))"
-        : COLORS.controlBg;
-
-const border = isLearn
-  ? "rgba(59,130,246,0.45)"
-  : isPlatforms
-    ? "rgba(34,197,94,0.45)"
-    : isPickers
-      ? "rgba(239,68,68,0.45)"
-      : isUtilities
-        ? "rgba(168,85,247,0.45)"
-        : COLORS.controlBorder;
-
-  return (
-    <Link
-      href={props.href}
-      className="msh-top-nav-btn"
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 8,
-        minHeight: 42,
-        padding: "9px 13px",
-        borderRadius: 14,
-        border: `1px solid ${border}`,
-        background: bg,
-        color: isPickers ? "#fef2f2" : COLORS.controlFg,
-        textDecoration: "none",
-        fontWeight: 900,
-        fontSize: 14,
-        whiteSpace: "nowrap",
-        boxShadow: COLORS.isDark
-          ? "0 8px 18px rgba(0,0,0,0.20)"
-          : "0 8px 18px rgba(0,0,0,0.06)",
-        transition:
-          "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-      }}
-    >
+    return (
       <span
-        aria-hidden="true"
         style={{
-          fontSize: 15,
-          lineHeight: 1,
+          position: "relative",
           display: "inline-flex",
           alignItems: "center",
           justifyContent: "center",
+          width: 18,
+          height: 18,
+          borderRadius: "50%",
+          background: props.isDark ? "rgba(255,255,255,0.15)" : "rgba(11,18,32,0.12)",
+          color: props.isDark ? "#fff" : "#0b1220",
+          fontSize: 11,
+          fontWeight: 900,
+          cursor: "pointer",
+          marginLeft: 6,
+          flex: "0 0 auto",
+          zIndex: 6,
         }}
+        onMouseEnter={() => setOpenTip(true)}
+        onMouseLeave={() => setOpenTip(false)}
+        onClick={() => setOpenTip((v) => !v)}
       >
-        {icon}
+        ?
+        {openTip ? (
+          <div
+            style={{
+              position: "absolute",
+              top: "calc(100% + 10px)",
+              right: 0,
+              width: 260,
+              maxWidth: "min(260px, calc(100vw - 32px))",
+              padding: 12,
+              borderRadius: 12,
+              backgroundColor: props.isDark ? "#0f172a" : "#ffffff",
+              border: props.isDark
+                ? "1px solid rgba(255,255,255,0.14)"
+                : "1px solid rgba(11,18,32,0.14)",
+              color: props.isDark ? "#f1f5f9" : "#0b1220",
+              fontSize: 12,
+              lineHeight: 1.5,
+              fontWeight: 600,
+              zIndex: 80,
+              boxShadow: "0 10px 24px rgba(0,0,0,0.28)",
+              pointerEvents: "none",
+              whiteSpace: "normal",
+            }}
+          >
+            {props.text}
+          </div>
+        ) : null}
       </span>
-
-      <span>{props.children}</span>
-    </Link>
-  );
-}
-
-function TimeframeButton(props: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={props.onClick}
-      style={{
-        padding: isMobile ? "8px 10px" : "10px 12px",
-        borderRadius: 12,
-        border: `1px solid ${props.active ? "rgba(255,255,255,0.32)" : COLORS.controlBorder}`,
-        background: props.active ? (COLORS.isDark ? "rgba(255,255,255,0.10)" : "rgba(11,18,32,0.08)") : COLORS.controlBg,
-        color: COLORS.controlFg,
-        fontWeight: 900,
-        fontSize: isMobile ? 13 : 14,
-        cursor: "pointer",
-        minWidth: isMobile ? 48 : 54,
-      }}
-    >
-      {props.label}
-    </button>
-  );
-}
-
-function SectionCard(props: {
-  title?: string;
-  right?: React.ReactNode;
-  children: React.ReactNode;
-  style?: React.CSSProperties;
-  bodyStyle?: React.CSSProperties;
-  allowOverflow?: boolean;
-}) {
-  return (
-    <section
-      style={{
-        border: `1px solid ${COLORS.border}`,
-        borderRadius: 18,
-        background: COLORS.cardBg,
-        color: COLORS.cardFg,
-        boxShadow: COLORS.isDark ? "0 14px 34px rgba(0,0,0,0.28)" : "0 14px 34px rgba(0,0,0,0.08)",
-        overflow: props.allowOverflow ? "visible" : "hidden",
-        minWidth: 0,
-        ...props.style,
-      }}
-    >
-      {props.title || props.right ? (
-        <div
-          style={{
-            padding: "14px 16px",
-            borderBottom: `1px solid ${COLORS.border}`,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          <div style={{ fontWeight: 900, fontSize: 15 }}>{props.title}</div>
-          {props.right}
-        </div>
-      ) : null}
-
-      <div style={{ padding: 16, ...props.bodyStyle }}>{props.children}</div>
-    </section>
-  );
-}
-
-function ChartToolbar() {
-  return (
-    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-      <button
-        onClick={() => setWindowOffset((o) => Math.min(maxOffset, o + Math.max(1, Math.floor(win * 0.2))))}
-        disabled={offset >= maxOffset}
-        title="Pan left (older)"
-        style={{
-          padding: "8px 10px",
-          borderRadius: 10,
-          border: `1px solid ${COLORS.controlBorder}`,
-          background: COLORS.controlBg,
-          color: COLORS.controlFg,
-          cursor: offset >= maxOffset ? "not-allowed" : "pointer",
-          opacity: offset >= maxOffset ? 0.45 : 1,
-          fontWeight: 900,
-          lineHeight: 1,
-        }}
-      >
-        ←
-      </button>
-
-      <button
-        onClick={() => setWindowOffset((o) => Math.max(0, o - Math.max(1, Math.floor(win * 0.2))))}
-        disabled={offset <= 0}
-        title="Pan right (newer)"
-        style={{
-          padding: "8px 10px",
-          borderRadius: 10,
-          border: `1px solid ${COLORS.controlBorder}`,
-          background: COLORS.controlBg,
-          color: COLORS.controlFg,
-          cursor: offset <= 0 ? "not-allowed" : "pointer",
-          opacity: offset <= 0 ? 0.45 : 1,
-          fontWeight: 900,
-          lineHeight: 1,
-        }}
-      >
-        →
-      </button>
-
-      <button
-        onClick={() => {
-          setWindowDays((d) => Math.max(2, Math.floor(d * 0.8)));
-          setWindowOffset(0);
-        }}
-        title="Zoom in"
-        style={{
-          padding: "8px 10px",
-          borderRadius: 10,
-          border: `1px solid ${COLORS.controlBorder}`,
-          background: COLORS.controlBg,
-          color: COLORS.controlFg,
-          cursor: "pointer",
-          fontWeight: 900,
-          lineHeight: 1,
-        }}
-      >
-        +
-      </button>
-
-      <button
-        onClick={() => {
-          setWindowDays((d) => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25)));
-          setWindowOffset(0);
-        }}
-        title="Zoom out"
-        style={{
-          padding: "8px 10px",
-          borderRadius: 10,
-          border: `1px solid ${COLORS.controlBorder}`,
-          background: COLORS.controlBg,
-          color: COLORS.controlFg,
-          cursor: "pointer",
-          fontWeight: 900,
-          lineHeight: 1,
-        }}
-      >
-        −
-      </button>
-
-      <div
-        style={{
-          padding: "8px 10px",
-          borderRadius: 10,
-          border: `1px solid ${COLORS.controlBorder}`,
-          background: COLORS.controlBg,
-          color: COLORS.mutedFg,
-          fontSize: 12,
-          fontWeight: 800,
-        }}
-      >
-        {Math.min(win, totalPoints)} bars
-      </div>
-
-      <button
-        onClick={() => setExpanded(true)}
-        title="Expand chart"
-        style={{
-          padding: "8px 10px",
-          borderRadius: 10,
-          border: `1px solid ${COLORS.controlBorder}`,
-          background: COLORS.controlBg,
-          color: COLORS.controlFg,
-          cursor: "pointer",
-          fontWeight: 900,
-          lineHeight: 1,
-        }}
-      >
-        ⤢
-      </button>
-    </div>
-  );
-}
-
-function OverviewPanel() {
-  if (!trendScore || !stretchScore) {
-    return (
-      <SectionCard title={`${symbol} Overview`} allowOverflow>
-        <div style={{ opacity: 0.75 }}>Overview unavailable.</div>
-      </SectionCard>
     );
   }
 
-  const trendTone = trendToneFromScore(trendScore);
-  const trendColor = toneToColor(trendTone, COLORS.isDark);
-  const stretchTone = compositeToneFromCounts(stretchScore.overbought, stretchScore.oversold, 0).tone;
-  const stretchColor = toneToColor(stretchTone, COLORS.isDark);
+  function SmallNavLink(props: { href: string; children: React.ReactNode }) {
+    const isLearn = props.href === "/learn";
+    const isPlatforms = props.href === "/platforms";
+    const isPickers = props.href === "/pickers";
+    const isUtilities = props.href === "/utilities";
 
-  return (
-    <SectionCard title={`${symbol} Overview`} allowOverflow>
-      <div style={{ display: "grid", gap: 14 }}>
-        <div
-          className="msh-overview-head"
+    const icon = isLearn ? "📘" : isPlatforms ? "🏦" : isPickers ? "📊" : isUtilities ? "🧮" : "→";
+
+    const bg = isLearn
+      ? "linear-gradient(135deg, rgba(59,130,246,0.20), rgba(37,99,235,0.10))"
+      : isPlatforms
+      ? "linear-gradient(135deg, rgba(34,197,94,0.20), rgba(16,185,129,0.10))"
+      : isPickers
+      ? "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.10))"
+      : isUtilities
+      ? "linear-gradient(135deg, rgba(168,85,247,0.20), rgba(139,92,246,0.10))"
+      : COLORS.controlBg;
+
+    const border = isLearn
+      ? "rgba(59,130,246,0.45)"
+      : isPlatforms
+      ? "rgba(34,197,94,0.45)"
+      : isPickers
+      ? "rgba(239,68,68,0.45)"
+      : isUtilities
+      ? "rgba(168,85,247,0.45)"
+      : COLORS.controlBorder;
+
+    return (
+      <Link
+        href={props.href}
+        className="msh-top-nav-btn"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+          minHeight: 42,
+          padding: "9px 13px",
+          borderRadius: 14,
+          border: `1px solid ${border}`,
+          background: bg,
+          color: isPickers ? "#fef2f2" : COLORS.controlFg,
+          textDecoration: "none",
+          fontWeight: 900,
+          fontSize: 14,
+          whiteSpace: "nowrap",
+          boxShadow: COLORS.isDark
+            ? "0 8px 18px rgba(0,0,0,0.20)"
+            : "0 8px 18px rgba(0,0,0,0.06)",
+          transition:
+            "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
+        }}
+      >
+        <span
+          aria-hidden="true"
           style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr) auto",
-            gap: 12,
+            fontSize: 15,
+            lineHeight: 1,
+            display: "inline-flex",
             alignItems: "center",
+            justifyContent: "center",
           }}
         >
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 950, lineHeight: 1.1 }}>
-              {symbol}
+          {icon}
+        </span>
+        <span>{props.children}</span>
+      </Link>
+    );
+  }
+
+  function TimeframeButton(props: { label: string; active: boolean; onClick: () => void }) {
+    return (
+      <button
+        type="button"
+        onClick={props.onClick}
+        style={{
+          padding: isMobile ? "8px 10px" : "10px 12px",
+          borderRadius: 12,
+          border: `1px solid ${
+            props.active ? "rgba(255,255,255,0.32)" : COLORS.controlBorder
+          }`,
+          background: props.active
+            ? COLORS.isDark
+              ? "rgba(255,255,255,0.10)"
+              : "rgba(11,18,32,0.08)"
+            : COLORS.controlBg,
+          color: COLORS.controlFg,
+          fontWeight: 900,
+          fontSize: isMobile ? 13 : 14,
+          cursor: "pointer",
+          minWidth: isMobile ? 48 : 54,
+        }}
+      >
+        {props.label}
+      </button>
+    );
+  }
+
+  function SectionCard(props: {
+    title?: string;
+    right?: React.ReactNode;
+    children: React.ReactNode;
+    style?: React.CSSProperties;
+    bodyStyle?: React.CSSProperties;
+    allowOverflow?: boolean;
+  }) {
+    return (
+      <section
+        style={{
+          border: `1px solid ${COLORS.border}`,
+          borderRadius: 18,
+          background: COLORS.cardBg,
+          color: COLORS.cardFg,
+          boxShadow: COLORS.isDark
+            ? "0 14px 34px rgba(0,0,0,0.28)"
+            : "0 14px 34px rgba(0,0,0,0.08)",
+          overflow: props.allowOverflow ? "visible" : "hidden",
+          minWidth: 0,
+          ...props.style,
+        }}
+      >
+        {props.title || props.right ? (
+          <div
+            style={{
+              padding: "14px 16px",
+              borderBottom: `1px solid ${COLORS.border}`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ fontWeight: 900, fontSize: 15 }}>{props.title}</div>
+            {props.right}
+          </div>
+        ) : null}
+
+        <div style={{ padding: 16, ...props.bodyStyle }}>{props.children}</div>
+      </section>
+    );
+  }
+
+  function BreakdownHelpButton() {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <HelpTip
+          text={
+            customMode
+              ? "This breakdown is showing the indicators you currently selected on the chart."
+              : "Breakdown shows the main dashboard indicators including trend, momentum, stretch, volatility and divergence clues."
+          }
+          isDark={COLORS.isDark}
+        />
+
+        <Link
+          href="/learn"
+          style={{
+            color: COLORS.isDark ? "#93c5fd" : "#2563eb",
+            textDecoration: "none",
+            fontWeight: 800,
+            fontSize: 12,
+            whiteSpace: "nowrap",
+          }}
+        >
+          Learn more →
+        </Link>
+      </div>
+    );
+  }
+
+  function ChartToolbar() {
+    return (
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <button
+          onClick={() =>
+            setWindowOffset((o) => Math.min(maxOffset, o + Math.max(1, Math.floor(win * 0.2))))
+          }
+          disabled={offset >= maxOffset}
+          title="Pan left (older)"
+          style={{
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: `1px solid ${COLORS.controlBorder}`,
+            background: COLORS.controlBg,
+            color: COLORS.controlFg,
+            cursor: offset >= maxOffset ? "not-allowed" : "pointer",
+            opacity: offset >= maxOffset ? 0.45 : 1,
+            fontWeight: 900,
+            lineHeight: 1,
+          }}
+        >
+          ←
+        </button>
+
+        <button
+          onClick={() =>
+            setWindowOffset((o) => Math.max(0, o - Math.max(1, Math.floor(win * 0.2))))
+          }
+          disabled={offset <= 0}
+          title="Pan right (newer)"
+          style={{
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: `1px solid ${COLORS.controlBorder}`,
+            background: COLORS.controlBg,
+            color: COLORS.controlFg,
+            cursor: offset <= 0 ? "not-allowed" : "pointer",
+            opacity: offset <= 0 ? 0.45 : 1,
+            fontWeight: 900,
+            lineHeight: 1,
+          }}
+        >
+          →
+        </button>
+
+        <button
+          onClick={() => {
+            setWindowDays((d) => Math.max(2, Math.floor(d * 0.8)));
+            setWindowOffset(0);
+          }}
+          title="Zoom in"
+          style={{
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: `1px solid ${COLORS.controlBorder}`,
+            background: COLORS.controlBg,
+            color: COLORS.controlFg,
+            cursor: "pointer",
+            fontWeight: 900,
+            lineHeight: 1,
+          }}
+        >
+          +
+        </button>
+
+        <button
+          onClick={() => {
+            setWindowDays((d) => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25)));
+            setWindowOffset(0);
+          }}
+          title="Zoom out"
+          style={{
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: `1px solid ${COLORS.controlBorder}`,
+            background: COLORS.controlBg,
+            color: COLORS.controlFg,
+            cursor: "pointer",
+            fontWeight: 900,
+            lineHeight: 1,
+          }}
+        >
+          −
+        </button>
+
+        <div
+          style={{
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: `1px solid ${COLORS.controlBorder}`,
+            background: COLORS.controlBg,
+            color: COLORS.mutedFg,
+            fontSize: 12,
+            fontWeight: 800,
+          }}
+        >
+          {Math.min(win, totalPoints)} bars
+        </div>
+
+        <button
+          onClick={() => setExpanded(true)}
+          title="Expand chart"
+          style={{
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: `1px solid ${COLORS.controlBorder}`,
+            background: COLORS.controlBg,
+            color: COLORS.controlFg,
+            cursor: "pointer",
+            fontWeight: 900,
+            lineHeight: 1,
+          }}
+        >
+          ⤢
+        </button>
+      </div>
+    );
+  }
+
+  function OverviewPanel() {
+    const trendColor = toneToColor(trendToneFromScore(trendScore), COLORS.isDark);
+    const stretchTone = compositeToneFromCounts(
+      stretchScore.overbought,
+      stretchScore.oversold,
+      0
+    ).tone;
+    const stretchColor = toneToColor(stretchTone, COLORS.isDark);
+
+    return (
+      <SectionCard title={`${symbol} Overview`} allowOverflow>
+        <div style={{ display: "grid", gap: 14 }}>
+          <div
+            className="msh-overview-head"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1fr) auto",
+              gap: 12,
+              alignItems: "center",
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 950, lineHeight: 1.1 }}>
+                {symbol}
+              </div>
+
+              <div style={{ marginTop: 4, color: COLORS.mutedFg, fontWeight: 700 }}>
+                {symbolName || "—"}
+              </div>
+
+              <div style={{ marginTop: 10 }}>
+                <Link
+                  href={`/stock/${encodeURIComponent(symbol)}`}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "8px 12px",
+                    borderRadius: 10,
+                    border: `1px solid ${COLORS.controlBorder}`,
+                    background: COLORS.controlBg,
+                    color: COLORS.isDark ? "#93c5fd" : "#2563eb",
+                    textDecoration: "none",
+                    fontWeight: 800,
+                    fontSize: 12,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Open stock page →
+                </Link>
+              </div>
             </div>
 
-            <div
-              style={{
-                marginTop: 4,
-                color: COLORS.mutedFg,
-                fontWeight: 700,
-              }}
-            >
-              {symbolName || "—"}
-            </div>
-
-            <div style={{ marginTop: 10 }}>
-              <Link
-                href={`/stock/${encodeURIComponent(symbol)}`}
+            <div style={{ textAlign: "right", minWidth: 0 }}>
+              <div
                 style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: "8px 12px",
-                  borderRadius: 10,
-                  border: `1px solid ${COLORS.controlBorder}`,
-                  background: COLORS.controlBg,
-                  color: COLORS.isDark ? "#93c5fd" : "#2563eb",
-                  textDecoration: "none",
-                  fontWeight: 800,
                   fontSize: 12,
-                  whiteSpace: "nowrap",
+                  color: COLORS.mutedFg,
+                  fontWeight: 900,
+                  letterSpacing: "0.04em",
+                  textTransform: "uppercase",
                 }}
               >
-                Open stock page →
-              </Link>
+                Last price
+              </div>
+              <div
+                style={{
+                  fontSize: isMobile ? 22 : 28,
+                  fontWeight: 950,
+                  lineHeight: 1.05,
+                }}
+              >
+                {quote?.price != null ? `$${quote.price.toFixed(2)}` : "—"}
+              </div>
             </div>
           </div>
 
-          <div
-            style={{
-              textAlign: "right",
-              minWidth: 0,
-            }}
-          >
+          <div className="msh-score-grid">
             <div
               style={{
-                fontSize: 12,
-                color: COLORS.mutedFg,
-                fontWeight: 900,
-                letterSpacing: "0.04em",
-                textTransform: "uppercase",
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: 16,
+                padding: 16,
+                background: COLORS.controlBg,
+                minWidth: 0,
               }}
             >
-              Last price
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 900 }}>
+                <span style={{ color: trendColor }}>●</span>
+                <span>Trend Score</span>
+                <HelpTip
+                  text="Trend score checks price vs MA50/MA200 and MACD histogram direction."
+                  isDark={COLORS.isDark}
+                />
+              </div>
+
+              <div style={{ marginTop: 8, fontSize: 20, fontWeight: 950, color: trendColor }}>
+                {trendScore.passed}/{trendScore.total}
+              </div>
+
+              {renderFlagsMeter({
+                flagged: trendScore.passed,
+                total: trendScore.total,
+                color: trendColor,
+                isDark: COLORS.isDark,
+              })}
             </div>
+
             <div
               style={{
-                fontSize: isMobile ? 22 : 28,
-                fontWeight: 950,
-                lineHeight: 1.05,
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: 16,
+                padding: 16,
+                background: COLORS.controlBg,
+                minWidth: 0,
               }}
             >
-              {quote?.price != null ? `$${quote.price.toFixed(2)}` : "—"}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 900 }}>
+                <span style={{ color: stretchColor }}>●</span>
+                <span>Stretch Score</span>
+                <HelpTip
+                  text="Stretch score checks RSI, Stoch, Bollinger, VWAP, EMA20 and MA50 extension."
+                  isDark={COLORS.isDark}
+                />
+              </div>
+
+              <div style={{ marginTop: 8, fontSize: 20, fontWeight: 950, color: stretchColor }}>
+                {stretchScore.flagged}/{stretchScore.total}
+              </div>
+
+              {renderFlagsMeter({
+                flagged: stretchScore.flagged,
+                total: stretchScore.total,
+                color: stretchColor,
+                isDark: COLORS.isDark,
+              })}
             </div>
           </div>
-        </div>
 
-        <div className="msh-score-grid">
-          <div
-            style={{
-              border: `1px solid ${COLORS.border}`,
-              borderRadius: 16,
-              padding: 16,
-              background: COLORS.controlBg,
-              minWidth: 0,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 900 }}>
-              <span style={{ color: trendColor }}>●</span>
-              <span>Trend Score</span>
-              <HelpTip text="Trend score checks price vs MA50/MA200 and MACD histogram direction." isDark={COLORS.isDark} />
-            </div>
-
-            <div style={{ marginTop: 8, fontSize: 20, fontWeight: 950, color: trendColor }}>
-              {trendScore.passed}/{trendScore.total}
-            </div>
-
-            {renderFlagsMeter({
-              flagged: trendScore.passed,
-              total: trendScore.total,
-              color: trendColor,
-              isDark: COLORS.isDark,
-            })}
-          </div>
-
-          <div
-            style={{
-              border: `1px solid ${COLORS.border}`,
-              borderRadius: 16,
-              padding: 16,
-              background: COLORS.controlBg,
-              minWidth: 0,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 900 }}>
-              <span style={{ color: stretchColor }}>●</span>
-              <span>Stretch Score</span>
-              <HelpTip text="Stretch score checks RSI, Stoch, Bollinger, VWAP, EMA20 and MA50 extension." isDark={COLORS.isDark} />
-            </div>
-
-            <div style={{ marginTop: 8, fontSize: 20, fontWeight: 950, color: stretchColor }}>
-              {stretchScore.flagged}/{stretchScore.total}
-            </div>
-
-        
-            {renderFlagsMeter({
-              flagged: stretchScore.flagged,
-              total: stretchScore.total,
-              color: stretchColor,
-              isDark: COLORS.isDark,
-            })}
-          </div>
-        </div>
-
-        {overviewMeta ? (
           <div
             style={{
               border: `1px solid ${COLORS.border}`,
@@ -2564,17 +2190,15 @@ function OverviewPanel() {
             Regime: {overviewMeta.trend} • Volatility: {overviewMeta.vol} • Bias:{" "}
             <span style={{ color: overviewMeta.toneColor }}>{overviewMeta.toneTag}</span>
           </div>
-        ) : null}
 
-        {autoSummary ? (
           <div
             style={{
-              border: `1px solid ${COLORS.border}`,
+              border: customMode ? `1px solid ${COLORS.yellowBorder}` : `1px solid ${COLORS.border}`,
               borderRadius: 14,
               padding: 12,
-              background: COLORS.controlBg,
+              background: customMode ? COLORS.yellowBg : COLORS.controlBg,
               lineHeight: 1.55,
-              color: COLORS.mutedFg,
+              color: customMode ? COLORS.yellowText : COLORS.mutedFg,
             }}
           >
             <div
@@ -2583,317 +2207,89 @@ function OverviewPanel() {
                 fontWeight: 900,
                 letterSpacing: "0.05em",
                 textTransform: "uppercase",
-                color: COLORS.cardFg,
+                color: customMode ? COLORS.yellowText : COLORS.cardFg,
                 marginBottom: 6,
               }}
             >
-              Chart Summary
+              {customMode ? "Selected Indicator Summary" : "Chart Summary"}
             </div>
-            {autoSummary}
+            {chartSummaryText}
           </div>
-        ) : null}
-
-        
-        <div
-          style={{
-            paddingTop: 12,
-            borderTop: `1px solid ${COLORS.border}`,
-            fontSize: 12,
-            color: COLORS.mutedFg,
-            fontWeight: 700,
-          }}
-        >
-          As of {quote?.date ?? "—"} {quote?.time ?? ""} • Source: {quote?.source ?? "stooq.com"}
-        </div>
-      </div>
-    </SectionCard>
-  );
-}
-
-function IndicatorPanel() {
-  if (!indicatorInsights.length) return null;
-
-  return (
-    <SectionCard
-      title={indicatorInsights.length > 1 ? "Selected Indicator Insights" : indicatorInsights[0].title}
-    >
-      <div style={{ display: "grid", gap: 16 }}>
-        {indicatorInsights.map((insight) => (
-          <div
-            key={insight.key}
-            style={{
-              display: "grid",
-              gap: 14,
-              paddingBottom: 16,
-              borderBottom: `1px solid ${COLORS.border}`,
-            }}
-          >
-            <div style={{ fontWeight: 900, fontSize: 16 }}>{insight.title}</div>
-
-            <div
-              style={{
-                border: `1px solid ${COLORS.border}`,
-                borderRadius: 14,
-                padding: 14,
-                background: COLORS.controlBg,
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                <span
-                  style={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: 999,
-                    background: signalDotColor(insight.accent.label),
-                    flex: "0 0 auto",
-                  }}
-                />
-                <div style={{ fontWeight: 900 }}>
-                  {insight.accent.label.replace(/[🟢🔴🟡⚡]/g, "").trim()}
-                </div>
-              </div>
-              <div style={{ marginTop: 8, color: COLORS.mutedFg, lineHeight: 1.5 }}>
-                {insight.accent.detail}
-              </div>
-            </div>
-
-            <div className="msh-info-grid">
-              {insight.stats.map((row) => (
-                <div
-                  key={`${insight.key}-${row.label}`}
-                  style={{
-                    border: `1px solid ${COLORS.border}`,
-                    borderRadius: 14,
-                    padding: 14,
-                    background: COLORS.controlBg,
-                    minWidth: 0,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: COLORS.mutedFg,
-                      fontWeight: 800,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.04em",
-                    }}
-                  >
-                    {row.label}
-                  </div>
-                  <div
-                    style={{
-                      marginTop: 6,
-                      fontSize: 16,
-                      fontWeight: 900,
-                      wordBreak: "break-word",
-                    }}
-                  >
-                    {row.value}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ color: COLORS.mutedFg, lineHeight: 1.55 }}>{insight.note}</div>
-          </div>
-        ))}
-
-        <div
-          style={{
-            paddingTop: 12,
-            fontSize: 12,
-            color: COLORS.mutedFg,
-            fontWeight: 700,
-          }}
-        >
-          Selected indicators: {selectedIndicatorsText}
-        </div>
-      </div>
-    </SectionCard>
-  );
-}
-
-  function buildSnapshotRowsForIndicator(indicatorName: Overlay) {
-  const rows: { label: string; tone: OverviewItem["tone"]; value: string }[] = [];
-
-  if (indicatorName === "RSI(14)") {
-    rows.push({
-      label: "RSI",
-      tone: typeof rsiLast === "number" ? (rsiLast >= 70 ? "red" : rsiLast <= 30 ? "green" : "yellow") : "muted",
-      value: typeof rsiLast === "number" ? rsiLast.toFixed(2) : "—",
-    });
-    rows.push({
-      label: "RSI Div",
-      tone: divergence.rsi === "none" ? "muted" : divergenceTone(divergence.rsi),
-      value: divergence.rsi === "none" ? "—" : divergenceLabel(divergence.rsi),
-    });
-    return rows;
-  }
-
-  if (indicatorName === "MACD(12,26,9)") {
-    rows.push({
-      label: "MACD Hist",
-      tone: typeof macdHistLast === "number" ? (macdHistLast > 0 ? "green" : macdHistLast < 0 ? "red" : "yellow") : "muted",
-      value: typeof macdHistLast === "number" ? macdHistLast.toFixed(4) : "—",
-    });
-    rows.push({
-      label: "MACD Div",
-      tone: divergence.macd === "none" ? "muted" : divergenceTone(divergence.macd),
-      value: divergence.macd === "none" ? "—" : divergenceLabel(divergence.macd),
-    });
-    return rows;
-  }
-
-  if (indicatorName === "MA50") {
-    rows.push({
-      label: "MA50 Distance",
-      tone: typeof ma50Pct === "number" ? (Math.abs(ma50Pct) >= 5 ? "red" : Math.abs(ma50Pct) >= 2 ? "orange" : "yellow") : "muted",
-      value: ma50Pct == null ? "—" : `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}%`,
-    });
-    rows.push({ label: "MA50 Value", tone: "muted", value: formatMaybeNumber(lastMA50) });
-    return rows;
-  }
-
-  if (indicatorName === "MA200") {
-    rows.push({
-      label: "MA200 Distance",
-      tone: typeof ma200Pct === "number" ? (Math.abs(ma200Pct) >= 10 ? "red" : Math.abs(ma200Pct) >= 4 ? "orange" : "yellow") : "muted",
-      value: ma200Pct == null ? "—" : `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}%`,
-    });
-    rows.push({ label: "MA200 Value", tone: "muted", value: formatMaybeNumber(lastMA200) });
-    return rows;
-  }
-
-  if (indicatorName === "Volume") {
-    const ratio =
-      typeof volumeLast === "number" && typeof volumeSmaLast === "number" && volumeSmaLast > 0
-        ? volumeLast / volumeSmaLast
-        : null;
-
-    rows.push({
-      label: "Volume Ratio",
-      tone: ratio == null ? "muted" : ratio >= 1.8 ? "orange" : "yellow",
-      value: ratio == null ? "—" : `${ratio.toFixed(2)}×`,
-    });
-    return rows;
-  }
-
-  if (indicatorName === "ATR(14)") {
-    const ratio =
-      typeof atrLast === "number" && typeof atrSmaLast === "number" && atrSmaLast > 0
-        ? atrLast / atrSmaLast
-        : null;
-
-    rows.push({
-      label: "ATR Ratio",
-      tone: ratio == null ? "muted" : ratio >= 1.5 ? "orange" : "yellow",
-      value: ratio == null ? "—" : `${ratio.toFixed(2)}×`,
-    });
-    return rows;
-  }
-
-  if (indicatorName === "VWAP") {
-    rows.push({
-      label: "VWAP Distance",
-      tone: typeof vwapPct === "number" ? (Math.abs(vwapPct) >= 5 ? "red" : Math.abs(vwapPct) >= 2 ? "orange" : "yellow") : "muted",
-      value: vwapPct == null ? "—" : `${vwapPct >= 0 ? "+" : ""}${vwapPct.toFixed(2)}%`,
-    });
-    rows.push({ label: "VWAP Value", tone: "muted", value: formatMaybeNumber(lastNum(vwapArr)) });
-    return rows;
-  }
-
-  if (indicatorName === "Bollinger(20,2)") {
-    rows.push({ label: "BB Upper", tone: "muted", value: formatMaybeNumber(bbUpperLast) });
-    rows.push({ label: "BB Lower", tone: "muted", value: formatMaybeNumber(bbLowerLast) });
-    return rows;
-  }
-
-  if (indicatorName === "EMA20") {
-    rows.push({
-      label: "EMA20 Distance",
-      tone: typeof ema20Pct === "number" ? (Math.abs(ema20Pct) >= 5 ? "red" : Math.abs(ema20Pct) >= 2 ? "orange" : "yellow") : "muted",
-      value: ema20Pct == null ? "—" : `${ema20Pct >= 0 ? "+" : ""}${ema20Pct.toFixed(2)}%`,
-    });
-    rows.push({ label: "EMA20 Value", tone: "muted", value: formatMaybeNumber(lastNum(ema20Arr)) });
-    return rows;
-  }
-
-  if (indicatorName === "Stochastic(14,3)") {
-    rows.push({
-      label: "Stoch %K",
-      tone: typeof stochLast === "number" ? (stochLast >= 80 ? "red" : stochLast <= 20 ? "green" : "yellow") : "muted",
-      value: typeof stochLast === "number" ? stochLast.toFixed(2) : "—",
-    });
-    rows.push({
-      label: "Stoch %D",
-      tone: "muted",
-      value: formatMaybeNumber(lastNum(stochD)),
-    });
-    return rows;
-  }
-
-  return rows;
-}
-
-
-function BreakdownPanel() {
-  const rows = indicator === "None" ? overviewItems : [];
-  const focusedRows =
-    indicator !== "None"
-      ? panelIndicators.flatMap((indicatorName) => buildSnapshotRowsForIndicator(indicatorName))
-      : [];
-
-  if (indicator !== "None") {
-    return (
-
-
-  
-      <SectionCard
-        title="Indicator Snapshot"
-        right={<BreakdownHelpButton indicator={indicator} />}
-        allowOverflow
-      >
-        <div style={{ display: "grid", gap: 12 }}>
-          {focusedRows.length ? (
-            focusedRows.map((row) => (
-              <div key={row.label} style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                  <span
-                    style={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: 999,
-                      background: chipToneColor(row.tone),
-                      flex: "0 0 auto",
-                    }}
-                  />
-                  <span style={{ fontWeight: 900 }}>{row.label}</span>
-                </div>
-                <div style={{ color: COLORS.mutedFg, fontWeight: 800, textAlign: "right" }}>{row.value}</div>
-              </div>
-            ))
-          ) : (
-            <div style={{ opacity: 0.75 }}>No additional snapshot available.</div>
-          )}
 
           <div
             style={{
-              paddingTop: 6,
+              paddingTop: 12,
+              borderTop: `1px solid ${COLORS.border}`,
               fontSize: 12,
               color: COLORS.mutedFg,
               fontWeight: 700,
             }}
           >
-            Selected indicators: {selectedIndicatorsText}
+            As of {quote?.date ?? "—"} {quote?.time ?? ""} • Source: {quote?.source ?? "stooq.com"}
           </div>
+        </div>
+      </SectionCard>
+    );
+  }
 
+  function BreakdownPanel() {
+    return (
+      <SectionCard
+        title={customMode ? "Selected Indicators" : "Breakdown"}
+        right={<BreakdownHelpButton />}
+        allowOverflow
+      >
+        <div className="msh-breakdown-grid">
+          {(customMode ? selectedBreakdownRows : overviewItems).map((item: any) => (
+            <div
+              key={customMode ? item.label : item.key}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 10,
+                alignItems: "center",
+                padding: "8px 10px",
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: 12,
+                background: COLORS.controlBg,
+                minWidth: 0,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                <span
+                  style={{
+                    width: 9,
+                    height: 9,
+                    borderRadius: 999,
+                    background: chipToneColor(item.tone),
+                    flex: "0 0 auto",
+                  }}
+                />
+                <span style={{ fontWeight: 900, fontSize: 14, minWidth: 0 }}>{item.label}</span>
+              </div>
+
+              <div
+                style={{
+                  color: COLORS.mutedFg,
+                  fontWeight: 800,
+                  textAlign: "right",
+                  fontSize: 13,
+                  whiteSpace: "nowrap",
+                  marginLeft: 8,
+                }}
+              >
+                {customMode ? item.value : item.valueText}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {customMode ? (
           <button
             type="button"
-            onClick={() => {
-              clearIndicatorSelection();
-            }}
+            onClick={clearIndicatorSelection}
             style={{
-              marginTop: 4,
+              marginTop: 14,
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
@@ -2910,1096 +2306,983 @@ function BreakdownPanel() {
           >
             ← Back to Overview
           </button>
+        ) : null}
+      </SectionCard>
+    );
+  }
+
+  function ChartPanel() {
+    return (
+      <SectionCard title="" right={null} bodyStyle={{ padding: 0 }} style={{ minHeight: isMobile ? "auto" : 0 }}>
+        <div style={{ padding: 16, borderBottom: `1px solid ${COLORS.border}` }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ fontWeight: 900, fontSize: 15 }}>Price ({chartIndicatorName})</div>
+
+            <div className="msh-timeframes">
+              {TIMEFRAMES.map((t) => (
+                <TimeframeButton
+                  key={t.label}
+                  label={t.label}
+                  active={tfDays === t.days}
+                  onClick={() => {
+                    setTfDays(t.days);
+                    setWindowDays(t.days);
+                    setWindowOffset(0);
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="msh-chart-head-row" style={{ marginTop: 14 }}>
+            <div style={{ minWidth: 0, position: "relative" }} ref={indicatorMenuRef}>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: COLORS.mutedFg,
+                  fontWeight: 900,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                Indicator
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIndicatorMenuOpen((v) => !v)}
+                style={{
+                  marginTop: 6,
+                  width: isMobile ? "100%" : 280,
+                  padding: "12px 14px",
+                  borderRadius: 14,
+                  border: `1px solid ${COLORS.controlBorder}`,
+                  background: COLORS.controlBgSolid,
+                  color: COLORS.controlFg,
+                  fontWeight: 900,
+                  fontSize: 16,
+                  textAlign: "left",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  cursor: "pointer",
+                }}
+              >
+                <span
+                  style={{
+                    minWidth: 0,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {selectedIndicators.length ? chartIndicatorName : "Overview"}
+                </span>
+                <span aria-hidden="true">▾</span>
+              </button>
+
+              {indicatorMenuOpen ? (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 8px)",
+                    left: 0,
+                    zIndex: 40,
+                    width: isMobile ? "100%" : 320,
+                    borderRadius: 16,
+                    border: `1px solid ${COLORS.border}`,
+                    background: COLORS.cardBg,
+                    boxShadow: COLORS.isDark
+                      ? "0 18px 34px rgba(0,0,0,0.40)"
+                      : "0 18px 34px rgba(0,0,0,0.12)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={clearIndicatorSelection}
+                    style={{
+                      width: "100%",
+                      padding: "12px 14px",
+                      border: "none",
+                      borderBottom: `1px solid ${COLORS.border}`,
+                      background: COLORS.controlBg,
+                      color: COLORS.cardFg,
+                      textAlign: "left",
+                      fontWeight: 900,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Clear all / Overview
+                  </button>
+
+                  <div
+                    style={{
+                      padding: "10px 14px 8px",
+                      fontSize: 11,
+                      fontWeight: 900,
+                      color: COLORS.mutedFg,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.04em",
+                    }}
+                  >
+                    Price overlays
+                  </div>
+
+                  {PRICE_OVERLAY_OPTIONS.map((opt) => {
+                    const checked = selectedIndicators.includes(opt);
+                    return (
+                      <label
+                        key={opt}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          padding: "10px 14px",
+                          borderTop: `1px solid ${COLORS.border}`,
+                          cursor: "pointer",
+                          fontWeight: 800,
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleIndicatorSelection(opt)}
+                        />
+                        <span>{opt}</span>
+                      </label>
+                    );
+                  })}
+
+                  <div
+                    style={{
+                      padding: "10px 14px 8px",
+                      fontSize: 11,
+                      fontWeight: 900,
+                      color: COLORS.mutedFg,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.04em",
+                      borderTop: `1px solid ${COLORS.border}`,
+                    }}
+                  >
+                    Lower indicator (1 max)
+                  </div>
+
+                  {LOWER_OVERLAY_OPTIONS.map((opt) => {
+                    const checked = selectedIndicators.includes(opt);
+                    return (
+                      <label
+                        key={opt}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          padding: "10px 14px",
+                          borderTop: `1px solid ${COLORS.border}`,
+                          cursor: "pointer",
+                          fontWeight: 800,
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleIndicatorSelection(opt)}
+                        />
+                        <span>{opt}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+
+            <ChartToolbar />
+          </div>
+        </div>
+
+        <div style={{ padding: 16 }}>
+          <PriceChart
+            symbol={symbol}
+            data={displayedHistory}
+            ma50={ma50}
+            ma200={ma200}
+            overlay={indicator}
+            selectedIndicators={selectedIndicators}
+            bollUpper={bollUpper}
+            bollMid={bollMid}
+            bollLower={bollLower}
+            ema20={ema20Arr}
+            vwap={vwapArr}
+            rsi14={rsi14Arr}
+            macdLine={macdLine}
+            macdSignal={macdSignal}
+            macdHist={macdHist}
+            stochK={stochK}
+            stochD={stochD}
+            atr14={atr14Arr}
+            volume={volumeArr}
+            divergence={divergence.div}
+            height={isMobile ? 250 : 430}
+          />
+
+          <div
+            style={{
+              marginTop: 12,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 12,
+              flexWrap: "wrap",
+              fontSize: 13,
+              fontWeight: 700,
+              color: COLORS.mutedFg,
+            }}
+          >
+            <div>
+              {displayedHistory.length
+                ? `From ${displayedHistory[0].date} → ${displayedHistory[displayedHistory.length - 1].date}`
+                : "No chart data"}
+            </div>
+
+            <Link
+              href="/platforms"
+              style={{
+                fontSize: 12,
+                color: COLORS.isDark ? "#93c5fd" : "#2563eb",
+                textDecoration: "none",
+                fontWeight: 800,
+                whiteSpace: "nowrap",
+              }}
+            >
+              Compare platforms →
+            </Link>
+          </div>
         </div>
       </SectionCard>
     );
   }
 
-  return (
-    <SectionCard
-      title="Breakdown"
-      right={<BreakdownHelpButton indicator="None" />}
-      allowOverflow
-    >
-      <div className="msh-breakdown-grid">
-        {rows.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            onClick={() =>
-              focusIndicator(
-                item.key === "div_rsi"
-                  ? "RSI(14)"
-                  : item.key === "div_macd"
-                  ? "MACD(12,26,9)"
-                  : BREAKDOWN_DEFS.find((d) => d.key === item.key)?.overlay ?? "None"
-              )
-            }
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 10,
-              alignItems: "center",
-              padding: "8px 10px",
-              border: `1px solid ${COLORS.border}`,
-              borderRadius: 12,
-              background: COLORS.controlBg,
-              color: "inherit",
-              cursor: "pointer",
-              textAlign: "left",
-              minWidth: 0,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-              <span
-                style={{
-                  width: 9,
-                  height: 9,
-                  borderRadius: 999,
-                  background: chipToneColor(item.tone),
-                  flex: "0 0 auto",
-                }}
-              />
-              <span style={{ fontWeight: 900, fontSize: 14, minWidth: 0 }}>{item.label}</span>
-            </div>
-            <div
-              style={{
-                color: COLORS.mutedFg,
-                fontWeight: 800,
-                textAlign: "right",
-                fontSize: 13,
-                whiteSpace: "nowrap",
-                marginLeft: 8,
-              }}
-            >
-              {item.valueText}
-            </div>
-          </button>
-        ))}
-      </div>
-    </SectionCard>
-  );
-}
+  function BenchmarksPanel() {
+    return (
+      <SectionCard title="Market Benchmarks">
+        <div style={{ fontSize: 12, color: COLORS.mutedFg, marginBottom: 12 }}>
+          Updated: {bench?.updatedAt ? new Date(bench.updatedAt).toLocaleString() : "—"} •
+          Benchmarks (Stooq, free)
+        </div>
 
-
-function ChartPanel() {
-  return (
-    <SectionCard
-      title=""
-    right={null}
-      bodyStyle={{ padding: 0 }}
-      style={{ minHeight: isMobile ? "auto" : 0 }}
-    >
-<div style={{ padding: 16, borderBottom: `1px solid ${COLORS.border}` }}>
-  <div
-    style={{
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: 12,
-      flexWrap: "wrap",
-    }}
-  >
-       <div style={{ fontWeight: 900, fontSize: 15 }}>Price ({chartIndicatorName})</div>
-
-    <div className="msh-timeframes">
-      {TIMEFRAMES.map((t) => (
-        <TimeframeButton
-          key={t.label}
-          label={t.label}
-          active={tfDays === t.days}
-          onClick={() => {
-            setTfDays(t.days);
-            setWindowDays(t.days);
-            setWindowOffset(0);
-          }}
-        />
-      ))}
-    </div>
-  </div>
-
-  <div
-    className="msh-chart-head-row"
-    style={{
-      marginTop: 14,
-    }}
-  >
-    <div style={{ minWidth: 0, position: "relative" }} ref={indicatorMenuRef}>
-      <div
-        style={{
-          fontSize: 12,
-          color: COLORS.mutedFg,
-          fontWeight: 900,
-          textTransform: "uppercase",
-          letterSpacing: "0.04em",
-        }}
-      >
-        Indicator
-      </div>
-
-      <button
-        type="button"
-        onClick={() => setIndicatorMenuOpen((v) => !v)}
-        style={{
-          marginTop: 6,
-          width: isMobile ? "100%" : 280,
-          padding: "12px 14px",
-          borderRadius: 14,
-          border: `1px solid ${COLORS.controlBorder}`,
-          background: COLORS.controlBgSolid,
-          color: COLORS.controlFg,
-          fontWeight: 900,
-          fontSize: 16,
-          outline: "none",
-          textAlign: "left",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-          cursor: "pointer",
-        }}
-      >
-        <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {selectedIndicators.length ? chartIndicatorName : "Overview"}
-        </span>
-        <span aria-hidden="true">▾</span>
-      </button>
-
-      {indicatorMenuOpen ? (
-        <div
-          style={{
-            position: "absolute",
-            top: "calc(100% + 8px)",
-            left: 0,
-            zIndex: 40,
-            width: isMobile ? "100%" : 320,
-            borderRadius: 16,
-            border: `1px solid ${COLORS.border}`,
-            background: COLORS.cardBg,
-            boxShadow: COLORS.isDark
-              ? "0 18px 34px rgba(0,0,0,0.40)"
-              : "0 18px 34px rgba(0,0,0,0.12)",
-            overflow: "hidden",
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => clearIndicatorSelection()}
-            style={{
-              width: "100%",
-              padding: "12px 14px",
-              border: "none",
-              borderBottom: `1px solid ${COLORS.border}`,
-              background: COLORS.controlBg,
-              color: COLORS.cardFg,
-              textAlign: "left",
-              fontWeight: 900,
-              cursor: "pointer",
-            }}
-          >
-            Clear all / Overview
-          </button>
-
-          <div
-            style={{
-              padding: "10px 14px 8px",
-              fontSize: 11,
-              fontWeight: 900,
-              color: COLORS.mutedFg,
-              textTransform: "uppercase",
-              letterSpacing: "0.04em",
-            }}
-          >
-            Price overlays
-          </div>
-
-          {PRICE_OVERLAY_OPTIONS.map((opt) => {
-            const checked = selectedIndicators.includes(opt);
+        <div className="msh-bench-grid">
+          {(bench?.items ?? []).map((it) => {
+            const pct = typeof it.changePct === "number" ? it.changePct : null;
+            const isUp = typeof pct === "number" ? pct >= 0 : null;
+            const arrow = isUp == null ? "•" : isUp ? "▲" : "▼";
+            const arrowColor = isUp == null ? COLORS.mutedFg : isUp ? "#22c55e" : "#ef4444";
+            const pctText = pct == null ? "—" : `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
+            const chartSymbol =
+              (it.symbol || "").split(".")[0]?.toUpperCase() || it.symbol.toUpperCase();
 
             return (
-              <label
-                key={opt}
+              <button
+                key={it.key}
+                type="button"
+                onClick={() => chooseSymbol(chartSymbol)}
+                title={`Open ${chartSymbol} on chart`}
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "10px 14px",
-                  borderTop: `1px solid ${COLORS.border}`,
+                  border: `1px solid ${COLORS.border}`,
+                  borderRadius: 16,
+                  padding: 14,
+                  background: COLORS.controlBg,
+                  color: COLORS.cardFg,
+                  textAlign: "left",
+                  width: "100%",
                   cursor: "pointer",
-                  fontWeight: 800,
                 }}
               >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => toggleIndicatorSelection(opt)}
-                />
-                <span>{opt}</span>
-              </label>
-            );
-          })}
-
-          <div
-            style={{
-              padding: "10px 14px 8px",
-              fontSize: 11,
-              fontWeight: 900,
-              color: COLORS.mutedFg,
-              textTransform: "uppercase",
-              letterSpacing: "0.04em",
-              borderTop: `1px solid ${COLORS.border}`,
-            }}
-          >
-            Lower indicator (1 max)
-          </div>
-
-          {LOWER_OVERLAY_OPTIONS.map((opt) => {
-            const checked = selectedIndicators.includes(opt);
-
-            return (
-              <label
-                key={opt}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "10px 14px",
-                  borderTop: `1px solid ${COLORS.border}`,
-                  cursor: "pointer",
-                  fontWeight: 800,
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => toggleIndicatorSelection(opt)}
-                />
-                <span>{opt}</span>
-              </label>
-            );
-          })}
-        </div>
-      ) : null}
-    </div>
-
-    <ChartToolbar />
-  </div>
-</div>
-
-      <div style={{ padding: 16 }}>
-<PriceChart
-  symbol={symbol}
-  data={displayedHistory}
-  ma50={ma50}
-  ma200={ma200}
-  overlay={indicator}
-  selectedIndicators={selectedIndicators}
-  bollUpper={bollUpper}
-  bollMid={bollMid}
-  bollLower={bollLower}
-  ema20={ema20Arr}
-  vwap={vwapArr}
-  rsi14={rsi14Arr}
-  macdLine={macdLine}
-  macdSignal={macdSignal}
-  macdHist={macdHist}
-  stochK={stochK}
-  stochD={stochD}
-  atr14={atr14Arr}
-  volume={volumeArr}
-  divergence={divergence.div}
-  height={chartHeight}
-/>
-
-        <div
-          style={{
-            marginTop: 12,
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 12,
-            flexWrap: "wrap",
-            fontSize: 13,
-            fontWeight: 700,
-            color: COLORS.mutedFg,
-          }}
-        >
-          <div>
-            {displayedHistory.length
-              ? `From ${displayedHistory[0].date} → ${displayedHistory[displayedHistory.length - 1].date}`
-              : "No chart data"}
-          </div>
-<Link
-  href="/platforms"
-  style={{
-    fontSize: 12,
-    color: COLORS.isDark ? "#93c5fd" : "#2563eb",
-    textDecoration: "none",
-    fontWeight: 800,
-    whiteSpace: "nowrap",
-  }}
->
-  Compare platforms →
-</Link>
-        </div>
-      </div>
-    </SectionCard>
-  );
-}
-
-function BenchmarksPanel() {
-  return (
-    <SectionCard title="Market Benchmarks">
-      <div style={{ fontSize: 12, color: COLORS.mutedFg, marginBottom: 12 }}>
-        Updated: {bench?.updatedAt ? new Date(bench.updatedAt).toLocaleString() : "—"} • Benchmarks (Stooq, free)
-      </div>
-
-      <div className="msh-bench-grid">
-        {(bench?.items ?? []).map((it) => {
-          const pct = typeof it.changePct === "number" ? it.changePct : null;
-          const isUp = typeof pct === "number" ? pct >= 0 : null;
-          const arrow = isUp == null ? "•" : isUp ? "▲" : "▼";
-          const arrowColor = isUp == null ? COLORS.mutedFg : isUp ? "#22c55e" : "#ef4444";
-          const pctText = pct == null ? "—" : `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
-          const chartSymbol = (it.symbol || "").split(".")[0]?.toUpperCase() || it.symbol.toUpperCase();
-
-return (
-  <button
-    key={it.key}
-    type="button"
-    onClick={() => chooseSymbol(chartSymbol)}
-    title={`Open ${chartSymbol} on chart`}
-    style={{
-      border: `1px solid ${COLORS.border}`,
-      borderRadius: 16,
-      padding: 14,
-      background: COLORS.controlBg,
-      color: COLORS.cardFg,
-      textAlign: "left",
-      width: "100%",
-      cursor: "pointer",
-      transition: "transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease, filter 120ms ease",
-      boxShadow: COLORS.isDark ? "0 8px 18px rgba(0,0,0,0.14)" : "0 8px 18px rgba(0,0,0,0.04)",
-    }}
-  >
-    <div style={{ display: "grid", gap: 10 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 950, fontSize: 16, lineHeight: 1.1 }}>{it.label}</div>
-          <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>{it.symbol}</div>
-        </div>
-
-        <div style={{ textAlign: "right", flex: "0 0 auto" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
-            <span style={{ fontWeight: 950, color: arrowColor, fontSize: 14 }}>{arrow}</span>
-            <span style={{ fontWeight: 950, color: arrowColor, fontSize: 20 }}>{pctText}</span>
-          </div>
-          <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
-            {typeof it.close === "number" ? it.close.toFixed(2) : "—"}
-          </div>
-        </div>
-      </div>
-
-      <div style={{ fontSize: 12, opacity: 0.7 }}>
-        {it.date && it.time ? `As of ${it.date} ${it.time}` : "Timestamp unavailable"}
-      </div>
-    </div>
-  </button>
-);
-        })}
-      </div>
-    </SectionCard>
-  );
-}
-
-function NewsPanel() {
-  return (
-    <SectionCard title="Latest News">
-      {news ? (
-        <div className="msh-news-sections">
-          {news.feeds.map((f) => (
-            <div key={f.label} className="msh-news-section">
-              <div className="msh-news-section-title">{f.label}</div>
-
-              <div className="msh-news-section-grid">
-                {(f.items || []).map((it, idx) => (
-                  <a
-                    key={`${f.label}-${idx}-${it.link}`}
-                    href={it.link}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ textDecoration: "none", color: "inherit" }}
+                <div style={{ display: "grid", gap: 10 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      alignItems: "flex-start",
+                    }}
                   >
-                    <div
-                      style={{
-                        padding: 12,
-                        borderRadius: 14,
-                        border: `1px solid ${COLORS.border}`,
-                        background: COLORS.controlBg,
-                        height: "100%",
-                      }}
-                    >
-                      <div style={{ fontWeight: 800, lineHeight: 1.45 }}>{it.title}</div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 950, fontSize: 16, lineHeight: 1.1 }}>
+                        {it.label}
+                      </div>
+                      <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>{it.symbol}</div>
+                    </div>
 
-                      <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
-                        <div style={{ fontWeight: 800 }}>{f.label}</div>
-                        <div>
-                          {(it.source ?? "Source")}
-                          {it.pubDate ? ` • ${new Date(it.pubDate).toLocaleString()}` : ""}
-                        </div>
+                    <div style={{ textAlign: "right", flex: "0 0 auto" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "flex-end",
+                          gap: 8,
+                        }}
+                      >
+                        <span style={{ fontWeight: 950, color: arrowColor, fontSize: 14 }}>
+                          {arrow}
+                        </span>
+                        <span style={{ fontWeight: 950, color: arrowColor, fontSize: 20 }}>
+                          {pctText}
+                        </span>
+                      </div>
+                      <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
+                        {typeof it.close === "number" ? it.close.toFixed(2) : "—"}
                       </div>
                     </div>
-                  </a>
-                ))}
+                  </div>
+
+                  <div style={{ fontSize: 12, opacity: 0.7 }}>
+                    {it.date && it.time ? `As of ${it.date} ${it.time}` : "Timestamp unavailable"}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </SectionCard>
+    );
+  }
+
+  function NewsPanel() {
+    return (
+      <SectionCard title="Latest News">
+        {news ? (
+          <div className="msh-news-sections">
+            {news.feeds.map((f) => (
+              <div key={f.label} className="msh-news-section">
+                <div className="msh-news-section-title">{f.label}</div>
+
+                <div className="msh-news-section-grid">
+                  {(f.items || []).map((it, idx) => (
+                    <a
+                      key={`${f.label}-${idx}-${it.link}`}
+                      href={it.link}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ textDecoration: "none", color: "inherit" }}
+                    >
+                      <div
+                        style={{
+                          padding: 12,
+                          borderRadius: 14,
+                          border: `1px solid ${COLORS.border}`,
+                          background: COLORS.controlBg,
+                          height: "100%",
+                        }}
+                      >
+                        <div style={{ fontWeight: 800, lineHeight: 1.45 }}>{it.title}</div>
+
+                        <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
+                          <div style={{ fontWeight: 800 }}>{f.label}</div>
+                          <div>
+                            {it.source ?? "Source"}
+                            {it.pubDate ? ` • ${new Date(it.pubDate).toLocaleString()}` : ""}
+                          </div>
+                        </div>
+                      </div>
+                    </a>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div style={{ opacity: 0.7 }}>News unavailable.</div>
-      )}
-    </SectionCard>
-  );
-}
-
-
-
-return (
-  <main
-    style={{
-      padding: 0,
-      fontFamily: "system-ui, Arial",
-      background: COLORS.pageBg,
-      color: COLORS.pageFg,
-      minHeight: "100vh",
-    }}
-  >
-
-<style>{`
-  .msh-page-wrap {
-    width: min(1480px, calc(100% - 24px));
-    margin: 0 auto;
-    padding: 18px 0 28px;
+            ))}
+          </div>
+        ) : (
+          <div style={{ opacity: 0.7 }}>News unavailable.</div>
+        )}
+      </SectionCard>
+    );
   }
 
-  .msh-topbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    flex-wrap: wrap;
-    margin-bottom: 18px;
-  }
-
-  .msh-top-left {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    flex-wrap: wrap;
-    position: relative;
-  }
-
-  .msh-top-right {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: nowrap;
-  }
-
-  .msh-top-nav-btn:hover {
-    transform: translateY(-1px);
-    filter: brightness(1.05);
-  }
-    .msh-stock-picker-cta:hover {
-    transform: translateY(-1px);
-    filter: brightness(1.04);
-  }
-
-  .msh-stock-picker-cta-arrow {
-    display: inline-block;
-    transition: transform 140ms ease;
-  }
-
-  .msh-stock-picker-cta:hover .msh-stock-picker-cta-arrow {
-    transform: translateX(4px);
-  }
-
-  .msh-toolbar-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.9fr);
-    gap: 14px;
-    align-items: end;
-    margin-bottom: 18px;
-  }
-
-  .msh-main-grid {
-    display: grid;
-    grid-template-columns: minmax(320px, 430px) minmax(0, 1fr);
-    gap: 18px;
-    align-items: start;
-  }
-
-  .msh-left-stack {
-    display: grid;
-    gap: 18px;
-  }
-
-  .msh-lower-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 18px;
-    margin-top: 18px;
-  }
-
-  .msh-chart-head-row {
-    display: flex;
-    justify-content: space-between;
-    gap: 14px;
-    align-items: flex-end;
-    flex-wrap: wrap;
-  }
-
-  .msh-timeframes {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
-
-  .msh-score-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
-  }
-
-  .msh-info-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-  }
-
-  .msh-breakdown-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-
-  .msh-bench-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 14px;
-  }
-
-  .msh-news-head-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
-  }
-
-  .msh-news-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 14px;
-  }
-
-  .msh-news-sections {
-    display: grid;
-    gap: 18px;
-  }
-
-  .msh-news-section {
-    display: grid;
-    gap: 12px;
-  }
-
-  .msh-news-section-title {
-    font-weight: 950;
-    text-align: center;
-  }
-
-  .msh-news-section-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 14px;
-  }
-
-  .msh-mobile-nav {
-    display: none;
-  }
-
-  .msh-overview-head {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  @media (min-width: 761px) {
-    .msh-top-nav-btn {
-      min-height: 48px !important;
-      padding: 12px 18px !important;
-      font-size: 16px !important;
-      gap: 10px !important;
-    }
-  }
-
-  @media (max-width: 1180px) {
-    .msh-bench-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .msh-news-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .msh-news-section-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-
-  @media (max-width: 980px) {
-    .msh-main-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .msh-mobile-primary {
-      order: 1;
-    }
-
-    .msh-mobile-secondary {
-      order: 2;
-    }
-
-    .msh-score-grid,
-    .msh-info-grid,
-    .msh-breakdown-grid,
-    .msh-bench-grid,
-    .msh-news-grid,
-    .msh-news-head-grid,
-    .msh-news-section-grid {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  @media (max-width: 768px) {
-    .msh-page-wrap {
-      width: min(100%, calc(100% - 16px));
-      padding-top: 12px;
-    }
-
-    .msh-topbar {
-      gap: 10px;
-      margin-bottom: 12px;
-    }
-
-    .msh-top-right {
-      display: none;
-    }
-
-    .msh-mobile-nav {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin-bottom: 14px;
-    }
-
-    .msh-top-nav-btn {
-      min-height: 38px !important;
-      padding: 7px 10px !important;
-      font-size: 13px !important;
-      gap: 6px !important;
-      border-radius: 12px !important;
-    }
-
-    .msh-toolbar-grid {
-      grid-template-columns: 1fr;
-      gap: 10px;
-    }
-
-    .msh-score-grid,
-    .msh-info-grid,
-    .msh-bench-grid,
-    .msh-news-grid,
-    .msh-breakdown-grid,
-    .msh-news-section-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .msh-news-head-grid {
-      display: none;
-    }
-
-    .msh-news-section-title {
-      text-align: left;
-    }
-
-.msh-chart-head-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.msh-timeframes {
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: 6px;
-}
-
-.msh-timeframes > * {
-  width: 100%;
-  padding: 6px 0;
-  font-size: 12px;
-}
-
-.msh-timeframes button:nth-child(4),
-.msh-timeframes button:nth-child(5) {
-  display: none;
-}
-
-    .msh-overview-head {
-      grid-template-columns: minmax(0, 1fr) auto !important;
-      align-items: center !important;
-    }
-  }
-
-  @media (max-width: 420px) {
-    .msh-overview-head {
-      grid-template-columns: 1fr;
-    }
-  }
-`}</style>
-    <div className="msh-page-wrap">
-      <div className="msh-topbar">
-<div className="msh-top-left">
-  <Link
-    href="/"
-    style={{
-      display: "inline-flex",
-      alignItems: "center",
-      textDecoration: "none",
-      flex: "0 0 auto",
-      marginRight: isMobile ? 4 : 8,
-    }}
-  >
-    <img
-      src="/logo.png"
-      alt="MyStockHarbor"
+  return (
+    <main
       style={{
-        height: isMobile ? 56 : 78,
-        width: "auto",
-        objectFit: "contain",
-        display: "block",
+        padding: 0,
+        fontFamily: "system-ui, Arial",
+        background: COLORS.pageBg,
+        color: COLORS.pageFg,
+        minHeight: "100vh",
       }}
-    />
-  </Link>
+    >
+      <style>{`
+        .msh-page-wrap {
+          width: min(1480px, calc(100% - 24px));
+          margin: 0 auto;
+          padding: 18px 0 28px;
+        }
 
-  <div style={{ paddingTop: isMobile ? 2 : 0 }}>
-    <div style={{ fontWeight: 900, fontSize: isMobile ? 14 : 16 }}>Learn charts. Discover stocks. Trade smarter.</div>
-    <div style={{ color: COLORS.mutedFg, fontSize: 13, fontWeight: 700 }}>Version 1</div>
-  </div>
-</div>
+        .msh-topbar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          flex-wrap: wrap;
+          margin-bottom: 18px;
+        }
 
-        <div className="msh-top-right">
-<SmallNavLink href="/learn">Learn</SmallNavLink>
-<SmallNavLink href="/platforms">Platforms</SmallNavLink>
-<SmallNavLink href="/pickers">Stock Pickers</SmallNavLink>
-<SmallNavLink href="/utilities">Calculators</SmallNavLink>
-          <button
-  type="button"
-  onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
-  className="msh-top-nav-btn"
-  style={{
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    minHeight: 42,
-    padding: "9px 13px",
-    borderRadius: 14,
-    border: `1px solid ${COLORS.controlBorder}`,
-    background: COLORS.controlBg,
-    color: COLORS.controlFg,
-    fontWeight: 900,
-    fontSize: 14,
-    cursor: "pointer",
-    whiteSpace: "nowrap",
-    boxShadow: COLORS.isDark
-      ? "0 8px 18px rgba(0,0,0,0.20)"
-      : "0 8px 18px rgba(0,0,0,0.06)",
-    transition:
-      "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-  }}
->
-  {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
-</button>
+        .msh-top-left {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          flex-wrap: wrap;
+          position: relative;
+        }
 
-        </div>
-      </div>
+        .msh-top-right {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: nowrap;
+        }
 
-      <div className="msh-mobile-nav">
-<SmallNavLink href="/learn">Learn</SmallNavLink>
-<SmallNavLink href="/platforms">Platforms</SmallNavLink>
-<SmallNavLink href="/pickers">Stock Pickers</SmallNavLink>
-<SmallNavLink href="/utilities">Calculators</SmallNavLink>
+        .msh-top-nav-btn:hover {
+          transform: translateY(-1px);
+          filter: brightness(1.05);
+        }
 
-        <button
-          type="button"
-          onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
-          className="msh-top-nav-btn"
-          aria-label="Toggle theme"
-          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            minHeight: 38,
-            minWidth: 38,
-            padding: "7px 10px",
-            borderRadius: 12,
-            border: `1px solid ${COLORS.controlBorder}`,
-            background: COLORS.controlBg,
-            color: COLORS.controlFg,
-            fontWeight: 900,
-            fontSize: 16,
-            cursor: "pointer",
-            whiteSpace: "nowrap",
-            boxShadow: COLORS.isDark
-              ? "0 8px 18px rgba(0,0,0,0.20)"
-              : "0 8px 18px rgba(0,0,0,0.06)",
-            transition:
-              "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-          }}
-        >
-          {theme === "dark" ? "🌙" : "☀️"}
-        </button>
-      </div>
+        .msh-stock-picker-cta:hover {
+          transform: translateY(-1px);
+          filter: brightness(1.04);
+        }
 
-      <div className="msh-toolbar-grid">
-        <div style={{ position: "relative", minWidth: 0 }}>
-          <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 6 }}>Search Any Stock</div>
+        .msh-stock-picker-cta-arrow {
+          display: inline-block;
+          transition: transform 140ms ease;
+        }
 
-<input
-  value={query}
-  onChange={(e) => {
-    setQuery(e.target.value);
-    setOpen(true);
-  }}
-  onFocus={() => setOpen(true)}
-onKeyDown={(e) => {
-  if (e.key === "Enter") {
-    e.preventDefault();
-    chooseSymbol(query || symbol);
-  }
-}}
-  placeholder="🔎 Search ANY ticker or company"
-  style={{
-    width: "100%",
-    padding: "14px 16px",
-    borderRadius: 16,
-    border: `1px solid ${COLORS.controlBorder}`,
-    background: COLORS.controlBgSolid,
-    color: COLORS.controlFg,
-    outline: "none",
-    fontSize: 15,
-    fontWeight: 700,
-  }}
-/>
+        .msh-stock-picker-cta:hover .msh-stock-picker-cta-arrow {
+          transform: translateX(4px);
+        }
 
-          {open && results.length > 0 ? (
-            <div
+        .msh-toolbar-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.9fr);
+          gap: 14px;
+          align-items: end;
+          margin-bottom: 18px;
+        }
+
+        .msh-main-grid {
+          display: grid;
+          grid-template-columns: minmax(320px, 430px) minmax(0, 1fr);
+          gap: 18px;
+          align-items: start;
+        }
+
+        .msh-left-stack {
+          display: grid;
+          gap: 18px;
+        }
+
+        .msh-lower-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 18px;
+          margin-top: 18px;
+        }
+
+        .msh-chart-head-row {
+          display: flex;
+          justify-content: space-between;
+          gap: 14px;
+          align-items: flex-end;
+          flex-wrap: wrap;
+        }
+
+        .msh-timeframes {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+
+        .msh-score-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 14px;
+        }
+
+        .msh-breakdown-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .msh-bench-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 14px;
+        }
+
+        .msh-news-sections {
+          display: grid;
+          gap: 18px;
+        }
+
+        .msh-news-section {
+          display: grid;
+          gap: 12px;
+        }
+
+        .msh-news-section-title {
+          font-weight: 950;
+          text-align: center;
+        }
+
+        .msh-news-section-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 14px;
+        }
+
+        .msh-mobile-nav {
+          display: none;
+        }
+
+        @media (min-width: 761px) {
+          .msh-top-nav-btn {
+            min-height: 48px !important;
+            padding: 12px 18px !important;
+            font-size: 16px !important;
+            gap: 10px !important;
+          }
+        }
+
+        @media (max-width: 1180px) {
+          .msh-bench-grid,
+          .msh-news-section-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+
+        @media (max-width: 980px) {
+          .msh-main-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .msh-mobile-primary {
+            order: 1;
+          }
+
+          .msh-mobile-secondary {
+            order: 2;
+          }
+
+          .msh-score-grid,
+          .msh-breakdown-grid,
+          .msh-bench-grid,
+          .msh-news-section-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .msh-page-wrap {
+            width: min(100%, calc(100% - 16px));
+            padding-top: 12px;
+          }
+
+          .msh-topbar {
+            gap: 10px;
+            margin-bottom: 12px;
+          }
+
+          .msh-top-right {
+            display: none;
+          }
+
+          .msh-mobile-nav {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 14px;
+          }
+
+          .msh-top-nav-btn {
+            min-height: 38px !important;
+            padding: 7px 10px !important;
+            font-size: 13px !important;
+            gap: 6px !important;
+            border-radius: 12px !important;
+          }
+
+          .msh-toolbar-grid {
+            grid-template-columns: 1fr;
+            gap: 10px;
+          }
+
+          .msh-score-grid,
+          .msh-bench-grid,
+          .msh-breakdown-grid,
+          .msh-news-section-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .msh-news-section-title {
+            text-align: left;
+          }
+
+          .msh-chart-head-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+          }
+
+          .msh-timeframes {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 6px;
+          }
+
+          .msh-timeframes > * {
+            width: 100%;
+            padding: 6px 0;
+            font-size: 12px;
+          }
+
+          .msh-timeframes button:nth-child(4),
+          .msh-timeframes button:nth-child(5) {
+            display: none;
+          }
+        }
+      `}</style>
+
+      <div className="msh-page-wrap">
+        <div className="msh-topbar">
+          <div className="msh-top-left">
+            <Link
+              href="/"
               style={{
-                position: "absolute",
-                top: "calc(100% + 8px)",
-                left: 0,
-                right: 0,
-                zIndex: 20,
-                border: `1px solid ${COLORS.border}`,
-                borderRadius: 16,
-                background: COLORS.cardBg,
-                boxShadow: COLORS.isDark ? "0 18px 34px rgba(0,0,0,0.40)" : "0 18px 34px rgba(0,0,0,0.12)",
-                overflow: "hidden",
+                display: "inline-flex",
+                alignItems: "center",
+                textDecoration: "none",
+                flex: "0 0 auto",
+                marginRight: isMobile ? 4 : 8,
               }}
             >
-              {results.slice(0, 8).map((r) => (
+              <img
+                src="/logo.png"
+                alt="MyStockHarbor"
+                style={{
+                  height: isMobile ? 56 : 78,
+                  width: "auto",
+                  objectFit: "contain",
+                  display: "block",
+                }}
+              />
+            </Link>
+
+            <div style={{ paddingTop: isMobile ? 2 : 0 }}>
+              <div style={{ fontWeight: 900, fontSize: isMobile ? 14 : 16 }}>
+                Learn charts. Discover stocks. Trade smarter.
+              </div>
+              <div style={{ color: COLORS.mutedFg, fontSize: 13, fontWeight: 700 }}>Version 1</div>
+            </div>
+          </div>
+
+          <div className="msh-top-right">
+            <SmallNavLink href="/learn">Learn</SmallNavLink>
+            <SmallNavLink href="/platforms">Platforms</SmallNavLink>
+            <SmallNavLink href="/pickers">Stock Pickers</SmallNavLink>
+            <SmallNavLink href="/utilities">Calculators</SmallNavLink>
+
+            <button
+              type="button"
+              onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+              className="msh-top-nav-btn"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                minHeight: 42,
+                padding: "9px 13px",
+                borderRadius: 14,
+                border: `1px solid ${COLORS.controlBorder}`,
+                background: COLORS.controlBg,
+                color: COLORS.controlFg,
+                fontWeight: 900,
+                fontSize: 14,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
+            </button>
+          </div>
+        </div>
+
+        <div className="msh-mobile-nav">
+          <SmallNavLink href="/learn">Learn</SmallNavLink>
+          <SmallNavLink href="/platforms">Platforms</SmallNavLink>
+          <SmallNavLink href="/pickers">Stock Pickers</SmallNavLink>
+          <SmallNavLink href="/utilities">Calculators</SmallNavLink>
+
+          <button
+            type="button"
+            onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+            className="msh-top-nav-btn"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              minHeight: 38,
+              minWidth: 38,
+              padding: "7px 10px",
+              borderRadius: 12,
+              border: `1px solid ${COLORS.controlBorder}`,
+              background: COLORS.controlBg,
+              color: COLORS.controlFg,
+              fontWeight: 900,
+              fontSize: 16,
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {theme === "dark" ? "🌙" : "☀️"}
+          </button>
+        </div>
+
+        <div className="msh-toolbar-grid">
+          <div style={{ position: "relative", minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 6 }}>Search Any Stock</div>
+
+            <input
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setOpen(true);
+              }}
+              onFocus={() => setOpen(true)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  chooseSymbol(query || symbol);
+                }
+              }}
+              placeholder="🔎 Search ANY ticker or company"
+              style={{
+                width: "100%",
+                padding: "14px 16px",
+                borderRadius: 16,
+                border: `1px solid ${COLORS.controlBorder}`,
+                background: COLORS.controlBgSolid,
+                color: COLORS.controlFg,
+                outline: "none",
+                fontSize: 15,
+                fontWeight: 700,
+              }}
+            />
+
+            {open && results.length > 0 ? (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "calc(100% + 8px)",
+                  left: 0,
+                  right: 0,
+                  zIndex: 20,
+                  border: `1px solid ${COLORS.border}`,
+                  borderRadius: 16,
+                  background: COLORS.cardBg,
+                  boxShadow: COLORS.isDark
+                    ? "0 18px 34px rgba(0,0,0,0.40)"
+                    : "0 18px 34px rgba(0,0,0,0.12)",
+                  overflow: "hidden",
+                }}
+              >
+                {results.slice(0, 8).map((r) => (
+                  <button
+                    key={`${r.symbol}-${r.exchange}`}
+                    type="button"
+                    onClick={() => chooseSymbol(r.symbol)}
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      padding: "12px 14px",
+                      border: "none",
+                      borderBottom: `1px solid ${COLORS.border}`,
+                      background: COLORS.cardBg,
+                      color: COLORS.cardFg,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div style={{ fontWeight: 900 }}>{r.symbol}</div>
+                    <div style={{ fontSize: 13, color: COLORS.mutedFg }}>
+                      {r.name} {r.exchange ? `• ${r.exchange}` : ""}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 6 }}>Stock Pickers</div>
+
+            <button
+              type="button"
+              onClick={() => router.push("/pickers")}
+              className="msh-stock-picker-cta"
+              style={{
+                width: "100%",
+                padding: "14px 16px",
+                borderRadius: 16,
+                border: `1px solid rgba(59,130,246,0.45)`,
+                background: COLORS.isDark
+                  ? "linear-gradient(135deg, rgba(37,99,235,0.26), rgba(29,78,216,0.16))"
+                  : "linear-gradient(135deg, rgba(37,99,235,0.14), rgba(29,78,216,0.08))",
+                color: COLORS.controlFg,
+                fontWeight: 950,
+                fontSize: 15,
+                cursor: "pointer",
+                textAlign: "left",
+                transition: "transform 120ms ease, filter 120ms ease, border-color 120ms ease",
+              }}
+            >
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <span>🔎 Scan for Stock Ideas</span>
+                <span className="msh-stock-picker-cta-arrow" aria-hidden="true">
+                  →
+                </span>
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {err ? (
+          <div
+            style={{
+              marginBottom: 16,
+              padding: 14,
+              borderRadius: 14,
+              border: `1px solid rgba(239,68,68,0.35)`,
+              background: COLORS.isDark ? "rgba(127,29,29,0.28)" : "rgba(254,226,226,0.75)",
+              color: COLORS.cardFg,
+              fontWeight: 800,
+            }}
+          >
+            {err}
+          </div>
+        ) : null}
+
+        <div className="msh-main-grid">
+          <div className="msh-left-stack msh-mobile-secondary">
+            <OverviewPanel />
+            <BreakdownPanel />
+          </div>
+
+          <div className="msh-mobile-primary">
+            <ChartPanel />
+          </div>
+        </div>
+
+        <div className="msh-lower-grid">
+          <BenchmarksPanel />
+          <NewsPanel />
+        </div>
+
+        {expanded ? (
+          <div
+            onClick={() => setExpanded(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.75)",
+              zIndex: 100,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 18,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: "min(1280px, 100%)",
+                maxHeight: "92vh",
+                overflow: "auto",
+                borderRadius: 20,
+                border: `1px solid ${COLORS.border}`,
+                background: COLORS.cardBg,
+                boxShadow: "0 24px 60px rgba(0,0,0,0.45)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  alignItems: "center",
+                  padding: "14px 16px",
+                  borderBottom: `1px solid ${COLORS.border}`,
+                }}
+              >
+                <div style={{ fontWeight: 900 }}>Expanded Chart ({chartIndicatorName})</div>
+
                 <button
-                  key={`${r.symbol}-${r.exchange}`}
                   type="button"
-                  onClick={() => chooseSymbol(r.symbol)}
+                  onClick={() => setExpanded(false)}
                   style={{
-                    width: "100%",
-                    textAlign: "left",
-                    padding: "12px 14px",
-                    border: "none",
-                    borderBottom: `1px solid ${COLORS.border}`,
-                    background: COLORS.cardBg,
-                    color: COLORS.cardFg,
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: `1px solid ${COLORS.controlBorder}`,
+                    background: COLORS.controlBg,
+                    color: COLORS.controlFg,
+                    fontWeight: 900,
                     cursor: "pointer",
                   }}
                 >
-                  <div style={{ fontWeight: 900 }}>{r.symbol}</div>
-                  <div style={{ fontSize: 13, color: COLORS.mutedFg }}>
-                    {r.name} {r.exchange ? `• ${r.exchange}` : ""}
-                  </div>
+                  ✕
                 </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
+              </div>
 
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 6 }}>Stock Pickers</div>
-
-<button
-  type="button"
-  onClick={() => router.push("/pickers")}
-  className="msh-stock-picker-cta"
-  style={{
-    width: "100%",
-    padding: "14px 16px",
-    borderRadius: 16,
-    border: `1px solid rgba(59,130,246,0.45)`,
-    background: COLORS.isDark
-      ? "linear-gradient(135deg, rgba(37,99,235,0.26), rgba(29,78,216,0.16))"
-      : "linear-gradient(135deg, rgba(37,99,235,0.14), rgba(29,78,216,0.08))",
-    color: COLORS.controlFg,
-    fontWeight: 950,
-    fontSize: 15,
-    cursor: "pointer",
-    textAlign: "left",
-    transition: "transform 120ms ease, filter 120ms ease, border-color 120ms ease",
-  }}
->
-  <span
-    style={{
-      display: "inline-flex",
-      alignItems: "center",
-      gap: 6,
-    }}
-  >
-    <span>🔎 Scan for Stock Ideas</span>
-    <span className="msh-stock-picker-cta-arrow" aria-hidden="true">
-      →
-    </span>
-  </span>
-</button>
-        </div>
-
-      </div>
-
-      {err ? (
-        <div
-          style={{
-            marginBottom: 16,
-            padding: 14,
-            borderRadius: 14,
-            border: `1px solid rgba(239,68,68,0.35)`,
-            background: COLORS.isDark ? "rgba(127,29,29,0.28)" : "rgba(254,226,226,0.75)",
-            color: COLORS.cardFg,
-            fontWeight: 800,
-          }}
-        >
-          {err}
-        </div>
-      ) : null}
-
-<div className="msh-main-grid">
-  <div className="msh-left-stack msh-mobile-secondary">
-    {indicator === "None" ? <OverviewPanel /> : <IndicatorPanel />}
-    <BreakdownPanel />
-  </div>
-
-  <div className="msh-mobile-primary">
-    <ChartPanel />
-  </div>
-</div>
-
-      <div className="msh-lower-grid">
-        <BenchmarksPanel />
-        <NewsPanel />
-      </div>
-
-      {expanded ? (
-        <div
-          onClick={() => setExpanded(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.75)",
-            zIndex: 100,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 18,
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: "min(1280px, 100%)",
-              maxHeight: "92vh",
-              overflow: "auto",
-              borderRadius: 20,
-              border: `1px solid ${COLORS.border}`,
-              background: COLORS.cardBg,
-              boxShadow: "0 24px 60px rgba(0,0,0,0.45)",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 12,
-                alignItems: "center",
-                padding: "14px 16px",
-                borderBottom: `1px solid ${COLORS.border}`,
-              }}
-            >
-        <div style={{ fontWeight: 900 }}>Expanded Chart ({chartIndicatorName})</div>
-
-              <button
-                type="button"
-                onClick={() => setExpanded(false)}
-                style={{
-                  padding: "8px 10px",
-                  borderRadius: 10,
-                  border: `1px solid ${COLORS.controlBorder}`,
-                  background: COLORS.controlBg,
-                  color: COLORS.controlFg,
-                  fontWeight: 900,
-                  cursor: "pointer",
-                }}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div style={{ padding: 16 }}>
-<PriceChart
-  symbol={symbol}
-  data={displayedHistory}
-  ma50={ma50}
-  ma200={ma200}
-  overlay={indicator}
-  selectedIndicators={selectedIndicators}
-  bollUpper={bollUpper}
-  bollMid={bollMid}
-  bollLower={bollLower}
-  ema20={ema20Arr}
-  vwap={vwapArr}
-  rsi14={rsi14Arr}
-  macdLine={macdLine}
-  macdSignal={macdSignal}
-  macdHist={macdHist}
-  stochK={stochK}
-  stochD={stochD}
-  atr14={atr14Arr}
-  volume={volumeArr}
-  divergence={divergence.div}
-  height={isMobile ? 280 : 520}
-/>
+              <div style={{ padding: 16 }}>
+                <PriceChart
+                  symbol={symbol}
+                  data={displayedHistory}
+                  ma50={ma50}
+                  ma200={ma200}
+                  overlay={indicator}
+                  selectedIndicators={selectedIndicators}
+                  bollUpper={bollUpper}
+                  bollMid={bollMid}
+                  bollLower={bollLower}
+                  ema20={ema20Arr}
+                  vwap={vwapArr}
+                  rsi14={rsi14Arr}
+                  macdLine={macdLine}
+                  macdSignal={macdSignal}
+                  macdHist={macdHist}
+                  stochK={stochK}
+                  stochD={stochD}
+                  atr14={atr14Arr}
+                  volume={volumeArr}
+                  divergence={divergence.div}
+                  height={isMobile ? 280 : 520}
+                />
+              </div>
             </div>
           </div>
-        </div>
-      ) : null}
-    </div>
-  </main>
-);
+        ) : null}
+
+        {loading ? (
+          <div style={{ marginTop: 14, fontSize: 13, opacity: 0.7 }}>Loading chart data…</div>
+        ) : null}
+      </div>
+    </main>
+  );
 }
