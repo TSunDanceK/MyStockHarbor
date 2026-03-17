@@ -330,6 +330,8 @@ export async function GET() {
       (e) => typeof e?.message === "string" && e.message.toLowerCase().includes("run out of api credits")
     );
 
+  const dynamicSymbols = Array.from(discoveryState.dynamic.keys());
+
   const payload = {
     updatedAt: new Date().toISOString(),
     scope: "Rolling Dynamic Discovery Universe",
@@ -337,6 +339,7 @@ export async function GET() {
     curatedUniverseSize: uniqUpper(CURATED_UNIVERSE).length,
     masterListSize: uniqUpper(DISCOVERY_MASTER_LIST).length,
     dynamicUniverseSize: discoveryState.dynamic.size,
+    dynamicSymbols,
     quotesReturned: quotes.length,
     rowsBuilt: rows.length,
     rateLimited: isRateLimited,
@@ -348,7 +351,8 @@ export async function GET() {
     debug: {
       discoveryIntervalMinutes: DISCOVERY_INTERVAL_MS / 60000,
       discoveryBatchSize: DISCOVERY_BATCH_SIZE,
-      dynamicTtlMinutes: DYNAMIC_TTL_MS / 60000,
+      openMarketTtlMinutes: OPEN_MARKET_TTL_MS / 60000,
+      closedMarketTtlMinutes: CLOSED_MARKET_TTL_MS / 60000,
       dynamicMaxSize: DYNAMIC_MAX_SIZE,
       discoveryWindowOpen: isDiscoveryWindowOpen(),
       pointer: discoveryState.pointer,
