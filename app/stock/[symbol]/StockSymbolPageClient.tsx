@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import StockPriceChart from "./StockPriceChart";
 
 type Quote = {
   symbol: string;
@@ -152,24 +153,24 @@ function buildLongSummary(args: {
   const ma50Pct = pctFromBase(lastClose, ma50);
   const ma200Pct = pctFromBase(lastClose, ma200);
 
-  let trendParagraph = `${companyLead} is currently showing a ${trend.toLowerCase()} structure, with ${trendScore.passed} of ${trendScore.total} core trend checks passing. The latest available price is ${priceText}.`;
+  let trendParagraph = `${companyLead} currently looks ${trend === "Uptrend" ? "constructive overall" : trend === "Downtrend" ? "weaker on the chart overall" : "more mixed than cleanly trending"}. The latest available price is ${priceText}, and ${trendScore.passed} of ${trendScore.total} core trend checks are currently passing.`;
 
   if (typeof ma50Pct === "number" && typeof ma200Pct === "number") {
-    trendParagraph += ` Price is ${ma50Pct >= 0 ? "trading above" : "trading below"} its 50-day moving average by ${Math.abs(ma50Pct).toFixed(1)}% and ${ma200Pct >= 0 ? "above" : "below"} its 200-day moving average by ${Math.abs(ma200Pct).toFixed(1)}%.`;
+    trendParagraph += ` Price is ${ma50Pct >= 0 ? "trading above" : "trading below"} the 50-day moving average by ${Math.abs(ma50Pct).toFixed(1)}% and ${ma200Pct >= 0 ? "above" : "below"} the 200-day moving average by ${Math.abs(ma200Pct).toFixed(1)}%.`;
   }
 
-  let momentumParagraph = `${symbol} currently looks more balanced from a momentum perspective.`;
+  let momentumParagraph = `${symbol} currently looks fairly balanced from a momentum perspective.`;
   if (typeof rsi === "number") {
     if (rsi >= 70) {
-      momentumParagraph = `${symbol} currently has an RSI reading of ${rsi.toFixed(1)}, which suggests stronger momentum but also a more extended short-term state. This can sometimes happen when a stock has already made a strong move.`;
+      momentumParagraph = `${symbol} currently has an RSI reading of ${rsi.toFixed(1)}, which points to stronger short-term momentum but also a more extended backdrop. In plain English, this can happen when a stock has already run hard, so trend traders may still like the strength while dip buyers may prefer to wait for a pullback.`;
     } else if (rsi <= 30) {
-      momentumParagraph = `${symbol} currently has an RSI reading of ${rsi.toFixed(1)}, which suggests weaker momentum and a more oversold short-term condition. Some traders may review this kind of setup for bounce-watch ideas rather than trend continuation.`;
+      momentumParagraph = `${symbol} currently has an RSI reading of ${rsi.toFixed(1)}, which suggests weaker short-term momentum and a more oversold condition. Some traders may review this type of setup for a bounce or dip-watch idea, but oversold readings on their own do not guarantee a reversal.`;
     } else {
-      momentumParagraph = `${symbol} currently has an RSI reading of ${rsi.toFixed(1)}, which suggests a more neutral momentum backdrop rather than an extreme stretched condition.`;
+      momentumParagraph = `${symbol} currently has an RSI reading of ${rsi.toFixed(1)}, which sits in a more neutral range. That usually means momentum is not yet stretched enough to strongly argue either an overbought or oversold condition on its own.`;
     }
   }
 
-  let structureParagraph = `This MyStockHarbor stock page is designed to act as a starting point for chart review, not a buy or sell recommendation. Traders may use this page to judge whether ${symbol} is trending cleanly, pulling back into support, or moving in a more mixed structure before opening the full interactive dashboard.`;
+  const structureParagraph = `This page is designed to help you quickly understand what the ${symbol} chart looks like before opening the full dashboard. The goal is not to tell you what to buy or sell, but to make it easier to judge whether the chart is trending well, getting stretched, or simply moving in a messier range where patience may matter more.`;
 
   return {
     trendParagraph,
@@ -395,8 +396,8 @@ export default function StockSymbolPageClient({ symbol }: { symbol: string }) {
             }}
           >
             {companyName || `${symbol} technical overview`}{" "}
-            {companyName ? `(${symbol})` : ""}. Review trend structure, moving averages,
-            momentum context and a direct route into the full MyStockHarbor dashboard.
+            {companyName ? `(${symbol})` : ""}. Review the chart, trend structure,
+            moving averages and momentum context in a more readable, beginner-friendly way.
           </p>
 
           {loading ? (
@@ -414,9 +415,7 @@ export default function StockSymbolPageClient({ symbol }: { symbol: string }) {
                     background: "rgba(255,255,255,0.04)",
                   }}
                 >
-                  <div style={{ fontSize: 12, opacity: 0.72, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                    Last price
-                  </div>
+                  <div style={miniLabelStyle}>Last price</div>
                   <div style={{ marginTop: 8, fontSize: 34, fontWeight: 950 }}>
                     {typeof quote?.price === "number" ? `$${quote.price.toFixed(2)}` : "—"}
                   </div>
@@ -433,9 +432,7 @@ export default function StockSymbolPageClient({ symbol }: { symbol: string }) {
                     background: "rgba(255,255,255,0.04)",
                   }}
                 >
-                  <div style={{ fontSize: 12, opacity: 0.72, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                    Trend score
-                  </div>
+                  <div style={miniLabelStyle}>Trend score</div>
                   <div
                     style={{
                       marginTop: 8,
@@ -447,7 +444,7 @@ export default function StockSymbolPageClient({ symbol }: { symbol: string }) {
                     {trendScore.passed}/{trendScore.total}
                   </div>
                   <div style={{ marginTop: 8, fontSize: 13, opacity: 0.72 }}>
-                    Based on price vs MA50, price vs MA200 and MA50 vs MA200.
+                    Price vs MA50, price vs MA200 and MA50 vs MA200.
                   </div>
                 </div>
 
@@ -459,14 +456,12 @@ export default function StockSymbolPageClient({ symbol }: { symbol: string }) {
                     background: "rgba(255,255,255,0.04)",
                   }}
                 >
-                  <div style={{ fontSize: 12, opacity: 0.72, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                    Regime
-                  </div>
+                  <div style={miniLabelStyle}>Regime</div>
                   <div style={{ marginTop: 8, fontSize: 34, fontWeight: 950 }}>
                     {trend}
                   </div>
                   <div style={{ marginTop: 8, fontSize: 13, opacity: 0.72 }}>
-                    A quick read on overall market structure.
+                    A quick read on overall chart structure.
                   </div>
                 </div>
               </div>
@@ -496,7 +491,7 @@ export default function StockSymbolPageClient({ symbol }: { symbol: string }) {
                     fontSize: 12,
                   }}
                 >
-                  INTERACTIVE CHART
+                  CHART VIEW
                 </div>
 
                 <h2
@@ -507,7 +502,7 @@ export default function StockSymbolPageClient({ symbol }: { symbol: string }) {
                     letterSpacing: "-0.03em",
                   }}
                 >
-                  Open the live dashboard chart for {symbol}
+                  {symbol} chart with MA50 and MA200
                 </h2>
 
                 <p
@@ -519,50 +514,52 @@ export default function StockSymbolPageClient({ symbol }: { symbol: string }) {
                     fontSize: 15,
                   }}
                 >
-                  Use the full MyStockHarbor dashboard to explore the interactive chart,
-                  indicator controls, timeframe switching, benchmarks and related market news.
+                  This chart gives Google readable page content and gives real visitors a useful
+                  visual snapshot straight away. For the full tool experience, open the interactive dashboard.
                 </p>
+
+                <div style={{ marginTop: 16 }}>
+                  <StockPriceChart
+                    symbol={symbol}
+                    data={history.slice(-240)}
+                    ma50={ma50.slice(-240)}
+                    ma200={ma200.slice(-240)}
+                    height={360}
+                  />
+                </div>
 
                 <div
                   style={{
                     marginTop: 16,
-                    borderRadius: 18,
-                    border: "1px dashed rgba(59,130,246,0.24)",
-                    background:
-                      "linear-gradient(180deg, rgba(59,130,246,0.05), rgba(15,23,42,0.10))",
-                    padding: "20px 18px",
-                    display: "grid",
+                    display: "flex",
+                    justifyContent: "space-between",
                     gap: 12,
+                    alignItems: "center",
+                    flexWrap: "wrap",
                   }}
                 >
-                  <div style={{ fontWeight: 900, fontSize: 18 }}>
-                    View {symbol} with the full chart engine
-                  </div>
-                  <div style={{ opacity: 0.76, lineHeight: 1.65 }}>
-                    This SEO page gives the written stock summary Google can read. The dashboard
-                    gives the full interactive charting experience for deeper analysis.
+                  <div style={{ fontSize: 13, opacity: 0.74 }}>
+                    Prefer the full tool layout? Open the live dashboard view for {symbol}.
                   </div>
 
-                  <div>
-                    <Link
-                      href={`/?symbol=${encodeURIComponent(symbol)}`}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        padding: "12px 16px",
-                        borderRadius: 14,
-                        border: "1px solid rgba(59,130,246,0.45)",
-                        background:
-                          "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(37,99,235,0.12))",
-                        color: "#eff6ff",
-                        textDecoration: "none",
-                        fontWeight: 900,
-                      }}
-                    >
-                      Open {symbol} in Dashboard →
-                    </Link>
-                  </div>
+                  <Link
+                    href={`/?symbol=${encodeURIComponent(symbol)}`}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      padding: "12px 16px",
+                      borderRadius: 14,
+                      border: "1px solid rgba(59,130,246,0.45)",
+                      background:
+                        "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(37,99,235,0.12))",
+                      color: "#eff6ff",
+                      textDecoration: "none",
+                      fontWeight: 900,
+                    }}
+                  >
+                    Open {symbol} in Dashboard →
+                  </Link>
                 </div>
               </section>
 
@@ -579,12 +576,12 @@ export default function StockSymbolPageClient({ symbol }: { symbol: string }) {
                 </article>
 
                 <article style={articleStyle}>
-                  <h2 style={articleHeadingStyle}>Momentum and structure context</h2>
+                  <h2 style={articleHeadingStyle}>Momentum and stretch context</h2>
                   <p style={articleTextStyle}>{longSummary.momentumParagraph}</p>
                 </article>
 
                 <article style={articleStyle}>
-                  <h2 style={articleHeadingStyle}>What traders may watch</h2>
+                  <h2 style={articleHeadingStyle}>What traders may watch next</h2>
                   <p style={articleTextStyle}>{longSummary.structureParagraph}</p>
                 </article>
               </section>
@@ -700,6 +697,78 @@ export default function StockSymbolPageClient({ symbol }: { symbol: string }) {
                   </Link>
                 </div>
               </section>
+
+              <section
+                style={{
+                  marginTop: 22,
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: 20,
+                  padding: 20,
+                  background:
+                    "linear-gradient(180deg, rgba(9,13,20,0.92), rgba(7,10,16,0.96))",
+                }}
+              >
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "7px 12px",
+                    borderRadius: 999,
+                    background:
+                      "linear-gradient(135deg, rgba(250,204,21,0.16), rgba(202,138,4,0.08))",
+                    border: "1px solid rgba(250,204,21,0.26)",
+                    color: "#fef3c7",
+                    fontWeight: 950,
+                    letterSpacing: "0.08em",
+                    fontSize: 12,
+                  }}
+                >
+                  FAQ
+                </div>
+
+                <h2
+                  style={{
+                    margin: "14px 0 0 0",
+                    fontSize: 24,
+                    lineHeight: 1.15,
+                    letterSpacing: "-0.03em",
+                  }}
+                >
+                  Common questions about {symbol}
+                </h2>
+
+                <div style={{ marginTop: 16, display: "grid", gap: 16 }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 17 }}>
+                      Is this page a buy or sell recommendation?
+                    </h3>
+                    <p style={{ margin: "8px 0 0", lineHeight: 1.7, opacity: 0.76 }}>
+                      No. This page is designed to help you review chart structure, momentum and
+                      technical context more quickly, but it is not personal financial advice.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 17 }}>
+                      Why can a stock look bullish and overbought at the same time?
+                    </h3>
+                    <p style={{ margin: "8px 0 0", lineHeight: 1.7, opacity: 0.76 }}>
+                      Strong trending stocks can still become stretched in the short term. That is
+                      why trend traders and dip buyers can read the same chart differently.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 17 }}>
+                      What should I do next after reading this page?
+                    </h3>
+                    <p style={{ margin: "8px 0 0", lineHeight: 1.7, opacity: 0.76 }}>
+                      Open the full dashboard, review the chart in more detail, compare indicators,
+                      and decide whether the setup still makes sense within your own process.
+                    </p>
+                  </div>
+                </div>
+              </section>
             </>
           )}
         </section>
@@ -812,6 +881,14 @@ function topLinkStyle(tint: "blue" | "green" | "red"): React.CSSProperties {
       "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
   };
 }
+
+const miniLabelStyle: React.CSSProperties = {
+  fontSize: 12,
+  opacity: 0.72,
+  fontWeight: 900,
+  textTransform: "uppercase",
+  letterSpacing: "0.05em",
+};
 
 const articleStyle: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
