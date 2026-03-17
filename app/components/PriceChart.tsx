@@ -79,6 +79,7 @@ type Props = {
   ma50: (number | null)[];
   ma200: (number | null)[];
   overlay?: Overlay;
+  selectedIndicators?: Overlay[];
 
   divergence?: DivResult | null;
 
@@ -108,6 +109,7 @@ export default function PriceChart(props: Props) {
     ma50,
     ma200,
     overlay = "None",
+    selectedIndicators = [],
     divergence = null,
 
     bollUpper,
@@ -137,12 +139,40 @@ export default function PriceChart(props: Props) {
   const padT = 24;
   const padB = 34;
 
-  const wantsSubPanel =
-    overlay === "RSI(14)" ||
-    overlay === "MACD(12,26,9)" ||
-    overlay === "Stochastic(14,3)" ||
-    overlay === "ATR(14)" ||
-    overlay === "Volume";
+  const activeIndicators = selectedIndicators.filter((v) => v !== "None");
+
+  const activeLowerOverlay = useMemo<Overlay | null>(() => {
+    const lower = activeIndicators.find(
+      (v) =>
+        v === "RSI(14)" ||
+        v === "MACD(12,26,9)" ||
+        v === "Stochastic(14,3)" ||
+        v === "ATR(14)" ||
+        v === "Volume"
+    );
+
+    if (lower) return lower;
+
+    if (
+      overlay === "RSI(14)" ||
+      overlay === "MACD(12,26,9)" ||
+      overlay === "Stochastic(14,3)" ||
+      overlay === "ATR(14)" ||
+      overlay === "Volume"
+    ) {
+      return overlay;
+    }
+
+    return null;
+  }, [activeIndicators, overlay]);
+
+  const wantsSubPanel = activeLowerOverlay != null;
+
+  const showMA50 = activeIndicators.includes("MA50");
+  const showMA200 = activeIndicators.includes("MA200");
+  const showBollinger = activeIndicators.includes("Bollinger(20,2)");
+  const showEMA20 = activeIndicators.includes("EMA20");
+  const showVWAP = activeIndicators.includes("VWAP");
 
   const gap = wantsSubPanel ? 14 : 0;
   const innerH = height - padT - padB - gap;
@@ -228,24 +258,24 @@ export default function PriceChart(props: Props) {
     for (const p of series) {
       vals.push(p.close);
 
-      if (overlay === "MA50" && typeof p.ma50 === "number") vals.push(p.ma50);
-      if (overlay === "MA200" && typeof p.ma200 === "number") vals.push(p.ma200);
+      if (showMA50 && typeof p.ma50 === "number") vals.push(p.ma50);
+      if (showMA200 && typeof p.ma200 === "number") vals.push(p.ma200);
 
-      if (overlay === "Bollinger(20,2)") {
+      if (showBollinger) {
         if (typeof p.bu === "number") vals.push(p.bu);
         if (typeof p.bm === "number") vals.push(p.bm);
         if (typeof p.bl === "number") vals.push(p.bl);
       }
 
-      if (overlay === "EMA20" && typeof p.ema20 === "number") vals.push(p.ema20);
-      if (overlay === "VWAP" && typeof p.vwap === "number") vals.push(p.vwap);
+      if (showEMA20 && typeof p.ema20 === "number") vals.push(p.ema20);
+      if (showVWAP && typeof p.vwap === "number") vals.push(p.vwap);
     }
 
     const minV = Math.min(...vals);
     const maxV = Math.max(...vals);
     const r = Math.max(1e-9, maxV - minV);
     return { pMin: minV, pMax: maxV, pRange: r };
-  }, [hasData, series, overlay]);
+  }, [hasData, series, showMA50, showMA200, showBollinger, showEMA20, showVWAP]);
 
   const yMain = useMemo(() => {
     return (v: number) => padT + ((pMax - v) * priceH) / pRange;
@@ -257,10 +287,10 @@ export default function PriceChart(props: Props) {
   const subRange = useMemo(() => {
     if (!hasData || !wantsSubPanel) return null;
 
-    if (overlay === "RSI(14)") return { min: 0, max: 100 };
-    if (overlay === "Stochastic(14,3)") return { min: 0, max: 100 };
+    if (activeLowerOverlay === "RSI(14)") return { min: 0, max: 100 };
+    if (activeLowerOverlay === "Stochastic(14,3)") return { min: 0, max: 100 };
 
-    if (overlay === "MACD(12,26,9)") {
+    if (activeLowerOverlay === "MACD(12,26,9)") {
       const mm1 = minMax(series.map((p) => p.macdLine));
       const mm2 = minMax(series.map((p) => p.macdSignal));
       const mm3 = minMax(series.map((p) => p.macdHist));
@@ -273,9 +303,9 @@ export default function PriceChart(props: Props) {
       return { min, max };
     }
 
-    if (overlay === "ATR(14)") return minMax(series.map((p) => p.atr14));
+    if (activeLowerOverlay === "ATR(14)") return minMax(series.map((p) => p.atr14));
 
-    if (overlay === "Volume") {
+    if (activeLowerOverlay === "Volume") {
       let max = 0;
       for (const p of series) {
         const v = p.volume;
@@ -286,7 +316,7 @@ export default function PriceChart(props: Props) {
     }
 
     return null;
-  }, [hasData, wantsSubPanel, overlay, series]);
+  }, [hasData, wantsSubPanel, activeLowerOverlay, series]);
 
   const ySub = useMemo(() => {
     if (!subRange) return (_v: number) => subTop + subH / 2;
@@ -370,7 +400,7 @@ export default function PriceChart(props: Props) {
 
   // --------- Divergence line (MACD subpanel) ----------
   const macdDivLine = useMemo(() => {
-    if (overlay !== "MACD(12,26,9)") return null;
+    if (activeLowerOverlay !== "MACD(12,26,9)") return null;
     if (!divergence || !divergence.hasMacd) return null;
 
     const i1 = divergence.p1.idx;
@@ -390,7 +420,7 @@ export default function PriceChart(props: Props) {
       x2: x(i2),
       y2: ySub(m2),
     };
-  }, [overlay, divergence, series, x, ySub]);
+  }, [activeLowerOverlay, divergence, series, x, ySub]);
 
   return (
     <div style={{ width: "100%" }}>
@@ -428,7 +458,7 @@ export default function PriceChart(props: Props) {
         />
 
         {/* price overlays */}
-        {overlay === "MA50" && ma50Path ? (
+        {showMA50 && ma50Path ? (
           <path
             d={ma50Path}
             fill="none"
@@ -439,7 +469,7 @@ export default function PriceChart(props: Props) {
           />
         ) : null}
 
-        {overlay === "MA200" && ma200Path ? (
+        {showMA200 && ma200Path ? (
           <path
             d={ma200Path}
             fill="none"
@@ -450,7 +480,7 @@ export default function PriceChart(props: Props) {
           />
         ) : null}
 
-        {overlay === "Bollinger(20,2)" ? (
+        {showBollinger ? (
           <>
             {bollUPath ? (
               <path
@@ -483,7 +513,7 @@ export default function PriceChart(props: Props) {
           </>
         ) : null}
 
-        {overlay === "EMA20" && ema20Path ? (
+        {showEMA20 && ema20Path ? (
           <path
             d={ema20Path}
             fill="none"
@@ -494,7 +524,7 @@ export default function PriceChart(props: Props) {
           />
         ) : null}
 
-        {overlay === "VWAP" && vwapPath ? (
+        {showVWAP && vwapPath ? (
           <path
             d={vwapPath}
             fill="none"
@@ -511,7 +541,7 @@ export default function PriceChart(props: Props) {
             <rect x={padL} y={subTop} width={width - padL - padR} height={subH} fill="none" stroke="currentColor" opacity="0.10" />
 
             {/* RSI */}
-            {overlay === "RSI(14)" ? (
+           {activeLowerOverlay === "RSI(14)" ? (
               <>
                 <line x1={padL} y1={ySub(70)} x2={width - padR} y2={ySub(70)} stroke="currentColor" opacity="0.10" />
                 <line x1={padL} y1={ySub(30)} x2={width - padR} y2={ySub(30)} stroke="currentColor" opacity="0.10" />
@@ -528,7 +558,7 @@ export default function PriceChart(props: Props) {
             ) : null}
 
             {/* MACD */}
-            {overlay === "MACD(12,26,9)" ? (
+        {activeLowerOverlay === "MACD(12,26,9)" ? (
               <>
                 {subRange ? <line x1={padL} y1={ySub(0)} x2={width - padR} y2={ySub(0)} stroke="currentColor" opacity="0.12" /> : null}
 
@@ -597,7 +627,7 @@ export default function PriceChart(props: Props) {
             ) : null}
 
             {/* Stochastic */}
-            {overlay === "Stochastic(14,3)" ? (
+            {activeLowerOverlay === "Stochastic(14,3)" ? (
               <>
                 <line x1={padL} y1={ySub(80)} x2={width - padR} y2={ySub(80)} stroke="currentColor" opacity="0.10" />
                 <line x1={padL} y1={ySub(20)} x2={width - padR} y2={ySub(20)} stroke="currentColor" opacity="0.10" />
@@ -624,7 +654,7 @@ export default function PriceChart(props: Props) {
             ) : null}
 
             {/* ATR */}
-                      {overlay === "ATR(14)" ? (
+                    {activeLowerOverlay === "ATR(14)" ? (
               <>
                 {atrPath ? (
                   <path
@@ -639,7 +669,7 @@ export default function PriceChart(props: Props) {
             ) : null}
 
             {/* Volume */}
-            {overlay === "Volume" ? (
+            {activeLowerOverlay === "Volume" ? (
               <>
                 {subRange
                   ? series.map((p, i) => {
