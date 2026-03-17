@@ -1816,260 +1816,304 @@ const atrLast = lastNum(atr14Arr);
 const atrSmaLast = lastNum(atrSma20Arr);
 const volumeLast = lastNum(volumeArr);
 const volumeSmaLast = lastNum(volSma20Arr);
+  const panelIndicators = useMemo(() => {
+  if (selectedIndicators.length) return selectedIndicators;
+  if (indicator !== "None") return [indicator];
+  return [];
+}, [selectedIndicators, indicator]);
 
-const indicatorInsight = useMemo(() => {
-  if (indicator === "None") return null;
+const selectedIndicatorsText = panelIndicators.length
+  ? panelIndicators.join(", ")
+  : "Overview";
+  
+const indicatorInsights = useMemo(() => {
+  if (!panelIndicators.length) return [];
 
-  if (indicator === "MA50") {
-    return {
-      title: "MA50 Insight",
-      accent: compareTo(lastClose, "MA50", typeof lastMA50 === "number" ? lastMA50 : null),
-      stats: [
-        { label: "Price vs MA50", value: ma50Pct == null ? "—" : `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}%` },
-        { label: "MA50 value", value: formatMaybeNumber(lastMA50) },
-        {
-          label: "Trend slope",
-          value:
-            ma50.length >= 6 &&
-            typeof ma50[ma50.length - 1] === "number" &&
-            typeof ma50[ma50.length - 6] === "number"
-              ? (ma50[ma50.length - 1]! > ma50[ma50.length - 6]! ? "Rising" : "Falling")
-              : "—",
-        },
-        {
-          label: "Structure",
-          value:
-            typeof lastClose === "number" && typeof lastMA50 === "number"
-              ? lastClose >= lastMA50
-                ? "Above trend support"
-                : "Below trend support"
-              : "—",
-        },
-      ],
-      note:
-        typeof ma50Pct === "number"
-          ? ma50Pct > 5
-            ? "Price is stretched well above the 50-day average."
-            : ma50Pct < -5
-            ? "Price is trading notably below the 50-day average."
-            : "Price is trading close enough to the 50-day average to be considered fairly balanced."
-          : "Need more data for a clearer MA50 read.",
-    };
-  }
+  return panelIndicators
+    .map((indicatorName) => {
+      if (indicatorName === "MA50") {
+        return {
+          key: "MA50",
+          title: "MA50 Insight",
+          accent: compareTo(lastClose, "MA50", typeof lastMA50 === "number" ? lastMA50 : null),
+          stats: [
+            { label: "Price vs MA50", value: ma50Pct == null ? "—" : `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}%` },
+            { label: "MA50 value", value: formatMaybeNumber(lastMA50) },
+            {
+              label: "Trend slope",
+              value:
+                ma50.length >= 6 &&
+                typeof ma50[ma50.length - 1] === "number" &&
+                typeof ma50[ma50.length - 6] === "number"
+                  ? ma50[ma50.length - 1]! > ma50[ma50.length - 6]!
+                    ? "Rising"
+                    : "Falling"
+                  : "—",
+            },
+            {
+              label: "Structure",
+              value:
+                typeof lastClose === "number" && typeof lastMA50 === "number"
+                  ? lastClose >= lastMA50
+                    ? "Above trend support"
+                    : "Below trend support"
+                  : "—",
+            },
+          ],
+          note:
+            typeof ma50Pct === "number"
+              ? ma50Pct > 5
+                ? "Price is stretched well above the 50-day average."
+                : ma50Pct < -5
+                ? "Price is trading notably below the 50-day average."
+                : "Price is trading close enough to the 50-day average to be considered fairly balanced."
+              : "Need more data for a clearer MA50 read.",
+        };
+      }
 
-  if (indicator === "MA200") {
-    return {
-      title: "MA200 Insight",
-      accent: compareTo(lastClose, "MA200", typeof lastMA200 === "number" ? lastMA200 : null),
-      stats: [
-        { label: "Price vs MA200", value: ma200Pct == null ? "—" : `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}%` },
-        { label: "MA200 value", value: formatMaybeNumber(lastMA200) },
-        {
-          label: "Long trend",
-          value:
-            typeof lastClose === "number" && typeof lastMA200 === "number"
-              ? lastClose >= lastMA200
-                ? "Above long-term trend"
-                : "Below long-term trend"
-              : "—",
-        },
-        {
-          label: "MA50 vs MA200",
-          value:
-            typeof lastMA50 === "number" && typeof lastMA200 === "number"
-              ? lastMA50 >= lastMA200
-                ? "Bullish stack"
-                : "Bearish stack"
-              : "—",
-        },
-      ],
-      note:
-        typeof ma200Pct === "number"
-          ? Math.abs(ma200Pct) >= 10
-            ? "This is a large long-term distance from the 200-day average."
-            : "This long-term distance is still fairly contained."
-          : "Need more data for a clearer MA200 read.",
-    };
-  }
+      if (indicatorName === "MA200") {
+        return {
+          key: "MA200",
+          title: "MA200 Insight",
+          accent: compareTo(lastClose, "MA200", typeof lastMA200 === "number" ? lastMA200 : null),
+          stats: [
+            { label: "Price vs MA200", value: ma200Pct == null ? "—" : `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}%` },
+            { label: "MA200 value", value: formatMaybeNumber(lastMA200) },
+            {
+              label: "Long trend",
+              value:
+                typeof lastClose === "number" && typeof lastMA200 === "number"
+                  ? lastClose >= lastMA200
+                    ? "Above long-term trend"
+                    : "Below long-term trend"
+                  : "—",
+            },
+            {
+              label: "MA50 vs MA200",
+              value:
+                typeof lastMA50 === "number" && typeof lastMA200 === "number"
+                  ? lastMA50 >= lastMA200
+                    ? "Bullish stack"
+                    : "Bearish stack"
+                  : "—",
+            },
+          ],
+          note:
+            typeof ma200Pct === "number"
+              ? Math.abs(ma200Pct) >= 10
+                ? "This is a large long-term distance from the 200-day average."
+                : "This long-term distance is still fairly contained."
+              : "Need more data for a clearer MA200 read.",
+        };
+      }
 
-  if (indicator === "EMA20") {
-    return {
-      title: "EMA20 Insight",
-      accent: compareTo(lastClose, "EMA20", lastNum(ema20Arr)),
-      stats: [
-        { label: "Price vs EMA20", value: ema20Pct == null ? "—" : `${ema20Pct >= 0 ? "+" : ""}${ema20Pct.toFixed(2)}%` },
-        { label: "EMA20 value", value: formatMaybeNumber(lastNum(ema20Arr)) },
-        {
-          label: "Short trend",
-          value:
-            typeof lastClose === "number" && typeof lastNum(ema20Arr) === "number"
-              ? lastClose >= (lastNum(ema20Arr) as number)
-                ? "Above short trend"
-                : "Below short trend"
-              : "—",
-        },
-        {
-          label: "Use case",
-          value: "Fast trend guide",
-        },
-      ],
-      note: "EMA20 reacts faster than MA50, so it is useful for short-term trend and pullback structure.",
-    };
-  }
+      if (indicatorName === "EMA20") {
+        return {
+          key: "EMA20",
+          title: "EMA20 Insight",
+          accent: compareTo(lastClose, "EMA20", lastNum(ema20Arr)),
+          stats: [
+            { label: "Price vs EMA20", value: ema20Pct == null ? "—" : `${ema20Pct >= 0 ? "+" : ""}${ema20Pct.toFixed(2)}%` },
+            { label: "EMA20 value", value: formatMaybeNumber(lastNum(ema20Arr)) },
+            {
+              label: "Short trend",
+              value:
+                typeof lastClose === "number" && typeof lastNum(ema20Arr) === "number"
+                  ? lastClose >= (lastNum(ema20Arr) as number)
+                    ? "Above short trend"
+                    : "Below short trend"
+                  : "—",
+            },
+            { label: "Use case", value: "Fast trend guide" },
+          ],
+          note: "EMA20 reacts faster than MA50, so it is useful for short-term trend and pullback structure.",
+        };
+      }
 
-  if (indicator === "VWAP") {
-    return {
-      title: "VWAP Insight",
-      accent: compareTo(lastClose, "VWAP", lastNum(vwapArr)),
-      stats: [
-        { label: "Price vs VWAP", value: vwapPct == null ? "—" : `${vwapPct >= 0 ? "+" : ""}${vwapPct.toFixed(2)}%` },
-        { label: "VWAP value", value: formatMaybeNumber(lastNum(vwapArr)) },
-        {
-          label: "Stretch",
-          value:
-            typeof vwapPct === "number"
-              ? Math.abs(vwapPct) >= 5
-                ? "High"
-                : Math.abs(vwapPct) >= 2
-                ? "Moderate"
-                : "Low"
-              : "—",
-        },
-        {
-          label: "Read",
-          value:
-            typeof vwapPct === "number"
-              ? vwapPct >= 0
-                ? "Trading above value"
-                : "Trading below value"
-              : "—",
-        },
-      ],
-      note: "VWAP is useful for judging whether price is extended away from a fairer average trading level.",
-    };
-  }
+      if (indicatorName === "VWAP") {
+        return {
+          key: "VWAP",
+          title: "VWAP Insight",
+          accent: compareTo(lastClose, "VWAP", lastNum(vwapArr)),
+          stats: [
+            { label: "Price vs VWAP", value: vwapPct == null ? "—" : `${vwapPct >= 0 ? "+" : ""}${vwapPct.toFixed(2)}%` },
+            { label: "VWAP value", value: formatMaybeNumber(lastNum(vwapArr)) },
+            {
+              label: "Stretch",
+              value:
+                typeof vwapPct === "number"
+                  ? Math.abs(vwapPct) >= 5
+                    ? "High"
+                    : Math.abs(vwapPct) >= 2
+                    ? "Moderate"
+                    : "Low"
+                  : "—",
+            },
+            {
+              label: "Read",
+              value:
+                typeof vwapPct === "number"
+                  ? vwapPct >= 0
+                    ? "Trading above value"
+                    : "Trading below value"
+                  : "—",
+            },
+          ],
+          note: "VWAP is useful for judging whether price is extended away from a fairer average trading level.",
+        };
+      }
 
-  if (indicator === "Bollinger(20,2)") {
-    let bandRead = "Inside bands";
-    if (typeof lastClose === "number" && typeof bbUpperLast === "number" && lastClose > bbUpperLast) bandRead = "Above upper band";
-    if (typeof lastClose === "number" && typeof bbLowerLast === "number" && lastClose < bbLowerLast) bandRead = "Below lower band";
+      if (indicatorName === "Bollinger(20,2)") {
+        let bandRead = "Inside bands";
+        if (typeof lastClose === "number" && typeof bbUpperLast === "number" && lastClose > bbUpperLast) bandRead = "Above upper band";
+        if (typeof lastClose === "number" && typeof bbLowerLast === "number" && lastClose < bbLowerLast) bandRead = "Below lower band";
 
-    return {
-      title: "Bollinger Insight",
-      accent: compareTo(lastClose, "BB mid", bbMidLast),
-      stats: [
-        { label: "Upper band", value: formatMaybeNumber(bbUpperLast) },
-        { label: "Mid band", value: formatMaybeNumber(bbMidLast) },
-        { label: "Lower band", value: formatMaybeNumber(bbLowerLast) },
-        { label: "Band location", value: bandRead },
-      ],
-      note: "Bollinger Bands help show when price is expanding, compressing, or pushing into an extreme zone.",
-    };
-  }
+        return {
+          key: "Bollinger(20,2)",
+          title: "Bollinger Insight",
+          accent: compareTo(lastClose, "BB mid", bbMidLast),
+          stats: [
+            { label: "Upper band", value: formatMaybeNumber(bbUpperLast) },
+            { label: "Mid band", value: formatMaybeNumber(bbMidLast) },
+            { label: "Lower band", value: formatMaybeNumber(bbLowerLast) },
+            { label: "Band location", value: bandRead },
+          ],
+          note: "Bollinger Bands help show when price is expanding, compressing, or pushing into an extreme zone.",
+        };
+      }
 
-  if (indicator === "RSI(14)") {
-    return {
-      title: "RSI Insight",
-      accent: compareOscillator("RSI(14)", rsiLast, 30, 70),
-      stats: [
-        { label: "RSI value", value: formatMaybeNumber(rsiLast) },
-        {
-          label: "Zone",
-          value: typeof rsiLast === "number" ? (rsiLast >= 70 ? "Overbought" : rsiLast <= 30 ? "Oversold" : "Neutral") : "—",
-        },
-        { label: "Divergence", value: divergenceLabel(divergence.rsi) },
-        {
-          label: "Momentum",
-          value:
-            rsi14Arr.length >= 4 &&
-            typeof rsi14Arr[rsi14Arr.length - 1] === "number" &&
-            typeof rsi14Arr[rsi14Arr.length - 4] === "number"
-              ? rsi14Arr[rsi14Arr.length - 1]! > rsi14Arr[rsi14Arr.length - 4]!
-                ? "Improving"
-                : "Weakening"
-              : "—",
-        },
-      ],
-      note: "RSI helps show whether momentum is hot, weak, or potentially diverging from price.",
-    };
-  }
+      if (indicatorName === "RSI(14)") {
+        return {
+          key: "RSI(14)",
+          title: "RSI Insight",
+          accent: compareOscillator("RSI(14)", rsiLast, 30, 70),
+          stats: [
+            { label: "RSI value", value: formatMaybeNumber(rsiLast) },
+            {
+              label: "Zone",
+              value:
+                typeof rsiLast === "number"
+                  ? rsiLast >= 70
+                    ? "Overbought"
+                    : rsiLast <= 30
+                    ? "Oversold"
+                    : "Neutral"
+                  : "—",
+            },
+            { label: "Divergence", value: divergenceLabel(divergence.rsi) },
+            {
+              label: "Momentum",
+              value:
+                rsi14Arr.length >= 4 &&
+                typeof rsi14Arr[rsi14Arr.length - 1] === "number" &&
+                typeof rsi14Arr[rsi14Arr.length - 4] === "number"
+                  ? rsi14Arr[rsi14Arr.length - 1]! > rsi14Arr[rsi14Arr.length - 4]!
+                    ? "Improving"
+                    : "Weakening"
+                  : "—",
+            },
+          ],
+          note: "RSI helps show whether momentum is hot, weak, or potentially diverging from price.",
+        };
+      }
 
-  if (indicator === "MACD(12,26,9)") {
-    return {
-      title: "MACD Insight",
-      accent: compareMacdHistogram(lastClose, macdHistLast),
-      stats: [
-        { label: "MACD line", value: formatMaybeNumber(macdLineLast, 4) },
-        { label: "Signal line", value: formatMaybeNumber(macdSignalLast, 4) },
-        { label: "Histogram", value: formatMaybeNumber(macdHistLast, 4) },
-        { label: "Divergence", value: divergenceLabel(divergence.macd) },
-      ],
-      note: "MACD is best for reading directional momentum, line cross behaviour, and whether momentum is strengthening or fading.",
-    };
-  }
+      if (indicatorName === "MACD(12,26,9)") {
+        return {
+          key: "MACD(12,26,9)",
+          title: "MACD Insight",
+          accent: compareMacdHistogram(lastClose, macdHistLast),
+          stats: [
+            { label: "MACD line", value: formatMaybeNumber(macdLineLast, 4) },
+            { label: "Signal line", value: formatMaybeNumber(macdSignalLast, 4) },
+            { label: "Histogram", value: formatMaybeNumber(macdHistLast, 4) },
+            { label: "Divergence", value: divergenceLabel(divergence.macd) },
+          ],
+          note: "MACD is best for reading directional momentum, line cross behaviour, and whether momentum is strengthening or fading.",
+        };
+      }
 
-  if (indicator === "Stochastic(14,3)") {
-    return {
-      title: "Stochastic Insight",
-      accent: compareOscillator("Stochastic %K", stochLast, 20, 80),
-      stats: [
-        { label: "%K", value: formatMaybeNumber(lastNum(stochK)) },
-        { label: "%D", value: formatMaybeNumber(lastNum(stochD)) },
-        {
-          label: "Zone",
-          value: typeof stochLast === "number" ? (stochLast >= 80 ? "Overbought" : stochLast <= 20 ? "Oversold" : "Neutral") : "—",
-        },
-        { label: "Use case", value: "Fast stretch read" },
-      ],
-      note: "Stochastic reacts quickly, so it is useful for spotting short-term stretch before price mean reverts or continues.",
-    };
-  }
+      if (indicatorName === "Stochastic(14,3)") {
+        return {
+          key: "Stochastic(14,3)",
+          title: "Stochastic Insight",
+          accent: compareOscillator("Stochastic %K", stochLast, 20, 80),
+          stats: [
+            { label: "%K", value: formatMaybeNumber(lastNum(stochK)) },
+            { label: "%D", value: formatMaybeNumber(lastNum(stochD)) },
+            {
+              label: "Zone",
+              value:
+                typeof stochLast === "number"
+                  ? stochLast >= 80
+                    ? "Overbought"
+                    : stochLast <= 20
+                    ? "Oversold"
+                    : "Neutral"
+                  : "—",
+            },
+            { label: "Use case", value: "Fast stretch read" },
+          ],
+          note: "Stochastic reacts quickly, so it is useful for spotting short-term stretch before price mean reverts or continues.",
+        };
+      }
 
-  if (indicator === "ATR(14)") {
-    const ratio =
-      typeof atrLast === "number" && typeof atrSmaLast === "number" && atrSmaLast > 0 ? atrLast / atrSmaLast : null;
+      if (indicatorName === "ATR(14)") {
+        const ratio =
+          typeof atrLast === "number" && typeof atrSmaLast === "number" && atrSmaLast > 0
+            ? atrLast / atrSmaLast
+            : null;
 
-    return {
-      title: "ATR Insight",
-      accent: compareSpike("ATR(14)", atrLast, atrSmaLast, 1.5, "higher = more volatility"),
-      stats: [
-        { label: "ATR value", value: formatMaybeNumber(atrLast) },
-        { label: "ATR vs 20SMA", value: ratio == null ? "—" : `${ratio.toFixed(2)}×` },
-        {
-          label: "Volatility",
-          value: ratio == null ? "—" : ratio >= 1.5 ? "Elevated" : ratio <= 0.85 ? "Quiet" : "Normal",
-        },
-        { label: "Use case", value: "Risk / stop sizing" },
-      ],
-      note: "ATR does not tell direction. It tells how much price has been moving and whether volatility is heating up or cooling down.",
-    };
-  }
+        return {
+          key: "ATR(14)",
+          title: "ATR Insight",
+          accent: compareSpike("ATR(14)", atrLast, atrSmaLast, 1.5, "higher = more volatility"),
+          stats: [
+            { label: "ATR value", value: formatMaybeNumber(atrLast) },
+            { label: "ATR vs 20SMA", value: ratio == null ? "—" : `${ratio.toFixed(2)}×` },
+            {
+              label: "Volatility",
+              value: ratio == null ? "—" : ratio >= 1.5 ? "Elevated" : ratio <= 0.85 ? "Quiet" : "Normal",
+            },
+            { label: "Use case", value: "Risk / stop sizing" },
+          ],
+          note: "ATR does not tell direction. It tells how much price has been moving and whether volatility is heating up or cooling down.",
+        };
+      }
 
-  if (indicator === "Volume") {
-    const ratio =
-      typeof volumeLast === "number" && typeof volumeSmaLast === "number" && volumeSmaLast > 0
-        ? volumeLast / volumeSmaLast
-        : null;
+      if (indicatorName === "Volume") {
+        const ratio =
+          typeof volumeLast === "number" && typeof volumeSmaLast === "number" && volumeSmaLast > 0
+            ? volumeLast / volumeSmaLast
+            : null;
 
-    return {
-      title: "Volume Insight",
-      accent: compareSpike("Volume", volumeLast, volumeSmaLast, 1.8, "higher = more activity"),
-      stats: [
-        { label: "Volume", value: typeof volumeLast === "number" ? volumeLast.toLocaleString() : "—" },
-        { label: "20-day avg", value: typeof volumeSmaLast === "number" ? Math.round(volumeSmaLast).toLocaleString() : "—" },
-        { label: "Volume ratio", value: ratio == null ? "—" : `${ratio.toFixed(2)}×` },
-        {
-          label: "Participation",
-          value: ratio == null ? "—" : ratio >= 1.8 ? "Heavy" : ratio <= 0.8 ? "Light" : "Normal",
-        },
-      ],
-      note: "Volume helps judge whether a move has real participation behind it or is happening on lighter activity.",
-    };
-  }
+        return {
+          key: "Volume",
+          title: "Volume Insight",
+          accent: compareSpike("Volume", volumeLast, volumeSmaLast, 1.8, "higher = more activity"),
+          stats: [
+            { label: "Volume", value: typeof volumeLast === "number" ? volumeLast.toLocaleString() : "—" },
+            { label: "20-day avg", value: typeof volumeSmaLast === "number" ? Math.round(volumeSmaLast).toLocaleString() : "—" },
+            { label: "Volume ratio", value: ratio == null ? "—" : `${ratio.toFixed(2)}×` },
+            {
+              label: "Participation",
+              value: ratio == null ? "—" : ratio >= 1.8 ? "Heavy" : ratio <= 0.8 ? "Light" : "Normal",
+            },
+          ],
+          note: "Volume helps judge whether a move has real participation behind it or is happening on lighter activity.",
+        };
+      }
 
-  return null;
+      return null;
+    })
+    .filter(Boolean) as Array<{
+      key: string;
+      title: string;
+      accent: { label: string; detail: string };
+      stats: { label: string; value: string }[];
+      note: string;
+    }>;
 }, [
-  indicator,
+  panelIndicators,
   lastClose,
   lastMA50,
   lastMA200,
@@ -2080,9 +2124,6 @@ const indicatorInsight = useMemo(() => {
   ma50,
   ema20Arr,
   vwapArr,
-  bollUpper,
-  bollMid,
-  bollLower,
   bbUpperLast,
   bbLowerLast,
   bbMidLast,
@@ -2100,6 +2141,7 @@ const indicatorInsight = useMemo(() => {
   volumeLast,
   volumeSmaLast,
 ]);
+
 
 function SmallNavLink(props: { href: string; children: React.ReactNode }) {
 const isLearn = props.href === "/learn";
@@ -2569,137 +2611,243 @@ function OverviewPanel() {
 }
 
 function IndicatorPanel() {
-  if (!indicatorInsight) return null;
+  if (!indicatorInsights.length) return null;
 
   return (
-    <SectionCard title={indicatorInsight.title}>
-      <div style={{ display: "grid", gap: 14 }}>
-        <div
-          style={{
-            border: `1px solid ${COLORS.border}`,
-            borderRadius: 14,
-            padding: 14,
-            background: COLORS.controlBg,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <span style={{ width: 10, height: 10, borderRadius: 999, background: signalDotColor(indicatorInsight.accent.label), flex: "0 0 auto" }} />
-            <div style={{ fontWeight: 900 }}>{indicatorInsight.accent.label.replace(/[🟢🔴🟡⚡]/g, "").trim()}</div>
-          </div>
-          <div style={{ marginTop: 8, color: COLORS.mutedFg, lineHeight: 1.5 }}>{indicatorInsight.accent.detail}</div>
-        </div>
+    <SectionCard
+      title={indicatorInsights.length > 1 ? "Selected Indicator Insights" : indicatorInsights[0].title}
+    >
+      <div style={{ display: "grid", gap: 16 }}>
+        {indicatorInsights.map((insight) => (
+          <div
+            key={insight.key}
+            style={{
+              display: "grid",
+              gap: 14,
+              paddingBottom: 16,
+              borderBottom: `1px solid ${COLORS.border}`,
+            }}
+          >
+            <div style={{ fontWeight: 900, fontSize: 16 }}>{insight.title}</div>
 
-        <div className="msh-info-grid">
-          {indicatorInsight.stats.map((row) => (
             <div
-              key={row.label}
               style={{
                 border: `1px solid ${COLORS.border}`,
                 borderRadius: 14,
                 padding: 14,
                 background: COLORS.controlBg,
-                minWidth: 0,
               }}
             >
-              <div style={{ fontSize: 12, color: COLORS.mutedFg, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                {row.label}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <span
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: 999,
+                    background: signalDotColor(insight.accent.label),
+                    flex: "0 0 auto",
+                  }}
+                />
+                <div style={{ fontWeight: 900 }}>
+                  {insight.accent.label.replace(/[🟢🔴🟡⚡]/g, "").trim()}
+                </div>
               </div>
-              <div style={{ marginTop: 6, fontSize: 16, fontWeight: 900, wordBreak: "break-word" }}>{row.value}</div>
+              <div style={{ marginTop: 8, color: COLORS.mutedFg, lineHeight: 1.5 }}>
+                {insight.accent.detail}
+              </div>
             </div>
-          ))}
-        </div>
 
-        <div style={{ color: COLORS.mutedFg, lineHeight: 1.55 }}>{indicatorInsight.note}</div>
+            <div className="msh-info-grid">
+              {insight.stats.map((row) => (
+                <div
+                  key={`${insight.key}-${row.label}`}
+                  style={{
+                    border: `1px solid ${COLORS.border}`,
+                    borderRadius: 14,
+                    padding: 14,
+                    background: COLORS.controlBg,
+                    minWidth: 0,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: COLORS.mutedFg,
+                      fontWeight: 800,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.04em",
+                    }}
+                  >
+                    {row.label}
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 6,
+                      fontSize: 16,
+                      fontWeight: 900,
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {row.value}
+                  </div>
+                </div>
+              ))}
+            </div>
 
-        <div style={{ paddingTop: 12, borderTop: `1px solid ${COLORS.border}`, fontSize: 12, color: COLORS.mutedFg, fontWeight: 700 }}>
-          Current view: {currentIndicatorName}
+            <div style={{ color: COLORS.mutedFg, lineHeight: 1.55 }}>{insight.note}</div>
+          </div>
+        ))}
+
+        <div
+          style={{
+            paddingTop: 12,
+            fontSize: 12,
+            color: COLORS.mutedFg,
+            fontWeight: 700,
+          }}
+        >
+          Selected indicators: {selectedIndicatorsText}
         </div>
       </div>
     </SectionCard>
   );
 }
 
+  function buildSnapshotRowsForIndicator(indicatorName: Overlay) {
+  const rows: { label: string; tone: OverviewItem["tone"]; value: string }[] = [];
+
+  if (indicatorName === "RSI(14)") {
+    rows.push({
+      label: "RSI",
+      tone: typeof rsiLast === "number" ? (rsiLast >= 70 ? "red" : rsiLast <= 30 ? "green" : "yellow") : "muted",
+      value: typeof rsiLast === "number" ? rsiLast.toFixed(2) : "—",
+    });
+    rows.push({
+      label: "RSI Div",
+      tone: divergence.rsi === "none" ? "muted" : divergenceTone(divergence.rsi),
+      value: divergence.rsi === "none" ? "—" : divergenceLabel(divergence.rsi),
+    });
+    return rows;
+  }
+
+  if (indicatorName === "MACD(12,26,9)") {
+    rows.push({
+      label: "MACD Hist",
+      tone: typeof macdHistLast === "number" ? (macdHistLast > 0 ? "green" : macdHistLast < 0 ? "red" : "yellow") : "muted",
+      value: typeof macdHistLast === "number" ? macdHistLast.toFixed(4) : "—",
+    });
+    rows.push({
+      label: "MACD Div",
+      tone: divergence.macd === "none" ? "muted" : divergenceTone(divergence.macd),
+      value: divergence.macd === "none" ? "—" : divergenceLabel(divergence.macd),
+    });
+    return rows;
+  }
+
+  if (indicatorName === "MA50") {
+    rows.push({
+      label: "MA50 Distance",
+      tone: typeof ma50Pct === "number" ? (Math.abs(ma50Pct) >= 5 ? "red" : Math.abs(ma50Pct) >= 2 ? "orange" : "yellow") : "muted",
+      value: ma50Pct == null ? "—" : `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}%`,
+    });
+    rows.push({ label: "MA50 Value", tone: "muted", value: formatMaybeNumber(lastMA50) });
+    return rows;
+  }
+
+  if (indicatorName === "MA200") {
+    rows.push({
+      label: "MA200 Distance",
+      tone: typeof ma200Pct === "number" ? (Math.abs(ma200Pct) >= 10 ? "red" : Math.abs(ma200Pct) >= 4 ? "orange" : "yellow") : "muted",
+      value: ma200Pct == null ? "—" : `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}%`,
+    });
+    rows.push({ label: "MA200 Value", tone: "muted", value: formatMaybeNumber(lastMA200) });
+    return rows;
+  }
+
+  if (indicatorName === "Volume") {
+    const ratio =
+      typeof volumeLast === "number" && typeof volumeSmaLast === "number" && volumeSmaLast > 0
+        ? volumeLast / volumeSmaLast
+        : null;
+
+    rows.push({
+      label: "Volume Ratio",
+      tone: ratio == null ? "muted" : ratio >= 1.8 ? "orange" : "yellow",
+      value: ratio == null ? "—" : `${ratio.toFixed(2)}×`,
+    });
+    return rows;
+  }
+
+  if (indicatorName === "ATR(14)") {
+    const ratio =
+      typeof atrLast === "number" && typeof atrSmaLast === "number" && atrSmaLast > 0
+        ? atrLast / atrSmaLast
+        : null;
+
+    rows.push({
+      label: "ATR Ratio",
+      tone: ratio == null ? "muted" : ratio >= 1.5 ? "orange" : "yellow",
+      value: ratio == null ? "—" : `${ratio.toFixed(2)}×`,
+    });
+    return rows;
+  }
+
+  if (indicatorName === "VWAP") {
+    rows.push({
+      label: "VWAP Distance",
+      tone: typeof vwapPct === "number" ? (Math.abs(vwapPct) >= 5 ? "red" : Math.abs(vwapPct) >= 2 ? "orange" : "yellow") : "muted",
+      value: vwapPct == null ? "—" : `${vwapPct >= 0 ? "+" : ""}${vwapPct.toFixed(2)}%`,
+    });
+    rows.push({ label: "VWAP Value", tone: "muted", value: formatMaybeNumber(lastNum(vwapArr)) });
+    return rows;
+  }
+
+  if (indicatorName === "Bollinger(20,2)") {
+    rows.push({ label: "BB Upper", tone: "muted", value: formatMaybeNumber(bbUpperLast) });
+    rows.push({ label: "BB Lower", tone: "muted", value: formatMaybeNumber(bbLowerLast) });
+    return rows;
+  }
+
+  if (indicatorName === "EMA20") {
+    rows.push({
+      label: "EMA20 Distance",
+      tone: typeof ema20Pct === "number" ? (Math.abs(ema20Pct) >= 5 ? "red" : Math.abs(ema20Pct) >= 2 ? "orange" : "yellow") : "muted",
+      value: ema20Pct == null ? "—" : `${ema20Pct >= 0 ? "+" : ""}${ema20Pct.toFixed(2)}%`,
+    });
+    rows.push({ label: "EMA20 Value", tone: "muted", value: formatMaybeNumber(lastNum(ema20Arr)) });
+    return rows;
+  }
+
+  if (indicatorName === "Stochastic(14,3)") {
+    rows.push({
+      label: "Stoch %K",
+      tone: typeof stochLast === "number" ? (stochLast >= 80 ? "red" : stochLast <= 20 ? "green" : "yellow") : "muted",
+      value: typeof stochLast === "number" ? stochLast.toFixed(2) : "—",
+    });
+    rows.push({
+      label: "Stoch %D",
+      tone: "muted",
+      value: formatMaybeNumber(lastNum(stochD)),
+    });
+    return rows;
+  }
+
+  return rows;
+}
+
+
 function BreakdownPanel() {
   const rows = indicator === "None" ? overviewItems : [];
+  const focusedRows =
+    indicator !== "None"
+      ? panelIndicators.flatMap((indicatorName) => buildSnapshotRowsForIndicator(indicatorName))
+      : [];
 
   if (indicator !== "None") {
-    const focusedRows: { label: string; tone: OverviewItem["tone"]; value: string }[] = [];
-
-    if (indicator === "RSI(14)") {
-      focusedRows.push({
-        label: "RSI",
-        tone: typeof rsiLast === "number" ? (rsiLast >= 70 ? "red" : rsiLast <= 30 ? "green" : "yellow") : "muted",
-        value: typeof rsiLast === "number" ? rsiLast.toFixed(2) : "—",
-      });
-      focusedRows.push({
-        label: "RSI Div",
-        tone: divergence.rsi === "none" ? "muted" : divergenceTone(divergence.rsi),
-        value: divergence.rsi === "none" ? "—" : divergenceLabel(divergence.rsi),
-      });
-    } else if (indicator === "MACD(12,26,9)") {
-      focusedRows.push({
-        label: "Histogram",
-        tone: typeof macdHistLast === "number" ? (macdHistLast > 0 ? "green" : macdHistLast < 0 ? "red" : "yellow") : "muted",
-        value: typeof macdHistLast === "number" ? macdHistLast.toFixed(4) : "—",
-      });
-      focusedRows.push({
-        label: "MACD Div",
-        tone: divergence.macd === "none" ? "muted" : divergenceTone(divergence.macd),
-        value: divergence.macd === "none" ? "—" : divergenceLabel(divergence.macd),
-      });
-    } else if (indicator === "MA50") {
-      focusedRows.push({
-        label: "Distance",
-        tone: typeof ma50Pct === "number" ? (Math.abs(ma50Pct) >= 5 ? "red" : Math.abs(ma50Pct) >= 2 ? "orange" : "yellow") : "muted",
-        value: ma50Pct == null ? "—" : `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}%`,
-      });
-      focusedRows.push({ label: "MA50", tone: "muted", value: formatMaybeNumber(lastMA50) });
-    } else if (indicator === "MA200") {
-      focusedRows.push({
-        label: "Distance",
-        tone: typeof ma200Pct === "number" ? (Math.abs(ma200Pct) >= 10 ? "red" : Math.abs(ma200Pct) >= 4 ? "orange" : "yellow") : "muted",
-        value: ma200Pct == null ? "—" : `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}%`,
-      });
-      focusedRows.push({ label: "MA200", tone: "muted", value: formatMaybeNumber(lastMA200) });
-    } else if (indicator === "Volume") {
-      const ratio = typeof volumeLast === "number" && typeof volumeSmaLast === "number" && volumeSmaLast > 0 ? volumeLast / volumeSmaLast : null;
-      focusedRows.push({
-        label: "Volume ratio",
-        tone: ratio == null ? "muted" : ratio >= 1.8 ? "orange" : "yellow",
-        value: ratio == null ? "—" : `${ratio.toFixed(2)}×`,
-      });
-    } else if (indicator === "ATR(14)") {
-      const ratio = typeof atrLast === "number" && typeof atrSmaLast === "number" && atrSmaLast > 0 ? atrLast / atrSmaLast : null;
-      focusedRows.push({
-        label: "ATR ratio",
-        tone: ratio == null ? "muted" : ratio >= 1.5 ? "orange" : "yellow",
-        value: ratio == null ? "—" : `${ratio.toFixed(2)}×`,
-      });
-    } else if (indicator === "VWAP") {
-      focusedRows.push({
-        label: "Distance",
-        tone: typeof vwapPct === "number" ? (Math.abs(vwapPct) >= 5 ? "red" : Math.abs(vwapPct) >= 2 ? "orange" : "yellow") : "muted",
-        value: vwapPct == null ? "—" : `${vwapPct >= 0 ? "+" : ""}${vwapPct.toFixed(2)}%`,
-      });
-    } else if (indicator === "Bollinger(20,2)") {
-      focusedRows.push({ label: "Upper", tone: "muted", value: formatMaybeNumber(bbUpperLast) });
-      focusedRows.push({ label: "Lower", tone: "muted", value: formatMaybeNumber(bbLowerLast) });
-    } else if (indicator === "EMA20") {
-      focusedRows.push({
-        label: "Distance",
-        tone: typeof ema20Pct === "number" ? (Math.abs(ema20Pct) >= 5 ? "red" : Math.abs(ema20Pct) >= 2 ? "orange" : "yellow") : "muted",
-        value: ema20Pct == null ? "—" : `${ema20Pct >= 0 ? "+" : ""}${ema20Pct.toFixed(2)}%`,
-      });
-    } else if (indicator === "Stochastic(14,3)") {
-      focusedRows.push({
-        label: "%K",
-        tone: typeof stochLast === "number" ? (stochLast >= 80 ? "red" : stochLast <= 20 ? "green" : "yellow") : "muted",
-        value: typeof stochLast === "number" ? stochLast.toFixed(2) : "—",
-      });
-      focusedRows.push({ label: "%D", tone: "muted", value: formatMaybeNumber(lastNum(stochD)) });
-    }
-
     return (
+
+
+  
       <SectionCard
         title="Indicator Snapshot"
         right={<BreakdownHelpButton indicator={indicator} />}
@@ -2727,6 +2875,17 @@ function BreakdownPanel() {
           ) : (
             <div style={{ opacity: 0.75 }}>No additional snapshot available.</div>
           )}
+
+          <div
+            style={{
+              paddingTop: 6,
+              fontSize: 12,
+              color: COLORS.mutedFg,
+              fontWeight: 700,
+            }}
+          >
+            Selected indicators: {selectedIndicatorsText}
+          </div>
 
           <button
             type="button"
