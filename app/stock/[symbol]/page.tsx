@@ -1,35 +1,36 @@
-import React from "react";
+import type { Metadata } from "next";
+import StockSymbolPageClient from "./StockSymbolPageClient";
 
 type Props = {
-  params: { symbol: string };
+  params: Promise<{ symbol: string }>;
 };
 
-export default function StockPage({ params }: Props) {
-  const symbol = params.symbol.toUpperCase();
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { symbol } = await params;
+  const upper = symbol.toUpperCase();
 
-  return (
-    <main
-      style={{
-        padding: 0,
-        fontFamily: "system-ui, Arial",
-        background: "#06080d",
-        color: "#f1f5f9",
-        minHeight: "100vh",
-      }}
-    >
-      <div className="wrap">
-        <h1>{symbol} Stock Page</h1>
+  return {
+    title: `${upper} Stock Analysis, Trend, Moving Averages & Technical Summary | MyStockHarbor`,
+    description: `View ${upper} stock analysis with trend structure, moving averages, technical summary and a direct link into the MyStockHarbor chart dashboard.`,
+    alternates: {
+      canonical: `/stock/${upper}`,
+    },
+    openGraph: {
+      title: `${upper} Stock Analysis | MyStockHarbor`,
+      description: `Trend, market structure and technical analysis for ${upper}.`,
+      url: `/stock/${upper}`,
+      siteName: "MyStockHarbor",
+      type: "article",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${upper} Stock Analysis | MyStockHarbor`,
+      description: `Trend, moving averages and technical summary for ${upper}.`,
+    },
+  };
+}
 
-        <p>This will become the full SEO stock analysis page.</p>
-      </div>
-
-      <style>{`
-        .wrap {
-          max-width: 1100px;
-          margin: 0 auto;
-          padding: 28px 20px 40px;
-        }
-      `}</style>
-    </main>
-  );
+export default async function StockPage({ params }: Props) {
+  const { symbol } = await params;
+  return <StockSymbolPageClient symbol={symbol.toUpperCase()} />;
 }
