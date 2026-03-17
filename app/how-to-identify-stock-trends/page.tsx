@@ -225,6 +225,25 @@ export default function HowToIdentifyStockTrendsPage() {
           </div>
         </section>
 
+        <div
+  style={{
+    marginTop: 18,
+    borderRadius: 16,
+    overflow: "hidden",
+    border: "1px solid rgba(255,255,255,0.12)",
+  }}
+>
+  <img
+    src="/how-to-identify-stock-trends/01.png"
+    alt="Stock trend example showing uptrend and downtrend structure"
+    style={{
+      width: "100%",
+      display: "block",
+    }}
+  />
+</div>
+
+
         <section style={contentSectionStyle()}>
           <h2 style={sectionHeadingStyle()}>1. Start with price structure</h2>
 
@@ -252,52 +271,88 @@ export default function HowToIdentifyStockTrendsPage() {
           </p>
         </section>
 
-        <section style={contentSectionStyle()}>
-          <h2 style={sectionHeadingStyle()}>2. Use moving averages to simplify the chart</h2>
+<section style={contentSectionStyle()}>
+  <h2 style={sectionHeadingStyle()}>2. Use moving averages to simplify the chart</h2>
 
-          <p style={bodyTextStyle()}>
-            Moving averages are one of the easiest ways for beginners to confirm
-            trend direction. The 50-day and 200-day moving averages are
-            especially useful.
-          </p>
+  <p style={bodyTextStyle()}>
+    Moving averages are one of the easiest ways for beginners to confirm
+    trend direction. The 50-day and 200-day moving averages are
+    especially useful.
+  </p>
 
-          <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
-            <div style={bulletCardStyle()}>
-              Price above MA50 and MA200 often suggests strength
-            </div>
+  <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
+    <div style={bulletCardStyle()}>
+      Price above MA50 and MA200 often suggests strength
+    </div>
 
-            <div style={bulletCardStyle()}>
-              MA50 above MA200 often suggests stronger long-term structure
-            </div>
+    <div style={bulletCardStyle()}>
+      MA50 above MA200 often suggests stronger long-term structure
+    </div>
 
-            <div style={bulletCardStyle()}>
-              Price below those averages often suggests a weaker trend
-            </div>
-          </div>
-        </section>
+    <div style={bulletCardStyle()}>
+      Price below those averages often suggests a weaker trend
+    </div>
+  </div>
 
-        <section style={contentSectionStyle()}>
-          <h2 style={sectionHeadingStyle()}>3. Check whether momentum agrees</h2>
+  <div
+    style={{
+      marginTop: 18,
+      borderRadius: 16,
+      overflow: "hidden",
+      border: "1px solid rgba(255,255,255,0.12)",
+    }}
+  >
+    <img
+      src="/how-to-identify-stock-trends/02.png"
+      alt="Stock chart showing moving averages used to identify trend"
+      style={{
+        width: "100%",
+        display: "block",
+      }}
+    />
+  </div>
+</section>
 
-          <p style={bodyTextStyle()}>
-            A healthy trend usually has momentum behind it. This is where
-            indicators like RSI and MACD can help.
-          </p>
+<section style={contentSectionStyle()}>
+  <h2 style={sectionHeadingStyle()}>3. Check whether momentum agrees</h2>
 
-          <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
-            <div style={bulletCardStyle()}>
-              Strong bullish trends often keep RSI firm and MACD positive
-            </div>
+  <p style={bodyTextStyle()}>
+    A healthy trend usually has momentum behind it. This is where
+    indicators like RSI and MACD can help.
+  </p>
 
-            <div style={bulletCardStyle()}>
-              Weakening trends often show fading MACD or bearish divergence
-            </div>
+  <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
+    <div style={bulletCardStyle()}>
+      Strong bullish trends often keep RSI firm and MACD positive
+    </div>
 
-            <div style={bulletCardStyle()}>
-              Choppy trends often produce mixed and unreliable momentum signals
-            </div>
-          </div>
-        </section>
+    <div style={bulletCardStyle()}>
+      Weakening trends often show fading MACD or bearish divergence
+    </div>
+
+    <div style={bulletCardStyle()}>
+      Choppy trends often produce mixed and unreliable momentum signals
+    </div>
+  </div>
+
+  <div
+    style={{
+      marginTop: 18,
+      borderRadius: 16,
+      overflow: "hidden",
+      border: "1px solid rgba(255,255,255,0.12)",
+    }}
+  >
+    <img
+      src="/how-to-identify-stock-trends/03.png"
+      alt="RSI and MACD momentum confirmation example on a stock chart"
+      style={{
+        width: "100%",
+        display: "block",
+      }}
+    />
+  </div>
+</section>
 
         <section style={contentSectionStyle()}>
           <h2 style={sectionHeadingStyle()}>4. Recognise pullbacks versus reversals</h2>
