@@ -3793,7 +3793,7 @@ onKeyDown={(e) => {
                 borderBottom: `1px solid ${COLORS.border}`,
               }}
             >
-              <div style={{ fontWeight: 900 }}>Expanded Chart ({currentIndicatorName})</div>
+        <div style={{ fontWeight: 900 }}>Expanded Chart ({chartIndicatorName})</div>
 
               <button
                 type="button"
