@@ -2281,8 +2281,41 @@ function OverviewPanel() {
           }}
         >
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 950, lineHeight: 1.1 }}>{symbol}</div>
-            <div style={{ marginTop: 4, color: COLORS.mutedFg, fontWeight: 700 }}>{symbolName || "—"}</div>
+            <div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 950, lineHeight: 1.1 }}>
+              {symbol}
+            </div>
+
+            <div
+              style={{
+                marginTop: 4,
+                color: COLORS.mutedFg,
+                fontWeight: 700,
+              }}
+            >
+              {symbolName || "—"}
+            </div>
+
+            <div style={{ marginTop: 10 }}>
+              <Link
+                href={`/stock/${encodeURIComponent(symbol)}`}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "8px 12px",
+                  borderRadius: 10,
+                  border: `1px solid ${COLORS.controlBorder}`,
+                  background: COLORS.controlBg,
+                  color: COLORS.isDark ? "#93c5fd" : "#2563eb",
+                  textDecoration: "none",
+                  fontWeight: 800,
+                  fontSize: 12,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Open stock page →
+              </Link>
+            </div>
           </div>
 
           <div
@@ -2302,7 +2335,13 @@ function OverviewPanel() {
             >
               Last price
             </div>
-            <div style={{ fontSize: isMobile ? 22 : 28, fontWeight: 950, lineHeight: 1.05 }}>
+            <div
+              style={{
+                fontSize: isMobile ? 22 : 28,
+                fontWeight: 950,
+                lineHeight: 1.05,
+              }}
+            >
               {quote?.price != null ? `$${quote.price.toFixed(2)}` : "—"}
             </div>
           </div>
