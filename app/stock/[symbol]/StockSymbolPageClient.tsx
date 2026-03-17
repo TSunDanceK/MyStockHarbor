@@ -604,27 +604,59 @@ export default function StockSymbolPageClient({ symbol }: { symbol: string }) {
                   }}
                 >
                   <div style={{ fontSize: 13, opacity: 0.74 }}>
-                    Prefer the full tool layout? Open the live dashboard view for {symbol}.
+                    Prefer the full tool layout? Open the live dashboard view for {symbol}, or view it on TradingView.
                   </div>
 
-                  <Link
-                    href={`/?symbol=${encodeURIComponent(symbol)}`}
+                  <div
                     style={{
-                      display: "inline-flex",
+                      display: "flex",
+                      gap: 10,
                       alignItems: "center",
-                      justifyContent: "center",
-                      padding: "12px 16px",
-                      borderRadius: 14,
-                      border: "1px solid rgba(59,130,246,0.45)",
-                      background:
-                        "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(37,99,235,0.12))",
-                      color: "#eff6ff",
-                      textDecoration: "none",
-                      fontWeight: 900,
+                      flexWrap: "wrap",
                     }}
                   >
-                    Open {symbol} in Dashboard →
-                  </Link>
+                    <Link
+                      href={`/?symbol=${encodeURIComponent(symbol)}`}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: "12px 16px",
+                        borderRadius: 14,
+                        border: "1px solid rgba(59,130,246,0.45)",
+                        background:
+                          "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(37,99,235,0.12))",
+                        color: "#eff6ff",
+                        textDecoration: "none",
+                        fontWeight: 900,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Open {symbol} in Dashboard →
+                    </Link>
+
+                    <a
+                      href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`}
+                      target="_blank"
+                      rel="noopener noreferrer sponsored"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: "12px 16px",
+                        borderRadius: 14,
+                        border: "1px solid rgba(34,197,94,0.40)",
+                        background:
+                          "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(16,185,129,0.10))",
+                        color: "#ecfdf5",
+                        textDecoration: "none",
+                        fontWeight: 900,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Open in TradingView ↗
+                    </a>
+                  </div>
                 </div>
               </section>
 
