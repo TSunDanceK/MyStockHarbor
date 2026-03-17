@@ -153,24 +153,89 @@ function buildLongSummary(args: {
   const ma50Pct = pctFromBase(lastClose, ma50);
   const ma200Pct = pctFromBase(lastClose, ma200);
 
-  let trendParagraph = `${companyLead} currently looks ${trend === "Uptrend" ? "constructive overall" : trend === "Downtrend" ? "weaker on the chart overall" : "more mixed than cleanly trending"}. The latest available price is ${priceText}, and ${trendScore.passed} of ${trendScore.total} core trend checks are currently passing.`;
-
-  if (typeof ma50Pct === "number" && typeof ma200Pct === "number") {
-    trendParagraph += ` Price is ${ma50Pct >= 0 ? "trading above" : "trading below"} the 50-day moving average by ${Math.abs(ma50Pct).toFixed(1)}% and ${ma200Pct >= 0 ? "above" : "below"} the 200-day moving average by ${Math.abs(ma200Pct).toFixed(1)}%.`;
-  }
-
-  let momentumParagraph = `${symbol} currently looks fairly balanced from a momentum perspective.`;
-  if (typeof rsi === "number") {
-    if (rsi >= 70) {
-      momentumParagraph = `${symbol} currently has an RSI reading of ${rsi.toFixed(1)}, which points to stronger short-term momentum but also a more extended backdrop. In plain English, this can happen when a stock has already run hard, so trend traders may still like the strength while dip buyers may prefer to wait for a pullback.`;
-    } else if (rsi <= 30) {
-      momentumParagraph = `${symbol} currently has an RSI reading of ${rsi.toFixed(1)}, which suggests weaker short-term momentum and a more oversold condition. Some traders may review this type of setup for a bounce or dip-watch idea, but oversold readings on their own do not guarantee a reversal.`;
+  let trendLead = `${companyLead} currently looks mixed rather than cleanly directional.`;
+  if (trend === "Uptrend") {
+    if (trendScore.passed === trendScore.total) {
+      trendLead = `${companyLead} is still trading in a constructive trend overall.`;
+    } else if (trendScore.passed >= 2) {
+      trendLead = `${companyLead} still shows some constructive trend features, even if the setup is not perfect.`;
     } else {
-      momentumParagraph = `${symbol} currently has an RSI reading of ${rsi.toFixed(1)}, which sits in a more neutral range. That usually means momentum is not yet stretched enough to strongly argue either an overbought or oversold condition on its own.`;
+      trendLead = `${companyLead} is holding some bullish traits, but the chart no longer looks especially clean.`;
+    }
+  } else if (trend === "Downtrend") {
+    if (trendScore.passed <= 1) {
+      trendLead = `${companyLead} currently looks weaker on the chart and is not showing much trend strength.`;
+    } else {
+      trendLead = `${companyLead} is leaning weaker overall, although not every signal is fully bearish.`;
+    }
+  } else {
+    if (trendScore.passed >= 2) {
+      trendLead = `${companyLead} looks more range-bound than strongly trending, but there are still a few supportive signs on the chart.`;
+    } else {
+      trendLead = `${companyLead} currently looks more uncertain than directional, with a fairly mixed technical picture.`;
     }
   }
 
-  const structureParagraph = `This page is designed to help you quickly understand what the ${symbol} chart looks like before opening the full dashboard. The goal is not to tell you what to buy or sell, but to make it easier to judge whether the chart is trending well, getting stretched, or simply moving in a messier range where patience may matter more.`;
+  let movingAverageText = "";
+  if (typeof ma50Pct === "number" && typeof ma200Pct === "number") {
+    movingAverageText =
+      ` Price is ${ma50Pct >= 0 ? "trading above" : "trading below"} the 50-day moving average by ${Math.abs(ma50Pct).toFixed(1)}% ` +
+      `and ${ma200Pct >= 0 ? "above" : "below"} the 200-day moving average by ${Math.abs(ma200Pct).toFixed(1)}%.`;
+  } else if (typeof ma50Pct === "number") {
+    movingAverageText =
+      ` Price is ${ma50Pct >= 0 ? "trading above" : "trading below"} the 50-day moving average by ${Math.abs(ma50Pct).toFixed(1)}%.`;
+  } else if (typeof ma200Pct === "number") {
+    movingAverageText =
+      ` Price is ${ma200Pct >= 0 ? "trading above" : "trading below"} the 200-day moving average by ${Math.abs(ma200Pct).toFixed(1)}%.`;
+  }
+
+  let trendParagraph =
+    `${trendLead} The latest available price is ${priceText}, and ${trendScore.passed} of ${trendScore.total} core trend checks are currently passing.` +
+    movingAverageText;
+
+  let momentumParagraph = `${symbol} currently looks fairly balanced from a momentum perspective.`;
+
+  if (typeof rsi === "number") {
+    if (rsi >= 75) {
+      momentumParagraph =
+        `${symbol} currently has an RSI reading of ${rsi.toFixed(1)}, which points to very strong short-term momentum but also a fairly extended setup. Stocks can stay strong for longer than expected, but this kind of reading often tells beginners not to confuse strength with low-risk entry timing.`;
+    } else if (rsi >= 70) {
+      momentumParagraph =
+        `${symbol} currently has an RSI reading of ${rsi.toFixed(1)}, which suggests stronger momentum and a more stretched short-term backdrop. Trend traders may still find that attractive, while more patient traders may prefer to wait and see whether the stock cools off first.`;
+    } else if (rsi <= 25) {
+      momentumParagraph =
+        `${symbol} currently has an RSI reading of ${rsi.toFixed(1)}, which places it in a deeply oversold zone. That can sometimes lead to bounce-watch setups, but it can also reflect genuine weakness, so the chart still needs proper confirmation rather than hope alone.`;
+    } else if (rsi <= 30) {
+      momentumParagraph =
+        `${symbol} currently has an RSI reading of ${rsi.toFixed(1)}, which suggests weaker momentum and a more oversold condition. Some traders may review this kind of setup for a rebound or buy-the-dip idea, but oversold readings by themselves do not guarantee a reversal.`;
+    } else if (rsi >= 55) {
+      momentumParagraph =
+        `${symbol} currently has an RSI reading of ${rsi.toFixed(1)}, which leans mildly positive without looking too stretched. In other words, momentum is supportive, but not yet extreme enough to dominate the entire chart read.`;
+    } else if (rsi <= 45) {
+      momentumParagraph =
+        `${symbol} currently has an RSI reading of ${rsi.toFixed(1)}, which leans a little softer than neutral. That does not automatically make the chart bearish, but it does suggest momentum is not especially strong right now.`;
+    } else {
+      momentumParagraph =
+        `${symbol} currently has an RSI reading of ${rsi.toFixed(1)}, which sits in a neutral range. That usually means momentum is not especially stretched in either direction, so traders may need to rely more on chart structure than on oscillator extremes alone.`;
+    }
+  }
+
+  let structureParagraph =
+    `This page is designed to help you quickly understand what the ${symbol} chart looks like before opening the full dashboard. The aim is not to tell you what to buy or sell, but to make it easier to judge whether the stock is trending cleanly, becoming stretched, or simply moving in a more awkward range.`;
+
+  if (trend === "Uptrend") {
+    structureParagraph =
+      `For traders reviewing ${symbol} next, the key question is whether the trend still looks healthy or whether price has started to outrun itself. A strong uptrend can stay strong, but entries often become more difficult when price is already extended, so many traders will watch for pullbacks, support reactions, or fresh bases rather than chasing strength blindly.`;
+  } else if (trend === "Downtrend") {
+    structureParagraph =
+      `For traders reviewing ${symbol} next, the main question is whether weakness is starting to stabilise or whether the chart still looks vulnerable to further downside. Some traders may watch for bounce attempts, but others will want to see stronger proof that the trend is improving before treating the stock as a cleaner setup.`;
+  } else if (typeof rsi === "number" && rsi <= 30) {
+    structureParagraph =
+      `Because ${symbol} is showing a more oversold-style momentum reading inside a mixed structure, the next step is usually to watch how price behaves rather than assuming a rebound is guaranteed. Traders often want to see a stabilisation phase, a stronger reclaim, or some sign that selling pressure is starting to fade.`;
+  } else if (typeof rsi === "number" && rsi >= 70) {
+    structureParagraph =
+      `Because ${symbol} is showing stronger momentum inside a more extended backdrop, the next step is often about timing rather than direction. A stock can keep pushing higher, but many traders will still watch for whether the move stays orderly or starts to look too stretched to offer a comfortable entry.`;
+  }
 
   return {
     trendParagraph,
