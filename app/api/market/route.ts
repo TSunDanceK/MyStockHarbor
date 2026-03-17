@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
+import { Redis } from "@upstash/redis";
 
 export const runtime = "nodejs";
+
+const redis = Redis.fromEnv();
+const REDIS_KEY = "msh:market:state";
 
 type Quote = {
   symbol: string;
