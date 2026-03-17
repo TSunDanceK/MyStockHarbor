@@ -859,6 +859,30 @@ const INDICATORS: Overlay[] = [
   ...Array.from(new Set(BREAKDOWN_DEFS.map((d) => d.overlay))),
 ];
 
+const PRICE_OVERLAY_OPTIONS: Overlay[] = [
+  "MA50",
+  "MA200",
+  "EMA20",
+  "VWAP",
+  "Bollinger(20,2)",
+];
+
+const LOWER_OVERLAY_OPTIONS: Overlay[] = [
+  "RSI(14)",
+  "MACD(12,26,9)",
+  "Stochastic(14,3)",
+  "ATR(14)",
+  "Volume",
+];
+
+function isLowerOverlay(v: Overlay) {
+  return LOWER_OVERLAY_OPTIONS.includes(v);
+}
+
+function isPriceOverlay(v: Overlay) {
+  return PRICE_OVERLAY_OPTIONS.includes(v);
+}
+
 /* ----------------------------- component ----------------------------- */
 
 export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymbol?: string }) {
@@ -932,6 +956,9 @@ useEffect(() => {
   const [windowOffset, setWindowOffset] = useState(0);
 
   const [indicator, setIndicator] = useState<Overlay>("None");
+  const [selectedIndicators, setSelectedIndicators] = useState<Overlay[]>([]);
+  const [indicatorMenuOpen, setIndicatorMenuOpen] = useState(false);
+  const indicatorMenuRef = React.useRef<HTMLDivElement | null>(null);
 
   const [quote, setQuote] = useState<Quote | null>(null);
   const [historyAll, setHistoryAll] = useState<Point[]>([]);
@@ -980,6 +1007,18 @@ useEffect(() => {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [expanded]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (!indicatorMenuRef.current) return;
+      if (!indicatorMenuRef.current.contains(e.target as Node)) {
+        setIndicatorMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1586,12 +1625,72 @@ function prettyIndicatorName(v: Overlay) {
   return v;
 }
 
-function selectValueFromIndicator(v: Overlay) {
-  return v === "None" ? "Overview" : v;
+function chartIndicatorLabel(values: Overlay[]) {
+  if (!values.length) return "Overview";
+  return values.join(", ");
 }
 
-function setIndicatorFromSelect(v: string) {
-  setIndicator(v === "Overview" ? "None" : (v as Overlay));
+function getNextFocusedIndicator(values: Overlay[]) {
+  const activeLower = values.find((v) => isLowerOverlay(v));
+  if (activeLower) return activeLower;
+  if (values.length) return values[values.length - 1];
+  return "None" as Overlay;
+}
+
+function clearIndicatorSelection() {
+  setSelectedIndicators([]);
+  setIndicator("None");
+  setWindowOffset(0);
+  setIndicatorMenuOpen(false);
+}
+
+function toggleIndicatorSelection(next: Overlay) {
+  if (next === "None") {
+    clearIndicatorSelection();
+    return;
+  }
+
+  setSelectedIndicators((prev) => {
+    const alreadyOn = prev.includes(next);
+
+    let nextValues: Overlay[];
+
+    if (isLowerOverlay(next)) {
+      nextValues = alreadyOn
+        ? prev.filter((v) => v !== next)
+        : [...prev.filter((v) => !isLowerOverlay(v)), next];
+    } else {
+      nextValues = alreadyOn
+        ? prev.filter((v) => v !== next)
+        : [...prev, next];
+    }
+
+    setIndicator(getNextFocusedIndicator(nextValues));
+    return nextValues;
+  });
+
+  setWindowOffset(0);
+}
+
+function focusIndicator(next: Overlay) {
+  if (next === "None") {
+    clearIndicatorSelection();
+    return;
+  }
+
+  if (isLowerOverlay(next)) {
+    setSelectedIndicators((prev) => {
+      const nextValues = [...prev.filter((v) => !isLowerOverlay(v)), next];
+      return nextValues;
+    });
+  } else if (isPriceOverlay(next)) {
+    setSelectedIndicators((prev) => {
+      if (prev.includes(next)) return prev;
+      return [...prev, next];
+    });
+  }
+
+  setIndicator(next);
   setWindowOffset(0);
 }
 
@@ -1697,6 +1796,7 @@ function BreakdownHelpButton(props: { indicator: Overlay }) {
 }
 
 const currentIndicatorName = prettyIndicatorName(indicator);
+const chartIndicatorName = chartIndicatorLabel(selectedIndicators);
 
 const chartHeight = isMobile ? 250 : 430;
 
@@ -2631,8 +2731,7 @@ function BreakdownPanel() {
           <button
             type="button"
             onClick={() => {
-              setIndicator("None");
-              setWindowOffset(0);
+              clearIndicatorSelection();
             }}
             style={{
               marginTop: 4,
@@ -2669,7 +2768,7 @@ function BreakdownPanel() {
             key={item.key}
             type="button"
             onClick={() =>
-              setIndicator(
+              focusIndicator(
                 item.key === "div_rsi"
                   ? "RSI(14)"
                   : item.key === "div_macd"
@@ -2742,7 +2841,7 @@ function ChartPanel() {
       flexWrap: "wrap",
     }}
   >
-    <div style={{ fontWeight: 900, fontSize: 15 }}>Price ({currentIndicatorName})</div>
+       <div style={{ fontWeight: 900, fontSize: 15 }}>Price ({chartIndicatorName})</div>
 
     <div className="msh-timeframes">
       {TIMEFRAMES.map((t) => (
@@ -2766,7 +2865,7 @@ function ChartPanel() {
       marginTop: 14,
     }}
   >
-    <div style={{ minWidth: 0 }}>
+    <div style={{ minWidth: 0, position: "relative" }} ref={indicatorMenuRef}>
       <div
         style={{
           fontSize: 12,
@@ -2778,12 +2877,13 @@ function ChartPanel() {
       >
         Indicator
       </div>
-      <select
-        value={selectValueFromIndicator(indicator)}
-        onChange={(e) => setIndicatorFromSelect(e.target.value)}
+
+      <button
+        type="button"
+        onClick={() => setIndicatorMenuOpen((v) => !v)}
         style={{
           marginTop: 6,
-          width: isMobile ? "100%" : 240,
+          width: isMobile ? "100%" : 280,
           padding: "12px 14px",
           borderRadius: 14,
           border: `1px solid ${COLORS.controlBorder}`,
@@ -2792,15 +2892,135 @@ function ChartPanel() {
           fontWeight: 900,
           fontSize: 16,
           outline: "none",
+          textAlign: "left",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          cursor: "pointer",
         }}
       >
-        <option value="Overview">Overview</option>
-        {INDICATORS.filter((x) => x !== "None").map((opt) => (
-          <option key={opt} value={opt}>
-            {opt}
-          </option>
-        ))}
-      </select>
+        <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {selectedIndicators.length ? chartIndicatorName : "Overview"}
+        </span>
+        <span aria-hidden="true">▾</span>
+      </button>
+
+      {indicatorMenuOpen ? (
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 8px)",
+            left: 0,
+            zIndex: 40,
+            width: isMobile ? "100%" : 320,
+            borderRadius: 16,
+            border: `1px solid ${COLORS.border}`,
+            background: COLORS.cardBg,
+            boxShadow: COLORS.isDark
+              ? "0 18px 34px rgba(0,0,0,0.40)"
+              : "0 18px 34px rgba(0,0,0,0.12)",
+            overflow: "hidden",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => clearIndicatorSelection()}
+            style={{
+              width: "100%",
+              padding: "12px 14px",
+              border: "none",
+              borderBottom: `1px solid ${COLORS.border}`,
+              background: COLORS.controlBg,
+              color: COLORS.cardFg,
+              textAlign: "left",
+              fontWeight: 900,
+              cursor: "pointer",
+            }}
+          >
+            Clear all / Overview
+          </button>
+
+          <div
+            style={{
+              padding: "10px 14px 8px",
+              fontSize: 11,
+              fontWeight: 900,
+              color: COLORS.mutedFg,
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+            }}
+          >
+            Price overlays
+          </div>
+
+          {PRICE_OVERLAY_OPTIONS.map((opt) => {
+            const checked = selectedIndicators.includes(opt);
+
+            return (
+              <label
+                key={opt}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "10px 14px",
+                  borderTop: `1px solid ${COLORS.border}`,
+                  cursor: "pointer",
+                  fontWeight: 800,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggleIndicatorSelection(opt)}
+                />
+                <span>{opt}</span>
+              </label>
+            );
+          })}
+
+          <div
+            style={{
+              padding: "10px 14px 8px",
+              fontSize: 11,
+              fontWeight: 900,
+              color: COLORS.mutedFg,
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+              borderTop: `1px solid ${COLORS.border}`,
+            }}
+          >
+            Lower indicator (1 max)
+          </div>
+
+          {LOWER_OVERLAY_OPTIONS.map((opt) => {
+            const checked = selectedIndicators.includes(opt);
+
+            return (
+              <label
+                key={opt}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "10px 14px",
+                  borderTop: `1px solid ${COLORS.border}`,
+                  cursor: "pointer",
+                  fontWeight: 800,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggleIndicatorSelection(opt)}
+                />
+                <span>{opt}</span>
+              </label>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
 
     <ChartToolbar />
@@ -2814,6 +3034,7 @@ function ChartPanel() {
   ma50={ma50}
   ma200={ma200}
   overlay={indicator}
+  selectedIndicators={selectedIndicators}
   bollUpper={bollUpper}
   bollMid={bollMid}
   bollLower={bollLower}
@@ -3598,6 +3819,7 @@ onKeyDown={(e) => {
   ma50={ma50}
   ma200={ma200}
   overlay={indicator}
+  selectedIndicators={selectedIndicators}
   bollUpper={bollUpper}
   bollMid={bollMid}
   bollLower={bollLower}
