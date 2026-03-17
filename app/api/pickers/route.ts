@@ -639,25 +639,16 @@ async function buildPickersPayload(origin: string) {
     new Set([...topTraded, ...topMovers, ...topRanges])
   );
 
-  // Prefer the full accumulated market discovery pool first,
-  // then fall back to ranked subsets from market,
-  // then fill with preset names.
   const dynamicUniverse = Array.from(
     new Set([...accumulatedDynamicUniverse, ...rankedDynamicUniverse])
   );
 
-  // Keep a fallback preset list so the universe is still healthy on quieter days
   const universe = Array.from(
     new Set([...dynamicUniverse, ...PRESET_UNIVERSE])
   ).slice(0, 100);
 
-  // Keep a fallback preset list so the universe is still healthy on quieter days
-  const universe = Array.from(
-    new Set([...dynamicUniverse, ...PRESET_UNIVERSE])
-  ).slice(0, 100);
-
-  const limit = pLimit(8); // concurrency cap
-  const days = 2600; // enough history for MA200-ish signals
+  const limit = pLimit(8);
+  const days = 2600;
 
   const green: PickerItem[] = [];
   const red: PickerItem[] = [];
@@ -666,7 +657,6 @@ async function buildPickersPayload(origin: string) {
   const divergences: PickerItem[] = [];
   const signalRecords: SignalRecord[] = [];
 
-  // helper for prioritising symbols coming from the live market lists
   const isDynamicUniverse = (sym: string) => dynamicUniverse.includes(sym);
   const dynamicBoost = (sym: string) => (isDynamicUniverse(sym) ? 1000 : 0);
 
@@ -680,13 +670,12 @@ async function buildPickersPayload(origin: string) {
           const comp = buildCompositeFromHistory(pts);
 
           if (comp) {
-            // green/red composite
             if (pickIsGreenOverallSignal(comp)) {
               green.push({
                 symbol,
                 tone: "green",
                 note: `${comp.oversold} oversold • ${comp.flagged}/${comp.total} checks`,
-               _score: dynamicBoost(symbol) + comp.oversold * 50 + comp.flagged * 10,
+                _score: dynamicBoost(symbol) + comp.oversold * 50 + comp.flagged * 10,
               });
             }
 
@@ -700,7 +689,6 @@ async function buildPickersPayload(origin: string) {
             }
           }
 
-          // Buy the Dip
           const dip = computeBuyTheDip(pts);
           if (dip) {
             dips.push({
@@ -711,28 +699,28 @@ async function buildPickersPayload(origin: string) {
             });
           }
 
-// Breakouts
-const bo = computeBreakout(pts);
-if (bo) {
-  const volSpike = typeof (bo as any).volumeSpike === "number" ? (bo as any).volumeSpike : 0;
+          const bo = computeBreakout(pts);
+          if (bo) {
+            const volSpike =
+              typeof (bo as any).volumeSpike === "number" ? (bo as any).volumeSpike : 0;
 
-  breakouts.push({
-    symbol,
-    tone: "orange",
-    note: `ATH + vol ${volSpike ? `${volSpike.toFixed(2)}×` : "—"}`,
-    // Score: dynamic universe boost + volume spike dominates + tiny recency nudge
-    _score: dynamicBoost(symbol) + volSpike * 1000 + 1,
-  });
-}
+            breakouts.push({
+              symbol,
+              tone: "orange",
+              note: `ATH + vol ${volSpike ? `${volSpike.toFixed(2)}×` : "—"}`,
+              _score: dynamicBoost(symbol) + volSpike * 1000 + 1,
+            });
+          }
 
-const div = detectDivergenceFromHistory(pts, {
-  lookbackBars: 60,
-  leftRight: 2,
-  minPriceSwingPct: 1.2,
-  minRsiSwing: 4,
-  macdStdMult: 0.35,
-  maxPivot2AgeBars: 12,
-});
+          const div = detectDivergenceFromHistory(pts, {
+            lookbackBars: 60,
+            leftRight: 2,
+            minPriceSwingPct: 1.2,
+            minRsiSwing: 4,
+            macdStdMult: 0.35,
+            maxPivot2AgeBars: 12,
+          });
+
           if (div) {
             divergences.push({
               symbol,
@@ -831,24 +819,26 @@ const div = detectDivergenceFromHistory(pts, {
     )
   );
 
-const takeTop = (arr: PickerItem[], n: number, opts?: { volumeFirstIfMany?: boolean }) => {
-  const volumeFirst = opts?.volumeFirstIfMany === true && arr.length > 10;
+  const takeTop = (
+    arr: PickerItem[],
+    n: number,
+    opts?: { volumeFirstIfMany?: boolean }
+  ) => {
+    const volumeFirst = opts?.volumeFirstIfMany === true && arr.length > 10;
 
-  const sorted = [...arr].sort((a, b) => {
-    // If many breakouts: volume spike dominates (we encoded it into _score already)
-    if (volumeFirst) return (b._score ?? 0) - (a._score ?? 0);
+    const sorted = [...arr].sort((a, b) => {
+      if (volumeFirst) return (b._score ?? 0) - (a._score ?? 0);
+      return (b._score ?? 0) - (a._score ?? 0);
+    });
 
-    // Default: still use _score (works for all other lists)
-    return (b._score ?? 0) - (a._score ?? 0);
-  });
-
-  return sorted.slice(0, n).map(({ symbol, note, tone }) => ({ symbol, note, tone }));
-};
+    return sorted.slice(0, n).map(({ symbol, note, tone }) => ({ symbol, note, tone }));
+  };
 
   const sections: PickerSection[] = [
     {
       title: "Green Overall Signal (Oversold-leaning)",
-      description: 'Stocks flashing multiple "oversold / dip-style" signals. Top traded are prioritised.',
+      description:
+        'Stocks flashing multiple "oversold / dip-style" signals. Top traded are prioritised.',
       items: takeTop(green, 20),
     },
     {
@@ -866,32 +856,33 @@ const takeTop = (arr: PickerItem[], n: number, opts?: { volumeFirstIfMany?: bool
       description: "Recently at ATH, but down 20%+ within ~4 months. Top traded are prioritised.",
       items: takeTop(dips, 20),
     },
-{
-  title: "Breakouts",
-  description: "Fresh ATH breakouts. If >10, ranked by volume spike first. Top traded are prioritised.",
-  items: takeTop(breakouts, 20, { volumeFirstIfMany: true }),
-},
+    {
+      title: "Breakouts",
+      description:
+        "Fresh ATH breakouts. If >10, ranked by volume spike first. Top traded are prioritised.",
+      items: takeTop(breakouts, 20, { volumeFirstIfMany: true }),
+    },
   ];
 
-return {
-  updatedAt: new Date().toISOString(),
-  universeSize: universe.length,
-  dynamicUniverseCount:
-    typeof market?.dynamicUniverseSize === "number"
-      ? market.dynamicUniverseSize
-      : dynamicUniverse.length,
-  dynamicUniversePreview: dynamicUniverse.slice(0, 20),
-  estimatedApiCalls: universe.length + 1,
-  sections,
-  signalRecords,
-};
+  return {
+    updatedAt: new Date().toISOString(),
+    universeSize: universe.length,
+    dynamicUniverseCount:
+      typeof market?.dynamicUniverseSize === "number"
+        ? market.dynamicUniverseSize
+        : dynamicUniverse.length,
+    dynamicUniversePreview: dynamicUniverse.slice(0, 20),
+    estimatedApiCalls: universe.length + 1,
+    sections,
+    signalRecords,
+  };
+}
 
 /* -------------------------------- GET -------------------------------- */
 
 export async function GET(req: NextRequest) {
   const now = Date.now();
 
-  // 1) in-memory warm cache
   if (memo && now - memo.ts < MEMORY_CACHE_MS) {
     return NextResponse.json(memo.data, {
       headers: {
@@ -901,7 +892,6 @@ export async function GET(req: NextRequest) {
   }
 
   const origin = originFromReq(req);
-
   const data = await buildPickersPayload(origin);
 
   memo = { ts: now, data };
