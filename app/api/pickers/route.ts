@@ -26,6 +26,8 @@ type MarketPayload = {
   topTraded: MarketRow[];
   topMovers: MarketRow[];
   topRanges: MarketRow[];
+  dynamicUniverseSize?: number;
+  dynamicSymbols?: string[];
 };
 
 type PickerTone = "green" | "yellow" | "orange" | "red";
@@ -86,9 +88,9 @@ let memo:
     }
   | null = null;
 
-const CACHE_SECONDS = 300; // 5 minutes CDN cache
-const STALE_SECONDS = 600; // allow stale for 10 minutes while revalidating
-const MEMORY_CACHE_MS = 300_000; // 5 minutes in-memory cache
+const CACHE_SECONDS = 60; // 1 minute CDN cache
+const STALE_SECONDS = 120; // short stale window
+const MEMORY_CACHE_MS = 60_000; // 1 minute in-memory cache
 
 /* ------------------------ small util helpers ------------------------ */
 
@@ -627,10 +629,27 @@ async function buildPickersPayload(origin: string) {
     .map((x) => x.symbol)
     .filter(Boolean);
 
-  // Dynamic live universe from multiple market views
-  const dynamicUniverse = Array.from(
+  const accumulatedDynamicUniverse = Array.isArray(market?.dynamicSymbols)
+    ? market.dynamicSymbols
+        .map((x) => String(x).trim().toUpperCase())
+        .filter(Boolean)
+    : [];
+
+  const rankedDynamicUniverse = Array.from(
     new Set([...topTraded, ...topMovers, ...topRanges])
   );
+
+  // Prefer the full accumulated market discovery pool first,
+  // then fall back to ranked subsets from market,
+  // then fill with preset names.
+  const dynamicUniverse = Array.from(
+    new Set([...accumulatedDynamicUniverse, ...rankedDynamicUniverse])
+  );
+
+  // Keep a fallback preset list so the universe is still healthy on quieter days
+  const universe = Array.from(
+    new Set([...dynamicUniverse, ...PRESET_UNIVERSE])
+  ).slice(0, 100);
 
   // Keep a fallback preset list so the universe is still healthy on quieter days
   const universe = Array.from(
@@ -857,13 +876,15 @@ const takeTop = (arr: PickerItem[], n: number, opts?: { volumeFirstIfMany?: bool
 return {
   updatedAt: new Date().toISOString(),
   universeSize: universe.length,
-  dynamicUniverseCount: dynamicUniverse.length,
+  dynamicUniverseCount:
+    typeof market?.dynamicUniverseSize === "number"
+      ? market.dynamicUniverseSize
+      : dynamicUniverse.length,
   dynamicUniversePreview: dynamicUniverse.slice(0, 20),
   estimatedApiCalls: universe.length + 1,
   sections,
   signalRecords,
 };
-}
 
 /* -------------------------------- GET -------------------------------- */
 
