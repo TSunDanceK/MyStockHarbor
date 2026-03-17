@@ -715,10 +715,10 @@ async function buildPickersPayload(origin: string) {
           const div = detectDivergenceFromHistory(pts, {
             lookbackBars: 60,
             leftRight: 2,
-            minPriceSwingPct: 1.2,
+            minPriceSwingPct: 1.0,
             minRsiSwing: 4,
             macdStdMult: 0.35,
-            maxPivot2AgeBars: 12,
+            maxPivot2AgeBars: 18,
           });
 
           if (div) {
@@ -847,7 +847,7 @@ async function buildPickersPayload(origin: string) {
       items: takeTop(red, 20),
     },
     {
-      title: "Divergences (Last ~40 bars)",
+      title: "Divergences (Last ~60 days)",
       description: "RSI / MACD divergences (bullish or bearish). Strongest signals first.",
       items: takeTop(divergences, 20),
     },
