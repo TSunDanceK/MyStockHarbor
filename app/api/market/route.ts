@@ -42,15 +42,44 @@ const DISCOVERY_BATCH_SIZE = 4; // 4 symbols per cycle
 
 let payloadCache: { at: number; payload: any } | null = null;
 
-let discoveryState: {
+type RedisDiscoveryState = {
   pointer: number;
   lastDiscoveryAt: number;
-  dynamic: Map<string, DynamicQuoteRecord>;
-} = {
-  pointer: 0,
-  lastDiscoveryAt: 0,
-  dynamic: new Map<string, DynamicQuoteRecord>(),
+  dynamic: Record<string, DynamicQuoteRecord>;
 };
+
+function emptyDiscoveryState(): RedisDiscoveryState {
+  return {
+    pointer: 0,
+    lastDiscoveryAt: 0,
+    dynamic: {},
+  };
+}
+
+async function loadDiscoveryState(): Promise<RedisDiscoveryState> {
+  const state = await redis.get<RedisDiscoveryState>(REDIS_KEY);
+
+  if (
+    !state ||
+    typeof state !== "object" ||
+    typeof state.pointer !== "number" ||
+    typeof state.lastDiscoveryAt !== "number" ||
+    !state.dynamic ||
+    typeof state.dynamic !== "object"
+  ) {
+    return emptyDiscoveryState();
+  }
+
+  return {
+    pointer: state.pointer,
+    lastDiscoveryAt: state.lastDiscoveryAt,
+    dynamic: state.dynamic,
+  };
+}
+
+async function saveDiscoveryState(state: RedisDiscoveryState) {
+  await redis.set(REDIS_KEY, state);
+}
 
 const CURATED_UNIVERSE: string[] = [
   "AAPL","ABBV","ABT","ADBE","AMZN","AVGO","BAC","BRK.B","COST","CRM","CSCO","CVX","DIS","GOOGL","HD",
@@ -168,28 +197,27 @@ async function fetchQuoteBatch(symbols: string[], apiKey: string) {
   return { ok: res.ok, status: res.status, json, url };
 }
 
-function pruneDynamicCache(now: number) {
+function pruneDynamicCache(state: RedisDiscoveryState, now: number) {
   const ttlMs = isDiscoveryWindowOpen() ? OPEN_MARKET_TTL_MS : CLOSED_MARKET_TTL_MS;
 
-  for (const [symbol, record] of discoveryState.dynamic.entries()) {
-    if (now - record.discoveredAt > ttlMs) {
-      discoveryState.dynamic.delete(symbol);
+  for (const [symbol, record] of Object.entries(state.dynamic)) {
+    if (!record || now - record.discoveredAt > ttlMs) {
+      delete state.dynamic[symbol];
     }
   }
 
-  if (discoveryState.dynamic.size <= DYNAMIC_MAX_SIZE) return;
+  const entries = Object.entries(state.dynamic);
+  if (entries.length <= DYNAMIC_MAX_SIZE) return;
 
-  const sorted = Array.from(discoveryState.dynamic.entries()).sort(
-    (a, b) => a[1].discoveredAt - b[1].discoveredAt
-  );
-
+  const sorted = entries.sort((a, b) => a[1].discoveredAt - b[1].discoveredAt);
   const toRemove = sorted.slice(0, Math.max(0, sorted.length - DYNAMIC_MAX_SIZE));
+
   for (const [symbol] of toRemove) {
-    discoveryState.dynamic.delete(symbol);
+    delete state.dynamic[symbol];
   }
 }
 
-function getNextDiscoveryBatch() {
+function getNextDiscoveryBatch(state: RedisDiscoveryState) {
   const curatedSet = new Set(uniqUpper(CURATED_UNIVERSE));
   const master = uniqUpper(DISCOVERY_MASTER_LIST);
 
@@ -199,17 +227,15 @@ function getNextDiscoveryBatch() {
   let checked = 0;
 
   while (picked.length < DISCOVERY_BATCH_SIZE && checked < master.length) {
-    const idx = discoveryState.pointer % master.length;
+    const idx = state.pointer % master.length;
     const symbol = master[idx];
 
-    discoveryState.pointer = (idx + 1) % master.length;
+    state.pointer = (idx + 1) % master.length;
     checked++;
 
     if (!symbol) continue;
     if (curatedSet.has(symbol)) continue;
-
-    const existing = discoveryState.dynamic.get(symbol);
-    if (existing) continue;
+    if (state.dynamic[symbol]) continue;
 
     picked.push(symbol);
   }
@@ -250,57 +276,69 @@ export async function GET() {
     return NextResponse.json({ error: "Missing TWELVEDATA_API_KEY env var." }, { status: 500 });
   }
 
-  const now = Date.now();
-  pruneDynamicCache(now);
+const now = Date.now();
 
-  const allowDiscoveryNow =
-    now - discoveryState.lastDiscoveryAt >= DISCOVERY_INTERVAL_MS &&
-    (isDiscoveryWindowOpen() || discoveryState.dynamic.size === 0);
+let state = await loadDiscoveryState();
 
-  const debugErrors: any[] = [];
+pruneDynamicCache(state, now);
 
-  if (allowDiscoveryNow) {
-    const nextSymbols = getNextDiscoveryBatch();
+const allowDiscoveryNow =
+  now - state.lastDiscoveryAt >= DISCOVERY_INTERVAL_MS &&
+  (isDiscoveryWindowOpen() || Object.keys(state.dynamic).length === 0);
 
-    if (nextSymbols.length > 0) {
-      try {
-        const r = await fetchQuoteBatch(nextSymbols, apiKey);
-        const quotes = extractQuotesFromBatch(r.json);
+const debugErrors: any[] = [];
 
-        for (const q of quotes) {
-          const symbol = String(q.symbol ?? "").toUpperCase();
-          if (!symbol) continue;
+if (allowDiscoveryNow) {
+  const nextSymbols = getNextDiscoveryBatch(state);
 
-          discoveryState.dynamic.set(symbol, {
-            quote: q,
-            discoveredAt: now,
-          });
-        }
+  if (nextSymbols.length > 0) {
+    try {
+      const r = await fetchQuoteBatch(nextSymbols, apiKey);
+      const quotes = extractQuotesFromBatch(r.json);
 
-        if (!quotes.length) {
-          const msg =
-            (r.json && (r.json.message || r.json.error)) ||
-            (r.json && r.json.status === "error" ? "status:error" : null) ||
-            null;
+      for (const q of quotes) {
+        const symbol = String(q.symbol ?? "").toUpperCase();
+        if (!symbol) continue;
 
-          debugErrors.push({
-            httpOk: r.ok,
-            httpStatus: r.status,
-            message: msg,
-            sampleKeys: r.json && typeof r.json === "object" ? Object.keys(r.json).slice(0, 8) : null,
-            attemptedSymbols: nextSymbols,
-          });
-        }
-      } catch (e: any) {
+        state.dynamic[symbol] = {
+          quote: q,
+          discoveredAt: now,
+        };
+      }
+
+      if (!quotes.length) {
+        const msg =
+          (r.json && (r.json.message || r.json.error)) ||
+          (r.json && r.json.status === "error" ? "status:error" : null) ||
+          null;
+
         debugErrors.push({
-          httpOk: false,
-          httpStatus: null,
-          message: e?.message ? String(e.message) : "fetch failed",
-          sampleKeys: null,
+          httpOk: r.ok,
+          httpStatus: r.status,
+          message: msg,
+          sampleKeys: r.json && typeof r.json === "object" ? Object.keys(r.json).slice(0, 8) : null,
           attemptedSymbols: nextSymbols,
         });
       }
+    } catch (e: any) {
+      debugErrors.push({
+        httpOk: false,
+        httpStatus: null,
+        message: e?.message ? String(e.message) : "fetch failed",
+        sampleKeys: null,
+        attemptedSymbols: nextSymbols,
+      });
     }
+  }
+
+  state.lastDiscoveryAt = now;
+
+  pruneDynamicCache(state, now);
+
+  await saveDiscoveryState(state);
+
+  payloadCache = null;
+}
 
     discoveryState.lastDiscoveryAt = now;
     pruneDynamicCache(now);
@@ -311,7 +349,7 @@ export async function GET() {
     return NextResponse.json(payloadCache.payload);
   }
 
-  const quotes = Array.from(discoveryState.dynamic.values()).map((r) => r.quote);
+  const quotes = Object.values(state.dynamic).map((r) => r.quote);
   const rows = buildRowsFromQuotes(quotes);
 
   const topTraded = [...rows]
@@ -334,7 +372,7 @@ export async function GET() {
       (e) => typeof e?.message === "string" && e.message.toLowerCase().includes("run out of api credits")
     );
 
-  const dynamicSymbols = Array.from(discoveryState.dynamic.keys());
+  const dynamicSymbols = Object.keys(state.dynamic);
 
   const payload = {
     updatedAt: new Date().toISOString(),
@@ -342,7 +380,7 @@ export async function GET() {
     provider: "twelvedata",
     curatedUniverseSize: uniqUpper(CURATED_UNIVERSE).length,
     masterListSize: uniqUpper(DISCOVERY_MASTER_LIST).length,
-    dynamicUniverseSize: discoveryState.dynamic.size,
+    dynamicUniverseSize: Object.keys(state.dynamic).length,
     dynamicSymbols,
     quotesReturned: quotes.length,
     rowsBuilt: rows.length,
