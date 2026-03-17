@@ -154,6 +154,24 @@ export default function HowToIdentifyStockTrendsPage() {
             How to Identify Stock Trends
           </h1>
 
+          <div
+  style={{
+    marginTop: 16,
+    border: "3px solid red",
+    borderRadius: 12,
+    overflow: "hidden",
+  }}
+>
+  <img
+    src="/how-to-identify-stock-trends/01.png"
+    alt="Test trend image"
+    style={{
+      width: "100%",
+      display: "block",
+    }}
+  />
+</div>
+
           <p
             style={{
               margin: 0,
