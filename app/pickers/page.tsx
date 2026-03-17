@@ -229,16 +229,42 @@ export default function PickersPage() {
 
               <div
                 style={{
-                  marginTop: 18,
+                  marginTop: 16,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  flexWrap: "wrap",
+                  padding: "10px 12px",
+                  borderRadius: 14,
+                  border: "1px solid rgba(59,130,246,0.20)",
+                  background:
+                    "linear-gradient(135deg, rgba(59,130,246,0.08), rgba(15,23,42,0.12))",
+                  color: "rgba(219,234,254,0.88)",
+                  fontSize: 13,
+                  fontWeight: 800,
+                  lineHeight: 1.5,
+                  boxSizing: "border-box",
+                  maxWidth: 560,
+                }}
+              >
+                <span aria-hidden="true" style={{ fontSize: 15, lineHeight: 1 }}>
+                  ↻
+                </span>
+                <span>Check back every hour for refreshed dynamic stock ideas.</span>
+              </div>
+
+              <div
+                style={{
+                  marginTop: 16,
                   borderRadius: 18,
                   border: "1px dashed rgba(59,130,246,0.24)",
                   background:
                     "linear-gradient(180deg, rgba(59,130,246,0.05), rgba(15,23,42,0.10))",
-                  padding: "18px 16px",
+                  padding: "14px 16px",
                   display: "grid",
                   placeItems: "center",
                   textAlign: "center",
-                  minHeight: 96,
+                  minHeight: 78,
                   minWidth: 0,
                   boxSizing: "border-box",
                 }}
@@ -257,8 +283,8 @@ export default function PickersPage() {
 
                 <div
                   style={{
-                    marginTop: 8,
-                    fontSize: 24,
+                    marginTop: 6,
+                    fontSize: 22,
                     lineHeight: 1,
                     color: "rgba(96,165,250,0.9)",
                     letterSpacing: "0.25em",
