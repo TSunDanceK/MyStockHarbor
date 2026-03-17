@@ -43,6 +43,7 @@ type PickersPayload = {
   universeSize?: number;
   dynamicUniverseCount?: number;
   dynamicUniversePreview?: string[];
+  dynamicSymbols?: string[];
   estimatedApiCalls?: number;
   sections?: PickerSection[];
   signalRecords?: SignalRecord[];
@@ -271,6 +272,7 @@ export default function PickersClient() {
   const [universeSize, setUniverseSize] = useState<number | null>(null);
   const [dynamicUniverseCount, setDynamicUniverseCount] = useState<number | null>(null);
   const [dynamicUniversePreview, setDynamicUniversePreview] = useState<string[] | null>(null);
+  const [dynamicSymbols, setDynamicSymbols] = useState<string[]>([]);
   const [estimatedApiCalls, setEstimatedApiCalls] = useState<number | null>(null);
 
   useEffect(() => {
@@ -305,6 +307,9 @@ export default function PickersClient() {
               ? data.dynamicUniversePreview
               : null
           );
+          setDynamicSymbols(
+            Array.isArray(data?.dynamicSymbols) ? data.dynamicSymbols : []
+          );
           setEstimatedApiCalls(
             typeof data?.estimatedApiCalls === "number"
               ? data.estimatedApiCalls
@@ -320,6 +325,7 @@ export default function PickersClient() {
           setUniverseSize(null);
           setDynamicUniverseCount(null);
           setDynamicUniversePreview(null);
+          setDynamicSymbols([]);
           setEstimatedApiCalls(null);
         }
       } finally {
@@ -343,6 +349,10 @@ export default function PickersClient() {
   const safeSignalRecords = useMemo(() => {
     return Array.isArray(signalRecords) ? signalRecords : [];
   }, [signalRecords]);
+
+    const dynamicSymbolSet = useMemo(() => {
+    return new Set(dynamicSymbols);
+  }, [dynamicSymbols]);
 
   const topBuySection = useMemo<PickerSection | null>(() => {
     const items = safeSignalRecords
@@ -519,12 +529,6 @@ export default function PickersClient() {
           .pickers-card-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }
-        }
-
-        .pickers-section-results-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 10px;
         }
 
         @media (max-width: 640px) {
@@ -1054,25 +1058,29 @@ export default function PickersClient() {
           <>
             {displaySections.map((sec) => {
               const items = Array.isArray(sec.items)
-  ? sec.items
-      .map((it) => {
-        const record = safeSignalRecords.find((r) => r.symbol === it.symbol);
+                ? sec.items
+                    .map((it) => {
+                      const record = safeSignalRecords.find((r) => r.symbol === it.symbol);
 
-        const checkCount = record
-          ? matchedSignalsForRecord(record).length
-          : 0;
+                      const checkCount = record
+                        ? matchedSignalsForRecord(record).length
+                        : 0;
 
-        return {
-          ...it,
-          checkCount,
-        };
-      })
-      .sort((a, b) => {
-        if (b.checkCount !== a.checkCount) return b.checkCount - a.checkCount;
-        return a.symbol.localeCompare(b.symbol);
-      })
-      .slice(0, 10)
-  : [];
+                      const isDynamic = dynamicSymbolSet.has(it.symbol);
+
+                      return {
+                        ...it,
+                        checkCount,
+                        isDynamic,
+                      };
+                    })
+                    .sort((a, b) => {
+                      if (b.checkCount !== a.checkCount) return b.checkCount - a.checkCount;
+                      if (a.isDynamic !== b.isDynamic) return a.isDynamic ? -1 : 1;
+                      return a.symbol.localeCompare(b.symbol);
+                    })
+                    .slice(0, 10)
+                : [];
 
               return (
                 <section
