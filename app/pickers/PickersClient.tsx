@@ -906,7 +906,13 @@ export default function PickersClient() {
                               flex: "0 0 auto",
                             }}
                           />
-                          <div style={{ fontSize: 20, fontWeight: 950, minWidth: 0 }}>
+                          <div
+                            style={{
+                              fontSize: 20,
+                              fontWeight: 950,
+                              minWidth: 0,
+                            }}
+                          >
                             {item.symbol}
                           </div>
                         </div>
@@ -924,6 +930,8 @@ export default function PickersClient() {
                             {item.note}
                           </div>
                         ) : null}
+                      </div>
+
                       <div
                         style={{
                           display: "flex",
