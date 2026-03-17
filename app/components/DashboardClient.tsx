@@ -699,6 +699,101 @@ function buildStretchScore(args: {
   return { total, flagged, oversold, overbought, details };
 }
 
+function buildAutoSummary(args: {
+  symbol: string;
+  trendScore: TrendScore | null;
+  stretchScore: StretchScore | null;
+  lastClose: number | null;
+  ma50: number | null;
+  ma200: number | null;
+  rsi: number | null;
+  rsiDiv: DivergenceState;
+  macdDiv: DivergenceState;
+}) {
+  const {
+    symbol,
+    trendScore,
+    stretchScore,
+    lastClose,
+    ma50,
+    ma200,
+    rsi,
+    rsiDiv,
+    macdDiv,
+  } = args;
+
+  if (
+    !trendScore ||
+    !stretchScore ||
+    typeof lastClose !== "number" ||
+    !Number.isFinite(lastClose)
+  ) {
+    return `${symbol} does not currently have enough signal data for an automated summary.`;
+  }
+
+  const buySignals = trendScore.passed;
+  const stretchSignals = stretchScore.flagged;
+  const oversoldCount = stretchScore.oversold;
+  const overboughtCount = stretchScore.overbought;
+
+  let trendText = "a mixed trend structure";
+  if (
+    typeof ma50 === "number" &&
+    Number.isFinite(ma50) &&
+    typeof ma200 === "number" &&
+    Number.isFinite(ma200)
+  ) {
+    if (lastClose > ma50 && ma50 > ma200) {
+      trendText = "a stronger bullish trend structure";
+    } else if (lastClose < ma50 && ma50 < ma200) {
+      trendText = "a weaker bearish trend structure";
+    } else if (lastClose > ma50) {
+      trendText = "a mildly constructive trend structure";
+    } else if (lastClose < ma50) {
+      trendText = "a softer short-term trend structure";
+    }
+  }
+
+  let stretchText = "with limited stretch signals";
+  if (overboughtCount >= 3) {
+    stretchText =
+      "with several overbought-style stretch signals, which can happen when price is extended after a strong move";
+  } else if (oversoldCount >= 3) {
+    stretchText =
+      "with several oversold-style stretch signals, which can happen after a sharp pullback or a weak stretch lower";
+  } else if (stretchSignals >= 2) {
+    stretchText = "with some mixed stretch signals showing in the current move";
+  }
+
+  let momentumText = "";
+  if (typeof rsi === "number" && Number.isFinite(rsi)) {
+    if (rsi >= 70) {
+      momentumText = ` RSI is currently ${rsi.toFixed(
+        1
+      )}, which sits in a stronger momentum / overbought zone.`;
+    } else if (rsi <= 30) {
+      momentumText = ` RSI is currently ${rsi.toFixed(
+        1
+      )}, which sits in a weaker momentum / oversold zone.`;
+    } else {
+      momentumText = ` RSI is currently ${rsi.toFixed(
+        1
+      )}, which is more neutral.`;
+    }
+  }
+
+  let divergenceText = "";
+  if (rsiDiv === "bullish" || macdDiv === "bullish") {
+    divergenceText =
+      " A bullish divergence signal is also present, which can sometimes point to improving momentum beneath price action.";
+  } else if (rsiDiv === "bearish" || macdDiv === "bearish") {
+    divergenceText =
+      " A bearish divergence signal is also present, which can sometimes point to weakening momentum beneath price action.";
+  }
+
+  return `${symbol} is currently showing ${trendText}, with ${buySignals} of ${trendScore.total} trend checks passing, ${stretchText}.${momentumText}${divergenceText} This summary is designed to help you review the chart structure, not provide a buy or sell recommendation.`;
+}
+
 /* ----------------------------- constants ----------------------------- */
 
 const PRESET_TICKERS: { symbol: string; name: string }[] = [
@@ -1252,6 +1347,32 @@ return {
 
     return { toneColor, toneTag: toneInfo.tag, trend, vol };
   }, [indicator, trendScore, stretchScore, COLORS.isDark, lastClose, lastMA50, lastMA200, atr14Arr, atrSma20Arr]);
+
+  const autoSummary = useMemo(() => {
+  if (indicator !== "None") return null;
+
+  return buildAutoSummary({
+    symbol,
+    trendScore,
+    stretchScore,
+    lastClose,
+    ma50: typeof lastMA50 === "number" ? lastMA50 : null,
+    ma200: typeof lastMA200 === "number" ? lastMA200 : null,
+    rsi: lastNum(rsi14Arr),
+    rsiDiv: divergence.rsi,
+    macdDiv: divergence.macd,
+  });
+}, [
+  indicator,
+  symbol,
+  trendScore,
+  stretchScore,
+  lastClose,
+  lastMA50,
+  lastMA200,
+  rsi14Arr,
+  divergence,
+]);
 
   const overviewItems = useMemo<OverviewItem[]>(() => {
     if (indicator !== "None") return [];
@@ -2272,15 +2393,42 @@ function OverviewPanel() {
           </div>
         ) : null}
 
+        {autoSummary ? (
+          <div
+            style={{
+              border: `1px solid ${COLORS.border}`,
+              borderRadius: 14,
+              padding: 14,
+              background: COLORS.controlBg,
+              lineHeight: 1.65,
+              color: COLORS.mutedFg,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 900,
+                letterSpacing: "0.05em",
+                textTransform: "uppercase",
+                color: COLORS.cardFg,
+                marginBottom: 8,
+              }}
+            >
+              Chart Summary
+            </div>
+            {autoSummary}
+          </div>
+        ) : null}
+
         <div
-  style={{
-    color: COLORS.mutedFg,
-    lineHeight: 1.55,
-    whiteSpace: "pre-line",
-  }}
->
-  {signal.detail}
-</div>
+          style={{
+            color: COLORS.mutedFg,
+            lineHeight: 1.55,
+            whiteSpace: "pre-line",
+          }}
+        >
+          {signal.detail}
+        </div>
 
         <div
           style={{
