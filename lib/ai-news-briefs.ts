@@ -8,7 +8,6 @@ export type AiNewsBriefInputItem = {
 };
 
 export type AiNewsBrief = {
-  headline: string;
   summary: string;
   whyItMatters: string;
   tone: "Bullish leaning" | "Neutral" | "Bearish leaning" | "Mixed";
@@ -66,33 +65,30 @@ async function generateAiNewsBriefs(input: BatchInput): Promise<AiNewsBrief[]> {
       type: "object",
       additionalProperties: false,
       properties: {
-        items: {
-          type: "array",
           items: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              headline: {
-                type: "string",
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                summary: {
+                  type: "string",
+                },
+                whyItMatters: {
+                  type: "string",
+                },
+                tone: {
+                  type: "string",
+                  enum: ["Bullish leaning", "Neutral", "Bearish leaning", "Mixed"],
+                },
+                confidence: {
+                  type: "string",
+                  enum: ["Low", "Medium", "High"],
+                },
               },
-              summary: {
-                type: "string",
-              },
-              whyItMatters: {
-                type: "string",
-              },
-              tone: {
-                type: "string",
-                enum: ["Bullish leaning", "Neutral", "Bearish leaning", "Mixed"],
-              },
-              confidence: {
-                type: "string",
-                enum: ["Low", "Medium", "High"],
-              },
+              required: ["summary", "whyItMatters", "tone", "confidence"],
             },
-            required: ["headline", "summary", "whyItMatters", "tone", "confidence"],
           },
-        },
       },
       required: ["items"],
     },
@@ -101,12 +97,16 @@ async function generateAiNewsBriefs(input: BatchInput): Promise<AiNewsBrief[]> {
   const systemPrompt =
     "You write short stock-news briefing copy for MyStockHarbor, a beginner-friendly stock analysis site. " +
     "Use only the provided headline, source, publication date, feed description, stock symbol, company name, trend context, and news-score label. " +
+    "Return one output item for each input article in the exact same order. " +
+    "Do not include or rewrite the headline. " +
+    "Make each summary clearly specific to that article, not a reusable template. " +
+    "If the article appears too vague or low-information, say so cautiously and explain what traders may be watching instead. " +
     "Do not invent facts. Do not imply full article access or independent verification. " +
     "Keep attribution light and natural, such as 'Reuters reports that' or 'Barron's highlights'. " +
     "Do not copy likely article wording. Paraphrase clearly. " +
     "Each summary must feel useful, specific, and editorial, but cautious. " +
     "Each summary should be 2 sentences max. " +
-    "Each whyItMatters line should be 1 sentence in plain English. " +
+    "Each whyItMatters line should be 1 sentence in plain English and should differ across articles when the headlines differ. " +
     "Avoid hype, predictions, sensational language, and fake certainty.";
 
   const userPrompt = JSON.stringify(input);
@@ -169,7 +169,6 @@ async function generateAiNewsBriefs(input: BatchInput): Promise<AiNewsBrief[]> {
 
     return parsed.items.slice(0, input.items.length).filter((item) => {
       return (
-        typeof item?.headline === "string" &&
         typeof item?.summary === "string" &&
         typeof item?.whyItMatters === "string" &&
         typeof item?.tone === "string" &&
