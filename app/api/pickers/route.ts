@@ -836,30 +836,33 @@ async function buildPickersPayload(origin: string) {
 
   const sections: PickerSection[] = [
     {
-      title: "Green Overall Signal (Oversold-leaning)",
+      title: "Oversold Stocks Today (Potential Rebound Setups)",
       description:
-        'Stocks flashing multiple "oversold / dip-style" signals. Top traded are prioritised.',
+        "Stocks showing multiple oversold-style technical signals. These are often reviewed for possible rebounds or dip-style entries.",
       items: takeTop(green, 20),
     },
     {
-      title: "Red Overall Signal (Overbought-leaning)",
-      description: "Stocks looking stretched / extended. Top traded are prioritised.",
+      title: "Overbought Stocks Today (Potential Pullback Setups)",
+      description:
+        "Stocks showing extended or overbought conditions. These are often reviewed for possible pullbacks or weaker near-term conditions.",
       items: takeTop(red, 20),
     },
     {
-      title: "Divergences (Last ~60 days)",
-      description: "RSI / MACD divergences (bullish or bearish). Strongest signals first.",
+      title: "Bullish & Bearish Divergence Stocks (RSI & MACD Signals)",
+      description:
+        "Stocks where price and momentum may be starting to disagree. Stronger RSI and MACD divergence signals are shown first.",
       items: takeTop(divergences, 20),
     },
     {
-      title: "Buy The Dip",
-      description: "Recently at ATH, but down 20%+ within ~4 months. Top traded are prioritised.",
+      title: "Stocks Down 20% From Recent Highs (Buy the Dip)",
+      description:
+        "Stocks that recently hit highs and are now 20%+ below them. These are pullback setups from stronger charts, not deep long-term breakdowns.",
       items: takeTop(dips, 20),
     },
     {
-      title: "Breakouts",
+      title: "Breakout Stocks Today (Momentum & Expansion)",
       description:
-        "Fresh ATH breakouts. If >10, ranked by volume spike first. Top traded are prioritised.",
+        "Stocks pushing into fresh highs with strong momentum. When there are many matches, stronger volume expansion is prioritised.",
       items: takeTop(breakouts, 20, { volumeFirstIfMany: true }),
     },
   ];
