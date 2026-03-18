@@ -4,6 +4,11 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       {
+        source: "/stocks/:symbol",
+        destination: "/stock/:symbol",
+        permanent: true,
+      },
+      {
         source: "/:path*",
         has: [
           {
