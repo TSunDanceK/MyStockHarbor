@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { getAiNewsBriefs } from "@/lib/ai-news-briefs";
 
 export const runtime = "nodejs";
 
@@ -29,6 +30,7 @@ type NewsItem = {
   link: string;
   pubDate: string | null;
   source: string | null;
+  description: string | null;
 };
 
 type ScoreTone = "green" | "yellow" | "red";
@@ -52,6 +54,20 @@ function decodeHtml(value: string) {
     .replace(/&gt;/g, ">");
 }
 
+function cleanRssDescription(value: string | null) {
+  if (!value) return null;
+
+  const cleaned = decodeHtml(
+    value
+      .replace(/<!\[CDATA\[(.*?)\]\]>/g, "$1")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
+
+  return cleaned || null;
+}
+
 function parseRss(xml: string): NewsItem[] {
   const items: NewsItem[] = [];
   const blocks = xml.split("<item>").slice(1);
@@ -65,6 +81,10 @@ function parseRss(xml: string): NewsItem[] {
     const link = block.match(/<link>(.*?)<\/link>/)?.[1] ?? "";
     const pubDate = block.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] ?? null;
     const source = block.match(/<source[^>]*>(.*?)<\/source>/)?.[1] ?? null;
+    const description =
+      block.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/)?.[1] ??
+      block.match(/<description>(.*?)<\/description>/)?.[1] ??
+      null;
 
     if (title && link) {
       items.push({
@@ -72,6 +92,7 @@ function parseRss(xml: string): NewsItem[] {
         link: link.trim(),
         pubDate,
         source: source ? decodeHtml(source.trim()) : null,
+        description: cleanRssDescription(description),
       });
     }
   }
@@ -510,38 +531,76 @@ function buildNewsSummary(item: NewsItem, symbol: string, trend: string, newsSco
   const lower = title.toLowerCase();
 
   if (keywordHits(lower, ["earnings", "results", "revenue", "guidance", "quarter"])) {
-    return `${source} is highlighting an earnings-related update for ${symbol}. For beginners, that matters because quarterly results and guidance can reset expectations quickly, especially if traders start questioning whether the company is accelerating, stabilising, or slowing from here.`;
+    return `${source} is highlighting an earnings-related update for ${symbol}. Recent coverage is focusing on whether the latest results or guidance shift expectations for the next phase of the stock story.`;
   }
 
   if (keywordHits(lower, ["upgrade", "downgrade", "price target", "analyst"])) {
-    return `${source} is focusing on analyst sentiment around ${symbol}. That matters because upgrades, downgrades, and target changes can shift short-term attention, but they usually matter most when the chart also confirms the same direction.`;
+    return `${source} is focusing on analyst sentiment around ${symbol}. That can matter for short-term attention, especially when the chart is already leaning in the same direction.`;
   }
 
   if (keywordHits(lower, ["delivery", "deliveries", "production", "factory", "supply"])) {
-    return `${source} is focusing on operating performance around ${symbol}. In plain English, traders are likely asking whether the company is executing well enough to support the bigger growth story behind the stock.`;
+    return `${source} is focusing on operating execution around ${symbol}. The latest coverage suggests traders are watching whether real business performance is lining up with the bigger growth narrative.`;
   }
 
   if (keywordHits(lower, ["lawsuit", "probe", "investigation", "recall"])) {
-    return `${source} is highlighting a risk-related development around ${symbol}. That matters because uncertainty can weigh on confidence, and the market often needs time to judge whether the issue is temporary noise or something more serious.`;
+    return `${source} is highlighting a risk-related development around ${symbol}. Recent headlines suggest the market may need time to judge whether this is temporary noise or a more durable problem.`;
   }
 
   if (keywordHits(lower, ["ai", "chip", "product", "launch", "software"])) {
-    return `${source} is discussing product or theme momentum around ${symbol}. That can matter because strong narratives often help explain why traders stay interested in a stock, especially when the chart is already behaving well.`;
+    return `${source} is discussing product or theme momentum around ${symbol}. That can help explain why investors stay engaged with the stock, especially when the broader setup already looks active.`;
   }
 
   if (keywordHits(lower, ["market", "sector", "fed", "rates", "tariff"])) {
-    return `${source} is framing ${symbol} within a wider market or sector story. That matters because sometimes a stock reaction is driven as much by the environment around it as by company-specific news.`;
+    return `${source} is framing ${symbol} inside a wider market or sector story. That matters because a stock move is not always driven by company-specific news alone.`;
   }
 
   if (newsScore.tone === "red" && trend === "Bearish trend") {
-    return `${source} is drawing attention to a development that fits into an already weaker backdrop for ${symbol}. For beginners, the big question is whether the headline creates fresh downside pressure or simply keeps an already fragile setup under stress.`;
+    return `${source} is drawing attention to a development that fits into an already softer backdrop for ${symbol}. The key question is whether the latest headline adds fresh pressure or simply extends an already weak setup.`;
   }
 
   if (newsScore.tone === "green" && trend === "Bullish trend") {
-    return `${source} is highlighting a development that may support an already stronger backdrop for ${symbol}. In that kind of setup, traders often look for whether the news strengthens momentum rather than creating the story from scratch.`;
+    return `${source} is highlighting a development that may support an already stronger backdrop for ${symbol}. In this kind of setup, traders usually watch for follow-through rather than assuming the headline alone changes everything.`;
   }
 
-  return `${source} is drawing attention to a recent development around ${symbol}. Traders will usually care less about the headline alone and more about whether the stock shows real follow-through once the market has time to react.`;
+  return `${source} is drawing attention to a recent development around ${symbol}. Traders will usually care most about whether the stock shows real follow-through after the market has time to digest the headline.`;
+}
+
+function buildWhyItMatters(item: NewsItem, symbol: string, trend: string, newsScore: NewsScoreResult) {
+  const lower = item.title.toLowerCase();
+
+  if (keywordHits(lower, ["earnings", "results", "revenue", "guidance", "quarter"])) {
+    return `Quarterly updates can reset expectations quickly, so even one earnings-related headline can change how investors frame ${symbol} in the near term.`;
+  }
+
+  if (keywordHits(lower, ["upgrade", "downgrade", "price target", "analyst"])) {
+    return `Analyst calls can shift attention fast, but they usually matter more when price action starts confirming the same message.`;
+  }
+
+  if (keywordHits(lower, ["delivery", "deliveries", "production", "factory", "supply"])) {
+    return `Execution headlines matter because investors want proof that the business story is holding up in real operations, not just in market hype.`;
+  }
+
+  if (keywordHits(lower, ["lawsuit", "probe", "investigation", "recall"])) {
+    return `Risk headlines can weigh on sentiment because uncertainty often stays in the stock until the market sees the issue is contained.`;
+  }
+
+  if (keywordHits(lower, ["ai", "chip", "product", "launch", "software"])) {
+    return `Product and theme headlines matter when traders are trying to decide whether a stock still has a strong reason to stay in focus.`;
+  }
+
+  if (keywordHits(lower, ["market", "sector", "fed", "rates", "tariff"])) {
+    return `Sometimes a stock reacts more to the environment around it than to company-specific news, so broader context can matter more than one isolated headline.`;
+  }
+
+  if (newsScore.tone === "green" && trend === "Bullish trend") {
+    return `The headline matters more when the chart is already supportive, because news and price structure are pulling in the same direction.`;
+  }
+
+  if (newsScore.tone === "red" && trend === "Bearish trend") {
+    return `The headline matters more when the chart is already weak, because bad news has less technical support underneath it.`;
+  }
+
+  return `This matters mainly because traders now watch whether the chart absorbs the headline calmly or starts to break in response.`;
 }
 
 function buildWhatItMeans(args: {
@@ -670,11 +729,12 @@ function buildTechnicalRead(args: {
   };
 }
 
-function structuredNews(news: NewsItem[]) {
+function structuredNews(news: NewsItem[], summaryByTitle: Record<string, string>) {
   return news.map((item) => ({
     "@type": "NewsArticle",
     headline: item.title,
     datePublished: item.pubDate,
+    description: summaryByTitle[item.title] ?? item.description ?? undefined,
     publisher: {
       "@type": "Organization",
       name: compactSource(item.source),
@@ -782,6 +842,24 @@ export default async function StockNewsPage({ params }: Props) {
   const detailedNews = news.slice(0, 3);
   const compactNews = news.slice(3, 6);
 
+  const aiBriefs = await getAiNewsBriefs({
+    symbol: upper,
+    companyName,
+    trend,
+    newsScoreLabel: newsScore.label,
+    items: detailedNews.map((item) => ({
+      title: item.title,
+      source: item.source,
+      pubDate: item.pubDate,
+      description: item.description,
+    })),
+  });
+
+  const aiBriefByHeadline = new Map(aiBriefs.map((item) => [item.headline, item]));
+  const summaryByTitle = Object.fromEntries(
+    aiBriefs.map((item) => [item.headline, item.summary])
+  );
+
   return (
     <main
       style={{
@@ -801,7 +879,7 @@ export default async function StockNewsPage({ params }: Props) {
             name: `${upper} Stock News, Summary & Analysis`,
             url: `https://mystockharbor.com/stock/${encodeURIComponent(upper)}/news`,
             description: leadSummary,
-            hasPart: structuredNews(news),
+            hasPart: structuredNews(news, summaryByTitle),
             breadcrumb: {
               "@type": "BreadcrumbList",
               itemListElement: [
@@ -954,32 +1032,45 @@ export default async function StockNewsPage({ params }: Props) {
 
               <div style={{ display: "grid", gap: 14, marginTop: 16 }}>
                 {detailedNews.length ? (
-                  detailedNews.map((item, index) => (
-                    <article
-                      key={`${item.link}-${index}`}
-                      style={{
-                        ...newsLeadCardStyle,
-                        borderLeft:
-                          index === 0
-                            ? "3px solid rgba(59,130,246,0.75)"
-                            : "3px solid rgba(255,255,255,0.08)",
-                      }}
-                    >
-                      <div style={newsMetaRowStyle}>
-                        <span style={newsSourcePillStyle}>{compactSource(item.source)}</span>
-                        <span style={newsDateStyle}>{formatDate(item.pubDate)}</span>
-                      </div>
+                  detailedNews.map((item, index) => {
+                    const aiBrief = aiBriefByHeadline.get(item.title);
 
-                      <h3 style={newsHeadlineStyle}>{item.title}</h3>
-                      <p style={newsSummaryStyle}>
-                        {buildNewsSummary(item, upper, trend, newsScore)}
-                      </p>
+                    return (
+                      <article
+                        key={`${item.link}-${index}`}
+                        style={{
+                          ...newsLeadCardStyle,
+                          borderLeft:
+                            index === 0
+                              ? "3px solid rgba(59,130,246,0.75)"
+                              : "3px solid rgba(255,255,255,0.08)",
+                        }}
+                      >
+                        <div style={newsMetaRowStyle}>
+                          <span style={newsSourcePillStyle}>{compactSource(item.source)}</span>
+                          <span style={newsDateStyle}>{formatDate(item.pubDate)}</span>
+                        </div>
 
-                      <div style={sourceFooterStyle}>
-                        Source noted for context: {compactSource(item.source)}
-                      </div>
-                    </article>
-                  ))
+                        <h3 style={newsHeadlineStyle}>{item.title}</h3>
+
+                        <p style={newsSummaryStyle}>
+                          {aiBrief?.summary ?? buildNewsSummary(item, upper, trend, newsScore)}
+                        </p>
+
+                        <div style={whyItMattersBoxStyle}>
+                          <div style={whyItMattersLabelStyle}>Why this matters</div>
+                          <div style={whyItMattersTextStyle}>
+                            {aiBrief?.whyItMatters ?? buildWhyItMatters(item, upper, trend, newsScore)}
+                          </div>
+                        </div>
+
+                        <div style={sourceFooterStyle}>
+                          Paraphrased on-page brief based on the headline and available source
+                          context. Source noted for context: {compactSource(item.source)}
+                        </div>
+                      </article>
+                    );
+                  })
                 ) : (
                   <div style={newsLeadCardStyle}>
                     <h3 style={{ ...newsHeadlineStyle, marginTop: 0 }}>No fresh headline set available</h3>
@@ -1491,6 +1582,29 @@ const newsSummaryStyle: CSSProperties = {
   margin: "10px 0 0 0",
   fontSize: 15,
   lineHeight: 1.72,
+  color: "rgba(241,245,249,0.82)",
+};
+
+const whyItMattersBoxStyle: CSSProperties = {
+  marginTop: 14,
+  border: "1px solid rgba(59,130,246,0.16)",
+  borderRadius: 14,
+  padding: 12,
+  background: "linear-gradient(135deg, rgba(59,130,246,0.08), rgba(255,255,255,0.02))",
+};
+
+const whyItMattersLabelStyle: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+  color: "rgba(191,219,254,0.86)",
+};
+
+const whyItMattersTextStyle: CSSProperties = {
+  marginTop: 7,
+  fontSize: 14,
+  lineHeight: 1.65,
   color: "rgba(241,245,249,0.82)",
 };
 
