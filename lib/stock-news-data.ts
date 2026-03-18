@@ -38,7 +38,8 @@ export type NewsScoreResult = {
 };
 
 export type EarningsScoreResult = {
-  label: "Positive" | "Mixed" | "Negative" | "Neutral";
+  score: number;
+  label: string;
   tone: ScoreTone;
   reason: string;
 };
@@ -681,41 +682,51 @@ function scoreEarnings(news: NewsItem[]): EarningsScoreResult {
 
   if (!earningsItems.length) {
     return {
-      label: "Neutral",
+      score: 50,
+      label: "Neutral earnings tone",
       tone: "yellow",
       reason: "There is no strong earnings-related signal in the current headline mix.",
     };
   }
 
-  let score = 0;
+  let signal = 0;
 
   for (const item of earningsItems.slice(0, 4)) {
     const title = item.title.toLowerCase();
 
-    if (keywordHits(title, ["beat", "beats", "strong", "record", "raises", "growth"])) score += 2;
-    if (keywordHits(title, ["miss", "misses", "weak", "cuts", "warning", "loss"])) score -= 2;
+    if (keywordHits(title, ["beat", "beats", "strong", "record", "raises", "growth"])) {
+      signal += 2;
+    }
+
+    if (keywordHits(title, ["miss", "misses", "weak", "cuts", "warning", "loss"])) {
+      signal -= 2;
+    }
   }
 
-  if (score >= 2) {
-    return {
-      label: "Positive",
-      tone: "green",
-      reason: "Recent earnings-related coverage leans constructive.",
-    };
-  }
+  const score = Math.max(0, Math.min(100, 50 + signal * 7));
 
-  if (score <= -2) {
-    return {
-      label: "Negative",
-      tone: "red",
-      reason: "Recent earnings-related coverage leans weak or pressured.",
-    };
+  let label = "Mixed earnings tone";
+  let tone: ScoreTone = "yellow";
+  let reason =
+    "Recent earnings-linked headlines are mixed, so the score stays close to the middle.";
+
+  if (score >= 64) {
+    label = "Positive earnings tone";
+    tone = "green";
+    reason =
+      "The earnings-linked headlines look more constructive than negative, which may help support confidence in the next leg of the story.";
+  } else if (score <= 36) {
+    label = "Weak earnings tone";
+    tone = "red";
+    reason =
+      "The earnings-linked headlines look more pressured than supportive, which can weigh on sentiment until the business story improves again.";
   }
 
   return {
-    label: "Mixed",
-    tone: "yellow",
-    reason: "Earnings-related headlines are present, but the signal is mixed.",
+    score,
+    label,
+    tone,
+    reason,
   };
 }
 
