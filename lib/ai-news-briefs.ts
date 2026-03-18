@@ -205,3 +205,175 @@ export async function getAiNewsBriefs(input: BatchInput): Promise<AiNewsBrief[]>
     return [];
   }
 }
+export type AiNewsInsight = {
+  beyondHeadline: string;
+  whatItMeans: string[];
+};
+
+type InsightInput = {
+  symbol: string;
+  companyName: string;
+  trend: string;
+  newsScoreLabel: string;
+  newsScoreValue: number;
+  earningsTone: string;
+  rsi: number | null;
+  priceVs50: number | null;
+  priceVs200: number | null;
+  recentHigh: number | null;
+  recentLow: number | null;
+  items: Array<{
+    title: string;
+    source: string | null;
+    pubDate: string | null;
+    description: string | null;
+    summary: string | null;
+    whyItMatters: string | null;
+  }>;
+};
+
+async function generateAiNewsInsight(input: InsightInput): Promise<AiNewsInsight | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  const model = process.env.OPENAI_NEWS_MODEL || "gpt-4.1-mini";
+
+  if (!apiKey) {
+    return null;
+  }
+
+  const schema = {
+    name: "stock_news_insight",
+    strict: true,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        beyondHeadline: {
+          type: "string",
+        },
+        whatItMeans: {
+          type: "array",
+          items: {
+            type: "string",
+          },
+          minItems: 2,
+          maxItems: 3,
+        },
+      },
+      required: ["beyondHeadline", "whatItMeans"],
+    },
+  };
+
+  const systemPrompt =
+    "You write concise stock-news insight copy for MyStockHarbor, a beginner-friendly stock analysis site. " +
+    "Use only the provided symbol, company name, trend, news score, earnings tone, RSI, distance vs moving averages, recent range levels, and the provided top article details. " +
+    "Do not invent facts. Do not imply full article access or independent verification. " +
+    "Your job is to synthesise the news flow and chart context into one calm editorial read. " +
+    "The beyondHeadline field should be one paragraph of 80 to 140 words. It should explain the main theme in the current coverage, what is uncertain, and what traders may be watching next. " +
+    "The whatItMeans field should return 2 to 3 short plain-English bullet-style lines, each one sentence, each distinct, and each useful for a beginner. " +
+    "Be specific, not generic. Avoid filler, hype, certainty, predictions, and dramatic language.";
+
+  const userPrompt = JSON.stringify(input);
+
+  const res = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      max_output_tokens: 900,
+      input: [
+        {
+          role: "system",
+          content: [
+            {
+              type: "input_text",
+              text: systemPrompt,
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: userPrompt,
+            },
+          ],
+        },
+      ],
+      text: {
+        format: {
+          type: "json_schema",
+          ...schema,
+        },
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    return null;
+  }
+
+  const data = (await res.json()) as unknown;
+  const rawText = extractResponseText(data);
+
+  if (!rawText) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(rawText) as {
+      beyondHeadline?: string;
+      whatItMeans?: string[];
+    };
+
+    if (
+      typeof parsed.beyondHeadline !== "string" ||
+      !Array.isArray(parsed.whatItMeans) ||
+      parsed.whatItMeans.length < 2
+    ) {
+      return null;
+    }
+
+    const cleanedLines = parsed.whatItMeans
+      .filter((line) => typeof line === "string" && line.trim())
+      .slice(0, 3);
+
+    if (!cleanedLines.length) {
+      return null;
+    }
+
+    return {
+      beyondHeadline: parsed.beyondHeadline.trim(),
+      whatItMeans: cleanedLines,
+    };
+  } catch {
+    return null;
+  }
+}
+
+const getCachedAiNewsInsight = unstable_cache(
+  async (payloadJson: string) => {
+    const payload = JSON.parse(payloadJson) as InsightInput;
+    return generateAiNewsInsight(payload);
+  },
+  ["msh-ai-news-insight-v1"],
+  {
+    revalidate: 60 * 60 * 12,
+  }
+);
+
+export async function getAiNewsInsight(input: InsightInput): Promise<AiNewsInsight | null> {
+  if (!input.items.length) {
+    return null;
+  }
+
+  try {
+    return await getCachedAiNewsInsight(JSON.stringify(input));
+  } catch {
+    return null;
+  }
+}
+
