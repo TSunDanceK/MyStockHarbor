@@ -1216,24 +1216,22 @@ export default async function StockNewsPage({ params }: Props) {
       />
 
       <div className="newsWrap">
-        <div style={topNavRowStyle}>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <Link href={`/?symbol=${encodeURIComponent(upper)}`} style={topNavBtnStyle("dashboard")}>
-              ← Dashboard
+        <div style={topUtilityRowStyle}>
+          <div style={topUtilityInnerStyle}>
+            <Link href={`/?symbol=${encodeURIComponent(upper)}`} style={topUtilityBtnStyle("gold")}>
+              📈 Dashboard
             </Link>
-            <Link href={`/stock/${encodeURIComponent(upper)}`} style={topNavBtnStyle("blue")}>
-              Stock Analysis
+
+            <Link href="/platforms" style={topUtilityBtnStyle("green")}>
+              🏛 Platforms
             </Link>
-            <a
-              href={`/api/go/tradingview?symbol=${encodeURIComponent(upper)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={topNavBtnStyle("green")}
-            >
-              OPEN ON TRADINGVIEW ↗
-            </a>
-            <Link href="/platforms" style={topNavBtnStyle("red")}>
-              TRADE THIS STOCK
+
+            <Link href="/pickers" style={topUtilityBtnStyle("red")}>
+              📊 Stock Pickers
+            </Link>
+
+            <Link href="/learn" style={topUtilityBtnStyle("blue")}>
+              📘 Learn
             </Link>
           </div>
         </div>
@@ -1620,13 +1618,18 @@ export default async function StockNewsPage({ params }: Props) {
   );
 }
 
-const topNavRowStyle: CSSProperties = {
+const topUtilityRowStyle: CSSProperties = {
   display: "flex",
-  justifyContent: "space-between",
+  justifyContent: "flex-end",
   alignItems: "center",
+  marginBottom: 18,
+};
+
+const topUtilityInnerStyle: CSSProperties = {
+  display: "flex",
   gap: 12,
   flexWrap: "wrap",
-  marginBottom: 18,
+  justifyContent: "flex-end",
 };
 
 const heroShellStyle: CSSProperties = {
@@ -2137,90 +2140,95 @@ const bottomStripActionsStyle: CSSProperties = {
 };
 
 function bottomActionStyle(tone: "blue" | "green" | "red"): CSSProperties {
-  return {
-    ...topNavBtnStyle(tone),
-    borderRadius: 999,
-    minHeight: 44,
-    padding: "11px 15px",
-  };
-}
-
-function topNavBtnStyle(type: "dashboard" | "blue" | "green" | "red"): CSSProperties {
-  if (type === "dashboard") {
-    return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-      minHeight: 40,
-      padding: "9px 13px",
-      borderRadius: 999,
-      border: "1px solid rgba(255,255,255,0.10)",
-      background: "rgba(255,255,255,0.04)",
-      color: "#f8fafc",
-      textDecoration: "none",
-      fontSize: 13,
-      fontWeight: 850,
-      lineHeight: 1,
-      whiteSpace: "nowrap",
-    };
-  }
-
-  if (type === "blue") {
-    return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-      minHeight: 40,
-      padding: "9px 13px",
-      borderRadius: 999,
-      border: "1px solid rgba(59,130,246,0.24)",
-      background: "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(37,99,235,0.08))",
-      color: "#dbeafe",
-      textDecoration: "none",
-      fontSize: 13,
-      fontWeight: 850,
-      lineHeight: 1,
-      whiteSpace: "nowrap",
-    };
-  }
-
-  if (type === "green") {
-    return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-      minHeight: 40,
-      padding: "9px 13px",
-      borderRadius: 999,
-      border: "1px solid rgba(34,197,94,0.22)",
-      background: "linear-gradient(135deg, rgba(34,197,94,0.14), rgba(21,128,61,0.08))",
-      color: "#dcfce7",
-      textDecoration: "none",
-      fontSize: 13,
-      fontWeight: 850,
-      lineHeight: 1,
-      whiteSpace: "nowrap",
-    };
-  }
-
-  return {
+  const base: CSSProperties = {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    minHeight: 40,
-    padding: "9px 13px",
+    minHeight: 44,
+    padding: "11px 15px",
     borderRadius: 999,
-    border: "1px solid rgba(248,113,113,0.22)",
-    background: "linear-gradient(135deg, rgba(248,113,113,0.14), rgba(185,28,28,0.08))",
-    color: "#fee2e2",
     textDecoration: "none",
     fontSize: 13,
     fontWeight: 850,
     lineHeight: 1,
     whiteSpace: "nowrap",
+  };
+
+  if (tone === "blue") {
+    return {
+      ...base,
+      border: "1px solid rgba(59,130,246,0.24)",
+      background: "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(37,99,235,0.08))",
+      color: "#dbeafe",
+    };
+  }
+
+  if (tone === "green") {
+    return {
+      ...base,
+      border: "1px solid rgba(34,197,94,0.22)",
+      background: "linear-gradient(135deg, rgba(34,197,94,0.14), rgba(21,128,61,0.08))",
+      color: "#dcfce7",
+    };
+  }
+
+  return {
+    ...base,
+    border: "1px solid rgba(248,113,113,0.22)",
+    background: "linear-gradient(135deg, rgba(248,113,113,0.14), rgba(185,28,28,0.08))",
+    color: "#fee2e2",
+  };
+}
+
+function topUtilityBtnStyle(type: "gold" | "green" | "red" | "blue"): CSSProperties {
+  const base: CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    minHeight: 40,
+    padding: "9px 14px",
+    borderRadius: 14,
+    textDecoration: "none",
+    fontSize: 13,
+    fontWeight: 900,
+    lineHeight: 1,
+    whiteSpace: "nowrap",
+    boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+  };
+
+  if (type === "gold") {
+    return {
+      ...base,
+      border: "1px solid rgba(250,204,21,0.34)",
+      background: "linear-gradient(135deg, rgba(250,204,21,0.18), rgba(202,138,4,0.08))",
+      color: "#fef3c7",
+    };
+  }
+
+  if (type === "green") {
+    return {
+      ...base,
+      border: "1px solid rgba(34,197,94,0.30)",
+      background: "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))",
+      color: "#dcfce7",
+    };
+  }
+
+  if (type === "red") {
+    return {
+      ...base,
+      border: "1px solid rgba(248,113,113,0.28)",
+      background: "linear-gradient(135deg, rgba(248,113,113,0.16), rgba(185,28,28,0.08))",
+      color: "#fee2e2",
+    };
+  }
+
+  return {
+    ...base,
+    border: "1px solid rgba(59,130,246,0.30)",
+    background: "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(37,99,235,0.08))",
+    color: "#dbeafe",
   };
 }
