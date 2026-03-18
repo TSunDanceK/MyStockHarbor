@@ -335,116 +335,202 @@ function scoreNews(news: NewsItem[]): NewsScoreResult {
       tone: "yellow",
       label: "Neutral",
       reason:
-        "There are not enough fresh headlines here to lean strongly bullish or bearish, so the score stays neutral.",
+        "There are not enough fresh headlines here to lean clearly bullish or bearish, so the score stays neutral.",
       positives: [],
       negatives: [],
       confidence: "Low",
     };
   }
 
-  const positiveWords = [
-    "beat",
-    "beats",
-    "strong",
-    "growth",
-    "surge",
-    "record",
-    "bullish",
-    "expands",
-    "expansion",
-    "partnership",
-    "wins",
-    "upgrade",
-    "buy rating",
-    "top pick",
-    "raises",
-    "rebound",
-    "profit jump",
-    "demand",
-    "momentum",
-  ];
+  const ranked = [...news].sort((a, b) => {
+    const scoreDiff = scoreNewsItem(b) - scoreNewsItem(a);
+    if (scoreDiff !== 0) return scoreDiff;
 
-  const negativeWords = [
-    "miss",
-    "misses",
-    "cuts",
-    "cut",
-    "warning",
-    "lawsuit",
-    "probe",
-    "investigation",
-    "downgrade",
-    "sell rating",
-    "falls",
-    "drop",
-    "slump",
-    "weak",
-    "soft",
-    "recall",
-    "tariff",
-    "delay",
-    "loss",
-    "concern",
-    "liquidation",
-    "hospital",
-  ];
+    const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+    const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
+    return bTime - aTime;
+  });
+
+  const highValue = ranked.filter((item) => !isLowValueNewsItem(item));
+  const candidates = (highValue.length ? highValue : ranked).slice(0, 5);
 
   const positiveTitles: string[] = [];
   const negativeTitles: string[] = [];
-  let raw = 50;
 
-  news.slice(0, 6).forEach((item, index) => {
-    const weight = index === 0 ? 1.5 : index === 1 ? 1.25 : index <= 3 ? 1 : 0.75;
+  let weightedSum = 0;
+  let totalWeight = 0;
+  let signalCount = 0;
 
-    if (keywordHits(item.title, positiveWords)) {
-      raw += 7 * weight;
+  for (let i = 0; i < candidates.length; i++) {
+    const item = candidates[i];
+    const title = item.title.toLowerCase();
+
+    const positionWeight = i === 0 ? 1.35 : i === 1 ? 1.18 : i === 2 ? 1.02 : 0.9;
+    let itemScore = 0;
+
+    const strongPositive = [
+      "beat",
+      "beats",
+      "strong",
+      "surge",
+      "record",
+      "upgrade",
+      "buy rating",
+      "top pick",
+      "price target raised",
+      "raises guidance",
+      "growth",
+      "expansion",
+      "partnership",
+      "wins",
+      "rebound",
+      "demand",
+      "momentum",
+      "profit jump",
+    ];
+
+    const moderatePositive = [
+      "launch",
+      "production",
+      "deliveries",
+      "delivery",
+      "analyst",
+      "bullish",
+      "margin",
+      "forecast",
+      "outlook",
+      "sec filing",
+      "insider buy",
+    ];
+
+    const strongNegative = [
+      "miss",
+      "misses",
+      "warning",
+      "downgrade",
+      "sell rating",
+      "price target cut",
+      "lawsuit",
+      "probe",
+      "investigation",
+      "recall",
+      "delay",
+      "cuts guidance",
+      "weak",
+      "slump",
+      "plunge",
+      "loss",
+    ];
+
+    const moderateNegative = [
+      "falls",
+      "drop",
+      "soft",
+      "tariff",
+      "concern",
+      "pressure",
+      "decline",
+      "headwinds",
+      "insider sale",
+      "tax-driven share sale",
+    ];
+
+    if (keywordHits(title, strongPositive)) itemScore += 3.2;
+    if (keywordHits(title, moderatePositive)) itemScore += 1.4;
+
+    if (keywordHits(title, strongNegative)) itemScore -= 3.2;
+    if (keywordHits(title, moderateNegative)) itemScore -= 1.4;
+
+    if (
+      keywordHits(title, ["earnings", "results", "revenue", "guidance", "quarter"]) &&
+      keywordHits(title, ["beat", "beats", "strong", "raises", "growth", "record"])
+    ) {
+      itemScore += 2.2;
+    }
+
+    if (
+      keywordHits(title, ["earnings", "results", "revenue", "guidance", "quarter"]) &&
+      keywordHits(title, ["miss", "warning", "cuts", "weak", "loss"])
+    ) {
+      itemScore -= 2.2;
+    }
+
+    if (
+      keywordHits(title, ["insider", "cfo", "director", "executive"]) &&
+      keywordHits(title, ["tax-driven", "rsu", "vesting"])
+    ) {
+      itemScore += 0.5;
+    }
+
+    if (itemScore > 0.75) {
       positiveTitles.push(item.title);
-    }
-
-    if (keywordHits(item.title, negativeWords)) {
-      raw -= 7 * weight;
+      signalCount += 1;
+    } else if (itemScore < -0.75) {
       negativeTitles.push(item.title);
+      signalCount += 1;
     }
 
-    if (
-      keywordHits(item.title, ["earnings", "results", "revenue", "guidance"]) &&
-      keywordHits(item.title, ["beat", "strong", "raises", "growth"])
-    ) {
-      raw += 5 * weight;
-    }
+    weightedSum += itemScore * positionWeight;
+    totalWeight += positionWeight;
+  }
 
-    if (
-      keywordHits(item.title, ["earnings", "results", "revenue", "guidance"]) &&
-      keywordHits(item.title, ["miss", "cuts", "warning", "weak"])
-    ) {
-      raw -= 5 * weight;
-    }
-  });
+  if (!totalWeight) {
+    return {
+      score: 50,
+      tone: "yellow",
+      label: "Neutral",
+      reason:
+        "There is not enough usable headline detail here to push sentiment strongly either way.",
+      positives: [],
+      negatives: [],
+      confidence: "Low",
+    };
+  }
 
-  const score = Math.max(0, Math.min(100, Math.round(raw)));
+  const avg = weightedSum / totalWeight;
+
+  let rawScore = 50 + avg * 11;
+
+  if (signalCount >= 3) rawScore += avg > 0 ? 4 : avg < 0 ? -4 : 0;
+  if (signalCount >= 4) rawScore += avg > 0 ? 2 : avg < 0 ? -2 : 0;
+
+  const score = Math.max(0, Math.min(100, Math.round(rawScore)));
 
   let tone: ScoreTone = "yellow";
   let label = "Neutral";
-  if (score >= 62) {
+
+  if (score >= 66) {
     tone = "green";
     label = "Bullish";
-  } else if (score <= 38) {
+  } else if (score <= 34) {
     tone = "red";
     label = "Bearish";
+  } else if (score >= 58) {
+    tone = "green";
+    label = "Slightly Bullish";
+  } else if (score <= 42) {
+    tone = "red";
+    label = "Slightly Bearish";
   }
 
-  const confidence =
-    news.length >= 5 ? "High" : news.length >= 3 ? "Medium" : "Low";
+  const confidence: "Low" | "Medium" | "High" =
+    signalCount >= 4 ? "High" : signalCount >= 2 ? "Medium" : "Low";
 
   let reason =
-    "The latest headline mix is balanced, so the score sits in the middle rather than signalling a clear strong lean.";
+    "The latest headline mix looks fairly balanced, so the score stays close to neutral rather than showing a strong directional lean.";
 
-  if (tone === "green") {
+  if (label === "Bullish") {
     reason =
-      "Recent coverage is leaning more constructive than negative, with the strongest headlines skewing toward demand, upgrades, momentum, or better-than-feared developments.";
-  } else if (tone === "red") {
+      "Recent coverage is leaning clearly constructive, with the stronger usable headlines skewing toward upgrades, growth, better-than-feared developments, or supportive business momentum.";
+  } else if (label === "Slightly Bullish") {
     reason =
-      "Recent coverage is leaning weaker than positive, with the strongest headlines skewing toward misses, cuts, downgrades, operational concerns, or broader risk flags.";
+      "Recent coverage is leaning constructive overall, although the positive read is not strong enough yet to count as a fully decisive bullish headline backdrop.";
+  } else if (label === "Bearish") {
+    reason =
+      "Recent coverage is leaning clearly weaker, with the stronger usable headlines skewing toward downgrades, misses, legal or operational risk, or broader pressure on the story.";
+  } else if (label === "Slightly Bearish") {
+    reason =
+      "Recent coverage is leaning a bit weaker than supportive, although the negative read is not broad or strong enough yet to count as a fully decisive bearish backdrop.";
   }
 
   return {
@@ -457,20 +543,30 @@ function scoreNews(news: NewsItem[]): NewsScoreResult {
     confidence,
   };
 }
-
 function scoreEarnings(news: NewsItem[]) {
-  const earningsNews = news.filter((item) =>
-    keywordHits(item.title, [
-      "earnings",
-      "results",
-      "revenue",
-      "guidance",
-      "quarter",
-      "q1",
-      "q2",
-      "q3",
-      "q4",
-    ])
+  const ranked = [...news].sort((a, b) => {
+    const scoreDiff = scoreNewsItem(b) - scoreNewsItem(a);
+    if (scoreDiff !== 0) return scoreDiff;
+
+    const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+    const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
+    return bTime - aTime;
+  });
+
+  const earningsNews = ranked.filter(
+    (item) =>
+      !isLowValueNewsItem(item) &&
+      keywordHits(item.title, [
+        "earnings",
+        "results",
+        "revenue",
+        "guidance",
+        "quarter",
+        "q1",
+        "q2",
+        "q3",
+        "q4",
+      ])
   );
 
   if (!earningsNews.length) {
@@ -479,30 +575,38 @@ function scoreEarnings(news: NewsItem[]) {
       tone: "yellow" as ScoreTone,
       label: "No clear earnings read",
       reason:
-        "There is not enough obvious earnings-specific coverage in the latest headline set to push this score strongly either way.",
+        "There is not enough obvious earnings-specific coverage in the latest higher-value headlines to push this score strongly either way.",
     };
   }
 
-  let score = 50;
+  let raw = 50;
 
-  earningsNews.slice(0, 4).forEach((item) => {
-    if (keywordHits(item.title, ["beat", "strong", "raises", "growth", "tops"])) score += 10;
-    if (keywordHits(item.title, ["miss", "cuts", "warning", "weak", "drops"])) score -= 10;
+  earningsNews.slice(0, 4).forEach((item, index) => {
+    const weight = index === 0 ? 1.3 : index === 1 ? 1.15 : 1;
+    const title = item.title.toLowerCase();
+
+    if (keywordHits(title, ["beat", "beats", "strong", "raises", "growth", "tops", "record"])) {
+      raw += 9 * weight;
+    }
+
+    if (keywordHits(title, ["miss", "cuts", "warning", "weak", "drops", "loss"])) {
+      raw -= 9 * weight;
+    }
   });
 
-  score = Math.max(0, Math.min(100, score));
+  const score = Math.max(0, Math.min(100, Math.round(raw)));
 
   let tone: ScoreTone = "yellow";
   let label = "Mixed earnings tone";
   let reason =
     "Recent earnings-linked headlines are mixed, so the score stays close to the middle.";
 
-  if (score >= 62) {
+  if (score >= 64) {
     tone = "green";
     label = "Positive earnings tone";
     reason =
       "The earnings-linked headlines look more constructive than negative, which may help support confidence in the next leg of the story.";
-  } else if (score <= 38) {
+  } else if (score <= 36) {
     tone = "red";
     label = "Weak earnings tone";
     reason =
@@ -1323,7 +1427,7 @@ export default async function StockNewsPage({ params }: Props) {
                       </div>
                     ))
                   ) : (
-                    <div style={signalBoxEmptyStyle}>No strong positive keyword cluster in the latest set.</div>
+                    <div style={signalBoxEmptyStyle}>No strong positive driver stood out in the latest higher-value headlines.</div>
                   )}
                 </div>
 
@@ -1336,7 +1440,7 @@ export default async function StockNewsPage({ params }: Props) {
                       </div>
                     ))
                   ) : (
-                    <div style={signalBoxEmptyStyle}>No strong negative keyword cluster in the latest set.</div>
+                    <div style={signalBoxEmptyStyle}>No strong negative driver stood out in the latest higher-value headlines.</div>
                   )}
                 </div>
               </div>
