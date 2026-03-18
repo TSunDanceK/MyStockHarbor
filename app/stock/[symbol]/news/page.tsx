@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getAiNewsBriefs, getAiNewsInsight } from "@/lib/ai-news-briefs";
+import { getStockNewsData } from "@/lib/stock-news-data";
 
 export const runtime = "nodejs";
 
@@ -1022,39 +1022,34 @@ export default async function StockNewsPage({ params }: Props) {
   const { symbol } = await params;
   const upper = symbol.toUpperCase();
 
-  const [quote, history, companyName] = await Promise.all([
-    fetchQuote(upper),
-    fetchHistory(upper),
-    fetchCompanyName(upper),
-  ]);
+  const newsData = await getStockNewsData(upper, {
+    maxDetailedItems: 3,
+    includeInsight: true,
+  });
 
-  const news = await fetchNews(upper, companyName);
-
-  const closes = history.map((point) => point.close);
-  const ma50 = movingAverage(closes, 50);
-  const ma200 = movingAverage(closes, 200);
-  const rsi = rsiWilder(closes, 14);
-
-  const lastClose = history.length ? history[history.length - 1].close : null;
-  const lastMA50 = lastNum(ma50);
-  const lastMA200 = lastNum(ma200);
-  const lastRsi = lastNum(rsi);
-
-  const trend = trendLabel(lastClose, lastMA50, lastMA200);
-   const isInvalidTicker = !quote?.price && history.length === 0;
-  const priceVs50 = pctFromBase(lastClose, lastMA50);
-  const priceVs200 = pctFromBase(lastClose, lastMA200);
-
-  const trailing = history.slice(-20);
-  const recentHigh = trailing.length
-    ? Math.max(...trailing.map((point) => point.high ?? point.close))
-    : null;
-  const recentLow = trailing.length
-    ? Math.min(...trailing.map((point) => point.low ?? point.close))
-    : null;
-
-  const newsScore = scoreNews(news);
-  const earningsScore = scoreEarnings(news);
+  const {
+    quote,
+    history,
+    companyName,
+    news,
+    trend,
+    lastClose,
+    lastMA50,
+    lastMA200,
+    lastRsi,
+    isInvalidTicker,
+    priceVs50,
+    priceVs200,
+    recentHigh,
+    recentLow,
+    newsScore,
+    earningsScore,
+    detailedNews,
+    compactNews,
+    aiBriefs,
+    aiInsight,
+    summaryByTitle,
+  } = newsData;
 
   const leadSummary = buildLeadSummary({
     symbol: upper,
@@ -1090,70 +1085,6 @@ export default async function StockNewsPage({ params }: Props) {
     priceVs50,
     priceVs200,
   });
-
-  const rankedNews = [...news].sort((a, b) => {
-    const scoreDiff = scoreNewsItem(b) - scoreNewsItem(a);
-    if (scoreDiff !== 0) return scoreDiff;
-
-    const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
-    const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
-    return bTime - aTime;
-  });
-
-  const highValueNews = rankedNews.filter((item) => !isLowValueNewsItem(item));
-  const fallbackNews = rankedNews.filter((item) => isLowValueNewsItem(item));
-
-  const detailedNews = [...highValueNews, ...fallbackNews].slice(0, 3);
-
-  const compactNews = rankedNews.filter(
-    (item) => !detailedNews.some((picked) => picked.link === item.link)
-  ).slice(0, 6);
-
-  const aiBriefs = isInvalidTicker
-    ? []
-    : await getAiNewsBriefs({
-        symbol: upper,
-        companyName,
-        trend,
-        newsScoreLabel: newsScore.label,
-        items: detailedNews.map((item) => ({
-          title: item.title,
-          source: item.source,
-          pubDate: item.pubDate,
-          description: item.description,
-        })),
-      });
-
-  const summaryByTitle = Object.fromEntries(
-    detailedNews.map((item, index) => [
-      item.title,
-      aiBriefs[index]?.summary ?? item.description ?? "",
-    ])
-  );
-
-  const aiInsight = isInvalidTicker
-    ? null
-    : await getAiNewsInsight({
-        symbol: upper,
-        companyName,
-        trend,
-        newsScoreLabel: newsScore.label,
-        newsScoreValue: newsScore.score,
-        earningsTone: earningsScore.label,
-        rsi: lastRsi,
-        priceVs50,
-        priceVs200,
-        recentHigh,
-        recentLow,
-        items: detailedNews.map((item, index) => ({
-          title: item.title,
-          source: item.source,
-          pubDate: item.pubDate,
-          description: item.description,
-          summary: aiBriefs[index]?.summary ?? null,
-          whyItMatters: aiBriefs[index]?.whyItMatters ?? null,
-        })),
-      });
 
   const displayBeyondHeadline = aiInsight?.beyondHeadline?.trim()
     ? aiInsight.beyondHeadline
