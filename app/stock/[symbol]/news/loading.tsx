@@ -25,7 +25,15 @@ export default function StockNewsLoading() {
           <div style={heroLeftStyle}>
             <div style={newsDeskTagStyle}>NEWS DESK</div>
 
-            <div style={{ ...ghostBlockStyle, height: 50, width: "82%", marginTop: 16 }} />
+            <div style={loadingStatusWrapStyle}>
+              <div style={loadingStatusTextStyle}>Building your stock news briefing…</div>
+
+              <div style={loadingBarTrackStyle}>
+                <div style={loadingBarFillStyle} />
+              </div>
+            </div>
+
+            <div style={{ ...ghostBlockStyle, height: 50, width: "82%", marginTop: 18 }} />
             <div style={{ ...ghostBlockStyle, height: 18, width: "92%", marginTop: 16 }} />
             <div style={{ ...ghostBlockStyle, height: 18, width: "88%", marginTop: 10 }} />
             <div style={{ ...ghostBlockStyle, height: 18, width: "72%", marginTop: 10 }} />
@@ -169,6 +177,15 @@ export default function StockNewsLoading() {
           100% { opacity: 0.55; }
         }
 
+        @keyframes newsLoadSlide {
+          0% {
+            transform: translateX(-110%);
+          }
+          100% {
+            transform: translateX(320%);
+          }
+        }
+
         @media (max-width: 1080px) {
           .newsWrap {
             padding: 20px 18px 36px;
@@ -223,6 +240,41 @@ const ghostBottomButtonStyle: CSSProperties = {
   background:
     "linear-gradient(90deg, rgba(255,255,255,0.05), rgba(255,255,255,0.10), rgba(255,255,255,0.05))",
   animation: "newsPulse 1.5s ease-in-out infinite",
+};
+
+const loadingStatusWrapStyle: CSSProperties = {
+  marginTop: 16,
+  maxWidth: 520,
+};
+
+const loadingStatusTextStyle: CSSProperties = {
+  fontSize: 13,
+  fontWeight: 800,
+  letterSpacing: "0.04em",
+  color: "rgba(219,234,254,0.86)",
+};
+
+const loadingBarTrackStyle: CSSProperties = {
+  position: "relative",
+  overflow: "hidden",
+  marginTop: 10,
+  width: "100%",
+  height: 8,
+  borderRadius: 999,
+  background: "rgba(255,255,255,0.08)",
+  border: "1px solid rgba(255,255,255,0.06)",
+};
+
+const loadingBarFillStyle: CSSProperties = {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  height: "100%",
+  width: "38%",
+  borderRadius: 999,
+  background:
+    "linear-gradient(90deg, rgba(59,130,246,0.92), rgba(96,165,250,0.95), rgba(34,197,94,0.88))",
+  animation: "newsLoadSlide 1.35s ease-in-out infinite",
 };
 
 const topNavRowStyle: CSSProperties = {
