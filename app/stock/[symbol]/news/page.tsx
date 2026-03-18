@@ -1157,7 +1157,13 @@ export default async function StockNewsPage({ params }: Props) {
   const displayWhatItMeans =
     aiInsight?.whatItMeans?.length ? aiInsight.whatItMeans : whatItMeans;
 
+  const hasAiInsight =
+    !!aiInsight?.beyondHeadline?.trim() &&
+    Array.isArray(aiInsight?.whatItMeans) &&
+    aiInsight.whatItMeans.length > 0;
+
   return (
+    
     <main
       style={{
         minHeight: "100vh",
@@ -1448,7 +1454,7 @@ export default async function StockNewsPage({ params }: Props) {
                   letterSpacing: "0.08em",
                 }}
               >
-                {aiInsight ? "1" : "0"}
+                {hasAiInsight ? "1" : "0"}
               </div>
             </section>
           </div>
@@ -1489,7 +1495,7 @@ export default async function StockNewsPage({ params }: Props) {
               </div>
             </section>
 
-            <section style={sidebarCardStyle}>
+            <section style={{ ...sidebarCardStyle, position: "relative" }}>
               <div style={sectionEyebrowStyle}>What this could mean</div>
               <h2 style={sectionTitleSmallStyle}>Going Forward</h2>
 
@@ -1500,6 +1506,20 @@ export default async function StockNewsPage({ params }: Props) {
                     <div style={bulletTextStyle}>{line}</div>
                   </div>
                 ))}
+              </div>
+
+              <div
+                style={{
+                  position: "absolute",
+                  right: 16,
+                  bottom: 14,
+                  fontSize: 10,
+                  opacity: 0.18,
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                }}
+              >
+                {hasAiInsight ? "1" : "0"}
               </div>
             </section>
 
