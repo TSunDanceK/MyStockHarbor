@@ -67,8 +67,9 @@ function parseRss(xml: string): NewsItem[] {
     const source = block.match(/<source[^>]*>(.*?)<\/source>/)?.[1] ?? null;
 
     if (title && link) {
+      const clean = decodeHtml(title.replace(/\s+-\s+Google News$/i, "").trim());
       items.push({
-        title: decodeHtml(title.replace(/\s+-\s+Google News$/i, "").trim()),
+        title: clean,
         link: link.trim(),
         pubDate,
         source: source ? decodeHtml(source.trim()) : null,
@@ -81,7 +82,7 @@ function parseRss(xml: string): NewsItem[] {
 
 async function fetchQuote(symbol: string): Promise<Quote | null> {
   const stooqSymbol = `${symbol.toLowerCase()}.us`;
-  const url = `https://stooq.com/q/l/?s=${stooqSymbol}&f=sd2t2ohlcv&h&e=csv`;
+  const url = `https://stooq.com/q/l/?s=${stooqSymbol}&f=sd2t2l&h&e=csv`;
 
   try {
     const res = await fetch(url, {
@@ -95,10 +96,7 @@ async function fetchQuote(symbol: string): Promise<Quote | null> {
     if (lines.length < 2) return null;
 
     const row = lines[1].split(",");
-    const price = Number(row[6] ?? "");
-    const high = Number(row[4] ?? "");
-    const low = Number(row[5] ?? "");
-    const volume = Number(row[7] ?? "");
+    const price = Number(row[3] ?? "");
 
     return {
       symbol,
@@ -106,10 +104,7 @@ async function fetchQuote(symbol: string): Promise<Quote | null> {
       date: row[1] ?? null,
       time: row[2] ?? null,
       source: "Stooq",
-      ...(Number.isFinite(high) ? { high } : {}),
-      ...(Number.isFinite(low) ? { low } : {}),
-      ...(Number.isFinite(volume) ? { volume } : {}),
-    } as Quote & { high?: number; low?: number; volume?: number };
+    };
   } catch {
     return null;
   }
@@ -184,7 +179,10 @@ async function fetchCompanyName(symbol: string): Promise<string> {
 }
 
 async function fetchNews(symbol: string, companyName: string): Promise<NewsItem[]> {
-  const baseQuery = companyName ? `${companyName} ${symbol} stock` : `${symbol} stock`;
+  const baseQuery = companyName
+    ? `${companyName} ${symbol} stock`
+    : `${symbol} stock`;
+
   const url = `https://news.google.com/rss/search?q=${encodeURIComponent(
     baseQuery
   )}&hl=en-GB&gl=GB&ceid=GB:en`;
@@ -291,11 +289,6 @@ function formatPercent(value: number | null, digits = 1) {
   return `${value > 0 ? "+" : ""}${value.toFixed(digits)}%`;
 }
 
-function formatNumber(value: number | null) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
-  return new Intl.NumberFormat("en-GB").format(Math.round(value));
-}
-
 function formatDate(value: string | null) {
   if (!value) return "Recent";
   const date = new Date(value);
@@ -313,8 +306,8 @@ function compactSource(source: string | null) {
   return source.replace(/\s+News$/i, "").trim();
 }
 
-function keywordHits(text: string, words: string[]) {
-  const lower = text.toLowerCase();
+function keywordHits(title: string, words: string[]) {
+  const lower = title.toLowerCase();
   return words.some((word) => lower.includes(word));
 }
 
@@ -375,12 +368,11 @@ function scoreNews(news: NewsItem[]): NewsScoreResult {
     "delay",
     "loss",
     "concern",
-    "liquidation",
-    "hospital",
   ];
 
   const positiveTitles: string[] = [];
   const negativeTitles: string[] = [];
+
   let raw = 50;
 
   news.slice(0, 6).forEach((item, index) => {
@@ -424,17 +416,21 @@ function scoreNews(news: NewsItem[]): NewsScoreResult {
   }
 
   const confidence =
-    news.length >= 5 ? "High" : news.length >= 3 ? "Medium" : "Low";
+    news.length >= 5
+      ? "High"
+      : news.length >= 3
+      ? "Medium"
+      : "Low";
 
   let reason =
     "The latest headline mix is balanced, so the score sits in the middle rather than signalling a clear strong lean.";
 
   if (tone === "green") {
     reason =
-      "Recent coverage is leaning more constructive than negative, with the strongest headlines skewing toward demand, upgrades, momentum, or better-than-feared developments.";
+      "Recent coverage is leaning more constructive than negative, with the strongest headlines skewing toward momentum, upgrades, demand, or better-than-feared developments.";
   } else if (tone === "red") {
     reason =
-      "Recent coverage is leaning weaker than positive, with the strongest headlines skewing toward misses, cuts, downgrades, operational concerns, or broader risk flags.";
+      "Recent coverage is leaning weaker than positive, with the strongest headlines skewing toward misses, cuts, downgrades, risk flags, or pressure on the broader story.";
   }
 
   return {
@@ -450,17 +446,7 @@ function scoreNews(news: NewsItem[]): NewsScoreResult {
 
 function scoreEarnings(news: NewsItem[]) {
   const earningsNews = news.filter((item) =>
-    keywordHits(item.title, [
-      "earnings",
-      "results",
-      "revenue",
-      "guidance",
-      "quarter",
-      "q1",
-      "q2",
-      "q3",
-      "q4",
-    ])
+    keywordHits(item.title, ["earnings", "results", "revenue", "guidance", "quarter", "q1", "q2", "q3", "q4"])
   );
 
   if (!earningsNews.length) {
@@ -512,76 +498,39 @@ function buildLeadSummary(args: {
   const { symbol, companyName, trend, newsScore, earningsScore } = args;
   const lead = companyName ? `${companyName} (${symbol})` : symbol;
 
-  return `${lead} is currently showing a ${newsScore.label.toLowerCase()} news tone with a ${trend.toLowerCase()} backdrop. This page groups the latest coverage into one beginner-friendly briefing, then adds technical context and a simple read on what traders may watch next. Earnings tone is currently ${earningsScore.label.toLowerCase()}.`;
-}
-
-function buildEasySummary(args: {
-  symbol: string;
-  companyName: string;
-  news: NewsItem[];
-  newsScore: NewsScoreResult;
-  trend: string;
-  priceVs50: number | null;
-}) {
-  const { symbol, companyName, news, newsScore, trend, priceVs50 } = args;
-  const lead = companyName ? `${companyName} (${symbol})` : symbol;
-
-  if (!news.length) {
-    return `${lead} does not have a strong fresh headline set available on this page right now, so the bigger focus shifts to chart structure, momentum, and whether the stock is holding up technically.`;
-  }
-
-  if (newsScore.tone === "green" && trend === "Bullish trend") {
-    return `${lead} currently has both a supportive chart backdrop and a friendlier headline tone. For beginners, that usually means the story and the chart are working together rather than fighting each other.`;
-  }
-
-  if (newsScore.tone === "red" && trend === "Bearish trend") {
-    return `${lead} is dealing with weaker headline flow while the chart also looks softer. For beginners, that combination can make the setup more fragile unless the stock starts reclaiming important levels.`;
-  }
-
-  if (newsScore.tone === "green") {
-    return `${lead} has seen more constructive than negative recent coverage, but the chart still needs to confirm it. Better news alone does not automatically create a durable uptrend.`;
-  }
-
-  if (newsScore.tone === "red") {
-    return `${lead} has seen more pressured than constructive recent coverage. That does not always mean the stock must fall, but it does mean traders may be more sensitive to weak reactions or failed rebounds.`;
-  }
-
-  if (typeof priceVs50 === "number" && Math.abs(priceVs50) > 8) {
-    return `${lead} is sitting in a more stretched position relative to its 50-day average, so traders may care as much about how the stock reacts to headlines as about the headlines themselves.`;
-  }
-
-  return `${lead} currently sits in a more mixed zone where recent news matters, but price confirmation is still likely to decide the next bigger move.`;
+  return `${lead} is currently showing a ${newsScore.label.toLowerCase()} headline tone with a ${trend.toLowerCase()} backdrop. The latest news flow is being framed here as context rather than prediction, so beginners can quickly see whether headlines are helping, hurting, or complicating the chart story. Earnings tone is currently ${earningsScore.label.toLowerCase()}.`;
 }
 
 function buildNewsSummary(item: NewsItem, symbol: string) {
-  const source = compactSource(item.source);
   const lower = item.title.toLowerCase();
 
-  if (keywordHits(lower, ["earnings", "results", "revenue", "guidance", "quarter"])) {
-    return `${source} is highlighting an earnings-related development around ${symbol}. In plain English, this matters because results and guidance can quickly change expectations for growth, margins, and near-term sentiment.`;
+  if (
+    keywordHits(lower, ["earnings", "results", "revenue", "guidance", "quarter"])
+  ) {
+    return `This looks like an earnings-related catalyst for ${symbol}, which matters because results and guidance often reshape expectations faster than ordinary headline flow.`;
   }
 
   if (keywordHits(lower, ["upgrade", "downgrade", "price target", "analyst"])) {
-    return `${source} is focusing on analyst sentiment around ${symbol}. That matters because rating changes can influence attention and short-term positioning, even when they do not change the business itself.`;
+    return `This headline looks more sentiment-driven, which can change short-term attention on ${symbol} even if it does not fully change the underlying business story.`;
   }
 
-  if (keywordHits(lower, ["delivery", "deliveries", "production", "factory", "supply"])) {
-    return `${source} is focusing on operations around ${symbol}. For beginners, that usually means traders are watching whether the company is executing well enough to support the broader story behind the stock.`;
+  if (keywordHits(lower, ["partnership", "deal", "contract", "wins", "customer"])) {
+    return `This update appears tied to business momentum or validation, which traders often treat as a sign the story still has demand behind it.`;
   }
 
   if (keywordHits(lower, ["lawsuit", "probe", "investigation", "recall"])) {
-    return `${source} is highlighting a risk-related issue around ${symbol}. That matters because uncertainty can weigh on confidence and keep traders more cautious until the picture becomes clearer.`;
+    return `This headline looks like a risk flag, which can pressure confidence because traders may need to price in uncertainty before focusing on growth again.`;
   }
 
   if (keywordHits(lower, ["ai", "chip", "product", "launch", "software"])) {
-    return `${source} is discussing product or theme momentum around ${symbol}. That can matter because narrative strength often helps explain why traders are becoming more interested in a stock.`;
+    return `This item seems linked to product or theme momentum, which matters because narrative strength can amplify already-strong charts and sometimes stabilise weaker ones.`;
   }
 
-  if (keywordHits(lower, ["market", "sector", "fed", "rates", "tariff"])) {
-    return `${source} is framing ${symbol} within a wider market or sector story. That matters because sometimes the stock reaction is driven as much by the environment as by company-specific news.`;
+  if (keywordHits(lower, ["tariff", "fed", "rates", "market", "sector"])) {
+    return `This headline looks more macro or sector-driven than company-only, so it may be shaping how traders view the environment around ${symbol}, not just the stock in isolation.`;
   }
 
-  return `${source} is drawing attention to a recent development around ${symbol}. Traders will usually care less about the headline itself and more about whether the stock shows real follow-through after the market digests it.`;
+  return `This update adds to the near-term picture around ${symbol}, even if the headline alone does not decide the chart. Traders usually look for follow-through after the first reaction.`;
 }
 
 function buildWhatItMeans(args: {
@@ -596,19 +545,19 @@ function buildWhatItMeans(args: {
 
   if (newsScore.tone === "green" && trend === "Bullish trend") {
     lines.push(
-      `${symbol} has a cleaner backdrop when positive headlines are landing into an already supportive chart, because the news and the structure are pointing in the same direction.`
+      `${symbol} has a friendlier setup when positive headlines are landing into an already supportive chart, because news and structure are pointing in the same direction.`
     );
-  } else if (newsScore.tone === "green") {
+  } else if (newsScore.tone === "green" && trend !== "Bullish trend") {
     lines.push(
-      `The recent headline flow for ${symbol} looks better than the chart structure, so traders may now watch for stronger price confirmation rather than assuming the story has already fully improved.`
+      `The recent news flow for ${symbol} looks better than the chart structure, which can be the early stage of improvement but still needs confirmation from price.`
     );
   } else if (newsScore.tone === "red" && trend === "Bearish trend") {
     lines.push(
-      `${symbol} looks more vulnerable when weaker headlines arrive into an already soft chart, because negative news has less technical support underneath it.`
+      `${symbol} looks more vulnerable when negative headlines are arriving into an already weak structure, because bad news has less technical support beneath it.`
     );
   } else if (newsScore.tone === "red") {
     lines.push(
-      `The chart may still be holding up better than the recent headline tone, but traders will watch whether weaker coverage starts damaging support or simply gets absorbed.`
+      `The chart may still be holding up better than the headline tone, but traders will watch whether weaker news starts breaking support or simply gets absorbed.`
     );
   } else {
     lines.push(
@@ -618,21 +567,21 @@ function buildWhatItMeans(args: {
 
   if (typeof rsi === "number" && rsi >= 70) {
     lines.push(
-      `Momentum already looks warm, so even strong news may lead to pause-and-hold behaviour before the next cleaner move higher.`
+      `Momentum already looks warm, so even strong news may lead to consolidation first rather than an endlessly clean upside continuation.`
     );
   } else if (typeof rsi === "number" && rsi <= 35) {
     lines.push(
-      `Momentum is softer, which means modestly better news could matter more than usual if traders start looking for stabilisation or rebound attempts.`
+      `Momentum is softer, which means even modestly better news could matter more than usual if traders start looking for stabilisation and rebound attempts.`
     );
   }
 
   if (typeof priceVs50 === "number" && priceVs50 >= 10) {
     lines.push(
-      `Because ${symbol} is already stretched above the 50-day average, the next bullish step often depends on support holding rather than on endless excitement.`
+      `Because ${symbol} is already stretched above the 50-day average, the next bullish step often depends on digestion and support-holding rather than pure excitement.`
     );
   } else if (typeof priceVs50 === "number" && priceVs50 <= -10) {
     lines.push(
-      `Because ${symbol} is trading well below the 50-day average, stronger headlines may first need to repair damage before the market treats them as a fresh uptrend signal.`
+      `Because ${symbol} is trading well below the 50-day average, stronger headlines may first need to repair damage before the market treats them as a clean fresh uptrend signal.`
     );
   }
 
@@ -649,7 +598,7 @@ function buildBeyondHeadline(args: {
   const { symbol, newsScore, trend, recentHigh, recentLow } = args;
 
   if (newsScore.tone === "red" && trend !== "Bearish trend") {
-    return `The outside-the-box read for ${symbol} is that apparently bad news does not always become lasting damage. If price keeps holding above important structure despite weaker coverage, that can mean some fear was already priced in or that buyers are still supporting the stock.`;
+    return `The outside-the-box read for ${symbol} is that apparently bad news does not always become lasting damage. If price keeps holding above important structure despite weaker headlines, that can mean some of the fear was already priced in or that stronger hands are still supporting the stock.`;
   }
 
   if (newsScore.tone === "green" && trend === "Bearish trend") {
@@ -657,11 +606,11 @@ function buildBeyondHeadline(args: {
   }
 
   if (typeof recentHigh === "number" && typeof recentLow === "number") {
-    return `${symbol} may not need perfect headlines to improve. Sometimes the bigger clue is whether the stock stops making lower lows near ${formatMoney(
+    return `${symbol} may not need perfect headlines to improve. Sometimes the more important clue is whether the stock stops making lower lows near ${formatMoney(
       recentLow
-    )} and starts building back toward resistance near ${formatMoney(
+    )} and starts building toward resistance near ${formatMoney(
       recentHigh
-    )}. That kind of behaviour can matter more than a dramatic headline.`;
+    )}. That kind of behaviour can quietly matter more than a dramatic headline.`;
   }
 
   return `The deeper read for ${symbol} is that headlines often matter most when they confirm or challenge the chart at a key moment. Good news is most useful when it attracts follow-through. Bad news is most dangerous when support is already fragile.`;
@@ -710,6 +659,43 @@ function buildTechnicalRead(args: {
   };
 }
 
+function buildWatchList(args: {
+  symbol: string;
+  recentHigh: number | null;
+  recentLow: number | null;
+  ma50: number | null;
+  ma200: number | null;
+}) {
+  const { symbol, recentHigh, recentLow, ma50, ma200 } = args;
+  const items: string[] = [];
+
+  if (typeof recentHigh === "number") {
+    items.push(
+      `A push toward ${formatMoney(recentHigh)} would show whether ${symbol} can challenge recent resistance instead of fading before it gets there.`
+    );
+  }
+
+  if (typeof ma50 === "number") {
+    items.push(
+      `The 50-day average near ${formatMoney(ma50)} is a practical short-term test area for pullbacks, holds, and reclaims.`
+    );
+  }
+
+  if (typeof ma200 === "number") {
+    items.push(
+      `The 200-day average near ${formatMoney(ma200)} remains a bigger-picture structure line that longer-term traders often care about.`
+    );
+  }
+
+  if (typeof recentLow === "number") {
+    items.push(
+      `A break below ${formatMoney(recentLow)} would make the setup look more fragile and could shift attention back toward risk control instead of upside continuation.`
+    );
+  }
+
+  return items.slice(0, 4);
+}
+
 function structuredNews(news: NewsItem[]) {
   return news.map((item) => ({
     "@type": "NewsArticle",
@@ -719,6 +705,7 @@ function structuredNews(news: NewsItem[]) {
       "@type": "Organization",
       name: compactSource(item.source),
     },
+    url: item.link,
   }));
 }
 
@@ -727,22 +714,22 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const upper = symbol.toUpperCase();
 
   return {
-    title: `${upper} Stock News, Summary & Analysis | MyStockHarbor`,
-    description: `Read ${upper} stock news with a beginner-friendly summary, news score, earnings tone, and technical context on MyStockHarbor.`,
+    title: `${upper} Stock News, News Score & Beginner Analysis | MyStockHarbor`,
+    description: `Read ${upper} stock news with a beginner-friendly news score, earnings tone, technical context, and a deeper look at what the latest headlines could mean.`,
     alternates: {
       canonical: `/stock/${upper}/news`,
     },
     openGraph: {
-      title: `${upper} Stock News & Analysis | MyStockHarbor`,
-      description: `Latest ${upper} stock news with beginner-friendly summaries, tone scoring, and chart context.`,
+      title: `${upper} Stock News & News Score | MyStockHarbor`,
+      description: `Latest ${upper} stock news, headline tone, what it may mean next, and chart context on MyStockHarbor.`,
       url: `/stock/${upper}/news`,
       siteName: "MyStockHarbor",
       type: "article",
     },
     twitter: {
       card: "summary_large_image",
-      title: `${upper} Stock News & Analysis | MyStockHarbor`,
-      description: `Latest ${upper} stock headlines with simple summaries and chart context.`,
+      title: `${upper} Stock News & News Score | MyStockHarbor`,
+      description: `Latest ${upper} stock headlines with beginner-friendly analysis and chart context.`,
     },
   };
 }
@@ -773,28 +760,16 @@ export default async function StockNewsPage({ params }: Props) {
   const priceVs50 = pctFromBase(lastClose, lastMA50);
   const priceVs200 = pctFromBase(lastClose, lastMA200);
 
-  const trailing20 = history.slice(-20);
-  const trailing252 = history.slice(-252);
-
-  const recentHigh = trailing20.length
-    ? Math.max(...trailing20.map((point) => point.high ?? point.close))
+  const trailing = history.slice(-20);
+  const recentHigh = trailing.length
+    ? Math.max(...trailing.map((point) => point.high ?? point.close))
     : null;
-  const recentLow = trailing20.length
-    ? Math.min(...trailing20.map((point) => point.low ?? point.close))
+  const recentLow = trailing.length
+    ? Math.min(...trailing.map((point) => point.low ?? point.close))
     : null;
-
-  const high52 = trailing252.length
-    ? Math.max(...trailing252.map((point) => point.high ?? point.close))
-    : null;
-  const low52 = trailing252.length
-    ? Math.min(...trailing252.map((point) => point.low ?? point.close))
-    : null;
-
-  const latestVolume = history.length ? history[history.length - 1].volume ?? null : null;
 
   const newsScore = scoreNews(news);
   const earningsScore = scoreEarnings(news);
-
   const leadSummary = buildLeadSummary({
     symbol: upper,
     companyName,
@@ -802,16 +777,6 @@ export default async function StockNewsPage({ params }: Props) {
     newsScore,
     earningsScore,
   });
-
-  const easySummary = buildEasySummary({
-    symbol: upper,
-    companyName,
-    news,
-    newsScore,
-    trend,
-    priceVs50,
-  });
-
   const whatItMeans = buildWhatItMeans({
     symbol: upper,
     trend,
@@ -819,7 +784,6 @@ export default async function StockNewsPage({ params }: Props) {
     rsi: lastRsi,
     priceVs50,
   });
-
   const beyondHeadline = buildBeyondHeadline({
     symbol: upper,
     newsScore,
@@ -827,7 +791,6 @@ export default async function StockNewsPage({ params }: Props) {
     recentHigh,
     recentLow,
   });
-
   const technicalRead = buildTechnicalRead({
     symbol: upper,
     price: quote?.price ?? lastClose,
@@ -838,8 +801,17 @@ export default async function StockNewsPage({ params }: Props) {
     priceVs50,
     priceVs200,
   });
+  const watchList = buildWatchList({
+    symbol: upper,
+    recentHigh,
+    recentLow,
+    ma50: lastMA50,
+    ma200: lastMA200,
+  });
 
-  const featuredNews = news.slice(0, 3);
+  const leadName = companyName ? `${companyName} (${upper})` : upper;
+  const detailedNews = news.slice(0, 3);
+  const compactNews = news.slice(3, 6);
 
   return (
     <main
@@ -857,9 +829,13 @@ export default async function StockNewsPage({ params }: Props) {
           __html: JSON.stringify({
             "@context": "https://schema.org",
             "@type": "WebPage",
-            name: `${upper} Stock News, Summary & Analysis`,
+            name: `${upper} Stock News, News Score & Beginner Analysis`,
             url: `https://mystockharbor.com/stock/${encodeURIComponent(upper)}/news`,
             description: leadSummary,
+            mainEntity: {
+              "@type": "Dataset",
+              name: `${upper} recent stock news summary`,
+            },
             hasPart: structuredNews(news),
             breadcrumb: {
               "@type": "BreadcrumbList",
@@ -873,7 +849,7 @@ export default async function StockNewsPage({ params }: Props) {
                 {
                   "@type": "ListItem",
                   position: 2,
-                  name: `${upper} Stock Analysis`,
+                  name: `${upper} Stock Page`,
                   item: `https://mystockharbor.com/stock/${encodeURIComponent(upper)}`,
                 },
                 {
@@ -891,25 +867,17 @@ export default async function StockNewsPage({ params }: Props) {
       <div className="newsWrap">
         <div style={topNavRowStyle}>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <Link href={`/?symbol=${encodeURIComponent(upper)}`} style={topNavBtnStyle("dashboard")}>
+            <Link href="/" style={topNavBtnStyle("dashboard")}>
               ← Dashboard
             </Link>
-
             <Link href={`/stock/${encodeURIComponent(upper)}`} style={topNavBtnStyle("blue")}>
-              Stock Analysis
+              Full Stock Page
             </Link>
-
-            <a
-              href={`/api/go/tradingview?symbol=${encodeURIComponent(upper)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={topNavBtnStyle("green")}
-            >
-              OPEN ON TRADINGVIEW ↗
-            </a>
-
-            <Link href="/platforms" style={topNavBtnStyle("red")}>
-              TRADE THIS STOCK
+            <Link href="/pickers" style={topNavBtnStyle("pickers")}>
+              Trade This Stock
+            </Link>
+            <Link href="/learn" style={topNavBtnStyle("green")}>
+              Learn
             </Link>
           </div>
         </div>
@@ -927,7 +895,7 @@ export default async function StockNewsPage({ params }: Props) {
                 maxWidth: 760,
               }}
             >
-              {upper} Stock News, Summary & What It Could Mean
+              {upper} Stock News, News Score & What It Could Mean
             </h1>
 
             <p
@@ -942,11 +910,28 @@ export default async function StockNewsPage({ params }: Props) {
               {leadSummary}
             </p>
 
-            <div style={heroCtaRowStyle}>
-              <Link href={`/stock/${encodeURIComponent(upper)}`} style={heroSecondaryCtaStyle}>
-                Stock Analysis
-              </Link>
+            <div style={heroMetricRowStyle}>
+              <div style={heroMetricStyle}>
+                <div style={heroMetricLabelStyle}>Last Price</div>
+                <div style={heroMetricValueStyle}>
+                  {formatMoney(quote?.price ?? lastClose)}
+                </div>
+              </div>
 
+              <div style={heroMetricStyle}>
+                <div style={heroMetricLabelStyle}>Trend Context</div>
+                <div style={heroMetricValueStyle}>{trend}</div>
+              </div>
+
+              <div style={heroMetricStyle}>
+                <div style={heroMetricLabelStyle}>RSI (14)</div>
+                <div style={heroMetricValueStyle}>
+                  {typeof lastRsi === "number" ? lastRsi.toFixed(1) : "—"}
+                </div>
+              </div>
+            </div>
+
+            <div style={heroCtaRowStyle}>
               <a
                 href={`/api/go/tradingview?symbol=${encodeURIComponent(upper)}`}
                 target="_blank"
@@ -956,14 +941,14 @@ export default async function StockNewsPage({ params }: Props) {
                 OPEN ON TRADINGVIEW ↗
               </a>
 
-              <Link href="/platforms" style={heroRedCtaStyle}>
+              <Link href="/pickers" style={heroSecondaryCtaStyle}>
                 TRADE THIS STOCK
               </Link>
             </div>
 
             <div style={heroSubCopyStyle}>
-              Stay on MyStockHarbor for the full summary and context, then move to charting or
-              platforms only when you are ready to act.
+              Full chart, indicators and drawing tools on TradingView. Use Pickers to explore
+              setups and related opportunities.
             </div>
           </div>
 
@@ -997,58 +982,9 @@ export default async function StockNewsPage({ params }: Props) {
               <div style={sectionEyebrowStyle}>Latest briefing</div>
               <h2 style={sectionTitleStyle}>What’s happening with {upper}</h2>
 
-              <div style={overviewGridStyle}>
-                <div style={overviewCardStyle}>
-                  <div style={overviewCardLabelStyle}>Financial Data Overview</div>
-
-                  <div style={overviewStatsGridStyle}>
-                    <div style={overviewStatStyle}>
-                      <div style={overviewStatTitleStyle}>Last Price</div>
-                      <div style={overviewStatValueStyle}>
-                        {formatMoney(quote?.price ?? lastClose)}
-                      </div>
-                    </div>
-
-                    <div style={overviewStatStyle}>
-                      <div style={overviewStatTitleStyle}>52-Week Range</div>
-                      <div style={overviewStatValueStyleSmall}>
-                        {formatMoney(low52)} – {formatMoney(high52)}
-                      </div>
-                    </div>
-
-                    <div style={overviewStatStyle}>
-                      <div style={overviewStatTitleStyle}>RSI (14)</div>
-                      <div style={overviewStatValueStyleSmall}>
-                        {typeof lastRsi === "number" ? lastRsi.toFixed(1) : "—"}
-                      </div>
-                    </div>
-
-                    <div style={overviewStatStyle}>
-                      <div style={overviewStatTitleStyle}>Trend</div>
-                      <div style={overviewStatValueStyleSmall}>{trend}</div>
-                    </div>
-
-                    <div style={overviewStatStyle}>
-                      <div style={overviewStatTitleStyle}>vs MA50</div>
-                      <div style={overviewStatValueStyleSmall}>{formatPercent(priceVs50)}</div>
-                    </div>
-
-                    <div style={overviewStatStyle}>
-                      <div style={overviewStatTitleStyle}>Latest Volume</div>
-                      <div style={overviewStatValueStyleSmall}>{formatNumber(latestVolume)}</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={overviewCardStyle}>
-                  <div style={overviewCardLabelStyle}>Easy-to-Understand Summary</div>
-                  <p style={bodyCopyStyle}>{easySummary}</p>
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gap: 14, marginTop: 18 }}>
-                {featuredNews.length ? (
-                  featuredNews.map((item, index) => (
+              <div style={{ display: "grid", gap: 14, marginTop: 16 }}>
+                {detailedNews.length ? (
+                  detailedNews.map((item, index) => (
                     <article
                       key={`${item.link}-${index}`}
                       style={{
@@ -1067,24 +1003,57 @@ export default async function StockNewsPage({ params }: Props) {
                       <h3 style={newsHeadlineStyle}>{item.title}</h3>
                       <p style={newsSummaryStyle}>{buildNewsSummary(item, upper)}</p>
 
-                      <div style={sourceFooterStyle}>
-                        Source noted for context: {compactSource(item.source)}
-                      </div>
+                      <a
+                        href={item.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={readOriginalLinkStyle}
+                      >
+                        Read original coverage ↗
+                      </a>
                     </article>
                   ))
                 ) : (
                   <div style={newsLeadCardStyle}>
-                    <h3 style={{ ...newsHeadlineStyle, marginTop: 0 }}>
-                      No fresh headline set available
-                    </h3>
+                    <h3 style={{ ...newsHeadlineStyle, marginTop: 0 }}>No fresh headline set available</h3>
                     <p style={newsSummaryStyle}>
                       This page still works as a stock-news analysis hub, but the current news feed
-                      is light. In that case, the bigger value shifts to technical context, tone,
-                      and what traders may watch next.
+                      is light. In that case, the page leans more on structure, levels, and what
+                      traders may watch next.
                     </p>
                   </div>
                 )}
               </div>
+
+              {compactNews.length ? (
+                <div style={{ marginTop: 16 }}>
+                  <div style={compactFeedLabelStyle}>Older updates drop into a lighter feed</div>
+
+                  <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+                    {compactNews.map((item, index) => (
+                      <article key={`${item.link}-compact-${index}`} style={compactNewsRowStyle}>
+                        <div style={{ minWidth: 88 }}>
+                          <div style={compactSourceStyle}>{compactSource(item.source)}</div>
+                          <div style={compactDateStyle}>{formatDate(item.pubDate)}</div>
+                        </div>
+
+                        <div style={{ minWidth: 0 }}>
+                          <div style={compactHeadlineStyle}>{item.title}</div>
+                        </div>
+
+                        <a
+                          href={item.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={compactReadStyle}
+                        >
+                          ↗
+                        </a>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </section>
 
             <section style={featuredInsightShellStyle}>
@@ -1111,9 +1080,7 @@ export default async function StockNewsPage({ params }: Props) {
                       </div>
                     ))
                   ) : (
-                    <div style={signalBoxEmptyStyle}>
-                      No strong positive keyword cluster in the latest set.
-                    </div>
+                    <div style={signalBoxEmptyStyle}>No strong positive keyword cluster in the latest set.</div>
                   )}
                 </div>
 
@@ -1126,9 +1093,7 @@ export default async function StockNewsPage({ params }: Props) {
                       </div>
                     ))
                   ) : (
-                    <div style={signalBoxEmptyStyle}>
-                      No strong negative keyword cluster in the latest set.
-                    </div>
+                    <div style={signalBoxEmptyStyle}>No strong negative keyword cluster in the latest set.</div>
                   )}
                 </div>
               </div>
@@ -1146,6 +1111,12 @@ export default async function StockNewsPage({ params }: Props) {
                   </div>
                 ))}
               </div>
+
+              <div style={{ marginTop: 16 }}>
+                <Link href="/pickers" style={midPageCtaStyle}>
+                  TRADE THIS STOCK
+                </Link>
+              </div>
             </section>
 
             <section style={sidebarCardStyle}>
@@ -1158,6 +1129,48 @@ export default async function StockNewsPage({ params }: Props) {
                 <p style={bodyCopyStyle}>{technicalRead.levelText}</p>
               </div>
             </section>
+
+            <section style={sidebarCardStyle}>
+              <div style={sectionEyebrowStyle}>Watch list</div>
+              <h2 style={sectionTitleSmallStyle}>Levels Traders May Watch</h2>
+
+              <div style={{ display: "grid", gap: 12, marginTop: 14 }}>
+                {watchList.map((item) => (
+                  <div key={item} style={bulletRowStyle}>
+                    <div style={bulletDotStyle} />
+                    <div style={bulletTextStyle}>{item}</div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section style={sidebarCardStyle}>
+              <div style={sectionEyebrowStyle}>Next actions</div>
+              <h2 style={sectionTitleSmallStyle}>Explore More</h2>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+                <Link href={`/stock/${encodeURIComponent(upper)}`} style={sideLinkStyle("blue")}>
+                  Open full {upper} stock page
+                </Link>
+
+                <a
+                  href={`/api/go/tradingview?symbol=${encodeURIComponent(upper)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={sideLinkStyle("green")}
+                >
+                  OPEN ON TRADINGVIEW ↗
+                </a>
+
+                <Link href="/pickers" style={sideLinkStyle("red")}>
+                  TRADE THIS STOCK
+                </Link>
+
+                <Link href="/learn" style={sideLinkStyle("blue")}>
+                  Read beginner learn guides
+                </Link>
+              </div>
+            </section>
           </aside>
         </section>
 
@@ -1165,14 +1178,14 @@ export default async function StockNewsPage({ params }: Props) {
           <div>
             <div style={bottomStripTitleStyle}>Continue your {upper} research</div>
             <div style={bottomStripTextStyle}>
-              Move into the full analysis page for a deeper technical read, open TradingView for
-              charting tools, or head to Platforms when you are ready to place a trade.
+              Use the chart page for a fuller technical read, TradingView for external charting, and
+              Pickers to explore related setups on MyStockHarbor.
             </div>
           </div>
 
           <div style={bottomStripActionsStyle}>
             <Link href={`/stock/${encodeURIComponent(upper)}`} style={bottomActionStyle("blue")}>
-              Stock Analysis
+              Full Stock Page
             </Link>
 
             <a
@@ -1184,7 +1197,7 @@ export default async function StockNewsPage({ params }: Props) {
               OPEN ON TRADINGVIEW ↗
             </a>
 
-            <Link href="/platforms" style={bottomActionStyle("red")}>
+            <Link href="/pickers" style={bottomActionStyle("red")}>
               TRADE THIS STOCK
             </Link>
           </div>
@@ -1211,12 +1224,7 @@ export default async function StockNewsPage({ params }: Props) {
             padding: 20px 18px 36px;
           }
 
-          .newsGrid,
-          .overviewGrid {
-            grid-template-columns: 1fr;
-          }
-
-          .heroShell {
+          .newsGrid {
             grid-template-columns: 1fr;
           }
         }
@@ -1241,8 +1249,10 @@ const heroShellStyle: CSSProperties = {
   border: "1px solid rgba(255,255,255,0.09)",
   borderRadius: 28,
   padding: 22,
-  background: "linear-gradient(135deg, rgba(10,16,32,0.98), rgba(6,9,15,0.98))",
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 20px 54px rgba(0,0,0,0.36)",
+  background:
+    "linear-gradient(135deg, rgba(10,16,32,0.98), rgba(6,9,15,0.98))",
+  boxShadow:
+    "inset 0 1px 0 rgba(255,255,255,0.05), 0 20px 54px rgba(0,0,0,0.36)",
 };
 
 const heroLeftStyle: CSSProperties = {
@@ -1267,6 +1277,37 @@ const newsDeskTagStyle: CSSProperties = {
   fontWeight: 950,
   letterSpacing: "0.08em",
   textTransform: "uppercase",
+};
+
+const heroMetricRowStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gap: 12,
+  marginTop: 18,
+};
+
+const heroMetricStyle: CSSProperties = {
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 16,
+  padding: 14,
+  background: "rgba(255,255,255,0.03)",
+};
+
+const heroMetricLabelStyle: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+  color: "rgba(191,219,254,0.86)",
+};
+
+const heroMetricValueStyle: CSSProperties = {
+  marginTop: 8,
+  fontSize: 24,
+  lineHeight: 1.08,
+  fontWeight: 950,
+  letterSpacing: "-0.04em",
+  color: "#f8fafc",
 };
 
 const heroCtaRowStyle: CSSProperties = {
@@ -1302,22 +1343,6 @@ const heroSecondaryCtaStyle: CSSProperties = {
   border: "1px solid rgba(34,197,94,0.30)",
   background: "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))",
   color: "#dcfce7",
-  textDecoration: "none",
-  fontWeight: 900,
-  fontSize: 13,
-  letterSpacing: "0.04em",
-};
-
-const heroRedCtaStyle: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  minHeight: 46,
-  padding: "12px 16px",
-  borderRadius: 14,
-  border: "1px solid rgba(248,113,113,0.24)",
-  background: "linear-gradient(135deg, rgba(248,113,113,0.16), rgba(185,28,28,0.08))",
-  color: "#fee2e2",
   textDecoration: "none",
   fontWeight: 900,
   fontSize: 13,
@@ -1386,7 +1411,11 @@ function scoreLabelStyle(tone: ScoreTone): CSSProperties {
     letterSpacing: "0.06em",
     textTransform: "uppercase",
     color:
-      tone === "green" ? "#dcfce7" : tone === "red" ? "#fee2e2" : "#fef3c7",
+      tone === "green"
+        ? "#dcfce7"
+        : tone === "red"
+        ? "#fee2e2"
+        : "#fef3c7",
     background:
       tone === "green"
         ? "rgba(34,197,94,0.18)"
@@ -1506,67 +1535,6 @@ const bodyCopyStyle: CSSProperties = {
   color: "rgba(241,245,249,0.82)",
 };
 
-const overviewGridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "minmax(0, 1.05fr) minmax(0, 0.95fr)",
-  gap: 14,
-  marginTop: 16,
-};
-
-const overviewCardStyle: CSSProperties = {
-  border: "1px solid rgba(255,255,255,0.08)",
-  borderRadius: 18,
-  padding: 16,
-  background: "rgba(255,255,255,0.028)",
-};
-
-const overviewCardLabelStyle: CSSProperties = {
-  fontSize: 11,
-  fontWeight: 950,
-  letterSpacing: "0.1em",
-  textTransform: "uppercase",
-  color: "rgba(191,219,254,0.86)",
-};
-
-const overviewStatsGridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  gap: 10,
-  marginTop: 14,
-};
-
-const overviewStatStyle: CSSProperties = {
-  border: "1px solid rgba(255,255,255,0.06)",
-  borderRadius: 14,
-  padding: 12,
-  background: "rgba(255,255,255,0.02)",
-};
-
-const overviewStatTitleStyle: CSSProperties = {
-  fontSize: 11,
-  fontWeight: 900,
-  letterSpacing: "0.08em",
-  textTransform: "uppercase",
-  color: "rgba(241,245,249,0.62)",
-};
-
-const overviewStatValueStyle: CSSProperties = {
-  marginTop: 8,
-  fontSize: 24,
-  lineHeight: 1.05,
-  fontWeight: 950,
-  letterSpacing: "-0.04em",
-  color: "#f8fafc",
-};
-
-const overviewStatValueStyleSmall: CSSProperties = {
-  marginTop: 8,
-  fontSize: 16,
-  lineHeight: 1.3,
-  fontWeight: 850,
-  color: "#f8fafc",
-};
-
 const newsLeadCardStyle: CSSProperties = {
   border: "1px solid rgba(255,255,255,0.08)",
   borderRadius: 16,
@@ -1614,11 +1582,63 @@ const newsSummaryStyle: CSSProperties = {
   color: "rgba(241,245,249,0.82)",
 };
 
-const sourceFooterStyle: CSSProperties = {
+const readOriginalLinkStyle: CSSProperties = {
+  display: "inline-flex",
   marginTop: 12,
+  color: "#93c5fd",
+  textDecoration: "none",
+  fontSize: 14,
+  fontWeight: 800,
+};
+
+const compactFeedLabelStyle: CSSProperties = {
   fontSize: 12,
-  lineHeight: 1.5,
-  color: "rgba(241,245,249,0.48)",
+  fontWeight: 850,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  color: "rgba(241,245,249,0.56)",
+};
+
+const compactNewsRowStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "88px minmax(0, 1fr) 32px",
+  gap: 12,
+  alignItems: "start",
+  border: "1px solid rgba(255,255,255,0.06)",
+  borderRadius: 14,
+  padding: 12,
+  background: "rgba(255,255,255,0.02)",
+};
+
+const compactSourceStyle: CSSProperties = {
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#dbeafe",
+};
+
+const compactDateStyle: CSSProperties = {
+  marginTop: 4,
+  fontSize: 11,
+  color: "rgba(241,245,249,0.56)",
+};
+
+const compactHeadlineStyle: CSSProperties = {
+  fontSize: 14,
+  lineHeight: 1.55,
+  color: "rgba(241,245,249,0.84)",
+};
+
+const compactReadStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: 28,
+  height: 28,
+  borderRadius: 999,
+  border: "1px solid rgba(59,130,246,0.22)",
+  color: "#93c5fd",
+  textDecoration: "none",
+  fontWeight: 900,
 };
 
 function signalBoxStyle(tone: "green" | "red"): CSSProperties {
@@ -1680,6 +1700,55 @@ const bulletTextStyle: CSSProperties = {
   color: "rgba(241,245,249,0.84)",
 };
 
+const midPageCtaStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 42,
+  padding: "10px 14px",
+  borderRadius: 12,
+  border: "1px solid rgba(34,197,94,0.30)",
+  background: "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))",
+  color: "#dcfce7",
+  textDecoration: "none",
+  fontWeight: 900,
+  fontSize: 13,
+  letterSpacing: "0.04em",
+};
+
+function sideLinkStyle(tone: "blue" | "green" | "red"): CSSProperties {
+  const tones = {
+    blue: {
+      border: "1px solid rgba(59,130,246,0.24)",
+      background: "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(37,99,235,0.08))",
+      color: "#dbeafe",
+    },
+    green: {
+      border: "1px solid rgba(34,197,94,0.24)",
+      background: "linear-gradient(135deg, rgba(34,197,94,0.14), rgba(21,128,61,0.08))",
+      color: "#dcfce7",
+    },
+    red: {
+      border: "1px solid rgba(248,113,113,0.22)",
+      background: "linear-gradient(135deg, rgba(248,113,113,0.14), rgba(185,28,28,0.08))",
+      color: "#fee2e2",
+    },
+  } as const;
+
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 42,
+    padding: "10px 14px",
+    borderRadius: 12,
+    textDecoration: "none",
+    fontSize: 13,
+    fontWeight: 850,
+    ...tones[tone],
+  };
+}
+
 const bottomStripStyle: CSSProperties = {
   marginTop: 22,
   border: "1px solid rgba(255,255,255,0.08)",
@@ -1716,14 +1785,14 @@ const bottomStripActionsStyle: CSSProperties = {
 
 function bottomActionStyle(tone: "blue" | "green" | "red"): CSSProperties {
   return {
-    ...topNavBtnStyle(tone),
+    ...sideLinkStyle(tone),
     borderRadius: 999,
     minHeight: 44,
     padding: "11px 15px",
   };
 }
 
-function topNavBtnStyle(type: "dashboard" | "blue" | "green" | "red"): CSSProperties {
+function topNavBtnStyle(type: "dashboard" | "blue" | "green" | "pickers"): CSSProperties {
   if (type === "dashboard") {
     return {
       display: "inline-flex",
