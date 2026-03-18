@@ -604,15 +604,16 @@ export default function PlatformsPage() {
               }}
             >
               <div
+                className="platformTopRow"
                 style={{
                   display: "flex",
                   alignItems: "flex-start",
                   justifyContent: "space-between",
                   gap: 16,
-                  flexWrap: "wrap",
+                  flexWrap: "nowrap",
                 }}
               >
-                <div style={{ minWidth: 0, flex: "1 1 700px" }}>
+                <div style={{ minWidth: 0, flex: "1 1 auto" }}>
                   <div
                     style={{
                       display: "flex",
@@ -789,11 +790,13 @@ export default function PlatformsPage() {
 
 <div
   style={{
-    minWidth: 260,
+    width: 300,
+    minWidth: 300,
     maxWidth: 300,
     display: "grid",
     gap: 12,
     alignContent: "start",
+    flex: "0 0 300px",
   }}
 >
   <a href={item.affiliateHref} style={ctaBtn()}>
@@ -952,6 +955,10 @@ export default function PlatformsPage() {
 
           .platformGrid {
             grid-template-columns: 1fr !important;
+          }
+
+          .platformTopRow {
+            flex-wrap: wrap !important;
           }
         }
 
