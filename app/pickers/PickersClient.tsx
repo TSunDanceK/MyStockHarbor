@@ -1242,35 +1242,28 @@ const displaySections = useMemo(() => {
 
         {!loading &&
         !err &&
-        (updatedAt ||
-          universeSize ||
-          dynamicUniverseCount ||
-          dynamicUniversePreview ||
-          estimatedApiCalls) ? (
+        (updatedAt || universeSize || dynamicUniverseCount || estimatedApiCalls) ? (
           <div
             style={{
-              marginTop: 4,
-              paddingTop: 6,
-              fontSize: 11,
-              lineHeight: 1.6,
-              opacity: 0.48,
+              marginTop: 6,
+              paddingTop: 4,
+              fontSize: 10,
+              lineHeight: 1.55,
+              opacity: 0.34,
               textAlign: "right",
+              letterSpacing: "0.01em",
+              userSelect: "none",
             }}
           >
             {updatedAt ? (
-              <div>Last picker refresh: {new Date(updatedAt).toLocaleString()}</div>
+              <div>{new Date(updatedAt).toLocaleString()}</div>
             ) : null}
-            {universeSize != null ? <div>Universe scanned: {universeSize} stocks</div> : null}
+            {universeSize != null ? <div>Universe: {universeSize}</div> : null}
             {dynamicUniverseCount != null ? (
-              <div>Dynamic symbols detected: {dynamicUniverseCount}</div>
-            ) : null}
-            {dynamicUniversePreview ? (
-              <div style={{ opacity: 0.7 }}>
-                Dynamic preview: {dynamicUniversePreview.join(", ")}
-              </div>
+              <div>Dynamic: {dynamicUniverseCount}</div>
             ) : null}
             {estimatedApiCalls != null ? (
-              <div>Estimated calls used on refresh: {estimatedApiCalls}</div>
+              <div>Estimated: {estimatedApiCalls}</div>
             ) : null}
           </div>
         ) : null}
