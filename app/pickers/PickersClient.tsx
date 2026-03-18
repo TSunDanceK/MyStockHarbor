@@ -175,12 +175,12 @@ function getSellSignalCount(record: SignalRecord) {
 }
 
 function getHeaderHelp(title: string) {
-  if (title.includes("BUY")) {
-    return "These highlight strong trend setups. Stocks here may already be trending strongly and could be extended. Trend traders sometimes buy these moves, while dip traders may prefer to wait for pullbacks.";
+  if (title.includes("Buy Signals")) {
+    return "These highlight stocks showing multiple bullish technical conditions at the same time. Some may be trending strongly already, so review the chart before chasing strength.";
   }
 
-  if (title.includes("Sell")) {
-    return "These highlight bearish or stretched conditions. Some traders review these for potential pullbacks or short opportunities.";
+  if (title.includes("Sell Signals")) {
+    return "These highlight stocks showing multiple bearish technical conditions. Some traders review these for pullback risk, weaker trends, or possible short setups.";
   }
 
   if (title.includes("Oversold")) {
@@ -195,8 +195,8 @@ function getHeaderHelp(title: string) {
     return "Divergence occurs when price and momentum indicators move differently, which can sometimes signal weakening trends or possible reversals.";
   }
 
-  if (title.includes("Buy-the-Dip")) {
-    return "These setups are more about pullbacks inside a broader trend. Traders often review these when looking for dip entries rather than buying pure strength near the top.";
+  if (title.includes("Buy the Dip") || title.includes("Recent Highs")) {
+    return "These setups are more about pullbacks from stronger recent charts. Traders often review these when looking for dip entries rather than buying pure strength near the top.";
   }
 
   if (title.includes("Breakout")) {
@@ -375,9 +375,9 @@ export default function PickersClient() {
     if (!items.length) return null;
 
     return {
-      title: "Stocks with the MOST BUY signals",
+      title: "Top Stocks With Buy Signals (Live Scan)",
       description:
-        "The strongest bullish-leaning setups right now, ranked by how many buy signals they currently show.",
+        "Stocks showing multiple bullish technical signals right now, ranked by how many buy signals are currently active.",
       items,
     };
   }, [safeSignalRecords]);
@@ -403,9 +403,9 @@ export default function PickersClient() {
     if (!items.length) return null;
 
     return {
-      title: "Stocks with the most Sell signals",
+      title: "Top Stocks With Sell Signals (Bearish Setups)",
       description:
-        "The strongest bearish-leaning setups right now, ranked by how many sell signals they currently show.",
+        "Stocks showing multiple bearish technical signals right now, ranked by how many sell signals are currently active.",
       items,
     };
   }, [safeSignalRecords]);
