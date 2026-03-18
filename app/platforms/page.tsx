@@ -796,6 +796,34 @@ export default function PlatformsPage() {
     alignContent: "start",
   }}
 >
+  <a href={item.affiliateHref} style={ctaBtn()}>
+    {item.ctaText} →
+  </a>
+
+  {item.name === "Trading 212" && (
+    <div
+      style={{
+        fontSize: 13,
+        color: "#86efac",
+        fontWeight: 800,
+        textAlign: "center",
+      }}
+    >
+      Most beginners start here
+    </div>
+  )}
+
+  <div
+    style={{
+      fontSize: 13,
+      opacity: 0.72,
+      lineHeight: 1.5,
+      textAlign: "center",
+    }}
+  >
+    Visit official platform page
+  </div>
+
   {item.name === "TradingView" && (
     <div
       style={{
@@ -833,34 +861,6 @@ export default function PlatformsPage() {
       </div>
     </div>
   )}
-
-  <a href={item.affiliateHref} style={ctaBtn()}>
-    {item.ctaText} →
-  </a>
-
-  {item.name === "Trading 212" && (
-    <div
-      style={{
-        fontSize: 13,
-        color: "#86efac",
-        fontWeight: 800,
-        textAlign: "center",
-      }}
-    >
-      Most beginners start here
-    </div>
-  )}
-
-  <div
-    style={{
-      fontSize: 13,
-      opacity: 0.72,
-      lineHeight: 1.5,
-      textAlign: "center",
-    }}
-  >
-    Visit official platform page
-  </div>
 </div>
               </div>
 
