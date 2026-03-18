@@ -17,6 +17,9 @@ export const metadata: Metadata = {
   title: "MyStockHarbor | Free Trading Dashboard, Market Signals & Technical Analysis",
   description:
     "MyStockHarbor helps traders track stocks, analyse technical indicators, monitor market benchmarks, and learn trading strategies with free educational tools and market insights.",
+  icons: {
+    icon: "/icon.png",
+  },
 };
 
 export default function RootLayout({
