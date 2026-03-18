@@ -1041,6 +1041,8 @@ export default async function StockNewsPage({ params }: Props) {
   const lastRsi = lastNum(rsi);
 
   const trend = trendLabel(lastClose, lastMA50, lastMA200);
+   const isInvalidTicker = !quote?.price && history.length === 0;
+  const isInvalidTicker = !quote?.price && history.length === 0;
   const priceVs50 = pctFromBase(lastClose, lastMA50);
   const priceVs200 = pctFromBase(lastClose, lastMA200);
 
@@ -1108,18 +1110,20 @@ export default async function StockNewsPage({ params }: Props) {
     (item) => !detailedNews.some((picked) => picked.link === item.link)
   ).slice(0, 6);
 
-  const aiBriefs = await getAiNewsBriefs({
-    symbol: upper,
-    companyName,
-    trend,
-    newsScoreLabel: newsScore.label,
-    items: detailedNews.map((item) => ({
-      title: item.title,
-      source: item.source,
-      pubDate: item.pubDate,
-      description: item.description,
-    })),
-  });
+  const aiBriefs = isInvalidTicker
+    ? []
+    : await getAiNewsBriefs({
+        symbol: upper,
+        companyName,
+        trend,
+        newsScoreLabel: newsScore.label,
+        items: detailedNews.map((item) => ({
+          title: item.title,
+          source: item.source,
+          pubDate: item.pubDate,
+          description: item.description,
+        })),
+      });
 
   const summaryByTitle = Object.fromEntries(
     detailedNews.map((item, index) => [
@@ -1128,27 +1132,29 @@ export default async function StockNewsPage({ params }: Props) {
     ])
   );
 
-  const aiInsight = await getAiNewsInsight({
-    symbol: upper,
-    companyName,
-    trend,
-    newsScoreLabel: newsScore.label,
-    newsScoreValue: newsScore.score,
-    earningsTone: earningsScore.label,
-    rsi: lastRsi,
-    priceVs50,
-    priceVs200,
-    recentHigh,
-    recentLow,
-    items: detailedNews.map((item, index) => ({
-      title: item.title,
-      source: item.source,
-      pubDate: item.pubDate,
-      description: item.description,
-      summary: aiBriefs[index]?.summary ?? null,
-      whyItMatters: aiBriefs[index]?.whyItMatters ?? null,
-    })),
-  });
+  const aiInsight = isInvalidTicker
+    ? null
+    : await getAiNewsInsight({
+        symbol: upper,
+        companyName,
+        trend,
+        newsScoreLabel: newsScore.label,
+        newsScoreValue: newsScore.score,
+        earningsTone: earningsScore.label,
+        rsi: lastRsi,
+        priceVs50,
+        priceVs200,
+        recentHigh,
+        recentLow,
+        items: detailedNews.map((item, index) => ({
+          title: item.title,
+          source: item.source,
+          pubDate: item.pubDate,
+          description: item.description,
+          summary: aiBriefs[index]?.summary ?? null,
+          whyItMatters: aiBriefs[index]?.whyItMatters ?? null,
+        })),
+      });
 
   const displayBeyondHeadline = aiInsight?.beyondHeadline?.trim()
     ? aiInsight.beyondHeadline
@@ -1249,59 +1255,78 @@ export default async function StockNewsPage({ params }: Props) {
               {upper} Stock News, News Score & What It Could Mean
             </h1>
 
-            <p
-              style={{
-                margin: "14px 0 0 0",
-                maxWidth: 780,
-                fontSize: 16,
-                lineHeight: 1.75,
-                color: "rgba(241,245,249,0.82)",
-              }}
-            >
-              {leadSummary}
-            </p>
+<p
+  style={{
+    margin: "14px 0 0 0",
+    maxWidth: 780,
+    fontSize: 16,
+    lineHeight: 1.75,
+    color: "rgba(241,245,249,0.82)",
+  }}
+>
+  {leadSummary}
+</p>
 
-            <div style={heroMetricRowStyle}>
-              <div style={heroMetricStyle}>
-                <div style={heroMetricLabelStyle}>Last Price</div>
-                <div style={heroMetricValueStyle}>
-                  {formatMoney(quote?.price ?? lastClose)}
-                </div>
-              </div>
+<div style={heroMetricRowStyle}>
+  <div style={heroMetricStyle}>
+    <div style={heroMetricLabelStyle}>Last Price</div>
+    <div
+      style={{
+        ...heroMetricValueStyle,
+        color: isInvalidTicker ? "#ef4444" : "#f8fafc",
+        fontSize: isInvalidTicker ? 14 : heroMetricValueStyle.fontSize,
+        letterSpacing: isInvalidTicker ? "0.08em" : "-0.04em",
+      }}
+    >
+      {isInvalidTicker
+        ? "INVALID TICKER"
+        : formatMoney(quote?.price ?? lastClose)}
+    </div>
+  </div>
 
-              <div style={heroMetricStyle}>
-                <div style={heroMetricLabelStyle}>Trend Context</div>
-                <div style={heroMetricValueStyle}>{trend}</div>
-              </div>
+  <div style={heroMetricStyle}>
+    <div style={heroMetricLabelStyle}>Trend Context</div>
+    <div style={heroMetricValueStyle}>{trend}</div>
+  </div>
 
-              <div style={heroMetricStyle}>
-                <div style={heroMetricLabelStyle}>RSI (14)</div>
-                <div style={heroMetricValueStyle}>
-                  {typeof lastRsi === "number" ? lastRsi.toFixed(1) : "—"}
-                </div>
-              </div>
-            </div>
+  <div style={heroMetricStyle}>
+    <div style={heroMetricLabelStyle}>RSI (14)</div>
+    <div
+      style={{
+        ...heroMetricValueStyle,
+        color: isInvalidTicker ? "#ef4444" : "#f8fafc",
+        fontSize: isInvalidTicker ? 14 : heroMetricValueStyle.fontSize,
+        letterSpacing: isInvalidTicker ? "0.08em" : "-0.04em",
+      }}
+    >
+      {isInvalidTicker
+        ? "INVALID TICKER"
+        : typeof lastRsi === "number"
+        ? lastRsi.toFixed(1)
+        : "—"}
+    </div>
+  </div>
+</div>
 
-            <div style={heroCtaRowStyle}>
-              <a
-                href={`/api/go/tradingview?symbol=${encodeURIComponent(upper)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={heroPrimaryCtaStyle}
-              >
-                OPEN ON TRADINGVIEW ↗
-              </a>
+<div style={heroCtaRowStyle}>
+  <a
+    href={`/api/go/tradingview?symbol=${encodeURIComponent(upper)}`}
+    target="_blank"
+    rel="noopener noreferrer"
+    style={heroPrimaryCtaStyle}
+  >
+    OPEN ON TRADINGVIEW ↗
+  </a>
 
-              <Link href="/platforms" style={heroSecondaryCtaStyle}>
-                TRADE THIS STOCK
-              </Link>
-            </div>
+  <Link href="/platforms" style={heroSecondaryCtaStyle}>
+    TRADE THIS STOCK
+  </Link>
+</div>
 
-            <div style={heroSubCopyStyle}>
-              Full chart, indicators and drawing tools on TradingView. Move to Platforms when you
-              are ready to act.
-            </div>
-          </div>
+<div style={heroSubCopyStyle}>
+  Full chart, indicators and drawing tools on TradingView. Move to Platforms when you
+  are ready to act.
+</div>
 
           <div style={heroRightStyle}>
             <div style={scorePanelStyle(newsScore.tone)}>
