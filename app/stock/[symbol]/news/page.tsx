@@ -1042,7 +1042,6 @@ export default async function StockNewsPage({ params }: Props) {
 
   const trend = trendLabel(lastClose, lastMA50, lastMA200);
    const isInvalidTicker = !quote?.price && history.length === 0;
-  const isInvalidTicker = !quote?.price && history.length === 0;
   const priceVs50 = pctFromBase(lastClose, lastMA50);
   const priceVs200 = pctFromBase(lastClose, lastMA200);
 
@@ -1327,6 +1326,7 @@ export default async function StockNewsPage({ params }: Props) {
   Full chart, indicators and drawing tools on TradingView. Move to Platforms when you
   are ready to act.
 </div>
+            </div>
 
           <div style={heroRightStyle}>
             <div style={scorePanelStyle(newsScore.tone)}>
