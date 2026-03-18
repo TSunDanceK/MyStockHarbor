@@ -2958,13 +2958,13 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
           gap: 10px;
         }
 
+
         .msh-bench-grid {
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 14px;
         }
 
-      <style>{`
         .msh-news-sections {
           display: grid;
           gap: 18px;
@@ -2995,6 +2995,8 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
         .msh-mobile-nav {
           display: none;
         }
+
+        
 
         @media (min-width: 761px) {
           .msh-top-nav-btn {
