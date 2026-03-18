@@ -54,7 +54,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/trading-risk-management",
   ];
 
-  const stocks = [
+  const coreMegaCaps = [
     "AAPL",
     "MSFT",
     "NVDA",
@@ -98,6 +98,107 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "DIS",
   ];
 
+  const retailInterestStocks = [
+    "PLTR",
+    "SOFI",
+    "RIVN",
+    "LCID",
+    "NIO",
+    "HOOD",
+    "COIN",
+    "DKNG",
+    "AFRM",
+    "UPST",
+    "ROKU",
+    "SNAP",
+    "PINS",
+    "U",
+    "SHOP",
+    "SQ",
+    "RDDT",
+    "MSTR",
+    "MARA",
+    "RIOT",
+    "HIMS",
+    "CAVA",
+    "DUOL",
+    "CELH",
+    "ARM",
+    "SMCI",
+    "PATH",
+    "CVNA",
+    "CHWY",
+    "ETSY",
+  ];
+
+  const recognizableMidCaps = [
+    "F",
+    "GM",
+    "UBER",
+    "LYFT",
+    "ABNB",
+    "NET",
+    "CRWD",
+    "PANW",
+    "SNOW",
+    "ZS",
+    "DDOG",
+    "OKTA",
+    "DOCU",
+    "MDB",
+    "ZS",
+    "TWLO",
+    "HUBS",
+    "ESTC",
+    "TEAM",
+    "ZM",
+    "BILL",
+    "TTD",
+    "ROKU",
+    "INTU",
+    "NOW",
+    "ADSK",
+    "ANET",
+    "MU",
+    "KLAC",
+    "LRCX",
+    "AMAT",
+    "ON",
+    "MRVL",
+    "DELL",
+    "HPQ",
+    "CSX",
+    "UAL",
+    "DAL",
+    "AAL",
+    "CCL",
+    "RCL",
+    "MAR",
+    "HLT",
+    "CMG",
+    "NKE",
+    "LOW",
+    "CAT",
+    "DE",
+    "GE",
+    "BA",
+    "RTX",
+    "PFE",
+    "BMY",
+    "GILD",
+    "AMGN",
+    "ISRG",
+    "BKNG",
+    "MELI",
+    "EBAY",
+    "WDAY",
+    "WDAY",
+  ];
+
+  const stocks = Array.from(
+    new Set([...coreMegaCaps, ...retailInterestStocks, ...recognizableMidCaps])
+  );
+
   const etfs = [
     "SPY",
     "QQQ",
@@ -113,8 +214,24 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "XLY",
     "XLV",
     "XLRE",
+    "XLI",
+    "XLC",
+    "XLB",
+    "XLU",
+    "SMH",
+    "SOXX",
+    "IBIT",
+    "HODL",
+    "ARKW",
+    "VUG",
+    "SCHD",
+    "DGRO",
+    "JEPI",
+    "JEPQ",
     "GLD",
     "SLV",
+    "TLT",
+    "HYG",
   ];
 
   const mainPageEntries = mainPages.map((page) => ({
@@ -135,28 +252,28 @@ export default function sitemap(): MetadataRoute.Sitemap {
     url: `${baseUrl}/stock/${encodeURIComponent(symbol.toUpperCase())}`,
     lastModified: now,
     changeFrequency: "daily" as const,
-    priority: 0.8,
+    priority: 0.72,
   }));
 
   const stockNewsEntries = stocks.map((symbol) => ({
     url: `${baseUrl}/stock/${encodeURIComponent(symbol.toUpperCase())}/news`,
     lastModified: now,
     changeFrequency: "daily" as const,
-    priority: 0.78,
+    priority: 0.74,
   }));
 
   const etfEntries = etfs.map((symbol) => ({
     url: `${baseUrl}/stock/${encodeURIComponent(symbol.toUpperCase())}`,
     lastModified: now,
     changeFrequency: "daily" as const,
-    priority: 0.8,
+    priority: 0.76,
   }));
 
   const etfNewsEntries = etfs.map((symbol) => ({
     url: `${baseUrl}/stock/${encodeURIComponent(symbol.toUpperCase())}/news`,
     lastModified: now,
     changeFrequency: "daily" as const,
-    priority: 0.78,
+    priority: 0.74,
   }));
 
   return [
