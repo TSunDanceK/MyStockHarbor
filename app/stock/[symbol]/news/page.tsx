@@ -5,7 +5,7 @@ import { getAiNewsBriefs } from "@/lib/ai-news-briefs";
 
 export const runtime = "nodejs";
 
-type Props = {
+type Props = { 
   params: Promise<{ symbol: string }>;
 };
 
