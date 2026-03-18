@@ -855,9 +855,8 @@ export default async function StockNewsPage({ params }: Props) {
     })),
   });
 
-  const aiBriefByHeadline = new Map(aiBriefs.map((item) => [item.headline, item]));
   const summaryByTitle = Object.fromEntries(
-    aiBriefs.map((item) => [item.headline, item.summary])
+    detailedNews.map((item, index) => [item.title, aiBriefs[index]?.summary ?? item.description ?? ""])
   );
 
   return (
@@ -1033,7 +1032,7 @@ export default async function StockNewsPage({ params }: Props) {
               <div style={{ display: "grid", gap: 14, marginTop: 16 }}>
                 {detailedNews.length ? (
                   detailedNews.map((item, index) => {
-                    const aiBrief = aiBriefByHeadline.get(item.title);
+                    const aiBrief = aiBriefs[index];
 
                     return (
                       <article
@@ -1054,13 +1053,17 @@ export default async function StockNewsPage({ params }: Props) {
                         <h3 style={newsHeadlineStyle}>{item.title}</h3>
 
                         <p style={newsSummaryStyle}>
-                          {aiBrief?.summary ?? buildNewsSummary(item, upper, trend, newsScore)}
+                          {aiBrief?.summary?.trim()
+                            ? aiBrief.summary
+                            : buildNewsSummary(item, upper, trend, newsScore)}
                         </p>
 
                         <div style={whyItMattersBoxStyle}>
                           <div style={whyItMattersLabelStyle}>Why this matters</div>
                           <div style={whyItMattersTextStyle}>
-                            {aiBrief?.whyItMatters ?? buildWhyItMatters(item, upper, trend, newsScore)}
+                            {aiBrief?.whyItMatters?.trim()
+                              ? aiBrief.whyItMatters
+                              : buildWhyItMatters(item, upper, trend, newsScore)}
                           </div>
                         </div>
 
