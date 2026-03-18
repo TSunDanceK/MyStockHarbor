@@ -2678,7 +2678,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
 
   function NewsPanel() {
     return (
-      <SectionCard title="Internal Stock News">
+      <SectionCard title={news ? `Latest Headlines on ${news.symbol}` : "Latest Headlines"}>
         {news ? (
           <div style={{ display: "grid", gap: 16 }}>
             <div
@@ -2704,7 +2704,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
                 </div>
 
                 <div style={{ marginTop: 6, fontSize: 22, fontWeight: 950, lineHeight: 1.1 }}>
-                  Latest headlines for {news.symbol}
+                  Latest headlines on {news.symbol}
                 </div>
 
                 <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.6, opacity: 0.78 }}>
@@ -2749,7 +2749,10 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: news.cards.length >= 3 ? "repeat(3, minmax(0, 1fr))" : "repeat(2, minmax(0, 1fr))",
+                gridTemplateColumns:
+                  news.cards.length >= 3
+                    ? "repeat(3, minmax(0, 1fr))"
+                    : "repeat(2, minmax(0, 1fr))",
                 gap: 14,
               }}
             >
@@ -2810,11 +2813,32 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
             </div>
 
             {!news.cards.length ? (
-              <div style={{ opacity: 0.7 }}>No internal news cards are available for this ticker yet.</div>
+              <div style={{ opacity: 0.7 }}>No headline cards are available for this ticker yet.</div>
             ) : null}
           </div>
         ) : (
-          <div style={{ opacity: 0.7 }}>Internal news unavailable.</div>
+          <div
+            style={{
+              display: "grid",
+              gap: 14,
+            }}
+          >
+            <div
+              style={{
+                height: 12,
+                borderRadius: 999,
+                overflow: "hidden",
+                background: "rgba(255,255,255,0.08)",
+                border: `1px solid ${COLORS.border}`,
+              }}
+            >
+              <div className="msh-news-loading-bar" />
+            </div>
+
+            <div style={{ fontSize: 14, lineHeight: 1.6, opacity: 0.76 }}>
+              Building your latest headline briefing for this ticker...
+            </div>
+          </div>
         )}
       </SectionCard>
     );
@@ -2940,9 +2964,32 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
           gap: 14px;
         }
 
+      <style>{`
         .msh-news-sections {
           display: grid;
           gap: 18px;
+        }
+
+        .msh-news-loading-bar {
+          width: 36%;
+          height: 100%;
+          border-radius: 999px;
+          background: linear-gradient(
+            90deg,
+            rgba(59,130,246,0.92),
+            rgba(34,197,94,0.88)
+          );
+          box-shadow: 0 0 22px rgba(59,130,246,0.22);
+          animation: mshNewsLoad 1.15s ease-in-out infinite;
+        }
+
+        @keyframes mshNewsLoad {
+          0% {
+            transform: translateX(-120%);
+          }
+          100% {
+            transform: translateX(320%);
+          }
         }
 
         .msh-mobile-nav {
