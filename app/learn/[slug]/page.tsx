@@ -156,6 +156,48 @@ function LessonImages(props: { slug: string; which: 1 | 2 | 3 }) {
   );
 }
 
+function nextLessonTopStyle(): React.CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "10px 14px",
+    borderRadius: 14,
+    border: "1px solid rgba(250,204,21,0.52)",
+    background:
+      "linear-gradient(135deg, rgba(250,204,21,0.28), rgba(202,138,4,0.18))",
+    color: "#fff7d6",
+    textDecoration: "none",
+    fontWeight: 950,
+    fontSize: 13,
+    letterSpacing: "0.04em",
+    textTransform: "uppercase",
+    boxShadow:
+      "0 10px 24px rgba(0,0,0,0.26), inset 0 1px 0 rgba(255,255,255,0.10)",
+    whiteSpace: "nowrap",
+  };
+}
+
+function nextLessonBottomStyle(): React.CSSProperties {
+  return {
+    display: "block",
+    width: "100%",
+    textAlign: "center",
+    padding: "18px 20px",
+    borderRadius: 18,
+    border: "1px solid rgba(250,204,21,0.56)",
+    background:
+      "linear-gradient(135deg, rgba(250,204,21,0.28), rgba(202,138,4,0.16))",
+    color: "#fff8dc",
+    textDecoration: "none",
+    fontWeight: 950,
+    fontSize: 16,
+    letterSpacing: "0.05em",
+    boxShadow:
+      "0 14px 34px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.10)",
+  };
+}
+
 export default async function LessonPage({ params }: Props) {
   // Defensive: some builds pass params strangely (or as a Promise)
   const resolvedParams: any = await Promise.resolve(params as any);
@@ -347,6 +389,23 @@ export default async function LessonPage({ params }: Props) {
 
         {/* Course-style intro */}
         <div style={{ marginTop: 16, display: "grid", gap: 12 }}>
+          {nextLesson ? (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                alignItems: "center",
+              }}
+            >
+              <Link
+                href={`/learn/${encodeURIComponent(nextLesson.slug)}`}
+                style={nextLessonTopStyle()}
+              >
+                Next lesson →
+              </Link>
+            </div>
+          ) : null}
+
           <TipBox title="How to use this lesson">
             Read it once, then open a chart and try to spot the same idea in 60 seconds. Repetition beats complexity.
           </TipBox>
@@ -413,27 +472,13 @@ export default async function LessonPage({ params }: Props) {
           <div style={{ marginTop: 18 }}>
             <Link
               href={`/learn/${encodeURIComponent(nextLesson.slug)}`}
-              style={{
-                display: "block",
-                width: "100%",
-                textAlign: "center",
-                padding: "18px 20px",
-                borderRadius: 18,
-                border: "1px solid rgba(59,130,246,0.38)",
-                background:
-                  "linear-gradient(135deg, rgba(59,130,246,0.24), rgba(16,185,129,0.14))",
-                color: "#f8fafc",
-                textDecoration: "none",
-                fontWeight: 950,
-                fontSize: 16,
-                letterSpacing: "0.4px",
-                boxShadow: "0 10px 30px rgba(0,0,0,0.22)",
-              }}
+              style={nextLessonBottomStyle()}
             >
               MOVE TO {nextLesson.title.toUpperCase()} LESSON →
             </Link>
           </div>
         ) : (
+      
           <div style={{ marginTop: 18 }}>
             <Link
               href="/learn"
