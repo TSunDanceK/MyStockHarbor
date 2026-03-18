@@ -604,7 +604,7 @@ export default function StockSymbolPageClient({ symbol }: { symbol: string }) {
                   }}
                 >
                   <div style={{ fontSize: 13, opacity: 0.74 }}>
-                    Prefer the full tool layout? Open the live dashboard view for {symbol}, or view it on TradingView.
+                    Prefer the full tool layout? Open the live dashboard view for {symbol}, view the latest headlines, or open it on TradingView.
                   </div>
 
                   <div
@@ -635,6 +635,26 @@ export default function StockSymbolPageClient({ symbol }: { symbol: string }) {
                       Open {symbol} in Dashboard →
                     </Link>
 
+                    <Link
+                      href={`/stock/${encodeURIComponent(symbol)}/news`}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: "12px 16px",
+                        borderRadius: 14,
+                        border: "1px solid rgba(250,204,21,0.34)",
+                        background:
+                          "linear-gradient(135deg, rgba(250,204,21,0.16), rgba(202,138,4,0.08))",
+                        color: "#fef3c7",
+                        textDecoration: "none",
+                        fontWeight: 900,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Check out the {symbol} headlines →
+                    </Link>
+
                     <a
                       href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`}
                       target="_blank"
@@ -658,6 +678,7 @@ export default function StockSymbolPageClient({ symbol }: { symbol: string }) {
                     </a>
                   </div>
                 </div>
+                
               </section>
 
               <section
