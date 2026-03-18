@@ -154,17 +154,17 @@ export default function HowToIdentifyStockTrendsPage() {
             How to Identify Stock Trends
           </h1>
 
-          <div
+        <div
   style={{
-    marginTop: 16,
-    border: "3px solid red",
-    borderRadius: 12,
+    marginTop: 18,
+    borderRadius: 16,
     overflow: "hidden",
+    border: "1px solid rgba(255,255,255,0.12)",
   }}
 >
   <img
     src="/how-to-identify-stock-trends/01.png"
-    alt="Test trend image"
+    alt="Stock trend example showing uptrend and downtrend structure"
     style={{
       width: "100%",
       display: "block",
