@@ -104,10 +104,13 @@ async function generateAiNewsBriefs(input: BatchInput): Promise<AiNewsBrief[]> {
     "Do not invent facts. Do not imply full article access or independent verification. " +
     "Keep attribution light and natural, such as 'Reuters reports that' or 'Barron's highlights'. " +
     "Do not copy likely article wording. Paraphrase clearly. " +
-    "Each summary must feel useful, specific, and editorial, but cautious. " +
-    "Each summary should be 2 sentences max. " +
+    "Each summary must feel useful, specific, editorial, and cautious. " +
+    "Each summary should be 2 to 3 sentences, around 45 to 80 words total. " +
+    "The first sentence should explain what the coverage is about. " +
+    "The second sentence should explain how traders or investors may interpret it. " +
+    "A third sentence is allowed only when it adds genuinely useful context. " +
     "Each whyItMatters line should be 1 sentence in plain English and should differ across articles when the headlines differ. " +
-    "Avoid hype, predictions, sensational language, and fake certainty.";
+    "Avoid hype, predictions, sensational language, fake certainty, and filler.";
 
   const userPrompt = JSON.stringify(input);
 
