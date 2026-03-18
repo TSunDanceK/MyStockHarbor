@@ -41,12 +41,24 @@ type BenchPayload = {
   items: BenchItem[];
 };
 
+type InternalNewsCard = {
+  title: string;
+  source: string | null;
+  pubDate: string | null;
+  summary: string;
+  whyItMatters: string;
+  debugAiUsed: 0 | 1;
+};
+
 type NewsPayload = {
   symbol: string;
-  feeds: {
-    label: string;
-    items: { title: string; link: string; pubDate: string | null; source: string | null }[];
-  }[];
+  companyName: string;
+  isInvalidTicker: boolean;
+  trend: string;
+  newsScoreLabel: string;
+  newsScoreValue: number;
+  cards: InternalNewsCard[];
+  ctaHref: string;
 };
 
 type CachedSymbolData = {
@@ -965,13 +977,21 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
 
     async function loadNews() {
       try {
-        const res = await fetch(`/api/news?symbol=${encodeURIComponent(symbol)}`, {
+        const res = await fetch(`/api/internal-news?symbol=${encodeURIComponent(symbol)}`, {
           cache: "no-store",
         });
+
+        if (!res.ok) throw new Error("Internal news API failed");
+
         const data = (await res.json()) as NewsPayload;
-        if (!cancelled) setNews(data);
+
+        if (!cancelled) {
+          setNews(data);
+        }
       } catch {
-        if (!cancelled) setNews(null);
+        if (!cancelled) {
+          setNews(null);
+        }
       }
     }
 
@@ -2658,49 +2678,143 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
 
   function NewsPanel() {
     return (
-      <SectionCard title="Latest News">
+      <SectionCard title="Internal Stock News">
         {news ? (
-          <div className="msh-news-sections">
-            {news.feeds.map((f) => (
-              <div key={f.label} className="msh-news-section">
-                <div className="msh-news-section-title">{f.label}</div>
+          <div style={{ display: "grid", gap: 16 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 900,
+                    letterSpacing: 1.1,
+                    opacity: 0.7,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  MyStockHarbor Briefing
+                </div>
 
-                <div className="msh-news-section-grid">
-                  {(f.items || []).map((it, idx) => (
-                    <a
-                      key={`${f.label}-${idx}-${it.link}`}
-                      href={it.link}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ textDecoration: "none", color: "inherit" }}
-                    >
-                      <div
-                        style={{
-                          padding: 12,
-                          borderRadius: 14,
-                          border: `1px solid ${COLORS.border}`,
-                          background: COLORS.controlBg,
-                          height: "100%",
-                        }}
-                      >
-                        <div style={{ fontWeight: 800, lineHeight: 1.45 }}>{it.title}</div>
+                <div style={{ marginTop: 6, fontSize: 22, fontWeight: 950, lineHeight: 1.1 }}>
+                  Latest headlines for {news.symbol}
+                </div>
 
-                        <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
-                          <div style={{ fontWeight: 800 }}>{f.label}</div>
-                          <div>
-                            {it.source ?? "Source"}
-                            {it.pubDate ? ` • ${new Date(it.pubDate).toLocaleString()}` : ""}
-                          </div>
-                        </div>
-                      </div>
-                    </a>
-                  ))}
+                <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.6, opacity: 0.78 }}>
+                  {news.companyName ? `${news.companyName} · ` : ""}
+                  {news.newsScoreLabel} news tone · {news.trend}
                 </div>
               </div>
-            ))}
+
+              <Link
+                href={news.ctaHref}
+                style={{
+                  textDecoration: "none",
+                  padding: "11px 14px",
+                  borderRadius: 12,
+                  border: `1px solid ${COLORS.yellowBorder}`,
+                  background: COLORS.yellowBg,
+                  color: COLORS.yellowText,
+                  fontWeight: 900,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Open full {news.symbol} news page
+              </Link>
+            </div>
+
+            {news.isInvalidTicker ? (
+              <div
+                style={{
+                  padding: 14,
+                  borderRadius: 14,
+                  border: "1px solid rgba(239,68,68,0.35)",
+                  background: "rgba(127,29,29,0.18)",
+                  color: "#fecaca",
+                  lineHeight: 1.7,
+                }}
+              >
+                This ticker does not have enough usable market data yet, so the internal news briefing
+                is showing fallback coverage only.
+              </div>
+            ) : null}
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: news.cards.length >= 3 ? "repeat(3, minmax(0, 1fr))" : "repeat(2, minmax(0, 1fr))",
+                gap: 14,
+              }}
+            >
+              {news.cards.map((item, idx) => (
+                <div
+                  key={`${item.title}-${idx}`}
+                  style={{
+                    padding: 14,
+                    borderRadius: 16,
+                    border: `1px solid ${COLORS.border}`,
+                    background: COLORS.controlBg,
+                    display: "grid",
+                    gap: 10,
+                    alignContent: "start",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 900,
+                        letterSpacing: 0.8,
+                        opacity: 0.72,
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {item.source ?? "Publisher"}
+                    </div>
+
+                    <div style={{ fontSize: 11, opacity: 0.62, whiteSpace: "nowrap" }}>
+                      {item.pubDate ? new Date(item.pubDate).toLocaleDateString() : "Recent"}
+                    </div>
+                  </div>
+
+                  <div style={{ fontWeight: 900, lineHeight: 1.45, fontSize: 16 }}>{item.title}</div>
+
+                  <div style={{ fontSize: 14, lineHeight: 1.7, opacity: 0.86 }}>{item.summary}</div>
+
+                  <div
+                    style={{
+                      padding: 10,
+                      borderRadius: 12,
+                      background: "rgba(255,255,255,0.035)",
+                      border: `1px solid ${COLORS.border}`,
+                      fontSize: 13,
+                      lineHeight: 1.6,
+                      opacity: 0.92,
+                    }}
+                  >
+                    <span style={{ fontWeight: 900 }}>Why this matters:</span> {item.whyItMatters}
+                  </div>
+
+                  <div style={{ fontSize: 11, opacity: 0.48, fontWeight: 800 }}>
+                    {item.debugAiUsed}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {!news.cards.length ? (
+              <div style={{ opacity: 0.7 }}>No internal news cards are available for this ticker yet.</div>
+            ) : null}
           </div>
         ) : (
-          <div style={{ opacity: 0.7 }}>News unavailable.</div>
+          <div style={{ opacity: 0.7 }}>Internal news unavailable.</div>
         )}
       </SectionCard>
     );
@@ -2831,22 +2945,6 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
           gap: 18px;
         }
 
-        .msh-news-section {
-          display: grid;
-          gap: 12px;
-        }
-
-        .msh-news-section-title {
-          font-weight: 950;
-          text-align: center;
-        }
-
-        .msh-news-section-grid {
-          display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 14px;
-        }
-
         .msh-mobile-nav {
           display: none;
         }
@@ -2861,8 +2959,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
         }
 
         @media (max-width: 1180px) {
-          .msh-bench-grid,
-          .msh-news-section-grid {
+          .msh-bench-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }
         }
