@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getAiNewsBriefs } from "@/lib/ai-news-briefs";
+import { getAiNewsBriefs, getAiNewsInsight } from "@/lib/ai-news-briefs";
 
 export const runtime = "nodejs";
 
@@ -1128,6 +1128,35 @@ export default async function StockNewsPage({ params }: Props) {
     ])
   );
 
+  const aiInsight = await getAiNewsInsight({
+    symbol: upper,
+    companyName,
+    trend,
+    newsScoreLabel: newsScore.label,
+    newsScoreValue: newsScore.score,
+    earningsTone: earningsScore.label,
+    rsi: lastRsi,
+    priceVs50,
+    priceVs200,
+    recentHigh,
+    recentLow,
+    items: detailedNews.map((item, index) => ({
+      title: item.title,
+      source: item.source,
+      pubDate: item.pubDate,
+      description: item.description,
+      summary: aiBriefs[index]?.summary ?? null,
+      whyItMatters: aiBriefs[index]?.whyItMatters ?? null,
+    })),
+  });
+
+  const displayBeyondHeadline = aiInsight?.beyondHeadline?.trim()
+    ? aiInsight.beyondHeadline
+    : beyondHeadline;
+
+  const displayWhatItMeans =
+    aiInsight?.whatItMeans?.length ? aiInsight.whatItMeans : whatItMeans;
+
   return (
     <main
       style={{
@@ -1403,10 +1432,24 @@ export default async function StockNewsPage({ params }: Props) {
               ) : null}
             </section>
 
-            <section style={featuredInsightShellStyle}>
+            <section style={{ ...featuredInsightShellStyle, position: "relative" }}>
               <div style={sectionEyebrowStyle}>Beyond the headline</div>
               <h2 style={sectionTitleStyle}>A deeper look for beginners</h2>
-              <p style={bodyCopyStyle}>{beyondHeadline}</p>
+              <p style={bodyCopyStyle}>{displayBeyondHeadline}</p>
+
+              <div
+                style={{
+                  position: "absolute",
+                  right: 16,
+                  bottom: 14,
+                  fontSize: 10,
+                  opacity: 0.18,
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                }}
+              >
+                {aiInsight ? "1" : "0"}
+              </div>
             </section>
           </div>
 
@@ -1451,7 +1494,7 @@ export default async function StockNewsPage({ params }: Props) {
               <h2 style={sectionTitleSmallStyle}>Going Forward</h2>
 
               <div style={{ display: "grid", gap: 12, marginTop: 14 }}>
-                {whatItMeans.map((line) => (
+                {displayWhatItMeans.map((line) => (
                   <div key={line} style={bulletRowStyle}>
                     <div style={bulletDotStyle} />
                     <div style={bulletTextStyle}>{line}</div>
