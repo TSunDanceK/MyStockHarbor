@@ -1052,25 +1052,42 @@ export default async function StockNewsPage({ params }: Props) {
 
                         <h3 style={newsHeadlineStyle}>{item.title}</h3>
 
-                        <p style={newsSummaryStyle}>
-                          {aiBrief?.summary?.trim()
-                            ? aiBrief.summary
-                            : buildNewsSummary(item, upper, trend, newsScore)}
-                        </p>
+const hasAi =
+  !!aiBrief?.summary?.trim() && !!aiBrief?.whyItMatters?.trim();
 
-                        <div style={whyItMattersBoxStyle}>
-                          <div style={whyItMattersLabelStyle}>Why this matters</div>
-                          <div style={whyItMattersTextStyle}>
-                            {aiBrief?.whyItMatters?.trim()
-                              ? aiBrief.whyItMatters
-                              : buildWhyItMatters(item, upper, trend, newsScore)}
-                          </div>
-                        </div>
+<p style={newsSummaryStyle}>
+  {hasAi
+    ? aiBrief!.summary
+    : buildNewsSummary(item, upper, trend, newsScore)}
+</p>
 
-                        <div style={sourceFooterStyle}>
-                          Paraphrased on-page brief based on the headline and available source
-                          context. Source noted for context: {compactSource(item.source)}
-                        </div>
+<div style={whyItMattersBoxStyle}>
+  <div style={whyItMattersLabelStyle}>Why this matters</div>
+  <div style={whyItMattersTextStyle}>
+    {hasAi
+      ? aiBrief!.whyItMatters
+      : buildWhyItMatters(item, upper, trend, newsScore)}
+  </div>
+</div>
+
+<div style={{ ...sourceFooterStyle, position: "relative" }}>
+  Paraphrased on-page brief based on the headline and available source
+  context. Source noted for context: {compactSource(item.source)}
+
+  <div
+    style={{
+      position: "absolute",
+      right: 0,
+      bottom: 0,
+      fontSize: 10,
+      opacity: 0.25,
+      fontWeight: 700,
+      letterSpacing: "0.08em",
+    }}
+  >
+    {hasAi ? "1" : "0"}
+  </div>
+</div>
                       </article>
                     );
                   })
