@@ -602,6 +602,153 @@ function buildWhyItMatters(item: NewsItem, symbol: string, trend: string, newsSc
 
   return `This matters mainly because traders now watch whether the chart absorbs the headline calmly or starts to break in response.`;
 }
+function isLowValueNewsItem(item: NewsItem) {
+  const title = item.title.toLowerCase();
+  const source = (item.source ?? "").toLowerCase();
+
+  const lowValuePatterns = [
+    "stock price",
+    "current price",
+    "live price",
+    "price chart",
+    "quote today",
+    "stock quote",
+    "company profile",
+    "market cap",
+    "forecast 2025",
+    "forecast 2026",
+    "forecast 2030",
+    "buy sell hold",
+    "prediction",
+    "how to buy",
+    "review",
+    "price prediction",
+    "current chart",
+  ];
+
+  const lowValueSources = [
+    "financialcontent",
+    "capital.com",
+  ];
+
+  if (lowValuePatterns.some((pattern) => title.includes(pattern))) {
+    return true;
+  }
+
+  if (
+    lowValueSources.includes(source) &&
+    !keywordHits(title, [
+      "earnings",
+      "revenue",
+      "guidance",
+      "analyst",
+      "upgrade",
+      "downgrade",
+      "price target",
+      "delivery",
+      "deliveries",
+      "production",
+      "lawsuit",
+      "investigation",
+      "recall",
+      "partnership",
+      "launch",
+      "insider",
+      "sec",
+    ])
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function scoreNewsItem(item: NewsItem) {
+  const title = item.title.toLowerCase();
+  const source = (item.source ?? "").toLowerCase();
+  let score = 0;
+
+  const strongSignals = [
+    "earnings",
+    "results",
+    "revenue",
+    "guidance",
+    "quarter",
+    "analyst",
+    "upgrade",
+    "downgrade",
+    "price target",
+    "delivery",
+    "deliveries",
+    "production",
+    "factory",
+    "supply",
+    "recall",
+    "investigation",
+    "lawsuit",
+    "probe",
+    "launch",
+    "partnership",
+    "acquisition",
+    "margin",
+    "forecast",
+    "insider",
+    "sec",
+    "tariff",
+    "fed",
+    "regulation",
+    "robotaxi",
+    "autonomous",
+  ];
+
+  const weakSignals = [
+    "stock price",
+    "current price",
+    "live price",
+    "price chart",
+    "quote today",
+    "stock quote",
+    "company profile",
+    "market cap",
+    "prediction",
+    "buy sell hold",
+    "how to buy",
+    "review",
+  ];
+
+  for (const term of strongSignals) {
+    if (title.includes(term)) {
+      score += 3;
+    }
+  }
+
+  for (const term of weakSignals) {
+    if (title.includes(term)) {
+      score -= 4;
+    }
+  }
+
+  if (item.description && item.description.trim().length > 80) {
+    score += 1;
+  }
+
+  if (source.includes("reuters")) score += 3;
+  if (source.includes("barron")) score += 2;
+  if (source.includes("marketwatch")) score += 2;
+  if (source.includes("stock titan")) score += 2;
+  if (source.includes("financialcontent")) score -= 2;
+  if (source.includes("capital.com")) score -= 2;
+
+  const pubTime = item.pubDate ? new Date(item.pubDate).getTime() : 0;
+  if (pubTime) {
+    const ageHours = (Date.now() - pubTime) / (1000 * 60 * 60);
+    if (ageHours <= 24) score += 3;
+    else if (ageHours <= 72) score += 2;
+    else if (ageHours <= 168) score += 1;
+  }
+
+  return score;
+}
 
 function buildWhatItMeans(args: {
   symbol: string;
@@ -839,8 +986,23 @@ export default async function StockNewsPage({ params }: Props) {
     priceVs200,
   });
 
-  const detailedNews = news.slice(0, 3);
-  const compactNews = news.slice(3, 6);
+  const rankedNews = [...news].sort((a, b) => {
+    const scoreDiff = scoreNewsItem(b) - scoreNewsItem(a);
+    if (scoreDiff !== 0) return scoreDiff;
+
+    const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+    const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
+    return bTime - aTime;
+  });
+
+  const highValueNews = rankedNews.filter((item) => !isLowValueNewsItem(item));
+  const fallbackNews = rankedNews.filter((item) => isLowValueNewsItem(item));
+
+  const detailedNews = [...highValueNews, ...fallbackNews].slice(0, 3);
+
+  const compactNews = rankedNews.filter(
+    (item) => !detailedNews.some((picked) => picked.link === item.link)
+  ).slice(0, 6);
 
   const aiBriefs = await getAiNewsBriefs({
     symbol: upper,
@@ -856,7 +1018,10 @@ export default async function StockNewsPage({ params }: Props) {
   });
 
   const summaryByTitle = Object.fromEntries(
-    detailedNews.map((item, index) => [item.title, aiBriefs[index]?.summary ?? item.description ?? ""])
+    detailedNews.map((item, index) => [
+      item.title,
+      aiBriefs[index]?.summary ?? item.description ?? "",
+    ])
   );
 
   return (
@@ -1069,23 +1234,31 @@ export default async function StockNewsPage({ params }: Props) {
                           </div>
                         </div>
 
-                        <div style={{ ...sourceFooterStyle, position: "relative" }}>
-                          Paraphrased on-page brief based on the headline and available source
-                          context. Source noted for context: {compactSource(item.source)}
+                        <div
+                          style={{
+                            ...sourceFooterStyle,
+                            display: "flex",
+                            alignItems: "flex-end",
+                            justifyContent: "space-between",
+                            gap: 12,
+                          }}
+                        >
+                          <span>
+                            Paraphrased on-page brief based on the headline and available source
+                            context. Source noted for context: {compactSource(item.source)}
+                          </span>
 
-                          <div
+                          <span
                             style={{
-                              position: "absolute",
-                              right: 0,
-                              bottom: 0,
                               fontSize: 10,
-                              opacity: 0.25,
+                              opacity: 0.22,
                               fontWeight: 700,
                               letterSpacing: "0.08em",
+                              flex: "0 0 auto",
                             }}
                           >
                             {hasAi ? "1" : "0"}
-                          </div>
+                          </span>
                         </div>
                       </article>
                     );
