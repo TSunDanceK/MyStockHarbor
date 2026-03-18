@@ -783,18 +783,6 @@ export default function PriceChart(props: Props) {
     </div>
   </div>
 
-  <a
-    href="/platforms"
-    style={{
-      fontSize: 12,
-      color: "#93c5fd",
-      textDecoration: "none",
-      fontWeight: 700,
-      opacity: 0.85,
-    }}
-  >
-    Compare trading platforms →
-  </a>
 </div>
     </div>
   );
