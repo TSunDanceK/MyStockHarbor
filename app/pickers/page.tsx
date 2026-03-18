@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import PickersClient from "./PickersClient";
+import BookmarkPromptButton from "./BookmarkPromptButton";
 
 export const metadata: Metadata = {
   title:
@@ -226,32 +227,8 @@ export default function PickersPage() {
                   tint="amber"
                 />
               </div>
-
-              <div
-                style={{
-                  marginTop: 16,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  flexWrap: "wrap",
-                  padding: "10px 12px",
-                  borderRadius: 14,
-                  border: "1px solid rgba(59,130,246,0.20)",
-                  background:
-                    "linear-gradient(135deg, rgba(59,130,246,0.08), rgba(15,23,42,0.12))",
-                  color: "rgba(219,234,254,0.88)",
-                  fontSize: 13,
-                  fontWeight: 800,
-                  lineHeight: 1.5,
-                  boxSizing: "border-box",
-                  maxWidth: 560,
-                }}
-              >
-                <span aria-hidden="true" style={{ fontSize: 15, lineHeight: 1 }}>
-                  ↻
-                </span>
-                <span>Check back every hour for refreshed dynamic stock ideas.</span>
-              </div>
+              
+ <BookmarkPromptButton />
 
               <div
                 style={{
