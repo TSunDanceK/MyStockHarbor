@@ -502,7 +502,8 @@ function computeThreeMonthBreakout(points: Point[]) {
   const rangeHigh = Math.max(...breakoutWindow);
   if (!Number.isFinite(rangeHigh) || rangeHigh <= 0) return null;
 
-  if (lastClose <= rangeHigh) return null;
+    const eps = 0.005; // within 0.5%
+  if (lastClose < rangeHigh * (1 - eps)) return null;
 
   return {
     rangeHigh,
