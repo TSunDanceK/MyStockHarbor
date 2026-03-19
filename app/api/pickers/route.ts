@@ -433,6 +433,53 @@ function pickIsRedOverallSignal(c: CompositeResult) {
   return c.overbought >= 2 && c.overbought > c.oversold;
 }
 
+function buildTrendScoreFromHistory(points: Point[]) {
+  const closes = points.map((p) => p.close).filter((x) => Number.isFinite(x));
+  if (closes.length < 220) return null;
+
+  const ma50Arr = movingAverage(closes, 50);
+  const ma200Arr = movingAverage(closes, 200);
+  const macdAll = macd(closes, 12, 26, 9);
+
+  const lastClose = closes[closes.length - 1];
+  const lastMA50 = lastNum(ma50Arr);
+  const lastMA200 = lastNum(ma200Arr);
+  const lastMacdHist = lastNum(macdAll.hist);
+
+  const priceAboveMA200 =
+    typeof lastClose === "number" &&
+    typeof lastMA200 === "number" &&
+    lastClose > lastMA200;
+
+  const priceAboveMA50 =
+    typeof lastClose === "number" &&
+    typeof lastMA50 === "number" &&
+    lastClose > lastMA50;
+
+  const ma50AboveMA200 =
+    typeof lastMA50 === "number" &&
+    typeof lastMA200 === "number" &&
+    lastMA50 > lastMA200;
+
+  const macdBullish =
+    typeof lastMacdHist === "number" &&
+    lastMacdHist > 0;
+
+  let passed = 0;
+  if (priceAboveMA200) passed += 1;
+  if (priceAboveMA50) passed += 1;
+  if (ma50AboveMA200) passed += 1;
+  if (macdBullish) passed += 1;
+
+  return {
+    total: 4,
+    passed,
+    priceAboveMA200,
+    priceAboveMA50,
+    ma50AboveMA200,
+    macdBullish,
+  };
+}
 function computeBuyTheDip(points: Point[]) {
   // Criteria: was at all-time high recently, now -20% within last 4 months (~120 trading days)
   const closes = points.map((p) => p.close).filter((x) => Number.isFinite(x));
@@ -662,6 +709,7 @@ async function buildPickersPayload(origin: string) {
 
   const green: PickerItem[] = [];
   const red: PickerItem[] = [];
+  const trendLeaders: PickerItem[] = [];
   const dips: PickerItem[] = [];
   const athBreakouts: PickerItem[] = [];
   const threeMonthBreakouts: PickerItem[] = [];
@@ -712,6 +760,22 @@ if (comp) {
                 _score: dynamicBoost(symbol) + comp.overbought * 50 + comp.flagged * 10,
               });
             }
+          }
+
+                    const trendScore = buildTrendScoreFromHistory(pts);
+          if (trendScore && trendScore.passed >= 3) {
+            trendLeaders.push({
+              symbol,
+              tone: trendScore.passed === 4 ? "green" : "yellow",
+              note: `${trendScore.passed}/${trendScore.total} trend checks`,
+              _score:
+                dynamicBoost(symbol) +
+                trendScore.passed * 100 +
+                (trendScore.priceAboveMA200 ? 20 : 0) +
+                (trendScore.priceAboveMA50 ? 10 : 0) +
+                (trendScore.ma50AboveMA200 ? 20 : 0) +
+                (trendScore.macdBullish ? 10 : 0),
+            });
           }
 
           const dip = computeBuyTheDip(pts);
@@ -875,6 +939,12 @@ if (comp) {
       description:
         "Stocks showing multiple oversold-style technical signals. These are often reviewed for possible rebounds or dip-style entries.",
       items: takeTop(green, 20),
+    },
+    {
+      title: "Best Trend Score Stocks",
+      description:
+        "Stocks with the strongest current trend structure based on price vs MA50 and MA200, MA50 vs MA200, and positive MACD momentum.",
+      items: takeTop(trendLeaders, 20),
     },
     {
       title: "Overbought Stocks Today (Potential Pullback Setups)",
