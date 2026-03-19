@@ -1374,13 +1374,6 @@ function loadingBarStyle(width: string): CSSProperties {
     background: "rgba(30,41,59,0.9)",
   };
 }
-  return {
-    width,
-    height: 12,
-    borderRadius: 999,
-    background: "linear-gradient(90deg, rgba(30,41,59,0.92), rgba(71,85,105,0.45), rgba(30,41,59,0.92))",
-  };
-}
 
 function loadingParagraphStyle(widths: string[]) {
   return (
