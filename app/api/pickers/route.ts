@@ -460,46 +460,78 @@ function computeBuyTheDip(points: Point[]) {
 
 function computeBreakout(points: Point[]) {
   /**
-   * Stricter breakout:
-   * - Must have made (or effectively matched) ATH VERY recently (last ~10 trading bars)
-   * - AND current close must still be near ATH (within 1%)
+   * Recent range breakout:
+   * - Current close must be above the highest close of the last 60 bars
+   * - Excluding the most recent 5 bars from the comparison
+   * - Requires volume confirmation
+   * - Requires price above MA50
    *
-   * This avoids "old" breakouts that happened weeks/months ago.
+   * This catches more real-world breakout setups than ATH-only logic.
    */
   const pts = points.filter((p) => p?.date && Number.isFinite(p.close));
-  if (pts.length < 80) return null;
+  if (pts.length < 90) return null;
 
   const closes = pts.map((p) => p.close);
   const lastClose = closes[closes.length - 1];
   if (!Number.isFinite(lastClose)) return null;
 
-  const allTimeHigh = Math.max(...closes);
-  if (!Number.isFinite(allTimeHigh) || allTimeHigh <= 0) return null;
+  const LOOKBACK_BARS = 60;
+  const EXCLUDE_RECENT_BARS = 5;
 
-  // how close counts as "at ATH"
-  const epsAth = 0.002; // 0.2% of ATH
-  const athFloor = allTimeHigh * (1 - epsAth);
+  const endExclusive = closes.length - EXCLUDE_RECENT_BARS;
+  const startInclusive = endExclusive - LOOKBACK_BARS;
 
-  // find the most recent bar that matched ATH (within eps)
-  let lastAthIdx = -1;
-  for (let i = closes.length - 1; i >= 0; i--) {
-    if (closes[i] >= athFloor) {
-      lastAthIdx = i;
-      break;
-    }
+  if (startInclusive < 0 || endExclusive <= startInclusive) return null;
+
+  const breakoutWindow = closes.slice(startInclusive, endExclusive);
+  if (!breakoutWindow.length) return null;
+
+  const rangeHigh = Math.max(...breakoutWindow);
+  if (!Number.isFinite(rangeHigh) || rangeHigh <= 0) return null;
+
+  const brokeAboveRange = lastClose > rangeHigh;
+  if (!brokeAboveRange) return null;
+
+  const ma50Arr = movingAverage(closes, 50);
+  const lastMA50 = lastNum(ma50Arr);
+  const aboveMA50 =
+    typeof lastMA50 === "number" &&
+    Number.isFinite(lastMA50) &&
+    lastClose > lastMA50;
+
+  if (!aboveMA50) return null;
+
+  const volumeArr: (number | null)[] = pts.map((p) =>
+    typeof p.volume === "number" && Number.isFinite(p.volume) ? p.volume : null
+  );
+  const volSma20Arr = smaNullable(volumeArr, 20);
+  const lastVol = lastNum(volumeArr);
+  const lastVolSma20 = lastNum(volSma20Arr);
+
+  const volumeRatio =
+    typeof lastVol === "number" &&
+    typeof lastVolSma20 === "number" &&
+    lastVolSma20 > 0
+      ? lastVol / lastVolSma20
+      : null;
+
+  if (typeof volumeRatio !== "number" || !Number.isFinite(volumeRatio) || volumeRatio < 1.4) {
+    return null;
   }
-  if (lastAthIdx === -1) return null;
 
-  // MUST be very recent (last 10 trading bars)
-  const RECENT_BARS = 5;
-  if (lastAthIdx < closes.length - RECENT_BARS) return null;
+  const breakoutPct = ((lastClose - rangeHigh) / rangeHigh) * 100;
+  const lookbackStartDate = pts[startInclusive]?.date ?? null;
+  const lookbackEndDate = pts[endExclusive - 1]?.date ?? null;
 
-  // current price must still be close to ATH (within 1%)
-  const nearNow = lastClose >= allTimeHigh * 0.99;
-  if (!nearNow) return null;
-
-  const when = pts[lastAthIdx]?.date ?? null;
-  return { ath: allTimeHigh, when };
+  return {
+    rangeHigh,
+    breakoutPct,
+    volumeRatio,
+    lookbackBars: LOOKBACK_BARS,
+    excludeRecentBars: EXCLUDE_RECENT_BARS,
+    lookbackStartDate,
+    lookbackEndDate,
+  };
 }
 
 /* -------------------------- concurrency limit ------------------------ */
@@ -701,14 +733,15 @@ async function buildPickersPayload(origin: string) {
 
           const bo = computeBreakout(pts);
           if (bo) {
-            const volSpike =
-              typeof (bo as any).volumeSpike === "number" ? (bo as any).volumeSpike : 0;
-
             breakouts.push({
               symbol,
               tone: "orange",
-              note: `ATH + vol ${volSpike ? `${volSpike.toFixed(2)}×` : "—"}`,
-              _score: dynamicBoost(symbol) + volSpike * 1000 + 1,
+              note: `Above ${bo.lookbackBars}-bar range high • vol ${bo.volumeRatio.toFixed(2)}×`,
+              _score:
+                dynamicBoost(symbol) +
+                bo.volumeRatio * 1000 +
+                bo.breakoutPct * 100 +
+                50,
             });
           }
 
@@ -862,10 +895,9 @@ async function buildPickersPayload(origin: string) {
     {
       title: "Breakout Stocks Today (Momentum & Expansion)",
       description:
-        "Stocks pushing into fresh highs with strong momentum. When there are many matches, stronger volume expansion is prioritised.",
+        "Stocks breaking above recent multi-week ranges with volume confirmation and price strength above the 50-day moving average.",
       items: takeTop(breakouts, 20, { volumeFirstIfMany: true }),
     },
-  ];
 
   return {
     updatedAt: new Date().toISOString(),
