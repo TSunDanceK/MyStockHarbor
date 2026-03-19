@@ -680,15 +680,29 @@ async function buildPickersPayload(origin: string) {
 
           const comp = buildCompositeFromHistory(pts);
 
-          if (comp) {
-            if (pickIsGreenOverallSignal(comp)) {
-              green.push({
-                symbol,
-                tone: "green",
-                note: `${comp.oversold} oversold • ${comp.flagged}/${comp.total} checks`,
-                _score: dynamicBoost(symbol) + comp.oversold * 50 + comp.flagged * 10,
-              });
-            }
+if (comp) {
+  const closes = pts.map((p) => p.close).filter((x) => Number.isFinite(x));
+  const ma200Arr = closes.length ? movingAverage(closes, 200) : [];
+  const lastClose = closes.length ? closes[closes.length - 1] : null;
+  const lastMA200 = lastNum(ma200Arr);
+
+  const aboveMA200 =
+    typeof lastClose === "number" &&
+    typeof lastMA200 === "number" &&
+    lastClose > lastMA200;
+
+  if (pickIsGreenOverallSignal(comp) && aboveMA200) {
+    green.push({
+      symbol,
+      tone: "green",
+      note: `${comp.oversold} oversold • above MA200 • ${comp.flagged}/${comp.total} checks`,
+      _score:
+        dynamicBoost(symbol) +
+        comp.oversold * 50 +
+        comp.flagged * 10 +
+        200, // bonus for trend quality
+    });
+  }
 
             if (pickIsRedOverallSignal(comp)) {
               red.push({
