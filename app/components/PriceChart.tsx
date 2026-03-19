@@ -13,7 +13,7 @@ const CHART_COLORS = {
   bollMid: "rgba(196,181,253,0.72)",
   bollLower: "rgba(167,139,250,0.55)",
   ema20: "#22d3ee",
-  vwap: "#14b8a6",
+  vwma20: "#14b8a6",,
   rsi: "#a78bfa",
   macdLine: "#22c55e",
   macdSignal: "#f59e0b",
@@ -34,7 +34,7 @@ export type Overlay =
   | "RSI(14)"
   | "MACD(12,26,9)"
   | "EMA20"
-  | "VWAP"
+  | "VWMA(20)"
   | "Stochastic(14,3)"
   | "ATR(14)"
   | "Volume";
@@ -88,7 +88,7 @@ type Props = {
   bollLower?: (number | null)[];
 
   ema20?: (number | null)[];
-  vwap?: (number | null)[];
+  vwma20?: (number | null)[];
 
   rsi14?: (number | null)[];
   macdLine?: (number | null)[];
@@ -117,7 +117,7 @@ export default function PriceChart(props: Props) {
     bollLower,
 
     ema20,
-    vwap,
+    vwma20,
 
     rsi14,
     macdLine,
@@ -172,7 +172,7 @@ export default function PriceChart(props: Props) {
   const showMA200 = activeIndicators.includes("MA200");
   const showBollinger = activeIndicators.includes("Bollinger(20,2)");
   const showEMA20 = activeIndicators.includes("EMA20");
-  const showVWAP = activeIndicators.includes("VWAP");
+  const showVWMA20 = activeIndicators.includes("VWMA(20)");
 
   const gap = wantsSubPanel ? 14 : 0;
   const innerH = height - padT - padB - gap;
@@ -191,7 +191,7 @@ export default function PriceChart(props: Props) {
     const l = bollLower && bollLower.length === n ? bollLower : Array(n).fill(null);
 
     const e20 = ema20 && ema20.length === n ? ema20 : Array(n).fill(null);
-    const vw = vwap && vwap.length === n ? vwap : Array(n).fill(null);
+    const vw = vwma20 && vwma20.length === n ? vwma20 : Array(n).fill(null);
 
     const rsi = rsi14 && rsi14.length === n ? rsi14 : Array(n).fill(null);
     const ml = macdLine && macdLine.length === n ? macdLine : Array(n).fill(null);
@@ -212,7 +212,7 @@ export default function PriceChart(props: Props) {
       bm: m[i] as number | null,
       bl: l[i] as number | null,
       ema20: e20[i] as number | null,
-      vwap: vw[i] as number | null,
+      vwma20: vw[i] as number | null,
 
       rsi14: rsi[i] as number | null,
       macdLine: ml[i] as number | null,
@@ -268,14 +268,14 @@ export default function PriceChart(props: Props) {
       }
 
       if (showEMA20 && typeof p.ema20 === "number") vals.push(p.ema20);
-      if (showVWAP && typeof p.vwap === "number") vals.push(p.vwap);
+          if (showVWMA20 && typeof p.vwma20 === "number") vals.push(p.vwma20);
     }
 
     const minV = Math.min(...vals);
     const maxV = Math.max(...vals);
     const r = Math.max(1e-9, maxV - minV);
     return { pMin: minV, pMax: maxV, pRange: r };
-  }, [hasData, series, showMA50, showMA200, showBollinger, showEMA20, showVWAP]);
+ }, [hasData, series, showMA50, showMA200, showBollinger, showEMA20, showVWMA20]);
 
   const yMain = useMemo(() => {
     return (v: number) => padT + ((pMax - v) * priceH) / pRange;
@@ -353,7 +353,7 @@ export default function PriceChart(props: Props) {
   const bollLPath = useMemo(() => pathFrom(series.map((p) => p.bl), yMain), [series, yMain]);
 
   const ema20Path = useMemo(() => pathFrom(series.map((p) => p.ema20), yMain), [series, yMain]);
-  const vwapPath = useMemo(() => pathFrom(series.map((p) => p.vwap), yMain), [series, yMain]);
+    const vwma20Path = useMemo(() => pathFrom(series.map((p) => p.vwma20), yMain), [series, yMain]);
 
   // sub paths
   const rsiPath = useMemo(() => pathFrom(series.map((p) => p.rsi14), ySub), [series, ySub]);
@@ -524,14 +524,13 @@ export default function PriceChart(props: Props) {
           />
         ) : null}
 
-        {showVWAP && vwapPath ? (
+        {showVWMA20 && vwma20Path ? (
           <path
-            d={vwapPath}
+            d={vwma20Path}
             fill="none"
-            stroke={CHART_COLORS.vwap}
-            strokeWidth="2"
-            opacity="0.95"
-            strokeDasharray="3 4"
+            stroke={CHART_COLORS.vwma20}
+            strokeWidth={2}
+            strokeDasharray="4 4"
           />
         ) : null}
 
