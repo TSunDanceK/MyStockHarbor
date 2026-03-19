@@ -558,11 +558,19 @@ const displaySections = useMemo(() => {
           }
         }
 
+        .pickers-desktop-only {
+          display: block;
+        }
+
         @media (max-width: 640px) {
           .pickers-filter-grid,
           .pickers-card-grid,
           .pickers-section-results-grid {
             grid-template-columns: minmax(0, 1fr);
+          }
+
+          .pickers-desktop-only {
+            display: none;
           }
         }
       `}</style>
@@ -629,7 +637,7 @@ const displaySections = useMemo(() => {
 
       {!loading && !err ? (
         <section
-          className="pickers-shell"
+          className="pickers-shell pickers-desktop-only"
           style={{
             border: "1px solid rgba(34,197,94,0.26)",
             borderRadius: 18,
