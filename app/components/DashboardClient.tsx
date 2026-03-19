@@ -2068,6 +2068,146 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     );
   }
 
+    function MobileStockAnalysisCard() {
+    return (
+      <SectionCard title="Stock Analysis">
+        <div style={{ display: "grid", gap: 14 }}>
+          <div
+            style={{
+              border: `1px solid ${COLORS.border}`,
+              borderRadius: 16,
+              padding: 14,
+              background: COLORS.controlBg,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 900,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                color: COLORS.mutedFg,
+              }}
+            >
+              Open full chart
+            </div>
+
+            <div
+              style={{
+                marginTop: 8,
+                fontSize: 22,
+                fontWeight: 950,
+                lineHeight: 1.1,
+              }}
+            >
+              {symbol} Stock Analysis
+            </div>
+
+            <div
+              style={{
+                marginTop: 8,
+                fontSize: 14,
+                lineHeight: 1.6,
+                color: COLORS.mutedFg,
+              }}
+            >
+              View the full stock page with the dedicated chart, indicators, trend view, and deeper breakdown.
+            </div>
+
+            <div
+              style={{
+                marginTop: 14,
+                display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: 10,
+              }}
+            >
+              <div
+                style={{
+                  border: `1px solid ${COLORS.border}`,
+                  borderRadius: 14,
+                  padding: 12,
+                  background: COLORS.cardBg,
+                  minWidth: 0,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 900,
+                    letterSpacing: "0.04em",
+                    textTransform: "uppercase",
+                    color: COLORS.mutedFg,
+                  }}
+                >
+                  Last price
+                </div>
+                <div style={{ marginTop: 6, fontSize: 22, fontWeight: 950 }}>
+                  {quote?.price != null ? `$${quote.price.toFixed(2)}` : "—"}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  border: `1px solid ${COLORS.border}`,
+                  borderRadius: 14,
+                  padding: 12,
+                  background: COLORS.cardBg,
+                  minWidth: 0,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 900,
+                    letterSpacing: "0.04em",
+                    textTransform: "uppercase",
+                    color: COLORS.mutedFg,
+                  }}
+                >
+                  Trend
+                </div>
+                <div
+                  style={{
+                    marginTop: 6,
+                    fontSize: 18,
+                    fontWeight: 900,
+                    lineHeight: 1.15,
+                  }}
+                >
+                  {overviewMeta.trend}
+                </div>
+              </div>
+            </div>
+
+            <Link
+              href={`/stock/${encodeURIComponent(symbol)}`}
+              style={{
+                marginTop: 14,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "100%",
+                padding: "14px 16px",
+                borderRadius: 16,
+                border: `1px solid rgba(59,130,246,0.45)`,
+                background: COLORS.isDark
+                  ? "linear-gradient(135deg, rgba(37,99,235,0.24), rgba(29,78,216,0.14))"
+                  : "linear-gradient(135deg, rgba(37,99,235,0.14), rgba(29,78,216,0.08))",
+                color: COLORS.controlFg,
+                textDecoration: "none",
+                fontWeight: 950,
+                fontSize: 15,
+              }}
+            >
+              Open {symbol} Stock Analysis →
+            </Link>
+          </div>
+        </div>
+      </SectionCard>
+    );
+  }
+
   function OverviewPanel() {
     const trendColor = toneToColor(trendToneFromScore(trendScore), COLORS.isDark);
     const stretchTone = compositeToneFromCounts(
@@ -2969,7 +3109,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
               lineHeight: 1.55,
             }}
           >
-            Scan the market for ideas, or search any stock to open its chart and latest news.
+            Scan the market for ideas, or search any stock to open its full analysis page and latest news.
           </div>
 
           <button
@@ -3302,10 +3442,17 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
           }
 
           .msh-mobile-nav {
-            display: flex;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 8px;
-            flex-wrap: wrap;
             margin-bottom: 14px;
+            width: 100%;
+          }
+
+          .msh-mobile-nav .msh-top-nav-btn {
+            width: 100%;
+            min-width: 0;
+            justify-content: center !important;
           }
 
           .msh-top-nav-btn {
@@ -3434,30 +3581,6 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
           <SmallNavLink href="/learn">Learn</SmallNavLink>
           <SmallNavLink href="/platforms">Platforms</SmallNavLink>
           <SmallNavLink href="/utilities">Calculators</SmallNavLink>
-
-          <button
-            type="button"
-            onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
-            className="msh-top-nav-btn"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              minHeight: 38,
-              minWidth: 38,
-              padding: "7px 10px",
-              borderRadius: 12,
-              border: `1px solid ${COLORS.controlBorder}`,
-              background: COLORS.controlBg,
-              color: COLORS.controlFg,
-              fontWeight: 900,
-              fontSize: 16,
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {theme === "dark" ? "🌙" : "☀️"}
-          </button>
         </div>
 
         <div className="msh-toolbar-grid">
@@ -3589,18 +3712,13 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
               <NewsPanel />
             </div>
 
-            <div className="msh-main-grid">
-              <div className="msh-left-stack msh-mobile-secondary">
-                <OverviewPanel />
-                <BreakdownPanel />
-              </div>
-
-              <div className="msh-mobile-primary">
-                <ChartPanel />
-              </div>
+            <div className="msh-lower-grid">
+              <MobileStockAnalysisCard />
             </div>
 
             <div className="msh-lower-grid">
+              <OverviewPanel />
+              <BreakdownPanel />
               <BenchmarksPanel />
             </div>
           </>
