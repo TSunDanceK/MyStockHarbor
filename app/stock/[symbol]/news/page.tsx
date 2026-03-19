@@ -1,7 +1,13 @@
 import type { CSSProperties } from "react";
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getStockNewsData } from "@/lib/stock-news-data";
+import {
+  getStockNewsBaseData,
+  getStockNewsAiData,
+  type NewsItem,
+  type NewsScoreResult,
+} from "@/lib/stock-news-data";
 
 export const runtime = "nodejs";
 
@@ -1018,13 +1024,500 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
+async function DetailedNewsAiSection({
+  symbol,
+  companyName,
+  trend,
+  newsScore,
+  detailedNews,
+  compactNews,
+}: {
+  symbol: string;
+  companyName: string;
+  trend: string;
+  newsScore: NewsScoreResult;
+  detailedNews: NewsItem[];
+  compactNews: NewsItem[];
+}) {
+  const aiData = await getStockNewsAiData(
+    {
+      symbol,
+      companyName,
+      quote: null,
+      history: [],
+      news: [],
+      trend,
+      lastClose: null,
+      lastMA50: null,
+      lastMA200: null,
+      lastRsi: null,
+      priceVs50: null,
+      priceVs200: null,
+      recentHigh: null,
+      recentLow: null,
+      isInvalidTicker: false,
+      isDataUnavailable: false,
+      newsScore,
+      earningsScore: {
+        score: 50,
+        label: "Neutral earnings tone",
+        tone: "yellow",
+        reason: "",
+      },
+      rankedNews: detailedNews,
+      detailedNews,
+      compactNews,
+    },
+    { includeInsight: false }
+  );
+
+  return (
+    <section style={editorialCardStyle}>
+      <div style={sectionEyebrowStyle}>Latest briefing</div>
+      <h2 style={sectionTitleStyle}>What’s happening with {symbol}</h2>
+
+      <div style={{ display: "grid", gap: 14, marginTop: 16 }}>
+        {detailedNews.length ? (
+          detailedNews.map((item, index) => {
+            const aiBrief = aiData.aiBriefs[index];
+            const hasAi =
+              !!aiBrief?.summary?.trim() && !!aiBrief?.whyItMatters?.trim();
+
+            return (
+              <article
+                key={`${item.link}-${index}`}
+                style={{
+                  ...newsLeadCardStyle,
+                  borderLeft:
+                    index === 0
+                      ? "3px solid rgba(59,130,246,0.75)"
+                      : "3px solid rgba(255,255,255,0.08)",
+                }}
+              >
+                <div style={newsMetaRowStyle}>
+                  <span style={newsSourcePillStyle}>{compactSource(item.source)}</span>
+                  <span style={newsDateStyle}>{formatDate(item.pubDate)}</span>
+                </div>
+
+                <h3 style={newsHeadlineStyle}>{item.title}</h3>
+
+                <p style={newsSummaryStyle}>
+                  {hasAi
+                    ? aiBrief!.summary
+                    : buildNewsSummary(item, symbol, trend, newsScore)}
+                </p>
+
+                <div style={whyItMattersBoxStyle}>
+                  <div style={whyItMattersLabelStyle}>Why this matters</div>
+                  <div style={whyItMattersTextStyle}>
+                    {hasAi
+                      ? aiBrief!.whyItMatters
+                      : buildWhyItMatters(item, symbol, trend, newsScore)}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    ...sourceFooterStyle,
+                    display: "flex",
+                    alignItems: "flex-end",
+                    justifyContent: "space-between",
+                    gap: 12,
+                  }}
+                >
+                  <span>
+                    Paraphrased on-page brief based on the headline and available source
+                    context. Source noted for context: {compactSource(item.source)}
+                  </span>
+
+                  <span
+                    style={{
+                      fontSize: 10,
+                      opacity: 0.22,
+                      fontWeight: 700,
+                      letterSpacing: "0.08em",
+                      flex: "0 0 auto",
+                    }}
+                  >
+                    {hasAi ? "1" : "0"}
+                  </span>
+                </div>
+              </article>
+            );
+          })
+        ) : (
+          <div style={newsLeadCardStyle}>
+            <h3 style={{ ...newsHeadlineStyle, marginTop: 0 }}>No fresh headline set available</h3>
+            <p style={newsSummaryStyle}>
+              This page still works as a stock-news analysis hub, but the current news feed
+              is light. In that case, the page leans more on structure, levels, and what
+              traders may watch next.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {compactNews.length ? (
+        <div style={{ marginTop: 16 }}>
+          <div style={compactFeedLabelStyle}>Older updates drop into a lighter feed</div>
+
+          <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+            {compactNews.map((item, index) => (
+              <article
+                key={`${item.link}-compact-${index}`}
+                className="compactNewsRow"
+                style={compactNewsRowStyle}
+              >
+                <div style={{ minWidth: 88 }}>
+                  <div style={compactSourceStyle}>{compactSource(item.source)}</div>
+                  <div style={compactDateStyle}>{formatDate(item.pubDate)}</div>
+                </div>
+
+                <div style={{ minWidth: 0 }}>
+                  <div style={compactHeadlineStyle}>{item.title}</div>
+                </div>
+
+                <div style={compactMutedStyle}>On-page summary only</div>
+              </article>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+async function InsightAiCard({
+  symbol,
+  companyName,
+  trend,
+  newsScore,
+  earningsScore,
+  lastRsi,
+  priceVs50,
+  priceVs200,
+  recentHigh,
+  recentLow,
+  detailedNews,
+  fallbackBeyondHeadline,
+}: {
+  symbol: string;
+  companyName: string;
+  trend: string;
+  newsScore: NewsScoreResult;
+  earningsScore: { score: number; label: string; tone: ScoreTone; reason: string };
+  lastRsi: number | null;
+  priceVs50: number | null;
+  priceVs200: number | null;
+  recentHigh: number | null;
+  recentLow: number | null;
+  detailedNews: NewsItem[];
+  fallbackBeyondHeadline: string;
+}) {
+  const aiData = await getStockNewsAiData(
+    {
+      symbol,
+      companyName,
+      quote: null,
+      history: [],
+      news: [],
+      trend,
+      lastClose: null,
+      lastMA50: null,
+      lastMA200: null,
+      lastRsi,
+      priceVs50,
+      priceVs200,
+      recentHigh,
+      recentLow,
+      isInvalidTicker: false,
+      isDataUnavailable: false,
+      newsScore,
+      earningsScore,
+      rankedNews: detailedNews,
+      detailedNews,
+      compactNews: [],
+    },
+    { includeInsight: true }
+  );
+
+  const displayBeyondHeadline = aiData.aiInsight?.beyondHeadline?.trim()
+    ? aiData.aiInsight.beyondHeadline
+    : fallbackBeyondHeadline;
+
+  const hasAiInsight =
+    !!aiData.aiInsight?.beyondHeadline?.trim() &&
+    Array.isArray(aiData.aiInsight?.whatItMeans) &&
+    aiData.aiInsight.whatItMeans.length > 0;
+
+  return (
+    <section style={{ ...featuredInsightShellStyle, position: "relative" }}>
+      <div style={sectionEyebrowStyle}>Beyond the headline</div>
+      <h2 style={sectionTitleStyle}>A deeper look for beginners</h2>
+      <p style={bodyCopyStyle}>{displayBeyondHeadline}</p>
+
+      <div
+        style={{
+          position: "absolute",
+          right: 16,
+          bottom: 14,
+          fontSize: 10,
+          opacity: 0.18,
+          fontWeight: 700,
+          letterSpacing: "0.08em",
+        }}
+      >
+        {hasAiInsight ? "1" : "0"}
+      </div>
+    </section>
+  );
+}
+
+async function GoingForwardAiCard({
+  symbol,
+  companyName,
+  trend,
+  newsScore,
+  earningsScore,
+  lastRsi,
+  priceVs50,
+  priceVs200,
+  recentHigh,
+  recentLow,
+  detailedNews,
+  fallbackWhatItMeans,
+}: {
+  symbol: string;
+  companyName: string;
+  trend: string;
+  newsScore: NewsScoreResult;
+  earningsScore: { score: number; label: string; tone: ScoreTone; reason: string };
+  lastRsi: number | null;
+  priceVs50: number | null;
+  priceVs200: number | null;
+  recentHigh: number | null;
+  recentLow: number | null;
+  detailedNews: NewsItem[];
+  fallbackWhatItMeans: string[];
+}) {
+  const aiData = await getStockNewsAiData(
+    {
+      symbol,
+      companyName,
+      quote: null,
+      history: [],
+      news: [],
+      trend,
+      lastClose: null,
+      lastMA50: null,
+      lastMA200: null,
+      lastRsi,
+      priceVs50,
+      priceVs200,
+      recentHigh,
+      recentLow,
+      isInvalidTicker: false,
+      isDataUnavailable: false,
+      newsScore,
+      earningsScore,
+      rankedNews: detailedNews,
+      detailedNews,
+      compactNews: [],
+    },
+    { includeInsight: true }
+  );
+
+  const displayWhatItMeans =
+    aiData.aiInsight?.whatItMeans?.length
+      ? aiData.aiInsight.whatItMeans
+      : fallbackWhatItMeans;
+
+  const hasAiInsight =
+    !!aiData.aiInsight?.beyondHeadline?.trim() &&
+    Array.isArray(aiData.aiInsight?.whatItMeans) &&
+    aiData.aiInsight.whatItMeans.length > 0;
+
+  return (
+    <section style={{ ...sidebarCardStyle, position: "relative" }}>
+      <div style={sectionEyebrowStyle}>What this could mean</div>
+      <h2 style={sectionTitleSmallStyle}>Going Forward</h2>
+
+      <div style={{ display: "grid", gap: 12, marginTop: 14 }}>
+        {displayWhatItMeans.map((line) => (
+          <div key={line} style={bulletRowStyle}>
+            <div style={bulletDotStyle} />
+            <div style={bulletTextStyle}>{line}</div>
+          </div>
+        ))}
+      </div>
+
+      <div
+        style={{
+          position: "absolute",
+          right: 16,
+          bottom: 14,
+          fontSize: 10,
+          opacity: 0.18,
+          fontWeight: 700,
+          letterSpacing: "0.08em",
+        }}
+      >
+        {hasAiInsight ? "1" : "0"}
+      </div>
+    </section>
+  );
+}
+
+function loadingBarStyle(width: string): CSSProperties {
+  return {
+    width,
+    height: 12,
+    borderRadius: 999,
+    background: "linear-gradient(90deg, rgba(30,41,59,0.92), rgba(71,85,105,0.45), rgba(30,41,59,0.92))",
+  };
+}
+
+function loadingParagraphStyle(widths: string[]) {
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      {widths.map((width, index) => (
+        <div key={`${width}-${index}`} style={loadingBarStyle(width)} />
+      ))}
+    </div>
+  );
+}
+
+function DetailedNewsFallback({
+  symbol,
+  detailedNews,
+  compactNews,
+}: {
+  symbol: string;
+  detailedNews: NewsItem[];
+  compactNews: NewsItem[];
+}) {
+  return (
+    <section style={editorialCardStyle}>
+      <div style={sectionEyebrowStyle}>Latest briefing</div>
+      <h2 style={sectionTitleStyle}>What’s happening with {symbol}</h2>
+
+      <div style={{ display: "grid", gap: 14, marginTop: 16 }}>
+        {detailedNews.length ? (
+          detailedNews.map((item, index) => (
+            <article
+              key={`${item.link}-${index}`}
+              style={{
+                ...newsLeadCardStyle,
+                borderLeft:
+                  index === 0
+                    ? "3px solid rgba(59,130,246,0.75)"
+                    : "3px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              <div style={newsMetaRowStyle}>
+                <span style={newsSourcePillStyle}>{compactSource(item.source)}</span>
+                <span style={newsDateStyle}>{formatDate(item.pubDate)}</span>
+              </div>
+
+              <h3 style={newsHeadlineStyle}>{item.title}</h3>
+
+              <div style={{ marginTop: 12 }}>
+                {loadingParagraphStyle(["94%", "88%", "61%"])}
+              </div>
+
+              <div style={whyItMattersBoxStyle}>
+                <div style={whyItMattersLabelStyle}>Why this matters</div>
+                <div style={{ marginTop: 10 }}>
+                  {loadingParagraphStyle(["92%", "72%"])}
+                </div>
+              </div>
+
+              <div style={sourceFooterStyle}>
+                Paraphrased on-page brief is loading…
+              </div>
+            </article>
+          ))
+        ) : (
+          <div style={newsLeadCardStyle}>
+            <h3 style={{ ...newsHeadlineStyle, marginTop: 0 }}>No fresh headline set available</h3>
+            <p style={newsSummaryStyle}>
+              This page still works as a stock-news analysis hub, but the current news feed
+              is light. In that case, the page leans more on structure, levels, and what
+              traders may watch next.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {compactNews.length ? (
+        <div style={{ marginTop: 16 }}>
+          <div style={compactFeedLabelStyle}>Older updates drop into a lighter feed</div>
+
+          <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+            {compactNews.map((item, index) => (
+              <article
+                key={`${item.link}-compact-${index}`}
+                className="compactNewsRow"
+                style={compactNewsRowStyle}
+              >
+                <div style={{ minWidth: 88 }}>
+                  <div style={compactSourceStyle}>{compactSource(item.source)}</div>
+                  <div style={compactDateStyle}>{formatDate(item.pubDate)}</div>
+                </div>
+
+                <div style={{ minWidth: 0 }}>
+                  <div style={compactHeadlineStyle}>{item.title}</div>
+                </div>
+
+                <div style={compactMutedStyle}>On-page summary only</div>
+              </article>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function InsightFallbackCard() {
+  return (
+    <section style={{ ...featuredInsightShellStyle, position: "relative" }}>
+      <div style={sectionEyebrowStyle}>Beyond the headline</div>
+      <h2 style={sectionTitleStyle}>A deeper look for beginners</h2>
+      <div style={{ marginTop: 16 }}>
+        {loadingParagraphStyle(["96%", "90%", "86%", "68%"])}
+      </div>
+    </section>
+  );
+}
+
+function GoingForwardFallbackCard() {
+  return (
+    <section style={{ ...sidebarCardStyle, position: "relative" }}>
+      <div style={sectionEyebrowStyle}>What this could mean</div>
+      <h2 style={sectionTitleSmallStyle}>Going Forward</h2>
+
+      <div style={{ display: "grid", gap: 12, marginTop: 14 }}>
+        {[1, 2, 3].map((item) => (
+          <div key={item} style={bulletRowStyle}>
+            <div style={bulletDotStyle} />
+            <div style={{ display: "grid", gap: 8 }}>
+              <div style={loadingBarStyle(item === 1 ? "92%" : item === 2 ? "86%" : "78%")} />
+              <div style={loadingBarStyle(item === 1 ? "76%" : item === 2 ? "68%" : "62%")} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default async function StockNewsPage({ params }: Props) {
   const { symbol } = await params;
   const upper = symbol.toUpperCase();
 
-  const newsData = await getStockNewsData(upper, {
+  const newsData = await getStockNewsBaseData(upper, {
     maxDetailedItems: 3,
-    includeInsight: true,
   });
 
   const {
@@ -1047,9 +1540,6 @@ export default async function StockNewsPage({ params }: Props) {
     earningsScore,
     detailedNews,
     compactNews,
-    aiBriefs,
-    aiInsight,
-    summaryByTitle,
   } = newsData;
 
   const leadSummary = buildLeadSummary({
@@ -1087,17 +1577,8 @@ export default async function StockNewsPage({ params }: Props) {
     priceVs200,
   });
 
-  const displayBeyondHeadline = aiInsight?.beyondHeadline?.trim()
-    ? aiInsight.beyondHeadline
-    : beyondHeadline;
-
-  const displayWhatItMeans =
-    aiInsight?.whatItMeans?.length ? aiInsight.whatItMeans : whatItMeans;
-
-  const hasAiInsight =
-    !!aiInsight?.beyondHeadline?.trim() &&
-    Array.isArray(aiInsight?.whatItMeans) &&
-    aiInsight.whatItMeans.length > 0;
+  const displayBeyondHeadline = beyondHeadline;
+  const displayWhatItMeans = whatItMeans;
 
   return (
     
@@ -1289,138 +1770,43 @@ export default async function StockNewsPage({ params }: Props) {
 
         <section className="newsGrid" style={newsGridStyle}>
           <div className="newsMainColumn" style={{ display: "grid", gap: 18 }}>
-            <section style={editorialCardStyle}>
-              <div style={sectionEyebrowStyle}>Latest briefing</div>
-              <h2 style={sectionTitleStyle}>What’s happening with {upper}</h2>
+            <Suspense
+              fallback={
+                <DetailedNewsFallback
+                  symbol={upper}
+                  detailedNews={detailedNews}
+                  compactNews={compactNews}
+                />
+              }
+            >
+              <DetailedNewsAiSection
+                symbol={upper}
+                companyName={companyName}
+                trend={trend}
+                newsScore={newsScore}
+                detailedNews={detailedNews}
+                compactNews={compactNews}
+              />
+            </Suspense>
 
-              <div style={{ display: "grid", gap: 14, marginTop: 16 }}>
-                {detailedNews.length ? (
-                  detailedNews.map((item, index) => {
-                    const aiBrief = aiBriefs[index];
-                    const hasAi =
-                      !!aiBrief?.summary?.trim() && !!aiBrief?.whyItMatters?.trim();
-
-                    return (
-                      <article
-                        key={`${item.link}-${index}`}
-                        style={{
-                          ...newsLeadCardStyle,
-                          borderLeft:
-                            index === 0
-                              ? "3px solid rgba(59,130,246,0.75)"
-                              : "3px solid rgba(255,255,255,0.08)",
-                        }}
-                      >
-                        <div style={newsMetaRowStyle}>
-                          <span style={newsSourcePillStyle}>{compactSource(item.source)}</span>
-                          <span style={newsDateStyle}>{formatDate(item.pubDate)}</span>
-                        </div>
-
-                        <h3 style={newsHeadlineStyle}>{item.title}</h3>
-
-                        <p style={newsSummaryStyle}>
-                          {hasAi
-                            ? aiBrief!.summary
-                            : buildNewsSummary(item, upper, trend, newsScore)}
-                        </p>
-
-                        <div style={whyItMattersBoxStyle}>
-                          <div style={whyItMattersLabelStyle}>Why this matters</div>
-                          <div style={whyItMattersTextStyle}>
-                            {hasAi
-                              ? aiBrief!.whyItMatters
-                              : buildWhyItMatters(item, upper, trend, newsScore)}
-                          </div>
-                        </div>
-
-                        <div
-                          style={{
-                            ...sourceFooterStyle,
-                            display: "flex",
-                            alignItems: "flex-end",
-                            justifyContent: "space-between",
-                            gap: 12,
-                          }}
-                        >
-                          <span>
-                            Paraphrased on-page brief based on the headline and available source
-                            context. Source noted for context: {compactSource(item.source)}
-                          </span>
-
-                          <span
-                            style={{
-                              fontSize: 10,
-                              opacity: 0.22,
-                              fontWeight: 700,
-                              letterSpacing: "0.08em",
-                              flex: "0 0 auto",
-                            }}
-                          >
-                            {hasAi ? "1" : "0"}
-                          </span>
-                        </div>
-                      </article>
-                    );
-                  })
-                ) : (
-                  <div style={newsLeadCardStyle}>
-                    <h3 style={{ ...newsHeadlineStyle, marginTop: 0 }}>No fresh headline set available</h3>
-                    <p style={newsSummaryStyle}>
-                      This page still works as a stock-news analysis hub, but the current news feed
-                      is light. In that case, the page leans more on structure, levels, and what
-                      traders may watch next.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {compactNews.length ? (
-                <div style={{ marginTop: 16 }}>
-                  <div style={compactFeedLabelStyle}>Older updates drop into a lighter feed</div>
-
-                  <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-                    {compactNews.map((item, index) => (
-                                           <article
-                        key={`${item.link}-compact-${index}`}
-                        className="compactNewsRow"
-                        style={compactNewsRowStyle}
-                      >
-                        <div style={{ minWidth: 88 }}>
-                          <div style={compactSourceStyle}>{compactSource(item.source)}</div>
-                          <div style={compactDateStyle}>{formatDate(item.pubDate)}</div>
-                        </div>
-
-                        <div style={{ minWidth: 0 }}>
-                          <div style={compactHeadlineStyle}>{item.title}</div>
-                        </div>
-
-                        <div style={compactMutedStyle}>On-page summary only</div>
-                      </article>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </section>
-
-            <section style={{ ...featuredInsightShellStyle, position: "relative" }}>
-              <div style={sectionEyebrowStyle}>Beyond the headline</div>
-              <h2 style={sectionTitleStyle}>A deeper look for beginners</h2>
-              <p style={bodyCopyStyle}>{displayBeyondHeadline}</p>
-
-              <div
-                style={{
-                  position: "absolute",
-                  right: 16,
-                  bottom: 14,
-                  fontSize: 10,
-                  opacity: 0.18,
-                  fontWeight: 700,
-                  letterSpacing: "0.08em",
-                }}
-              >
-                {hasAiInsight ? "1" : "0"}
-              </div>
-            </section>
+            <Suspense
+              fallback={<InsightFallbackCard />}
+            >
+              <InsightAiCard
+                symbol={upper}
+                companyName={companyName}
+                trend={trend}
+                newsScore={newsScore}
+                earningsScore={earningsScore}
+                lastRsi={lastRsi}
+                priceVs50={priceVs50}
+                priceVs200={priceVs200}
+                recentHigh={recentHigh}
+                recentLow={recentLow}
+                detailedNews={detailedNews}
+                fallbackBeyondHeadline={displayBeyondHeadline}
+              />
+            </Suspense>
           </div>
 
              <aside className="newsSidebar" style={{ display: "grid", gap: 18 }}>
@@ -1459,33 +1845,24 @@ export default async function StockNewsPage({ params }: Props) {
               </div>
             </section>
 
-            <section style={{ ...sidebarCardStyle, position: "relative" }}>
-              <div style={sectionEyebrowStyle}>What this could mean</div>
-              <h2 style={sectionTitleSmallStyle}>Going Forward</h2>
-
-              <div style={{ display: "grid", gap: 12, marginTop: 14 }}>
-                {displayWhatItMeans.map((line) => (
-                  <div key={line} style={bulletRowStyle}>
-                    <div style={bulletDotStyle} />
-                    <div style={bulletTextStyle}>{line}</div>
-                  </div>
-                ))}
-              </div>
-
-              <div
-                style={{
-                  position: "absolute",
-                  right: 16,
-                  bottom: 14,
-                  fontSize: 10,
-                  opacity: 0.18,
-                  fontWeight: 700,
-                  letterSpacing: "0.08em",
-                }}
-              >
-                {hasAiInsight ? "1" : "0"}
-              </div>
-            </section>
+            <Suspense
+              fallback={<GoingForwardFallbackCard />}
+            >
+              <GoingForwardAiCard
+                symbol={upper}
+                companyName={companyName}
+                trend={trend}
+                newsScore={newsScore}
+                earningsScore={earningsScore}
+                lastRsi={lastRsi}
+                priceVs50={priceVs50}
+                priceVs200={priceVs200}
+                recentHigh={recentHigh}
+                recentLow={recentLow}
+                detailedNews={detailedNews}
+                fallbackWhatItMeans={displayWhatItMeans}
+              />
+            </Suspense>
 
             <section style={sidebarCardStyle}>
               <div style={sectionEyebrowStyle}>Chart context</div>
