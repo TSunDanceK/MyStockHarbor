@@ -1148,55 +1148,55 @@ export default async function StockNewsPage({ params }: Props) {
       />
 
       <div className="newsWrap">
-        <div style={topUtilityRowStyle}>
-          <div style={topUtilityInnerStyle}>
-            <Link href={`/?symbol=${encodeURIComponent(upper)}`} style={topUtilityBtnStyle("gold")}>
+        <div className="newsTopUtilityRow" style={topUtilityRowStyle}>
+          <div className="newsTopUtilityInner" style={topUtilityInnerStyle}>
+            <Link
+              href={`/?symbol=${encodeURIComponent(upper)}`}
+              className="newsTopBtn"
+              style={topUtilityBtnStyle("gold")}
+            >
               📈 Dashboard
             </Link>
 
-            <Link href="/platforms" style={topUtilityBtnStyle("green")}>
+            <Link
+              href="/platforms"
+              className="newsTopBtn"
+              style={topUtilityBtnStyle("green")}
+            >
               🏛 Platforms
             </Link>
 
-            <Link href="/pickers" style={topUtilityBtnStyle("red")}>
+            <Link
+              href="/pickers"
+              className="newsTopBtn"
+              style={topUtilityBtnStyle("red")}
+            >
               📊 Stock Pickers
             </Link>
 
-            <Link href="/learn" style={topUtilityBtnStyle("blue")}>
+            <Link
+              href="/learn"
+              className="newsTopBtn"
+              style={topUtilityBtnStyle("blue")}
+            >
               📘 Learn
             </Link>
           </div>
         </div>
 
-        <section style={heroShellStyle}>
-          <div style={heroLeftStyle}>
+        <section className="newsHeroShell" style={heroShellStyle}>
+          <div className="newsHeroLeft" style={heroLeftStyle}>
             <div style={newsDeskTagStyle}>NEWS DESK</div>
 
-            <h1
-              style={{
-                margin: "14px 0 0 0",
-                fontSize: 44,
-                lineHeight: 1.02,
-                letterSpacing: "-0.055em",
-                maxWidth: 760,
-              }}
-            >
+            <h1 className="newsHeroTitle" style={heroTitleStyle}>
               {upper} Stock News, News Score & What It Could Mean
             </h1>
 
-<p
-  style={{
-    margin: "14px 0 0 0",
-    maxWidth: 780,
-    fontSize: 16,
-    lineHeight: 1.75,
-    color: "rgba(241,245,249,0.82)",
-  }}
->
-  {leadSummary}
-</p>
+            <p className="newsHeroLead" style={heroLeadStyle}>
+              {leadSummary}
+            </p>
 
-<div style={heroMetricRowStyle}>
+            <div className="newsHeroMetricRow" style={heroMetricRowStyle}>
   <div style={heroMetricStyle}>
     <div style={heroMetricLabelStyle}>Last Price</div>
     <div
@@ -1238,22 +1238,33 @@ export default async function StockNewsPage({ params }: Props) {
   </div>
 </div>
 
-<div style={heroCtaRowStyle}>
-  <a
-    href={`/api/go/tradingview?symbol=${encodeURIComponent(upper)}`}
-    target="_blank"
-    rel="noopener noreferrer"
-    style={heroPrimaryCtaStyle}
-  >
-    OPEN ON TRADINGVIEW ↗
-  </a>
+            <div className="newsHeroCtaRow" style={heroCtaRowStyle}>
+              <a
+                href={`/api/go/tradingview?symbol=${encodeURIComponent(upper)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="newsHeroBtn"
+                style={heroPrimaryCtaStyle}
+              >
+                OPEN ON TRADINGVIEW ↗
+              </a>
 
-  <Link href="/platforms" style={heroSecondaryCtaStyle}>
-    TRADE THIS STOCK
-  </Link>
-</div>
+              <Link
+                href="/platforms"
+                className="newsHeroBtn"
+                style={heroSecondaryCtaStyle}
+              >
+                TRADE THIS STOCK
+              </Link>
+            </div>
 
-<div style={heroSubCopyStyle}>
+            <div className="newsHeroSubCopy" style={heroSubCopyStyle}>
+              Full chart, indicators and drawing tools on TradingView. Move to Platforms when you
+              are ready to act.
+            </div>
+          </div>
+
+          <div className="newsHeroRight" style={heroRightStyle}>
   Full chart, indicators and drawing tools on TradingView. Move to Platforms when you
   are ready to act.
 </div>
@@ -1284,7 +1295,7 @@ export default async function StockNewsPage({ params }: Props) {
         </section>
 
         <section className="newsGrid" style={newsGridStyle}>
-          <div style={{ display: "grid", gap: 18 }}>
+          <div className="newsMainColumn" style={{ display: "grid", gap: 18 }}>
             <section style={editorialCardStyle}>
               <div style={sectionEyebrowStyle}>Latest briefing</div>
               <h2 style={sectionTitleStyle}>What’s happening with {upper}</h2>
@@ -1376,7 +1387,11 @@ export default async function StockNewsPage({ params }: Props) {
 
                   <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
                     {compactNews.map((item, index) => (
-                      <article key={`${item.link}-compact-${index}`} style={compactNewsRowStyle}>
+                                           <article
+                        key={`${item.link}-compact-${index}`}
+                        className="compactNewsRow"
+                        style={compactNewsRowStyle}
+                      >
                         <div style={{ minWidth: 88 }}>
                           <div style={compactSourceStyle}>{compactSource(item.source)}</div>
                           <div style={compactDateStyle}>{formatDate(item.pubDate)}</div>
@@ -1415,7 +1430,7 @@ export default async function StockNewsPage({ params }: Props) {
             </section>
           </div>
 
-          <aside style={{ display: "grid", gap: 18 }}>
+             <aside className="newsSidebar" style={{ display: "grid", gap: 18 }}>
             <section style={sidebarCardStyle}>
               <div style={sectionEyebrowStyle}>Why the score looks like this</div>
               <h2 style={sectionTitleSmallStyle}>News Score Breakdown</h2>
@@ -1492,7 +1507,7 @@ export default async function StockNewsPage({ params }: Props) {
           </aside>
         </section>
 
-        <section style={bottomStripStyle}>
+        <section className="newsBottomStrip" style={bottomStripStyle}>
           <div>
             <div style={bottomStripTitleStyle}>Continue your {upper} research</div>
             <div style={bottomStripTextStyle}>
@@ -1501,7 +1516,7 @@ export default async function StockNewsPage({ params }: Props) {
             </div>
           </div>
 
-          <div style={bottomStripActionsStyle}>
+          <div className="newsBottomActions" style={bottomStripActionsStyle}> 
             <Link href={`/stock/${encodeURIComponent(upper)}`} style={bottomActionStyle("blue")}>
               Stock Analysis
             </Link>
@@ -1537,13 +1552,172 @@ export default async function StockNewsPage({ params }: Props) {
           align-items: start;
         }
 
-        @media (max-width: 1080px) {
+        .newsHeroShell {
+          display: grid;
+          grid-template-columns: minmax(0, 1.24fr) minmax(280px, 0.76fr);
+          gap: 18px;
+        }
+
+        .newsHeroTitle {
+          margin: 14px 0 0 0;
+          max-width: 760px;
+        }
+
+        .newsHeroLead {
+          margin: 14px 0 0 0;
+          max-width: 780px;
+        }
+
+        .newsHeroMetricRow {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 12px;
+          margin-top: 18px;
+        }
+
+        .newsHeroCtaRow {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 12px;
+          margin-top: 18px;
+        }
+
+        .newsBottomStrip {
+          display: flex;
+          justify-content: space-between;
+          gap: 16px;
+          flex-wrap: wrap;
+          align-items: center;
+        }
+
+        .compactNewsRow {
+          display: grid;
+          grid-template-columns: 88px minmax(0, 1fr) 120px;
+          gap: 12px;
+          align-items: start;
+        }
+
+        @media (max-width: 1180px) {
           .newsWrap {
-            padding: 20px 18px 36px;
+            padding: 22px 24px 38px;
+          }
+
+          .newsHeroShell {
+            grid-template-columns: 1fr;
           }
 
           .newsGrid {
             grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 820px) {
+          .newsWrap {
+            padding: 18px 16px 32px;
+          }
+
+          .newsTopUtilityRow {
+            justify-content: stretch !important;
+          }
+
+          .newsTopUtilityInner {
+            width: 100%;
+            justify-content: stretch !important;
+            gap: 10px !important;
+          }
+
+          .newsTopBtn {
+            flex: 1 1 calc(50% - 5px);
+            justify-content: center !important;
+            min-height: 44px !important;
+            padding: 11px 12px !important;
+            font-size: 13px !important;
+          }
+
+          .newsHeroTitle {
+            font-size: 34px !important;
+            line-height: 1.06 !important;
+            letter-spacing: -0.045em !important;
+          }
+
+          .newsHeroLead {
+            font-size: 15px !important;
+            line-height: 1.7 !important;
+          }
+
+          .newsHeroMetricRow {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+
+          .newsHeroCtaRow {
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .newsHeroBtn {
+            width: 100%;
+            justify-content: center !important;
+          }
+
+          .newsBottomStrip {
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .newsBottomActions {
+            width: 100%;
+          }
+        }
+
+        @media (max-width: 560px) {
+          .newsWrap {
+            padding: 14px 12px 26px;
+          }
+
+          .newsTopUtilityInner {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            width: 100%;
+          }
+
+          .newsTopBtn {
+            width: 100%;
+            min-width: 0;
+          }
+
+          .newsHeroShell {
+            border-radius: 22px !important;
+            padding: 16px !important;
+          }
+
+          .newsHeroTitle {
+            font-size: 28px !important;
+            line-height: 1.08 !important;
+            letter-spacing: -0.035em !important;
+          }
+
+          .newsHeroLead {
+            font-size: 14px !important;
+            line-height: 1.65 !important;
+          }
+
+          .newsHeroMetricRow {
+            grid-template-columns: 1fr !important;
+          }
+
+          .compactNewsRow {
+            grid-template-columns: 1fr !important;
+          }
+
+          .newsBottomActions {
+            display: grid !important;
+            grid-template-columns: 1fr;
+            width: 100%;
+          }
+
+          .newsBottomActions a {
+            width: 100%;
+            justify-content: center !important;
           }
         }
       `}</style>
@@ -1600,6 +1774,22 @@ const newsDeskTagStyle: CSSProperties = {
   fontWeight: 950,
   letterSpacing: "0.08em",
   textTransform: "uppercase",
+};
+
+const heroTitleStyle: CSSProperties = {
+  margin: "14px 0 0 0",
+  fontSize: 44,
+  lineHeight: 1.02,
+  letterSpacing: "-0.055em",
+  maxWidth: 760,
+};
+
+const heroLeadStyle: CSSProperties = {
+  margin: "14px 0 0 0",
+  maxWidth: 780,
+  fontSize: 16,
+  lineHeight: 1.75,
+  color: "rgba(241,245,249,0.82)",
 };
 
 const heroMetricRowStyle: CSSProperties = {
