@@ -59,7 +59,8 @@ export type StockNewsData = {
   priceVs200: number | null;
   recentHigh: number | null;
   recentLow: number | null;
-  isInvalidTicker: boolean;
+    isInvalidTicker: boolean;
+  isDataUnavailable: boolean;
   newsScore: NewsScoreResult;
   earningsScore: EarningsScoreResult;
   rankedNews: NewsItem[];
@@ -857,6 +858,7 @@ async function buildStockNewsData(
     recentHigh,
     recentLow,
     isInvalidTicker,
+    isDataUnavailable,
     newsScore,
     earningsScore,
     rankedNews,
