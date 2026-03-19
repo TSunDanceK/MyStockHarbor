@@ -898,6 +898,7 @@ async function buildPickersPayload(origin: string) {
         "Stocks breaking above recent multi-week ranges with volume confirmation and price strength above the 50-day moving average.",
       items: takeTop(breakouts, 20, { volumeFirstIfMany: true }),
     },
+ ];
 
   return {
     updatedAt: new Date().toISOString(),
