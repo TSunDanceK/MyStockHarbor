@@ -44,7 +44,7 @@ export type EarningsScoreResult = {
   reason: string;
 };
 
-export type StockNewsData = {
+export type StockNewsBaseData = {
   symbol: string;
   companyName: string;
   quote: Quote | null;
@@ -59,17 +59,22 @@ export type StockNewsData = {
   priceVs200: number | null;
   recentHigh: number | null;
   recentLow: number | null;
-    isInvalidTicker: boolean;
+  isInvalidTicker: boolean;
   isDataUnavailable: boolean;
   newsScore: NewsScoreResult;
   earningsScore: EarningsScoreResult;
   rankedNews: NewsItem[];
   detailedNews: NewsItem[];
   compactNews: NewsItem[];
+};
+
+export type StockNewsAiData = {
   aiBriefs: AiNewsBrief[];
   aiInsight: AiNewsInsight | null;
   summaryByTitle: Record<string, string>;
 };
+
+export type StockNewsData = StockNewsBaseData & StockNewsAiData;
 
 type BuildOptions = {
   maxDetailedItems?: number;
@@ -731,13 +736,12 @@ function scoreEarnings(news: NewsItem[]): EarningsScoreResult {
   };
 }
 
-async function buildStockNewsData(
+async function buildStockNewsBaseData(
   symbol: string,
   options: BuildOptions
-): Promise<StockNewsData> {
+): Promise<StockNewsBaseData> {
   const upper = symbol.trim().toUpperCase();
   const maxDetailedItems = Math.max(1, Math.min(options.maxDetailedItems ?? 3, 3));
-  const includeInsight = options.includeInsight ?? true;
 
   const [quote, history, companyName] = await Promise.all([
     fetchQuote(upper),
@@ -758,7 +762,7 @@ async function buildStockNewsData(
   const lastRsi = lastNum(rsi);
 
   const trend = trendLabel(lastClose, lastMA50, lastMA200);
-    const hasNoQuote = !quote || quote.price == null;
+  const hasNoQuote = !quote || quote.price == null;
   const hasNoHistory = !history || history.length === 0;
 
   const isInvalidTicker = false;
@@ -795,53 +799,6 @@ async function buildStockNewsData(
     .filter((item) => !detailedNews.some((picked) => picked.link === item.link))
     .slice(0, 6);
 
-  const aiBriefs = isInvalidTicker
-    ? []
-    : await getAiNewsBriefs({
-        symbol: upper,
-        companyName,
-        trend,
-        newsScoreLabel: newsScore.label,
-        items: detailedNews.map((item) => ({
-          title: item.title,
-          source: item.source,
-          pubDate: item.pubDate,
-          description: item.description,
-        })),
-      });
-
-  const summaryByTitle = Object.fromEntries(
-    detailedNews.map((item, index) => [
-      item.title,
-      aiBriefs[index]?.summary ?? item.description ?? "",
-    ])
-  );
-
-  const aiInsight =
-    isInvalidTicker || !includeInsight
-      ? null
-      : await getAiNewsInsight({
-          symbol: upper,
-          companyName,
-          trend,
-          newsScoreLabel: newsScore.label,
-          newsScoreValue: newsScore.score,
-          earningsTone: earningsScore.label,
-          rsi: lastRsi,
-          priceVs50,
-          priceVs200,
-          recentHigh,
-          recentLow,
-          items: detailedNews.map((item, index) => ({
-            title: item.title,
-            source: item.source,
-            pubDate: item.pubDate,
-            description: item.description,
-            summary: aiBriefs[index]?.summary ?? null,
-            whyItMatters: aiBriefs[index]?.whyItMatters ?? null,
-          })),
-        });
-
   return {
     symbol: upper,
     companyName,
@@ -864,40 +821,126 @@ async function buildStockNewsData(
     rankedNews,
     detailedNews,
     compactNews,
+  };
+}
+
+export async function getStockNewsAiData(
+  baseData: StockNewsBaseData,
+  options: BuildOptions = {}
+): Promise<StockNewsAiData> {
+  const includeInsight = options.includeInsight ?? true;
+
+  const {
+    symbol,
+    companyName,
+    trend,
+    newsScore,
+    earningsScore,
+    lastRsi,
+    priceVs50,
+    priceVs200,
+    recentHigh,
+    recentLow,
+    detailedNews,
+    isInvalidTicker,
+  } = baseData;
+
+  const aiBriefs = isInvalidTicker
+    ? []
+    : await getAiNewsBriefs({
+        symbol,
+        companyName,
+        trend,
+        newsScoreLabel: newsScore.label,
+        items: detailedNews.map((item) => ({
+          title: item.title,
+          source: item.source,
+          pubDate: item.pubDate,
+          description: item.description,
+        })),
+      });
+
+  const summaryByTitle = Object.fromEntries(
+    detailedNews.map((item, index) => [
+      item.title,
+      aiBriefs[index]?.summary ?? item.description ?? "",
+    ])
+  );
+
+  const aiInsight =
+    isInvalidTicker || !includeInsight
+      ? null
+      : await getAiNewsInsight({
+          symbol,
+          companyName,
+          trend,
+          newsScoreLabel: newsScore.label,
+          newsScoreValue: newsScore.score,
+          earningsTone: earningsScore.label,
+          rsi: lastRsi,
+          priceVs50,
+          priceVs200,
+          recentHigh,
+          recentLow,
+          items: detailedNews.map((item, index) => ({
+            title: item.title,
+            source: item.source,
+            pubDate: item.pubDate,
+            description: item.description,
+            summary: aiBriefs[index]?.summary ?? null,
+            whyItMatters: aiBriefs[index]?.whyItMatters ?? null,
+          })),
+        });
+
+  return {
     aiBriefs,
     aiInsight,
     summaryByTitle,
   };
 }
 
-const getCachedStockNewsData = unstable_cache(
+const getCachedStockNewsBaseData = unstable_cache(
   async (key: string) => {
     const parsed = JSON.parse(key) as {
       symbol: string;
       options: BuildOptions;
     };
 
-    return buildStockNewsData(parsed.symbol, parsed.options);
+    return buildStockNewsBaseData(parsed.symbol, parsed.options);
   },
-  ["msh-stock-news-data-v1"],
+  ["msh-stock-news-base-data-v1"],
   {
     revalidate: 1800,
   }
 );
 
-export async function getStockNewsData(
+export async function getStockNewsBaseData(
   symbol: string,
   options: BuildOptions = {}
-): Promise<StockNewsData> {
+): Promise<StockNewsBaseData> {
   const safeSymbol = symbol.trim().toUpperCase();
 
-  return getCachedStockNewsData(
+  return getCachedStockNewsBaseData(
     JSON.stringify({
       symbol: safeSymbol,
       options: {
         maxDetailedItems: options.maxDetailedItems ?? 3,
-        includeInsight: options.includeInsight ?? true,
       },
     })
   );
 }
+
+export async function getStockNewsData(
+  symbol: string,
+  options: BuildOptions = {}
+): Promise<StockNewsData> {
+  const baseData = await getStockNewsBaseData(symbol, options);
+  const aiData = await getStockNewsAiData(baseData, options);
+
+  return {
+    ...baseData,
+    ...aiData,
+  };
+}
+
+
