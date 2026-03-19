@@ -218,27 +218,34 @@ function macd(values: number[], fast = 12, slow = 26, signal = 9) {
   return { line, signal: sig, hist };
 }
 
-function vwapFromPoints(points: Point[]): (number | null)[] {
-  const out: (number | null)[] = Array(points.length).fill(null);
-  let cumPV = 0;
-  let cumV = 0;
+function vwma(values: number[], volumes: (number | undefined)[], window = 20): (number | null)[] {
+  const out: (number | null)[] = Array(values.length).fill(null);
 
-  for (let i = 0; i < points.length; i++) {
-    const p = points[i];
-    const v = typeof p.volume === "number" && Number.isFinite(p.volume) ? p.volume : null;
+  for (let i = 0; i < values.length; i++) {
+    if (i < window - 1) continue;
 
-    if (v == null || v <= 0) {
-      out[i] = cumV > 0 ? cumPV / cumV : null;
-      continue;
+    let pvSum = 0;
+    let vSum = 0;
+
+    for (let j = i - window + 1; j <= i; j++) {
+      const price = values[j];
+      const volume = volumes[j];
+
+      if (
+        typeof price !== "number" ||
+        !Number.isFinite(price) ||
+        typeof volume !== "number" ||
+        !Number.isFinite(volume) ||
+        volume <= 0
+      ) {
+        continue;
+      }
+
+      pvSum += price * volume;
+      vSum += volume;
     }
 
-    const h = typeof p.high === "number" && Number.isFinite(p.high) ? p.high : null;
-    const l = typeof p.low === "number" && Number.isFinite(p.low) ? p.low : null;
-    const typical = h != null && l != null ? (h + l + p.close) / 3 : p.close;
-
-    cumPV += typical * v;
-    cumV += v;
-    out[i] = cumPV / cumV;
+    out[i] = vSum > 0 ? pvSum / vSum : null;
   }
 
   return out;
@@ -685,7 +692,7 @@ const PRICE_OVERLAY_OPTIONS: Overlay[] = [
   "MA50",
   "MA200",
   "EMA20",
-  "VWAP",
+   "VWMA(20)",
   "Bollinger(20,2)",
 ];
 
@@ -1023,7 +1030,10 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   const bbFull = useMemo(() => bollinger(closesAll, 20, 2), [closesAll]);
   const rsi14Full = useMemo(() => rsiWilder(closesAll, 14), [closesAll]);
   const macdFull = useMemo(() => macd(closesAll, 12, 26, 9), [closesAll]);
-  const vwapFull = useMemo(() => vwapFromPoints(historyAll), [historyAll]);
+   const vwma20Full = useMemo(
+    () => vwma(historyAll.map((p) => p.close), historyAll.map((p) => p.volume), 20),
+    [historyAll]
+  );
   const stochFull = useMemo(() => stochastic(historyAll, 14, 3), [historyAll]);
   const atr14Full = useMemo(() => atr(historyAll, 14), [historyAll]);
 
@@ -1037,7 +1047,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   const macdLine = useMemo(() => macdFull.line.slice(-n), [macdFull, n]);
   const macdSignal = useMemo(() => macdFull.signal.slice(-n), [macdFull, n]);
   const macdHist = useMemo(() => macdFull.hist.slice(-n), [macdFull, n]);
-  const vwapArr = useMemo(() => vwapFull.slice(-n), [vwapFull, n]);
+   const vwma20Arr = useMemo(() => vwma20Full.slice(-n), [vwma20Full, n]);
   const stochK = useMemo(() => stochFull.k.slice(-n), [stochFull, n]);
   const stochD = useMemo(() => stochFull.d.slice(-n), [stochFull, n]);
   const atr14Arr = useMemo(() => atr14Full.slice(-n), [atr14Full, n]);
@@ -1062,7 +1072,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   const ma50Pct = formatPctFromBase(lastClose, typeof lastMA50 === "number" ? lastMA50 : null);
   const ma200Pct = formatPctFromBase(lastClose, typeof lastMA200 === "number" ? lastMA200 : null);
   const ema20Pct = formatPctFromBase(lastClose, lastNum(ema20Arr));
-  const vwapPct = formatPctFromBase(lastClose, lastNum(vwapArr));
+   const vwma20Pct = formatPctFromBase(lastClose, lastNum(vwma20Arr));
   const bbUpperLast = lastNum(bollUpper);
   const bbLowerLast = lastNum(bollLower);
   const rsiLast = lastNum(rsi14Arr);
@@ -1093,7 +1103,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
         bollUpper: lastNum(bollUpper),
         bollLower: lastNum(bollLower),
         ema20: lastNum(ema20Arr),
-        vwap: lastNum(vwapArr),
+         vwap: lastNum(vwma20Arr),
         ma50: typeof lastMA50 === "number" ? lastMA50 : null,
       }),
     [lastClose, rsi14Arr, stochK, bollUpper, bollLower, ema20Arr, vwapArr, lastMA50]
@@ -1272,11 +1282,11 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
         );
       }
 
-      if (ind === "VWAP") {
+      if (ind === "VWMA(20)") {
         parts.push(
-          vwapPct == null
-            ? "VWAP needs more data."
-            : `Price is ${vwapPct >= 0 ? `${vwapPct.toFixed(1)}% above` : `${Math.abs(vwapPct).toFixed(1)}% below`} VWAP.`
+          vwma20Pct == null
+            ? "VWMA(20) needs more data."
+            : `Price is ${vwma20Pct >= 0 ? `${vwma20Pct.toFixed(1)}% above` : `${Math.abs(vwma20Pct).toFixed(1)}% below`} VWMA(20).`
         );
       }
 
@@ -1423,18 +1433,18 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
         });
       }
 
-      if (ind === "VWAP") {
+      if (ind === "VWMA(20)") {
         rows.push({
-          label: "VWAP Distance",
+          label: "VWMA(20) Distance",
           tone:
-            typeof vwapPct === "number"
-              ? Math.abs(vwapPct) >= 5
+            typeof vwma20Pct === "number"
+              ? Math.abs(vwma20Pct) >= 5
                 ? "red"
-                : Math.abs(vwapPct) >= 2
+                : Math.abs(vwma20Pct) >= 2
                 ? "orange"
                 : "yellow"
               : "muted",
-          value: vwapPct == null ? "—" : `${vwapPct >= 0 ? "+" : ""}${vwapPct.toFixed(2)}%`,
+          value: vwma20Pct == null ? "—" : `${vwma20Pct >= 0 ? "+" : ""}${vwma20Pct.toFixed(2)}%`,
         });
       }
 
@@ -2541,7 +2551,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
             bollMid={bollMid}
             bollLower={bollLower}
             ema20={ema20Arr}
-            vwap={vwapArr}
+            vwma20={vwma20Arr}
             rsi14={rsi14Arr}
             macdLine={macdLine}
             macdSignal={macdSignal}
@@ -3408,7 +3418,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
                   bollMid={bollMid}
                   bollLower={bollLower}
                   ema20={ema20Arr}
-                  vwap={vwapArr}
+                  vwma20={vwma20Arr}
                   rsi14={rsi14Arr}
                   macdLine={macdLine}
                   macdSignal={macdSignal}
