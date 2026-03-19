@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   getStockNewsBaseData,
   getStockNewsAiData,
-  type NewsScoreResult,
 } from "@/lib/stock-news-data";
 
 export const runtime = "nodejs";
@@ -1578,6 +1577,10 @@ export default async function StockNewsPage({ params }: Props) {
 
   const displayBeyondHeadline = beyondHeadline;
   const displayWhatItMeans = whatItMeans;
+
+  const summaryByTitle = Object.fromEntries(
+    detailedNews.map((item) => [item.title, item.description ?? ""])
+  );
 
   return (
     
