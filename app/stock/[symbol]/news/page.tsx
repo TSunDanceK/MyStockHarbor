@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   getStockNewsBaseData,
   getStockNewsAiData,
-  type NewsItem,
   type NewsScoreResult,
 } from "@/lib/stock-news-data";
 
