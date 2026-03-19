@@ -757,7 +757,11 @@ async function buildStockNewsData(
   const lastRsi = lastNum(rsi);
 
   const trend = trendLabel(lastClose, lastMA50, lastMA200);
-  const isInvalidTicker = !quote?.price && history.length === 0;
+    const hasNoQuote = !quote || quote.price == null;
+  const hasNoHistory = !history || history.length === 0;
+
+  const isInvalidTicker = false;
+  const isDataUnavailable = hasNoQuote && hasNoHistory;
   const priceVs50 = pctFromBase(lastClose, lastMA50);
   const priceVs200 = pctFromBase(lastClose, lastMA200);
 
