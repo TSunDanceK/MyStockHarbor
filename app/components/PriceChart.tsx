@@ -13,7 +13,7 @@ const CHART_COLORS = {
   bollMid: "rgba(196,181,253,0.72)",
   bollLower: "rgba(167,139,250,0.55)",
   ema20: "#22d3ee",
-  vwma20: "#14b8a6",,
+  vwma20: "#14b8a6",
   rsi: "#a78bfa",
   macdLine: "#22c55e",
   macdSignal: "#f59e0b",
