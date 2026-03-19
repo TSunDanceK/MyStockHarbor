@@ -273,7 +273,7 @@ export default function PickersPage() {
             </section>
 
             <section
-              className="heroPanel"
+              className="heroPanel mobile-hide-screened-setups"
               style={{
                 border: "1px solid rgba(59,130,246,0.20)",
                 borderRadius: 22,
@@ -811,6 +811,10 @@ export default function PickersPage() {
             max-width: 100% !important;
             overflow: hidden !important;
             box-sizing: border-box !important;
+          }
+
+          .mobile-hide-screened-setups {
+            display: none !important;
           }
 
           .heroMiniStats {
