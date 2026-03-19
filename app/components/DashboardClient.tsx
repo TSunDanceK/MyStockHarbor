@@ -3575,7 +3575,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
           </div>
         </div>
 
-        {isMobile ? <MobileHero /> : null}
+       {isMobile ? MobileHero() : null}
 
         <div className="msh-mobile-nav">
           <SmallNavLink href="/learn">Learn</SmallNavLink>
