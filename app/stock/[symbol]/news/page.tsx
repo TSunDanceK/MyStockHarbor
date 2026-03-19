@@ -1371,6 +1371,13 @@ function loadingBarStyle(width: string): CSSProperties {
     width,
     height: 12,
     borderRadius: 999,
+    background: "rgba(30,41,59,0.9)",
+  };
+}
+  return {
+    width,
+    height: 12,
+    borderRadius: 999,
     background: "linear-gradient(90deg, rgba(30,41,59,0.92), rgba(71,85,105,0.45), rgba(30,41,59,0.92))",
   };
 }
@@ -1379,7 +1386,11 @@ function loadingParagraphStyle(widths: string[]) {
   return (
     <div style={{ display: "grid", gap: 10 }}>
       {widths.map((width, index) => (
-        <div key={`${width}-${index}`} style={loadingBarStyle(width)} />
+       <div
+  key={`${width}-${index}`}
+  className="shimmer"
+  style={loadingBarStyle(width)}
+/>
       ))}
     </div>
   );
@@ -2108,7 +2119,27 @@ export default async function StockNewsPage({ params }: Props) {
             min-width: 0;
           }
         }
-      `}</style>
+      @keyframes shimmer {
+  0% {
+    background-position: -400px 0;
+  }
+  100% {
+    background-position: 400px 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(30,41,59,0.9) 0%,
+    rgba(71,85,105,0.55) 50%,
+    rgba(30,41,59,0.9) 100%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite linear;
+}
+
+`}</style>
 
 
       
