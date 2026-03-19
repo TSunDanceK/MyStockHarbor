@@ -414,7 +414,18 @@ const displaySections = useMemo(() => {
   const out: PickerSection[] = [];
 
   const buyTheDipSection = safeSections.find(
-    (section) => section.title === "Buy-the-Dip Setups"
+    (section) =>
+      section.title === "Buy-the-Dip Setups" ||
+      section.title.includes("Buy the Dip") ||
+      section.title.includes("Recent Highs")
+  );
+
+  const athBreakoutSection = safeSections.find((section) =>
+    section.title.includes("All-Time High Breakout")
+  );
+
+  const threeMonthBreakoutSection = safeSections.find((section) =>
+    section.title.includes("3-Month High Breakout")
   );
 
   const oversoldSection = safeSections.find((section) =>
@@ -424,14 +435,16 @@ const displaySections = useMemo(() => {
   const otherSections = safeSections.filter(
     (section) =>
       section !== buyTheDipSection &&
+      section !== athBreakoutSection &&
+      section !== threeMonthBreakoutSection &&
       section !== oversoldSection
   );
 
   if (topBuySection) out.push(topBuySection);
-  if (topSellSection) out.push(topSellSection);
-
   if (buyTheDipSection) out.push(buyTheDipSection);
-
+  if (athBreakoutSection) out.push(athBreakoutSection);
+  if (threeMonthBreakoutSection) out.push(threeMonthBreakoutSection);
+  if (topSellSection) out.push(topSellSection);
   if (oversoldSection) out.push(oversoldSection);
 
   return [...out, ...otherSections];
