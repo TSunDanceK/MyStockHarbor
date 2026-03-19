@@ -200,7 +200,7 @@ function getHeaderHelp(title: string) {
   }
 
   if (title.includes("Breakout")) {
-    return "Breakout setups focus on strength and expansion. These can work in trending markets, but some breakouts can also fail if the move is already overextended.";
+    return "Breakout setups focus on stocks moving above recent multi-week ranges with volume confirmation. These can work well in trending markets, but some breakouts can still fail if the move is too stretched.";
   }
 
   return "These stocks match multiple technical signals worth reviewing on the chart.";
