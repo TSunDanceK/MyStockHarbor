@@ -880,7 +880,6 @@ async function buildPickersPayload(origin: string) {
       items: takeTop(dips, 20),
     },
     {
-   {
       title: "All-Time High Breakout Stocks",
       description:
         "Stocks trading at or very near all-time closing highs. These are the strongest blue-sky breakout setups.",
@@ -892,7 +891,7 @@ async function buildPickersPayload(origin: string) {
         "Stocks breaking above their highest closing level from the last 3 months, excluding the most recent few bars.",
       items: takeTop(threeMonthBreakouts, 20, { volumeFirstIfMany: true }),
     },
- ];
+  ];
 
   return {
     updatedAt: new Date().toISOString(),
