@@ -200,7 +200,7 @@ function getHeaderHelp(title: string) {
   }
 
   if (title.includes("Breakout")) {
-    return "Breakout setups focus on stocks moving above recent multi-week ranges with volume confirmation. These can work well in trending markets, but some breakouts can still fail if the move is too stretched.";
+    return "Breakout setups focus on stocks making fresh all-time highs or breaking above their highest level from the last 3 months. These can work well in trending markets, but some breakouts can still fail if the move is already stretched.";
   }
 
   return "These stocks match multiple technical signals worth reviewing on the chart.";
