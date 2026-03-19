@@ -1530,6 +1530,7 @@ export default async function StockNewsPage({ params }: Props) {
         </section>
       </div>
 
+
       <style>{`
         .newsWrap {
           max-width: 1240px;
@@ -1554,6 +1555,7 @@ export default async function StockNewsPage({ params }: Props) {
         .newsHeroTitle {
           margin: 14px 0 0 0;
           max-width: 760px;
+          word-break: break-word;
         }
 
         .newsHeroLead {
@@ -1596,11 +1598,11 @@ export default async function StockNewsPage({ params }: Props) {
           }
 
           .newsHeroShell {
-            grid-template-columns: 1fr;
+            grid-template-columns: 1fr !important;
           }
 
           .newsGrid {
-            grid-template-columns: 1fr;
+            grid-template-columns: 1fr !important;
           }
         }
 
@@ -1643,8 +1645,8 @@ export default async function StockNewsPage({ params }: Props) {
           }
 
           .newsHeroCtaRow {
-            flex-direction: column;
-            align-items: stretch;
+            flex-direction: column !important;
+            align-items: stretch !important;
           }
 
           .newsHeroBtn {
@@ -1653,8 +1655,8 @@ export default async function StockNewsPage({ params }: Props) {
           }
 
           .newsBottomStrip {
-            flex-direction: column;
-            align-items: stretch;
+            flex-direction: column !important;
+            align-items: stretch !important;
           }
 
           .newsBottomActions {
@@ -1669,7 +1671,7 @@ export default async function StockNewsPage({ params }: Props) {
 
           .newsTopUtilityInner {
             display: grid !important;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
             width: 100%;
           }
 
@@ -1679,6 +1681,7 @@ export default async function StockNewsPage({ params }: Props) {
           }
 
           .newsHeroShell {
+            grid-template-columns: 1fr !important;
             border-radius: 22px !important;
             padding: 16px !important;
           }
@@ -1704,7 +1707,7 @@ export default async function StockNewsPage({ params }: Props) {
 
           .newsBottomActions {
             display: grid !important;
-            grid-template-columns: 1fr;
+            grid-template-columns: 1fr !important;
             width: 100%;
           }
 
@@ -1712,8 +1715,24 @@ export default async function StockNewsPage({ params }: Props) {
             width: 100%;
             justify-content: center !important;
           }
+
+          .newsMainColumn,
+          .newsSidebar {
+            min-width: 0;
+          }
+
+          .newsSidebar section,
+          .newsMainColumn section,
+          .compactNewsRow,
+          .newsHeroRight > div,
+          .newsHeroMetricRow > div {
+            min-width: 0;
+          }
         }
       `}</style>
+
+
+      
     </main>
   );
 }
