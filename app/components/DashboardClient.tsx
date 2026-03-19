@@ -1568,7 +1568,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     ma50Pct,
     ma200Pct,
     ema20Pct,
-    vwapPct,
+    vwma20Pct,
     lastClose,
     bbUpperLast,
     bbLowerLast,
