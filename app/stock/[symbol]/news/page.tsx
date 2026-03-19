@@ -1256,8 +1256,6 @@ export default async function StockNewsPage({ params }: Props) {
               >
                 TRADE THIS STOCK
               </Link>
-            </div>
-
             <div className="newsHeroSubCopy" style={heroSubCopyStyle}>
               Full chart, indicators and drawing tools on TradingView. Move to Platforms when you
               are ready to act.
@@ -1265,10 +1263,6 @@ export default async function StockNewsPage({ params }: Props) {
           </div>
 
           <div className="newsHeroRight" style={heroRightStyle}>
-  Full chart, indicators and drawing tools on TradingView. Move to Platforms when you
-  are ready to act.
-</div>
-            </div>
 
           <div style={heroRightStyle}>
             <div style={scorePanelStyle(newsScore.tone)}>
