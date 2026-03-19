@@ -458,16 +458,29 @@ function computeBuyTheDip(points: Point[]) {
   return null;
 }
 
-function computeBreakout(points: Point[]) {
-  /**
-   * Recent range breakout:
-   * - Current close must be above the highest close of the last 60 bars
-   * - Excluding the most recent 5 bars from the comparison
-   * - Requires volume confirmation
-   * - Requires price above MA50
-   *
-   * This catches more real-world breakout setups than ATH-only logic.
-   */
+function computeAthBreakout(points: Point[]) {
+  const pts = points.filter((p) => p?.date && Number.isFinite(p.close));
+  if (pts.length < 80) return null;
+
+  const closes = pts.map((p) => p.close);
+  const lastClose = closes[closes.length - 1];
+  if (!Number.isFinite(lastClose)) return null;
+
+  const allTimeHigh = Math.max(...closes);
+  if (!Number.isFinite(allTimeHigh) || allTimeHigh <= 0) return null;
+
+  const eps = 0.002; // within 0.2%
+  const isAtAth = lastClose >= allTimeHigh * (1 - eps);
+
+  if (!isAtAth) return null;
+
+  return {
+    allTimeHigh,
+    breakoutPct: ((lastClose - allTimeHigh) / allTimeHigh) * 100,
+  };
+}
+
+function computeThreeMonthBreakout(points: Point[]) {
   const pts = points.filter((p) => p?.date && Number.isFinite(p.close));
   if (pts.length < 90) return null;
 
@@ -475,7 +488,7 @@ function computeBreakout(points: Point[]) {
   const lastClose = closes[closes.length - 1];
   if (!Number.isFinite(lastClose)) return null;
 
-  const LOOKBACK_BARS = 60;
+  const LOOKBACK_BARS = 63; // ~3 months
   const EXCLUDE_RECENT_BARS = 5;
 
   const endExclusive = closes.length - EXCLUDE_RECENT_BARS;
@@ -489,48 +502,12 @@ function computeBreakout(points: Point[]) {
   const rangeHigh = Math.max(...breakoutWindow);
   if (!Number.isFinite(rangeHigh) || rangeHigh <= 0) return null;
 
-  const brokeAboveRange = lastClose > rangeHigh;
-  if (!brokeAboveRange) return null;
-
-  const ma50Arr = movingAverage(closes, 50);
-  const lastMA50 = lastNum(ma50Arr);
-  const aboveMA50 =
-    typeof lastMA50 === "number" &&
-    Number.isFinite(lastMA50) &&
-    lastClose > lastMA50;
-
-  if (!aboveMA50) return null;
-
-  const volumeArr: (number | null)[] = pts.map((p) =>
-    typeof p.volume === "number" && Number.isFinite(p.volume) ? p.volume : null
-  );
-  const volSma20Arr = smaNullable(volumeArr, 20);
-  const lastVol = lastNum(volumeArr);
-  const lastVolSma20 = lastNum(volSma20Arr);
-
-  const volumeRatio =
-    typeof lastVol === "number" &&
-    typeof lastVolSma20 === "number" &&
-    lastVolSma20 > 0
-      ? lastVol / lastVolSma20
-      : null;
-
-  if (typeof volumeRatio !== "number" || !Number.isFinite(volumeRatio) || volumeRatio < 1.4) {
-    return null;
-  }
-
-  const breakoutPct = ((lastClose - rangeHigh) / rangeHigh) * 100;
-  const lookbackStartDate = pts[startInclusive]?.date ?? null;
-  const lookbackEndDate = pts[endExclusive - 1]?.date ?? null;
+  if (lastClose <= rangeHigh) return null;
 
   return {
     rangeHigh,
-    breakoutPct,
-    volumeRatio,
+    breakoutPct: ((lastClose - rangeHigh) / rangeHigh) * 100,
     lookbackBars: LOOKBACK_BARS,
-    excludeRecentBars: EXCLUDE_RECENT_BARS,
-    lookbackStartDate,
-    lookbackEndDate,
   };
 }
 
@@ -685,7 +662,8 @@ async function buildPickersPayload(origin: string) {
   const green: PickerItem[] = [];
   const red: PickerItem[] = [];
   const dips: PickerItem[] = [];
-  const breakouts: PickerItem[] = [];
+  const athBreakouts: PickerItem[] = [];
+  const threeMonthBreakouts: PickerItem[] = [];
   const divergences: PickerItem[] = [];
   const signalRecords: SignalRecord[] = [];
 
@@ -731,17 +709,26 @@ async function buildPickersPayload(origin: string) {
             });
           }
 
-          const bo = computeBreakout(pts);
-          if (bo) {
-            breakouts.push({
+          const athBo = computeAthBreakout(pts);
+          if (athBo) {
+            athBreakouts.push({
               symbol,
               tone: "orange",
-              note: `Above ${bo.lookbackBars}-bar range high • vol ${bo.volumeRatio.toFixed(2)}×`,
+              note: "At all-time high breakout",
+              _score: dynamicBoost(symbol) + 5000 + athBo.breakoutPct * 100,
+            });
+          }
+
+          const threeMonthBo = computeThreeMonthBreakout(pts);
+          if (threeMonthBo) {
+            threeMonthBreakouts.push({
+              symbol,
+              tone: "orange",
+              note: `Above ${threeMonthBo.lookbackBars}-bar high`,
               _score:
                 dynamicBoost(symbol) +
-                bo.volumeRatio * 1000 +
-                bo.breakoutPct * 100 +
-                50,
+                1000 +
+                threeMonthBo.breakoutPct * 100,
             });
           }
 
@@ -787,7 +774,7 @@ async function buildPickersPayload(origin: string) {
           const overbought = !!comp && comp.overbought >= 2 && comp.overbought > comp.oversold;
 
           const buyTheDip = !!dip;
-          const breakout = !!bo;
+          const breakout = !!athBo || !!threeMonthBo;
 
           const volumeSpike =
             typeof lastVol === "number" &&
@@ -893,10 +880,17 @@ async function buildPickersPayload(origin: string) {
       items: takeTop(dips, 20),
     },
     {
-      title: "Breakout Stocks Today (Momentum & Expansion)",
+   {
+      title: "All-Time High Breakout Stocks",
       description:
-        "Stocks breaking above recent multi-week ranges with volume confirmation and price strength above the 50-day moving average.",
-      items: takeTop(breakouts, 20, { volumeFirstIfMany: true }),
+        "Stocks trading at or very near all-time closing highs. These are the strongest blue-sky breakout setups.",
+      items: takeTop(athBreakouts, 20, { volumeFirstIfMany: true }),
+    },
+    {
+      title: "3-Month High Breakout Stocks",
+      description:
+        "Stocks breaking above their highest closing level from the last 3 months, excluding the most recent few bars.",
+      items: takeTop(threeMonthBreakouts, 20, { volumeFirstIfMany: true }),
     },
  ];
 
