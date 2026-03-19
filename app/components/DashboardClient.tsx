@@ -1106,7 +1106,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
          vwap: lastNum(vwma20Arr),
         ma50: typeof lastMA50 === "number" ? lastMA50 : null,
       }),
-    [lastClose, rsi14Arr, stochK, bollUpper, bollLower, ema20Arr, vwapArr, lastMA50]
+        [lastClose, rsi14Arr, stochK, bollUpper, bollLower, ema20Arr, vwma20Arr, lastMA50]
   );
 
   const divergence = useMemo(() => {
