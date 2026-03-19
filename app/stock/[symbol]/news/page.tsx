@@ -1201,7 +1201,7 @@ export default async function StockNewsPage({ params }: Props) {
     <div style={heroMetricLabelStyle}>Last Price</div>
     <div
       style={{
-      style={{
+     
         ...heroMetricValueStyle,
         color: isDataUnavailable ? "#f59e0b" : "#f8fafc",
         fontSize: isDataUnavailable ? 14 : heroMetricValueStyle.fontSize,
