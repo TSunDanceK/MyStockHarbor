@@ -3713,12 +3713,15 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
             </div>
 
             <div className="msh-lower-grid">
+              <OverviewPanel />
+              <BreakdownPanel />
+            </div>
+
+            <div className="msh-lower-grid">
               <NewsPanel />
             </div>
 
             <div className="msh-lower-grid">
-              <OverviewPanel />
-              <BreakdownPanel />
               <BenchmarksPanel />
             </div>
           </>
