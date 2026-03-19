@@ -1197,46 +1197,45 @@ export default async function StockNewsPage({ params }: Props) {
             </p>
 
             <div className="newsHeroMetricRow" style={heroMetricRowStyle}>
-  <div style={heroMetricStyle}>
-    <div style={heroMetricLabelStyle}>Last Price</div>
-    <div
-      style={{
-     
-        ...heroMetricValueStyle,
-        color: isDataUnavailable ? "#f59e0b" : "#f8fafc",
-        fontSize: isDataUnavailable ? 14 : heroMetricValueStyle.fontSize,
-        letterSpacing: isDataUnavailable ? "0.08em" : "-0.04em",
-      }}
-    >
-      {isDataUnavailable
-        ? "DATA UNAVAILABLE"
-        : formatMoney(quote?.price ?? lastClose)}
-    </div>
-  </div>
+              <div style={heroMetricStyle}>
+                <div style={heroMetricLabelStyle}>Last Price</div>
+                <div
+                  style={{
+                    ...heroMetricValueStyle,
+                    color: isDataUnavailable ? "#f59e0b" : "#f8fafc",
+                    fontSize: isDataUnavailable ? 14 : heroMetricValueStyle.fontSize,
+                    letterSpacing: isDataUnavailable ? "0.08em" : "-0.04em",
+                  }}
+                >
+                  {isDataUnavailable
+                    ? "DATA UNAVAILABLE"
+                    : formatMoney(quote?.price ?? lastClose)}
+                </div>
+              </div>
 
-  <div style={heroMetricStyle}>
-    <div style={heroMetricLabelStyle}>Trend Context</div>
-    <div style={heroMetricValueStyle}>{trend}</div>
-  </div>
+              <div style={heroMetricStyle}>
+                <div style={heroMetricLabelStyle}>Trend Context</div>
+                <div style={heroMetricValueStyle}>{trend}</div>
+              </div>
 
-  <div style={heroMetricStyle}>
-    <div style={heroMetricLabelStyle}>RSI (14)</div>
-    <div
-      style={{
-        ...heroMetricValueStyle,
-        color: isDataUnavailable ? "#f59e0b" : "#f8fafc",
-        fontSize: isDataUnavailable ? 14 : heroMetricValueStyle.fontSize,
-        letterSpacing: isDataUnavailable ? "0.08em" : "-0.04em",
-      }}
-    >
-      {isDataUnavailable
-        ? "DATA UNAVAILABLE"
-        : typeof lastRsi === "number"
-        ? lastRsi.toFixed(1)
-        : "—"}
-    </div>
-  </div>
-</div>
+              <div style={heroMetricStyle}>
+                <div style={heroMetricLabelStyle}>RSI (14)</div>
+                <div
+                  style={{
+                    ...heroMetricValueStyle,
+                    color: isDataUnavailable ? "#f59e0b" : "#f8fafc",
+                    fontSize: isDataUnavailable ? 14 : heroMetricValueStyle.fontSize,
+                    letterSpacing: isDataUnavailable ? "0.08em" : "-0.04em",
+                  }}
+                >
+                  {isDataUnavailable
+                    ? "DATA UNAVAILABLE"
+                    : typeof lastRsi === "number"
+                    ? lastRsi.toFixed(1)
+                    : "—"}
+                </div>
+              </div>
+            </div>
 
             <div className="newsHeroCtaRow" style={heroCtaRowStyle}>
               <a
@@ -1256,6 +1255,8 @@ export default async function StockNewsPage({ params }: Props) {
               >
                 TRADE THIS STOCK
               </Link>
+            </div>
+
             <div className="newsHeroSubCopy" style={heroSubCopyStyle}>
               Full chart, indicators and drawing tools on TradingView. Move to Platforms when you
               are ready to act.
@@ -1263,8 +1264,6 @@ export default async function StockNewsPage({ params }: Props) {
           </div>
 
           <div className="newsHeroRight" style={heroRightStyle}>
-
-          <div style={heroRightStyle}>
             <div style={scorePanelStyle(newsScore.tone)}>
               <div style={scorePanelKickerStyle}>NEWS SCORE</div>
               <div style={scoreValueStyle}>{newsScore.score}/100</div>
