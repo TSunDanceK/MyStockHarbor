@@ -469,7 +469,7 @@ function computeAthBreakout(points: Point[]) {
   const allTimeHigh = Math.max(...closes);
   if (!Number.isFinite(allTimeHigh) || allTimeHigh <= 0) return null;
 
-  const eps = 0.002; // within 0.2%
+  const eps = 0.01; // within 1%
   const isAtAth = lastClose >= allTimeHigh * (1 - eps);
 
   if (!isAtAth) return null;
