@@ -147,6 +147,8 @@ function chooseCardTone(
 }
 
 function getBuySignalCount(record: SignalRecord) {
+  if (!record.aboveMA200) return 0;
+
   let count = 0;
 
   if (record.oversold) count += 1;
