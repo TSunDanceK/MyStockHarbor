@@ -3709,11 +3709,11 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
         {isMobile ? (
           <>
             <div className="msh-lower-grid" style={{ marginTop: 0 }}>
-              <NewsPanel />
+              <MobileStockAnalysisCard />
             </div>
 
             <div className="msh-lower-grid">
-              <MobileStockAnalysisCard />
+              <NewsPanel />
             </div>
 
             <div className="msh-lower-grid">
