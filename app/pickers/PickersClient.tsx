@@ -188,6 +188,9 @@ function getHeaderHelp(title: string) {
   if (title.includes("Oversold")) {
     return "Oversold signals highlight stocks that have dropped or stretched downward. Some traders review these for rebound or dip-buy setups.";
   }
+    if (title.includes("Best Trend Score")) {
+    return "These stocks have the strongest current trend structure based on price relative to MA50 and MA200, moving average alignment, and positive MACD momentum.";
+  }
 
   if (title.includes("Overbought")) {
     return "Overbought signals highlight stocks that may be extended after strong moves and could experience pullbacks.";
