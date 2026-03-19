@@ -1037,7 +1037,8 @@ export default async function StockNewsPage({ params }: Props) {
     lastMA50,
     lastMA200,
     lastRsi,
-    isInvalidTicker,
+       isInvalidTicker,
+    isDataUnavailable,
     priceVs50,
     priceVs200,
     recentHigh,
@@ -1200,14 +1201,15 @@ export default async function StockNewsPage({ params }: Props) {
     <div style={heroMetricLabelStyle}>Last Price</div>
     <div
       style={{
+      style={{
         ...heroMetricValueStyle,
-        color: isInvalidTicker ? "#ef4444" : "#f8fafc",
-        fontSize: isInvalidTicker ? 14 : heroMetricValueStyle.fontSize,
-        letterSpacing: isInvalidTicker ? "0.08em" : "-0.04em",
+        color: isDataUnavailable ? "#f59e0b" : "#f8fafc",
+        fontSize: isDataUnavailable ? 14 : heroMetricValueStyle.fontSize,
+        letterSpacing: isDataUnavailable ? "0.08em" : "-0.04em",
       }}
     >
-      {isInvalidTicker
-        ? "INVALID TICKER"
+      {isDataUnavailable
+        ? "DATA UNAVAILABLE"
         : formatMoney(quote?.price ?? lastClose)}
     </div>
   </div>
@@ -1222,13 +1224,13 @@ export default async function StockNewsPage({ params }: Props) {
     <div
       style={{
         ...heroMetricValueStyle,
-        color: isInvalidTicker ? "#ef4444" : "#f8fafc",
-        fontSize: isInvalidTicker ? 14 : heroMetricValueStyle.fontSize,
-        letterSpacing: isInvalidTicker ? "0.08em" : "-0.04em",
+        color: isDataUnavailable ? "#f59e0b" : "#f8fafc",
+        fontSize: isDataUnavailable ? 14 : heroMetricValueStyle.fontSize,
+        letterSpacing: isDataUnavailable ? "0.08em" : "-0.04em",
       }}
     >
-      {isInvalidTicker
-        ? "INVALID TICKER"
+      {isDataUnavailable
+        ? "DATA UNAVAILABLE"
         : typeof lastRsi === "number"
         ? lastRsi.toFixed(1)
         : "—"}
