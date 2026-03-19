@@ -2703,7 +2703,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
               <div style={{ minWidth: 0 }}>
                 <div
                   style={{
-                    fontSize: 12,
+                    fontSize: 11,
                     fontWeight: 900,
                     letterSpacing: 1.1,
                     opacity: 0.7,
@@ -2713,11 +2713,25 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
                   MyStockHarbor Briefing
                 </div>
 
-                <div style={{ marginTop: 6, fontSize: 22, fontWeight: 950, lineHeight: 1.1 }}>
+                <div
+                  style={{
+                    marginTop: 6,
+                    fontSize: isMobile ? 20 : 22,
+                    fontWeight: 950,
+                    lineHeight: 1.1,
+                  }}
+                >
                   Latest headlines on {news.symbol}
                 </div>
 
-                <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.6, opacity: 0.78 }}>
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: isMobile ? 13 : 14,
+                    lineHeight: 1.6,
+                    opacity: 0.78,
+                  }}
+                >
                   {news.companyName ? `${news.companyName} · ` : ""}
                   {news.newsScoreLabel} news tone · {news.trend}
                 </div>
@@ -2734,6 +2748,8 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
                   color: COLORS.yellowText,
                   fontWeight: 900,
                   whiteSpace: "nowrap",
+                  width: isMobile ? "100%" : "auto",
+                  textAlign: "center",
                 }}
               >
                 Open full {news.symbol} news page
@@ -2759,10 +2775,11 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns:
-                  news.cards.length >= 3
-                    ? "repeat(3, minmax(0, 1fr))"
-                    : "repeat(2, minmax(0, 1fr))",
+                gridTemplateColumns: isMobile
+                  ? "1fr"
+                  : news.cards.length >= 3
+                  ? "repeat(3, minmax(0, 1fr))"
+                  : "repeat(2, minmax(0, 1fr))",
                 gap: 14,
               }}
             >
@@ -2770,7 +2787,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
                 <div
                   key={`${item.title}-${idx}`}
                   style={{
-                    padding: 14,
+                    padding: isMobile ? 12 : 14,
                     borderRadius: 16,
                     border: `1px solid ${COLORS.border}`,
                     background: COLORS.controlBg,
@@ -2797,9 +2814,25 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
                     </div>
                   </div>
 
-                  <div style={{ fontWeight: 900, lineHeight: 1.45, fontSize: 16 }}>{item.title}</div>
+                  <div
+                    style={{
+                      fontWeight: 900,
+                      lineHeight: 1.45,
+                      fontSize: isMobile ? 15 : 16,
+                    }}
+                  >
+                    {item.title}
+                  </div>
 
-                  <div style={{ fontSize: 14, lineHeight: 1.7, opacity: 0.86 }}>{item.summary}</div>
+                  <div
+                    style={{
+                      fontSize: isMobile ? 13 : 14,
+                      lineHeight: 1.7,
+                      opacity: 0.86,
+                    }}
+                  >
+                    {item.summary}
+                  </div>
 
                   <div
                     style={{
@@ -2813,10 +2846,6 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
                     }}
                   >
                     <span style={{ fontWeight: 900 }}>Why this matters:</span> {item.whyItMatters}
-                  </div>
-
-                  <div style={{ fontSize: 11, opacity: 0.48, fontWeight: 800 }}>
-                    {item.debugAiUsed}
                   </div>
                 </div>
               ))}
@@ -2854,6 +2883,220 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     );
   }
 
+    function MobileHero() {
+    return (
+      <section
+        style={{
+          marginBottom: 14,
+          border: `1px solid ${COLORS.border}`,
+          borderRadius: 20,
+          background: COLORS.cardBg,
+          color: COLORS.cardFg,
+          boxShadow: COLORS.isDark
+            ? "0 14px 34px rgba(0,0,0,0.28)"
+            : "0 14px 34px rgba(0,0,0,0.08)",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            padding: "16px 14px 14px",
+            background: COLORS.isDark
+              ? "linear-gradient(180deg, rgba(37,99,235,0.16), rgba(11,18,32,0.00))"
+              : "linear-gradient(180deg, rgba(37,99,235,0.08), rgba(255,255,255,0.00))",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              marginBottom: 12,
+            }}
+          >
+            <Link
+              href="/"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                textDecoration: "none",
+                flex: "0 0 auto",
+              }}
+            >
+              <img
+                src="/logo.png"
+                alt="MyStockHarbor"
+                style={{
+                  height: 54,
+                  width: "auto",
+                  objectFit: "contain",
+                  display: "block",
+                }}
+              />
+            </Link>
+
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: 800,
+                  color: COLORS.mutedFg,
+                  lineHeight: 1.35,
+                }}
+              >
+                Educational stock dashboard and market research tools.
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              fontWeight: 950,
+              fontSize: 28,
+              lineHeight: 1.05,
+              letterSpacing: "-0.03em",
+            }}
+          >
+            Find stock ideas fast
+          </div>
+
+          <div
+            style={{
+              marginTop: 8,
+              color: COLORS.mutedFg,
+              fontSize: 14,
+              fontWeight: 700,
+              lineHeight: 1.55,
+            }}
+          >
+            Scan the market for ideas, or search any stock to open its chart and latest news.
+          </div>
+
+          <button
+            type="button"
+            onClick={() => router.push("/pickers")}
+            className="msh-stock-picker-cta msh-mobile-hero-cta"
+            style={{
+              width: "100%",
+              marginTop: 16,
+              padding: "16px 16px",
+              borderRadius: 18,
+              border: `1px solid rgba(59,130,246,0.52)`,
+              background: COLORS.isDark
+                ? "linear-gradient(135deg, rgba(37,99,235,0.34), rgba(16,185,129,0.18))"
+                : "linear-gradient(135deg, rgba(37,99,235,0.18), rgba(16,185,129,0.10))",
+              color: COLORS.controlFg,
+              fontWeight: 950,
+              fontSize: 18,
+              cursor: "pointer",
+              textAlign: "left",
+              transition: "transform 120ms ease, filter 120ms ease, border-color 120ms ease",
+              boxShadow: COLORS.isDark
+                ? "0 16px 32px rgba(37,99,235,0.22)"
+                : "0 12px 24px rgba(37,99,235,0.12)",
+            }}
+          >
+            <span
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                width: "100%",
+              }}
+            >
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 20 }} aria-hidden="true">
+                  🔎
+                </span>
+                <span>Scan for Stock Ideas</span>
+              </span>
+
+              <span
+                className="msh-stock-picker-cta-arrow"
+                aria-hidden="true"
+                style={{ fontSize: 20, lineHeight: 1 }}
+              >
+                →
+              </span>
+            </span>
+          </button>
+
+          <div style={{ marginTop: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 6 }}>Search Any Stock</div>
+
+            <input
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setOpen(true);
+              }}
+              onFocus={() => setOpen(true)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  chooseSymbol(query || symbol);
+                }
+              }}
+              placeholder="🔎 Search ticker or company"
+              style={{
+                width: "100%",
+                padding: "14px 16px",
+                borderRadius: 16,
+                border: `1px solid ${COLORS.controlBorder}`,
+                background: COLORS.controlBgSolid,
+                color: COLORS.controlFg,
+                outline: "none",
+                fontSize: 15,
+                fontWeight: 700,
+              }}
+            />
+
+            {open && results.length > 0 ? (
+              <div
+                style={{
+                  position: "relative",
+                  marginTop: 8,
+                  zIndex: 20,
+                  border: `1px solid ${COLORS.border}`,
+                  borderRadius: 16,
+                  background: COLORS.cardBg,
+                  boxShadow: COLORS.isDark
+                    ? "0 18px 34px rgba(0,0,0,0.40)"
+                    : "0 18px 34px rgba(0,0,0,0.12)",
+                  overflow: "hidden",
+                }}
+              >
+                {results.slice(0, 8).map((r) => (
+                  <button
+                    key={`${r.symbol}-${r.exchange}`}
+                    type="button"
+                    onClick={() => chooseSymbol(r.symbol)}
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      padding: "12px 14px",
+                      border: "none",
+                      borderBottom: `1px solid ${COLORS.border}`,
+                      background: COLORS.cardBg,
+                      color: COLORS.cardFg,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div style={{ fontWeight: 900 }}>{r.symbol}</div>
+                    <div style={{ fontSize: 13, color: COLORS.mutedFg }}>
+                      {r.name} {r.exchange ? `• ${r.exchange}` : ""}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </section>
+    );
+  }
+  
   return (
     <main
       style={{
@@ -3051,8 +3294,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
           }
 
           .msh-topbar {
-            gap: 10px;
-            margin-bottom: 12px;
+            display: none;
           }
 
           .msh-top-right {
@@ -3074,9 +3316,13 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
             border-radius: 12px !important;
           }
 
+          .msh-mobile-hero-cta:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.03);
+          }
+
           .msh-toolbar-grid {
-            grid-template-columns: 1fr;
-            gap: 10px;
+            display: none;
           }
 
           .msh-score-grid,
@@ -3099,8 +3345,9 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
 
           .msh-timeframes {
             display: grid;
-            grid-template-columns: repeat(8, 1fr);
+            grid-template-columns: repeat(6, 1fr);
             gap: 6px;
+            width: 100%;
           }
 
           .msh-timeframes > * {
@@ -3126,14 +3373,14 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
                 alignItems: "center",
                 textDecoration: "none",
                 flex: "0 0 auto",
-                marginRight: isMobile ? 4 : 8,
+                marginRight: 8,
               }}
             >
               <img
                 src="/logo.png"
                 alt="MyStockHarbor"
                 style={{
-                  height: isMobile ? 56 : 78,
+                  height: 78,
                   width: "auto",
                   objectFit: "contain",
                   display: "block",
@@ -3141,8 +3388,8 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
               />
             </Link>
 
-            <div style={{ paddingTop: isMobile ? 2 : 0 }}>
-              <div style={{ fontWeight: 900, fontSize: isMobile ? 14 : 16 }}>
+            <div>
+              <div style={{ fontWeight: 900, fontSize: 16 }}>
                 Learn charts. Discover stocks. Trade smarter.
               </div>
               <div style={{ color: COLORS.mutedFg, fontSize: 13, fontWeight: 700 }}>Version 1</div>
@@ -3181,10 +3428,11 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
           </div>
         </div>
 
+        {isMobile ? <MobileHero /> : null}
+
         <div className="msh-mobile-nav">
           <SmallNavLink href="/learn">Learn</SmallNavLink>
           <SmallNavLink href="/platforms">Platforms</SmallNavLink>
-          <SmallNavLink href="/pickers">Stock Pickers</SmallNavLink>
           <SmallNavLink href="/utilities">Calculators</SmallNavLink>
 
           <button
@@ -3335,21 +3583,46 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
           </div>
         ) : null}
 
-        <div className="msh-main-grid">
-          <div className="msh-left-stack msh-mobile-secondary">
-            <OverviewPanel />
-            <BreakdownPanel />
-          </div>
+        {isMobile ? (
+          <>
+            <div className="msh-lower-grid" style={{ marginTop: 0 }}>
+              <NewsPanel />
+            </div>
 
-          <div className="msh-mobile-primary">
-            <ChartPanel />
-          </div>
-        </div>
+            <div className="msh-main-grid">
+              <div className="msh-left-stack msh-mobile-secondary">
+                <OverviewPanel />
+                <BreakdownPanel />
+              </div>
 
-        <div className="msh-lower-grid">
-          <BenchmarksPanel />
-          <NewsPanel />
-        </div>
+              <div className="msh-mobile-primary">
+                <ChartPanel />
+              </div>
+            </div>
+
+            <div className="msh-lower-grid">
+              <BenchmarksPanel />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="msh-main-grid">
+              <div className="msh-left-stack msh-mobile-secondary">
+                <OverviewPanel />
+                <BreakdownPanel />
+              </div>
+
+              <div className="msh-mobile-primary">
+                <ChartPanel />
+              </div>
+            </div>
+
+            <div className="msh-lower-grid">
+              <BenchmarksPanel />
+              <NewsPanel />
+            </div>
+          </>
+        )}
 
         {expanded ? (
           <div
