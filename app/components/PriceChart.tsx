@@ -233,7 +233,7 @@ export default function PriceChart(props: Props) {
     bollMid,
     bollLower,
     ema20,
-    vwap,
+    vwma20,
     rsi14,
     macdLine,
     macdSignal,
