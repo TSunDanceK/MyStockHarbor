@@ -1587,7 +1587,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     let order = 0;
     const push = (it: Omit<OverviewItem, "order">) => items.push({ ...it, order: order++ });
 
-    const vwap = lastNum(vwapArr);
+     const vwap = lastNum(vwma20Arr);
     if (typeof lastClose === "number" && typeof vwap === "number" && vwap > 0) {
       const pct = ((lastClose - vwap) / vwap) * 100;
       push({
@@ -1703,7 +1703,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     });
   }, [
     lastClose,
-    vwapArr,
+    vwma20Arr,
     macdHistLast,
     rsiLast,
     stochLast,
