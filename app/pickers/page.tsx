@@ -156,25 +156,39 @@ export default function PickersPage() {
               }}
             >
               <div
+                className="pickersHeroPills"
                 style={{
-                  display: "inline-flex",
+                  display: "flex",
                   alignItems: "center",
-                  gap: 8,
-                  padding: "8px 12px",
-                  borderRadius: 999,
-                  border: "1px solid rgba(59,130,246,0.32)",
-                  background:
-                    "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(37,99,235,0.08))",
-                  fontSize: 12,
-                  fontWeight: 950,
-                  letterSpacing: "0.08em",
-                  textTransform: "uppercase",
-                  color: "#dbeafe",
-                  maxWidth: "100%",
-                  boxSizing: "border-box",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  flexWrap: "wrap",
+                  minWidth: 0,
                 }}
               >
-                STOCK PICKERS
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "8px 12px",
+                    borderRadius: 999,
+                    border: "1px solid rgba(59,130,246,0.32)",
+                    background:
+                      "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(37,99,235,0.08))",
+                    fontSize: 12,
+                    fontWeight: 950,
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    color: "#dbeafe",
+                    maxWidth: "100%",
+                    boxSizing: "border-box",
+                  }}
+                >
+                  STOCK PICKERS
+                </div>
+
+                <BookmarkPromptButton compact />
               </div>
 
               <h1
@@ -228,37 +242,54 @@ export default function PickersPage() {
                 />
               </div>
               
- <BookmarkPromptButton />
 
               <div
+                className="scrollCueBox"
                 style={{
                   marginTop: 16,
                   borderRadius: 18,
-                  border: "1px dashed rgba(59,130,246,0.24)",
+                  border: "1px dashed rgba(96,165,250,0.40)",
                   background:
-                    "linear-gradient(180deg, rgba(59,130,246,0.05), rgba(15,23,42,0.10))",
-                  padding: "14px 16px",
+                    "linear-gradient(180deg, rgba(30,64,175,0.14), rgba(15,23,42,0.12))",
+                  padding: "16px 18px",
                   display: "grid",
                   placeItems: "center",
                   textAlign: "center",
-                  minHeight: 78,
+                  minHeight: 90,
                   minWidth: 0,
                   boxSizing: "border-box",
+                  boxShadow:
+                    "inset 0 1px 0 rgba(255,255,255,0.05), 0 0 0 1px rgba(59,130,246,0.06), 0 0 28px rgba(37,99,235,0.16)",
                 }}
               >
                 <div
+                  className="scrollCueText"
                   style={{
-                    fontSize: 13,
-                    fontWeight: 900,
-                    letterSpacing: "0.06em",
-                    color: "rgba(219,234,254,0.88)",
+                    fontSize: 14,
+                    fontWeight: 950,
+                    letterSpacing: "0.08em",
+                    color: "#dbeafe",
                     textTransform: "uppercase",
+                    textShadow: "0 0 18px rgba(96,165,250,0.20)",
                   }}
                 >
-                  Screened stocks below
+                  Scroll down for today’s screened stock setups
                 </div>
 
                 <div
+                  className="scrollCueArrows"
+                  style={{
+                    marginTop: 8,
+                    fontSize: 24,
+                    lineHeight: 1,
+                    color: "#60a5fa",
+                    letterSpacing: "0.28em",
+                    fontWeight: 900,
+                  }}
+                >
+                  ↓ ↓ ↓
+                </div>
+              </div>
                   style={{
                     marginTop: 6,
                     fontSize: 22,
@@ -323,8 +354,8 @@ export default function PickersPage() {
                   tint="green"
                 />
                 <SignalCard
-                  title="Extended Strength Signals"
-                  text="Extended upside moves worth reviewing closely."
+                  title="MA200 Proximity Signals"
+                  text="Stocks trading close to a major long-term moving average."
                   tint="red"
                 />
                 <SignalCard
@@ -785,6 +816,60 @@ export default function PickersPage() {
           transform: translateY(-1px);
         }
 
+        .scrollCueBox {
+          animation: scrollCueGlow 1.9s ease-in-out infinite;
+        }
+
+        .scrollCueText {
+          animation: scrollCueTextPulse 1.9s ease-in-out infinite;
+        }
+
+        .scrollCueArrows {
+          animation: scrollCueBounce 1.2s ease-in-out infinite;
+        }
+
+        @keyframes scrollCueGlow {
+          0%,
+          100% {
+            transform: translateY(0);
+            box-shadow:
+              inset 0 1px 0 rgba(255,255,255,0.05),
+              0 0 0 1px rgba(59,130,246,0.06),
+              0 0 18px rgba(37,99,235,0.12);
+          }
+          50% {
+            transform: translateY(-2px);
+            box-shadow:
+              inset 0 1px 0 rgba(255,255,255,0.05),
+              0 0 0 1px rgba(96,165,250,0.10),
+              0 0 34px rgba(59,130,246,0.22);
+          }
+        }
+
+        @keyframes scrollCueTextPulse {
+          0%,
+          100% {
+            opacity: 0.9;
+            letter-spacing: 0.08em;
+          }
+          50% {
+            opacity: 1;
+            letter-spacing: 0.11em;
+          }
+        }
+
+        @keyframes scrollCueBounce {
+          0%,
+          100% {
+            transform: translateY(0);
+            opacity: 0.75;
+          }
+          50% {
+            transform: translateY(6px);
+            opacity: 1;
+          }
+        }
+
         @media (max-width: 900px) {
           .wrap {
             padding: 18px 16px 34px !important;
@@ -820,6 +905,10 @@ export default function PickersPage() {
           .heroMiniStats {
             grid-template-columns: minmax(0, 1fr) !important;
             max-width: 100% !important;
+          }
+
+          .pickersHeroPills {
+            align-items: stretch !important;
           }
 
           .heroSignalStack {
