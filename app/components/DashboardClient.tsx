@@ -22,6 +22,8 @@ type Point = {
   volume?: number;
 };
 
+type ChartInterval = "d" | "w" | "m";
+
 type SymbolResult = { symbol: string; name: string; exchange: string };
 
 type BenchItem = {
@@ -678,8 +680,6 @@ const PRESET_TICKERS: { symbol: string; name: string }[] = [
 ].sort((a, b) => a.symbol.localeCompare(b.symbol));
 
 const TIMEFRAMES: { label: string; days: number }[] = [
-  { label: "1D", days: 30 },
-  { label: "1W", days: 7 },
   { label: "1M", days: 30 },
   { label: "3M", days: 90 },
   { label: "6M", days: 180 },
@@ -724,6 +724,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   const [tfDays, setTfDays] = useState(365);
   const [windowDays, setWindowDays] = useState(365);
   const [windowOffset, setWindowOffset] = useState(0);
+  const [chartInterval, setChartInterval] = useState<ChartInterval>("d");
 
   const [indicator, setIndicator] = useState<Overlay>("None");
   const [selectedIndicators, setSelectedIndicators] = useState<Overlay[]>([]);
@@ -777,7 +778,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   useEffect(() => {
     setWindowDays(tfDays);
     setWindowOffset(0);
-  }, [symbol, tfDays]);
+  }, [symbol, tfDays, chartInterval]);
 
   useEffect(() => {
     const urlSymbol = searchParams.get("symbol");
@@ -851,7 +852,8 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     let cancelled = false;
 
     async function load() {
-      const cacheHit = symbolCache[symbol];
+      const cacheKey = `${symbol}:${chartInterval}`;
+      const cacheHit = symbolCache[cacheKey];
       if (cacheHit) {
         setErr(null);
         setQuote(cacheHit.quote);
@@ -864,14 +866,16 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
       setErr(null);
 
       try {
-        const historyDays = 2600;
+        const historyDays =
+          chartInterval === "m" ? 5000 : chartInterval === "w" ? 3000 : 1200;
 
-        const [qRes, hRes] = await Promise.all([
-          fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" }),
-          fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=${historyDays}`, {
-            cache: "no-store",
-          }),
-        ]);
+const [qRes, hRes] = await Promise.all([
+  fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" }),
+  fetch(
+    `/api/history?symbol=${encodeURIComponent(symbol)}&days=${historyDays}&interval=${chartInterval}`,
+    { cache: "no-store" }
+  ),
+]);
 
         if (!qRes.ok) throw new Error("Quote fetch failed");
         if (!hRes.ok) throw new Error("History fetch failed");
@@ -897,7 +901,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
 
         setSymbolCache((prev) => ({
           ...prev,
-          [symbol]: {
+          [cacheKey]: {
             quote: q,
             history: pts,
           },
@@ -916,7 +920,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     return () => {
       cancelled = true;
     };
-  }, [symbol, symbolCache]);
+  }, [symbol, chartInterval, symbolCache]);
 
   useEffect(() => {
     let cancelled = false;
