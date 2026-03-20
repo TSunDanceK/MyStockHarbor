@@ -329,6 +329,126 @@ function atr(points: Point[], period = 14): (number | null)[] {
   return out;
 }
 
+type AggregatedPoint = {
+  date: string;
+  close: number;
+  high?: number;
+  low?: number;
+  volume?: number;
+};
+
+function startOfWeekUtc(dateStr: string) {
+  const [yearStr, monthStr, dayStr] = dateStr.split("-");
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+
+  const dt = new Date(Date.UTC(year, month - 1, day));
+  const weekday = dt.getUTCDay();
+  const diffToMonday = weekday === 0 ? 6 : weekday - 1;
+
+  dt.setUTCDate(dt.getUTCDate() - diffToMonday);
+
+  const y = dt.getUTCFullYear();
+  const m = String(dt.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(dt.getUTCDate()).padStart(2, "0");
+
+  return `${y}-${m}-${d}`;
+}
+
+function monthKey(dateStr: string) {
+  return dateStr.slice(0, 7);
+}
+
+function aggregatePoints(points: Point[], interval: "w" | "m"): AggregatedPoint[] {
+  const bucketed: AggregatedPoint[] = [];
+  let currentKey = "";
+  let current: AggregatedPoint | null = null;
+
+  for (const point of points) {
+    const key = interval === "w" ? startOfWeekUtc(point.date) : monthKey(point.date);
+
+    if (!current || key !== currentKey) {
+      if (current) bucketed.push(current);
+
+      currentKey = key;
+      current = {
+        date: point.date,
+        close: point.close,
+        high: point.high,
+        low: point.low,
+        volume: typeof point.volume === "number" ? point.volume : undefined,
+      };
+
+      continue;
+    }
+
+    current.date = point.date;
+    current.close = point.close;
+
+    if (typeof point.high === "number") {
+      current.high =
+        typeof current.high === "number"
+          ? Math.max(current.high, point.high)
+          : point.high;
+    }
+
+    if (typeof point.low === "number") {
+      current.low =
+        typeof current.low === "number"
+          ? Math.min(current.low, point.low)
+          : point.low;
+    }
+
+    if (typeof point.volume === "number") {
+      current.volume =
+        typeof current.volume === "number"
+          ? current.volume + point.volume
+          : point.volume;
+    }
+  }
+
+  if (current) bucketed.push(current);
+
+  return bucketed;
+}
+
+function computeMa200Proximity(
+  points: Point[],
+  interval: "d" | "w"
+): { pctDistance: number; timeframe: "D" | "W" } | null {
+  const series =
+    interval === "d"
+      ? points
+      : aggregatePoints(points, "w");
+
+  const closes = series.map((p) => p.close).filter((x) => Number.isFinite(x));
+  if (closes.length < 200) return null;
+
+  const ma200Arr = movingAverage(closes, 200);
+  const lastClose = closes[closes.length - 1];
+  const lastMA200 = lastNum(ma200Arr);
+
+  if (
+    typeof lastClose !== "number" ||
+    typeof lastMA200 !== "number" ||
+    !Number.isFinite(lastClose) ||
+    !Number.isFinite(lastMA200) ||
+    lastMA200 === 0
+  ) {
+    return null;
+  }
+
+  const pctDistance = ((lastClose - lastMA200) / lastMA200) * 100;
+
+  if (pctDistance < -1 || pctDistance > 3) return null;
+
+  return {
+    pctDistance,
+    timeframe: interval === "d" ? "D" : "W",
+  };
+}
+
 /* --------------------- composite + picker logic ---------------------- */
 
 function compositeToneFromCounts(overbought: number, oversold: number, spikes: number) {
@@ -745,6 +865,7 @@ async function buildPickersPayload(origin: string) {
   const dips: PickerItem[] = [];
   const athBreakouts: PickerItem[] = [];
   const threeMonthBreakouts: PickerItem[] = [];
+  const ma200Proximity: PickerItem[] = [];
   const divergences: PickerItem[] = [];
   const signalRecords: SignalRecord[] = [];
 
@@ -843,6 +964,46 @@ if (comp) {
             });
           }
 
+                    const dailyMa200Proximity = computeMa200Proximity(pts, "d");
+          if (dailyMa200Proximity) {
+            const side =
+              dailyMa200Proximity.pctDistance >= 0 ? "above" : "below";
+
+            ma200Proximity.push({
+              symbol,
+              tone: "yellow",
+              note: `Near Daily MA200 • ${Math.abs(dailyMa200Proximity.pctDistance).toFixed(1)}% ${side}`,
+              timeframe: "D",
+              indicator: "MA200",
+              dashboardHref: buildDashboardHref({
+                symbol,
+                timeframe: "D",
+                indicator: "MA200",
+              }),
+              _score: dynamicBoost(symbol) + (100 - Math.abs(dailyMa200Proximity.pctDistance)),
+            });
+          }
+
+          const weeklyMa200Proximity = computeMa200Proximity(pts, "w");
+          if (weeklyMa200Proximity) {
+            const side =
+              weeklyMa200Proximity.pctDistance >= 0 ? "above" : "below";
+
+            ma200Proximity.push({
+              symbol,
+              tone: "yellow",
+              note: `Near Weekly MA200 • ${Math.abs(weeklyMa200Proximity.pctDistance).toFixed(1)}% ${side}`,
+              timeframe: "W",
+              indicator: "MA200",
+              dashboardHref: buildDashboardHref({
+                symbol,
+                timeframe: "W",
+                indicator: "MA200",
+              }),
+              _score: dynamicBoost(symbol) + 200 + (100 - Math.abs(weeklyMa200Proximity.pctDistance)),
+            });
+          }
+
           const div = detectDivergenceFromHistory(pts, {
             lookbackBars: 60,
             leftRight: 2,
@@ -853,10 +1014,28 @@ if (comp) {
           });
 
           if (div) {
+            const preferredIndicator =
+              div.hasRsi && !div.hasMacd
+                ? "RSI(14)"
+                : !div.hasRsi && div.hasMacd
+                ? "MACD(12,26,9)"
+                : div.hasRsi && div.hasMacd
+                ? "MACD(12,26,9)"
+                : undefined;
+
+            const preferredTimeframe: "D" = "D";
+
             divergences.push({
               symbol,
               tone: div.kind === "bullish" ? "green" : "red",
               note: div.note,
+              timeframe: preferredTimeframe,
+              indicator: preferredIndicator,
+              dashboardHref: buildDashboardHref({
+                symbol,
+                timeframe: preferredTimeframe,
+                indicator: preferredIndicator,
+              }),
               _score: dynamicBoost(symbol) + div.score,
             });
           }
@@ -924,6 +1103,17 @@ if (comp) {
           const bullishMacdDivergence = !!div && div.kind === "bullish" && div.hasMacd;
           const bearishMacdDivergence = !!div && div.kind === "bearish" && div.hasMacd;
 
+          const preferredDivergenceIndicator =
+            bullishRsiDivergence || bearishRsiDivergence
+              ? bullishMacdDivergence || bearishMacdDivergence
+                ? "MACD(12,26,9)"
+                : "RSI(14)"
+              : bullishMacdDivergence || bearishMacdDivergence
+              ? "MACD(12,26,9)"
+              : undefined;
+
+          const preferredTimeframe: "D" | undefined = preferredDivergenceIndicator ? "D" : undefined;
+
           signalRecords.push({
             symbol,
             note: comp ? `${comp.flagged}/${comp.total} checks • ${comp.tag}` : undefined,
@@ -942,6 +1132,16 @@ if (comp) {
             bearishRsiDivergence,
             bullishMacdDivergence,
             bearishMacdDivergence,
+            preferredTimeframe,
+            preferredIndicator: preferredDivergenceIndicator,
+            dashboardHref:
+              preferredTimeframe && preferredDivergenceIndicator
+                ? buildDashboardHref({
+                    symbol,
+                    timeframe: preferredTimeframe,
+                    indicator: preferredDivergenceIndicator,
+                  })
+                : undefined,
           });
         } catch {
           // ignore per-symbol failures
@@ -988,6 +1188,12 @@ if (comp) {
       items: takeTop(trendLeaders, 20),
     },
     {
+      title: "MA200 Proximity",
+      description:
+        "Stocks trading close to their Daily or Weekly MA200. Clicking a result opens the chart on the correct timeframe with MA200 selected.",
+      items: takeTop(ma200Proximity, 20),
+    },
+    {
       title: "Overbought Stocks Today (Potential Pullback Setups)",
       description:
         "Stocks showing extended or overbought conditions. These are often reviewed for possible pullbacks or weaker near-term conditions.",
@@ -996,7 +1202,7 @@ if (comp) {
     {
       title: "Bullish & Bearish Divergence Stocks (RSI & MACD Signals)",
       description:
-        "Stocks where price and momentum may be starting to disagree. Stronger RSI and MACD divergence signals are shown first.",
+        "Stocks where price and momentum may be starting to disagree. Clicking a result opens the chart on the strongest divergence indicator.",
       items: takeTop(divergences, 20),
     },
     {
