@@ -795,11 +795,35 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     const cleaned = urlSymbol ? urlSymbol.trim().toUpperCase() : "";
     if (!cleaned) return;
 
+    const urlTf = (searchParams.get("tf") || "").trim().toUpperCase();
+    const urlIndicator = (searchParams.get("indicator") || "").trim();
+
     setSymbol(cleaned);
     setQuery(cleaned);
     setResults([]);
     setOpen(false);
-    setActiveTimeframe("D");
+
+    if (urlTf === "D" || urlTf === "W" || urlTf === "M") {
+      setActiveTimeframe(urlTf);
+    } else {
+      setActiveTimeframe("D");
+    }
+
+    if (urlIndicator === "MA200") {
+      setSelectedIndicators(["MA200"]);
+      setIndicator("MA200");
+    } else if (urlIndicator === "RSI(14)") {
+      setSelectedIndicators(["RSI(14)"]);
+      setIndicator("RSI(14)");
+    } else if (urlIndicator === "MACD(12,26,9)") {
+      setSelectedIndicators(["MACD(12,26,9)"]);
+      setIndicator("MACD(12,26,9)");
+    } else {
+      setSelectedIndicators([]);
+      setIndicator("None");
+    }
+
+    setIndicatorMenuOpen(false);
     setWindowOffset(0);
   }, [searchParams]);
 
@@ -1249,7 +1273,9 @@ const [qRes, hRes] = await Promise.all([
     setQuery(cleaned);
     setResults([]);
     setOpen(false);
-    setActiveTimeframe("1Y");
+    setActiveTimeframe("D");
+    setSelectedIndicators([]);
+    setIndicator("None");
     setWindowOffset(0);
   }
 
