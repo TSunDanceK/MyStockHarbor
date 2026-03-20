@@ -20,6 +20,7 @@ type PlatformItem = {
   pros: string[];
   cons: string[];
   note: string;
+  complianceNote: string;
   affiliateHref: string;
   ctaText: string;
   score: string;
@@ -34,9 +35,9 @@ const PLATFORMS: PlatformItem[] = [
     logoSrc: "/platforms/tradingview.png",
     logoAlt: "TradingView logo",
     bestFor:
-      "Beginners and experienced traders who want the best charts, indicators, layout tools, and a cleaner way to analyse stocks.",
+      "Beginners and experienced traders who want strong charts, indicators, layout tools, and a cleaner way to analyse stocks.",
     summary:
-      "TradingView is the platform most people should use for charting. It is excellent for technical analysis, learning patterns, using indicators, and building confidence reading charts. For many users, the best setup is to do all chart analysis on TradingView, then use one of the broker platforms below to actually place stock trades.",
+      "TradingView is the platform most people should use for charting. It is excellent for technical analysis, learning patterns, using indicators, and building confidence reading charts. For many users, the strongest setup is to do chart analysis on TradingView, then use one of the broker platforms below if they decide to invest.",
     pros: [
       "Best overall platform here for charting and technical analysis",
       "Excellent for beginners learning indicators, levels, and trend structure",
@@ -45,12 +46,14 @@ const PLATFORMS: PlatformItem[] = [
       "Works very well as your main analysis platform even if you trade elsewhere",
     ],
     cons: [
-      "Many people still use a separate broker for placing the actual trade",
+      "Many people still use a separate broker for investing",
       "It is more chart-focused than a simple beginner investing app",
       "A brand-new investor may still need a broker below for direct stock execution",
     ],
     note:
-      "Best overall choice for charts. A very strong setup is: analyse on TradingView, then execute your stock trade using your broker.",
+      "Best overall choice for charts. A very strong setup is: analyse on TradingView, then use your chosen broker if you decide to invest.",
+    complianceNote:
+      "Platform features, pricing, and market access can vary by region. Trading and investing involve risk, and charting tools should be used for research and educational purposes only.",
     affiliateHref: "/api/go/tradingview",
     ctaText: "Visit TradingView",
     score: "9.7/10",
@@ -78,7 +81,9 @@ const PLATFORMS: PlatformItem[] = [
       "Less professional-feeling than more advanced platforms",
     ],
     note:
-      "A very good broker for beginners. Many users would chart on TradingView, then place the trade using Trading 212.",
+      "A very good broker for beginners. Many users would chart on TradingView, then use Trading 212 if they choose to invest.",
+    complianceNote:
+      "Investing involves risk and the value of investments can go down as well as up. Platform availability, products, and tax treatment can vary depending on your country and personal circumstances.",
     affiliateHref: "/api/go/trading212",
     ctaText: "Visit Trading 212",
     score: "9.3/10",
@@ -107,6 +112,8 @@ const PLATFORMS: PlatformItem[] = [
     ],
     note:
       "Good for users who want a simple and modern investing experience, but less ideal than TradingView for serious chart work.",
+    complianceNote:
+      "eToro is a multi-asset platform. Trading and investing involve risk. If you are promoting eToro under an affiliate arrangement, use the provider-approved risk warning text for your region, including the current CFD retail loss percentage where required.",
     affiliateHref: "/api/go/etoro",
     ctaText: "Visit eToro",
     score: "9.0/10",
@@ -134,6 +141,8 @@ const PLATFORMS: PlatformItem[] = [
     ],
     note:
       "A strong broker choice for users who are becoming more serious. Many people would still prefer to chart on TradingView first.",
+    complianceNote:
+      "Investing and trading involve risk, and more advanced platforms may offer complex products that are not suitable for all users. Always review the provider's official terms, fees, and product risks before opening an account.",
     affiliateHref: "/api/go/interactivebrokers",
     ctaText: "Visit Interactive Brokers",
     score: "9.2/10",
@@ -161,6 +170,8 @@ const PLATFORMS: PlatformItem[] = [
     ],
     note:
       "A good option for users who want a more premium investing experience, though TradingView is still the better place to do chart analysis.",
+    complianceNote:
+      "Investing and trading involve risk, and product availability can vary by region. Review the provider's official risk disclosures, fees, and account terms before making any financial decision.",
     affiliateHref: "/api/go/saxo",
     ctaText: "Visit Saxo",
     score: "8.9/10",
@@ -582,7 +593,7 @@ export default function PlatformsPage() {
     <div style={{ opacity: 0.86, lineHeight: 1.55 }}>
       <strong>If you want a more serious broker:</strong> choose <strong>Interactive Brokers</strong> for a stronger long-term platform.
     </div>
-    <div
+<div
   style={{
     marginTop: 6,
     paddingTop: 10,
@@ -591,7 +602,7 @@ export default function PlatformsPage() {
     lineHeight: 1.55,
   }}
 >
-  <strong>Most people do this:</strong> analyse stocks on <strong>TradingView</strong>, then place the trade using a broker like <strong>Trading 212</strong> or <strong>Interactive Brokers</strong>.
+  <strong>Many users do this:</strong> analyse stocks on <strong>TradingView</strong>, then use a broker like <strong>Trading 212</strong> or <strong>Interactive Brokers</strong> if they decide to invest.
 </div>
   </div>
 </div>
@@ -938,6 +949,19 @@ export default function PlatformsPage() {
                     ))}
                   </ul>
                 </div>
+              </div>
+
+              <div
+                style={{
+                  marginTop: 12,
+                  fontSize: 12,
+                  lineHeight: 1.55,
+                  opacity: 0.62,
+                  borderTop: "1px solid rgba(255,255,255,0.08)",
+                  paddingTop: 10,
+                }}
+              >
+                {item.complianceNote}
               </div>
             </section>
           ))}
