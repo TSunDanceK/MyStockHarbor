@@ -692,8 +692,8 @@ const TIMEFRAMES: TimeframePreset[] = [
   { label: "W", interval: "w", fetchBars: 260, visibleBars: 75 },
   { label: "M", interval: "m", fetchBars: 180, visibleBars: 75 },
   { label: "1Y", interval: "d", fetchBars: 520, visibleBars: 260 },
-  { label: "3Y", interval: "w", fetchBars: 220, visibleBars: 156 },
-  { label: "MAX", interval: "m", fetchBars: 500, visibleBars: 500, showAll: true },
+  { label: "3Y", interval: "d", fetchBars: 1100, visibleBars: 780 },
+  { label: "MAX", interval: "d", fetchBars: 5000, visibleBars: 5000, showAll: true },
 ];
 
 const PRICE_OVERLAY_OPTIONS: Overlay[] = [
