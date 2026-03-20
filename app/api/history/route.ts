@@ -2,13 +2,11 @@ import { NextResponse } from "next/server";
 
 export const runtime = "edge";
 
-const ACTIVE_CACHE_SECONDS = 3600; // 1 hour during market activity
-const ACTIVE_STALE_SECONDS = 7200; // 2 hours stale while revalidating
+const ACTIVE_CACHE_SECONDS = 3600;
+const ACTIVE_STALE_SECONDS = 7200;
 
-const QUIET_CACHE_SECONDS = 60 * 60 * 14; // 14 hours outside active market window
-const QUIET_STALE_SECONDS = 60 * 60 * 6; // 6 extra stale hours
-
-
+const QUIET_CACHE_SECONDS = 60 * 60 * 14;
+const QUIET_STALE_SECONDS = 60 * 60 * 6;
 
 type Point = {
   date: string;
@@ -17,6 +15,8 @@ type Point = {
   low?: number;
   volume?: number;
 };
+
+type Interval = "d" | "w" | "m";
 
 function getEasternParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -31,13 +31,10 @@ function getEasternParts(date = new Date()) {
   }).formatToParts(date);
 
   const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
-  const year = Number(parts.find((p) => p.type === "year")?.value ?? "0");
-  const month = Number(parts.find((p) => p.type === "month")?.value ?? "0");
-  const day = Number(parts.find((p) => p.type === "day")?.value ?? "0");
   const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
   const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
 
-  return { weekday, year, month, day, hour, minute };
+  return { weekday, hour, minute };
 }
 
 function isWeekendEastern(weekday: string) {
@@ -51,36 +48,10 @@ function isActiveMarketWindow(date = new Date()) {
 
   const totalMinutes = hour * 60 + minute;
 
-  // 8:30 AM to 5:00 PM Eastern
   const start = 8 * 60 + 30;
   const end = 17 * 60;
 
   return totalMinutes >= start && totalMinutes <= end;
-}
-
-function secondsUntilNextActiveWindow(date = new Date()) {
-  const { weekday, hour, minute } = getEasternParts(date);
-
-  const totalMinutes = hour * 60 + minute;
-  const activeStart = 8 * 60 + 30;
-
-  if (weekday === "Sat") {
-    return 60 * 60 * 48;
-  }
-
-  if (weekday === "Sun") {
-    return 60 * 60 * 24;
-  }
-
-  if (weekday === "Fri" && totalMinutes > 17 * 60) {
-    return 60 * 60 * 63;
-  }
-
-  if (totalMinutes < activeStart) {
-    return Math.max(60, (activeStart - totalMinutes) * 60);
-  }
-
-  return QUIET_CACHE_SECONDS;
 }
 
 function getCacheControlHeader() {
@@ -88,47 +59,103 @@ function getCacheControlHeader() {
     return `public, s-maxage=${ACTIVE_CACHE_SECONDS}, stale-while-revalidate=${ACTIVE_STALE_SECONDS}`;
   }
 
-  const quietSeconds = Math.max(QUIET_CACHE_SECONDS, secondsUntilNextActiveWindow());
-  return `public, s-maxage=${quietSeconds}, stale-while-revalidate=${QUIET_STALE_SECONDS}`;
+  return `public, s-maxage=${QUIET_CACHE_SECONDS}, stale-while-revalidate=${QUIET_STALE_SECONDS}`;
+}
+
+function parseInterval(value: string | null): Interval {
+  if (value === "w") return "w";
+  if (value === "m") return "m";
+  return "d";
+}
+
+function startOfWeekUtc(dateStr: string) {
+  const dt = new Date(dateStr);
+  const weekday = dt.getUTCDay();
+  const diff = weekday === 0 ? 6 : weekday - 1;
+  dt.setUTCDate(dt.getUTCDate() - diff);
+
+  return dt.toISOString().slice(0, 10);
+}
+
+function monthKey(dateStr: string) {
+  return dateStr.slice(0, 7);
+}
+
+function aggregate(points: Point[], interval: Interval) {
+  if (interval === "d") return points;
+
+  const out: Point[] = [];
+  let current: Point | null = null;
+  let currentKey = "";
+
+  for (const p of points) {
+    const key = interval === "w" ? startOfWeekUtc(p.date) : monthKey(p.date);
+
+    if (!current || key !== currentKey) {
+      if (current) out.push(current);
+
+      currentKey = key;
+      current = { ...p };
+      continue;
+    }
+
+    current.close = p.close;
+    current.date = p.date;
+
+    if (p.high !== undefined) {
+      current.high = Math.max(current.high ?? p.high, p.high);
+    }
+
+    if (p.low !== undefined) {
+      current.low = Math.min(current.low ?? p.low, p.low);
+    }
+
+    if (p.volume !== undefined) {
+      current.volume = (current.volume ?? 0) + p.volume;
+    }
+  }
+
+  if (current) out.push(current);
+
+  return out;
 }
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
+
   const symbol = (searchParams.get("symbol") || "AAPL").toUpperCase();
   const days = Math.max(30, Math.min(5000, Number(searchParams.get("days") || "365")));
+  const interval = parseInterval(searchParams.get("interval"));
 
   const stooqSymbol = `${symbol.toLowerCase()}.us`;
   const url = `https://stooq.com/q/d/l/?s=${stooqSymbol}&i=d`;
 
   try {
-   const res = await fetch(url);
+    const res = await fetch(url);
     const text = await res.text();
 
     const lines = text.trim().split("\n");
-   if (lines.length < 3)
-  return NextResponse.json(
-    { symbol, points: [] as Point[] },
-    {
-      headers: {
-        "Cache-Control": getCacheControlHeader(),
-      },
+    if (lines.length < 3) {
+      return NextResponse.json(
+        { symbol, interval, points: [] as Point[] },
+        { headers: { "Cache-Control": getCacheControlHeader() } }
+      );
     }
-  );
 
-    const points: Point[] = [];
+    const daily: Point[] = [];
+
     for (let i = 1; i < lines.length; i++) {
       const cols = lines[i].split(",");
-      const date = String(cols[0] ?? "").replace("\r", "");
 
-      // Date,Open,High,Low,Close,Volume
-      const high = Number(String(cols[2] ?? "").replace("\r", ""));
-      const low = Number(String(cols[3] ?? "").replace("\r", ""));
-      const close = Number(String(cols[4] ?? "").replace("\r", ""));
-      const volume = Number(String(cols[5] ?? "").replace("\r", ""));
+      const date = cols[0];
+      const high = Number(cols[2]);
+      const low = Number(cols[3]);
+      const close = Number(cols[4]);
+      const volume = Number(cols[5]);
 
       if (!date || !Number.isFinite(close)) continue;
 
-      points.push({
+      daily.push({
         date,
         close,
         high: Number.isFinite(high) ? high : undefined,
@@ -137,8 +164,14 @@ export async function GET(req: Request) {
       });
     }
 
-     return NextResponse.json(
-      { symbol, points: points.slice(-days) },
+    const points = aggregate(daily, interval);
+
+    return NextResponse.json(
+      {
+        symbol,
+        interval,
+        points: points.slice(-days),
+      },
       {
         headers: {
           "Cache-Control": getCacheControlHeader(),
@@ -146,8 +179,8 @@ export async function GET(req: Request) {
       }
     );
   } catch {
-      return NextResponse.json(
-      { symbol, points: [] as Point[] },
+    return NextResponse.json(
+      { symbol, interval, points: [] as Point[] },
       {
         headers: {
           "Cache-Control": getCacheControlHeader(),
