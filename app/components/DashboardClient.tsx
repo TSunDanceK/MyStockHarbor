@@ -679,15 +679,21 @@ const PRESET_TICKERS: { symbol: string; name: string }[] = [
   { symbol: "XOM", name: "Exxon Mobil Corp." },
 ].sort((a, b) => a.symbol.localeCompare(b.symbol));
 
-const TIMEFRAMES: { label: string; days: number; interval: ChartInterval }[] = [
-  { label: "D", days: 30, interval: "d" },
-  { label: "W", days: 180, interval: "w" },
-  { label: "M", days: 3650, interval: "m" },
-  { label: "3M", days: 90, interval: "d" },
-  { label: "6M", days: 180, interval: "d" },
-  { label: "1Y", days: 365, interval: "d" },
-  { label: "3Y", days: 365 * 3, interval: "w" },
-  { label: "MAX", days: 5000, interval: "m" },
+type TimeframePreset = {
+  label: string;
+  interval: ChartInterval;
+  fetchBars: number;
+  visibleBars: number;
+  showAll?: boolean;
+};
+
+const TIMEFRAMES: TimeframePreset[] = [
+  { label: "D", interval: "d", fetchBars: 240, visibleBars: 75 },
+  { label: "W", interval: "w", fetchBars: 260, visibleBars: 75 },
+  { label: "M", interval: "m", fetchBars: 180, visibleBars: 75 },
+  { label: "1Y", interval: "d", fetchBars: 520, visibleBars: 260 },
+  { label: "3Y", interval: "w", fetchBars: 220, visibleBars: 156 },
+  { label: "MAX", interval: "m", fetchBars: 500, visibleBars: 500, showAll: true },
 ];
 
 const PRICE_OVERLAY_OPTIONS: Overlay[] = [
@@ -724,8 +730,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
 
   const [symbolName, setSymbolName] = useState("");
   const [activeTimeframe, setActiveTimeframe] = useState("1Y");
-  const [tfDays, setTfDays] = useState(365);
-  const [windowDays, setWindowDays] = useState(365);
+  const [visibleBars, setVisibleBars] = useState(260);
   const [windowOffset, setWindowOffset] = useState(0);
   const [chartInterval, setChartInterval] = useState<ChartInterval>("d");
 
@@ -752,7 +757,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   const [isMobile, setIsMobile] = useState(false);
 
   const selectedTimeframe = useMemo(
-    () => TIMEFRAMES.find((t) => t.label === activeTimeframe) ?? TIMEFRAMES[5],
+    () => TIMEFRAMES.find((t) => t.label === activeTimeframe) ?? TIMEFRAMES[3],
     [activeTimeframe]
   );
 
@@ -784,9 +789,8 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   }, []);
 
   useEffect(() => {
-    setTfDays(selectedTimeframe.days);
     setChartInterval(selectedTimeframe.interval);
-    setWindowDays(selectedTimeframe.days);
+    setVisibleBars(selectedTimeframe.visibleBars);
     setWindowOffset(0);
   }, [symbol, selectedTimeframe]);
 
@@ -863,7 +867,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     let cancelled = false;
 
     async function load() {
-      const cacheKey = `${symbol}:${activeTimeframe}`;
+      const cacheKey = `${symbol}:${activeTimeframe}:${selectedTimeframe.fetchBars}:${selectedTimeframe.interval}`;
       const cacheHit = symbolCache[cacheKey];
       if (cacheHit) {
         setErr(null);
@@ -877,12 +881,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
       setErr(null);
 
       try {
-        const historyDays =
-          chartInterval === "m"
-            ? 240
-            : chartInterval === "w"
-            ? 260
-            : Math.max(tfDays + 250, 400);
+     const historyDays = selectedTimeframe.fetchBars;
 
 const [qRes, hRes] = await Promise.all([
   fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" }),
@@ -935,7 +934,7 @@ const [qRes, hRes] = await Promise.all([
     return () => {
       cancelled = true;
     };
-  }, [symbol, activeTimeframe, chartInterval, tfDays, symbolCache]);
+  }, [symbol, activeTimeframe, selectedTimeframe, chartInterval, symbolCache]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1028,7 +1027,7 @@ const [qRes, hRes] = await Promise.all([
   }, [symbol]);
 
   const totalPoints = historyAll.length;
-  const win = Math.max(windowDays, 2);
+  const win = selectedTimeframe.showAll ? Math.max(totalPoints, 2) : Math.max(visibleBars, 2);
   const maxOffset = Math.max(totalPoints - win, 0);
   const offset = Math.min(Math.max(windowOffset, 0), maxOffset);
 
@@ -2086,7 +2085,7 @@ const [qRes, hRes] = await Promise.all([
 
         <button
           onClick={() => {
-            setWindowDays((d) => Math.max(2, Math.floor(d * 0.8)));
+            setVisibleBars((d) => Math.max(2, Math.floor(d * 0.8)));
             setWindowOffset(0);
           }}
           title="Zoom in"
@@ -2106,7 +2105,7 @@ const [qRes, hRes] = await Promise.all([
 
         <button
           onClick={() => {
-            setWindowDays((d) => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25)));
+            setVisibleBars((d) => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25)));
             setWindowOffset(0);
           }}
           title="Zoom out"
