@@ -2361,8 +2361,33 @@ const [qRes, hRes] = await Promise.all([
     ).tone;
     const stretchColor = toneToColor(stretchTone, COLORS.isDark);
 
-    return (
-      <SectionCard title={`${symbol} Overview`} allowOverflow>
+return (
+  <SectionCard
+    title={`${symbol} Overview`}
+    allowOverflow
+    right={
+      <Link
+        href={`/stock/${encodeURIComponent(symbol)}`}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "8px 12px",
+          borderRadius: 10,
+          border: "1px solid rgba(250,204,21,0.45)",
+          background:
+            "linear-gradient(135deg, rgba(250,204,21,0.22), rgba(202,138,4,0.12))",
+          color: "#fef3c7",
+          textDecoration: "none",
+          fontWeight: 800,
+          fontSize: 12,
+          whiteSpace: "nowrap",
+        }}
+      >
+        Open stock page →
+      </Link>
+    }
+  >
         <div style={{ display: "grid", gap: 14 }}>
           <div
             className="msh-overview-head"
@@ -2382,28 +2407,7 @@ const [qRes, hRes] = await Promise.all([
                 {symbolName || "—"}
               </div>
 
-              <div style={{ marginTop: 10 }}>
-                <Link
-                  href={`/stock/${encodeURIComponent(symbol)}`}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    padding: "8px 12px",
-                    borderRadius: 10,
-                    border: "1px solid rgba(250,204,21,0.45)",
-                    background:
-                      "linear-gradient(135deg, rgba(250,204,21,0.22), rgba(202,138,4,0.12))",
-                    color: "#fef3c7",
-                    textDecoration: "none",
-                    fontWeight: 800,
-                    fontSize: 12,
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Open stock page →
-                </Link>
-              </div>
+
             </div>
 
             <div style={{ textAlign: "right", minWidth: 0 }}>
