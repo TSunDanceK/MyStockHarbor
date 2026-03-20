@@ -2498,7 +2498,56 @@ const [qRes, hRes] = await Promise.all([
               flexWrap: "wrap",
             }}
           >
-            <div style={{ fontWeight: 900, fontSize: 15 }}>Price ({chartIndicatorName})</div>
+            <div style={{ display: "grid", gap: 10 }}>
+              <div style={{ fontWeight: 900, fontSize: 15 }}>Price ({chartIndicatorName})</div>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                }}
+              >
+                {[
+                  { label: "D", value: "d" as ChartInterval },
+                  { label: "W", value: "w" as ChartInterval },
+                  { label: "M", value: "m" as ChartInterval },
+                ].map((item) => {
+                  const active = chartInterval === item.value;
+
+                  return (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() => {
+                        setChartInterval(item.value);
+                        setWindowOffset(0);
+                      }}
+                      style={{
+                        padding: isMobile ? "8px 10px" : "10px 12px",
+                        borderRadius: 12,
+                        border: `1px solid ${
+                          active ? "rgba(96,165,250,0.9)" : COLORS.controlBorder
+                        }`,
+                        background: active
+                          ? COLORS.isDark
+                            ? "rgba(59,130,246,0.18)"
+                            : "rgba(59,130,246,0.10)"
+                          : COLORS.controlBg,
+                        color: COLORS.controlFg,
+                        fontWeight: 900,
+                        fontSize: isMobile ? 13 : 14,
+                        cursor: "pointer",
+                        minWidth: isMobile ? 48 : 54,
+                      }}
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
             <div className="msh-timeframes">
               {TIMEFRAMES.map((t) => (
