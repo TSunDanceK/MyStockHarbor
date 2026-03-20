@@ -290,17 +290,6 @@ export default function PickersPage() {
                   ↓ ↓ ↓
                 </div>
               </div>
-                  style={{
-                    marginTop: 6,
-                    fontSize: 22,
-                    lineHeight: 1,
-                    color: "rgba(96,165,250,0.9)",
-                    letterSpacing: "0.25em",
-                  }}
-                >
-                  ↓ ↓ ↓
-                </div>
-              </div>
             </section>
 
             <section
