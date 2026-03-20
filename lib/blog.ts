@@ -9,13 +9,27 @@ export type BlogPost = {
   title: string;
   date: string;
   excerpt: string;
-  symbol?: string;
+  symbol?: string | null;
 };
+
+function formatFrontmatterDate(value: unknown): string {
+  if (value instanceof Date) {
+    return value.toISOString().split("T")[0];
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return "";
+}
 
 export function getAllPosts(): BlogPost[] {
   if (!fs.existsSync(postsDirectory)) return [];
 
-  const fileNames = fs.readdirSync(postsDirectory);
+  const fileNames = fs
+    .readdirSync(postsDirectory)
+    .filter((fileName) => fileName.endsWith(".md"));
 
   const posts = fileNames.map((fileName) => {
     const slug = fileName.replace(/\.md$/, "");
@@ -26,10 +40,10 @@ export function getAllPosts(): BlogPost[] {
 
     return {
       slug,
-      title: data.title,
-      date: data.date,
-      excerpt: data.excerpt,
-      symbol: data.symbol || null,
+      title: String(data.title || ""),
+      date: formatFrontmatterDate(data.date),
+      excerpt: String(data.excerpt || ""),
+      symbol: data.symbol ? String(data.symbol) : null,
     };
   });
 
@@ -38,17 +52,16 @@ export function getAllPosts(): BlogPost[] {
 
 export function getPostBySlug(slug: string) {
   const fullPath = path.join(postsDirectory, `${slug}.md`);
-
   const fileContents = fs.readFileSync(fullPath, "utf8");
 
   const { data, content } = matter(fileContents);
 
   return {
     slug,
-    title: data.title,
-    date: data.date,
-    excerpt: data.excerpt,
-    symbol: data.symbol || null,
+    title: String(data.title || ""),
+    date: formatFrontmatterDate(data.date),
+    excerpt: String(data.excerpt || ""),
+    symbol: data.symbol ? String(data.symbol) : null,
     content,
   };
 }
