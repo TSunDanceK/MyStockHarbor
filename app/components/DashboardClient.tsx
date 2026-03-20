@@ -683,17 +683,13 @@ type TimeframePreset = {
   label: string;
   interval: ChartInterval;
   fetchBars: number;
-  visibleBars: number;
-  showAll?: boolean;
+  defaultVisibleBars: number;
 };
 
 const TIMEFRAMES: TimeframePreset[] = [
-  { label: "D", interval: "d", fetchBars: 240, visibleBars: 75 },
-  { label: "W", interval: "w", fetchBars: 260, visibleBars: 75 },
-  { label: "M", interval: "m", fetchBars: 180, visibleBars: 75 },
-  { label: "1Y", interval: "d", fetchBars: 520, visibleBars: 260 },
-  { label: "3Y", interval: "d", fetchBars: 1100, visibleBars: 780 },
-  { label: "MAX", interval: "d", fetchBars: 5000, visibleBars: 5000, showAll: true },
+  { label: "D", interval: "d", fetchBars: 240, defaultVisibleBars: 75 },
+  { label: "W", interval: "w", fetchBars: 260, defaultVisibleBars: 75 },
+  { label: "M", interval: "m", fetchBars: 180, defaultVisibleBars: 75 },
 ];
 
 const PRICE_OVERLAY_OPTIONS: Overlay[] = [
@@ -729,8 +725,8 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   });
 
   const [symbolName, setSymbolName] = useState("");
-  const [activeTimeframe, setActiveTimeframe] = useState("1Y");
-  const [visibleBars, setVisibleBars] = useState(260);
+  const [activeTimeframe, setActiveTimeframe] = useState("D");
+  const [visibleBars, setVisibleBars] = useState(75);
   const [windowOffset, setWindowOffset] = useState(0);
   const [chartInterval, setChartInterval] = useState<ChartInterval>("d");
 
@@ -757,7 +753,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   const [isMobile, setIsMobile] = useState(false);
 
   const selectedTimeframe = useMemo(
-    () => TIMEFRAMES.find((t) => t.label === activeTimeframe) ?? TIMEFRAMES[3],
+    () => TIMEFRAMES.find((t) => t.label === activeTimeframe) ?? TIMEFRAMES[0],
     [activeTimeframe]
   );
 
@@ -790,7 +786,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
 
   useEffect(() => {
     setChartInterval(selectedTimeframe.interval);
-    setVisibleBars(selectedTimeframe.visibleBars);
+    setVisibleBars(selectedTimeframe.defaultVisibleBars);
     setWindowOffset(0);
   }, [symbol, selectedTimeframe]);
 
@@ -803,7 +799,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     setQuery(cleaned);
     setResults([]);
     setOpen(false);
-    setActiveTimeframe("1Y");
+    setActiveTimeframe("D");
     setWindowOffset(0);
   }, [searchParams]);
 
@@ -1027,7 +1023,7 @@ const [qRes, hRes] = await Promise.all([
   }, [symbol]);
 
   const totalPoints = historyAll.length;
-  const win = selectedTimeframe.showAll ? Math.max(totalPoints, 2) : Math.max(visibleBars, 2);
+  const win = Math.max(visibleBars, 2);
   const maxOffset = Math.max(totalPoints - win, 0);
   const offset = Math.min(Math.max(windowOffset, 0), maxOffset);
 
@@ -2136,6 +2132,26 @@ const [qRes, hRes] = await Promise.all([
         >
           {Math.min(win, totalPoints)} bars
         </div>
+
+        <button
+          onClick={() => {
+            setVisibleBars(Math.max(totalPoints, 2));
+            setWindowOffset(0);
+          }}
+          title="Show full chart"
+          style={{
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: `1px solid ${COLORS.controlBorder}`,
+            background: COLORS.controlBg,
+            color: COLORS.controlFg,
+            cursor: "pointer",
+            fontWeight: 900,
+            lineHeight: 1,
+          }}
+        >
+          MAX
+        </button>
 
         <button
           onClick={() => setExpanded(true)}
@@ -3579,7 +3595,7 @@ const [qRes, hRes] = await Promise.all([
 
           .msh-timeframes {
             display: grid;
-            grid-template-columns: repeat(6, 1fr);
+            grid-template-columns: repeat(3, 1fr);
             gap: 6px;
             width: 100%;
           }
@@ -3588,11 +3604,6 @@ const [qRes, hRes] = await Promise.all([
             width: 100%;
             padding: 6px 0;
             font-size: 12px;
-          }
-
-          .msh-timeframes button:nth-child(4),
-          .msh-timeframes button:nth-child(5) {
-            display: none;
           }
         }
       `}</style>
