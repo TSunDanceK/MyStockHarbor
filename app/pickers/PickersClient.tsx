@@ -8,6 +8,9 @@ type PickerItem = {
   symbol: string;
   note?: string;
   tone?: PickerTone;
+  timeframe?: "D" | "W" | "M";
+  indicator?: "MA200" | "RSI(14)" | "MACD(12,26,9)";
+  dashboardHref?: string;
 };
 
 type PickerSection = {
@@ -36,6 +39,10 @@ type SignalRecord = {
   bearishRsiDivergence: boolean;
   bullishMacdDivergence: boolean;
   bearishMacdDivergence: boolean;
+
+  preferredTimeframe?: "D" | "W" | "M";
+  preferredIndicator?: "MA200" | "RSI(14)" | "MACD(12,26,9)";
+  dashboardHref?: string;
 };
 
 type PickersPayload = {
@@ -197,11 +204,15 @@ function getHeaderHelp(title: string) {
   }
 
   if (title.includes("Divergence")) {
-    return "Divergence occurs when price and momentum indicators move differently, which can sometimes signal weakening trends or possible reversals.";
+    return "Divergence occurs when price and momentum indicators move differently, which can sometimes signal weakening trends or possible reversals. Clicking a result opens the chart on the strongest divergence indicator.";
   }
 
   if (title.includes("Buy the Dip") || title.includes("Recent Highs")) {
     return "These setups are more about pullbacks from stronger recent charts. Traders often review these when looking for dip entries rather than buying pure strength near the top.";
+  }
+
+  if (title.includes("MA200 Proximity")) {
+    return "These stocks are trading close to their Daily or Weekly 200-period moving average. Clicking a result opens the chart on the matching timeframe with MA200 selected.";
   }
 
   if (title.includes("Breakout")) {
@@ -917,7 +928,7 @@ const displaySections = useMemo(() => {
                 {customMatches.map((item) => (
                   <a
                     key={item.symbol}
-                    href={`/?symbol=${encodeURIComponent(item.symbol)}`}
+                    href={item.dashboardHref ?? `/?symbol=${encodeURIComponent(item.symbol)}`}
                     style={{
                       display: "block",
                       minWidth: 0,
@@ -968,6 +979,55 @@ const displaySections = useMemo(() => {
                             {item.symbol}
                           </div>
                         </div>
+
+                        {item.preferredTimeframe || item.preferredIndicator ? (
+                          <div
+                            style={{
+                              marginTop: 8,
+                              display: "flex",
+                              gap: 8,
+                              flexWrap: "wrap",
+                              alignItems: "center",
+                            }}
+                          >
+                            {item.preferredTimeframe ? (
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  padding: "5px 8px",
+                                  borderRadius: 999,
+                                  border: "1px solid rgba(255,255,255,0.12)",
+                                  background: "rgba(255,255,255,0.05)",
+                                  fontSize: 10,
+                                  fontWeight: 900,
+                                  letterSpacing: "0.04em",
+                                }}
+                              >
+                                {item.preferredTimeframe}
+                              </span>
+                            ) : null}
+
+                            {item.preferredIndicator ? (
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  padding: "5px 8px",
+                                  borderRadius: 999,
+                                  border: "1px solid rgba(96,165,250,0.22)",
+                                  background: "rgba(59,130,246,0.08)",
+                                  color: "#dbeafe",
+                                  fontSize: 10,
+                                  fontWeight: 900,
+                                  letterSpacing: "0.04em",
+                                }}
+                              >
+                                {item.preferredIndicator}
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : null}
 
                         {item.note ? (
                           <div
@@ -1197,7 +1257,7 @@ const displaySections = useMemo(() => {
                         }}
                       >
                         <a
-                          href={`/?symbol=${encodeURIComponent(it.symbol)}`}
+                          href={it.dashboardHref ?? `/?symbol=${encodeURIComponent(it.symbol)}`}
                           style={{
                             display: "inline-flex",
                             alignItems: "center",
@@ -1221,6 +1281,46 @@ const displaySections = useMemo(() => {
                             }}
                           />
                           <span style={{ minWidth: 0 }}>{it.symbol}</span>
+
+                          {it.timeframe ? (
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                padding: "4px 7px",
+                                borderRadius: 999,
+                                border: "1px solid rgba(255,255,255,0.12)",
+                                background: "rgba(255,255,255,0.05)",
+                                fontSize: 10,
+                                fontWeight: 900,
+                                letterSpacing: "0.04em",
+                                flex: "0 0 auto",
+                              }}
+                            >
+                              {it.timeframe}
+                            </span>
+                          ) : null}
+
+                          {it.indicator ? (
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                padding: "4px 7px",
+                                borderRadius: 999,
+                                border: "1px solid rgba(96,165,250,0.22)",
+                                background: "rgba(59,130,246,0.08)",
+                                color: "#dbeafe",
+                                fontSize: 10,
+                                fontWeight: 900,
+                                letterSpacing: "0.04em",
+                                flex: "0 0 auto",
+                              }}
+                            >
+                              {it.indicator}
+                            </span>
+                          ) : null}
+
                           {it.note ? (
                             <span
                               style={{
