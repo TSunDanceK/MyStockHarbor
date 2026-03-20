@@ -687,9 +687,9 @@ type TimeframePreset = {
 };
 
 const TIMEFRAMES: TimeframePreset[] = [
-  { label: "D", interval: "d", fetchBars: 240, defaultVisibleBars: 75 },
-  { label: "W", interval: "w", fetchBars: 260, defaultVisibleBars: 75 },
-  { label: "M", interval: "m", fetchBars: 180, defaultVisibleBars: 75 },
+  { label: "D", interval: "d", fetchBars: 1200, defaultVisibleBars: 75 },
+  { label: "W", interval: "w", fetchBars: 520, defaultVisibleBars: 75 },
+  { label: "M", interval: "m", fetchBars: 240, defaultVisibleBars: 75 },
 ];
 
 const PRICE_OVERLAY_OPTIONS: Overlay[] = [
@@ -1942,18 +1942,23 @@ const [qRes, hRes] = await Promise.all([
           padding: isMobile ? "8px 10px" : "10px 12px",
           borderRadius: 12,
           border: `1px solid ${
-            props.active ? "rgba(255,255,255,0.32)" : COLORS.controlBorder
+            props.active ? "rgba(96,165,250,0.95)" : COLORS.controlBorder
           }`,
           background: props.active
             ? COLORS.isDark
-              ? "rgba(255,255,255,0.10)"
-              : "rgba(11,18,32,0.08)"
+              ? "linear-gradient(135deg, rgba(37,99,235,0.32), rgba(59,130,246,0.18))"
+              : "linear-gradient(135deg, rgba(37,99,235,0.16), rgba(59,130,246,0.10))"
             : COLORS.controlBg,
-          color: COLORS.controlFg,
+          color: props.active ? "#ffffff" : COLORS.controlFg,
           fontWeight: 900,
           fontSize: isMobile ? 13 : 14,
           cursor: "pointer",
           minWidth: isMobile ? 48 : 54,
+          boxShadow: props.active
+            ? COLORS.isDark
+              ? "0 0 0 1px rgba(96,165,250,0.18) inset, 0 8px 18px rgba(37,99,235,0.22)"
+              : "0 0 0 1px rgba(96,165,250,0.12) inset, 0 8px 18px rgba(37,99,235,0.10)"
+            : "none",
         }}
       >
         {props.label}
