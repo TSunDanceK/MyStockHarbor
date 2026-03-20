@@ -1587,7 +1587,7 @@ const [qRes, hRes] = await Promise.all([
         });
       }
 
-      if (ind === "RSI(14)") {
+ if (ind === "RSI(14)") {
         rows.push({
           label: "RSI",
           tone:
@@ -1608,6 +1608,7 @@ const [qRes, hRes] = await Promise.all([
             value: divergenceLabel(divergence.rsi),
           });
         }
+      }
 
       if (ind === "MACD(12,26,9)") {
         rows.push({
@@ -1630,6 +1631,7 @@ const [qRes, hRes] = await Promise.all([
             value: divergenceLabel(divergence.macd),
           });
         }
+      }
 
       if (ind === "Stochastic(14,3)") {
         rows.push({
