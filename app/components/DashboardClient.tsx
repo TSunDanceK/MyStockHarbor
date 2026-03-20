@@ -688,8 +688,8 @@ type TimeframePreset = {
 
 const TIMEFRAMES: TimeframePreset[] = [
   { label: "D", interval: "d", fetchBars: 1200, defaultVisibleBars: 75 },
-  { label: "W", interval: "w", fetchBars: 520, defaultVisibleBars: 75 },
-  { label: "M", interval: "m", fetchBars: 240, defaultVisibleBars: 75 },
+  { label: "W", interval: "w", fetchBars: 780, defaultVisibleBars: 75 },
+  { label: "M", interval: "m", fetchBars: 360, defaultVisibleBars: 75 },
 ];
 
 const PRICE_OVERLAY_OPTIONS: Overlay[] = [
