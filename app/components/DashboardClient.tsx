@@ -2383,9 +2383,10 @@ const [qRes, hRes] = await Promise.all([
                     justifyContent: "center",
                     padding: "8px 12px",
                     borderRadius: 10,
-                    border: `1px solid ${COLORS.controlBorder}`,
-                    background: COLORS.controlBg,
-                    color: COLORS.isDark ? "#93c5fd" : "#2563eb",
+                    border: "1px solid rgba(250,204,21,0.45)",
+                    background:
+                      "linear-gradient(135deg, rgba(250,204,21,0.22), rgba(202,138,4,0.12))",
+                    color: "#fef3c7",
                     textDecoration: "none",
                     fontWeight: 800,
                     fontSize: 12,
