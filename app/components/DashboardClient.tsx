@@ -2435,25 +2435,32 @@ return (
           </div>
 
           <div className="msh-score-grid">
-            <div
+                       <div
               style={{
                 border: `1px solid ${COLORS.border}`,
                 borderRadius: 16,
-                padding: 16,
+                padding: isMobile ? 12 : 16,
                 background: COLORS.controlBg,
                 minWidth: 0,
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 900 }}>
                 <span style={{ color: trendColor }}>●</span>
-                <span>Trend Score</span>
+                <span>{isMobile ? "Trend" : "Trend Score"}</span>
                 <HelpTip
                   text="Trend score checks price vs MA50/MA200 and MACD histogram direction."
                   isDark={COLORS.isDark}
                 />
               </div>
 
-              <div style={{ marginTop: 8, fontSize: 20, fontWeight: 950, color: trendColor }}>
+              <div
+                style={{
+                  marginTop: isMobile ? 6 : 8,
+                  fontSize: isMobile ? 18 : 20,
+                  fontWeight: 950,
+                  color: trendColor,
+                }}
+              >
                 {trendScore.passed}/{trendScore.total}
               </div>
 
@@ -2464,26 +2471,32 @@ return (
                 isDark: COLORS.isDark,
               })}
             </div>
-
-            <div
+                       <div
               style={{
                 border: `1px solid ${COLORS.border}`,
                 borderRadius: 16,
-                padding: 16,
+                padding: isMobile ? 12 : 16,
                 background: COLORS.controlBg,
                 minWidth: 0,
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 900 }}>
                 <span style={{ color: stretchColor }}>●</span>
-                <span>Stretch Score</span>
+                <span>{isMobile ? "Stretch" : "Stretch Score"}</span>
                 <HelpTip
                   text="Stretch score checks RSI, Stoch, Bollinger, VWAP, EMA20 and MA50 extension."
                   isDark={COLORS.isDark}
                 />
               </div>
 
-              <div style={{ marginTop: 8, fontSize: 20, fontWeight: 950, color: stretchColor }}>
+              <div
+                style={{
+                  marginTop: isMobile ? 6 : 8,
+                  fontSize: isMobile ? 18 : 20,
+                  fontWeight: 950,
+                  color: stretchColor,
+                }}
+              >
                 {stretchScore.flagged}/{stretchScore.total}
               </div>
 
@@ -3619,13 +3632,15 @@ return (
             display: none;
           }
 
-          .msh-score-grid,
-          .msh-bench-grid,
-          .msh-breakdown-grid,
-          .msh-news-section-grid {
-            grid-template-columns: 1fr;
-          }
+.msh-score-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
 
+.msh-bench-grid,
+.msh-breakdown-grid,
+.msh-news-section-grid {
+  grid-template-columns: 1fr;
+}
           .msh-news-section-title {
             text-align: left;
           }
