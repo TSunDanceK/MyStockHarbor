@@ -1601,12 +1601,13 @@ const [qRes, hRes] = await Promise.all([
           value: typeof rsiLast === "number" ? rsiLast.toFixed(2) : "—",
         });
 
-        rows.push({
-          label: "RSI Div",
-          tone: divergenceTone(divergence.rsi),
-          value: divergenceLabel(divergence.rsi),
-        });
-      }
+        if (divergence.rsi !== "none") {
+          rows.push({
+            label: "RSI Div",
+            tone: divergenceTone(divergence.rsi),
+            value: divergenceLabel(divergence.rsi),
+          });
+        }
 
       if (ind === "MACD(12,26,9)") {
         rows.push({
@@ -1622,12 +1623,13 @@ const [qRes, hRes] = await Promise.all([
           value: typeof macdHistLast === "number" ? macdHistLast.toFixed(4) : "—",
         });
 
-        rows.push({
-          label: "MACD Div",
-          tone: divergenceTone(divergence.macd),
-          value: divergenceLabel(divergence.macd),
-        });
-      }
+        if (divergence.macd !== "none") {
+          rows.push({
+            label: "MACD Div",
+            tone: divergenceTone(divergence.macd),
+            value: divergenceLabel(divergence.macd),
+          });
+        }
 
       if (ind === "Stochastic(14,3)") {
         rows.push({
@@ -1790,21 +1792,25 @@ const [qRes, hRes] = await Promise.all([
       push({ key: "atr", label: "ATR", tone: "muted", valueText: "—", severity: 0 });
     }
 
-    push({
-      key: "div_rsi",
-      label: "RSI Div",
-      tone: divergenceTone(divergence.rsi),
-      valueText: divergenceLabel(divergence.rsi),
-      severity: divergence.rsi === "none" ? 0 : 100,
-    });
+    if (divergence.rsi !== "none") {
+      push({
+        key: "div_rsi",
+        label: "RSI Div",
+        tone: divergenceTone(divergence.rsi),
+        valueText: divergenceLabel(divergence.rsi),
+        severity: 100,
+      });
+    }
 
-    push({
-      key: "div_macd",
-      label: "MACD Div",
-      tone: divergenceTone(divergence.macd),
-      valueText: divergenceLabel(divergence.macd),
-      severity: divergence.macd === "none" ? 0 : 100,
-    });
+    if (divergence.macd !== "none") {
+      push({
+        key: "div_macd",
+        label: "MACD Div",
+        tone: divergenceTone(divergence.macd),
+        valueText: divergenceLabel(divergence.macd),
+        severity: 100,
+      });
+    }
 
     return items.sort((a, b) => {
       if (b.severity !== a.severity) return b.severity - a.severity;
