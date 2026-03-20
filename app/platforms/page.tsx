@@ -337,6 +337,7 @@ export default function PlatformsPage() {
       <div className="wrap">
         <div style={{ display: "grid", gap: 14 }}>
           <div
+            className="topNavRow"
             style={{
               display: "flex",
               justifyContent: "flex-end",
@@ -349,28 +350,32 @@ export default function PlatformsPage() {
               <span aria-hidden="true" style={topNavIconWrapStyle}>
                 {topNavIcon("dashboard")}
               </span>
-              <span>Dashboard</span>
-            </Link>
-
-            <Link href="/learn" style={topNavBtnStyle("learn")}>
-              <span aria-hidden="true" style={topNavIconWrapStyle}>
-                {topNavIcon("learn")}
-              </span>
-              <span>Learn</span>
+              <span className="topNavText">Dashboard</span>
             </Link>
 
             <Link href="/pickers" style={topNavBtnStyle("pickers")}>
               <span aria-hidden="true" style={topNavIconWrapStyle}>
                 {topNavIcon("pickers")}
               </span>
-              <span>Stock Pickers</span>
+              <span className="topNavText">Stock Pickers</span>
             </Link>
 
-            <Link href="/utilities" style={topNavBtnStyle("calculators")}>
+            <Link href="/learn" style={topNavBtnStyle("learn")} className="topNavIconOnlyMobile">
+              <span aria-hidden="true" style={topNavIconWrapStyle}>
+                {topNavIcon("learn")}
+              </span>
+              <span className="topNavText topNavHideOnMobile">Learn</span>
+            </Link>
+
+            <Link
+              href="/utilities"
+              style={topNavBtnStyle("calculators")}
+              className="topNavIconOnlyMobile"
+            >
               <span aria-hidden="true" style={topNavIconWrapStyle}>
                 {topNavIcon("calculators")}
               </span>
-              <span>Calculators</span>
+              <span className="topNavText topNavHideOnMobile">Calculators</span>
             </Link>
           </div>
 
@@ -992,6 +997,33 @@ export default function PlatformsPage() {
         @media (max-width: 760px) {
           .wrap {
             padding: 16px !important;
+          }
+
+          .topNavRow {
+            display: grid !important;
+            grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.15fr) 64px 64px !important;
+            gap: 8px !important;
+            align-items: stretch !important;
+          }
+
+          .topNavRow a {
+            width: 100% !important;
+            min-width: 0 !important;
+            min-height: 40px !important;
+            padding: 8px 10px !important;
+            font-size: 12px !important;
+            border-radius: 12px !important;
+            gap: 6px !important;
+            justify-content: center !important;
+          }
+
+          .topNavIconOnlyMobile {
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+          }
+
+          .topNavHideOnMobile {
+            display: none !important;
           }
         }
       `}</style>
