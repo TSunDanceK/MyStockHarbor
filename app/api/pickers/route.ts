@@ -36,6 +36,9 @@ type PickerItem = {
   symbol: string;
   note?: string;
   tone?: PickerTone;
+  timeframe?: "D" | "W" | "M";
+  indicator?: "MA200" | "RSI(14)" | "MACD(12,26,9)";
+  dashboardHref?: string;
   // internal sorting helpers (not returned)
   _score?: number;
 };
@@ -43,7 +46,14 @@ type PickerItem = {
 type PickerSection = {
   title: string;
   description?: string;
-  items: { symbol: string; note?: string; tone?: PickerTone }[];
+  items: {
+    symbol: string;
+    note?: string;
+    tone?: PickerTone;
+    timeframe?: "D" | "W" | "M";
+    indicator?: "MA200" | "RSI(14)" | "MACD(12,26,9)";
+    dashboardHref?: string;
+  }[];
 };
 
 type CompositeResult = {
@@ -76,6 +86,10 @@ type SignalRecord = {
   bearishRsiDivergence: boolean;
   bullishMacdDivergence: boolean;
   bearishMacdDivergence: boolean;
+
+  preferredTimeframe?: "D" | "W" | "M";
+  preferredIndicator?: "MA200" | "RSI(14)" | "MACD(12,26,9)";
+  dashboardHref?: string;
 };
 
 /* ----------------------------- caching ------------------------------ */
@@ -107,6 +121,24 @@ function lastNum(arr: Array<number | null>) {
 
 function clampNum(v: number, lo: number, hi: number) {
   return Math.min(hi, Math.max(lo, v));
+}
+function buildDashboardHref(args: {
+  symbol: string;
+  timeframe?: "D" | "W" | "M";
+  indicator?: "MA200" | "RSI(14)" | "MACD(12,26,9)";
+}) {
+  const params = new URLSearchParams();
+  params.set("symbol", args.symbol);
+
+  if (args.timeframe) {
+    params.set("tf", args.timeframe);
+  }
+
+  if (args.indicator) {
+    params.set("indicator", args.indicator);
+  }
+
+  return `/?${params.toString()}`;
 }
 
 /** Strict SMA over nullable values: returns null if any null in window. */
@@ -930,7 +962,16 @@ if (comp) {
       return (b._score ?? 0) - (a._score ?? 0);
     });
 
-    return sorted.slice(0, n).map(({ symbol, note, tone }) => ({ symbol, note, tone }));
+    return sorted.slice(0, n).map(
+      ({ symbol, note, tone, timeframe, indicator, dashboardHref }) => ({
+        symbol,
+        note,
+        tone,
+        timeframe,
+        indicator,
+        dashboardHref,
+      })
+    );
   };
 
   const sections: PickerSection[] = [
