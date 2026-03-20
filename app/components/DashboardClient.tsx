@@ -799,6 +799,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     setQuery(cleaned);
     setResults([]);
     setOpen(false);
+    setActiveTimeframe("1Y");
     setWindowOffset(0);
   }, [searchParams]);
 
@@ -862,7 +863,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     let cancelled = false;
 
     async function load() {
-      const cacheKey = `${symbol}:${chartInterval}`;
+      const cacheKey = `${symbol}:${activeTimeframe}`;
       const cacheHit = symbolCache[cacheKey];
       if (cacheHit) {
         setErr(null);
@@ -877,7 +878,11 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
 
       try {
         const historyDays =
-          chartInterval === "m" ? 5000 : chartInterval === "w" ? 3000 : 1200;
+          chartInterval === "m"
+            ? 240
+            : chartInterval === "w"
+            ? 260
+            : Math.max(tfDays + 250, 400);
 
 const [qRes, hRes] = await Promise.all([
   fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" }),
@@ -930,7 +935,7 @@ const [qRes, hRes] = await Promise.all([
     return () => {
       cancelled = true;
     };
-  }, [symbol, chartInterval, symbolCache]);
+  }, [symbol, activeTimeframe, chartInterval, tfDays, symbolCache]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1249,6 +1254,7 @@ const [qRes, hRes] = await Promise.all([
     setQuery(cleaned);
     setResults([]);
     setOpen(false);
+    setActiveTimeframe("1Y");
     setWindowOffset(0);
   }
 
