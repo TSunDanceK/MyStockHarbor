@@ -1248,7 +1248,7 @@ const displaySections = useMemo(() => {
                           alignItems: "center",
                           justifyContent: "space-between",
                           gap: 10,
-                          flexWrap: "wrap",
+                          flexWrap: "nowrap",
                           border: "1px solid rgba(255,255,255,0.14)",
                           borderRadius: 16,
                           padding: 12,
@@ -1264,9 +1264,11 @@ const displaySections = useMemo(() => {
                             gap: 8,
                             minWidth: 0,
                             maxWidth: "100%",
+                            flex: "1 1 auto",
                             color: "#f1f5f9",
                             textDecoration: "none",
                             fontWeight: 900,
+                            overflow: "hidden",
                           }}
                           title={it.note ?? "Open in dashboard"}
                         >
@@ -1282,45 +1284,6 @@ const displaySections = useMemo(() => {
                           />
                           <span style={{ minWidth: 0 }}>{it.symbol}</span>
 
-                          {it.timeframe ? (
-                            <span
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                padding: "4px 7px",
-                                borderRadius: 999,
-                                border: "1px solid rgba(255,255,255,0.12)",
-                                background: "rgba(255,255,255,0.05)",
-                                fontSize: 10,
-                                fontWeight: 900,
-                                letterSpacing: "0.04em",
-                                flex: "0 0 auto",
-                              }}
-                            >
-                              {it.timeframe}
-                            </span>
-                          ) : null}
-
-                          {it.indicator ? (
-                            <span
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                padding: "4px 7px",
-                                borderRadius: 999,
-                                border: "1px solid rgba(96,165,250,0.22)",
-                                background: "rgba(59,130,246,0.08)",
-                                color: "#dbeafe",
-                                fontSize: 10,
-                                fontWeight: 900,
-                                letterSpacing: "0.04em",
-                                flex: "0 0 auto",
-                              }}
-                            >
-                              {it.indicator}
-                            </span>
-                          ) : null}
-
                           {it.note ? (
                             <span
                               style={{
@@ -1328,7 +1291,9 @@ const displaySections = useMemo(() => {
                                 opacity: 0.65,
                                 fontWeight: 700,
                                 minWidth: 0,
-                                wordBreak: "break-word",
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
                               }}
                             >
                               {it.note}
