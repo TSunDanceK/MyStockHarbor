@@ -87,7 +87,7 @@ export default function PickersPage() {
     >
       <div className="wrap">
         <div style={{ display: "grid", gap: 14 }}>
-          <div
+              <div
             className="topNavRow"
             style={{
               display: "flex",
@@ -102,28 +102,32 @@ export default function PickersPage() {
               <span aria-hidden="true" style={topNavIconWrapStyle}>
                 {topNavIcon("dashboard")}
               </span>
-              <span>Dashboard</span>
+              <span className="topNavText">Dashboard</span>
             </Link>
 
             <Link href="/platforms" style={topNavBtnStyle("platforms")}>
               <span aria-hidden="true" style={topNavIconWrapStyle}>
                 {topNavIcon("platforms")}
               </span>
-              <span>Platforms</span>
+              <span className="topNavText">Platforms</span>
             </Link>
 
-            <Link href="/learn" style={topNavBtnStyle("learn")}>
+            <Link href="/learn" style={topNavBtnStyle("learn")} className="topNavIconOnlyMobile">
               <span aria-hidden="true" style={topNavIconWrapStyle}>
                 {topNavIcon("learn")}
               </span>
-              <span>Learn</span>
+              <span className="topNavText topNavHideOnMobile">Learn</span>
             </Link>
 
-            <Link href="/utilities" style={topNavBtnStyle("calculators")}>
+            <Link
+              href="/utilities"
+              style={topNavBtnStyle("calculators")}
+              className="topNavIconOnlyMobile"
+            >
               <span aria-hidden="true" style={topNavIconWrapStyle}>
                 {topNavIcon("calculators")}
               </span>
-              <span>Calculators</span>
+              <span className="topNavText topNavHideOnMobile">Calculators</span>
             </Link>
           </div>
 
@@ -875,6 +879,33 @@ export default function PickersPage() {
           .wrap {
             padding-left: 12px !important;
             padding-right: 12px !important;
+          }
+
+          .topNavRow {
+            display: grid !important;
+            grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) 64px 64px !important;
+            gap: 8px !important;
+            align-items: stretch !important;
+          }
+
+          .topNavRow a {
+            width: 100% !important;
+            min-width: 0 !important;
+            min-height: 40px !important;
+            padding: 8px 10px !important;
+            font-size: 12px !important;
+            border-radius: 12px !important;
+            gap: 6px !important;
+            justify-content: center !important;
+          }
+
+          .topNavIconOnlyMobile {
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+          }
+
+          .topNavHideOnMobile {
+            display: none !important;
           }
 
           .heroPanel {
