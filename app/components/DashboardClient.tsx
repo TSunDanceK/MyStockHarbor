@@ -679,13 +679,15 @@ const PRESET_TICKERS: { symbol: string; name: string }[] = [
   { symbol: "XOM", name: "Exxon Mobil Corp." },
 ].sort((a, b) => a.symbol.localeCompare(b.symbol));
 
-const TIMEFRAMES: { label: string; days: number }[] = [
-  { label: "1M", days: 30 },
-  { label: "3M", days: 90 },
-  { label: "6M", days: 180 },
-  { label: "1Y", days: 365 },
-  { label: "3Y", days: 365 * 3 },
-  { label: "MAX", days: 4000 },
+const TIMEFRAMES: { label: string; days: number; interval: ChartInterval }[] = [
+  { label: "D", days: 30, interval: "d" },
+  { label: "W", days: 180, interval: "w" },
+  { label: "M", days: 3650, interval: "m" },
+  { label: "3M", days: 90, interval: "d" },
+  { label: "6M", days: 180, interval: "d" },
+  { label: "1Y", days: 365, interval: "d" },
+  { label: "3Y", days: 365 * 3, interval: "w" },
+  { label: "MAX", days: 5000, interval: "m" },
 ];
 
 const PRICE_OVERLAY_OPTIONS: Overlay[] = [
@@ -721,6 +723,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   });
 
   const [symbolName, setSymbolName] = useState("");
+  const [activeTimeframe, setActiveTimeframe] = useState("1Y");
   const [tfDays, setTfDays] = useState(365);
   const [windowDays, setWindowDays] = useState(365);
   const [windowOffset, setWindowOffset] = useState(0);
@@ -747,6 +750,11 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [expanded, setExpanded] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+
+  const selectedTimeframe = useMemo(
+    () => TIMEFRAMES.find((t) => t.label === activeTimeframe) ?? TIMEFRAMES[5],
+    [activeTimeframe]
+  );
 
   const COLORS = useMemo(() => {
     const isDark = theme === "dark";
@@ -776,9 +784,11 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   }, []);
 
   useEffect(() => {
-    setWindowDays(tfDays);
+    setTfDays(selectedTimeframe.days);
+    setChartInterval(selectedTimeframe.interval);
+    setWindowDays(selectedTimeframe.days);
     setWindowOffset(0);
-  }, [symbol, tfDays, chartInterval]);
+  }, [symbol, selectedTimeframe]);
 
   useEffect(() => {
     const urlSymbol = searchParams.get("symbol");
@@ -2568,67 +2578,16 @@ const [qRes, hRes] = await Promise.all([
               flexWrap: "wrap",
             }}
           >
-            <div style={{ display: "grid", gap: 10 }}>
-              <div style={{ fontWeight: 900, fontSize: 15 }}>Price ({chartIndicatorName})</div>
-
-              <div
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                }}
-              >
-                {[
-                  { label: "D", value: "d" as ChartInterval },
-                  { label: "W", value: "w" as ChartInterval },
-                  { label: "M", value: "m" as ChartInterval },
-                ].map((item) => {
-                  const active = chartInterval === item.value;
-
-                  return (
-                    <button
-                      key={item.value}
-                      type="button"
-                      onClick={() => {
-                        setChartInterval(item.value);
-                        setWindowOffset(0);
-                      }}
-                      style={{
-                        padding: isMobile ? "8px 10px" : "10px 12px",
-                        borderRadius: 12,
-                        border: `1px solid ${
-                          active ? "rgba(96,165,250,0.9)" : COLORS.controlBorder
-                        }`,
-                        background: active
-                          ? COLORS.isDark
-                            ? "rgba(59,130,246,0.18)"
-                            : "rgba(59,130,246,0.10)"
-                          : COLORS.controlBg,
-                        color: COLORS.controlFg,
-                        fontWeight: 900,
-                        fontSize: isMobile ? 13 : 14,
-                        cursor: "pointer",
-                        minWidth: isMobile ? 48 : 54,
-                      }}
-                    >
-                      {item.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            <div style={{ fontWeight: 900, fontSize: 15 }}>Price ({chartIndicatorName})</div>
 
             <div className="msh-timeframes">
               {TIMEFRAMES.map((t) => (
                 <TimeframeButton
                   key={t.label}
                   label={t.label}
-                  active={tfDays === t.days}
+                  active={activeTimeframe === t.label}
                   onClick={() => {
-                    setTfDays(t.days);
-                    setWindowDays(t.days);
-                    setWindowOffset(0);
+                    setActiveTimeframe(t.label);
                   }}
                 />
               ))}
