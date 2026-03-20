@@ -1017,15 +1017,34 @@ const [qRes, hRes] = await Promise.all([
   const maxOffset = Math.max(totalPoints - win, 0);
   const offset = Math.min(Math.max(windowOffset, 0), maxOffset);
 
-  const displayedHistory = useMemo(() => {
-    if (!historyAll.length) return [];
+  const { displayStart, displayEnd, displayedHistory } = useMemo(() => {
+    if (!historyAll.length) {
+      return {
+        displayStart: 0,
+        displayEnd: 0,
+        displayedHistory: [] as Point[],
+      };
+    }
+
     const end = totalPoints - offset;
     const start = Math.max(0, end - win);
     const slice = historyAll.slice(start, end);
-    return slice.length >= 2 ? slice : historyAll.slice(-2);
+
+    if (slice.length >= 2) {
+      return {
+        displayStart: start,
+        displayEnd: end,
+        displayedHistory: slice,
+      };
+    }
+
+    return {
+      displayStart: Math.max(totalPoints - 2, 0),
+      displayEnd: totalPoints,
+      displayedHistory: historyAll.slice(-2),
+    };
   }, [historyAll, totalPoints, offset, win]);
 
-  const n = displayedHistory.length;
   const closesAll = useMemo(() => historyAll.map((p) => p.close), [historyAll]);
 
   const ma50Full = useMemo(() => movingAverage(closesAll, 50), [closesAll]);
@@ -1034,27 +1053,69 @@ const [qRes, hRes] = await Promise.all([
   const bbFull = useMemo(() => bollinger(closesAll, 20, 2), [closesAll]);
   const rsi14Full = useMemo(() => rsiWilder(closesAll, 14), [closesAll]);
   const macdFull = useMemo(() => macd(closesAll, 12, 26, 9), [closesAll]);
-   const vwma20Full = useMemo(
+  const vwma20Full = useMemo(
     () => vwma(historyAll.map((p) => p.close), historyAll.map((p) => p.volume), 20),
     [historyAll]
   );
   const stochFull = useMemo(() => stochastic(historyAll, 14, 3), [historyAll]);
   const atr14Full = useMemo(() => atr(historyAll, 14), [historyAll]);
 
-  const ma50 = useMemo(() => ma50Full.slice(-n), [ma50Full, n]);
-  const ma200 = useMemo(() => ma200Full.slice(-n), [ma200Full, n]);
-  const ema20Arr = useMemo(() => ema20Full.slice(-n), [ema20Full, n]);
-  const bollUpper = useMemo(() => bbFull.upper.slice(-n), [bbFull, n]);
-  const bollMid = useMemo(() => bbFull.mid.slice(-n), [bbFull, n]);
-  const bollLower = useMemo(() => bbFull.lower.slice(-n), [bbFull, n]);
-  const rsi14Arr = useMemo(() => rsi14Full.slice(-n), [rsi14Full, n]);
-  const macdLine = useMemo(() => macdFull.line.slice(-n), [macdFull, n]);
-  const macdSignal = useMemo(() => macdFull.signal.slice(-n), [macdFull, n]);
-  const macdHist = useMemo(() => macdFull.hist.slice(-n), [macdFull, n]);
-   const vwma20Arr = useMemo(() => vwma20Full.slice(-n), [vwma20Full, n]);
-  const stochK = useMemo(() => stochFull.k.slice(-n), [stochFull, n]);
-  const stochD = useMemo(() => stochFull.d.slice(-n), [stochFull, n]);
-  const atr14Arr = useMemo(() => atr14Full.slice(-n), [atr14Full, n]);
+  const ma50 = useMemo(
+    () => ma50Full.slice(displayStart, displayEnd),
+    [ma50Full, displayStart, displayEnd]
+  );
+  const ma200 = useMemo(
+    () => ma200Full.slice(displayStart, displayEnd),
+    [ma200Full, displayStart, displayEnd]
+  );
+  const ema20Arr = useMemo(
+    () => ema20Full.slice(displayStart, displayEnd),
+    [ema20Full, displayStart, displayEnd]
+  );
+  const bollUpper = useMemo(
+    () => bbFull.upper.slice(displayStart, displayEnd),
+    [bbFull, displayStart, displayEnd]
+  );
+  const bollMid = useMemo(
+    () => bbFull.mid.slice(displayStart, displayEnd),
+    [bbFull, displayStart, displayEnd]
+  );
+  const bollLower = useMemo(
+    () => bbFull.lower.slice(displayStart, displayEnd),
+    [bbFull, displayStart, displayEnd]
+  );
+  const rsi14Arr = useMemo(
+    () => rsi14Full.slice(displayStart, displayEnd),
+    [rsi14Full, displayStart, displayEnd]
+  );
+  const macdLine = useMemo(
+    () => macdFull.line.slice(displayStart, displayEnd),
+    [macdFull, displayStart, displayEnd]
+  );
+  const macdSignal = useMemo(
+    () => macdFull.signal.slice(displayStart, displayEnd),
+    [macdFull, displayStart, displayEnd]
+  );
+  const macdHist = useMemo(
+    () => macdFull.hist.slice(displayStart, displayEnd),
+    [macdFull, displayStart, displayEnd]
+  );
+  const vwma20Arr = useMemo(
+    () => vwma20Full.slice(displayStart, displayEnd),
+    [vwma20Full, displayStart, displayEnd]
+  );
+  const stochK = useMemo(
+    () => stochFull.k.slice(displayStart, displayEnd),
+    [stochFull, displayStart, displayEnd]
+  );
+  const stochD = useMemo(
+    () => stochFull.d.slice(displayStart, displayEnd),
+    [stochFull, displayStart, displayEnd]
+  );
+  const atr14Arr = useMemo(
+    () => atr14Full.slice(displayStart, displayEnd),
+    [atr14Full, displayStart, displayEnd]
+  );
 
   const volumeFull = useMemo(
     () =>
@@ -1064,10 +1125,19 @@ const [qRes, hRes] = await Promise.all([
     [historyAll]
   );
   const volSma20Full = useMemo(() => smaNullable(volumeFull, 20), [volumeFull]);
-  const volumeArr = useMemo(() => volumeFull.slice(-n), [volumeFull, n]);
-  const volSma20Arr = useMemo(() => volSma20Full.slice(-n), [volSma20Full, n]);
+  const volumeArr = useMemo(
+    () => volumeFull.slice(displayStart, displayEnd),
+    [volumeFull, displayStart, displayEnd]
+  );
+  const volSma20Arr = useMemo(
+    () => volSma20Full.slice(displayStart, displayEnd),
+    [volSma20Full, displayStart, displayEnd]
+  );
   const atrSma20Full = useMemo(() => smaNullable(atr14Full, 20), [atr14Full]);
-  const atrSma20Arr = useMemo(() => atrSma20Full.slice(-n), [atrSma20Full, n]);
+  const atrSma20Arr = useMemo(
+    () => atrSma20Full.slice(displayStart, displayEnd),
+    [atrSma20Full, displayStart, displayEnd]
+  );
 
   const lastClose = displayedHistory.length ? displayedHistory[displayedHistory.length - 1].close : null;
   const lastMA50 = lastNum(ma50);
