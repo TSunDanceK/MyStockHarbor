@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 type BookmarkPromptButtonProps = {
   compact?: boolean;
@@ -10,6 +10,15 @@ export default function BookmarkPromptButton({
   compact = false,
 }: BookmarkPromptButtonProps) {
   const [copied, setCopied] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detect mobile
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth <= 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   const shortcut = useMemo(() => {
     if (typeof navigator !== "undefined") {
@@ -103,8 +112,12 @@ export default function BookmarkPromptButton({
             ? "Link copied"
             : "Link copied — press bookmark shortcut to save this page."
           : compact
-            ? "Add me to bookmarks"
-            : "Add me to bookmarks — check back hourly for new stock ideas."}
+            ? isMobile
+              ? "Bookmark Me"
+              : "Add me to bookmarks"
+            : isMobile
+              ? "Bookmark Me — check back hourly for new stock ideas."
+              : "Add me to bookmarks — check back hourly for new stock ideas."}
       </span>
     </button>
   );
