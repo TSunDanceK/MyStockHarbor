@@ -266,24 +266,45 @@ export default async function InsightPostPage({ params }: Props) {
             </Link>
 
             {post.symbol ? (
-              <Link
-                href={`/stock/${post.symbol}`}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: "11px 14px",
-                  borderRadius: 12,
-                  border: "1px solid rgba(250,204,21,0.32)",
-                  background:
-                    "linear-gradient(135deg, rgba(250,204,21,0.18), rgba(245,158,11,0.10))",
-                  color: "#fefce8",
-                  textDecoration: "none",
-                  fontWeight: 900,
-                }}
-              >
-                Open {post.symbol} Analysis
-              </Link>
+              <>
+                <Link
+                  href={`/stock/${post.symbol}`}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "11px 14px",
+                    borderRadius: 12,
+                    border: "1px solid rgba(250,204,21,0.32)",
+                    background:
+                      "linear-gradient(135deg, rgba(250,204,21,0.18), rgba(245,158,11,0.10))",
+                    color: "#fefce8",
+                    textDecoration: "none",
+                    fontWeight: 900,
+                  }}
+                >
+                  Open {post.symbol} Analysis
+                </Link>
+
+                <Link
+                  href={`/stock/${post.symbol}/news`}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "11px 14px",
+                    borderRadius: 12,
+                    border: "1px solid rgba(59,130,246,0.32)",
+                    background:
+                      "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
+                    color: "#eff6ff",
+                    textDecoration: "none",
+                    fontWeight: 900,
+                  }}
+                >
+                  Read {post.symbol} News
+                </Link>
+              </>
             ) : null}
           </div>
         </div>
