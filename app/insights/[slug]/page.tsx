@@ -67,12 +67,10 @@ export default async function InsightPostPage({ params }: Props) {
   const processedContent = await remark().use(html).process(post.content);
   const contentHtml = processedContent.toString();
 
-const snapshot = await getOrCreateInsightSnapshot({
-  slug: post.slug,
-  symbol: post.symbol ?? null,
-});
-
-  const snapshot = redisSnapshot ?? post.snapshot ?? null;
+  const snapshot = await getOrCreateInsightSnapshot({
+    slug: post.slug,
+    symbol: post.symbol ?? null,
+  });
 
   return (
     <InsightPostClient
