@@ -48,6 +48,39 @@ function movingAverage(values: number[], window: number): (number | null)[] {
   return out;
 }
 
+function buildWeeklyCloses(points: Point[]): number[] {
+  if (!points.length) return [];
+
+  const weekly: number[] = [];
+  let currentWeekKey = "";
+  let lastCloseForWeek: number | null = null;
+
+  for (const point of points) {
+    const d = new Date(point.date);
+    if (Number.isNaN(d.getTime())) continue;
+
+    const utcDay = d.getUTCDay();
+    const diffToMonday = utcDay === 0 ? -6 : 1 - utcDay;
+    const monday = new Date(d);
+    monday.setUTCDate(d.getUTCDate() + diffToMonday);
+
+    const weekKey = `${monday.getUTCFullYear()}-${String(
+      monday.getUTCMonth() + 1
+    ).padStart(2, "0")}-${String(monday.getUTCDate()).padStart(2, "0")}`;
+
+    if (weekKey !== currentWeekKey) {
+      if (lastCloseForWeek !== null) weekly.push(lastCloseForWeek);
+      currentWeekKey = weekKey;
+    }
+
+    lastCloseForWeek = point.close;
+  }
+
+  if (lastCloseForWeek !== null) weekly.push(lastCloseForWeek);
+
+  return weekly;
+}
+
 function lastNum(arr: (number | null)[]) {
   return arr.length ? arr[arr.length - 1] : null;
 }
@@ -232,12 +265,18 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
   }, [symbol]);
 
   const closes = useMemo(() => history.map((p) => p.close), [history]);
+  const weeklyCloses = useMemo(() => buildWeeklyCloses(history), [history]);
   const ma50 = useMemo(() => movingAverage(closes, 50), [closes]);
   const ma200 = useMemo(() => movingAverage(closes, 200), [closes]);
+    const weeklyMA200 = useMemo(
+    () => movingAverage(weeklyCloses, 200),
+    [weeklyCloses]
+  );
 
   const lastClose = history.length ? history[history.length - 1].close : null;
   const lastMA50 = lastNum(ma50);
   const lastMA200 = lastNum(ma200);
+  const lastWeeklyMA200 = lastNum(weeklyMA200);
 
   const trend = useMemo(
     () =>
@@ -256,6 +295,10 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
   const ma200Pct = pctFromBase(
     lastClose,
     typeof lastMA200 === "number" ? lastMA200 : null
+  );
+  const weeklyMA200Pct = pctFromBase(
+    lastClose,
+    typeof lastWeeklyMA200 === "number" ? lastWeeklyMA200 : null
   );
 
   const insightTag = useMemo(
@@ -521,14 +564,16 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                       gap: 12,
                     }}
                   >
-                    <div style={smallStatCardStyle}>
-                      <div style={smallStatLabelStyle}>Daily MA50</div>
-                      <div style={smallStatValueStyle}>
+                    <div className="insightSmallStatCard" style={smallStatCardStyle}>
+                      <div className="insightSmallStatLabel" style={smallStatLabelStyle}>
+                        Daily MA50
+                      </div>
+                      <div className="insightSmallStatValue" style={smallStatValueStyle}>
                         {typeof lastMA50 === "number"
                           ? `$${lastMA50.toFixed(2)}`
                           : "—"}
                       </div>
-                      <div style={smallStatMetaStyle}>
+                      <div className="insightSmallStatMeta" style={smallStatMetaStyle}>
                         {typeof ma50Pct === "number"
                           ? `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(
                               2
@@ -537,16 +582,36 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                       </div>
                     </div>
 
-                    <div style={smallStatCardStyle}>
-                      <div style={smallStatLabelStyle}>Daily MA200</div>
-                      <div style={smallStatValueStyle}>
+                    <div className="insightSmallStatCard" style={smallStatCardStyle}>
+                      <div className="insightSmallStatLabel" style={smallStatLabelStyle}>
+                        Daily MA200
+                      </div>
+                      <div className="insightSmallStatValue" style={smallStatValueStyle}>
                         {typeof lastMA200 === "number"
                           ? `$${lastMA200.toFixed(2)}`
                           : "—"}
                       </div>
-                      <div style={smallStatMetaStyle}>
+                      <div className="insightSmallStatMeta" style={smallStatMetaStyle}>
                         {typeof ma200Pct === "number"
                           ? `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(
+                              2
+                            )}% vs price`
+                          : "Distance unavailable"}
+                      </div>
+                    </div>
+
+                    <div className="insightSmallStatCard" style={smallStatCardStyle}>
+                      <div className="insightSmallStatLabel" style={smallStatLabelStyle}>
+                        Weekly MA200
+                      </div>
+                      <div className="insightSmallStatValue" style={smallStatValueStyle}>
+                        {typeof lastWeeklyMA200 === "number"
+                          ? `$${lastWeeklyMA200.toFixed(2)}`
+                          : "—"}
+                      </div>
+                      <div className="insightSmallStatMeta" style={smallStatMetaStyle}>
+                        {typeof weeklyMA200Pct === "number"
+                          ? `${weeklyMA200Pct >= 0 ? "+" : ""}${weeklyMA200Pct.toFixed(
                               2
                             )}% vs price`
                           : "Distance unavailable"}
@@ -731,6 +796,26 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
     width: 100%;
   }
 }
+          .insightSmallStatCard {
+            padding: 10px 10px !important;
+            border-radius: 14px !important;
+          }
+
+          .insightSmallStatLabel {
+            margin-bottom: 6px !important;
+            font-size: 11px !important;
+          }
+
+          .insightSmallStatValue {
+            margin-top: 2px !important;
+            font-size: 16px !important;
+          }
+
+          .insightSmallStatMeta {
+            margin-top: 2px !important;
+            font-size: 11px !important;
+            line-height: 1.35 !important;
+          }
 
         .insightDesktopOnly {
           display: inline-flex;
@@ -1088,8 +1173,8 @@ const miniLabelStyle: React.CSSProperties = {
 
 const smallStatCardStyle: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
-  borderRadius: 14,
-  padding: "10px 10px",
+  borderRadius: 16,
+  padding: 14,
   background: "rgba(255,255,255,0.04)",
   display: "flex",
   flexDirection: "column",
@@ -1108,13 +1193,13 @@ const smallStatLabelStyle: React.CSSProperties = {
 
 const smallStatValueStyle: React.CSSProperties = {
   marginTop: 4,
-  fontSize: 16,
+  fontSize: 22,
   fontWeight: 900,
 };
 
 const smallStatMetaStyle: React.CSSProperties = {
-  marginTop: 2,
-  fontSize: 11,
-  opacity: 0.7,
-  lineHeight: 1.35,
+  marginTop: 8,
+  fontSize: 13,
+  opacity: 0.72,
+  lineHeight: 1.45,
 };
