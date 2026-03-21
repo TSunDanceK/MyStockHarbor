@@ -5,6 +5,7 @@ import { getOrCreateInsightSnapshot } from "@/lib/insightSnapshots";
 import { remark } from "remark";
 import html from "remark-html";
 import InsightPostClient from "./InsightPostClient";
+import { submitInsightToIndexNowOnce } from "@/lib/indexnowAuto";
 
 export const dynamic = "force-dynamic";
 
@@ -70,6 +71,10 @@ export default async function InsightPostPage({ params }: Props) {
   const snapshot = await getOrCreateInsightSnapshot({
     slug: post.slug,
     symbol: post.symbol ?? null,
+  });
+
+  void submitInsightToIndexNowOnce(post.slug).catch((error) => {
+    console.error("IndexNow auto-submit failed:", error);
   });
 
   return (
