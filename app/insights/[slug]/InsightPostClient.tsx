@@ -506,7 +506,7 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                 <div style={{ marginTop: 16, opacity: 0.78 }}>
                   Loading chart snapshot…
                 </div>
-              ) : marketError ? (
+              ) : marketError ? ( 
                 <div style={{ marginTop: 16, opacity: 0.78 }}>{marketError}</div>
               ) : chartSlice.length >= 2 ? (
                 <>
