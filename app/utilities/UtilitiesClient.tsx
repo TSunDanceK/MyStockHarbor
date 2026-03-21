@@ -536,7 +536,7 @@ export default function UtilitiesClientPage() {
             <Link
               href="/"
               style={topNavBtnStyle("dashboard")}
-              className="topNavBtn mobileIconOnly"
+              className="topNavBtn mobileIconOnly dashboardIconOnlyBtn"
               aria-label="Dashboard"
             >
               <span
@@ -597,7 +597,7 @@ export default function UtilitiesClientPage() {
             <Link
               href="/learn"
               style={topNavBtnStyle("learn")}
-              className="topNavBtn mobileIconOnly forceIconOnlyBtn"
+              className="topNavBtn mobileIconOnly learnIconOnlyBtn"
               aria-label="Learn"
             >
               <span
@@ -1179,21 +1179,15 @@ export default function UtilitiesClientPage() {
       flex: 1 1 0 !important;
     }
 
-    .mobileIconOnly {
+    .mobileIconOnly,
+    .dashboardIconOnlyBtn,
+    .learnIconOnlyBtn {
       padding-left: 0 !important;
       padding-right: 0 !important;
     }
 
-    .mobileIconOnly .topNavLabel {
-      display: none !important;
-    }
-
-    .forceIconOnlyBtn {
-      padding-left: 0 !important;
-      padding-right: 0 !important;
-    }
-
-    .forceIconOnlyBtn .topNavLabel {
+    .dashboardLabel,
+    .learnLabel {
       display: none !important;
     }
 
