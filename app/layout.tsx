@@ -68,7 +68,7 @@ export default function RootLayout({
               borderTop: "1px solid rgba(255,255,255,0.12)",
               background: "#0b1220",
               color: "rgba(241,245,249,0.82)",
-              padding: "18px 20px",
+              padding: "28px 20px",
             }}
           >
             <div
@@ -76,59 +76,123 @@ export default function RootLayout({
                 maxWidth: 1200,
                 margin: "0 auto",
                 display: "grid",
-                gap: 8,
+                gap: 20,
               }}
             >
               <div style={{ fontWeight: 800, fontSize: 14 }}>MyStockHarbor</div>
 
-<div style={{ fontSize: 13, lineHeight: 1.6 }}>
-  MyStockHarbor is designed for educational purposes and general
-  market research. Please do your own research before making
-  financial decisions.
-</div>
+              <div style={{ fontSize: 13, lineHeight: 1.6, maxWidth: 760 }}>
+                MyStockHarbor is designed for educational purposes and general
+                market research. Please do your own research before making
+                financial decisions.
+              </div>
 
               <div
                 style={{
-                  display: "flex",
-                  gap: 14,
-                  flexWrap: "wrap",
-                  fontSize: 13,
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                  gap: 20,
                 }}
               >
-                <Link
-                  href="/about"
-                  style={{ color: "#93c5fd", textDecoration: "none" }}
-                >
-                  About
-                </Link>
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0" }}>
+                    Platform
+                  </div>
 
-                <Link
-                  href="/contact"
-                  style={{ color: "#93c5fd", textDecoration: "none" }}
-                >
-                  Contact
-                </Link>
+                  <Link href="/" style={{ color: "#93c5fd", textDecoration: "none" }}>
+                    Dashboard
+                  </Link>
+                  <Link href="/pickers" style={{ color: "#93c5fd", textDecoration: "none" }}>
+                    Stock Pickers
+                  </Link>
+                  <Link href="/insights" style={{ color: "#93c5fd", textDecoration: "none" }}>
+                    Insights
+                  </Link>
+                  <Link href="/learn" style={{ color: "#93c5fd", textDecoration: "none" }}>
+                    Learn
+                  </Link>
+                  <Link href="/platforms" style={{ color: "#93c5fd", textDecoration: "none" }}>
+                    Platforms
+                  </Link>
+                  <Link href="/utilities" style={{ color: "#93c5fd", textDecoration: "none" }}>
+                    Utilities
+                  </Link>
+                </div>
 
-                <Link
-                  href="/risk-disclaimer"
-                  style={{ color: "#93c5fd", textDecoration: "none" }}
-                >
-                  Risk Disclaimer
-                </Link>
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0" }}>
+                    Popular Pages
+                  </div>
 
-                <Link
-                  href="/affiliate-disclosure"
-                  style={{ color: "#93c5fd", textDecoration: "none" }}
-                >
-                  Affiliate Disclosure
-                </Link>
-                
-                <Link
-  href="/privacy-policy"
-  style={{ color: "#93c5fd", textDecoration: "none" }}
->
-  Privacy Policy
-</Link>
+                  <Link
+                    href="/breakout-stocks"
+                    style={{ color: "#93c5fd", textDecoration: "none" }}
+                  >
+                    Breakout Stocks
+                  </Link>
+                  <Link
+                    href="/oversold-stocks"
+                    style={{ color: "#93c5fd", textDecoration: "none" }}
+                  >
+                    Oversold Stocks
+                  </Link>
+                  <Link
+                    href="/buy-the-dip-stocks"
+                    style={{ color: "#93c5fd", textDecoration: "none" }}
+                  >
+                    Buy The Dip Stocks
+                  </Link>
+                  <Link
+                    href="/bullish-divergence-stocks"
+                    style={{ color: "#93c5fd", textDecoration: "none" }}
+                  >
+                    Bullish Divergence Stocks
+                  </Link>
+                  <Link
+                    href="/bearish-divergence-stocks"
+                    style={{ color: "#93c5fd", textDecoration: "none" }}
+                  >
+                    Bearish Divergence Stocks
+                  </Link>
+                </div>
+
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0" }}>
+                    Company
+                  </div>
+
+                  <Link href="/about" style={{ color: "#93c5fd", textDecoration: "none" }}>
+                    About
+                  </Link>
+                  <Link href="/contact" style={{ color: "#93c5fd", textDecoration: "none" }}>
+                    Contact
+                  </Link>
+                </div>
+
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0" }}>
+                    Legal
+                  </div>
+
+                  <Link
+                    href="/risk-disclaimer"
+                    style={{ color: "#93c5fd", textDecoration: "none" }}
+                  >
+                    Risk Disclaimer
+                  </Link>
+                  <Link
+                    href="/affiliate-disclosure"
+                    style={{ color: "#93c5fd", textDecoration: "none" }}
+                  >
+                    Affiliate Disclosure
+                  </Link>
+                  <Link
+                    href="/privacy-policy"
+                    style={{ color: "#93c5fd", textDecoration: "none" }}
+                  >
+                    Privacy Policy
+                  </Link>
+                </div>
               </div>
             </div>
           </footer>
