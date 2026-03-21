@@ -3,27 +3,23 @@ import Link from "next/link";
 import PickersClient from "./PickersClient";
 import BookmarkPromptButton from "./BookmarkPromptButton";
 
-export const metadata: Metadata = {
-  title:
-    "Stock Screener Ideas: Oversold, Overbought, Divergence, Dip Buys & Breakouts | MyStockHarbor",
+export const metadata = {
+  title: "Stock Screener: Breakouts, Oversold, Divergence & Dip Buys | MyStockHarbor",
   description:
-    "Find stock ideas using signal-based filters including oversold setups, overbought setups, divergence scans, buy-the-dip candidates and breakout stocks. Open any symbol directly in the MyStockHarbor dashboard.",
-  alternates: {
-    canonical: "/pickers",
-  },
+    "Find stocks near key technical levels like MA200, oversold conditions, breakouts and divergence setups. Open any stock instantly in the dashboard.",
   openGraph: {
-    title: "Stock Screener Ideas | MyStockHarbor",
+    title: "Stocks Near Key Technical Levels (MA200, Breakouts, Divergence)",
     description:
-      "Browse stock ideas by setup: oversold, overbought, divergence, dip buys and breakouts.",
-    url: "/pickers",
+      "Live stock ideas including MA200 proximity, oversold setups, breakouts and divergence signals.",
+    url: "https://mystockharbor.com/pickers",
     siteName: "MyStockHarbor",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Stock Screener Ideas | MyStockHarbor",
+    title: "Stocks Near Key Technical Levels (MA200, Breakouts, Divergence)",
     description:
-      "Browse stock ideas by setup: oversold, overbought, divergence, dip buys and breakouts.",
+      "Browse live stock setups including MA200 proximity, breakouts and divergence signals.",
   },
 };
 
