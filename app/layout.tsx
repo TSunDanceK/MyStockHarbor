@@ -32,6 +32,11 @@ export default function RootLayout({
     textDecoration: "none",
   };
 
+  const footerSmallLinkStyle: React.CSSProperties = {
+    color: "rgba(241,245,249,0.58)",
+    textDecoration: "none",
+  };
+
   return (
     <html lang="en">
       <head>
@@ -74,7 +79,7 @@ export default function RootLayout({
               borderTop: "1px solid rgba(255,255,255,0.12)",
               background: "#0b1220",
               color: "rgba(241,245,249,0.82)",
-              padding: "32px 20px 22px",
+              padding: "22px 20px 16px",
             }}
           >
             <div
@@ -82,13 +87,13 @@ export default function RootLayout({
                 maxWidth: 1200,
                 margin: "0 auto",
                 display: "grid",
-                gap: 24,
+                gap: 16,
               }}
             >
               <div
                 style={{
                   display: "grid",
-                  gap: 10,
+                  gap: 6,
                   maxWidth: 760,
                 }}
               >
@@ -104,8 +109,9 @@ export default function RootLayout({
 
                 <div
                   style={{
-                    fontSize: 13,
-                    lineHeight: 1.6,
+                    fontSize: 12,
+                    lineHeight: 1.55,
+                    color: "rgba(241,245,249,0.78)",
                   }}
                 >
                   MyStockHarbor is designed for educational purposes and general
@@ -117,15 +123,15 @@ export default function RootLayout({
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-                  gap: "24px 28px",
+                  gridTemplateColumns: "minmax(280px, 2fr) minmax(140px, 1fr) minmax(180px, 1fr)",
+                  gap: "16px 28px",
                   alignItems: "start",
                 }}
               >
                 <div
                   style={{
                     display: "grid",
-                    gap: 10,
+                    gap: 6,
                     alignContent: "start",
                   }}
                 >
@@ -136,24 +142,30 @@ export default function RootLayout({
                       color: "#e2e8f0",
                     }}
                   >
-                    Platform
+                    Platforms
                   </div>
 
-                  <div style={{ display: "grid", gap: 6 }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(2, minmax(120px, max-content))",
+                      gap: "4px 28px",
+                    }}
+                  >
                     <Link href="/" style={footerLinkStyle}>
                       Dashboard
-                    </Link>
-                    <Link href="/pickers" style={footerLinkStyle}>
-                      Stock Pickers
-                    </Link>
-                    <Link href="/insights" style={footerLinkStyle}>
-                      Insights
                     </Link>
                     <Link href="/learn" style={footerLinkStyle}>
                       Learn
                     </Link>
+                    <Link href="/pickers" style={footerLinkStyle}>
+                      Stock Pickers
+                    </Link>
                     <Link href="/platforms" style={footerLinkStyle}>
                       Platforms
+                    </Link>
+                    <Link href="/insights" style={footerLinkStyle}>
+                      Insights
                     </Link>
                     <Link href="/utilities" style={footerLinkStyle}>
                       Utilities
@@ -164,49 +176,7 @@ export default function RootLayout({
                 <div
                   style={{
                     display: "grid",
-                    gap: 10,
-                    alignContent: "start",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: "#e2e8f0",
-                    }}
-                  >
-                    Popular Pages
-                  </div>
-
-                  <div style={{ display: "grid", gap: 6 }}>
-                    <Link href="/breakout-stocks" style={footerLinkStyle}>
-                      Breakout Stocks
-                    </Link>
-                    <Link href="/oversold-stocks" style={footerLinkStyle}>
-                      Oversold Stocks
-                    </Link>
-                    <Link href="/buy-the-dip-stocks" style={footerLinkStyle}>
-                      Buy The Dip Stocks
-                    </Link>
-                    <Link
-                      href="/bullish-divergence-stocks"
-                      style={footerLinkStyle}
-                    >
-                      Bullish Divergence Stocks
-                    </Link>
-                    <Link
-                      href="/bearish-divergence-stocks"
-                      style={footerLinkStyle}
-                    >
-                      Bearish Divergence Stocks
-                    </Link>
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    display: "grid",
-                    gap: 10,
+                    gap: 6,
                     alignContent: "start",
                   }}
                 >
@@ -220,7 +190,7 @@ export default function RootLayout({
                     Company
                   </div>
 
-                  <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ display: "grid", gap: 4 }}>
                     <Link href="/about" style={footerLinkStyle}>
                       About
                     </Link>
@@ -233,7 +203,7 @@ export default function RootLayout({
                 <div
                   style={{
                     display: "grid",
-                    gap: 10,
+                    gap: 6,
                     alignContent: "start",
                   }}
                 >
@@ -247,7 +217,7 @@ export default function RootLayout({
                     Legal
                   </div>
 
-                  <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ display: "grid", gap: 4 }}>
                     <Link href="/risk-disclaimer" style={footerLinkStyle}>
                       Risk Disclaimer
                     </Link>
@@ -264,7 +234,59 @@ export default function RootLayout({
               <div
                 style={{
                   borderTop: "1px solid rgba(255,255,255,0.08)",
-                  paddingTop: 14,
+                  paddingTop: 10,
+                  display: "grid",
+                  gap: 6,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "rgba(241,245,249,0.72)",
+                    letterSpacing: 0.2,
+                  }}
+                >
+                  Other Links
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: "6px 16px",
+                    fontSize: 12,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  <Link href="/breakout-stocks" style={footerSmallLinkStyle}>
+                    Breakout Stocks
+                  </Link>
+                  <Link href="/oversold-stocks" style={footerSmallLinkStyle}>
+                    Oversold Stocks
+                  </Link>
+                  <Link href="/buy-the-dip-stocks" style={footerSmallLinkStyle}>
+                    Buy The Dip Stocks
+                  </Link>
+                  <Link
+                    href="/bullish-divergence-stocks"
+                    style={footerSmallLinkStyle}
+                  >
+                    Bullish Divergence Stocks
+                  </Link>
+                  <Link
+                    href="/bearish-divergence-stocks"
+                    style={footerSmallLinkStyle}
+                  >
+                    Bearish Divergence Stocks
+                  </Link>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  borderTop: "1px solid rgba(255,255,255,0.08)",
+                  paddingTop: 10,
                   fontSize: 12,
                   color: "rgba(241,245,249,0.56)",
                 }}
