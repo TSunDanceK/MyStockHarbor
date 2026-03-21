@@ -635,8 +635,7 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                     </div>
                   </div>
                 </div>
-                </>
-              ) : (
+               ) : (
                 <div style={{ marginTop: 16, opacity: 0.78 }}>
                   Not enough chart data to show a snapshot.
                 </div>
