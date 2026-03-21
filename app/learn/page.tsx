@@ -20,22 +20,14 @@ export default function LearnPage() {
     
       <div className="wrap">
         <div style={{ display: "grid", gap: 12 }}>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "flex-end",
-              alignItems: "flex-start",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                gap: 10,
-                flexWrap: "wrap",
-                justifyContent: "flex-end",
-              }}
-            >
-              <Link href="/" style={topNavBtnStyle("dashboard")}>
+          <div className="topNavOuter">
+            <div className="topNavRow">
+              <Link
+                href="/"
+                style={topNavBtnStyle("dashboard")}
+                className="topNavBtn dashboardIconOnlyBtn"
+                aria-label="Dashboard"
+              >
                 <span
                   aria-hidden="true"
                   style={{
@@ -48,10 +40,14 @@ export default function LearnPage() {
                 >
                   {topNavIcon("dashboard")}
                 </span>
-                <span>Dashboard</span>
+                <span className="topNavLabel dashboardLabel">Dashboard</span>
               </Link>
 
-              <Link href="/platforms" style={topNavBtnStyle("platforms")}>
+              <Link
+                href="/platforms"
+                style={topNavBtnStyle("platforms")}
+                className="topNavBtn mobileTextBtn"
+              >
                 <span
                   aria-hidden="true"
                   style={{
@@ -64,10 +60,14 @@ export default function LearnPage() {
                 >
                   {topNavIcon("platforms")}
                 </span>
-                <span>Platforms</span>
+                <span className="topNavLabel">Platforms</span>
               </Link>
 
-              <Link href="/pickers" style={topNavBtnStyle("pickers")}>
+              <Link
+                href="/pickers"
+                style={topNavBtnStyle("pickers")}
+                className="topNavBtn mobileTextBtn"
+              >
                 <span
                   aria-hidden="true"
                   style={{
@@ -80,10 +80,15 @@ export default function LearnPage() {
                 >
                   {topNavIcon("pickers")}
                 </span>
-                <span>Stock Pickers</span>
+                <span className="topNavLabel">Pickers</span>
               </Link>
 
-              <Link href="/utilities" style={topNavBtnStyle("calculators")}>
+              <Link
+                href="/utilities"
+                style={topNavBtnStyle("calculators")}
+                className="topNavBtn calculatorsIconOnlyBtn"
+                aria-label="Calculators"
+              >
                 <span
                   aria-hidden="true"
                   style={{
@@ -96,7 +101,7 @@ export default function LearnPage() {
                 >
                   {topNavIcon("calculators")}
                 </span>
-                <span>Calculators</span>
+                <span className="topNavLabel calculatorsLabel">Calculators</span>
               </Link>
             </div>
           </div>
@@ -429,7 +434,33 @@ export default function LearnPage() {
       </div>
 
       <style>{`
-        .wrap { max-width: 980px; margin: 0 auto; padding: 24px; }
+        .wrap {
+          max-width: 980px;
+          margin: 0 auto;
+          padding: 24px;
+        }
+
+        .topNavOuter {
+          display: flex;
+          justify-content: flex-end;
+          align-items: flex-start;
+        }
+
+        .topNavRow {
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+
+        .topNavBtn {
+          flex: 0 0 auto;
+        }
+
+        .topNavLabel {
+          display: inline-flex;
+          align-items: center;
+        }
 
         a:hover {
           filter: brightness(1.05);
@@ -437,7 +468,37 @@ export default function LearnPage() {
         }
 
         @media (max-width: 760px) {
-          .wrap { padding: 16px !important; }
+          .wrap {
+            padding: 16px !important;
+          }
+
+          .topNavRow {
+            width: 100%;
+            gap: 8px !important;
+            flex-wrap: nowrap !important;
+            justify-content: stretch !important;
+          }
+
+          .topNavBtn {
+            min-width: 0 !important;
+            min-height: 40px !important;
+            padding: 9px 10px !important;
+            border-radius: 12px !important;
+            font-size: 13px !important;
+            gap: 6px !important;
+            flex: 1 1 0 !important;
+          }
+
+          .dashboardIconOnlyBtn,
+          .calculatorsIconOnlyBtn {
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+          }
+
+          .dashboardLabel,
+          .calculatorsLabel {
+            display: none !important;
+          }
         }
       `}</style>
     </main>
