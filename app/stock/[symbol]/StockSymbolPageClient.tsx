@@ -376,37 +376,40 @@ export default function StockSymbolPageClient({ symbol }: { symbol: string }) {
       }}
     >
       <div className="wrap">
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 12,
-            alignItems: "center",
-            flexWrap: "wrap",
-            marginBottom: 18,
-          }}
-        >
-          <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-            <Link href="/" style={topLinkStyle("blue")}>
-              ← Dashboard
+        <div className="analysisTopUtilityRow" style={topUtilityRowStyle}>
+          <div className="analysisTopUtilityInner" style={topUtilityInnerStyle}>
+            <Link
+              href={`/?symbol=${encodeURIComponent(symbol)}`}
+              className="analysisTopBtn"
+              style={topUtilityBtnStyle("gold")}
+            >
+              📈 Dashboard
             </Link>
-            <Link href="/pickers" style={topLinkStyle("red")}>
-              Stock Pickers
+
+            <Link
+              href="/platforms"
+              className="analysisTopBtn"
+              style={topUtilityBtnStyle("green")}
+            >
+              🏦 Platforms
             </Link>
-            <Link href="/learn" style={topLinkStyle("green")}>
-              Learn
+
+            <Link
+              href="/pickers"
+              className="analysisTopBtn"
+              style={topUtilityBtnStyle("red")}
+            >
+              📊 Stock Pickers
+            </Link>
+
+            <Link
+              href="/learn"
+              className="analysisTopBtn"
+              style={topUtilityBtnStyle("blue")}
+            >
+              📘 Learn
             </Link>
           </div>
-
-          <Link
-            href={`/?symbol=${encodeURIComponent(symbol)}`}
-            style={{
-              ...topLinkStyle("blue"),
-              fontWeight: 900,
-            }}
-          >
-            Open Full Interactive Chart →
-          </Link>
         </div>
 
         <section
@@ -926,77 +929,113 @@ export default function StockSymbolPageClient({ symbol }: { symbol: string }) {
             grid-template-columns: 1fr !important;
           }
         }
+
+        @media (max-width: 820px) {
+          .analysisTopUtilityRow {
+            justify-content: stretch !important;
+          }
+
+          .analysisTopUtilityInner {
+            width: 100%;
+            justify-content: stretch !important;
+            gap: 10px !important;
+          }
+
+          .analysisTopBtn {
+            flex: 1 1 calc(50% - 5px);
+            justify-content: center !important;
+            min-height: 44px !important;
+            padding: 11px 12px !important;
+            font-size: 13px !important;
+          }
+        }
+
+        @media (max-width: 560px) {
+          .analysisTopUtilityInner {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            width: 100%;
+          }
+
+          .analysisTopBtn {
+            width: 100%;
+            min-width: 0;
+          }
+        }
       `}</style>
     </main>
   );
 }
 
-function topLinkStyle(tint: "blue" | "green" | "red"): React.CSSProperties {
-  if (tint === "green") {
-    return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-      minHeight: 42,
-      padding: "9px 13px",
-      borderRadius: 14,
-      border: "1px solid rgba(34,197,94,0.45)",
-      background:
-        "linear-gradient(135deg, rgba(34,197,94,0.20), rgba(16,185,129,0.10))",
-      color: "#f0fdf4",
-      textDecoration: "none",
-      fontWeight: 900,
-      fontSize: 14,
-      whiteSpace: "nowrap",
-      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-      transition:
-        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-    };
-  }
+const topUtilityRowStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "flex-end",
+  alignItems: "center",
+  marginBottom: 18,
+};
 
-  if (tint === "red") {
-    return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-      minHeight: 42,
-      padding: "9px 13px",
-      borderRadius: 14,
-      border: "1px solid rgba(239,68,68,0.45)",
-      background:
-        "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.10))",
-      color: "#fef2f2",
-      textDecoration: "none",
-      fontWeight: 900,
-      fontSize: 14,
-      whiteSpace: "nowrap",
-      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-      transition:
-        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-    };
-  }
+const topUtilityInnerStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 12,
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
+};
 
-  return {
+function topUtilityBtnStyle(
+  type: "gold" | "green" | "red" | "blue"
+): React.CSSProperties {
+  const base: React.CSSProperties = {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    minHeight: 42,
-    padding: "9px 13px",
+    minHeight: 40,
+    padding: "9px 14px",
     borderRadius: 14,
-    border: "1px solid rgba(59,130,246,0.45)",
-    background:
-      "linear-gradient(135deg, rgba(59,130,246,0.20), rgba(37,99,235,0.10))",
-    color: "#eff6ff",
     textDecoration: "none",
+    fontSize: 13,
     fontWeight: 900,
-    fontSize: 14,
+    lineHeight: 1,
     whiteSpace: "nowrap",
     boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-    transition:
-      "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
+  };
+
+  if (type === "gold") {
+    return {
+      ...base,
+      border: "1px solid rgba(250,204,21,0.34)",
+      background:
+        "linear-gradient(135deg, rgba(250,204,21,0.18), rgba(202,138,4,0.08))",
+      color: "#fef3c7",
+    };
+  }
+
+  if (type === "green") {
+    return {
+      ...base,
+      border: "1px solid rgba(34,197,94,0.30)",
+      background:
+        "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))",
+      color: "#dcfce7",
+    };
+  }
+
+  if (type === "red") {
+    return {
+      ...base,
+      border: "1px solid rgba(248,113,113,0.28)",
+      background:
+        "linear-gradient(135deg, rgba(248,113,113,0.16), rgba(185,28,28,0.08))",
+      color: "#fee2e2",
+    };
+  }
+
+  return {
+    ...base,
+    border: "1px solid rgba(59,130,246,0.30)",
+    background:
+      "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(37,99,235,0.08))",
+    color: "#dbeafe",
   };
 }
 
