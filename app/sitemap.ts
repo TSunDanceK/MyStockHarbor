@@ -1,8 +1,10 @@
 import type { MetadataRoute } from "next";
+import { getAllPosts } from "@/lib/blog";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const baseUrl = "https://mystockharbor.com";
   const now = new Date();
+  const insightPosts = getAllPosts();
 
   const mainPages = [
     { path: "", changeFrequency: "daily" as const, priority: 1 },
@@ -10,8 +12,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: "/pickers", changeFrequency: "daily" as const, priority: 0.9 },
     { path: "/platforms", changeFrequency: "weekly" as const, priority: 0.8 },
     { path: "/utilities", changeFrequency: "weekly" as const, priority: 0.7 },
+    { path: "/insights", changeFrequency: "daily" as const, priority: 0.85 },
     { path: "/about", changeFrequency: "monthly" as const, priority: 0.5 },
     { path: "/contact", changeFrequency: "monthly" as const, priority: 0.5 },
+    { path: "/privacy-policy", changeFrequency: "monthly" as const, priority: 0.4 },
+    { path: "/affiliate-disclosure", changeFrequency: "monthly" as const, priority: 0.4 },
     { path: "/risk-disclaimer", changeFrequency: "monthly" as const, priority: 0.4 },
   ];
 
@@ -248,6 +253,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.8,
   }));
 
+  const insightEntries = insightPosts.map((post) => ({
+    url: `${baseUrl}/insights/${post.slug}`,
+    lastModified: post.date ? new Date(post.date) : now,
+    changeFrequency: "monthly" as const,
+    priority: 0.7,
+  }));
+
   const stockEntries = stocks.map((symbol) => ({
     url: `${baseUrl}/stock/${encodeURIComponent(symbol.toUpperCase())}`,
     lastModified: now,
@@ -279,6 +291,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return [
     ...mainPageEntries,
     ...seoGuideEntries,
+    ...insightEntries,
     ...stockEntries,
     ...stockNewsEntries,
     ...etfEntries,
