@@ -3183,6 +3183,109 @@ return (
     );
   }
 
+    function InsightsPanel() {
+    return (
+      <SectionCard title="Latest Market Insights">
+        <div style={{ display: "grid", gap: 14 }}>
+          <div
+            style={{
+              border: `1px solid ${COLORS.border}`,
+              borderRadius: 16,
+              padding: 16,
+              background: COLORS.controlBg,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 900,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                color: COLORS.mutedFg,
+              }}
+            >
+              Fresh content
+            </div>
+
+            <div
+              style={{
+                marginTop: 8,
+                fontSize: isMobile ? 20 : 22,
+                fontWeight: 950,
+                lineHeight: 1.15,
+              }}
+            >
+              Read the latest stock market insights and trade ideas
+            </div>
+
+            <div
+              style={{
+                marginTop: 8,
+                fontSize: 14,
+                lineHeight: 1.65,
+                color: COLORS.mutedFg,
+                maxWidth: 760,
+              }}
+            >
+              Explore chart-based market insights, trade ideas, technical analysis
+              write-ups and stock breakdowns from MyStockHarbor.
+            </div>
+
+            <div
+              style={{
+                marginTop: 14,
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+                alignItems: "center",
+              }}
+            >
+              <Link
+                href="/insights"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "12px 16px",
+                  borderRadius: 14,
+                  border: "1px solid rgba(59,130,246,0.32)",
+                  background:
+                    "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
+                  color: "#eff6ff",
+                  textDecoration: "none",
+                  fontWeight: 900,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Open Insights →
+              </Link>
+
+              <Link
+                href="/pickers"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "12px 16px",
+                  borderRadius: 14,
+                  border: "1px solid rgba(34,197,94,0.28)",
+                  background:
+                    "linear-gradient(135deg, rgba(34,197,94,0.14), rgba(16,185,129,0.08))",
+                  color: "#dcfce7",
+                  textDecoration: "none",
+                  fontWeight: 900,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Scan Stock Pickers →
+              </Link>
+            </div>
+          </div>
+        </div>
+      </SectionCard>
+    );
+  }
+
     function MobileHero() {
     return (
       <section
@@ -3881,6 +3984,10 @@ return (
             <div className="msh-lower-grid">
               <BenchmarksPanel />
             </div>
+
+            <div className="msh-lower-grid">
+              <InsightsPanel />
+            </div>
           </>
         ) : (
           <>
@@ -3898,6 +4005,7 @@ return (
             <div className="msh-lower-grid">
               <BenchmarksPanel />
               <NewsPanel />
+              <InsightsPanel />
             </div>
           </>
         )}
