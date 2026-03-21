@@ -249,14 +249,19 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
     [lastClose, lastMA50, lastMA200]
   );
 
-  const ma50Pct = pctFromBase(lastClose, typeof lastMA50 === "number" ? lastMA50 : null);
-  const ma200Pct = pctFromBase(lastClose, typeof lastMA200 === "number" ? lastMA200 : null);
+  const ma50Pct = pctFromBase(
+    lastClose,
+    typeof lastMA50 === "number" ? lastMA50 : null
+  );
+  const ma200Pct = pctFromBase(
+    lastClose,
+    typeof lastMA200 === "number" ? lastMA200 : null
+  );
 
   const insightTag = useMemo(
     () => inferInsightTag(post.title, post.excerpt, post.contentHtml),
     [post.title, post.excerpt, post.contentHtml]
   );
-
 
   const chartSlice = history.slice(-240);
   const ma50Slice = ma50.slice(-240);
@@ -390,8 +395,13 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
           <div className="insightSummaryGrid" style={{ marginTop: 18 }}>
             <div style={summaryCardStyle}>
               <div style={miniLabelStyle}>Last price</div>
-              <div className="insightPriceValue" style={{ marginTop: 8, fontWeight: 950 }}>
-                {typeof quote?.price === "number" ? `$${quote.price.toFixed(2)}` : "—"}
+              <div
+                className="insightPriceValue"
+                style={{ marginTop: 8, fontWeight: 950 }}
+              >
+                {typeof quote?.price === "number"
+                  ? `$${quote.price.toFixed(2)}`
+                  : "—"}
               </div>
               <div style={{ marginTop: 8, fontSize: 13, opacity: 0.72 }}>
                 {quote?.date && quote?.time
@@ -406,11 +416,11 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
 
             <div style={summaryCardStyle}>
               <div style={miniLabelStyle}>Trend structure</div>
-<div
-  className="insightTrendValue"
-  style={{
-    marginTop: 8,
-    fontWeight: 950,
+              <div
+                className="insightTrendValue"
+                style={{
+                  marginTop: 8,
+                  fontWeight: 950,
                   color:
                     trend === "Uptrend"
                       ? "#22c55e"
@@ -422,7 +432,8 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                 {symbol ? trend : "Article"}
               </div>
               <div style={{ marginTop: 8, fontSize: 13, opacity: 0.72 }}>
-                {companyName || (symbol ? `${symbol} chart structure` : "Editorial insight")}
+                {companyName ||
+                  (symbol ? `${symbol} chart structure` : "Editorial insight")}
               </div>
             </div>
           </div>
@@ -464,7 +475,7 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                   letterSpacing: "-0.03em",
                 }}
               >
-                 {symbol} chart with Daily MA50 and Daily MA200
+                {symbol} chart with Daily MA50 and Daily MA200
               </h2>
 
               <p
@@ -477,16 +488,18 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                 }}
               >
                 This insight includes a daily chart snapshot so the written
-                breakdown can be compared against daily price structure, Daily MA50
-                and Daily MA200.
+                breakdown can be compared against daily price structure, Daily
+                MA50 and Daily MA200.
               </p>
 
               {loadingMarket ? (
                 <div style={{ marginTop: 16, opacity: 0.78 }}>
                   Loading chart snapshot…
                 </div>
-              ) : marketError ? ( 
-                <div style={{ marginTop: 16, opacity: 0.78 }}>{marketError}</div>
+              ) : marketError ? (
+                <div style={{ marginTop: 16, opacity: 0.78 }}>
+                  {marketError}
+                </div>
               ) : chartSlice.length >= 2 ? (
                 <>
                   <div style={{ marginTop: 16 }}>
@@ -511,11 +524,15 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                     <div style={smallStatCardStyle}>
                       <div style={smallStatLabelStyle}>Daily MA50</div>
                       <div style={smallStatValueStyle}>
-                        {typeof lastMA50 === "number" ? `$${lastMA50.toFixed(2)}` : "—"}
+                        {typeof lastMA50 === "number"
+                          ? `$${lastMA50.toFixed(2)}`
+                          : "—"}
                       </div>
                       <div style={smallStatMetaStyle}>
                         {typeof ma50Pct === "number"
-                          ? `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}% vs price`
+                          ? `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(
+                              2
+                            )}% vs price`
                           : "Distance unavailable"}
                       </div>
                     </div>
@@ -523,11 +540,15 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                     <div style={smallStatCardStyle}>
                       <div style={smallStatLabelStyle}>Daily MA200</div>
                       <div style={smallStatValueStyle}>
-                        {typeof lastMA200 === "number" ? `$${lastMA200.toFixed(2)}` : "—"}
+                        {typeof lastMA200 === "number"
+                          ? `$${lastMA200.toFixed(2)}`
+                          : "—"}
                       </div>
                       <div style={smallStatMetaStyle}>
                         {typeof ma200Pct === "number"
-                          ? `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}% vs price`
+                          ? `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(
+                              2
+                            )}% vs price`
                           : "Distance unavailable"}
                       </div>
                     </div>
@@ -544,11 +565,18 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                       flexWrap: "wrap",
                     }}
                   >
-                    <div className="insightChartActionsDesktop" style={{ fontSize: 13, opacity: 0.74 }}>
-                      Compare this chart snapshot with the full dashboard, latest headlines, or TradingView.
+                    <div
+                      className="insightChartActionsDesktop"
+                      style={{ fontSize: 13, opacity: 0.74 }}
+                    >
+                      Compare this chart snapshot with the full dashboard,
+                      latest headlines, or TradingView.
                     </div>
 
-                    <div className="insightChartActionsMobile" style={{ fontSize: 13, opacity: 0.78 }}>
+                    <div
+                      className="insightChartActionsMobile"
+                      style={{ fontSize: 13, opacity: 0.78 }}
+                    >
                       Quick links for {symbol}
                     </div>
 
@@ -587,21 +615,21 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                         Open chart dashboard →
                       </Link>
 
-<Link
-  href={`/stock/${encodeURIComponent(symbol)}/news`}
-  className="insightMobileOnly insightMobileButton"
-  style={chartActionStyle("gold")}
->
-  {symbol} headlines
-</Link>
+                      <Link
+                        href={`/stock/${encodeURIComponent(symbol)}/news`}
+                        className="insightMobileOnly insightMobileButton"
+                        style={chartActionStyle("gold")}
+                      >
+                        {symbol} headlines
+                      </Link>
 
-<Link
-  href={`/stock/${encodeURIComponent(symbol)}`}
-  className="insightMobileOnly insightMobileButton"
-  style={chartActionStyle("blue")}
->
-  {symbol} stock page
-</Link>
+                      <Link
+                        href={`/stock/${encodeURIComponent(symbol)}`}
+                        className="insightMobileOnly insightMobileButton"
+                        style={chartActionStyle("blue")}
+                      >
+                        {symbol} stock page
+                      </Link>
                     </div>
                   </div>
                 </>
@@ -643,7 +671,9 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
             padding: 18,
           }}
         >
-          <div style={{ fontWeight: 900, marginBottom: 8 }}>Continue exploring</div>
+          <div style={{ fontWeight: 900, marginBottom: 8 }}>
+            Continue exploring
+          </div>
 
           <div className="insightExploreGrid">
             <Link href="/pickers" style={ctaStyle("green")}>
@@ -762,19 +792,19 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
             padding-right: 12px !important;
           }
 
-.insightPriceValue {
-  font-size: 26px !important;
-}
+          .insightPriceValue {
+            font-size: 26px !important;
+          }
 
-.insightTrendValue {
-  font-size: 22px !important;
-  line-height: 1.1 !important;
-}
+          .insightTrendValue {
+            font-size: 22px !important;
+            line-height: 1.1 !important;
+          }
 
-.insightMobileButton {
-  font-size: 13px !important;
-  padding: 10px 10px !important;
-}
+          .insightMobileButton {
+            font-size: 13px !important;
+            padding: 10px 10px !important;
+          }
 
           .insightHeroTitle {
             font-size: 30px !important;
@@ -1042,18 +1072,16 @@ const miniLabelStyle: React.CSSProperties = {
   letterSpacing: "0.05em",
 };
 
-function smallStatCardStyle(): React.CSSProperties {
-  return {
-    borderRadius: 14,
-    border: "1px solid rgba(255,255,255,0.10)",
-    background: "rgba(255,255,255,0.04)",
-    padding: "10px 10px",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-    minHeight: 0,
-  };
-}
+const smallStatCardStyle: React.CSSProperties = {
+  border: "1px solid rgba(255,255,255,0.10)",
+  borderRadius: 14,
+  padding: "10px 10px",
+  background: "rgba(255,255,255,0.04)",
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "center",
+  minHeight: 0,
+};
 
 const smallStatLabelStyle: React.CSSProperties = {
   fontSize: 12,
@@ -1064,17 +1092,15 @@ const smallStatLabelStyle: React.CSSProperties = {
   letterSpacing: "0.05em",
 };
 
-function smallStatMetaStyle(): React.CSSProperties {
-  return {
-    marginTop: 2,
-    fontSize: 11,
-    opacity: 0.7,
-  };
-}
+const smallStatValueStyle: React.CSSProperties = {
+  marginTop: 4,
+  fontSize: 16,
+  fontWeight: 900,
+};
 
 const smallStatMetaStyle: React.CSSProperties = {
-  marginTop: 8,
-  fontSize: 13,
-  opacity: 0.72,
-  lineHeight: 1.55,
+  marginTop: 2,
+  fontSize: 11,
+  opacity: 0.7,
+  lineHeight: 1.35,
 };
