@@ -616,21 +616,23 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                       </Link>
 
                       <Link
-                        href={`/stock/${encodeURIComponent(symbol)}/news`}
-                        className="insightMobileOnly insightMobileButton"
-                        style={chartActionStyle("gold")}
-                      >
-                        {symbol} headlines
-                      </Link>
+<div className="insightMobileOnlyWrapper">
+  <Link
+    href={`/stock/${encodeURIComponent(symbol)}/news`}
+    className="insightMobileButton"
+    style={chartActionStyle("gold")}
+  >
+    {symbol} headlines
+  </Link>
 
-                      <Link
-                        href={`/stock/${encodeURIComponent(symbol)}`}
-                        className="insightMobileOnly insightMobileButton"
-                        style={chartActionStyle("blue")}
-                      >
-                        {symbol} stock page
-                      </Link>
-                    </div>
+  <Link
+    href={`/stock/${encodeURIComponent(symbol)}`}
+    className="insightMobileButton"
+    style={chartActionStyle("blue")}
+  >
+    {symbol} stock page
+  </Link>
+</div>
                   </div>
                 </>
               ) : (
@@ -717,6 +719,18 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
           grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 12px;
         }
+        .insightMobileOnlyWrapper {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .insightMobileOnlyWrapper {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    width: 100%;
+  }
+}
 
         .insightDesktopOnly {
           display: inline-flex;
