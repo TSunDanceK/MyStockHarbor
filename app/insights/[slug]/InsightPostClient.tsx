@@ -390,7 +390,7 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
           <div className="insightSummaryGrid" style={{ marginTop: 18 }}>
             <div style={summaryCardStyle}>
               <div style={miniLabelStyle}>Last price</div>
-              <div style={{ marginTop: 8, fontSize: 32, fontWeight: 950 }}>
+              <div className="insightPriceValue" style={{ marginTop: 8, fontWeight: 950 }}>
                 {typeof quote?.price === "number" ? `$${quote.price.toFixed(2)}` : "—"}
               </div>
               <div style={{ marginTop: 8, fontSize: 13, opacity: 0.72 }}>
@@ -406,11 +406,11 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
 
             <div style={summaryCardStyle}>
               <div style={miniLabelStyle}>Trend structure</div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 32,
-                  fontWeight: 950,
+<div
+  className="insightTrendValue"
+  style={{
+    marginTop: 8,
+    fontWeight: 950,
                   color:
                     trend === "Uptrend"
                       ? "#22c55e"
@@ -587,21 +587,21 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                         Open chart dashboard →
                       </Link>
 
-                      <Link
-                        href={`/stock/${encodeURIComponent(symbol)}/news`}
-                        className="insightMobileOnly"
-                        style={chartActionStyle("gold")}
-                      >
-                        {symbol} headlines →
-                      </Link>
+<Link
+  href={`/stock/${encodeURIComponent(symbol)}/news`}
+  className="insightMobileOnly insightMobileButton"
+  style={chartActionStyle("gold")}
+>
+  {symbol} headlines
+</Link>
 
-                      <Link
-                        href={`/stock/${encodeURIComponent(symbol)}`}
-                        className="insightMobileOnly"
-                        style={chartActionStyle("blue")}
-                      >
-                        {symbol} stock page →
-                      </Link>
+<Link
+  href={`/stock/${encodeURIComponent(symbol)}`}
+  className="insightMobileOnly insightMobileButton"
+  style={chartActionStyle("blue")}
+>
+  {symbol} stock page
+</Link>
                     </div>
                   </div>
                 </>
@@ -761,6 +761,19 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
             padding-left: 12px !important;
             padding-right: 12px !important;
           }
+
+.insightPriceValue {
+  font-size: 26px !important;
+}
+
+.insightTrendValue {
+  font-size: 26px !important;
+}
+
+.insightMobileButton {
+  font-size: 13px !important;
+  padding: 10px 10px !important;
+}
 
           .insightHeroTitle {
             font-size: 30px !important;
