@@ -698,7 +698,7 @@ export default function UtilitiesClientPage() {
               against you while using leverage.
             </p>
 
-            <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
+            <div className="calcFieldGrid" style={{ marginTop: 18 }}>
               <div>
                 <div style={labelStyle()}>
                   Trade Direction
@@ -714,6 +714,18 @@ export default function UtilitiesClientPage() {
                   <option value="long">Long</option>
                   <option value="short">Short</option>
                 </select>
+              </div>
+
+              <div>
+                <div style={labelStyle()}>
+                  Leverage
+                  <HelpTip text="How much borrowed money is used. 2× leverage means you control double your capital." />
+                </div>
+                <input
+                  value={marginLeverage}
+                  onChange={(e) => setMarginLeverage(e.target.value)}
+                  style={inputStyle()}
+                />
               </div>
 
               <div>
@@ -739,24 +751,12 @@ export default function UtilitiesClientPage() {
                   style={inputStyle()}
                 />
               </div>
-
-              <div>
-                <div style={labelStyle()}>
-                  Leverage
-                  <HelpTip text="How much borrowed money is used. 2× leverage means you control double your capital." />
-                </div>
-                <input
-                  value={marginLeverage}
-                  onChange={(e) => setMarginLeverage(e.target.value)}
-                  style={inputStyle()}
-                />
-              </div>
             </div>
 
-            <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
-              <div style={tintBox(liquidationColor)}>
-                <div style={resultLabelStyle()}>
-                  Liquidation Price
+            <div className="calcResultGrid" style={{ marginTop: 18 }}>
+              <div className="mobileCompactResultCard" style={tintBox(liquidationColor)}>
+                <div className="mobileCompactResultLabel" style={resultLabelStyle()}>
+                  <span className="mobileCompactResultText">Liquidation Price</span>
                   <HelpTip text="Estimated liquidation price only. Some brokers may calculate liquidation differently." />
                   {liquidationColor === "red" ? (
                     <span
@@ -770,14 +770,14 @@ export default function UtilitiesClientPage() {
                     </span>
                   ) : null}
                 </div>
-                <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
+                <div className="mobileCompactResultValue" style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
                   {fmtMoney(marginCalc.liquidationPrice)}
                 </div>
               </div>
 
-              <div style={tintBox(liquidationColor)}>
-                <div style={resultLabelStyle()}>
-                  Distance to Liquidation
+              <div className="mobileCompactResultCard" style={tintBox(liquidationColor)}>
+                <div className="mobileCompactResultLabel" style={resultLabelStyle()}>
+                  <span className="mobileCompactResultText">Distance to Liquidation</span>
                   <HelpTip text="Shows how far price can move against your trade before estimated liquidation. Some brokers may calculate liquidation differently." />
                   {liquidationColor === "red" ? (
                     <span
@@ -791,7 +791,7 @@ export default function UtilitiesClientPage() {
                     </span>
                   ) : null}
                 </div>
-                <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
+                <div className="mobileCompactResultValue" style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
                   {fmtPct(marginCalc.distancePct)}
                 </div>
               </div>
@@ -1129,6 +1129,18 @@ export default function UtilitiesClientPage() {
     gap: 16px;
   }
 
+  .calcFieldGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .calcResultGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
   .topNavRow {
     display: flex;
     justify-content: flex-end;
@@ -1201,6 +1213,39 @@ export default function UtilitiesClientPage() {
 
     .mobileHideIntroSection {
       display: none !important;
+    }
+
+    .calcFieldGrid,
+    .calcResultGrid {
+      grid-template-columns: 1fr 1fr !important;
+      gap: 10px !important;
+    }
+
+    .mobileCompactResultCard {
+      padding: 12px !important;
+      border-radius: 12px !important;
+      min-width: 0 !important;
+    }
+
+    .mobileCompactResultLabel {
+      font-size: 11px !important;
+      gap: 2px !important;
+      line-height: 1.2 !important;
+      flex-wrap: nowrap !important;
+      min-width: 0 !important;
+    }
+
+    .mobileCompactResultText {
+      min-width: 0 !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+      white-space: nowrap !important;
+    }
+
+    .mobileCompactResultValue {
+      font-size: 18px !important;
+      line-height: 1.15 !important;
+      margin-top: 5px !important;
     }
   }
 `}</style>
