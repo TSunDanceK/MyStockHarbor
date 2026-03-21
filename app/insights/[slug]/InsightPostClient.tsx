@@ -22,6 +22,19 @@ type InsightPostData = {
   contentHtml: string;
 };
 
+function movingAverage(values: number[], window: number): (number | null)[] {
+  const out: (number | null)[] = Array(values.length).fill(null);
+  let sum = 0;
+
+  for (let i = 0; i < values.length; i++) {
+    sum += values[i];
+    if (i >= window) sum -= values[i - window];
+    if (i >= window - 1) out[i] = sum / window;
+  }
+
+  return out;
+}
+
 function inferInsightTag(title: string, excerpt: string, contentHtml: string) {
   const hay = `${title} ${excerpt} ${contentHtml}`.toLowerCase();
 
@@ -97,7 +110,14 @@ export default function InsightPostClient({
     ? snapshot.chartPoints
     : [];
 
+  const closes = useMemo(() => chartPoints.map((p) => p.close), [chartPoints]);
+  const ma50 = useMemo(() => movingAverage(closes, 50), [closes]);
+  const ma200 = useMemo(() => movingAverage(closes, 200), [closes]);
+
   const chartSlice = chartPoints.slice(-240);
+  const ma50Slice = ma50.slice(-240);
+  const ma200Slice = ma200.slice(-240);
+
   const hasSnapshot = Boolean(snapshot && chartPoints.length >= 2);
 
   const companyName = snapshot?.companyName ?? "";
@@ -217,6 +237,18 @@ export default function InsightPostClient({
             >
               {post.date}
             </div>
+
+            {snapshot?.snapshotDate ? (
+              <div
+                style={{
+                  fontSize: 13,
+                  opacity: 0.78,
+                  fontWeight: 700,
+                }}
+              >
+                • Snapshot {snapshotDateText}
+              </div>
+            ) : null}
           </div>
 
           <h1
@@ -254,7 +286,11 @@ export default function InsightPostClient({
                 {typeof lastPrice === "number" ? `$${lastPrice.toFixed(2)}` : "—"}
               </div>
               <div style={{ marginTop: 8, fontSize: 13, opacity: 0.72 }}>
-                {hasSnapshot ? snapshotDateText : symbol ? "Snapshot unavailable" : "No ticker linked"}
+                {hasSnapshot
+                  ? `Snapshot: ${snapshotDateText}`
+                  : symbol
+                  ? "Snapshot unavailable"
+                  : "No ticker linked"}
               </div>
             </div>
 
@@ -339,10 +375,20 @@ export default function InsightPostClient({
                     <StockPriceChart
                       symbol={symbol}
                       data={chartSlice}
-                      ma50={[]}
-                      ma200={[]}
+                      ma50={ma50Slice}
+                      ma200={ma200Slice}
                       height={360}
                     />
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 10,
+                      fontSize: 13,
+                      opacity: 0.72,
+                    }}
+                  >
+                    Snapshot date: {snapshotDateText}
                   </div>
 
                   <div
