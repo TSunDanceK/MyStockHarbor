@@ -777,7 +777,7 @@ export default function UtilitiesClientPage() {
 
               <div className="mobileCompactResultCard" style={tintBox(liquidationColor)}>
                 <div className="mobileCompactResultLabel" style={resultLabelStyle()}>
-                  <span className="mobileCompactResultText">Distance to Liquidation</span>
+                  <span className="mobileCompactResultText">Liquidation %</span>
                   <HelpTip text="Shows how far price can move against your trade before estimated liquidation. Some brokers may calculate liquidation differently." />
                   {liquidationColor === "red" ? (
                     <span
