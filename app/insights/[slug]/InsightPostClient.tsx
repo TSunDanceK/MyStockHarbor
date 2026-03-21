@@ -501,7 +501,7 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                   {marketError}
                 </div>
               ) : chartSlice.length >= 2 ? (
-                <>
+                <div>
                   <div style={{ marginTop: 16 }}>
                     <StockPriceChart
                       symbol={symbol}
@@ -614,25 +614,27 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                       >
                         Open chart dashboard →
                       </Link>
+                    </div>
 
-                      <div className="insightMobileOnlyWrapper">
-                        <Link
-                          href={`/stock/${encodeURIComponent(symbol)}/news`}
-                          className="insightMobileButton"
-                          style={chartActionStyle("gold")}
-                        >
-                          {symbol} headlines
-                        </Link>
+                    <div className="insightMobileOnlyWrapper">
+                      <Link
+                        href={`/stock/${encodeURIComponent(symbol)}/news`}
+                        className="insightMobileButton"
+                        style={chartActionStyle("gold")}
+                      >
+                        {symbol} headlines
+                      </Link>
 
-                        <Link
-                          href={`/stock/${encodeURIComponent(symbol)}`}
-                          className="insightMobileButton"
-                          style={chartActionStyle("blue")}
-                        >
-                          {symbol} stock page
-                        </Link>
-                      </div>
+                      <Link
+                        href={`/stock/${encodeURIComponent(symbol)}`}
+                        className="insightMobileButton"
+                        style={chartActionStyle("blue")}
+                      >
+                        {symbol} stock page
+                      </Link>
+                    </div>
                   </div>
+                </div>
                 </>
               ) : (
                 <div style={{ marginTop: 16, opacity: 0.78 }}>
