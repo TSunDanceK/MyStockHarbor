@@ -1,16 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import StockPriceChart from "@/app/stock/[symbol]/StockPriceChart";
-
-type Quote = {
-  symbol: string;
-  price: number | null;
-  date: string | null;
-  time: string | null;
-  source: string;
-};
+import type { InsightSnapshot } from "@/lib/blog";
 
 type Point = {
   date: string;
@@ -18,12 +11,6 @@ type Point = {
   high?: number;
   low?: number;
   volume?: number;
-};
-
-type SymbolResult = {
-  symbol: string;
-  name: string;
-  exchange: string;
 };
 
 type InsightPostData = {
@@ -34,89 +21,6 @@ type InsightPostData = {
   symbol?: string | null;
   contentHtml: string;
 };
-
-function movingAverage(values: number[], window: number): (number | null)[] {
-  const out: (number | null)[] = Array(values.length).fill(null);
-  let sum = 0;
-
-  for (let i = 0; i < values.length; i++) {
-    sum += values[i];
-    if (i >= window) sum -= values[i - window];
-    if (i >= window - 1) out[i] = sum / window;
-  }
-
-  return out;
-}
-
-function buildWeeklyCloses(points: Point[]): number[] {
-  if (!points.length) return [];
-
-  const weekly: number[] = [];
-  let currentWeekKey = "";
-  let lastCloseForWeek: number | null = null;
-
-  for (const point of points) {
-    const d = new Date(point.date);
-    if (Number.isNaN(d.getTime())) continue;
-
-    const utcDay = d.getUTCDay();
-    const diffToMonday = utcDay === 0 ? -6 : 1 - utcDay;
-    const monday = new Date(d);
-    monday.setUTCDate(d.getUTCDate() + diffToMonday);
-
-    const weekKey = `${monday.getUTCFullYear()}-${String(
-      monday.getUTCMonth() + 1
-    ).padStart(2, "0")}-${String(monday.getUTCDate()).padStart(2, "0")}`;
-
-    if (weekKey !== currentWeekKey) {
-      if (lastCloseForWeek !== null) weekly.push(lastCloseForWeek);
-      currentWeekKey = weekKey;
-    }
-
-    lastCloseForWeek = point.close;
-  }
-
-  if (lastCloseForWeek !== null) weekly.push(lastCloseForWeek);
-
-  return weekly;
-}
-
-function lastNum(arr: (number | null)[]) {
-  return arr.length ? arr[arr.length - 1] : null;
-}
-
-function pctFromBase(last: number | null, base: number | null) {
-  if (
-    typeof last !== "number" ||
-    typeof base !== "number" ||
-    !Number.isFinite(last) ||
-    !Number.isFinite(base) ||
-    base === 0
-  ) {
-    return null;
-  }
-
-  return ((last - base) / base) * 100;
-}
-
-function trendLabel(args: {
-  lastClose: number | null;
-  ma50: number | null;
-  ma200: number | null;
-}) {
-  const { lastClose, ma50, ma200 } = args;
-
-  if (
-    typeof lastClose === "number" &&
-    typeof ma50 === "number" &&
-    typeof ma200 === "number"
-  ) {
-    if (lastClose > ma50 && ma50 > ma200) return "Uptrend";
-    if (lastClose < ma50 && ma50 < ma200) return "Downtrend";
-  }
-
-  return "Range / Mixed";
-}
 
 function inferInsightTag(title: string, excerpt: string, contentHtml: string) {
   const hay = `${title} ${excerpt} ${contentHtml}`.toLowerCase();
@@ -175,140 +79,45 @@ function tradingViewHref(symbol: string) {
   return `/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`;
 }
 
-export default function InsightPostClient({ post }: { post: InsightPostData }) {
-  const symbol = post.symbol?.toUpperCase() ?? "";
-
-  const [quote, setQuote] = useState<Quote | null>(null);
-  const [history, setHistory] = useState<Point[]>([]);
-  const [companyName, setCompanyName] = useState("");
-  const [loadingMarket, setLoadingMarket] = useState(Boolean(symbol));
-  const [marketError, setMarketError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!symbol) {
-      setLoadingMarket(false);
-      setMarketError(null);
-      setQuote(null);
-      setHistory([]);
-      setCompanyName("");
-      return;
-    }
-
-    let cancelled = false;
-
-    async function load() {
-      setLoadingMarket(true);
-      setMarketError(null);
-
-      try {
-        const [quoteRes, historyRes, symbolsRes] = await Promise.all([
-          fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, {
-            cache: "no-store",
-          }),
-          fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=2200`, {
-            cache: "no-store",
-          }),
-          fetch(`/api/symbols?q=${encodeURIComponent(symbol)}`, {
-            cache: "no-store",
-          }),
-        ]);
-
-        if (!quoteRes.ok) throw new Error("Quote fetch failed");
-        if (!historyRes.ok) throw new Error("History fetch failed");
-
-        const quoteData = (await quoteRes.json()) as Quote;
-        const historyData = (await historyRes.json()) as { points: any[] };
-
-        let name = "";
-        if (symbolsRes.ok) {
-          const symbolsData = (await symbolsRes.json()) as {
-            results?: SymbolResult[];
-          };
-          const exact = (symbolsData.results ?? []).find(
-            (r) => (r.symbol ?? "").toUpperCase() === symbol
-          );
-          name = exact?.name ?? "";
-        }
-
-        if (cancelled) return;
-
-        const ptsRaw = Array.isArray(historyData.points) ? historyData.points : [];
-        const pts: Point[] = ptsRaw
-          .map((p: any) => ({
-            date: String(p?.date ?? ""),
-            close: Number(p?.close),
-            high: p?.high == null ? undefined : Number(p.high),
-            low: p?.low == null ? undefined : Number(p.low),
-            volume: p?.volume == null ? undefined : Number(p.volume),
-          }))
-          .filter((p) => p.date && Number.isFinite(p.close));
-
-        setQuote(quoteData);
-        setHistory(pts);
-        setCompanyName(name);
-      } catch {
-        if (cancelled) return;
-        setMarketError("Could not load chart data for this insight.");
-        setQuote(null);
-        setHistory([]);
-        setCompanyName("");
-      } finally {
-        if (!cancelled) setLoadingMarket(false);
-      }
-    }
-
-    load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [symbol]);
-
-  const closes = useMemo(() => history.map((p) => p.close), [history]);
-  const weeklyCloses = useMemo(() => buildWeeklyCloses(history), [history]);
-  const ma50 = useMemo(() => movingAverage(closes, 50), [closes]);
-  const ma200 = useMemo(() => movingAverage(closes, 200), [closes]);
-    const weeklyMA200 = useMemo(
-    () => movingAverage(weeklyCloses, 200),
-    [weeklyCloses]
-  );
-
-  const lastClose = history.length ? history[history.length - 1].close : null;
-  const lastMA50 = lastNum(ma50);
-  const lastMA200 = lastNum(ma200);
-  const lastWeeklyMA200 = lastNum(weeklyMA200);
-
-  const trend = useMemo(
-    () =>
-      trendLabel({
-        lastClose,
-        ma50: typeof lastMA50 === "number" ? lastMA50 : null,
-        ma200: typeof lastMA200 === "number" ? lastMA200 : null,
-      }),
-    [lastClose, lastMA50, lastMA200]
-  );
-
-  const ma50Pct = pctFromBase(
-    lastClose,
-    typeof lastMA50 === "number" ? lastMA50 : null
-  );
-  const ma200Pct = pctFromBase(
-    lastClose,
-    typeof lastMA200 === "number" ? lastMA200 : null
-  );
-  const weeklyMA200Pct = pctFromBase(
-    lastClose,
-    typeof lastWeeklyMA200 === "number" ? lastWeeklyMA200 : null
-  );
+export default function InsightPostClient({
+  post,
+  snapshot,
+}: {
+  post: InsightPostData;
+  snapshot: InsightSnapshot | null;
+}) {
+  const symbol = post.symbol?.toUpperCase() ?? snapshot?.symbol?.toUpperCase() ?? "";
 
   const insightTag = useMemo(
     () => inferInsightTag(post.title, post.excerpt, post.contentHtml),
     [post.title, post.excerpt, post.contentHtml]
   );
 
-  const chartSlice = history.slice(-240);
-  const ma50Slice = ma50.slice(-240);
-  const ma200Slice = ma200.slice(-240);
+  const chartPoints: Point[] = Array.isArray(snapshot?.chartPoints)
+    ? snapshot.chartPoints
+    : [];
+
+  const chartSlice = chartPoints.slice(-240);
+  const hasSnapshot = Boolean(snapshot && chartPoints.length >= 2);
+
+  const companyName = snapshot?.companyName ?? "";
+  const lastPrice = snapshot?.price;
+  const trend = snapshot?.trend ?? (symbol ? "Archived snapshot" : "Article");
+  const lastMA50 = snapshot?.lastMA50;
+  const lastMA200 = snapshot?.lastMA200;
+  const lastWeeklyMA200 = snapshot?.lastWeeklyMA200;
+  const ma50Pct = snapshot?.ma50Pct;
+  const ma200Pct = snapshot?.ma200Pct;
+  const weeklyMA200Pct = snapshot?.weeklyMA200Pct;
+
+  const snapshotDateText =
+    snapshot?.snapshotDate && snapshot?.snapshotTime
+      ? `${snapshot.snapshotDate} ${snapshot.snapshotTime}`
+      : snapshot?.snapshotDate
+      ? snapshot.snapshotDate
+      : post.date
+      ? `Snapshot from ${post.date}`
+      : "Archived snapshot";
 
   return (
     <main
@@ -442,18 +251,10 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                 className="insightPriceValue"
                 style={{ marginTop: 8, fontWeight: 950 }}
               >
-                {typeof quote?.price === "number"
-                  ? `$${quote.price.toFixed(2)}`
-                  : "—"}
+                {typeof lastPrice === "number" ? `$${lastPrice.toFixed(2)}` : "—"}
               </div>
               <div style={{ marginTop: 8, fontSize: 13, opacity: 0.72 }}>
-                {quote?.date && quote?.time
-                  ? `${quote.date} ${quote.time}`
-                  : symbol
-                  ? loadingMarket
-                    ? "Loading latest quote..."
-                    : "Latest quote unavailable"
-                  : "No ticker linked"}
+                {hasSnapshot ? snapshotDateText : symbol ? "Snapshot unavailable" : "No ticker linked"}
               </div>
             </div>
 
@@ -472,11 +273,10 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                       : "#eab308",
                 }}
               >
-                {symbol ? trend : "Article"}
+                {trend}
               </div>
               <div style={{ marginTop: 8, fontSize: 13, opacity: 0.72 }}>
-                {companyName ||
-                  (symbol ? `${symbol} chart structure` : "Editorial insight")}
+                {companyName || (symbol ? `${symbol} archived chart structure` : "Editorial insight")}
               </div>
             </div>
           </div>
@@ -530,27 +330,17 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                   fontSize: 15,
                 }}
               >
-                This insight includes a daily chart snapshot so the written
-                breakdown can be compared against daily price structure, Daily
-                MA50 and Daily MA200.
+                This chart snapshot is frozen to the original article analysis date, so later readers see the same setup the post was based on.
               </p>
 
-              {loadingMarket ? (
-                <div style={{ marginTop: 16, opacity: 0.78 }}>
-                  Loading chart snapshot…
-                </div>
-              ) : marketError ? (
-                <div style={{ marginTop: 16, opacity: 0.78 }}>
-                  {marketError}
-                </div>
-              ) : chartSlice.length >= 2 ? (
+              {hasSnapshot ? (
                 <div>
                   <div style={{ marginTop: 16 }}>
                     <StockPriceChart
                       symbol={symbol}
                       data={chartSlice}
-                      ma50={ma50Slice}
-                      ma200={ma200Slice}
+                      ma50={[]}
+                      ma200={[]}
                       height={360}
                     />
                   </div>
@@ -569,15 +359,11 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                         Daily MA50
                       </div>
                       <div className="insightSmallStatValue" style={smallStatValueStyle}>
-                        {typeof lastMA50 === "number"
-                          ? `$${lastMA50.toFixed(2)}`
-                          : "—"}
+                        {typeof lastMA50 === "number" ? `$${lastMA50.toFixed(2)}` : "—"}
                       </div>
                       <div className="insightSmallStatMeta" style={smallStatMetaStyle}>
                         {typeof ma50Pct === "number"
-                          ? `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(
-                              2
-                            )}% vs price`
+                          ? `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}% vs price`
                           : "Distance unavailable"}
                       </div>
                     </div>
@@ -587,15 +373,11 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                         Daily MA200
                       </div>
                       <div className="insightSmallStatValue" style={smallStatValueStyle}>
-                        {typeof lastMA200 === "number"
-                          ? `$${lastMA200.toFixed(2)}`
-                          : "—"}
+                        {typeof lastMA200 === "number" ? `$${lastMA200.toFixed(2)}` : "—"}
                       </div>
                       <div className="insightSmallStatMeta" style={smallStatMetaStyle}>
                         {typeof ma200Pct === "number"
-                          ? `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(
-                              2
-                            )}% vs price`
+                          ? `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}% vs price`
                           : "Distance unavailable"}
                       </div>
                     </div>
@@ -614,9 +396,7 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                       </div>
                       <div className="insightSmallStatMeta" style={smallStatMetaStyle}>
                         {typeof weeklyMA200Pct === "number"
-                          ? `${weeklyMA200Pct >= 0 ? "+" : ""}${weeklyMA200Pct.toFixed(
-                              2
-                            )}% vs price`
+                          ? `${weeklyMA200Pct >= 0 ? "+" : ""}${weeklyMA200Pct.toFixed(2)}% vs price`
                           : "Distance unavailable"}
                       </div>
                     </div>
@@ -637,8 +417,7 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                       className="insightChartActionsDesktop"
                       style={{ fontSize: 13, opacity: 0.74 }}
                     >
-                      Compare this chart snapshot with the full dashboard,
-                      latest headlines, or TradingView.
+                      This article chart is frozen. Use the links to compare it with current data, headlines, or TradingView.
                     </div>
 
                     <div
@@ -703,9 +482,9 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                     </div>
                   </div>
                 </div>
-               ) : (
+              ) : (
                 <div style={{ marginTop: 16, opacity: 0.78 }}>
-                  Not enough chart data to show a snapshot.
+                  Snapshot data was not saved for this article.
                 </div>
               )}
             </section>
@@ -787,47 +566,19 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
           grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 12px;
         }
+
         .insightMobileOnlyWrapper {
-  display: none;
-}
-
-@media (max-width: 640px) {
-  .insightMobileOnlyWrapper {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-    width: 100%;
-  }
-}
-          .insightSmallStatCard {
-            padding: 10px 10px !important;
-            border-radius: 14px !important;
-          }
-
-          .insightSmallStatLabel {
-            margin-bottom: 6px !important;
-            font-size: 11px !important;
-          }
-
-          .insightSmallStatValue {
-            margin-top: 2px !important;
-            font-size: 16px !important;
-          }
-
-          .insightSmallStatMeta {
-            margin-top: 2px !important;
-            font-size: 11px !important;
-            line-height: 1.35 !important;
-          }
+          display: none;
+        }
 
         .insightDesktopOnly {
           display: inline-flex;
         }
-        
+
         .insightDesktopOnlyStat {
           display: flex;
         }
-        
+
         .insightMobileOnly {
           display: none;
         }
@@ -897,8 +648,36 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
             padding-left: 12px !important;
             padding-right: 12px !important;
           }
-          
-            .insightDesktopOnlyStat {
+
+          .insightMobileOnlyWrapper {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            width: 100%;
+          }
+
+          .insightSmallStatCard {
+            padding: 10px 10px !important;
+            border-radius: 14px !important;
+          }
+
+          .insightSmallStatLabel {
+            margin-bottom: 6px !important;
+            font-size: 11px !important;
+          }
+
+          .insightSmallStatValue {
+            margin-top: 2px !important;
+            font-size: 16px !important;
+          }
+
+          .insightSmallStatMeta {
+            margin-top: 2px !important;
+            font-size: 11px !important;
+            line-height: 1.35 !important;
+          }
+
+          .insightDesktopOnlyStat {
             display: none !important;
           }
 
@@ -964,8 +743,7 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
 
           .insightChartActionsButtons {
             width: 100%;
-            display: grid !important;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            display: flex !important;
             gap: 10px !important;
           }
 
