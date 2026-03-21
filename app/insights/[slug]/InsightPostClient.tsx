@@ -767,7 +767,8 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
 }
 
 .insightTrendValue {
-  font-size: 26px !important;
+  font-size: 22px !important;
+  line-height: 1.1 !important;
 }
 
 .insightMobileButton {
@@ -1041,12 +1042,18 @@ const miniLabelStyle: React.CSSProperties = {
   letterSpacing: "0.05em",
 };
 
-const smallStatCardStyle: React.CSSProperties = {
-  border: "1px solid rgba(255,255,255,0.10)",
-  borderRadius: 16,
-  padding: 14,
-  background: "rgba(255,255,255,0.03)",
-};
+function smallStatCardStyle(): React.CSSProperties {
+  return {
+    borderRadius: 14,
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(255,255,255,0.04)",
+    padding: "10px 10px",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+    minHeight: 0,
+  };
+}
 
 const smallStatLabelStyle: React.CSSProperties = {
   fontSize: 12,
@@ -1057,10 +1064,13 @@ const smallStatLabelStyle: React.CSSProperties = {
   letterSpacing: "0.05em",
 };
 
-const smallStatValueStyle: React.CSSProperties = {
-  fontSize: 22,
-  fontWeight: 900,
-};
+function smallStatMetaStyle(): React.CSSProperties {
+  return {
+    marginTop: 2,
+    fontSize: 11,
+    opacity: 0.7,
+  };
+}
 
 const smallStatMetaStyle: React.CSSProperties = {
   marginTop: 8,
