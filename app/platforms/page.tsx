@@ -357,7 +357,10 @@ export default function PlatformsPage() {
               <span aria-hidden="true" style={topNavIconWrapStyle}>
                 {topNavIcon("pickers")}
               </span>
-              <span className="topNavText">Stock Pickers</span>
+              <span className="topNavText">
+                <span className="topNavShowDesktop">Stock Pickers</span>
+                <span className="topNavShowMobile">Pickers</span>
+              </span>
             </Link>
 
             <Link href="/learn" style={topNavBtnStyle("learn")} className="topNavIconOnlyMobile">
@@ -979,6 +982,14 @@ export default function PlatformsPage() {
           margin: 0 auto;
           padding: 24px;
         }
+        
+          .topNavShowDesktop {
+          display: inline;
+        }
+
+        .topNavShowMobile {
+          display: none;
+        }
 
         @media (max-width: 900px) {
           .topCompareGrid {
@@ -1024,6 +1035,14 @@ export default function PlatformsPage() {
 
           .topNavHideOnMobile {
             display: none !important;
+          }
+
+          .topNavShowDesktop {
+            display: none !important;
+          }
+
+          .topNavShowMobile {
+            display: inline !important;
           }
         }
       `}</style>
