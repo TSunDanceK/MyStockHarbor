@@ -111,22 +111,94 @@ export default function RootLayout({
                   </div>
 
                   <div style={{ display: "grid", gap: 6 }}>
-                    <Link href="/" style={{ color: "#93c5fd", textDecoration: "none" }}>
+                    <Link href="/" style={{
+  color: "rgba(241,245,249,0.65)",
+  textDecoration: "none",
+  transition: "all 0.15s ease",
+}}
+onMouseEnter={(e) => {
+  e.currentTarget.style.color = "#93c5fd";
+  e.currentTarget.style.textDecoration = "underline";
+}}
+onMouseLeave={(e) => {
+  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
+  e.currentTarget.style.textDecoration = "none";
+}}
                       Dashboard
                     </Link>
-                    <Link href="/pickers" style={{ color: "#93c5fd", textDecoration: "none" }}>
+                    <Link href="/pickers" style={{
+  color: "rgba(241,245,249,0.65)",
+  textDecoration: "none",
+  transition: "all 0.15s ease",
+}}
+onMouseEnter={(e) => {
+  e.currentTarget.style.color = "#93c5fd";
+  e.currentTarget.style.textDecoration = "underline";
+}}
+onMouseLeave={(e) => {
+  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
+  e.currentTarget.style.textDecoration = "none";
+}}
                       Stock Pickers
                     </Link>
-                    <Link href="/insights" style={{ color: "#93c5fd", textDecoration: "none" }}>
+                    <Link href="/insights" style={{
+  color: "rgba(241,245,249,0.65)",
+  textDecoration: "none",
+  transition: "all 0.15s ease",
+}}
+onMouseEnter={(e) => {
+  e.currentTarget.style.color = "#93c5fd";
+  e.currentTarget.style.textDecoration = "underline";
+}}
+onMouseLeave={(e) => {
+  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
+  e.currentTarget.style.textDecoration = "none";
+}}
                       Insights
                     </Link>
-                    <Link href="/learn" style={{ color: "#93c5fd", textDecoration: "none" }}>
+                    <Link href="/learn" style={{
+  color: "rgba(241,245,249,0.65)",
+  textDecoration: "none",
+  transition: "all 0.15s ease",
+}}
+onMouseEnter={(e) => {
+  e.currentTarget.style.color = "#93c5fd";
+  e.currentTarget.style.textDecoration = "underline";
+}}
+onMouseLeave={(e) => {
+  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
+  e.currentTarget.style.textDecoration = "none";
+}}
                       Learn
                     </Link>
-                    <Link href="/platforms" style={{ color: "#93c5fd", textDecoration: "none" }}>
+                    <Link href="/platforms" style={{
+  color: "rgba(241,245,249,0.65)",
+  textDecoration: "none",
+  transition: "all 0.15s ease",
+}}
+onMouseEnter={(e) => {
+  e.currentTarget.style.color = "#93c5fd";
+  e.currentTarget.style.textDecoration = "underline";
+}}
+onMouseLeave={(e) => {
+  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
+  e.currentTarget.style.textDecoration = "none";
+}}
                       Platforms
                     </Link>
-                    <Link href="/utilities" style={{ color: "#93c5fd", textDecoration: "none" }}>
+                    <Link href="/utilities" style={{
+  color: "rgba(241,245,249,0.65)",
+  textDecoration: "none",
+  transition: "all 0.15s ease",
+}}
+onMouseEnter={(e) => {
+  e.currentTarget.style.color = "#93c5fd";
+  e.currentTarget.style.textDecoration = "underline";
+}}
+onMouseLeave={(e) => {
+  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
+  e.currentTarget.style.textDecoration = "none";
+}}
                       Utilities
                     </Link>
                   </div>
@@ -140,31 +212,91 @@ export default function RootLayout({
                   <div style={{ display: "grid", gap: 6 }}>
                     <Link
                       href="/breakout-stocks"
-                      style={{ color: "#93c5fd", textDecoration: "none" }}
+                      style={{
+  color: "rgba(241,245,249,0.65)",
+  textDecoration: "none",
+  transition: "all 0.15s ease",
+}}
+onMouseEnter={(e) => {
+  e.currentTarget.style.color = "#93c5fd";
+  e.currentTarget.style.textDecoration = "underline";
+}}
+onMouseLeave={(e) => {
+  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
+  e.currentTarget.style.textDecoration = "none";
+}}
                     >
                       Breakout Stocks
                     </Link>
                     <Link
                       href="/oversold-stocks"
-                      style={{ color: "#93c5fd", textDecoration: "none" }}
+                      style={{
+  color: "rgba(241,245,249,0.65)",
+  textDecoration: "none",
+  transition: "all 0.15s ease",
+}}
+onMouseEnter={(e) => {
+  e.currentTarget.style.color = "#93c5fd";
+  e.currentTarget.style.textDecoration = "underline";
+}}
+onMouseLeave={(e) => {
+  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
+  e.currentTarget.style.textDecoration = "none";
+}}
                     >
                       Oversold Stocks
                     </Link>
                     <Link
                       href="/buy-the-dip-stocks"
-                      style={{ color: "#93c5fd", textDecoration: "none" }}
+                      style={{
+  color: "rgba(241,245,249,0.65)",
+  textDecoration: "none",
+  transition: "all 0.15s ease",
+}}
+onMouseEnter={(e) => {
+  e.currentTarget.style.color = "#93c5fd";
+  e.currentTarget.style.textDecoration = "underline";
+}}
+onMouseLeave={(e) => {
+  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
+  e.currentTarget.style.textDecoration = "none";
+}}
                     >
                       Buy The Dip Stocks
                     </Link>
                     <Link
                       href="/bullish-divergence-stocks"
-                      style={{ color: "#93c5fd", textDecoration: "none" }}
+                      style={{
+  color: "rgba(241,245,249,0.65)",
+  textDecoration: "none",
+  transition: "all 0.15s ease",
+}}
+onMouseEnter={(e) => {
+  e.currentTarget.style.color = "#93c5fd";
+  e.currentTarget.style.textDecoration = "underline";
+}}
+onMouseLeave={(e) => {
+  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
+  e.currentTarget.style.textDecoration = "none";
+}}
                     >
                       Bullish Divergence Stocks
                     </Link>
                     <Link
                       href="/bearish-divergence-stocks"
-                      style={{ color: "#93c5fd", textDecoration: "none" }}
+                      style={{
+  color: "rgba(241,245,249,0.65)",
+  textDecoration: "none",
+  transition: "all 0.15s ease",
+}}
+onMouseEnter={(e) => {
+  e.currentTarget.style.color = "#93c5fd";
+  e.currentTarget.style.textDecoration = "underline";
+}}
+onMouseLeave={(e) => {
+  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
+  e.currentTarget.style.textDecoration = "none";
+}}
                     >
                       Bearish Divergence Stocks
                     </Link>
@@ -177,10 +309,34 @@ export default function RootLayout({
                   </div>
 
                   <div style={{ display: "grid", gap: 6 }}>
-                    <Link href="/about" style={{ color: "#93c5fd", textDecoration: "none" }}>
+                    <Link href="/about" style={{
+  color: "rgba(241,245,249,0.65)",
+  textDecoration: "none",
+  transition: "all 0.15s ease",
+}}
+onMouseEnter={(e) => {
+  e.currentTarget.style.color = "#93c5fd";
+  e.currentTarget.style.textDecoration = "underline";
+}}
+onMouseLeave={(e) => {
+  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
+  e.currentTarget.style.textDecoration = "none";
+}}
                       About
                     </Link>
-                    <Link href="/contact" style={{ color: "#93c5fd", textDecoration: "none" }}>
+                    <Link href="/contact" style={{
+  color: "rgba(241,245,249,0.65)",
+  textDecoration: "none",
+  transition: "all 0.15s ease",
+}}
+onMouseEnter={(e) => {
+  e.currentTarget.style.color = "#93c5fd";
+  e.currentTarget.style.textDecoration = "underline";
+}}
+onMouseLeave={(e) => {
+  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
+  e.currentTarget.style.textDecoration = "none";
+}}
                       Contact
                     </Link>
                   </div>
@@ -194,19 +350,55 @@ export default function RootLayout({
                   <div style={{ display: "grid", gap: 6 }}>
                     <Link
                       href="/risk-disclaimer"
-                      style={{ color: "#93c5fd", textDecoration: "none" }}
+                      style={{
+  color: "rgba(241,245,249,0.65)",
+  textDecoration: "none",
+  transition: "all 0.15s ease",
+}}
+onMouseEnter={(e) => {
+  e.currentTarget.style.color = "#93c5fd";
+  e.currentTarget.style.textDecoration = "underline";
+}}
+onMouseLeave={(e) => {
+  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
+  e.currentTarget.style.textDecoration = "none";
+}}
                     >
                       Risk Disclaimer
                     </Link>
                     <Link
                       href="/affiliate-disclosure"
-                      style={{ color: "#93c5fd", textDecoration: "none" }}
+                      style={{
+  color: "rgba(241,245,249,0.65)",
+  textDecoration: "none",
+  transition: "all 0.15s ease",
+}}
+onMouseEnter={(e) => {
+  e.currentTarget.style.color = "#93c5fd";
+  e.currentTarget.style.textDecoration = "underline";
+}}
+onMouseLeave={(e) => {
+  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
+  e.currentTarget.style.textDecoration = "none";
+}}
                     >
                       Affiliate Disclosure
                     </Link>
                     <Link
                       href="/privacy-policy"
-                      style={{ color: "#93c5fd", textDecoration: "none" }}
+                      style={{
+  color: "rgba(241,245,249,0.65)",
+  textDecoration: "none",
+  transition: "all 0.15s ease",
+}}
+onMouseEnter={(e) => {
+  e.currentTarget.style.color = "#93c5fd";
+  e.currentTarget.style.textDecoration = "underline";
+}}
+onMouseLeave={(e) => {
+  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
+  e.currentTarget.style.textDecoration = "none";
+}}
                     >
                       Privacy Policy
                     </Link>
