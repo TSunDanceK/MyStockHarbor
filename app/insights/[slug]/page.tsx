@@ -74,6 +74,7 @@ export default async function InsightPostPage({ params }: Props) {
         symbol: post.symbol ?? null,
         contentHtml,
       }}
+      snapshot={post.snapshot}
     />
   );
 }
