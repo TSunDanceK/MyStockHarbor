@@ -6,7 +6,7 @@ excerpt: Apple is approaching a major technical support zone, with traders watch
 ---
 
 Apple (AAPL) is moving into an important technical area as price approaches the daily MA200.
-
+ 
 That matters on its own, but for Apple the bigger long-term reference has often been the weekly MA200, which the stock has broadly respected since 2009.
 
 The monthly MA50 also adds extra weight to this broader support region.
