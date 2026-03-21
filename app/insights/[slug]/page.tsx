@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getAllPosts, getPostBySlug } from "@/lib/blog";
+import { getOrCreateInsightSnapshot } from "@/lib/insightSnapshots";
 import { remark } from "remark";
 import html from "remark-html";
 import InsightPostClient from "./InsightPostClient";
+
+export const dynamic = "force-dynamic";
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -64,6 +67,13 @@ export default async function InsightPostPage({ params }: Props) {
   const processedContent = await remark().use(html).process(post.content);
   const contentHtml = processedContent.toString();
 
+  const redisSnapshot = await getOrCreateInsightSnapshot({
+    slug: post.slug,
+    symbol: post.symbol ?? null,
+  });
+
+  const snapshot = redisSnapshot ?? post.snapshot ?? null;
+
   return (
     <InsightPostClient
       post={{
@@ -74,7 +84,7 @@ export default async function InsightPostPage({ params }: Props) {
         symbol: post.symbol ?? null,
         contentHtml,
       }}
-      snapshot={post.snapshot}
+      snapshot={snapshot}
     />
   );
 }
