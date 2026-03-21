@@ -838,7 +838,7 @@ export default function UtilitiesClientPage() {
               within a sensible risk limit.
             </p>
 
-            <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
+            <div className="calcFieldGrid" style={{ marginTop: 18 }}>
               <div>
                 <div style={labelStyle()}>
                   Risk Amount ($)
@@ -847,18 +847,6 @@ export default function UtilitiesClientPage() {
                 <input
                   value={riskAmount}
                   onChange={(e) => setRiskAmount(e.target.value)}
-                  style={inputStyle()}
-                />
-              </div>
-
-              <div>
-                <div style={labelStyle()}>
-                  Entry Price ($)
-                  <HelpTip text="The price where you plan to enter the trade." />
-                </div>
-                <input
-                  value={riskEntry}
-                  onChange={(e) => setRiskEntry(e.target.value)}
                   style={inputStyle()}
                 />
               </div>
@@ -877,6 +865,18 @@ export default function UtilitiesClientPage() {
 
               <div>
                 <div style={labelStyle()}>
+                  Entry Price ($)
+                  <HelpTip text="The price where you plan to enter the trade." />
+                </div>
+                <input
+                  value={riskEntry}
+                  onChange={(e) => setRiskEntry(e.target.value)}
+                  style={inputStyle()}
+                />
+              </div>
+
+              <div>
+                <div style={labelStyle()}>
                   Target Price ($)
                   <HelpTip text="Optional price where you plan to take profit." />
                 </div>
@@ -888,34 +888,23 @@ export default function UtilitiesClientPage() {
               </div>
             </div>
 
-            <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
-              <div style={baseResultBoxStyle()}>
-                <div style={resultLabelStyle()}>Max Shares</div>
-                <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
-                  {fmtNum(riskCalc.shares)}
-                </div>
-              </div>
-
-              <div style={tintBox("green", true)}>
-                <div style={resultLabelStyle()}>
-                  Total Position Size
+            <div className="calcResultGrid" style={{ marginTop: 18 }}>
+              <div className="mobileCompactResultCard" style={tintBox("green", true)}>
+                <div className="mobileCompactResultLabel" style={resultLabelStyle()}>
+                  <span className="mobileCompactResultText">Total Position Size</span>
                   <HelpTip text="This is the suggested trade size based on your chosen risk amount and stop loss distance." />
                 </div>
-                <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
+                <div
+                  className="mobileCompactResultValue"
+                  style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}
+                >
                   {fmtMoney(riskCalc.positionSize)}
                 </div>
               </div>
 
-              <div style={baseResultBoxStyle()}>
-                <div style={resultLabelStyle()}>Dollar Risk</div>
-                <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
-                  {fmtMoney(riskCalc.dollarRisk)}
-                </div>
-              </div>
-
-              <div style={tintBox(rrColor)}>
-                <div style={resultLabelStyle()}>
-                  Risk / Reward
+              <div className="mobileCompactResultCard" style={tintBox(rrColor)}>
+                <div className="mobileCompactResultLabel" style={resultLabelStyle()}>
+                  <span className="mobileCompactResultText">Risk / Reward</span>
                   <HelpTip text="Compares your potential reward to your potential loss. Higher is usually better." />
                   {rrColor === "red" ? (
                     <span
@@ -929,12 +918,38 @@ export default function UtilitiesClientPage() {
                     </span>
                   ) : null}
                 </div>
-                <div style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}>
+                <div
+                  className="mobileCompactResultValue"
+                  style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}
+                >
                   {riskCalc.rr == null ? "—" : `1 : ${riskCalc.rr.toFixed(2)}`}
                 </div>
               </div>
-            </div>
 
+              <div className="mobileCompactResultCard" style={baseResultBoxStyle()}>
+                <div className="mobileCompactResultLabel" style={resultLabelStyle()}>
+                  <span className="mobileCompactResultText">Max Shares</span>
+                </div>
+                <div
+                  className="mobileCompactResultValue"
+                  style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}
+                >
+                  {fmtNum(riskCalc.shares)}
+                </div>
+              </div>
+
+              <div className="mobileCompactResultCard" style={baseResultBoxStyle()}>
+                <div className="mobileCompactResultLabel" style={resultLabelStyle()}>
+                  <span className="mobileCompactResultText">Dollar Risk</span>
+                </div>
+                <div
+                  className="mobileCompactResultValue"
+                  style={{ marginTop: 6, fontSize: 24, fontWeight: 950 }}
+                >
+                  {fmtMoney(riskCalc.dollarRisk)}
+                </div>
+              </div>
+            </div>
             <div style={{ marginTop: 18, ...infoCardStyle() }}>
               <div style={{ fontWeight: 900, marginBottom: 6 }}>
                 What this tool does
