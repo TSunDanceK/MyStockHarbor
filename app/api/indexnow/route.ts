@@ -1,16 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { submitUrlsToIndexNow } from "../../../lib/indexnow";
 
-export async function GET() {
-  const testUrls = [
-    "https://www.mystockharbor.com/insights",
-    "https://www.mystockharbor.com/pickers",
-   "https://www.mystockharbor.com/news",
-  ];
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const urls = Array.isArray(body?.urls) ? body.urls : [];
 
-  const result = await submitUrlsToIndexNow(testUrls);
+    const result = await submitUrlsToIndexNow(urls);
 
-  return NextResponse.json(result, {
-    status: result.status || 200,
-  });
+    return NextResponse.json(result, {
+      status: result.status || 200,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown IndexNow error";
+
+    return NextResponse.json(
+      {
+        ok: false,
+        status: 500,
+        message,
+      },
+      { status: 500 }
+    );
+  }
 }
