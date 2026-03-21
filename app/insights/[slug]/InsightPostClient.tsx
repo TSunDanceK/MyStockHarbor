@@ -138,10 +138,9 @@ function inferInsightTag(title: string, excerpt: string, contentHtml: string) {
   };
 }
 
-function extractKeyLevelText(contentHtml: string) {
-  const matches = contentHtml.match(/\$?\d+(?:\.\d+)?/g);
-  if (!matches?.length) return "Levels mentioned in article";
-  return matches.slice(0, 3).join(" • ");
+function chartBasisText(symbol: string) {
+  if (!symbol) return "Article overview";
+  return "Daily chart";
 }
 
 export default function InsightPostClient({ post }: { post: InsightPostData }) {
@@ -259,10 +258,7 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
     [post.title, post.excerpt, post.contentHtml]
   );
 
-  const keyLevels = useMemo(
-    () => extractKeyLevelText(post.contentHtml),
-    [post.contentHtml]
-  );
+ const chartBasis = useMemo(() => chartBasisText(symbol), [symbol]);
 
   const chartSlice = history.slice(-240);
   const ma50Slice = ma50.slice(-240);
@@ -434,7 +430,8 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
             </div>
 
             <div style={summaryCardStyle}>
-              <div style={miniLabelStyle}>Key levels</div>
+            <div style={summaryCardStyle}>
+              <div style={miniLabelStyle}>Chart basis</div>
               <div
                 style={{
                   marginTop: 8,
@@ -443,10 +440,10 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                   lineHeight: 1.25,
                 }}
               >
-                {keyLevels}
+                {chartBasis}
               </div>
               <div style={{ marginTop: 8, fontSize: 13, opacity: 0.72 }}>
-                First levels pulled from the written analysis
+                Snapshot uses daily price, Daily MA50 and Daily MA200
               </div>
             </div>
           </div>
@@ -488,7 +485,7 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                   letterSpacing: "-0.03em",
                 }}
               >
-                {symbol} chart with MA50 and MA200
+                 {symbol} chart with Daily MA50 and Daily MA200
               </h2>
 
               <p
@@ -500,8 +497,9 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                   fontSize: 15,
                 }}
               >
-                This insight now includes a visual chart snapshot so the written
-                breakdown and the price structure can be reviewed together.
+                This insight includes a daily chart snapshot so the written
+                breakdown can be compared against daily price structure, Daily MA50
+                and Daily MA200.
               </p>
 
               {loadingMarket ? (
@@ -532,7 +530,7 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                     }}
                   >
                     <div style={smallStatCardStyle}>
-                      <div style={smallStatLabelStyle}>MA50</div>
+                      <div style={smallStatLabelStyle}>Daily MA50</div>
                       <div style={smallStatValueStyle}>
                         {typeof lastMA50 === "number" ? `$${lastMA50.toFixed(2)}` : "—"}
                       </div>
@@ -544,7 +542,7 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                     </div>
 
                     <div style={smallStatCardStyle}>
-                      <div style={smallStatLabelStyle}>MA200</div>
+                      <div style={smallStatLabelStyle}>Daily MA200</div>
                       <div style={smallStatValueStyle}>
                         {typeof lastMA200 === "number" ? `$${lastMA200.toFixed(2)}` : "—"}
                       </div>
