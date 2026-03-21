@@ -773,59 +773,13 @@ export default function PlatformsPage() {
                     style={{
                       marginTop: 14,
                       display: "flex",
-                      alignItems: "center",
+                      alignItems: "flex-start",
+                      justifyContent: "space-between",
                       gap: 14,
-                      flexWrap: "wrap",
+                      flexWrap: "nowrap",
                     }}
                   >
-                    <a
-                      href={item.affiliateHref}
-                      aria-label={`Visit ${item.name}`}
-                      style={{ textDecoration: "none" }}
-                    >
-                      <div
-                        className="platformLogoBox"
-                        style={{
-                          width: item.name === "TradingView" ? 148 : 76,
-                          height: item.name === "TradingView" ? 68 : 76,
-                          borderRadius: item.name === "TradingView" ? 18 : 16,
-                          border:
-                            item.name === "TradingView"
-                              ? "1px solid rgba(59,130,246,0.26)"
-                              : "1px solid rgba(255,255,255,0.12)",
-                          background:
-                            item.name === "TradingView"
-                              ? "linear-gradient(135deg, rgba(255,255,255,0.98), rgba(241,245,249,0.96))"
-                              : "#ffffff",
-                          boxShadow:
-                            item.name === "TradingView"
-                              ? "0 10px 24px rgba(0,0,0,0.22)"
-                              : "none",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          padding: item.name === "TradingView" ? "10px 16px" : 10,
-                          overflow: "hidden",
-                          flex: "0 0 auto",
-                          cursor: "pointer",
-                        }}
-                      >
-                        <img
-                          src={item.logoSrc}
-                          alt={item.logoAlt}
-                          style={{
-                            width: "100%",
-                            height: item.name === "TradingView" ? "auto" : "100%",
-                            maxWidth: "100%",
-                            maxHeight: "100%",
-                            objectFit: "contain",
-                            display: "block",
-                          }}
-                        />
-                      </div>
-                    </a>
-
-                    <div style={{ minWidth: 0 }}>
+                    <div style={{ minWidth: 0, flex: "1 1 auto" }}>
                       {item.recommended ? (
                         <div
                           style={{
@@ -893,6 +847,52 @@ export default function PlatformsPage() {
                         <strong>Best for:</strong> {item.bestFor}
                       </p>
                     </div>
+
+                    <a
+                      href={item.affiliateHref}
+                      aria-label={`Visit ${item.name}`}
+                      style={{ textDecoration: "none", flex: "0 0 auto" }}
+                    >
+                      <div
+                        className="platformLogoBox"
+                        style={{
+                          width: item.name === "TradingView" ? 148 : 76,
+                          height: item.name === "TradingView" ? 68 : 76,
+                          borderRadius: item.name === "TradingView" ? 18 : 16,
+                          border:
+                            item.name === "TradingView"
+                              ? "1px solid rgba(59,130,246,0.26)"
+                              : "1px solid rgba(255,255,255,0.12)",
+                          background:
+                            item.name === "TradingView"
+                              ? "linear-gradient(135deg, rgba(255,255,255,0.98), rgba(241,245,249,0.96))"
+                              : "#ffffff",
+                          boxShadow:
+                            item.name === "TradingView"
+                              ? "0 10px 24px rgba(0,0,0,0.22)"
+                              : "none",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          padding: item.name === "TradingView" ? "10px 16px" : 10,
+                          overflow: "hidden",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <img
+                          src={item.logoSrc}
+                          alt={item.logoAlt}
+                          style={{
+                            width: "100%",
+                            height: item.name === "TradingView" ? "auto" : "100%",
+                            maxWidth: "100%",
+                            maxHeight: "100%",
+                            objectFit: "contain",
+                            display: "block",
+                          }}
+                        />
+                      </div>
+                    </a>
                   </div>
 
                   <p
@@ -1009,12 +1009,6 @@ export default function PlatformsPage() {
                     Why choose it
                   </div>
                   <div style={{ opacity: 0.84, lineHeight: 1.55 }}>{item.note}</div>
-
-                  <div style={{ marginTop: 14 }}>
-                    <a href={item.affiliateHref} style={ctaBtn()}>
-                      {item.ctaText} →
-                    </a>
-                  </div>
                 </div>
 
                 <div
@@ -1191,14 +1185,16 @@ export default function PlatformsPage() {
 
           .platformHeaderBlock {
             align-items: flex-start !important;
+            justify-content: space-between !important;
             gap: 12px !important;
           }
 
           .platformLogoBox {
-            width: 64px !important;
-            height: 64px !important;
-            border-radius: 14px !important;
-            padding: 10px !important;
+            width: 56px !important;
+            height: 56px !important;
+            border-radius: 12px !important;
+            padding: 8px !important;
+            flex: 0 0 56px !important;
           }
 
           .platformScoreLabel {
@@ -1207,11 +1203,31 @@ export default function PlatformsPage() {
 
           .platformSummaryText {
             font-size: 14px !important;
-            line-height: 1.55 !important;
+            line-height: 1.5 !important;
+            margin-top: 12px !important;
           }
 
           .platformPromoCard {
             padding: 14px !important;
+          }
+
+          .platformGrid {
+            gap: 10px !important;
+            margin-top: 14px !important;
+          }
+
+          .platformGrid > div {
+            padding: 12px !important;
+          }
+
+          .platformGrid ul {
+            gap: 6px !important;
+            padding-left: 16px !important;
+          }
+
+          .platformGrid li {
+            line-height: 1.4 !important;
+            font-size: 13px !important;
           }
         }
       `}</style>
