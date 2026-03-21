@@ -615,24 +615,23 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                         Open chart dashboard →
                       </Link>
 
-                      <Link
-<div className="insightMobileOnlyWrapper">
-  <Link
-    href={`/stock/${encodeURIComponent(symbol)}/news`}
-    className="insightMobileButton"
-    style={chartActionStyle("gold")}
-  >
-    {symbol} headlines
-  </Link>
+                      <div className="insightMobileOnlyWrapper">
+                        <Link
+                          href={`/stock/${encodeURIComponent(symbol)}/news`}
+                          className="insightMobileButton"
+                          style={chartActionStyle("gold")}
+                        >
+                          {symbol} headlines
+                        </Link>
 
-  <Link
-    href={`/stock/${encodeURIComponent(symbol)}`}
-    className="insightMobileButton"
-    style={chartActionStyle("blue")}
-  >
-    {symbol} stock page
-  </Link>
-</div>
+                        <Link
+                          href={`/stock/${encodeURIComponent(symbol)}`}
+                          className="insightMobileButton"
+                          style={chartActionStyle("blue")}
+                        >
+                          {symbol} stock page
+                        </Link>
+                      </div>
                   </div>
                 </>
               ) : (
