@@ -59,9 +59,8 @@ function HelpTip({ text }: { text: string }) {
 }
 
 function topNavBtnStyle(
-  type: "learn" | "pickers" | "dashboard" | "platforms"
+  type: "learn" | "pickers" | "dashboard" | "platforms" | "utilities"
 ): React.CSSProperties {
-
   if (type === "dashboard") {
     return {
       display: "inline-flex",
@@ -72,14 +71,16 @@ function topNavBtnStyle(
       padding: "9px 13px",
       borderRadius: 14,
       border: "1px solid rgba(250,204,21,0.45)",
-      background: "linear-gradient(135deg, rgba(250,204,21,0.20), rgba(202,138,4,0.10))",
+      background:
+        "linear-gradient(135deg, rgba(250,204,21,0.20), rgba(202,138,4,0.10))",
       color: "#fefce8",
       textDecoration: "none",
       fontWeight: 900,
       fontSize: 14,
       whiteSpace: "nowrap",
       boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-      transition: "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
+      transition:
+        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
     };
   }
 
@@ -93,18 +94,20 @@ function topNavBtnStyle(
       padding: "9px 13px",
       borderRadius: 14,
       border: "1px solid rgba(239,68,68,0.45)",
-      background: "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.10))",
+      background:
+        "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.10))",
       color: "#fef2f2",
       textDecoration: "none",
       fontWeight: 900,
       fontSize: 14,
       whiteSpace: "nowrap",
       boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-      transition: "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
+      transition:
+        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
     };
   }
-  
-    if (type === "platforms") {
+
+  if (type === "platforms") {
     return {
       display: "inline-flex",
       alignItems: "center",
@@ -114,14 +117,39 @@ function topNavBtnStyle(
       padding: "9px 13px",
       borderRadius: 14,
       border: "1px solid rgba(34,197,94,0.45)",
-      background: "linear-gradient(135deg, rgba(34,197,94,0.20), rgba(16,185,129,0.10))",
+      background:
+        "linear-gradient(135deg, rgba(34,197,94,0.20), rgba(16,185,129,0.10))",
       color: "#f0fdf4",
       textDecoration: "none",
       fontWeight: 900,
       fontSize: 14,
       whiteSpace: "nowrap",
       boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-      transition: "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
+      transition:
+        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
+    };
+  }
+
+  if (type === "utilities") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      minHeight: 42,
+      padding: "9px 13px",
+      borderRadius: 14,
+      border: "1px solid rgba(168,85,247,0.48)",
+      background:
+        "linear-gradient(135deg, rgba(168,85,247,0.22), rgba(91,33,182,0.12))",
+      color: "#faf5ff",
+      textDecoration: "none",
+      fontWeight: 900,
+      fontSize: 14,
+      whiteSpace: "nowrap",
+      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+      transition:
+        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
     };
   }
 
@@ -134,21 +162,26 @@ function topNavBtnStyle(
     padding: "9px 13px",
     borderRadius: 14,
     border: "1px solid rgba(59,130,246,0.45)",
-    background: "linear-gradient(135deg, rgba(59,130,246,0.20), rgba(37,99,235,0.10))",
+    background:
+      "linear-gradient(135deg, rgba(59,130,246,0.20), rgba(37,99,235,0.10))",
     color: "#f1f5f9",
     textDecoration: "none",
     fontWeight: 900,
     fontSize: 14,
     whiteSpace: "nowrap",
     boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-    transition: "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
+    transition:
+      "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
   };
 }
 
-function topNavIcon(type: "learn" | "pickers" | "dashboard" | "platforms") {
+function topNavIcon(
+  type: "learn" | "pickers" | "dashboard" | "platforms" | "utilities"
+) {
   if (type === "learn") return "📘";
   if (type === "pickers") return "📊";
   if (type === "dashboard") return "📈";
+  if (type === "utilities") return "🧮";
   return "🏦";
 }
 
@@ -499,16 +532,13 @@ export default function UtilitiesClientPage() {
     >
       <div className="wrap">
         <div style={{ display: "grid", gap: 14 }}>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "flex-end",
-              alignItems: "flex-start",
-              gap: 10,
-              flexWrap: "wrap",
-            }}
-          >
-            <Link href="/" style={topNavBtnStyle("dashboard")}>
+          <div className="topNavRow">
+            <Link
+              href="/"
+              style={topNavBtnStyle("dashboard")}
+              className="topNavBtn mobileIconOnly"
+              aria-label="Dashboard"
+            >
               <span
                 aria-hidden="true"
                 style={{
@@ -521,10 +551,14 @@ export default function UtilitiesClientPage() {
               >
                 {topNavIcon("dashboard")}
               </span>
-              <span>Dashboard</span>
+              <span className="topNavLabel dashboardLabel">Dashboard</span>
             </Link>
 
-            <Link href="/platforms" style={topNavBtnStyle("platforms")}>
+            <Link
+              href="/platforms"
+              style={topNavBtnStyle("platforms")}
+              className="topNavBtn mobileTextBtn"
+            >
               <span
                 aria-hidden="true"
                 style={{
@@ -537,10 +571,14 @@ export default function UtilitiesClientPage() {
               >
                 {topNavIcon("platforms")}
               </span>
-              <span>Platforms</span>
+              <span className="topNavLabel">Platforms</span>
             </Link>
 
-            <Link href="/pickers" style={topNavBtnStyle("pickers")}>
+            <Link
+              href="/pickers"
+              style={topNavBtnStyle("pickers")}
+              className="topNavBtn mobileTextBtn"
+            >
               <span
                 aria-hidden="true"
                 style={{
@@ -553,10 +591,15 @@ export default function UtilitiesClientPage() {
               >
                 {topNavIcon("pickers")}
               </span>
-              <span>Stock Pickers</span>
+              <span className="topNavLabel">Pickers</span>
             </Link>
 
-            <Link href="/learn" style={topNavBtnStyle("learn")}>
+            <Link
+              href="/learn"
+              style={topNavBtnStyle("learn")}
+              className="topNavBtn mobileIconOnly"
+              aria-label="Learn"
+            >
               <span
                 aria-hidden="true"
                 style={{
@@ -569,7 +612,28 @@ export default function UtilitiesClientPage() {
               >
                 {topNavIcon("learn")}
               </span>
-              <span>Learn</span>
+              <span className="topNavLabel learnLabel">Learn</span>
+            </Link>
+
+            <Link
+              href="/utilities"
+              style={topNavBtnStyle("utilities")}
+              className="topNavBtn mobileIconOnly activeMobileIconBtn"
+              aria-label="Tools"
+            >
+              <span
+                aria-hidden="true"
+                style={{
+                  fontSize: 15,
+                  lineHeight: 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {topNavIcon("utilities")}
+              </span>
+              <span className="topNavLabel utilitiesLabel">Tools</span>
             </Link>
           </div>
 
@@ -1086,6 +1150,23 @@ export default function UtilitiesClientPage() {
     gap: 16px;
   }
 
+  .topNavRow {
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-start;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .topNavBtn {
+    flex: 0 0 auto;
+  }
+
+  .topNavLabel {
+    display: inline-flex;
+    align-items: center;
+  }
+
   a:hover {
     filter: brightness(1.05);
     transform: translateY(-1px);
@@ -1100,6 +1181,47 @@ export default function UtilitiesClientPage() {
   @media (max-width: 760px) {
     .wrap {
       padding: 16px !important;
+    }
+
+    .topNavRow {
+      justify-content: stretch !important;
+      align-items: stretch !important;
+      gap: 8px !important;
+      flex-wrap: nowrap !important;
+    }
+
+    .topNavBtn {
+      min-width: 0 !important;
+      min-height: 40px !important;
+      padding: 9px 10px !important;
+      border-radius: 12px !important;
+      font-size: 13px !important;
+      gap: 6px !important;
+      flex: 1 1 0 !important;
+    }
+
+    .mobileIconOnly {
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+    }
+
+    .mobileIconOnly .topNavLabel {
+      display: none !important;
+    }
+
+    .mobileTextBtn {
+      justify-content: center !important;
+    }
+
+    .mobileTextBtn :global(span[aria-hidden="true"]) {
+      display: none !important;
+    }
+
+    .activeMobileIconBtn {
+      box-shadow:
+        0 0 0 1px rgba(168,85,247,0.18) inset,
+        0 8px 18px rgba(0,0,0,0.24) !important;
+      filter: brightness(1.05);
     }
   }
 `}</style>
