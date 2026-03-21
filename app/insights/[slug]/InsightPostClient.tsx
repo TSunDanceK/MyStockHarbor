@@ -205,7 +205,7 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
           fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, {
             cache: "no-store",
           }),
-          fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=400`, {
+          fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=2200`, {
             cache: "no-store",
           }),
           fetch(`/api/symbols?q=${encodeURIComponent(symbol)}`, {
@@ -600,7 +600,10 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                       </div>
                     </div>
 
-                    <div className="insightSmallStatCard" style={smallStatCardStyle}>
+                    <div
+                      className="insightSmallStatCard insightDesktopOnlyStat"
+                      style={smallStatCardStyle}
+                    >
                       <div className="insightSmallStatLabel" style={smallStatLabelStyle}>
                         Weekly MA200
                       </div>
@@ -820,7 +823,11 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
         .insightDesktopOnly {
           display: inline-flex;
         }
-
+        
+        .insightDesktopOnlyStat {
+          display: flex;
+        }
+        
         .insightMobileOnly {
           display: none;
         }
@@ -889,6 +896,10 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
           .wrap {
             padding-left: 12px !important;
             padding-right: 12px !important;
+          }
+          
+            .insightDesktopOnlyStat {
+            display: none !important;
           }
 
           .insightPriceValue {
