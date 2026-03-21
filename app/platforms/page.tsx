@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Best Trading Platforms for Beginners, Chart Analysis, and Serious Traders | MyStockHarbor",
+  title:
+    "Best Trading Platforms for Beginners, Chart Analysis, and Serious Traders | MyStockHarbor",
   description:
     "Compare the best trading platforms for beginners, chart analysis, and serious traders, including TradingView, Trading 212, eToro, Interactive Brokers, and Saxo.",
   alternates: {
@@ -214,6 +215,7 @@ function smallVisitBtn(): React.CSSProperties {
     whiteSpace: "nowrap",
   };
 }
+
 const topNavIconWrapStyle: React.CSSProperties = {
   fontSize: 15,
   lineHeight: 1,
@@ -363,7 +365,11 @@ export default function PlatformsPage() {
               </span>
             </Link>
 
-            <Link href="/learn" style={topNavBtnStyle("learn")} className="topNavIconOnlyMobile">
+            <Link
+              href="/learn"
+              style={topNavBtnStyle("learn")}
+              className="topNavIconOnlyMobile"
+            >
               <span aria-hidden="true" style={topNavIconWrapStyle}>
                 {topNavIcon("learn")}
               </span>
@@ -387,17 +393,12 @@ export default function PlatformsPage() {
               PLATFORM GUIDE
             </div>
 
-            <h1
-              style={{
-                margin: "6px 0 0",
-                fontSize: 34,
-                letterSpacing: "-0.4px",
-              }}
-            >
+            <h1 className="platformHeroTitle">
               Best Trading Platforms for Beginners, Chart Analysis, and Serious Traders
             </h1>
 
             <div
+              className="platformHeroText"
               style={{
                 marginTop: 8,
                 opacity: 0.78,
@@ -405,23 +406,42 @@ export default function PlatformsPage() {
                 maxWidth: 860,
               }}
             >
-              Looking for the best trading platform for beginners, better stock chart analysis,
-              or a stronger long-term broker? This guide compares the best trading platforms
-              for different types of users, including <strong>TradingView</strong> for charting,
-              <strong> Trading 212</strong> for beginners, and <strong>Interactive Brokers</strong>
-              for more serious traders.
+              Looking for the best trading platform for beginners, better stock chart
+              analysis, or a stronger long-term broker? This guide compares the best
+              trading platforms for different types of users, including{" "}
+              <strong>TradingView</strong> for charting, <strong>Trading 212</strong>{" "}
+              for beginners, and <strong>Interactive Brokers</strong> for more
+              serious traders.
+            </div>
+
+            <div
+              className="platformMobileOnly"
+              style={{
+                marginTop: 12,
+                padding: "12px 14px",
+                borderRadius: 14,
+                border: "1px solid rgba(250,204,21,0.20)",
+                background:
+                  "linear-gradient(135deg, rgba(250,204,21,0.08), rgba(15,23,42,0.10))",
+                lineHeight: 1.55,
+                opacity: 0.88,
+              }}
+            >
+              <strong>Simple setup:</strong> analyse on <strong>TradingView</strong>,
+              then use a broker like <strong>Trading 212</strong> or{" "}
+              <strong>Interactive Brokers</strong> if you decide to invest.
             </div>
           </div>
         </div>
 
         <div
+          className="topCompareGrid platformDesktopOnly"
           style={{
             marginTop: 18,
             display: "grid",
             gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
             gap: 14,
           }}
-          className="topCompareGrid"
         >
           <div
             style={{
@@ -443,45 +463,45 @@ export default function PlatformsPage() {
             </div>
           </div>
 
-<div
-  style={{
-    borderRadius: 16,
-    border: "1px solid rgba(59,130,246,0.28)",
-    background:
-      "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(168,85,247,0.08))",
-    padding: 16,
-    position: "relative",
-    overflow: "hidden",
-  }}
->
-  <div
-    style={{
-      display: "inline-flex",
-      alignItems: "center",
-      padding: "5px 10px",
-      borderRadius: 999,
-      background: "rgba(250,204,21,0.18)",
-      border: "1px solid rgba(250,204,21,0.30)",
-      color: "#fde68a",
-      fontSize: 11,
-      fontWeight: 900,
-      letterSpacing: "0.35px",
-      marginBottom: 10,
-    }}
-  >
-    ★ MOST BEGINNER-FRIENDLY
-  </div>
+          <div
+            style={{
+              borderRadius: 16,
+              border: "1px solid rgba(59,130,246,0.28)",
+              background:
+                "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(168,85,247,0.08))",
+              padding: 16,
+              position: "relative",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "5px 10px",
+                borderRadius: 999,
+                background: "rgba(250,204,21,0.18)",
+                border: "1px solid rgba(250,204,21,0.30)",
+                color: "#fde68a",
+                fontSize: 11,
+                fontWeight: 900,
+                letterSpacing: "0.35px",
+                marginBottom: 10,
+              }}
+            >
+              ★ MOST BEGINNER-FRIENDLY
+            </div>
 
-  <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>
-    BEST FOR BEGINNERS
-  </div>
-  <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900 }}>
-    Trading 212
-  </div>
-  <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.55 }}>
-    Best if you want the simplest route to buying stocks and ETFs.
-  </div>
-</div>
+            <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>
+              BEST FOR BEGINNERS
+            </div>
+            <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900 }}>
+              Trading 212
+            </div>
+            <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.55 }}>
+              Best if you want the simplest route to buying stocks and ETFs.
+            </div>
+          </div>
 
           <div
             style={{
@@ -526,6 +546,7 @@ export default function PlatformsPage() {
           </div>
 
           <table
+            className="platformCompareTable platformDesktopOnly"
             style={{
               width: "100%",
               borderCollapse: "collapse",
@@ -569,51 +590,119 @@ export default function PlatformsPage() {
               ))}
             </tbody>
           </table>
+
+          <div className="platformCompareMobile">
+            {PLATFORMS.map((item) => (
+              <div
+                key={item.name}
+                style={{
+                  padding: "12px 14px",
+                  borderTop: "1px solid rgba(255,255,255,0.08)",
+                }}
+              >
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(0, 1fr) auto auto",
+                    gap: 10,
+                    alignItems: "center",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontWeight: 900,
+                      minWidth: 0,
+                    }}
+                  >
+                    {item.name}
+                  </div>
+
+                  <div
+                    style={{
+                      fontWeight: 900,
+                      color: "#86efac",
+                      whiteSpace: "nowrap",
+                      fontSize: 13,
+                    }}
+                  >
+                    {item.score}
+                  </div>
+
+                  <a href={item.affiliateHref} style={smallVisitBtn()}>
+                    Visit →
+                  </a>
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 6,
+                    opacity: 0.8,
+                    lineHeight: 1.45,
+                    fontSize: 13,
+                  }}
+                >
+                  <strong>Best for:</strong> {item.shortLabel}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
-      <div
-  style={{
-    marginTop: 18,
-    borderRadius: 16,
-    border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(255,255,255,0.04)",
-    padding: 16,
-  }}
->
-  <div style={{ fontWeight: 950, marginBottom: 10 }}>
-    How to choose a platform
-  </div>
+        <div className="platformDesktopOnly">
+          <div
+            style={{
+              marginTop: 18,
+              borderRadius: 16,
+              border: "1px solid rgba(255,255,255,0.12)",
+              background: "rgba(255,255,255,0.04)",
+              padding: 16,
+            }}
+          >
+            <div style={{ fontWeight: 950, marginBottom: 10 }}>
+              How to choose a platform
+            </div>
 
-  <div
-    style={{
-      display: "grid",
-      gap: 10,
-    }}
-  >
-    <div style={{ opacity: 0.86, lineHeight: 1.55 }}>
-      <strong>If you are brand new:</strong> start with <strong>Trading 212</strong> for the easiest route to buying stocks and ETFs.
-    </div>
+            <div
+              style={{
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              <div style={{ opacity: 0.86, lineHeight: 1.55 }}>
+                <strong>If you are brand new:</strong> start with{" "}
+                <strong>Trading 212</strong> for the easiest route to buying stocks
+                and ETFs.
+              </div>
 
-    <div style={{ opacity: 0.86, lineHeight: 1.55 }}>
-      <strong>If you want the best charts:</strong> use <strong>TradingView</strong> for analysis and chart reading.
-    </div>
+              <div style={{ opacity: 0.86, lineHeight: 1.55 }}>
+                <strong>If you want the best charts:</strong> use{" "}
+                <strong>TradingView</strong> for analysis and chart reading.
+              </div>
 
-    <div style={{ opacity: 0.86, lineHeight: 1.55 }}>
-      <strong>If you want a more serious broker:</strong> choose <strong>Interactive Brokers</strong> for a stronger long-term platform.
-    </div>
-<div
-  style={{
-    marginTop: 6,
-    paddingTop: 10,
-    borderTop: "1px solid rgba(255,255,255,0.1)",
-    opacity: 0.9,
-    lineHeight: 1.55,
-  }}
->
-  <strong>Many users do this:</strong> analyse stocks on <strong>TradingView</strong>, then use a broker like <strong>Trading 212</strong> or <strong>Interactive Brokers</strong> if they decide to invest.
-</div>
-  </div>
-</div>
+              <div style={{ opacity: 0.86, lineHeight: 1.55 }}>
+                <strong>If you want a more serious broker:</strong> choose{" "}
+                <strong>Interactive Brokers</strong> for a stronger long-term
+                platform.
+              </div>
+
+              <div
+                style={{
+                  marginTop: 6,
+                  paddingTop: 10,
+                  borderTop: "1px solid rgba(255,255,255,0.1)",
+                  opacity: 0.9,
+                  lineHeight: 1.55,
+                }}
+              >
+                <strong>Many users do this:</strong> analyse stocks on{" "}
+                <strong>TradingView</strong>, then use a broker like{" "}
+                <strong>Trading 212</strong> or{" "}
+                <strong>Interactive Brokers</strong> if they decide to invest.
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div style={{ marginTop: 22, display: "grid", gap: 16 }}>
           {PLATFORMS.map((item, idx) => (
             <section
@@ -637,6 +726,7 @@ export default function PlatformsPage() {
               >
                 <div style={{ minWidth: 0, flex: "1 1 auto" }}>
                   <div
+                    className="platformTopPills"
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -662,6 +752,7 @@ export default function PlatformsPage() {
                     </div>
 
                     <div
+                      className="platformHighlightPill"
                       style={{
                         display: "inline-flex",
                         alignItems: "center",
@@ -678,6 +769,7 @@ export default function PlatformsPage() {
                   </div>
 
                   <div
+                    className="platformHeaderBlock"
                     style={{
                       marginTop: 14,
                       display: "flex",
@@ -686,51 +778,52 @@ export default function PlatformsPage() {
                       flexWrap: "wrap",
                     }}
                   >
-<a
-  href={item.affiliateHref}
-  aria-label={`Visit ${item.name}`}
-  style={{ textDecoration: "none" }}
->
-  <div
-    style={{
-      width: item.name === "TradingView" ? 148 : 76,
-      height: item.name === "TradingView" ? 68 : 76,
-      borderRadius: item.name === "TradingView" ? 18 : 16,
-      border:
-        item.name === "TradingView"
-          ? "1px solid rgba(59,130,246,0.26)"
-          : "1px solid rgba(255,255,255,0.12)",
-      background:
-        item.name === "TradingView"
-          ? "linear-gradient(135deg, rgba(255,255,255,0.98), rgba(241,245,249,0.96))"
-          : "#ffffff",
-      boxShadow:
-        item.name === "TradingView"
-          ? "0 10px 24px rgba(0,0,0,0.22)"
-          : "none",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: item.name === "TradingView" ? "10px 16px" : 10,
-      overflow: "hidden",
-      flex: "0 0 auto",
-      cursor: "pointer",
-    }}
-  >
-    <img
-      src={item.logoSrc}
-      alt={item.logoAlt}
-      style={{
-        width: item.name === "TradingView" ? "100%" : "100%",
-        height: item.name === "TradingView" ? "auto" : "100%",
-        maxWidth: "100%",
-        maxHeight: "100%",
-        objectFit: "contain",
-        display: "block",
-      }}
-    />
-  </div>
-</a>
+                    <a
+                      href={item.affiliateHref}
+                      aria-label={`Visit ${item.name}`}
+                      style={{ textDecoration: "none" }}
+                    >
+                      <div
+                        className="platformLogoBox"
+                        style={{
+                          width: item.name === "TradingView" ? 148 : 76,
+                          height: item.name === "TradingView" ? 68 : 76,
+                          borderRadius: item.name === "TradingView" ? 18 : 16,
+                          border:
+                            item.name === "TradingView"
+                              ? "1px solid rgba(59,130,246,0.26)"
+                              : "1px solid rgba(255,255,255,0.12)",
+                          background:
+                            item.name === "TradingView"
+                              ? "linear-gradient(135deg, rgba(255,255,255,0.98), rgba(241,245,249,0.96))"
+                              : "#ffffff",
+                          boxShadow:
+                            item.name === "TradingView"
+                              ? "0 10px 24px rgba(0,0,0,0.22)"
+                              : "none",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          padding: item.name === "TradingView" ? "10px 16px" : 10,
+                          overflow: "hidden",
+                          flex: "0 0 auto",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <img
+                          src={item.logoSrc}
+                          alt={item.logoAlt}
+                          style={{
+                            width: "100%",
+                            height: item.name === "TradingView" ? "auto" : "100%",
+                            maxWidth: "100%",
+                            maxHeight: "100%",
+                            objectFit: "contain",
+                            display: "block",
+                          }}
+                        />
+                      </div>
+                    </a>
 
                     <div style={{ minWidth: 0 }}>
                       {item.recommended ? (
@@ -782,7 +875,10 @@ export default function PlatformsPage() {
                           {item.score}
                         </div>
 
-                        <div style={{ opacity: 0.74, fontSize: 14 }}>
+                        <div
+                          className="platformScoreLabel"
+                          style={{ opacity: 0.74, fontSize: 14 }}
+                        >
                           MyStockHarbor platform score
                         </div>
                       </div>
@@ -800,6 +896,7 @@ export default function PlatformsPage() {
                   </div>
 
                   <p
+                    className="platformSummaryText"
                     style={{
                       margin: "14px 0 0",
                       opacity: 0.84,
@@ -810,93 +907,95 @@ export default function PlatformsPage() {
                   </p>
                 </div>
 
-<div
-  style={{
-    width: 300,
-    minWidth: 300,
-    maxWidth: 300,
-    display: "grid",
-    gap: 12,
-    alignContent: "start",
-    flex: "0 0 300px",
-  }}
->
-  <a href={item.affiliateHref} style={ctaBtn()}>
-    {item.ctaText} →
-  </a>
+                <div
+                  className="platformRightRail"
+                  style={{
+                    width: 300,
+                    minWidth: 300,
+                    maxWidth: 300,
+                    display: "grid",
+                    gap: 12,
+                    alignContent: "start",
+                    flex: "0 0 300px",
+                  }}
+                >
+                  <a href={item.affiliateHref} style={ctaBtn()}>
+                    {item.ctaText} →
+                  </a>
 
-  {item.name === "Trading 212" && (
-    <div
-      style={{
-        fontSize: 13,
-        color: "#86efac",
-        fontWeight: 800,
-        textAlign: "center",
-      }}
-    >
-      Most beginners start here
-    </div>
-  )}
+                  {item.name === "Trading 212" && (
+                    <div
+                      style={{
+                        fontSize: 13,
+                        color: "#86efac",
+                        fontWeight: 800,
+                        textAlign: "center",
+                      }}
+                    >
+                      Most beginners start here
+                    </div>
+                  )}
 
-  <div
-    style={{
-      fontSize: 13,
-      opacity: 0.72,
-      lineHeight: 1.5,
-      textAlign: "center",
-    }}
-  >
-    Visit official platform page
-  </div>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      opacity: 0.72,
+                      lineHeight: 1.5,
+                      textAlign: "center",
+                    }}
+                  >
+                    Visit official platform page
+                  </div>
 
-  {item.name === "TradingView" && (
-    <div
-      style={{
-        borderRadius: 18,
-        border: "1px solid rgba(59,130,246,0.34)",
-        background:
-          "linear-gradient(135deg, rgba(37,99,235,0.22), rgba(30,41,59,0.22))",
-        padding: 18,
-        boxShadow: "0 12px 28px rgba(0,0,0,0.22)",
-      }}
-    >
-      <div
-        style={{
-          fontSize: 34,
-          lineHeight: 1,
-          fontWeight: 950,
-          letterSpacing: "-1px",
-          color: "#dbeafe",
-        }}
-      >
-        $15 OFF
-      </div>
+                  {item.name === "TradingView" && (
+                    <div
+                      className="platformPromoCard"
+                      style={{
+                        borderRadius: 18,
+                        border: "1px solid rgba(59,130,246,0.34)",
+                        background:
+                          "linear-gradient(135deg, rgba(37,99,235,0.22), rgba(30,41,59,0.22))",
+                        padding: 18,
+                        boxShadow: "0 12px 28px rgba(0,0,0,0.22)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 34,
+                          lineHeight: 1,
+                          fontWeight: 950,
+                          letterSpacing: "-1px",
+                          color: "#dbeafe",
+                        }}
+                      >
+                        $15 OFF
+                      </div>
 
-      <div
-        style={{
-          marginTop: 10,
-          fontSize: 14,
-          lineHeight: 1.55,
-          opacity: 0.88,
-          color: "#e2e8f0",
-        }}
-      >
-        Eligible new users get $15 toward a new TradingView plan when signing up
-        through this page.
-      </div>
-    </div>
-  )}
-</div>
+                      <div
+                        style={{
+                          marginTop: 10,
+                          fontSize: 14,
+                          lineHeight: 1.55,
+                          opacity: 0.88,
+                          color: "#e2e8f0",
+                        }}
+                      >
+                        Eligible new users get $15 toward a new TradingView plan
+                        when signing up through this page.
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div
+                className="platformGrid"
                 style={{
                   marginTop: 18,
                   display: "grid",
                   gridTemplateColumns: "1.1fr 1fr 1fr",
                   gap: 14,
                 }}
-                className="platformGrid"
               >
                 <div
                   style={{
@@ -982,12 +1081,20 @@ export default function PlatformsPage() {
           margin: 0 auto;
           padding: 24px;
         }
-        
-          .topNavShowDesktop {
+
+        .topNavShowDesktop {
           display: inline;
         }
 
         .topNavShowMobile {
+          display: none;
+        }
+
+        .platformMobileOnly {
+          display: none;
+        }
+
+        .platformCompareMobile {
           display: none;
         }
 
@@ -1012,7 +1119,7 @@ export default function PlatformsPage() {
 
           .topNavRow {
             display: grid !important;
-            grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.15fr) 64px 64px !important;
+            grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.05fr) 60px 60px !important;
             gap: 8px !important;
             align-items: stretch !important;
           }
@@ -1043,6 +1150,68 @@ export default function PlatformsPage() {
 
           .topNavShowMobile {
             display: inline !important;
+          }
+
+          .platformHeroTitle {
+            margin: 6px 0 0 !important;
+            font-size: 26px !important;
+            line-height: 1.12 !important;
+            letter-spacing: -0.5px !important;
+            max-width: 100% !important;
+          }
+
+          .platformHeroText {
+            font-size: 14px !important;
+            line-height: 1.55 !important;
+          }
+
+          .platformDesktopOnly {
+            display: none !important;
+          }
+
+          .platformMobileOnly {
+            display: block !important;
+          }
+
+          .platformCompareMobile {
+            display: block !important;
+          }
+
+          .platformTopPills {
+            display: none !important;
+          }
+
+          .platformRightRail {
+            width: 100% !important;
+            min-width: 0 !important;
+            max-width: 100% !important;
+            flex: 1 1 100% !important;
+            margin-top: 14px !important;
+          }
+
+          .platformHeaderBlock {
+            align-items: flex-start !important;
+            gap: 12px !important;
+          }
+
+          .platformLogoBox {
+            width: 64px !important;
+            height: 64px !important;
+            border-radius: 14px !important;
+            padding: 10px !important;
+          }
+
+          .platformScoreLabel {
+            display: none !important;
+          }
+
+          .platformSummaryText {
+            font-size: 14px !important;
+            line-height: 1.55 !important;
+          }
+
+          .platformPromoCard {
+            padding: 14px !important;
           }
         }
       `}</style>
