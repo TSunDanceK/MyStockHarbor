@@ -597,7 +597,7 @@ export default function UtilitiesClientPage() {
             <Link
               href="/learn"
               style={topNavBtnStyle("learn")}
-              className="topNavBtn mobileIconOnly"
+              className="topNavBtn mobileIconOnly forceIconOnlyBtn"
               aria-label="Learn"
             >
               <span
@@ -613,27 +613,6 @@ export default function UtilitiesClientPage() {
                 {topNavIcon("learn")}
               </span>
               <span className="topNavLabel learnLabel">Learn</span>
-            </Link>
-
-            <Link
-              href="/utilities"
-              style={topNavBtnStyle("utilities")}
-              className="topNavBtn mobileIconOnly activeMobileIconBtn"
-              aria-label="Tools"
-            >
-              <span
-                aria-hidden="true"
-                style={{
-                  fontSize: 15,
-                  lineHeight: 1,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {topNavIcon("utilities")}
-              </span>
-              <span className="topNavLabel utilitiesLabel">Tools</span>
             </Link>
           </div>
 
@@ -666,7 +645,7 @@ export default function UtilitiesClientPage() {
           </div>
         </div>
 
-        <section style={infoSectionStyle()}>
+        <section style={infoSectionStyle()} className="mobileHideIntroSection">
           <h2 style={{ margin: 0, fontSize: 24, lineHeight: 1.2 }}>
             Free trading calculators for risk management
           </h2>
@@ -1209,6 +1188,15 @@ export default function UtilitiesClientPage() {
       display: none !important;
     }
 
+    .forceIconOnlyBtn {
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+    }
+
+    .forceIconOnlyBtn .topNavLabel {
+      display: none !important;
+    }
+
     .mobileTextBtn {
       justify-content: center !important;
     }
@@ -1217,11 +1205,8 @@ export default function UtilitiesClientPage() {
       display: none !important;
     }
 
-    .activeMobileIconBtn {
-      box-shadow:
-        0 0 0 1px rgba(168,85,247,0.18) inset,
-        0 8px 18px rgba(0,0,0,0.24) !important;
-      filter: brightness(1.05);
+    .mobileHideIntroSection {
+      display: none !important;
     }
   }
 `}</style>
