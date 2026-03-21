@@ -138,9 +138,8 @@ function inferInsightTag(title: string, excerpt: string, contentHtml: string) {
   };
 }
 
-function chartBasisText(symbol: string) {
-  if (!symbol) return "Article overview";
-  return "Daily chart";
+function tradingViewHref(symbol: string) {
+  return `/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`;
 }
 
 export default function InsightPostClient({ post }: { post: InsightPostData }) {
@@ -258,7 +257,6 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
     [post.title, post.excerpt, post.contentHtml]
   );
 
- const chartBasis = useMemo(() => chartBasisText(symbol), [symbol]);
 
   const chartSlice = history.slice(-240);
   const ma50Slice = ma50.slice(-240);
@@ -275,12 +273,11 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
     >
       <div className="wrap">
         <div
+          className="insightTopActions"
           style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 12,
-            flexWrap: "wrap",
+            display: "grid",
+            gridTemplateColumns: symbol ? "repeat(2, minmax(0, 1fr))" : "1fr",
+            gap: 10,
             marginBottom: 16,
           }}
         >
@@ -428,23 +425,6 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                 {companyName || (symbol ? `${symbol} chart structure` : "Editorial insight")}
               </div>
             </div>
-
-            <div style={summaryCardStyle}>
-              <div style={miniLabelStyle}>Chart basis</div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 22,
-                  fontWeight: 900,
-                  lineHeight: 1.25,
-                }}
-              >
-                {chartBasis}
-              </div>
-              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.72 }}>
-                Snapshot uses daily price, Daily MA50 and Daily MA200
-              </div>
-            </div>
           </div>
 
           {symbol ? (
@@ -551,13 +531,77 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
                           : "Distance unavailable"}
                       </div>
                     </div>
+                  </div>
 
-                    <div style={smallStatCardStyle}>
-                      <div style={smallStatLabelStyle}>Chart read</div>
-                      <div style={smallStatValueStyle}>{trend}</div>
-                      <div style={smallStatMetaStyle}>
-                        Use this together with the article below
-                      </div>
+                  <div
+                    className="insightChartActions"
+                    style={{
+                      marginTop: 14,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div className="insightChartActionsDesktop" style={{ fontSize: 13, opacity: 0.74 }}>
+                      Compare this chart snapshot with the full dashboard, latest headlines, or TradingView.
+                    </div>
+
+                    <div className="insightChartActionsMobile" style={{ fontSize: 13, opacity: 0.78 }}>
+                      Quick links for {symbol}
+                    </div>
+
+                    <div
+                      className="insightChartActionsButtons"
+                      style={{
+                        display: "flex",
+                        gap: 10,
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <Link
+                        href={`/stock/${encodeURIComponent(symbol)}/news`}
+                        className="insightDesktopOnly"
+                        style={chartActionStyle("gold")}
+                      >
+                        Check out {symbol} headlines →
+                      </Link>
+
+                      <a
+                        href={tradingViewHref(symbol)}
+                        target="_blank"
+                        rel="noopener noreferrer sponsored"
+                        className="insightDesktopOnly"
+                        style={chartActionStyle("green")}
+                      >
+                        Open in TradingView ↗
+                      </a>
+
+                      <Link
+                        href={`/?symbol=${encodeURIComponent(symbol)}`}
+                        className="insightDesktopOnly"
+                        style={chartActionStyle("blue")}
+                      >
+                        Open chart dashboard →
+                      </Link>
+
+                      <Link
+                        href={`/stock/${encodeURIComponent(symbol)}/news`}
+                        className="insightMobileOnly"
+                        style={chartActionStyle("gold")}
+                      >
+                        {symbol} headlines →
+                      </Link>
+
+                      <Link
+                        href={`/stock/${encodeURIComponent(symbol)}`}
+                        className="insightMobileOnly"
+                        style={chartActionStyle("blue")}
+                      >
+                        {symbol} stock page →
+                      </Link>
                     </div>
                   </div>
                 </>
@@ -601,13 +645,7 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
         >
           <div style={{ fontWeight: 900, marginBottom: 8 }}>Continue exploring</div>
 
-          <div
-            style={{
-              display: "flex",
-              gap: 12,
-              flexWrap: "wrap",
-            }}
-          >
+          <div className="insightExploreGrid">
             <Link href="/pickers" style={ctaStyle("green")}>
               Scan Stock Pickers
             </Link>
@@ -640,8 +678,30 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
 
         .insightSummaryGrid {
           display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
+          grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 14px;
+        }
+
+        .insightExploreGrid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
+        }
+
+        .insightDesktopOnly {
+          display: inline-flex;
+        }
+
+        .insightMobileOnly {
+          display: none;
+        }
+
+        .insightChartActionsDesktop {
+          display: block;
+        }
+
+        .insightChartActionsMobile {
+          display: none;
         }
 
         .insightArticleBody h2 {
@@ -690,11 +750,6 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
             padding: 18px 16px 34px !important;
           }
 
-          .insightSummaryGrid,
-          .insightChartMetaGrid {
-            grid-template-columns: 1fr !important;
-          }
-
           .insightHeroTitle {
             font-size: 34px !important;
             line-height: 1.08 !important;
@@ -725,6 +780,48 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
           .insightArticleBody h3 {
             font-size: 17px !important;
           }
+
+          .insightTopActions {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+
+          .insightChartMetaGrid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 10px !important;
+          }
+
+          .insightExploreGrid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 10px !important;
+          }
+
+          .insightChartActions {
+            align-items: stretch !important;
+          }
+
+          .insightChartActionsDesktop {
+            display: none !important;
+          }
+
+          .insightChartActionsMobile {
+            display: block !important;
+            width: 100%;
+          }
+
+          .insightChartActionsButtons {
+            width: 100%;
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px !important;
+          }
+
+          .insightDesktopOnly {
+            display: none !important;
+          }
+
+          .insightMobileOnly {
+            display: inline-flex !important;
+          }
         }
       `}</style>
     </main>
@@ -739,7 +836,8 @@ function topLinkStyle(tint: "blue" | "gold"): React.CSSProperties {
       justifyContent: "center",
       gap: 8,
       minHeight: 42,
-      padding: "9px 13px",
+      width: "100%",
+      padding: "9px 12px",
       borderRadius: 14,
       border: "1px solid rgba(250,204,21,0.45)",
       background:
@@ -761,7 +859,8 @@ function topLinkStyle(tint: "blue" | "gold"): React.CSSProperties {
     justifyContent: "center",
     gap: 8,
     minHeight: 42,
-    padding: "9px 13px",
+    width: "100%",
+    padding: "9px 12px",
     borderRadius: 14,
     border: "1px solid rgba(59,130,246,0.45)",
     background:
@@ -785,7 +884,9 @@ function ctaStyle(
       display: "inline-flex",
       alignItems: "center",
       justifyContent: "center",
-      padding: "11px 14px",
+      width: "100%",
+      minWidth: 0,
+      padding: "11px 12px",
       borderRadius: 12,
       border: "1px solid rgba(34,197,94,0.32)",
       background:
@@ -793,6 +894,7 @@ function ctaStyle(
       color: "#ecfdf5",
       textDecoration: "none",
       fontWeight: 900,
+      textAlign: "center",
     };
   }
 
@@ -801,7 +903,9 @@ function ctaStyle(
       display: "inline-flex",
       alignItems: "center",
       justifyContent: "center",
-      padding: "11px 14px",
+      width: "100%",
+      minWidth: 0,
+      padding: "11px 12px",
       borderRadius: 12,
       border: "1px solid rgba(168,85,247,0.32)",
       background:
@@ -809,6 +913,7 @@ function ctaStyle(
       color: "#faf5ff",
       textDecoration: "none",
       fontWeight: 900,
+      textAlign: "center",
     };
   }
 
@@ -817,7 +922,9 @@ function ctaStyle(
       display: "inline-flex",
       alignItems: "center",
       justifyContent: "center",
-      padding: "11px 14px",
+      width: "100%",
+      minWidth: 0,
+      padding: "11px 12px",
       borderRadius: 12,
       border: "1px solid rgba(250,204,21,0.32)",
       background:
@@ -825,6 +932,66 @@ function ctaStyle(
       color: "#fefce8",
       textDecoration: "none",
       fontWeight: 900,
+      textAlign: "center",
+    };
+  }
+
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+    minWidth: 0,
+    padding: "11px 12px",
+    borderRadius: 12,
+    border: "1px solid rgba(59,130,246,0.32)",
+    background:
+      "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
+    color: "#eff6ff",
+    textDecoration: "none",
+    fontWeight: 900,
+    textAlign: "center",
+  };
+}
+
+function chartActionStyle(
+  tint: "gold" | "green" | "blue"
+): React.CSSProperties {
+  if (tint === "gold") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "11px 14px",
+      borderRadius: 14,
+      border: "1px solid rgba(250,204,21,0.34)",
+      background:
+        "linear-gradient(135deg, rgba(250,204,21,0.16), rgba(202,138,4,0.08))",
+      color: "#fef3c7",
+      textDecoration: "none",
+      fontWeight: 900,
+      whiteSpace: "nowrap",
+      minWidth: 0,
+      textAlign: "center",
+    };
+  }
+
+  if (tint === "green") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "11px 14px",
+      borderRadius: 14,
+      border: "1px solid rgba(34,197,94,0.40)",
+      background:
+        "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(16,185,129,0.10))",
+      color: "#ecfdf5",
+      textDecoration: "none",
+      fontWeight: 900,
+      whiteSpace: "nowrap",
+      minWidth: 0,
+      textAlign: "center",
     };
   }
 
@@ -833,13 +1000,16 @@ function ctaStyle(
     alignItems: "center",
     justifyContent: "center",
     padding: "11px 14px",
-    borderRadius: 12,
-    border: "1px solid rgba(59,130,246,0.32)",
+    borderRadius: 14,
+    border: "1px solid rgba(59,130,246,0.45)",
     background:
-      "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
+      "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(37,99,235,0.12))",
     color: "#eff6ff",
     textDecoration: "none",
     fontWeight: 900,
+    whiteSpace: "nowrap",
+    minWidth: 0,
+    textAlign: "center",
   };
 }
 
