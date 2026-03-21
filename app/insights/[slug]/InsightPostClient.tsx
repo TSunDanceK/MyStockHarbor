@@ -430,7 +430,6 @@ export default function InsightPostClient({ post }: { post: InsightPostData }) {
             </div>
 
             <div style={summaryCardStyle}>
-            <div style={summaryCardStyle}>
               <div style={miniLabelStyle}>Chart basis</div>
               <div
                 style={{
