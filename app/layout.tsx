@@ -27,24 +27,30 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const footerLinkStyle: React.CSSProperties = {
+    color: "rgba(241,245,249,0.68)",
+    textDecoration: "none",
+  };
+
   return (
     <html lang="en">
       <head>
-  <script
-    async
-    src="https://www.googletagmanager.com/gtag/js?id=G-V2BD40X7H2"
-  />
-  <script
-    dangerouslySetInnerHTML={{
-      __html: `
-        window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
-        gtag('js', new Date());
-        gtag('config', 'G-V2BD40X7H2');
-      `,
-    }}
-  />
-</head>
+        <script
+          async
+          src="https://www.googletagmanager.com/gtag/js?id=G-V2BD40X7H2"
+        />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.dataLayer = window.dataLayer || [];
+              function gtag(){dataLayer.push(arguments);}
+              gtag('js', new Date());
+              gtag('config', 'G-V2BD40X7H2');
+            `,
+          }}
+        />
+      </head>
+
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         style={{
@@ -86,11 +92,22 @@ export default function RootLayout({
                   maxWidth: 760,
                 }}
               >
-                <div style={{ fontWeight: 800, fontSize: 14, color: "#f8fafc" }}>
+                <div
+                  style={{
+                    fontWeight: 800,
+                    fontSize: 14,
+                    color: "#f8fafc",
+                  }}
+                >
                   MyStockHarbor
                 </div>
 
-                <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+                <div
+                  style={{
+                    fontSize: 13,
+                    lineHeight: 1.6,
+                  }}
+                >
                   MyStockHarbor is designed for educational purposes and general
                   market research. Please do your own research before making
                   financial decisions.
@@ -105,301 +122,139 @@ export default function RootLayout({
                   alignItems: "start",
                 }}
               >
-                <div style={{ display: "grid", gap: 10, alignContent: "start" }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0" }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 10,
+                    alignContent: "start",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: "#e2e8f0",
+                    }}
+                  >
                     Platform
                   </div>
 
                   <div style={{ display: "grid", gap: 6 }}>
-                    <Link href="/" style={{
-  color: "rgba(241,245,249,0.65)",
-  textDecoration: "none",
-  transition: "all 0.15s ease",
-}}
-onMouseEnter={(e) => {
-  e.currentTarget.style.color = "#93c5fd";
-  e.currentTarget.style.textDecoration = "underline";
-}}
-onMouseLeave={(e) => {
-  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
-  e.currentTarget.style.textDecoration = "none";
-}}
+                    <Link href="/" style={footerLinkStyle}>
                       Dashboard
                     </Link>
-                    <Link href="/pickers" style={{
-  color: "rgba(241,245,249,0.65)",
-  textDecoration: "none",
-  transition: "all 0.15s ease",
-}}
-onMouseEnter={(e) => {
-  e.currentTarget.style.color = "#93c5fd";
-  e.currentTarget.style.textDecoration = "underline";
-}}
-onMouseLeave={(e) => {
-  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
-  e.currentTarget.style.textDecoration = "none";
-}}
+                    <Link href="/pickers" style={footerLinkStyle}>
                       Stock Pickers
                     </Link>
-                    <Link href="/insights" style={{
-  color: "rgba(241,245,249,0.65)",
-  textDecoration: "none",
-  transition: "all 0.15s ease",
-}}
-onMouseEnter={(e) => {
-  e.currentTarget.style.color = "#93c5fd";
-  e.currentTarget.style.textDecoration = "underline";
-}}
-onMouseLeave={(e) => {
-  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
-  e.currentTarget.style.textDecoration = "none";
-}}
+                    <Link href="/insights" style={footerLinkStyle}>
                       Insights
                     </Link>
-                    <Link href="/learn" style={{
-  color: "rgba(241,245,249,0.65)",
-  textDecoration: "none",
-  transition: "all 0.15s ease",
-}}
-onMouseEnter={(e) => {
-  e.currentTarget.style.color = "#93c5fd";
-  e.currentTarget.style.textDecoration = "underline";
-}}
-onMouseLeave={(e) => {
-  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
-  e.currentTarget.style.textDecoration = "none";
-}}
+                    <Link href="/learn" style={footerLinkStyle}>
                       Learn
                     </Link>
-                    <Link href="/platforms" style={{
-  color: "rgba(241,245,249,0.65)",
-  textDecoration: "none",
-  transition: "all 0.15s ease",
-}}
-onMouseEnter={(e) => {
-  e.currentTarget.style.color = "#93c5fd";
-  e.currentTarget.style.textDecoration = "underline";
-}}
-onMouseLeave={(e) => {
-  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
-  e.currentTarget.style.textDecoration = "none";
-}}
+                    <Link href="/platforms" style={footerLinkStyle}>
                       Platforms
                     </Link>
-                    <Link href="/utilities" style={{
-  color: "rgba(241,245,249,0.65)",
-  textDecoration: "none",
-  transition: "all 0.15s ease",
-}}
-onMouseEnter={(e) => {
-  e.currentTarget.style.color = "#93c5fd";
-  e.currentTarget.style.textDecoration = "underline";
-}}
-onMouseLeave={(e) => {
-  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
-  e.currentTarget.style.textDecoration = "none";
-}}
+                    <Link href="/utilities" style={footerLinkStyle}>
                       Utilities
                     </Link>
                   </div>
                 </div>
 
-                <div style={{ display: "grid", gap: 10, alignContent: "start" }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0" }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 10,
+                    alignContent: "start",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: "#e2e8f0",
+                    }}
+                  >
                     Popular Pages
                   </div>
 
                   <div style={{ display: "grid", gap: 6 }}>
-                    <Link
-                      href="/breakout-stocks"
-                      style={{
-  color: "rgba(241,245,249,0.65)",
-  textDecoration: "none",
-  transition: "all 0.15s ease",
-}}
-onMouseEnter={(e) => {
-  e.currentTarget.style.color = "#93c5fd";
-  e.currentTarget.style.textDecoration = "underline";
-}}
-onMouseLeave={(e) => {
-  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
-  e.currentTarget.style.textDecoration = "none";
-}}
-                    >
+                    <Link href="/breakout-stocks" style={footerLinkStyle}>
                       Breakout Stocks
                     </Link>
-                    <Link
-                      href="/oversold-stocks"
-                      style={{
-  color: "rgba(241,245,249,0.65)",
-  textDecoration: "none",
-  transition: "all 0.15s ease",
-}}
-onMouseEnter={(e) => {
-  e.currentTarget.style.color = "#93c5fd";
-  e.currentTarget.style.textDecoration = "underline";
-}}
-onMouseLeave={(e) => {
-  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
-  e.currentTarget.style.textDecoration = "none";
-}}
-                    >
+                    <Link href="/oversold-stocks" style={footerLinkStyle}>
                       Oversold Stocks
                     </Link>
-                    <Link
-                      href="/buy-the-dip-stocks"
-                      style={{
-  color: "rgba(241,245,249,0.65)",
-  textDecoration: "none",
-  transition: "all 0.15s ease",
-}}
-onMouseEnter={(e) => {
-  e.currentTarget.style.color = "#93c5fd";
-  e.currentTarget.style.textDecoration = "underline";
-}}
-onMouseLeave={(e) => {
-  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
-  e.currentTarget.style.textDecoration = "none";
-}}
-                    >
+                    <Link href="/buy-the-dip-stocks" style={footerLinkStyle}>
                       Buy The Dip Stocks
                     </Link>
                     <Link
                       href="/bullish-divergence-stocks"
-                      style={{
-  color: "rgba(241,245,249,0.65)",
-  textDecoration: "none",
-  transition: "all 0.15s ease",
-}}
-onMouseEnter={(e) => {
-  e.currentTarget.style.color = "#93c5fd";
-  e.currentTarget.style.textDecoration = "underline";
-}}
-onMouseLeave={(e) => {
-  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
-  e.currentTarget.style.textDecoration = "none";
-}}
+                      style={footerLinkStyle}
                     >
                       Bullish Divergence Stocks
                     </Link>
                     <Link
                       href="/bearish-divergence-stocks"
-                      style={{
-  color: "rgba(241,245,249,0.65)",
-  textDecoration: "none",
-  transition: "all 0.15s ease",
-}}
-onMouseEnter={(e) => {
-  e.currentTarget.style.color = "#93c5fd";
-  e.currentTarget.style.textDecoration = "underline";
-}}
-onMouseLeave={(e) => {
-  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
-  e.currentTarget.style.textDecoration = "none";
-}}
+                      style={footerLinkStyle}
                     >
                       Bearish Divergence Stocks
                     </Link>
                   </div>
                 </div>
 
-                <div style={{ display: "grid", gap: 10, alignContent: "start" }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0" }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 10,
+                    alignContent: "start",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: "#e2e8f0",
+                    }}
+                  >
                     Company
                   </div>
 
                   <div style={{ display: "grid", gap: 6 }}>
-                    <Link href="/about" style={{
-  color: "rgba(241,245,249,0.65)",
-  textDecoration: "none",
-  transition: "all 0.15s ease",
-}}
-onMouseEnter={(e) => {
-  e.currentTarget.style.color = "#93c5fd";
-  e.currentTarget.style.textDecoration = "underline";
-}}
-onMouseLeave={(e) => {
-  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
-  e.currentTarget.style.textDecoration = "none";
-}}
+                    <Link href="/about" style={footerLinkStyle}>
                       About
                     </Link>
-                    <Link href="/contact" style={{
-  color: "rgba(241,245,249,0.65)",
-  textDecoration: "none",
-  transition: "all 0.15s ease",
-}}
-onMouseEnter={(e) => {
-  e.currentTarget.style.color = "#93c5fd";
-  e.currentTarget.style.textDecoration = "underline";
-}}
-onMouseLeave={(e) => {
-  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
-  e.currentTarget.style.textDecoration = "none";
-}}
+                    <Link href="/contact" style={footerLinkStyle}>
                       Contact
                     </Link>
                   </div>
                 </div>
 
-                <div style={{ display: "grid", gap: 10, alignContent: "start" }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0" }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 10,
+                    alignContent: "start",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: "#e2e8f0",
+                    }}
+                  >
                     Legal
                   </div>
 
                   <div style={{ display: "grid", gap: 6 }}>
-                    <Link
-                      href="/risk-disclaimer"
-                      style={{
-  color: "rgba(241,245,249,0.65)",
-  textDecoration: "none",
-  transition: "all 0.15s ease",
-}}
-onMouseEnter={(e) => {
-  e.currentTarget.style.color = "#93c5fd";
-  e.currentTarget.style.textDecoration = "underline";
-}}
-onMouseLeave={(e) => {
-  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
-  e.currentTarget.style.textDecoration = "none";
-}}
-                    >
+                    <Link href="/risk-disclaimer" style={footerLinkStyle}>
                       Risk Disclaimer
                     </Link>
-                    <Link
-                      href="/affiliate-disclosure"
-                      style={{
-  color: "rgba(241,245,249,0.65)",
-  textDecoration: "none",
-  transition: "all 0.15s ease",
-}}
-onMouseEnter={(e) => {
-  e.currentTarget.style.color = "#93c5fd";
-  e.currentTarget.style.textDecoration = "underline";
-}}
-onMouseLeave={(e) => {
-  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
-  e.currentTarget.style.textDecoration = "none";
-}}
-                    >
+                    <Link href="/affiliate-disclosure" style={footerLinkStyle}>
                       Affiliate Disclosure
                     </Link>
-                    <Link
-                      href="/privacy-policy"
-                      style={{
-  color: "rgba(241,245,249,0.65)",
-  textDecoration: "none",
-  transition: "all 0.15s ease",
-}}
-onMouseEnter={(e) => {
-  e.currentTarget.style.color = "#93c5fd";
-  e.currentTarget.style.textDecoration = "underline";
-}}
-onMouseLeave={(e) => {
-  e.currentTarget.style.color = "rgba(241,245,249,0.65)";
-  e.currentTarget.style.textDecoration = "none";
-}}
-                    >
+                    <Link href="/privacy-policy" style={footerLinkStyle}>
                       Privacy Policy
                     </Link>
                   </div>
