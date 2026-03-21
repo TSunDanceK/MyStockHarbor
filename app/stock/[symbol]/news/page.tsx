@@ -1650,7 +1650,7 @@ export default async function StockNewsPage({ params }: Props) {
               className="newsTopBtn"
               style={topUtilityBtnStyle("green")}
             >
-              🏛 Platforms
+              🏦 Platforms
             </Link>
 
             <Link
