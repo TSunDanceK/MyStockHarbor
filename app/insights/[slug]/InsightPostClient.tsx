@@ -276,7 +276,7 @@ export default function InsightPostClient({
 
           {symbol ? (
             <Link href={`/stock/${symbol}`} style={topLinkStyle("gold")}>
-              View {symbol} Stock Page →
+              {symbol} Stock Page →
             </Link>
           ) : null}
         </div>
@@ -751,6 +751,7 @@ export default function InsightPostClient({
                         style={chartActionStyle("blue")}
                       >
                         {symbol} stock page
+                    
                       </Link>
 
                       <Link
