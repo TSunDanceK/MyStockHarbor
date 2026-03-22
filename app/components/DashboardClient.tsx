@@ -3511,6 +3511,7 @@ return (
         minHeight: "100vh",
       }}
     >
+
       <style>{`
         .msh-page-wrap {
           width: min(1480px, calc(100% - 24px));
@@ -3518,26 +3519,26 @@ return (
           padding: 18px 0 28px;
         }
 
-.msh-topbar {
-  display: block;
-  margin-bottom: 14px;
-}
+        .msh-topbar {
+          display: block;
+          margin-bottom: 14px;
+        }
 
-.msh-top-left {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: nowrap;
-  position: relative;
-}
+        .msh-top-left {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          flex-wrap: nowrap;
+          position: relative;
+        }
 
-.msh-desktop-nav-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 18px;
-}
+        .msh-desktop-nav-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+          margin-bottom: 18px;
+        }
 
         .msh-top-nav-btn:hover {
           transform: translateY(-1px);
@@ -3612,7 +3613,6 @@ return (
           gap: 10px;
         }
 
-
         .msh-bench-grid {
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -3649,8 +3649,6 @@ return (
         .msh-mobile-nav {
           display: none;
         }
-
-        
 
         @media (min-width: 761px) {
           .msh-top-nav-btn {
@@ -3733,15 +3731,16 @@ return (
             display: none;
           }
 
-.msh-score-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
+          .msh-score-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
 
-.msh-bench-grid,
-.msh-breakdown-grid,
-.msh-news-section-grid {
-  grid-template-columns: 1fr;
-}
+          .msh-bench-grid,
+          .msh-breakdown-grid,
+          .msh-news-section-grid {
+            grid-template-columns: 1fr;
+          }
+
           .msh-news-section-title {
             text-align: left;
           }
@@ -3768,7 +3767,10 @@ return (
         }
       `}</style>
 
+      <div className="msh-page-wrap">
         <div className="msh-topbar">
+
+      
           <div className="msh-top-left">
             <Link
               href="/"
