@@ -2,10 +2,11 @@ import type { MetadataRoute } from "next";
 
 export default function robots(): MetadataRoute.Robots {
   return {
-    rules: {
-      userAgent: "*",
-      allow: "/",
-    },
+   rules: {
+  userAgent: "*",
+  allow: "/",
+  disallow: ["/api/"],
+},
     sitemap: "https://mystockharbor.com/sitemap.xml",
   };
 }
