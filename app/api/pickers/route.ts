@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { detectDivergenceFromHistory } from "../../../lib/ta/divergence";
+import { getDailyHistory } from "../../../lib/server/historyCache";
 
 type Point = {
   date: string;
@@ -749,22 +750,19 @@ async function fetchMarket(origin: string) {
   return fetchJSON<MarketPayload>(`${origin}/api/market`);
 }
 
-async function fetchHistory(origin: string, symbol: string, days: number) {
-  const u = `${origin}/api/history?symbol=${encodeURIComponent(symbol)}&days=${days}&interval=d`;
-  const data = await fetchJSON<{ symbol: string; points: any[] }>(u);
+async function fetchHistory(symbol: string, days: number) {
+  const pts = await getDailyHistory(symbol);
 
-  const ptsRaw = Array.isArray(data.points) ? data.points : [];
-  const pts: Point[] = ptsRaw
-    .map((p: any) => ({
+  return pts
+    .map((p) => ({
       date: String(p?.date ?? ""),
       close: Number(p?.close),
       high: p?.high == null ? undefined : Number(p.high),
       low: p?.low == null ? undefined : Number(p.low),
       volume: p?.volume == null ? undefined : Number(p.volume),
     }))
-    .filter((p) => p.date && Number.isFinite(p.close));
-
-  return pts;
+    .filter((p) => p.date && Number.isFinite(p.close))
+    .slice(-days);
 }
 
 /* ------------------------------ universe ----------------------------- */
@@ -886,7 +884,7 @@ async function buildPickersPayload(origin: string) {
     universe.map((symbol) =>
       limit(async () => {
         try {
-          const pts = await fetchHistory(origin, symbol, days);
+          const pts = await fetchHistory(symbol, days);
           if (!pts.length) return;
 
           const comp = buildCompositeFromHistory(pts);
