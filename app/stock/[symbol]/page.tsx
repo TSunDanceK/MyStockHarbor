@@ -43,14 +43,37 @@ export default async function StockPage({ params }: Props) {
             "@context": "https://schema.org",
             "@graph": [
               {
+                "@type": "Organization",
+                "@id": "https://www.mystockharbor.com/#organization",
+                name: "MyStockHarbor",
+                url: "https://www.mystockharbor.com",
+                logo: {
+                  "@type": "ImageObject",
+                  url: "https://www.mystockharbor.com/logo.png",
+                },
+              },
+              {
+                "@type": "WebSite",
+                "@id": "https://www.mystockharbor.com/#website",
+                name: "MyStockHarbor",
+                url: "https://www.mystockharbor.com",
+                publisher: {
+                  "@id": "https://www.mystockharbor.com/#organization",
+                },
+              },
+              {
                 "@type": "WebPage",
                 "@id": `https://www.mystockharbor.com/stock/${upper}#webpage`,
                 url: `https://www.mystockharbor.com/stock/${upper}`,
                 name: `${upper} Stock Analysis | MyStockHarbor`,
+                description: `View ${upper} stock analysis with trend structure, moving averages, technical summary and chart-based insights from MyStockHarbor.`,
                 isPartOf: {
                   "@id": "https://www.mystockharbor.com/#website",
                 },
                 about: {
+                  "@id": `https://www.mystockharbor.com/stock/${upper}#financialproduct`,
+                },
+                mainEntity: {
                   "@id": `https://www.mystockharbor.com/stock/${upper}#financialproduct`,
                 },
               },
@@ -63,6 +86,26 @@ export default async function StockPage({ params }: Props) {
                 provider: {
                   "@id": "https://www.mystockharbor.com/#organization",
                 },
+                url: `https://www.mystockharbor.com/stock/${upper}`,
+                description: `${upper} stock analysis, technical summary, moving averages and chart-based market context.`,
+              },
+              {
+                "@type": "BreadcrumbList",
+                "@id": `https://www.mystockharbor.com/stock/${upper}#breadcrumb`,
+                itemListElement: [
+                  {
+                    "@type": "ListItem",
+                    position: 1,
+                    name: "Home",
+                    item: "https://www.mystockharbor.com/",
+                  },
+                  {
+                    "@type": "ListItem",
+                    position: 2,
+                    name: upper,
+                    item: `https://www.mystockharbor.com/stock/${upper}`,
+                  },
+                ],
               },
             ],
           }),
