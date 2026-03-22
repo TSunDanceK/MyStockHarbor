@@ -7,13 +7,13 @@ export const metadata: Metadata = {
   description:
     "Use MyStockHarbor to explore stock analysis tools, stock pickers, market insights, technical chart views and educational investing resources.",
   alternates: {
-    canonical: "/",
+    canonical: "https://www.mystockharbor.com/",
   },
   openGraph: {
     title: "Stock Analysis Tools, Stock Pickers & Market Insights | MyStockHarbor",
     description:
       "Explore stock analysis tools, technical chart views, stock pickers and market insights on MyStockHarbor.",
-    url: "/",
+    url: "https://www.mystockharbor.com/",
     siteName: "MyStockHarbor",
     type: "website",
   },
@@ -38,7 +38,7 @@ export default function Page() {
                 "@type": "WebSite",
                 "@id": "https://www.mystockharbor.com/#website",
                 name: "MyStockHarbor",
-                url: "https://www.mystockharbor.com",
+                url: "https://www.mystockharbor.com/",
                 description:
                   "Stock analysis tools, stock pickers, market insights and chart-based research from MyStockHarbor.",
                 inLanguage: "en",
@@ -50,22 +50,52 @@ export default function Page() {
                 "@type": "Organization",
                 "@id": "https://www.mystockharbor.com/#organization",
                 name: "MyStockHarbor",
-                url: "https://www.mystockharbor.com",
+                url: "https://www.mystockharbor.com/",
                 logo: {
                   "@type": "ImageObject",
                   url: "https://www.mystockharbor.com/logo.png",
                 },
               },
               {
+                "@type": "WebPage",
+                "@id": "https://www.mystockharbor.com/#webpage",
+                url: "https://www.mystockharbor.com/",
+                name: "Stock Analysis Tools, Stock Pickers & Market Insights | MyStockHarbor",
+                description:
+                  "Use MyStockHarbor to explore stock analysis tools, stock pickers, market insights, technical chart views and educational investing resources.",
+                inLanguage: "en",
+                isPartOf: {
+                  "@id": "https://www.mystockharbor.com/#website",
+                },
+                about: {
+                  "@id": "https://www.mystockharbor.com/#organization",
+                },
+                breadcrumb: {
+                  "@id": "https://www.mystockharbor.com/#breadcrumb",
+                },
+              },
+              {
+                "@type": "BreadcrumbList",
+                "@id": "https://www.mystockharbor.com/#breadcrumb",
+                itemListElement: [
+                  {
+                    "@type": "ListItem",
+                    position: 1,
+                    name: "Home",
+                    item: "https://www.mystockharbor.com/",
+                  },
+                ],
+              },
+              {
                 "@type": "WebApplication",
                 "@id": "https://www.mystockharbor.com/#webapp",
-                name: "MyStockHarbor",
-                url: "https://www.mystockharbor.com",
+                name: "MyStockHarbor Dashboard",
+                url: "https://www.mystockharbor.com/",
                 applicationCategory: "FinanceApplication",
                 operatingSystem: "Web",
                 browserRequirements: "Requires a modern web browser",
-description:
-  "A stock analysis web application providing chart tools, stock pickers, and educational resources to help users study market behaviour and price action.",
+                description:
+                  "A stock analysis web application providing chart tools, stock pickers, market benchmarks, news briefings, and educational resources to help users study market behaviour and price action.",
                 inLanguage: "en",
                 isPartOf: {
                   "@id": "https://www.mystockharbor.com/#website",
@@ -78,6 +108,15 @@ description:
                   price: "0",
                   priceCurrency: "USD",
                 },
+                featureList: [
+                  "Stock chart analysis",
+                  "Technical indicators",
+                  "Stock pickers",
+                  "Market benchmarks",
+                  "Stock news briefings",
+                  "Trading calculators",
+                  "Trading education",
+                ],
               },
             ],
           }),
