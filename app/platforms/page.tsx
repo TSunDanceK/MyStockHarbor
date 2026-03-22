@@ -6,7 +6,21 @@ export const metadata: Metadata = {
   description:
     "Compare beginner-friendly trading platforms and charting tools including TradingView, Trading 212, eToro, Interactive Brokers, and Saxo.",
   alternates: {
-    canonical: "https://mystockharbor.com/platforms",
+    canonical: "https://www.mystockharbor.com/platforms",
+  },
+  openGraph: {
+    title: "Best Trading Platforms for Beginners & Chart Analysis | MyStockHarbor",
+    description:
+      "Compare beginner-friendly trading platforms and charting tools including TradingView, Trading 212, eToro, Interactive Brokers, and Saxo.",
+    url: "https://www.mystockharbor.com/platforms",
+    siteName: "MyStockHarbor",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Best Trading Platforms for Beginners & Chart Analysis | MyStockHarbor",
+    description:
+      "Compare beginner-friendly trading platforms and charting tools including TradingView, Trading 212, eToro, Interactive Brokers, and Saxo.",
   },
 };
 
@@ -335,14 +349,14 @@ export default function PlatformsPage() {
         minHeight: "100vh",
       }}
     >
-           <script
+      <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
           __html: JSON.stringify({
             "@context": "https://schema.org",
             "@type": "CollectionPage",
             name: "Best Trading Platforms for Beginners & Chart Analysis",
-            url: "https://mystockharbor.com/platforms",
+            url: "https://www.mystockharbor.com/platforms",
             description:
               "Compare beginner-friendly trading platforms and charting tools including TradingView, Trading 212, eToro, Interactive Brokers, and Saxo.",
             about: {
@@ -355,15 +369,17 @@ export default function PlatformsPage() {
                 "@type": "ListItem",
                 position: index + 1,
                 item: {
-                  "@type": "Product",
+                  "@type": "SoftwareApplication",
                   name: item.name,
+                  applicationCategory: "FinanceApplication",
+                  operatingSystem: "Web",
                   description: item.summary,
-                  image: `https://mystockharbor.com${item.logoSrc}`,
-                  brand: {
-                    "@type": "Brand",
+                  image: `https://www.mystockharbor.com${item.logoSrc}`,
+                  url: "https://www.mystockharbor.com/platforms",
+                  publisher: {
+                    "@type": "Organization",
                     name: item.name,
                   },
-                  category: "Trading Platform",
                   additionalProperty: [
                     {
                       "@type": "PropertyValue",
@@ -391,13 +407,13 @@ export default function PlatformsPage() {
                   "@type": "ListItem",
                   position: 1,
                   name: "Home",
-                  item: "https://mystockharbor.com/",
+                  item: "https://www.mystockharbor.com/",
                 },
                 {
                   "@type": "ListItem",
                   position: 2,
                   name: "Platforms",
-                  item: "https://mystockharbor.com/platforms",
+                  item: "https://www.mystockharbor.com/platforms",
                 },
               ],
             },
