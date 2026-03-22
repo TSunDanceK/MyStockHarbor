@@ -7,7 +7,7 @@ const pickersJsonLd = {
   "@context": "https://schema.org",
   "@type": "CollectionPage",
   name: "Stock Pickers",
-  url: "https://mystockharbor.com/pickers",
+  url: "https://www.mystockharbor.com/oversold-stocks",
   description:
     "Browse stock screener ideas including oversold stocks, overbought stocks, breakouts, stocks near MA200, divergence setups, unusual volume, and pullback ideas.",
   mainEntity: {
@@ -28,7 +28,7 @@ const pickersJsonLd = {
         item: {
           "@type": "Thing",
           name: "Overbought Stocks",
-          url: "https://mystockharbor.com/overbought-stocks",
+          url: "https://www.mystockharbor.com/overbought-stocks",
         },
       },
       {
@@ -37,7 +37,7 @@ const pickersJsonLd = {
         item: {
           "@type": "Thing",
           name: "Breakout Stocks",
-          url: "https://mystockharbor.com/breakout-stocks",
+          url: "https://www.mystockharbor.com/breakout-stocks",
         },
       },
       {
@@ -46,7 +46,7 @@ const pickersJsonLd = {
         item: {
           "@type": "Thing",
           name: "Buy The Dip Stocks",
-          url: "https://mystockharbor.com/buy-the-dip-stocks",
+          url: "https://www.mystockharbor.com/buy-the-dip-stocks",
         },
       },
       {
@@ -55,7 +55,7 @@ const pickersJsonLd = {
         item: {
           "@type": "Thing",
           name: "Stocks Above 200 Day Moving Average",
-          url: "https://mystockharbor.com/stocks-above-200-day-moving-average",
+          url: "https://www.mystockharbor.com/stocks-above-200-day-moving-average",
         },
       },
       {
@@ -64,7 +64,7 @@ const pickersJsonLd = {
         item: {
           "@type": "Thing",
           name: "Stocks Down From Highs",
-          url: "https://mystockharbor.com/stocks-down-from-highs",
+           url: "https://www.mystockharbor.com/stocks-down-from-highs",
         },
       },
       {
@@ -73,7 +73,7 @@ const pickersJsonLd = {
         item: {
           "@type": "Thing",
           name: "Bullish Divergence Stocks",
-          url: "https://mystockharbor.com/bullish-divergence-stocks",
+          uurl: "https://www.mystockharbor.com/bullish-divergence-stocks",
         },
       },
       {
@@ -82,7 +82,7 @@ const pickersJsonLd = {
         item: {
           "@type": "Thing",
           name: "Bearish Divergence Stocks",
-          url: "https://mystockharbor.com/bearish-divergence-stocks",
+          url: "https://www.mystockharbor.com/bearish-divergence-stocks",
         },
       },
     ],
@@ -94,13 +94,13 @@ const pickersJsonLd = {
         "@type": "ListItem",
         position: 1,
         name: "Home",
-        item: "https://mystockharbor.com/",
+        item: "https://www.mystockharbor.com/",
       },
       {
         "@type": "ListItem",
         position: 2,
         name: "Stock Pickers",
-        item: "https://mystockharbor.com/pickers",
+        item: "https://www.mystockharbor.com/pickers",
       },
     ],
   },
@@ -186,6 +186,10 @@ export default function PickersPage() {
         minHeight: "100vh",
       }}
     >
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(pickersJsonLd) }}
+      />
       <div className="wrap">
         <div style={{ display: "grid", gap: 14 }}>
               <div
