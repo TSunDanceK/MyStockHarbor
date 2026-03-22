@@ -5,7 +5,6 @@ import { useMemo } from "react";
 import StockPriceChart from "@/app/stock/[symbol]/StockPriceChart";
 import type { InsightSnapshot } from "@/lib/blog";
 
-/* TYPES */
 type Point = {
   date: string;
   close: number;
@@ -24,7 +23,6 @@ type InsightPostData = {
   contentHtml: string;
 };
 
-/* HELPERS */
 function formatPostDate(dateString: string) {
   const date = new Date(dateString);
   if (Number.isNaN(date.getTime())) return dateString;
@@ -85,7 +83,6 @@ function tradingViewHref(symbol: string) {
   return `/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`;
 }
 
-/* COMPONENT */
 export default function InsightPostClient({
   post,
   snapshot,
@@ -129,7 +126,6 @@ export default function InsightPostClient({
     <main style={{ minHeight: "100vh", background: "#06080d", color: "#f1f5f9" }}>
       <div className="wrap">
 
-        {/* TOP BUTTONS */}
         <div className="insightTopActions">
           <Link href="/insights" style={topLinkStyle("blue")}>
             ← Back to Insights
@@ -143,22 +139,16 @@ export default function InsightPostClient({
           )}
         </div>
 
-        {/* HEADER */}
         <section className="card">
 
-          {/* PILLS */}
           <div className="pillRow">
-            <div className="pill blue">{symbol}</div>
-            <div className="pill red">Breakdown Risk</div>
-            <div className="pill neutral">
-              <span className="desktopOnly">{timeframeLabel} Chart</span>
-              <span className="mobileOnly">
-                {post.timeframe === "w" ? "W.CHART" : "D.CHART"}
-              </span>
+            <div className="pill">{symbol}</div>
+            <div className="pill">Breakdown Risk</div>
+            <div className="pill">
+              {post.timeframe === "w" ? "Weekly Chart" : "Daily Chart"}
             </div>
           </div>
 
-          {/* DATES */}
           <div className="dates">
             <div>Published: {formatPostDate(post.date)}</div>
             {snapshot?.snapshotDate && (
@@ -169,12 +159,13 @@ export default function InsightPostClient({
           <h1>{post.title}</h1>
           <p className="excerpt">{post.excerpt}</p>
 
-          {/* STATS */}
           <div className="stats">
             <div className="stat">
               <div>Last Price</div>
               <div className="price">
-                ${lastPrice?.toFixed(2) ?? "—"}
+                {typeof lastPrice === "number"
+                  ? `$${lastPrice.toFixed(2)}`
+                  : "—"}
               </div>
             </div>
 
@@ -184,7 +175,6 @@ export default function InsightPostClient({
             </div>
           </div>
 
-          {/* CHART */}
           <StockPriceChart
             symbol={symbol}
             data={chartSlice}
@@ -193,39 +183,6 @@ export default function InsightPostClient({
             height={360}
           />
 
-          {/* CTA */}
-          <div className="ctaRow">
-
-            {/* MOBILE ONLY */}
-            <a
-              href={tradingViewHref(symbol)}
-              target="_blank"
-              rel="noopener noreferrer sponsored"
-              className="mobileOnly"
-              style={chartActionStyle("green")}
-            >
-              Open in TradingView ↗
-            </a>
-
-            {/* DESKTOP ONLY */}
-            <div className="desktopOnly ctaDesktop">
-              <Link
-                href={`/?symbol=${symbol}`}
-                style={chartActionStyle("blue")}
-              >
-                Open chart dashboard →
-              </Link>
-
-              <Link
-                href="/pickers"
-                style={chartActionStyle("purple")}
-              >
-                Stock Scanner →
-              </Link>
-            </div>
-          </div>
-
-          {/* BLOG */}
           <section className="content">
             <div dangerouslySetInnerHTML={{ __html: post.contentHtml }} />
           </section>
@@ -237,9 +194,8 @@ export default function InsightPostClient({
 
         .pillRow {
           display:flex;
-          gap:6px;
-          overflow-x:auto;
-          white-space:nowrap;
+          gap:8px;
+          flex-wrap:wrap;
         }
 
         .pill {
@@ -247,6 +203,8 @@ export default function InsightPostClient({
           border-radius:999px;
           font-size:11px;
           font-weight:900;
+          background:rgba(255,255,255,0.06);
+          border:1px solid rgba(255,255,255,0.12);
         }
 
         .dates { margin-top:10px; font-size:13px; opacity:.8; }
@@ -261,17 +219,7 @@ export default function InsightPostClient({
         .price { font-size:32px; font-weight:900; }
         .trend { font-size:28px; font-weight:900; color:#ef4444; }
 
-        .ctaRow { margin-top:16px; }
-
-        .ctaDesktop { display:flex; gap:10px; }
-
-        .desktopOnly { display:inline-flex; }
-        .mobileOnly { display:none; }
-
         @media (max-width:640px){
-          .desktopOnly { display:none !important; }
-          .mobileOnly { display:inline-flex !important; }
-
           .price { font-size:24px; }
           .trend { font-size:22px; }
         }
@@ -283,4 +231,19 @@ export default function InsightPostClient({
       `}</style>
     </main>
   );
+}
+
+function topLinkStyle(tint: "blue" | "gold"): React.CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+    padding: "10px",
+    borderRadius: 10,
+    fontWeight: 900,
+    background: tint === "gold" ? "#d97706" : "#2563eb",
+    color: "#fff",
+    textDecoration: "none",
+  };
 }
