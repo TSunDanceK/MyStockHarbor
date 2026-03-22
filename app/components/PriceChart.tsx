@@ -3,12 +3,16 @@
 import React, { useMemo } from "react";
 import type { DivResult } from "../../lib/ta/divergence";
 
-type Point = { date: string; close: number };
+type Point = {
+  date: string;
+  close: number;
+};
 
 const CHART_COLORS = {
   price: "rgba(241,245,249,0.96)",
   ma50: "#60a5fa",
   ma200: "#f59e0b",
+  weeklyMa200: "#ef4444",
   bollUpper: "rgba(167,139,250,0.55)",
   bollMid: "rgba(196,181,253,0.72)",
   bollLower: "rgba(167,139,250,0.55)",
@@ -30,6 +34,7 @@ export type Overlay =
   | "None"
   | "MA50"
   | "MA200"
+  | "Weekly MA200"
   | "Bollinger(20,2)"
   | "RSI(14)"
   | "MACD(12,26,9)"
@@ -53,8 +58,10 @@ function fmtXLabel(s: string) {
     const m = s.match(/(\d{2}:\d{2})/);
     return m ? m[1] : s.slice(-5);
   }
+
   const d = new Date(s);
   if (!Number.isFinite(d.getTime())) return s;
+
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${mm}/${dd}`;
@@ -63,11 +70,13 @@ function fmtXLabel(s: string) {
 function minMax(arr: Array<number | null>) {
   let min = Infinity;
   let max = -Infinity;
+
   for (const v of arr) {
     if (typeof v !== "number" || !Number.isFinite(v)) continue;
     if (v < min) min = v;
     if (v > max) max = v;
   }
+
   if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
   if (min === max) return { min: min - 1, max: max + 1 };
   return { min, max };
@@ -78,6 +87,7 @@ type Props = {
   data: Point[];
   ma50: (number | null)[];
   ma200: (number | null)[];
+  weeklyMa200?: (number | null)[];
   overlay?: Overlay;
   selectedIndicators?: Overlay[];
 
@@ -108,6 +118,7 @@ export default function PriceChart(props: Props) {
     data,
     ma50,
     ma200,
+    weeklyMa200,
     overlay = "None",
     selectedIndicators = [],
     divergence = null,
@@ -133,7 +144,6 @@ export default function PriceChart(props: Props) {
 
   const width = 760;
 
-  // padding
   const padL = 34;
   const padR = 54;
   const padT = 24;
@@ -170,6 +180,7 @@ export default function PriceChart(props: Props) {
 
   const showMA50 = activeIndicators.includes("MA50");
   const showMA200 = activeIndicators.includes("MA200");
+  const showWeeklyMA200 = activeIndicators.includes("Weekly MA200");
   const showBollinger = activeIndicators.includes("Bollinger(20,2)");
   const showEMA20 = activeIndicators.includes("EMA20");
   const showVWMA20 = activeIndicators.includes("VWMA(20)");
@@ -185,6 +196,8 @@ export default function PriceChart(props: Props) {
 
     const a50 = ma50.length === n ? ma50 : Array(n).fill(null);
     const a200 = ma200.length === n ? ma200 : Array(n).fill(null);
+    const w200 =
+      weeklyMa200 && weeklyMa200.length === n ? weeklyMa200 : Array(n).fill(null);
 
     const u = bollUpper && bollUpper.length === n ? bollUpper : Array(n).fill(null);
     const m = bollMid && bollMid.length === n ? bollMid : Array(n).fill(null);
@@ -208,20 +221,18 @@ export default function PriceChart(props: Props) {
       ...p,
       ma50: a50[i] as number | null,
       ma200: a200[i] as number | null,
+      weeklyMa200: w200[i] as number | null,
       bu: u[i] as number | null,
       bm: m[i] as number | null,
       bl: l[i] as number | null,
       ema20: e20[i] as number | null,
       vwma20: vw[i] as number | null,
-
       rsi14: rsi[i] as number | null,
       macdLine: ml[i] as number | null,
       macdSignal: ms[i] as number | null,
       macdHist: mh[i] as number | null,
-
       stochK: sk[i] as number | null,
       stochD: sd[i] as number | null,
-
       atr14: at[i] as number | null,
       volume: vol[i] as number | null,
     }));
@@ -229,6 +240,7 @@ export default function PriceChart(props: Props) {
     data,
     ma50,
     ma200,
+    weeklyMa200,
     bollUpper,
     bollMid,
     bollLower,
@@ -247,19 +259,21 @@ export default function PriceChart(props: Props) {
   const hasData = series.length >= 2;
 
   const x = useMemo(() => {
-    return (i: number) => padL + (i * (width - padL - padR)) / Math.max(1, series.length - 1);
+    return (i: number) =>
+      padL + (i * (width - padL - padR)) / Math.max(1, series.length - 1);
   }, [series.length]);
 
-  // PRICE Y RANGE (price + price overlays only)
   const { pMin, pMax, pRange } = useMemo(() => {
     if (!hasData) return { pMin: 0, pMax: 1, pRange: 1 };
 
     const vals: number[] = [];
+
     for (const p of series) {
       vals.push(p.close);
 
       if (showMA50 && typeof p.ma50 === "number") vals.push(p.ma50);
       if (showMA200 && typeof p.ma200 === "number") vals.push(p.ma200);
+      if (showWeeklyMA200 && typeof p.weeklyMa200 === "number") vals.push(p.weeklyMa200);
 
       if (showBollinger) {
         if (typeof p.bu === "number") vals.push(p.bu);
@@ -268,14 +282,24 @@ export default function PriceChart(props: Props) {
       }
 
       if (showEMA20 && typeof p.ema20 === "number") vals.push(p.ema20);
-          if (showVWMA20 && typeof p.vwma20 === "number") vals.push(p.vwma20);
+      if (showVWMA20 && typeof p.vwma20 === "number") vals.push(p.vwma20);
     }
 
     const minV = Math.min(...vals);
     const maxV = Math.max(...vals);
     const r = Math.max(1e-9, maxV - minV);
+
     return { pMin: minV, pMax: maxV, pRange: r };
- }, [hasData, series, showMA50, showMA200, showBollinger, showEMA20, showVWMA20]);
+  }, [
+    hasData,
+    series,
+    showMA50,
+    showMA200,
+    showWeeklyMA200,
+    showBollinger,
+    showEMA20,
+    showVWMA20,
+  ]);
 
   const yMain = useMemo(() => {
     return (v: number) => padT + ((pMax - v) * priceH) / pRange;
@@ -283,7 +307,6 @@ export default function PriceChart(props: Props) {
 
   const subTop = padT + priceH + gap;
 
-  // SUBPANEL RANGE
   const subRange = useMemo(() => {
     if (!hasData || !wantsSubPanel) return null;
 
@@ -294,23 +317,35 @@ export default function PriceChart(props: Props) {
       const mm1 = minMax(series.map((p) => p.macdLine));
       const mm2 = minMax(series.map((p) => p.macdSignal));
       const mm3 = minMax(series.map((p) => p.macdHist));
-      const mins = [mm1?.min, mm2?.min, mm3?.min].filter((x) => typeof x === "number") as number[];
-      const maxs = [mm1?.max, mm2?.max, mm3?.max].filter((x) => typeof x === "number") as number[];
+
+      const mins = [mm1?.min, mm2?.min, mm3?.min].filter(
+        (x) => typeof x === "number"
+      ) as number[];
+      const maxs = [mm1?.max, mm2?.max, mm3?.max].filter(
+        (x) => typeof x === "number"
+      ) as number[];
+
       if (!mins.length || !maxs.length) return null;
+
       const min = Math.min(...mins);
       const max = Math.max(...maxs);
+
       if (min === max) return { min: min - 1, max: max + 1 };
       return { min, max };
     }
 
-    if (activeLowerOverlay === "ATR(14)") return minMax(series.map((p) => p.atr14));
+    if (activeLowerOverlay === "ATR(14)") {
+      return minMax(series.map((p) => p.atr14));
+    }
 
     if (activeLowerOverlay === "Volume") {
       let max = 0;
+
       for (const p of series) {
         const v = p.volume;
         if (typeof v === "number" && Number.isFinite(v) && v > max) max = v;
       }
+
       if (max <= 0) return null;
       return { min: 0, max };
     }
@@ -327,65 +362,86 @@ export default function PriceChart(props: Props) {
   const pathFrom = (arr: Array<number | null>, yFn: (v: number) => number) => {
     let d = "";
     let started = false;
+
     for (let i = 0; i < arr.length; i++) {
       const v = arr[i];
       if (typeof v !== "number" || !Number.isFinite(v)) {
         started = false;
         continue;
       }
+
       const cmd = started ? "L" : "M";
       d += `${cmd} ${x(i).toFixed(2)} ${yFn(v).toFixed(2)} `;
       started = true;
     }
+
     return d.trim();
   };
 
   const closePath = useMemo(() => {
     if (!hasData) return "";
-    return series.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(2)} ${yMain(p.close).toFixed(2)}`).join(" ");
+    return series
+      .map((p, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(2)} ${yMain(p.close).toFixed(2)}`)
+      .join(" ");
   }, [hasData, series, x, yMain]);
 
   const ma50Path = useMemo(() => pathFrom(series.map((p) => p.ma50), yMain), [series, yMain]);
   const ma200Path = useMemo(() => pathFrom(series.map((p) => p.ma200), yMain), [series, yMain]);
+  const weeklyMa200Path = useMemo(
+    () => pathFrom(series.map((p) => p.weeklyMa200), yMain),
+    [series, yMain]
+  );
 
   const bollUPath = useMemo(() => pathFrom(series.map((p) => p.bu), yMain), [series, yMain]);
   const bollMPath = useMemo(() => pathFrom(series.map((p) => p.bm), yMain), [series, yMain]);
   const bollLPath = useMemo(() => pathFrom(series.map((p) => p.bl), yMain), [series, yMain]);
 
   const ema20Path = useMemo(() => pathFrom(series.map((p) => p.ema20), yMain), [series, yMain]);
-    const vwma20Path = useMemo(() => pathFrom(series.map((p) => p.vwma20), yMain), [series, yMain]);
+  const vwma20Path = useMemo(
+    () => pathFrom(series.map((p) => p.vwma20), yMain),
+    [series, yMain]
+  );
 
-  // sub paths
   const rsiPath = useMemo(() => pathFrom(series.map((p) => p.rsi14), ySub), [series, ySub]);
-  const macdLinePath = useMemo(() => pathFrom(series.map((p) => p.macdLine), ySub), [series, ySub]);
-  const macdSignalPath = useMemo(() => pathFrom(series.map((p) => p.macdSignal), ySub), [series, ySub]);
+  const macdLinePath = useMemo(
+    () => pathFrom(series.map((p) => p.macdLine), ySub),
+    [series, ySub]
+  );
+  const macdSignalPath = useMemo(
+    () => pathFrom(series.map((p) => p.macdSignal), ySub),
+    [series, ySub]
+  );
   const stochKPath = useMemo(() => pathFrom(series.map((p) => p.stochK), ySub), [series, ySub]);
   const stochDPath = useMemo(() => pathFrom(series.map((p) => p.stochD), ySub), [series, ySub]);
   const atrPath = useMemo(() => pathFrom(series.map((p) => p.atr14), ySub), [series, ySub]);
 
-  // price y ticks (right)
   const yTicks = useMemo(() => {
     if (!hasData) return [];
+
     const ticks: { v: number; y: number }[] = [];
     const nTicks = 5;
+
     for (let i = 0; i < nTicks; i++) {
       const t = i / (nTicks - 1);
       const v = pMax - t * pRange;
       ticks.push({ v, y: yMain(v) });
     }
+
     return ticks;
   }, [hasData, pMax, pRange, yMain]);
 
-  // x ticks (bottom)
   const xTicks = useMemo(() => {
     if (!hasData) return [];
+
     const nTicks = 5;
     const ticks: { i: number; x: number; label: string }[] = [];
+
     for (let k = 0; k < nTicks; k++) {
       const t = k / (nTicks - 1);
       const i = Math.round(t * (series.length - 1));
       ticks.push({ i, x: x(i), label: fmtXLabel(series[i].date) });
     }
+
     const seen = new Set<string>();
     return ticks.filter((t) => {
       if (seen.has(t.label)) return false;
@@ -394,11 +450,12 @@ export default function PriceChart(props: Props) {
     });
   }, [hasData, series, x]);
 
-  if (!hasData) return <div style={{ opacity: 0.7 }}>Not enough data to chart.</div>;
+  if (!hasData) {
+    return <div style={{ opacity: 0.7 }}>Not enough data to chart.</div>;
+  }
 
   const last = series[series.length - 1];
 
-  // --------- Divergence line (MACD subpanel) ----------
   const macdDivLine = useMemo(() => {
     if (activeLowerOverlay !== "MACD(12,26,9)") return null;
     if (!divergence || !divergence.hasMacd) return null;
@@ -411,6 +468,7 @@ export default function PriceChart(props: Props) {
 
     const m1 = series[i1]?.macdLine;
     const m2 = series[i2]?.macdLine;
+
     if (typeof m1 !== "number" || !Number.isFinite(m1)) return null;
     if (typeof m2 !== "number" || !Number.isFinite(m2)) return null;
 
@@ -424,32 +482,67 @@ export default function PriceChart(props: Props) {
 
   return (
     <div style={{ width: "100%" }}>
-      <svg width="100%" viewBox={`0 0 ${width} ${height}`} style={{ border: "1px solid #3333", borderRadius: 12 }}>
-        {/* PRICE plot box */}
-        <rect x={padL} y={padT} width={width - padL - padR} height={priceH} fill="none" stroke="currentColor" opacity="0.10" />
+      <svg
+        width="100%"
+        viewBox={`0 0 ${width} ${height}`}
+        style={{ border: "1px solid #3333", borderRadius: 12 }}
+      >
+        <rect
+          x={padL}
+          y={padT}
+          width={width - padL - padR}
+          height={priceH}
+          fill="none"
+          stroke="currentColor"
+          opacity="0.10"
+        />
 
-        {/* price grid + y labels */}
         {yTicks.map((t, idx) => (
           <g key={idx}>
-            <line x1={padL} y1={t.y} x2={width - padR} y2={t.y} stroke="currentColor" opacity="0.08" />
-            <text x={width - padR + 6} y={t.y + 4} fontSize={11} fill="currentColor" opacity="0.6">
+            <line
+              x1={padL}
+              y1={t.y}
+              x2={width - padR}
+              y2={t.y}
+              stroke="currentColor"
+              opacity="0.08"
+            />
+            <text
+              x={width - padR + 6}
+              y={t.y + 4}
+              fontSize={11}
+              fill="currentColor"
+              opacity="0.6"
+            >
               {fmtMoney(t.v)}
             </text>
           </g>
         ))}
 
-        {/* x labels */}
         {xTicks.map((t, idx) => (
           <g key={idx}>
-            <line x1={t.x} y1={height - padB} x2={t.x} y2={height - padB + 4} stroke="currentColor" opacity="0.25" />
-            <text x={t.x} y={height - 10} fontSize={11} fill="currentColor" opacity="0.6" textAnchor="middle">
+            <line
+              x1={t.x}
+              y1={height - padB}
+              x2={t.x}
+              y2={height - padB + 4}
+              stroke="currentColor"
+              opacity="0.25"
+            />
+            <text
+              x={t.x}
+              y={height - 10}
+              fontSize={11}
+              fill="currentColor"
+              opacity="0.6"
+              textAnchor="middle"
+            >
               {t.label}
             </text>
           </g>
         ))}
 
-        {/* price line */}
-                <path
+        <path
           d={closePath}
           fill="none"
           stroke={CHART_COLORS.price}
@@ -457,7 +550,6 @@ export default function PriceChart(props: Props) {
           opacity="1"
         />
 
-        {/* price overlays */}
         {showMA50 && ma50Path ? (
           <path
             d={ma50Path}
@@ -477,6 +569,16 @@ export default function PriceChart(props: Props) {
             strokeWidth="2.1"
             opacity="0.9"
             strokeDasharray="2 6"
+          />
+        ) : null}
+
+        {showWeeklyMA200 && weeklyMa200Path ? (
+          <path
+            d={weeklyMa200Path}
+            fill="none"
+            stroke={CHART_COLORS.weeklyMa200}
+            strokeWidth="2.4"
+            opacity="0.95"
           />
         ) : null}
 
@@ -534,17 +636,37 @@ export default function PriceChart(props: Props) {
           />
         ) : null}
 
-        {/* SUB PANEL */}
         {wantsSubPanel ? (
           <>
-            <rect x={padL} y={subTop} width={width - padL - padR} height={subH} fill="none" stroke="currentColor" opacity="0.10" />
+            <rect
+              x={padL}
+              y={subTop}
+              width={width - padL - padR}
+              height={subH}
+              fill="none"
+              stroke="currentColor"
+              opacity="0.10"
+            />
 
-            {/* RSI */}
-           {activeLowerOverlay === "RSI(14)" ? (
+            {activeLowerOverlay === "RSI(14)" ? (
               <>
-                <line x1={padL} y1={ySub(70)} x2={width - padR} y2={ySub(70)} stroke="currentColor" opacity="0.10" />
-                <line x1={padL} y1={ySub(30)} x2={width - padR} y2={ySub(30)} stroke="currentColor" opacity="0.10" />
-                                {rsiPath ? (
+                <line
+                  x1={padL}
+                  y1={ySub(70)}
+                  x2={width - padR}
+                  y2={ySub(70)}
+                  stroke="currentColor"
+                  opacity="0.10"
+                />
+                <line
+                  x1={padL}
+                  y1={ySub(30)}
+                  x2={width - padR}
+                  y2={ySub(30)}
+                  stroke="currentColor"
+                  opacity="0.10"
+                />
+                {rsiPath ? (
                   <path
                     d={rsiPath}
                     fill="none"
@@ -556,22 +678,33 @@ export default function PriceChart(props: Props) {
               </>
             ) : null}
 
-            {/* MACD */}
-        {activeLowerOverlay === "MACD(12,26,9)" ? (
+            {activeLowerOverlay === "MACD(12,26,9)" ? (
               <>
-                {subRange ? <line x1={padL} y1={ySub(0)} x2={width - padR} y2={ySub(0)} stroke="currentColor" opacity="0.12" /> : null}
+                {subRange ? (
+                  <line
+                    x1={padL}
+                    y1={ySub(0)}
+                    x2={width - padR}
+                    y2={ySub(0)}
+                    stroke="currentColor"
+                    opacity="0.12"
+                  />
+                ) : null}
 
                 {subRange
                   ? series.map((p, i) => {
                       const v = p.macdHist;
                       if (typeof v !== "number" || !Number.isFinite(v)) return null;
+
                       const x0 = x(i);
-                      const barW = Math.max(1, (width - padL - padR) / Math.max(10, series.length) - 1);
+                      const barW =
+                        Math.max(1, (width - padL - padR) / Math.max(10, series.length) - 1);
                       const y0 = ySub(0);
                       const yv = ySub(v);
                       const h = Math.abs(yv - y0);
+
                       return (
-                                                <rect
+                        <rect
                           key={i}
                           x={x0 - barW / 2}
                           y={Math.min(y0, yv)}
@@ -593,6 +726,7 @@ export default function PriceChart(props: Props) {
                     opacity="0.95"
                   />
                 ) : null}
+
                 {macdSignalPath ? (
                   <path
                     d={macdSignalPath}
@@ -604,7 +738,6 @@ export default function PriceChart(props: Props) {
                   />
                 ) : null}
 
-                {/* Divergence line on MACD (matches pivots) */}
                 {macdDivLine ? (
                   <line
                     x1={macdDivLine.x1}
@@ -625,11 +758,24 @@ export default function PriceChart(props: Props) {
               </>
             ) : null}
 
-            {/* Stochastic */}
             {activeLowerOverlay === "Stochastic(14,3)" ? (
               <>
-                <line x1={padL} y1={ySub(80)} x2={width - padR} y2={ySub(80)} stroke="currentColor" opacity="0.10" />
-                <line x1={padL} y1={ySub(20)} x2={width - padR} y2={ySub(20)} stroke="currentColor" opacity="0.10" />
+                <line
+                  x1={padL}
+                  y1={ySub(80)}
+                  x2={width - padR}
+                  y2={ySub(80)}
+                  stroke="currentColor"
+                  opacity="0.10"
+                />
+                <line
+                  x1={padL}
+                  y1={ySub(20)}
+                  x2={width - padR}
+                  y2={ySub(20)}
+                  stroke="currentColor"
+                  opacity="0.10"
+                />
                 {stochKPath ? (
                   <path
                     d={stochKPath}
@@ -652,8 +798,7 @@ export default function PriceChart(props: Props) {
               </>
             ) : null}
 
-            {/* ATR */}
-                    {activeLowerOverlay === "ATR(14)" ? (
+            {activeLowerOverlay === "ATR(14)" ? (
               <>
                 {atrPath ? (
                   <path
@@ -667,20 +812,22 @@ export default function PriceChart(props: Props) {
               </>
             ) : null}
 
-            {/* Volume */}
             {activeLowerOverlay === "Volume" ? (
               <>
                 {subRange
                   ? series.map((p, i) => {
                       const v = p.volume;
                       if (typeof v !== "number" || !Number.isFinite(v) || v < 0) return null;
+
                       const x0 = x(i);
-                      const barW = Math.max(1, (width - padL - padR) / Math.max(10, series.length) - 1);
+                      const barW =
+                        Math.max(1, (width - padL - padR) / Math.max(10, series.length) - 1);
                       const y0 = ySub(0);
                       const yv = ySub(v);
                       const h = Math.abs(yv - y0);
+
                       return (
-                                                <rect
+                        <rect
                           key={i}
                           x={x0 - barW / 2}
                           y={Math.min(y0, yv)}
@@ -697,8 +844,7 @@ export default function PriceChart(props: Props) {
           </>
         ) : null}
 
-        {/* last point */}
-                <circle
+        <circle
           cx={x(series.length - 1)}
           cy={yMain(last.close)}
           r="3.5"
@@ -707,82 +853,81 @@ export default function PriceChart(props: Props) {
         />
       </svg>
 
-<div
-  style={{
-    marginTop: 8,
-    display: "flex",
-    flexDirection: "column",
-    gap: 10,
-  }}
->
-  <div
-    style={{
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      flexWrap: "wrap",
-      gap: 12,
-    }}
-  >
-    <div style={{ fontSize: 12, opacity: 0.7 }}>
-      From {series[0].date} → {series[series.length - 1].date}
-    </div>
-
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        flexWrap: "wrap",
-      }}
-    >
-      <a
-        href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`}
-        target="_blank"
-        rel="noopener noreferrer"
+      <div
         style={{
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "8px 12px",
-          borderRadius: 10,
-          border: "1px solid rgba(59,130,246,0.40)",
-          background:
-            "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
-          color: "#dbeafe",
-          textDecoration: "none",
-          fontWeight: 800,
-          fontSize: 12,
-          whiteSpace: "nowrap",
+          marginTop: 8,
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
         }}
       >
-        Open in TradingView ↗
-      </a>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 12,
+          }}
+        >
+          <div style={{ fontSize: 12, opacity: 0.7 }}>
+            From {series[0].date} → {series[series.length - 1].date}
+          </div>
 
-<a
-  href="/platforms"
-  style={{
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "8px 12px",
-    borderRadius: 10,
-    border: "1px solid rgba(34,197,94,0.40)",
-    background:
-      "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))",
-    color: "#dcfce7",
-    textDecoration: "none",
-    fontWeight: 800,
-    fontSize: 12,
-    whiteSpace: "nowrap",
-  }}
->
-  Trade {symbol} →
-</a>
-    </div>
-  </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
+            <a
+              href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "8px 12px",
+                borderRadius: 10,
+                border: "1px solid rgba(59,130,246,0.40)",
+                background:
+                  "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
+                color: "#dbeafe",
+                textDecoration: "none",
+                fontWeight: 800,
+                fontSize: 12,
+                whiteSpace: "nowrap",
+              }}
+            >
+              Open in TradingView ↗
+            </a>
 
-</div>
+            <a
+              href="/platforms"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "8px 12px",
+                borderRadius: 10,
+                border: "1px solid rgba(34,197,94,0.40)",
+                background:
+                  "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))",
+                color: "#dcfce7",
+                textDecoration: "none",
+                fontWeight: 800,
+                fontSize: 12,
+                whiteSpace: "nowrap",
+              }}
+            >
+              Trade {symbol} →
+            </a>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
