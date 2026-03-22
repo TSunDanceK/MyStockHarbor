@@ -78,7 +78,7 @@ export function getAllPosts(): BlogPost[] {
       date: formatFrontmatterDate(data.date),
       excerpt: String(data.excerpt || ""),
       symbol: data.symbol ? String(data.symbol) : null,
-      timeframe: data.timeframe === "w" ? "w" : "d",
+      timeframe: (data.timeframe === "w" ? "w" : "d") as "d" | "w",
     };
   });
 
@@ -102,7 +102,7 @@ export function getPostBySlug(slug: string): BlogPostFull {
     date: formatFrontmatterDate(data.date),
     excerpt: String(data.excerpt || ""),
     symbol: data.symbol ? String(data.symbol) : null,
-    timeframe: data.timeframe === "w" ? "w" : "d",
+    timeframe: (data.timeframe === "w" ? "w" : "d") as "d" | "w",
     content,
   };
 }
