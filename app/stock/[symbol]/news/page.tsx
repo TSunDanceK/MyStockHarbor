@@ -1604,6 +1604,25 @@ export default async function StockNewsPage({ params }: Props) {
             "@context": "https://schema.org",
             "@graph": [
               {
+                "@type": "Organization",
+                "@id": "https://www.mystockharbor.com/#organization",
+                name: "MyStockHarbor",
+                url: "https://www.mystockharbor.com",
+                logo: {
+                  "@type": "ImageObject",
+                  url: "https://www.mystockharbor.com/logo.png",
+                },
+              },
+              {
+                "@type": "WebSite",
+                "@id": "https://www.mystockharbor.com/#website",
+                name: "MyStockHarbor",
+                url: "https://www.mystockharbor.com",
+                publisher: {
+                  "@id": "https://www.mystockharbor.com/#organization",
+                },
+              },
+              {
                 "@type": "WebPage",
                 "@id": `https://www.mystockharbor.com/stock/${encodeURIComponent(upper)}/news#webpage`,
                 url: `https://www.mystockharbor.com/stock/${encodeURIComponent(upper)}/news`,
