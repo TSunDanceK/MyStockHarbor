@@ -870,6 +870,40 @@ const displaySections = useMemo(() => {
           boxSizing: "border-box",
         }}
       >
+        {!loading && !err ? (
+          <div
+            style={{
+              border: "1px solid rgba(255,255,255,0.14)",
+              borderRadius: 16,
+              padding: 16,
+              background: "#0b1220",
+              boxSizing: "border-box",
+            }}
+          >
+            <h2
+              style={{
+                margin: 0,
+                fontSize: 22,
+                fontWeight: 950,
+                letterSpacing: "-0.02em",
+              }}
+            >
+              MA200 Proximity
+            </h2>
+
+            <p
+              style={{
+                margin: "10px 0 0",
+                fontSize: 14,
+                opacity: 0.72,
+                lineHeight: 1.6,
+                maxWidth: 760,
+              }}
+            >
+              Stocks trading close to their Daily or Weekly MA200. Clicking a result opens the chart on the correct timeframe with MA200 selected.
+            </p>
+          </div>
+        ) : null}
         {customMode ? (
           <section
             style={{
