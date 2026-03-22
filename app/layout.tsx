@@ -44,7 +44,7 @@ export const metadata: Metadata = {
       "MyStockHarbor (My Stock Harbor) | Free Trading Dashboard, Market Signals & Technical Analysis",
     description:
       "MyStockHarbor (My Stock Harbor) helps traders track stocks, analyse technical indicators, monitor market benchmarks, and learn trading strategies with free educational tools, stock screeners, and market insights.",
-    images: ["https://www.mystockharbor.com/icon.png"],
+    images: ["https://www.mystockharbor.com/og-image.png"],
   },
 };
 
