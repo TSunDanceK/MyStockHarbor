@@ -155,8 +155,41 @@ export default function InsightsPage() {
           padding: "24px 20px 40px",
         }}
       >
-        <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 800 }}>
-          DAILY STOCK BLOG
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 800 }}>
+            DAILY STOCK BLOG
+          </div>
+
+          <Link
+            href="/"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "9px 14px",
+              borderRadius: 12,
+              border: "1px solid rgba(239,68,68,0.45)",
+              background:
+                "linear-gradient(135deg, rgba(239,68,68,0.18), rgba(127,29,29,0.10))",
+              color: "#fee2e2",
+              textDecoration: "none",
+              fontWeight: 900,
+              fontSize: 13,
+              boxShadow: "0 6px 16px rgba(0,0,0,0.25)",
+              transition: "all 140ms ease",
+              whiteSpace: "nowrap",
+            }}
+          >
+            ← Back
+          </Link>
         </div>
 
         <h1
@@ -269,11 +302,24 @@ export default function InsightsPage() {
                 <div
                   style={{
                     marginTop: 14,
-                    fontWeight: 800,
-                    color: "#93c5fd",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "10px 14px",
+                    borderRadius: 12,
+                    border: "1px solid rgba(59,130,246,0.45)",
+                    background:
+                      "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(37,99,235,0.12))",
+                    color: "#eff6ff",
+                    textDecoration: "none",
+                    fontWeight: 900,
+                    fontSize: 13,
+                    whiteSpace: "nowrap",
+                    boxShadow: "0 6px 16px rgba(0,0,0,0.25)",
+                    transition: "all 140ms ease",
                   }}
                 >
-                  Read insight →
+                  Read Insight →
                 </div>
               </Link>
             ))}
