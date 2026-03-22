@@ -613,16 +613,15 @@ function buildStretchScore(args: {
     if (pct <= -0.02) {
       oversold++;
       details.push({ name: "VWMA dist", state: "oversold" });
-    } else if (pct >= 0.02) {
-      overbought++;
-      details.push({ name: "VWMA dist", state: "neutral" });
-    } else {
+} else if (pct >= 0.02) {
+  overbought++;
+  details.push({ name: "VWMA dist", state: "overbought" });
+} else {
       details.push({ name: "VWMA dist", state: "neutral" });
     }
-  } else {
-    details.push({ name: "VWMA dist", state: "oversold" });
-  }
-
+} else {
+  details.push({ name: "VWMA dist", state: "na" });
+}
   if (typeof lastClose === "number" && typeof ema20 === "number" && ema20 > 0) {
     const pct = (lastClose - ema20) / ema20;
     if (pct <= -0.05) {
