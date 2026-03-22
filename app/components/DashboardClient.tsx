@@ -205,17 +205,48 @@ function macd(values: number[], fast = 12, slow = 26, signal = 9) {
   const line: (number | null)[] = values.map((_, i) => {
     const f = emaFast[i];
     const s = emaSlow[i];
-    if (typeof f !== "number" || typeof s !== "number") return null;
+    if (typeof f !== "number" || !Number.isFinite(f)) return null;
+    if (typeof s !== "number" || !Number.isFinite(s)) return null;
     return f - s;
   });
 
-  const lineForEma = line.map((v) => (typeof v === "number" ? v : 0));
-  const sigAll = ema(lineForEma, signal);
+  const sig: (number | null)[] = Array(values.length).fill(null);
+  const hist: (number | null)[] = Array(values.length).fill(null);
 
-  const sig: (number | null)[] = sigAll.map((v, i) => (line[i] == null ? null : v));
-  const hist: (number | null)[] = line.map((v, i) =>
-    v == null || sig[i] == null ? null : v - sig[i]!
-  );
+  const validMacd: { index: number; value: number }[] = [];
+  for (let i = 0; i < line.length; i++) {
+    const v = line[i];
+    if (typeof v === "number" && Number.isFinite(v)) {
+      validMacd.push({ index: i, value: v });
+    }
+  }
+
+  if (validMacd.length < signal) {
+    return { line, signal: sig, hist };
+  }
+
+  let signalSeed = 0;
+  for (let i = 0; i < signal; i++) {
+    signalSeed += validMacd[i].value;
+  }
+
+  let prevSignal = signalSeed / signal;
+  sig[validMacd[signal - 1].index] = prevSignal;
+
+  const k = 2 / (signal + 1);
+
+  for (let i = signal; i < validMacd.length; i++) {
+    prevSignal = validMacd[i].value * k + prevSignal * (1 - k);
+    sig[validMacd[i].index] = prevSignal;
+  }
+
+  for (let i = 0; i < line.length; i++) {
+    const l = line[i];
+    const s = sig[i];
+    if (typeof l === "number" && Number.isFinite(l) && typeof s === "number" && Number.isFinite(s)) {
+      hist[i] = l - s;
+    }
+  }
 
   return { line, signal: sig, hist };
 }
@@ -581,15 +612,15 @@ function buildStretchScore(args: {
     const pct = (lastClose - vwap) / vwap;
     if (pct <= -0.02) {
       oversold++;
-      details.push({ name: "VWAP dist", state: "oversold" });
+      details.push({ name: "VWMA dist", state: "oversold" });
     } else if (pct >= 0.02) {
       overbought++;
-      details.push({ name: "VWAP dist", state: "overbought" });
+      details.push({ name: "VWMA dist", state: "neutral" });
     } else {
-      details.push({ name: "VWAP dist", state: "neutral" });
+      details.push({ name: "VWMA dist", state: "neutral" });
     }
   } else {
-    details.push({ name: "VWAP dist", state: "na" });
+    details.push({ name: "VWMA dist", state: "oversold" });
   }
 
   if (typeof lastClose === "number" && typeof ema20 === "number" && ema20 > 0) {
@@ -1707,13 +1738,13 @@ const [qRes, hRes] = await Promise.all([
       const pct = ((lastClose - vwap) / vwap) * 100;
       push({
         key: "vwap",
-        label: "VWAP",
+        label: "VWMA(20)",
         tone: pct >= 2 || pct <= -2 ? (Math.abs(pct) >= 5 ? "red" : "orange") : "yellow",
         valueText: `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`,
         severity: Math.abs(pct),
       });
     } else {
-      push({ key: "vwap", label: "VWAP", tone: "muted", valueText: "—", severity: 0 });
+      push({ key: "vwap", label: "VWMA(20)", tone: "muted", valueText: "—", severity: 0 });
     }
 
     if (typeof macdHistLast === "number") {
@@ -2484,7 +2515,7 @@ return (
                 <span style={{ color: stretchColor }}>●</span>
                 <span>{isMobile ? "Stretch" : "Stretch Score"}</span>
                 <HelpTip
-                  text="Stretch score checks RSI, Stoch, Bollinger, VWAP, EMA20 and MA50 extension."
+                 text="Stretch score checks RSI, Stoch, Bollinger, VWMA(20), EMA20 and MA50 extension."
                   isDark={COLORS.isDark}
                 />
               </div>
