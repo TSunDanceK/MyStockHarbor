@@ -315,7 +315,7 @@ async function buildSnapshot(symbol: string): Promise<InsightSnapshot> {
       typeof weeklyMA200Pct === "number"
         ? Number(weeklyMA200Pct.toFixed(4))
         : null,
-    chartPoints: points.slice(-240),
+  chartPoints: points.slice(-2000),
   };
 }
 
