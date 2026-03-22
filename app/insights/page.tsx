@@ -7,7 +7,21 @@ export const metadata: Metadata = {
   description:
     "Read daily stock market insights, chart-based trade ideas, and technical analysis updates from MyStockHarbor.",
   alternates: {
-    canonical: "https://www.mystockharbor.com/insights"
+    canonical: "https://www.mystockharbor.com/insights",
+  },
+  openGraph: {
+    title: "Stock Market Insights & Trade Ideas | MyStockHarbor",
+    description:
+      "Read daily stock market insights, chart-based trade ideas, and technical analysis updates from MyStockHarbor.",
+    url: "https://www.mystockharbor.com/insights",
+    siteName: "MyStockHarbor",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Stock Market Insights & Trade Ideas | MyStockHarbor",
+    description:
+      "Read daily stock market insights, chart-based trade ideas, and technical analysis updates from MyStockHarbor.",
   },
 };
 
@@ -27,8 +41,65 @@ function postCardStyle(): React.CSSProperties {
 export default function InsightsPage() {
   const posts = getAllPosts();
 
+  const insightsJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    name: "Stock Market Insights & Trade Ideas",
+    url: "https://www.mystockharbor.com/insights",
+    description:
+      "Read daily stock market insights, chart-based trade ideas, and technical analysis updates from MyStockHarbor.",
+    mainEntity: {
+      "@type": "ItemList",
+      itemListElement: posts.slice(0, 12).map((post, index) => ({
+        "@type": "ListItem",
+        position: index + 1,
+        item: {
+          "@type": "BlogPosting",
+          headline: post.title,
+          url: `https://www.mystockharbor.com/insights/${post.slug}`,
+          datePublished: post.date,
+          description: post.excerpt,
+          about: post.symbol
+            ? {
+                "@type": "Thing",
+                name: post.symbol,
+              }
+            : undefined,
+          publisher: {
+            "@type": "Organization",
+            name: "MyStockHarbor",
+            url: "https://www.mystockharbor.com",
+          },
+        },
+      })),
+    },
+    breadcrumb: {
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        {
+          "@type": "ListItem",
+          position: 1,
+          name: "Home",
+          item: "https://www.mystockharbor.com/",
+        },
+        {
+          "@type": "ListItem",
+          position: 2,
+          name: "Insights",
+          item: "https://www.mystockharbor.com/insights",
+        },
+      ],
+    },
+  };
+
   return (
-    <main
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(insightsJsonLd) }}
+      />
+
+      <main
       style={{
         minHeight: "100vh",
         background: "#06080d",
@@ -169,5 +240,6 @@ export default function InsightsPage() {
         )}
       </div>
     </main>
+    </>
   );
 }
