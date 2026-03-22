@@ -3361,7 +3361,7 @@ return (
               letterSpacing: "-0.03em",
             }}
           >
-            Stock Analysis Tools & Stock Pickers
+            Stock Analysis Tools, Stock Pickers & Market Insights
           </h1>
 
           <div
