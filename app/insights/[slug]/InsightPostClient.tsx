@@ -746,19 +746,27 @@ export default function InsightPostClient({
 
                     <div className="insightMobileOnlyWrapper">
                       <Link
-                        href="/pickers"
-                        className="insightDesktopOnly insightDesktopOnlyPickerCta insightPrimaryPickerCta"
-                        style={chartActionStyle("picker")}
-                      >
-                        {symbol} headlines
-                      </Link>
-
-                      <Link
                         href={`/stock/${encodeURIComponent(symbol)}`}
                         className="insightMobileButton"
                         style={chartActionStyle("blue")}
                       >
                         {symbol} stock page
+                      </Link>
+
+                      <Link
+                        href="/pickers"
+                        className="insightMobileButton insightPrimaryPickerCta"
+                        style={chartActionStyle("picker")}
+                      >
+                        Find Similar Setups →
+                      </Link>
+
+                      <Link
+                        href={`/stock/${encodeURIComponent(symbol)}/news`}
+                        className="insightMobileButton"
+                        style={chartActionStyle("gold")}
+                      >
+                        {symbol} headlines
                       </Link>
                     </div>
                   </div>
@@ -1045,6 +1053,11 @@ export default function InsightPostClient({
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 10px;
             width: 100%;
+            align-items: stretch;
+          }
+
+          .insightMobileOnlyWrapper > :nth-child(3) {
+            grid-column: 1 / -1;
           }
 
           .insightSmallStatCard {
