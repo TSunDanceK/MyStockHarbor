@@ -19,6 +19,7 @@ type InsightPostData = {
   date: string;
   excerpt: string;
   symbol?: string | null;
+  timeframe: "d" | "w";
   contentHtml: string;
 };
 
@@ -45,6 +46,56 @@ function movingAverage(values: number[], window: number): (number | null)[] {
   }
 
   return out;
+}
+
+function aggregateToWeekly(points: Point[]): Point[] {
+  if (!points.length) return [];
+
+  const buckets = new Map<
+    string,
+    {
+      date: string;
+      close: number;
+      high: number;
+      low: number;
+      volume: number;
+    }
+  >();
+
+  for (const point of points) {
+    const d = new Date(`${point.date}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) continue;
+
+    const utcDay = d.getUTCDay();
+    const diffToMonday = utcDay === 0 ? -6 : 1 - utcDay;
+
+    const weekStart = new Date(d);
+    weekStart.setUTCDate(d.getUTCDate() + diffToMonday);
+
+    const key = weekStart.toISOString().slice(0, 10);
+    const existing = buckets.get(key);
+
+    if (!existing) {
+      buckets.set(key, {
+        date: point.date,
+        close: point.close,
+        high: point.high ?? point.close,
+        low: point.low ?? point.close,
+        volume: point.volume ?? 0,
+      });
+      continue;
+    }
+
+    existing.date = point.date;
+    existing.close = point.close;
+    existing.high = Math.max(existing.high, point.high ?? point.close);
+    existing.low = Math.min(existing.low, point.low ?? point.close);
+    existing.volume += point.volume ?? 0;
+  }
+
+  return Array.from(buckets.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([, value]) => value);
 }
 
 function inferInsightTag(title: string, excerpt: string, contentHtml: string) {
@@ -118,9 +169,17 @@ export default function InsightPostClient({
     [post.title, post.excerpt, post.contentHtml]
   );
 
-  const chartPoints: Point[] = Array.isArray(snapshot?.chartPoints)
+  const dailyChartPoints: Point[] = Array.isArray(snapshot?.chartPoints)
     ? snapshot.chartPoints
     : [];
+
+  const chartPoints = useMemo(
+    () =>
+      post.timeframe === "w"
+        ? aggregateToWeekly(dailyChartPoints)
+        : dailyChartPoints,
+    [dailyChartPoints, post.timeframe]
+  );
 
   const closes = useMemo(() => chartPoints.map((p) => p.close), [chartPoints]);
   const ma50 = useMemo(() => movingAverage(closes, 50), [closes]);
@@ -133,14 +192,45 @@ export default function InsightPostClient({
   const hasSnapshot = Boolean(snapshot && chartPoints.length >= 2);
 
   const companyName = snapshot?.companyName ?? "";
-  const lastPrice = snapshot?.price;
+  const lastPrice = typeof snapshot?.price === "number"
+    ? snapshot.price
+    : chartPoints.length
+    ? chartPoints[chartPoints.length - 1]?.close ?? null
+    : null;
   const trend = snapshot?.trend ?? (symbol ? "Archived snapshot" : "Article");
-  const lastMA50 = snapshot?.lastMA50;
-  const lastMA200 = snapshot?.lastMA200;
-  const lastWeeklyMA200 = snapshot?.lastWeeklyMA200;
-  const ma50Pct = snapshot?.ma50Pct;
-  const ma200Pct = snapshot?.ma200Pct;
-  const weeklyMA200Pct = snapshot?.weeklyMA200Pct;
+
+  const lastChartMA50 = ma50.length ? ma50[ma50.length - 1] : null;
+  const lastChartMA200 = ma200.length ? ma200[ma200.length - 1] : null;
+
+  const lastMA50 =
+    post.timeframe === "w"
+      ? lastChartMA50
+      : snapshot?.lastMA50 ?? lastChartMA50;
+
+  const lastMA200 =
+    post.timeframe === "w"
+      ? lastChartMA200
+      : snapshot?.lastMA200 ?? lastChartMA200;
+
+  const lastWeeklyMA200 = post.timeframe === "d" ? snapshot?.lastWeeklyMA200 : null;
+
+  const ma50Pct =
+    typeof lastPrice === "number" && typeof lastMA50 === "number" && lastPrice !== 0
+      ? ((lastMA50 - lastPrice) / lastPrice) * 100
+      : null;
+
+  const ma200Pct =
+    typeof lastPrice === "number" && typeof lastMA200 === "number" && lastPrice !== 0
+      ? ((lastMA200 - lastPrice) / lastPrice) * 100
+      : null;
+
+  const weeklyMA200Pct =
+    post.timeframe === "d"
+      ? snapshot?.weeklyMA200Pct ?? null
+      : null;
+
+  const timeframeLabel = post.timeframe === "w" ? "Weekly" : "Daily";
+  const showWeeklyMA200Card = post.timeframe === "d";
 
   const snapshotDateText =
     snapshot?.snapshotDate && snapshot?.snapshotTime
@@ -238,6 +328,23 @@ export default function InsightPostClient({
               }}
             >
               {insightTag.label}
+            </div>
+                        <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "7px 12px",
+                borderRadius: 999,
+                background: "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.12)",
+                color: "#e2e8f0",
+                fontWeight: 900,
+                fontSize: 12,
+                letterSpacing: "0.05em",
+                textTransform: "uppercase",
+              }}
+            >
+              {timeframeLabel} Chart
             </div>
 
 <div
@@ -429,7 +536,7 @@ export default function InsightPostClient({
                   letterSpacing: "-0.03em",
                 }}
               >
-                {symbol} chart with Daily MA50 and Daily MA200
+                {symbol} chart with {timeframeLabel} MA50 and {timeframeLabel} MA200
               </h2>
 
               <p
@@ -441,7 +548,7 @@ export default function InsightPostClient({
                   fontSize: 15,
                 }}
               >
-                This chart snapshot is frozen to the original article analysis date, so later readers see the same setup the post was based on.
+                This {post.timeframe === "w" ? "weekly" : "daily"} chart snapshot is frozen to the original article analysis date, so later readers see the same setup the post was based on.
               </p>
 
               {hasSnapshot ? (
@@ -480,7 +587,7 @@ export default function InsightPostClient({
                   >
                     <div className="insightSmallStatCard" style={smallStatCardStyle}>
                       <div className="insightSmallStatLabel" style={smallStatLabelStyle}>
-                        Daily MA50
+                        {timeframeLabel} MA50
                       </div>
                       <div className="insightSmallStatValue" style={smallStatValueStyle}>
                         {typeof lastMA50 === "number" ? `$${lastMA50.toFixed(2)}` : "—"}
@@ -494,7 +601,7 @@ export default function InsightPostClient({
 
                     <div className="insightSmallStatCard" style={smallStatCardStyle}>
                       <div className="insightSmallStatLabel" style={smallStatLabelStyle}>
-                        Daily MA200
+                        {timeframeLabel} MA200
                       </div>
                       <div className="insightSmallStatValue" style={smallStatValueStyle}>
                         {typeof lastMA200 === "number" ? `$${lastMA200.toFixed(2)}` : "—"}
@@ -506,24 +613,26 @@ export default function InsightPostClient({
                       </div>
                     </div>
 
-                    <div
-                      className="insightSmallStatCard insightDesktopOnlyStat"
-                      style={smallStatCardStyle}
-                    >
-                      <div className="insightSmallStatLabel" style={smallStatLabelStyle}>
-                        Weekly MA200
+                    {showWeeklyMA200Card ? (
+                      <div
+                        className="insightSmallStatCard insightDesktopOnlyStat"
+                        style={smallStatCardStyle}
+                      >
+                        <div className="insightSmallStatLabel" style={smallStatLabelStyle}>
+                          Weekly MA200
+                        </div>
+                        <div className="insightSmallStatValue" style={smallStatValueStyle}>
+                          {typeof lastWeeklyMA200 === "number"
+                            ? `$${lastWeeklyMA200.toFixed(2)}`
+                            : "—"}
+                        </div>
+                        <div className="insightSmallStatMeta" style={smallStatMetaStyle}>
+                          {typeof weeklyMA200Pct === "number"
+                            ? `${weeklyMA200Pct >= 0 ? "+" : ""}${weeklyMA200Pct.toFixed(2)}% vs price`
+                            : "Distance unavailable"}
+                        </div>
                       </div>
-                      <div className="insightSmallStatValue" style={smallStatValueStyle}>
-                        {typeof lastWeeklyMA200 === "number"
-                          ? `$${lastWeeklyMA200.toFixed(2)}`
-                          : "—"}
-                      </div>
-                      <div className="insightSmallStatMeta" style={smallStatMetaStyle}>
-                        {typeof weeklyMA200Pct === "number"
-                          ? `${weeklyMA200Pct >= 0 ? "+" : ""}${weeklyMA200Pct.toFixed(2)}% vs price`
-                          : "Distance unavailable"}
-                      </div>
-                    </div>
+                    ) : null}
                   </div>
 
                   <div
@@ -541,7 +650,7 @@ export default function InsightPostClient({
                       className="insightChartActionsDesktop"
                       style={{ fontSize: 13, opacity: 0.74 }}
                     >
-                      This article chart is frozen. Use the links to compare it with current data, headlines, or TradingView.
+                      This article chart is frozen. Use the links to compare this {post.timeframe === "w" ? "weekly" : "daily"} setup with current data, headlines, or TradingView.
                     </div>
 
                     <div
