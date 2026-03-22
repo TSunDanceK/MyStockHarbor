@@ -740,7 +740,7 @@ export default function InsightPostClient({
                         className="insightDesktopOnly insightDesktopOnlyPickerCta"
                         style={chartActionStyle("blue")}
                       >
-                        Scan Pickers →
+                        Scan for Similar Setups →
                       </Link>
                     </div>
 
