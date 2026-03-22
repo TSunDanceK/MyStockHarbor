@@ -4,25 +4,25 @@ import Link from "next/link";
 import { lessonsByCategory } from "./lessons";
 
 export const metadata: Metadata = {
-  title: "Learn Stock Charts, Indicators & Trading Basics",
+  title: "Learn Stock Charts & Trading Basics",
   description:
-    "Beginner-friendly lessons on stock charts, indicators, trading basics and risk management.",
+    "Beginner lessons on stock charts, indicators, trading basics and risk management.",
   alternates: {
     canonical: "https://www.mystockharbor.com/learn",
   },
   openGraph: {
-    title: "Learn Stock Charts, Indicators & Trading Basics",
+    title: "Learn Stock Charts & Trading Basics",
     description:
-      "Beginner-friendly lessons on stock charts, indicators, trading basics and risk management.",
+      "Beginner lessons on stock charts, indicators, trading basics and risk management.",
     url: "https://www.mystockharbor.com/learn",
     siteName: "MyStockHarbor",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Learn Stock Charts, Indicators & Trading Basics",
+    title: "Learn Stock Charts & Trading Basics",
     description:
-      "Beginner-friendly lessons on stock charts, indicators, trading basics and risk management.",
+      "Beginner lessons on stock charts, indicators, trading basics and risk management.",
   },
 };
 
@@ -151,7 +151,7 @@ export default function LearnPage() {
             </div>
 
 <h1 style={{ margin: 0, fontSize: 34, letterSpacing: "-0.4px" }}>
-  Learn Stock Charts, Indicators & Trading Basics
+  Learn Stock Charts & Trading Basics
 </h1>
 
 <p
