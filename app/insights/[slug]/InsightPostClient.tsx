@@ -22,6 +22,18 @@ type InsightPostData = {
   contentHtml: string;
 };
 
+function formatPostDate(dateString: string) {
+  const date = new Date(dateString);
+
+  if (Number.isNaN(date.getTime())) return dateString;
+
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
+
 function movingAverage(values: number[], window: number): (number | null)[] {
   const out: (number | null)[] = Array(values.length).fill(null);
   let sum = 0;
@@ -228,27 +240,86 @@ export default function InsightPostClient({
               {insightTag.label}
             </div>
 
-            <div
-              style={{
-                fontSize: 13,
-                opacity: 0.68,
-                fontWeight: 700,
-              }}
-            >
-              {post.date}
-            </div>
+<div
+  style={{
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  }}
+>
+  <span
+    style={{
+      display: "inline-flex",
+      alignItems: "center",
+      padding: "6px 10px",
+      borderRadius: 999,
+      background: "rgba(255,255,255,0.06)",
+      border: "1px solid rgba(255,255,255,0.12)",
+      color: "#e2e8f0",
+      fontSize: 12,
+      fontWeight: 900,
+      letterSpacing: "0.06em",
+      textTransform: "uppercase",
+    }}
+  >
+    Published
+  </span>
 
-            {snapshot?.snapshotDate ? (
-              <div
-                style={{
-                  fontSize: 13,
-                  opacity: 0.78,
-                  fontWeight: 700,
-                }}
-              >
-                • Snapshot {snapshotDateText}
-              </div>
-            ) : null}
+  <span
+    style={{
+      fontSize: 14,
+      fontWeight: 800,
+      color: "#f8fafc",
+    }}
+  >
+    {formatPostDate(post.date)}
+  </span>
+
+  {snapshot?.snapshotDate ? (
+    <>
+      <span
+        style={{
+          fontSize: 13,
+          opacity: 0.42,
+          fontWeight: 700,
+        }}
+      >
+        •
+      </span>
+
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          padding: "6px 10px",
+          borderRadius: 999,
+          background: "rgba(59,130,246,0.10)",
+          border: "1px solid rgba(59,130,246,0.20)",
+          color: "#dbeafe",
+          fontSize: 12,
+          fontWeight: 900,
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+        }}
+      >
+        Snapshot
+      </span>
+
+      <span
+        style={{
+          fontSize: 14,
+          fontWeight: 700,
+          color: "#cbd5e1",
+        }}
+      >
+        {snapshot?.snapshotDate
+  ? formatPostDate(snapshot.snapshotDate)
+  : snapshotDateText}
+      </span>
+    </>
+  ) : null}
+</div>
           </div>
 
           <h1
@@ -286,11 +357,15 @@ export default function InsightPostClient({
                 {typeof lastPrice === "number" ? `$${lastPrice.toFixed(2)}` : "—"}
               </div>
               <div style={{ marginTop: 8, fontSize: 13, opacity: 0.72 }}>
-                {hasSnapshot
-                  ? `Snapshot: ${snapshotDateText}`
-                  : symbol
-                  ? "Snapshot unavailable"
-                  : "No ticker linked"}
+{hasSnapshot
+  ? `Snapshot: ${
+      snapshot?.snapshotDate
+        ? formatPostDate(snapshot.snapshotDate)
+        : snapshotDateText
+    }`
+  : symbol
+  ? "Snapshot unavailable"
+  : "No ticker linked"}
               </div>
             </div>
 
@@ -388,7 +463,10 @@ export default function InsightPostClient({
                       opacity: 0.72,
                     }}
                   >
-                    Snapshot date: {snapshotDateText}
+                    Snapshot date:{" "}
+{snapshot?.snapshotDate
+  ? formatPostDate(snapshot.snapshotDate)
+  : snapshotDateText}
                   </div>
 
                   <div
