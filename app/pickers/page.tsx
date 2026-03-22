@@ -193,33 +193,33 @@ export default function PickersPage() {
                 <BookmarkPromptButton compact />
               </div>
 
-              <h1
-                className="pickersHeroTitle"
-                style={{
-                  margin: "14px 0 0 0",
-                  fontSize: 44,
-                  lineHeight: 1.04,
-                  letterSpacing: "-0.05em",
-                }}
-              >
-                Find Your Next Stock
-              </h1>
+<h1
+  className="pickersHeroTitle"
+  style={{
+    margin: "14px 0 0 0",
+    fontSize: 44,
+    lineHeight: 1.04,
+    letterSpacing: "-0.05em",
+  }}
+>
+  Stock Pickers & Technical Setup Ideas
+</h1>
 
-              <p
-                className="pickersHeroText"
-                style={{
-                  marginTop: 12,
-                  fontSize: 17,
-                  lineHeight: 1.65,
-                  opacity: 0.84,
-                  maxWidth: 700,
-                }}
-              >
-                Browse screened stock ideas across oversold rebounds, extended
-                strength, divergence, dip-buy setups and breakout candidates,
-                then open any symbol in the dashboard to review the chart in
-                more detail.
-              </p>
+<p
+  className="pickersHeroText"
+  style={{
+    marginTop: 12,
+    fontSize: 17,
+    lineHeight: 1.65,
+    opacity: 0.84,
+    maxWidth: 700,
+  }}
+>
+  Discover stock ideas using technical setups including oversold conditions,
+  breakouts, divergence signals, MA200 tests, dip-buy opportunities and other
+  chart-based filters. Open any stock in the dashboard to explore charts and
+  indicators in more detail.
+</p>
 
               <div
                 className="heroMiniStats"
