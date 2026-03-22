@@ -335,6 +335,76 @@ export default function PlatformsPage() {
         minHeight: "100vh",
       }}
     >
+           <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "CollectionPage",
+            name: "Best Trading Platforms for Beginners & Chart Analysis",
+            url: "https://mystockharbor.com/platforms",
+            description:
+              "Compare beginner-friendly trading platforms and charting tools including TradingView, Trading 212, eToro, Interactive Brokers, and Saxo.",
+            about: {
+              "@type": "Thing",
+              name: "Trading platforms and chart analysis tools",
+            },
+            mainEntity: {
+              "@type": "ItemList",
+              itemListElement: PLATFORMS.map((item, index) => ({
+                "@type": "ListItem",
+                position: index + 1,
+                item: {
+                  "@type": "Product",
+                  name: item.name,
+                  description: item.summary,
+                  image: `https://mystockharbor.com${item.logoSrc}`,
+                  brand: {
+                    "@type": "Brand",
+                    name: item.name,
+                  },
+                  category: "Trading Platform",
+                  additionalProperty: [
+                    {
+                      "@type": "PropertyValue",
+                      name: "Best For",
+                      value: item.shortLabel,
+                    },
+                    {
+                      "@type": "PropertyValue",
+                      name: "MyStockHarbor Score",
+                      value: item.score,
+                    },
+                    {
+                      "@type": "PropertyValue",
+                      name: "Highlight",
+                      value: item.highlight,
+                    },
+                  ],
+                },
+              })),
+            },
+            breadcrumb: {
+              "@type": "BreadcrumbList",
+              itemListElement: [
+                {
+                  "@type": "ListItem",
+                  position: 1,
+                  name: "Home",
+                  item: "https://mystockharbor.com/",
+                },
+                {
+                  "@type": "ListItem",
+                  position: 2,
+                  name: "Platforms",
+                  item: "https://mystockharbor.com/platforms",
+                },
+              ],
+            },
+          }),
+        }}
+      />
+
       <div className="wrap">
         <div style={{ display: "grid", gap: 14 }}>
           <div
