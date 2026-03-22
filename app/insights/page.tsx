@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description:
     "Read daily stock market insights, chart-based trade ideas, and technical analysis updates from MyStockHarbor.",
   alternates: {
-    canonical: "https://mystockharbor.com/insights",
+    canonical: "https://www.mystockharbor.com/insights"
   },
 };
 
