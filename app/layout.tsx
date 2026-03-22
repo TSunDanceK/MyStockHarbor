@@ -20,6 +20,32 @@ export const metadata: Metadata = {
   icons: {
     icon: "/icon.png",
   },
+  openGraph: {
+    title:
+      "MyStockHarbor (My Stock Harbor) | Free Trading Dashboard, Market Signals & Technical Analysis",
+    description:
+      "MyStockHarbor (My Stock Harbor) helps traders track stocks, analyse technical indicators, monitor market benchmarks, and learn trading strategies with free educational tools, stock screeners, and market insights.",
+    url: "https://www.mystockharbor.com",
+    siteName: "MyStockHarbor",
+    images: [
+      {
+        url: "https://www.mystockharbor.com/icon.png",
+        width: 512,
+        height: 512,
+        alt: "MyStockHarbor logo",
+      },
+    ],
+    locale: "en_GB",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title:
+      "MyStockHarbor (My Stock Harbor) | Free Trading Dashboard, Market Signals & Technical Analysis",
+    description:
+      "MyStockHarbor (My Stock Harbor) helps traders track stocks, analyse technical indicators, monitor market benchmarks, and learn trading strategies with free educational tools, stock screeners, and market insights.",
+    images: ["https://www.mystockharbor.com/icon.png"],
+  },
 };
 
 export default function RootLayout({
@@ -291,7 +317,7 @@ export default function RootLayout({
                   color: "rgba(241,245,249,0.56)",
                 }}
               >
-                © {new Date().getFullYear()} MyStockHarbor. All rights reserved.
+                © {new Date().getFullYear()} MyStockHarbor (My Stock Harbor). All rights reserved.
               </div>
             </div>
           </footer>
