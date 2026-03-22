@@ -73,21 +73,86 @@ export default async function InsightPostPage({ params }: Props) {
     symbol: post.symbol ?? null,
   });
 
+  const insightJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    headline: post.title,
+    description: post.excerpt,
+    datePublished: post.date,
+    dateModified: post.date,
+    mainEntityOfPage: `https://www.mystockharbor.com/insights/${post.slug}`,
+    url: `https://www.mystockharbor.com/insights/${post.slug}`,
+    author: {
+      "@type": "Organization",
+      name: "MyStockHarbor",
+    },
+    publisher: {
+      "@type": "Organization",
+      name: "MyStockHarbor",
+      logo: {
+        "@type": "ImageObject",
+        url: "https://www.mystockharbor.com/logo.png",
+      },
+    },
+    articleSection: "Stock Market Insights",
+    keywords: post.symbol
+      ? [`${post.symbol}`, "stock analysis", "technical analysis", "market insights"]
+      : ["stock analysis", "technical analysis", "market insights"],
+    about: post.symbol
+      ? {
+          "@type": "Thing",
+          name: post.symbol,
+        }
+      : undefined,
+    breadcrumb: {
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        {
+          "@type": "ListItem",
+          position: 1,
+          name: "Home",
+          item: "https://www.mystockharbor.com/",
+        },
+        {
+          "@type": "ListItem",
+          position: 2,
+          name: "Insights",
+          item: "https://www.mystockharbor.com/insights",
+        },
+        {
+          "@type": "ListItem",
+          position: 3,
+          name: post.title,
+          item: `https://www.mystockharbor.com/insights/${post.slug}`,
+        },
+      ],
+    },
+  };
+
   void submitInsightToIndexNowOnce(post.slug).catch((error) => {
     console.error("IndexNow auto-submit failed:", error);
   });
 
   return (
-    <InsightPostClient
-      post={{
-        slug: post.slug,
-        title: post.title,
-        date: post.date,
-        excerpt: post.excerpt,
-        symbol: post.symbol ?? null,
-        contentHtml,
-      }}
-      snapshot={snapshot}
-    />
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(insightJsonLd),
+        }}
+      />
+
+      <InsightPostClient
+        post={{
+          slug: post.slug,
+          title: post.title,
+          date: post.date,
+          excerpt: post.excerpt,
+          symbol: post.symbol ?? null,
+          contentHtml,
+        }}
+        snapshot={snapshot}
+      />
+    </>
   );
 }
