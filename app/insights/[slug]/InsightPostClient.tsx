@@ -233,6 +233,11 @@ export default function InsightPostClient({
     post.timeframe === "d"
       ? snapshot?.weeklyMA200Pct ?? null
       : null;
+  
+    const maSpreadPct =
+    typeof lastMA50 === "number" && typeof lastMA200 === "number" && lastMA200 !== 0
+      ? ((lastMA50 - lastMA200) / lastMA200) * 100
+      : null;
 
   const timeframeLabel = post.timeframe === "w" ? "Weekly" : "Daily";
   const showWeeklyMA200Card = post.timeframe === "d";
@@ -648,7 +653,26 @@ export default function InsightPostClient({
                             : "Distance unavailable"}
                         </div>
                       </div>
-                    ) : null}
+                    ) : (
+                      <div
+                        className="insightSmallStatCard insightDesktopOnlyStat"
+                        style={smallStatCardStyle}
+                      >
+                        <div className="insightSmallStatLabel" style={smallStatLabelStyle}>
+                          MA Spread
+                        </div>
+                        <div className="insightSmallStatValue" style={smallStatValueStyle}>
+                          {typeof maSpreadPct === "number"
+                            ? `${maSpreadPct >= 0 ? "+" : ""}${maSpreadPct.toFixed(2)}%`
+                            : "—"}
+                        </div>
+                        <div className="insightSmallStatMeta" style={smallStatMetaStyle}>
+                          {typeof lastMA50 === "number" && typeof lastMA200 === "number"
+                            ? `${timeframeLabel} MA50 vs ${timeframeLabel} MA200`
+                            : "Spread unavailable"}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div
@@ -709,6 +733,14 @@ export default function InsightPostClient({
                         style={chartActionStyle("blue")}
                       >
                         Open chart dashboard →
+                      </Link>
+
+                      <Link
+                        href="/pickers"
+                        className="insightDesktopOnly insightDesktopOnlyPickerCta"
+                        style={chartActionStyle("blue")}
+                      >
+                        Scan Pickers →
                       </Link>
                     </div>
 
@@ -917,7 +949,7 @@ export default function InsightPostClient({
             padding-right: 12px !important;
           }
           
-                    .insightMetaRows {
+            .insightMetaRows {
             display: flex !important;
             flex-direction: column !important;
             align-items: flex-start !important;
@@ -931,6 +963,10 @@ export default function InsightPostClient({
             gap: 8px !important;
             flex-wrap: wrap !important;
             width: 100%;
+          }
+          
+           .insightDesktopOnlyPickerCta {
+            display: none !important;
           }
 
           .insightMetaSnapshot {
