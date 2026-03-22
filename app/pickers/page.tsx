@@ -107,7 +107,7 @@ const pickersJsonLd = {
 };
 
 export const metadata: Metadata = {
-  title: "Stock Pickers, Breakouts & Oversold Setups | MyStockHarbor",
+  title: "Stock Pickers, Breakouts & Oversold Setups | MyStockHarbor (My Stock Harbor)",
   description:
     "Find stock ideas using breakout, oversold, divergence and dip-buy setup filters. Open any stock in the MyStockHarbor dashboard for deeper chart analysis.",
   alternates: {
