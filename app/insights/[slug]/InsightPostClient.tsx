@@ -738,9 +738,9 @@ export default function InsightPostClient({
                       <Link
                         href="/pickers"
                         className="insightDesktopOnly insightDesktopOnlyPickerCta"
-                        style={chartActionStyle("blue")}
+                        style={chartActionStyle("picker")}
                       >
-                        Scan for Similar Setups →
+                        Find Similar Setups →
                       </Link>
                     </div>
 
