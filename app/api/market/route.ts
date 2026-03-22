@@ -343,12 +343,27 @@ export async function GET() {
 
   const debugErrors: any[] = [];
 
-  let historyChecks = 0;
+let discoveryRan = false;
+let discoveryReason: string | null = null;
+let attemptedSymbols: string[] = [];
+let historyChecks = 0;
 let historyQualified = 0;
 let historyRejected = 0;
 
+if (!allowDiscoveryNow) {
+  if (now - state.lastDiscoveryAt < DISCOVERY_INTERVAL_MS) {
+    discoveryReason = "interval_not_elapsed";
+  } else if (!isDiscoveryWindowOpen() && Object.keys(state.dynamic).length > 0) {
+    discoveryReason = "outside_market_hours";
+  } else {
+    discoveryReason = "unknown_block";
+  }
+}
+
   if (allowDiscoveryNow) {
     const nextSymbols = getNextDiscoveryBatch(state);
+attemptedSymbols = nextSymbols;
+discoveryRan = true;
 
     if (nextSymbols.length > 0) {
       try {
@@ -461,6 +476,9 @@ if (hasQualifiedHistory) {
 historyChecks,
 historyQualified,
 historyRejected,
+discoveryRan,
+discoveryReason,
+attemptedSymbols,
       discoveryIntervalMinutes: DISCOVERY_INTERVAL_MS / 60000,
       discoveryBatchSize: DISCOVERY_BATCH_SIZE,
       openMarketTtlMinutes: OPEN_MARKET_TTL_MS / 60000,
