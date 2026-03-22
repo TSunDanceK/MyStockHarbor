@@ -325,7 +325,11 @@ export default function PickersClient() {
               : null
           );
           setDynamicSymbols(
-            Array.isArray(data?.dynamicSymbols) ? data.dynamicSymbols : []
+            Array.isArray(data?.dynamicSymbols)
+              ? data.dynamicSymbols
+                  .map((x) => String(x).trim().toUpperCase())
+                  .filter(Boolean)
+              : []
           );
           setEstimatedApiCalls(
             typeof data?.estimatedApiCalls === "number"
@@ -367,8 +371,22 @@ export default function PickersClient() {
     return Array.isArray(signalRecords) ? signalRecords : [];
   }, [signalRecords]);
 
-    const dynamicSymbolSet = useMemo(() => {
-    return new Set(dynamicSymbols);
+    const signalRecordMap = useMemo(() => {
+    const map = new Map<string, SignalRecord>();
+
+    for (const record of safeSignalRecords) {
+      const symbol = String(record.symbol ?? "").trim().toUpperCase();
+      if (!symbol) continue;
+      map.set(symbol, record);
+    }
+
+    return map;
+  }, [safeSignalRecords]);
+
+  const dynamicSymbolSet = useMemo(() => {
+    return new Set(
+      dynamicSymbols.map((x) => String(x).trim().toUpperCase()).filter(Boolean)
+    );
   }, [dynamicSymbols]);
 
   const topBuySection = useMemo<PickerSection | null>(() => {
@@ -471,7 +489,7 @@ const displaySections = useMemo(() => {
   if (oversoldSection) out.push(oversoldSection);
 
   return [...out, ...otherSections];
-}, [safeSections, topBuySection, topSellSection]);
+}, [safeSections, signalRecordMap, dynamicSymbolSet, topBuySection, topSellSection]);
 
   const customMode = selectedFilters.length > 0;
 
@@ -1223,16 +1241,18 @@ const displaySections = useMemo(() => {
               const items = Array.isArray(sec.items)
                 ? sec.items
                     .map((it) => {
-                      const record = safeSignalRecords.find((r) => r.symbol === it.symbol);
+                      const symbol = String(it.symbol ?? "").trim().toUpperCase();
+                      const record = signalRecordMap.get(symbol);
 
                       const checkCount = record
                         ? matchedSignalsForRecord(record).length
                         : 0;
 
-                      const isDynamic = dynamicSymbolSet.has(it.symbol);
+                      const isDynamic = dynamicSymbolSet.has(symbol);
 
                       return {
                         ...it,
+                        symbol,
                         checkCount,
                         isDynamic,
                       };
