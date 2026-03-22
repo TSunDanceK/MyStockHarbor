@@ -6,13 +6,13 @@ export const metadata: Metadata = {
   description:
     "Use MyStockHarbor trading calculators to estimate liquidation price, position size, stop loss risk, and risk-reward before entering a trade.",
   alternates: {
-    canonical: "/utilities",
+    canonical: "https://www.mystockharbor.com/utilities",
   },
   openGraph: {
     title: "Trading Risk Tools & Calculators | MyStockHarbor",
     description:
       "Estimate liquidation price, position size, stop loss risk, and risk-reward with MyStockHarbor trading tools.",
-    url: "https://mystockharbor.com/utilities",
+    url: "https://www.mystockharbor.com/utilities",
     siteName: "MyStockHarbor",
     type: "website",
   },
@@ -34,7 +34,7 @@ export default function UtilitiesPage() {
             "@context": "https://schema.org",
             "@type": "CollectionPage",
             name: "Trading Risk Tools & Calculators",
-            url: "https://mystockharbor.com/utilities",
+            url: "https://www.mystockharbor.com/utilities",
             description:
               "Use trading calculators to estimate position size, stop loss risk, liquidation price, and risk-reward before entering a trade.",
             mainEntity: {
@@ -85,13 +85,13 @@ export default function UtilitiesPage() {
                   "@type": "ListItem",
                   position: 1,
                   name: "Home",
-                  item: "https://mystockharbor.com/",
+                  item: "https://www.mystockharbor.com/",
                 },
                 {
                   "@type": "ListItem",
                   position: 2,
                   name: "Utilities",
-                  item: "https://mystockharbor.com/utilities",
+                 item: "https://www.mystockharbor.com/utilities",
                 },
               ],
             },
