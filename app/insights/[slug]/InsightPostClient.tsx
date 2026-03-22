@@ -674,13 +674,15 @@ export default function InsightPostClient({
                         flexWrap: "wrap",
                       }}
                     >
-                      <Link
-                        href={`/stock/${encodeURIComponent(symbol)}/news`}
-                        className="insightDesktopOnly"
-                        style={chartActionStyle("gold")}
+                      <a
+                        href={tradingViewHref(symbol)}
+                        target="_blank"
+                        rel="noopener noreferrer sponsored"
+                        className="insightMobileOnly"
+                        style={chartActionStyle("green")}
                       >
-                        Check out {symbol} headlines →
-                      </Link>
+                        Open In TradingView ↗
+                      </a>
 
                       <a
                         href={tradingViewHref(symbol)}
