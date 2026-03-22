@@ -746,9 +746,9 @@ export default function InsightPostClient({
 
                     <div className="insightMobileOnlyWrapper">
                       <Link
-                        href={`/stock/${encodeURIComponent(symbol)}/news`}
-                        className="insightMobileButton"
-                        style={chartActionStyle("gold")}
+                        href="/pickers"
+                        className="insightDesktopOnly insightDesktopOnlyPickerCta insightPrimaryPickerCta"
+                        style={chartActionStyle("picker")}
                       >
                         {symbol} headlines
                       </Link>
@@ -872,6 +872,60 @@ export default function InsightPostClient({
           display: none;
         }
 
+        .insightPrimaryPickerCta {
+          position: relative;
+          overflow: hidden;
+          animation: insightPickerPulse 2.8s ease-in-out infinite;
+        }
+
+        .insightPrimaryPickerCta::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(
+            120deg,
+            rgba(255,255,255,0) 0%,
+            rgba(255,255,255,0.18) 50%,
+            rgba(255,255,255,0) 100%
+          );
+          transform: translateX(-130%);
+          animation: insightPickerShine 3.6s ease-in-out infinite;
+          pointer-events: none;
+        }
+
+        .insightPrimaryPickerCta:hover {
+          transform: translateY(-2px) scale(1.02);
+          box-shadow:
+            0 0 0 1px rgba(255,255,255,0.06) inset,
+            0 14px 34px rgba(34,197,94,0.24);
+          filter: brightness(1.05);
+        }
+
+        @keyframes insightPickerPulse {
+          0%,
+          100% {
+            box-shadow:
+              0 0 0 1px rgba(255,255,255,0.04) inset,
+              0 10px 28px rgba(34,197,94,0.18);
+          }
+          50% {
+            box-shadow:
+              0 0 0 1px rgba(255,255,255,0.06) inset,
+              0 14px 36px rgba(34,197,94,0.28);
+          }
+        }
+
+        @keyframes insightPickerShine {
+          0%,
+          70%,
+          100% {
+            transform: translateX(-130%);
+          }
+          85% {
+            transform: translateX(130%);
+          }
+        }
+
         .insightArticleBody h2 {
           margin: 26px 0 10px;
           font-size: 26px;
@@ -912,7 +966,8 @@ export default function InsightPostClient({
           filter: brightness(1.05);
           transform: translateY(-1px);
         }
-                .insightTimeframeMobile {
+
+        .insightTimeframeMobile {
           display: none;
         }
 
@@ -920,7 +975,7 @@ export default function InsightPostClient({
           display: inline;
         }
 
-                @media (min-width: 901px) {
+        @media (min-width: 901px) {
           .insightPriceValue {
             font-size: 42px !important;
             line-height: 1.05 !important;
@@ -948,8 +1003,8 @@ export default function InsightPostClient({
             padding-left: 12px !important;
             padding-right: 12px !important;
           }
-          
-            .insightMetaRows {
+
+          .insightMetaRows {
             display: flex !important;
             flex-direction: column !important;
             align-items: flex-start !important;
@@ -964,8 +1019,8 @@ export default function InsightPostClient({
             flex-wrap: wrap !important;
             width: 100%;
           }
-          
-           .insightDesktopOnlyPickerCta {
+
+          .insightDesktopOnlyPickerCta {
             display: none !important;
           }
 
@@ -1223,7 +1278,7 @@ function ctaStyle(
 }
 
 function chartActionStyle(
-  tint: "gold" | "green" | "blue"
+  tint: "gold" | "green" | "blue" | "picker"
 ): React.CSSProperties {
   if (tint === "gold") {
     return {
@@ -1241,6 +1296,8 @@ function chartActionStyle(
       whiteSpace: "nowrap",
       minWidth: 0,
       textAlign: "center",
+      transition:
+        "transform 160ms ease, box-shadow 160ms ease, filter 160ms ease, border-color 160ms ease",
     };
   }
 
@@ -1260,6 +1317,31 @@ function chartActionStyle(
       whiteSpace: "nowrap",
       minWidth: 0,
       textAlign: "center",
+      transition:
+        "transform 160ms ease, box-shadow 160ms ease, filter 160ms ease, border-color 160ms ease",
+    };
+  }
+
+  if (tint === "picker") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "14px 22px",
+      borderRadius: 16,
+      border: "1px solid rgba(34,197,94,0.56)",
+      background:
+        "linear-gradient(135deg, rgba(34,197,94,0.30), rgba(59,130,246,0.26))",
+      color: "#f8fafc",
+      textDecoration: "none",
+      fontWeight: 950,
+      whiteSpace: "nowrap",
+      minWidth: 0,
+      textAlign: "center",
+      boxShadow:
+        "0 0 0 1px rgba(255,255,255,0.04) inset, 0 10px 28px rgba(34,197,94,0.18)",
+      transition:
+        "transform 160ms ease, box-shadow 160ms ease, filter 160ms ease, border-color 160ms ease",
     };
   }
 
@@ -1278,6 +1360,8 @@ function chartActionStyle(
     whiteSpace: "nowrap",
     minWidth: 0,
     textAlign: "center",
+    transition:
+      "transform 160ms ease, box-shadow 160ms ease, filter 160ms ease, border-color 160ms ease",
   };
 }
 
