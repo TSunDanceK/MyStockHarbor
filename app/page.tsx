@@ -64,8 +64,8 @@ export default function Page() {
                 applicationCategory: "FinanceApplication",
                 operatingSystem: "Web",
                 browserRequirements: "Requires a modern web browser",
-                description:
-                  "A stock analysis web application with chart tools, stock pickers, market insights and educational investing resources.",
+description:
+  "A stock analysis web application providing chart tools, stock pickers, and educational resources to help users study market behaviour and price action.",
                 inLanguage: "en",
                 isPartOf: {
                   "@id": "https://www.mystockharbor.com/#website",
