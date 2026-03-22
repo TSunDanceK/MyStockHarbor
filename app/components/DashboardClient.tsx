@@ -3518,29 +3518,26 @@ return (
           padding: 18px 0 28px;
         }
 
-        .msh-topbar {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 16px;
-          flex-wrap: wrap;
-          margin-bottom: 18px;
-        }
+.msh-topbar {
+  display: block;
+  margin-bottom: 14px;
+}
 
-        .msh-top-left {
-          display: flex;
-          align-items: center;
-          gap: 14px;
-          flex-wrap: wrap;
-          position: relative;
-        }
+.msh-top-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: nowrap;
+  position: relative;
+}
 
-        .msh-top-right {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          flex-wrap: nowrap;
-        }
+.msh-desktop-nav-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
 
         .msh-top-nav-btn:hover {
           transform: translateY(-1px);
@@ -3701,7 +3698,7 @@ return (
             display: none;
           }
 
-          .msh-top-right {
+          .msh-desktop-nav-row {
             display: none;
           }
 
@@ -3771,7 +3768,6 @@ return (
         }
       `}</style>
 
-      <div className="msh-page-wrap">
         <div className="msh-topbar">
           <div className="msh-top-left">
             <Link
@@ -3813,37 +3809,37 @@ return (
               </div>
             </div>
           </div>
+        </div>
 
-          <div className="msh-top-right">
-            <SmallNavLink href="/learn">Learn</SmallNavLink>
-            <SmallNavLink href="/platforms">Platforms</SmallNavLink>
-            <SmallNavLink href="/pickers">Stock Pickers</SmallNavLink>
-            <SmallNavLink href="/utilities">Calculators</SmallNavLink>
+        <div className="msh-desktop-nav-row">
+          <SmallNavLink href="/learn">Learn</SmallNavLink>
+          <SmallNavLink href="/platforms">Platforms</SmallNavLink>
+          <SmallNavLink href="/pickers">Stock Pickers</SmallNavLink>
+          <SmallNavLink href="/utilities">Calculators</SmallNavLink>
 
-            <button
-              type="button"
-              onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
-              className="msh-top-nav-btn"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                minHeight: 42,
-                padding: "9px 13px",
-                borderRadius: 14,
-                border: `1px solid ${COLORS.controlBorder}`,
-                background: COLORS.controlBg,
-                color: COLORS.controlFg,
-                fontWeight: 900,
-                fontSize: 14,
-                cursor: "pointer",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+            className="msh-top-nav-btn"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              minHeight: 42,
+              padding: "9px 13px",
+              borderRadius: 14,
+              border: `1px solid ${COLORS.controlBorder}`,
+              background: COLORS.controlBg,
+              color: COLORS.controlFg,
+              fontWeight: 900,
+              fontSize: 14,
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
+          </button>
         </div>
 
        {isMobile ? MobileHero() : null}
