@@ -80,7 +80,12 @@ export function getAllPosts(): BlogPost[] {
     };
   });
 
-  return posts.sort((a, b) => (a.date < b.date ? 1 : -1));
+   return posts.sort((a, b) => {
+    if (a.date === b.date) return 0;
+    if (!a.date) return 1;
+    if (!b.date) return -1;
+    return a.date < b.date ? 1 : -1;
+  });
 }
 
 export function getPostBySlug(slug: string): BlogPostFull {
