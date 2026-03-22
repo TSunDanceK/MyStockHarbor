@@ -334,7 +334,8 @@ export default function InsightPostClient({
             >
               {insightTag.label}
             </div>
-                        <div
+            <div
+              className="insightTimeframePill"
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -349,10 +350,12 @@ export default function InsightPostClient({
                 textTransform: "uppercase",
               }}
             >
-              {timeframeLabel} Chart
+              <span className="insightTimeframeDesktop">{timeframeLabel} Chart</span>
+              <span className="insightTimeframeMobile">{post.timeframe === "w" ? "W.Chart" : "D.Chart"}</span>
             </div>
 
 <div
+  className="insightMetaRows"
   style={{
     display: "flex",
     alignItems: "center",
@@ -360,46 +363,16 @@ export default function InsightPostClient({
     flexWrap: "wrap",
   }}
 >
-  <span
-    style={{
-      display: "inline-flex",
-      alignItems: "center",
-      padding: "6px 10px",
-      borderRadius: 999,
-      background: "rgba(255,255,255,0.06)",
-      border: "1px solid rgba(255,255,255,0.12)",
-      color: "#e2e8f0",
-      fontSize: 12,
-      fontWeight: 900,
-      letterSpacing: "0.06em",
-      textTransform: "uppercase",
-    }}
-  >
-    Published
-  </span>
-
-  <span
-    style={{
-      fontSize: 14,
-      fontWeight: 800,
-      color: "#f8fafc",
-    }}
-  >
-    {formatPostDate(post.date)}
-  </span>
-
   {snapshot?.snapshotDate ? (
-    <>
-      <span
-        style={{
-          fontSize: 13,
-          opacity: 0.42,
-          fontWeight: 700,
-        }}
-      >
-        •
-      </span>
-
+    <div
+      className="insightMetaGroup insightMetaSnapshot"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        flexWrap: "wrap",
+      }}
+    >
       <span
         style={{
           display: "inline-flex",
@@ -429,8 +402,46 @@ export default function InsightPostClient({
   ? formatPostDate(snapshot.snapshotDate)
   : snapshotDateText}
       </span>
-    </>
+    </div>
   ) : null}
+
+  <div
+    className="insightMetaGroup insightMetaPublished"
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      flexWrap: "wrap",
+    }}
+  >
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "6px 10px",
+        borderRadius: 999,
+        background: "rgba(255,255,255,0.06)",
+        border: "1px solid rgba(255,255,255,0.12)",
+        color: "#e2e8f0",
+        fontSize: 12,
+        fontWeight: 900,
+        letterSpacing: "0.06em",
+        textTransform: "uppercase",
+      }}
+    >
+      Published
+    </span>
+
+    <span
+      style={{
+        fontSize: 14,
+        fontWeight: 800,
+        color: "#f8fafc",
+      }}
+    >
+      {formatPostDate(post.date)}
+    </span>
+  </div>
 </div>
           </div>
 
@@ -869,6 +880,13 @@ export default function InsightPostClient({
           filter: brightness(1.05);
           transform: translateY(-1px);
         }
+                .insightTimeframeMobile {
+          display: none;
+        }
+
+        .insightTimeframeDesktop {
+          display: inline;
+        }
 
                 @media (min-width: 901px) {
           .insightPriceValue {
@@ -897,6 +915,38 @@ export default function InsightPostClient({
           .wrap {
             padding-left: 12px !important;
             padding-right: 12px !important;
+          }
+          
+                    .insightMetaRows {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 6px !important;
+            width: 100%;
+          }
+
+          .insightMetaGroup {
+            display: flex !important;
+            align-items: center !important;
+            gap: 8px !important;
+            flex-wrap: wrap !important;
+            width: 100%;
+          }
+
+          .insightMetaSnapshot {
+            order: 1;
+          }
+
+          .insightMetaPublished {
+            order: 2;
+          }
+
+          .insightTimeframeDesktop {
+            display: none !important;
+          }
+
+          .insightTimeframeMobile {
+            display: inline !important;
           }
 
           .insightMobileOnlyWrapper {
