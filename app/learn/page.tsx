@@ -1,6 +1,30 @@
 // app/learn/page.tsx
+import type { Metadata } from "next";
 import Link from "next/link";
 import { lessonsByCategory } from "./lessons";
+
+export const metadata: Metadata = {
+  title: "Learn Stock Charts, Indicators & Trading Basics | MyStockHarbor",
+  description:
+    "Learn stock charts, indicators, trading basics and risk management with beginner-friendly lessons from MyStockHarbor.",
+  alternates: {
+    canonical: "https://www.mystockharbor.com/learn",
+  },
+  openGraph: {
+    title: "Learn Stock Charts, Indicators & Trading Basics | MyStockHarbor",
+    description:
+      "Beginner-friendly lessons on stock charts, indicators, trading basics and risk management.",
+    url: "https://www.mystockharbor.com/learn",
+    siteName: "MyStockHarbor",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Learn Stock Charts, Indicators & Trading Basics | MyStockHarbor",
+    description:
+      "Beginner-friendly lessons on stock charts, indicators, trading basics and risk management.",
+  },
+};
 
 export default function LearnPage() {
   const basics = lessonsByCategory("Basics");
@@ -126,21 +150,22 @@ export default function LearnPage() {
               LEARN
             </div>
 
-            <h1 style={{ margin: 0, fontSize: 34, letterSpacing: "-0.4px" }}>
-              Learn the Basics
-            </h1>
+<h1 style={{ margin: 0, fontSize: 34, letterSpacing: "-0.4px" }}>
+  Learn Stock Charts, Indicators & Trading Basics
+</h1>
 
-            <p
-              style={{
-                margin: "10px 0 0 0",
-                opacity: 0.75,
-                lineHeight: 1.5,
-                maxWidth: 760,
-              }}
-            >
-              Short lessons on reading charts, key concepts, and the indicators used in
-              MyStockHarbor.
-            </p>
+<p
+  style={{
+    margin: "10px 0 0 0",
+    opacity: 0.75,
+    lineHeight: 1.5,
+    maxWidth: 760,
+  }}
+>
+  Beginner-friendly lessons on stock charts, technical indicators, trading
+  basics and risk management to help you understand the tools used across
+  MyStockHarbor.
+</p>
           </div>
         </div>
 
