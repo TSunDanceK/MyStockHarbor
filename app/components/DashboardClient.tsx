@@ -3258,7 +3258,7 @@ return (
               }}
             >
               Explore chart-based market insights, trade ideas, technical analysis
-              write-ups and stock breakdowns from MyStockHarbor.
+              write-ups and stock breakdowns from MyStockHarbor (My Stock Harbor). 
             </div>
 
             <div
