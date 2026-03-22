@@ -31,7 +31,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       title: `${post.title} | MyStockHarbor`,
       description: post.excerpt,
       alternates: {
-        canonical: `https://mystockharbor.com/insights/${slug}`,
+        canonical: `https://www.mystockharbor.com/insights/${slug}`
       },
       openGraph: {
         title: `${post.title} | MyStockHarbor`,
