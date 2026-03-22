@@ -750,7 +750,7 @@ async function fetchMarket(origin: string) {
 }
 
 async function fetchHistory(origin: string, symbol: string, days: number) {
-  const u = `${origin}/api/history?symbol=${encodeURIComponent(symbol)}&days=${days}`;
+  const u = `${origin}/api/history?symbol=${encodeURIComponent(symbol)}&days=${days}&interval=d`;
   const data = await fetchJSON<{ symbol: string; points: any[] }>(u);
 
   const ptsRaw = Array.isArray(data.points) ? data.points : [];
@@ -849,11 +849,21 @@ async function buildPickersPayload(origin: string) {
   );
 
   const dynamicUniverse = Array.from(
-    new Set([...accumulatedDynamicUniverse, ...rankedDynamicUniverse])
+    new Set(
+      [...accumulatedDynamicUniverse, ...rankedDynamicUniverse]
+        .map((x) => String(x).trim().toUpperCase())
+        .filter(Boolean)
+    )
   );
 
+  const dynamicUniverseSet = new Set(dynamicUniverse);
+
   const universe = Array.from(
-    new Set([...dynamicUniverse, ...PRESET_UNIVERSE])
+    new Set(
+      [...dynamicUniverse, ...PRESET_UNIVERSE]
+        .map((x) => String(x).trim().toUpperCase())
+        .filter(Boolean)
+    )
   ).slice(0, 100);
 
   const limit = pLimit(8);
@@ -869,7 +879,7 @@ async function buildPickersPayload(origin: string) {
   const divergences: PickerItem[] = [];
   const signalRecords: SignalRecord[] = [];
 
-  const isDynamicUniverse = (sym: string) => dynamicUniverse.includes(sym);
+  const isDynamicUniverse = (sym: string) => dynamicUniverseSet.has(sym);
   const dynamicBoost = (sym: string) => (isDynamicUniverse(sym) ? 1000 : 0);
 
   await Promise.all(
@@ -1233,11 +1243,11 @@ if (comp) {
         ? market.dynamicUniverseSize
         : dynamicUniverse.length,
     dynamicUniversePreview: dynamicUniverse.slice(0, 20),
+    dynamicSymbols: dynamicUniverse,
     estimatedApiCalls: universe.length + 1,
     sections,
     signalRecords,
   };
-}
 
 /* -------------------------------- GET -------------------------------- */
 
