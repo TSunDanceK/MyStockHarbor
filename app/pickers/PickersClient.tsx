@@ -541,6 +541,48 @@ const displaySections = useMemo(() => {
           50% { transform: translateX(140%); opacity: 0.95; }
           100% { transform: translateX(320%); opacity: 0.55; }
         }
+        @keyframes pickersPulseCard {
+  0%, 100% {
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.08) inset,
+                0 10px 30px rgba(59,130,246,0.10);
+    filter: brightness(1);
+  }
+  50% {
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.14) inset,
+                0 14px 40px rgba(59,130,246,0.22);
+    filter: brightness(1.08);
+  }
+}
+
+@keyframes pickersShimmer {
+  0% {
+    transform: translateX(-120%);
+  }
+  70%, 100% {
+    transform: translateX(140%);
+  }
+}
+
+.pickers-loading-card {
+  position: relative;
+  overflow: hidden;
+  animation: pickersPulseCard 2.6s ease-in-out infinite;
+}
+
+.pickers-loading-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    120deg,
+    rgba(255,255,255,0) 0%,
+    rgba(255,255,255,0.18) 50%,
+    rgba(255,255,255,0) 100%
+  );
+  transform: translateX(-120%);
+  animation: pickersShimmer 3.2s ease-in-out infinite;
+  pointer-events: none;
+}
 
         .pickers-shell {
           width: 100%;
@@ -612,8 +654,8 @@ const displaySections = useMemo(() => {
       `}</style>
 
       {loading ? (
-        <div
-          className="pickers-shell"
+<div
+  className="pickers-shell pickers-loading-card"
           style={{
             border: "1px solid rgba(255,255,255,0.12)",
             borderRadius: 18,
