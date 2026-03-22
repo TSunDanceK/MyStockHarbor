@@ -429,6 +429,10 @@ export default function PickersClient() {
 const displaySections = useMemo(() => {
   const out: PickerSection[] = [];
 
+  const ma200Section = safeSections.find((section) =>
+    section.title.includes("MA200 Proximity")
+  );
+
   const buyTheDipSection = safeSections.find(
     (section) =>
       section.title === "Buy-the-Dip Setups" ||
@@ -450,12 +454,14 @@ const displaySections = useMemo(() => {
 
   const otherSections = safeSections.filter(
     (section) =>
+      section !== ma200Section &&
       section !== buyTheDipSection &&
       section !== athBreakoutSection &&
       section !== threeMonthBreakoutSection &&
       section !== oversoldSection
   );
 
+  if (ma200Section) out.push(ma200Section);
   if (topBuySection) out.push(topBuySection);
   if (buyTheDipSection) out.push(buyTheDipSection);
   if (athBreakoutSection) out.push(athBreakoutSection);
@@ -582,6 +588,10 @@ const displaySections = useMemo(() => {
 
           .pickers-desktop-only {
             display: none;
+          }
+
+          .pickers-item-note {
+            display: none !important;
           }
         }
       `}</style>
@@ -870,40 +880,7 @@ const displaySections = useMemo(() => {
           boxSizing: "border-box",
         }}
       >
-        {!loading && !err ? (
-          <div
-            style={{
-              border: "1px solid rgba(255,255,255,0.14)",
-              borderRadius: 16,
-              padding: 16,
-              background: "#0b1220",
-              boxSizing: "border-box",
-            }}
-          >
-            <h2
-              style={{
-                margin: 0,
-                fontSize: 22,
-                fontWeight: 950,
-                letterSpacing: "-0.02em",
-              }}
-            >
-              MA200 Proximity
-            </h2>
-
-            <p
-              style={{
-                margin: "10px 0 0",
-                fontSize: 14,
-                opacity: 0.72,
-                lineHeight: 1.6,
-                maxWidth: 760,
-              }}
-            >
-              Stocks trading close to their Daily or Weekly MA200. Clicking a result opens the chart on the correct timeframe with MA200 selected.
-            </p>
-          </div>
-        ) : null}
+      
         {customMode ? (
           <section
             style={{
@@ -1320,6 +1297,7 @@ const displaySections = useMemo(() => {
 
                           {it.note ? (
                             <span
+                              className="pickers-item-note"
                               style={{
                                 fontSize: 12,
                                 opacity: 0.65,
