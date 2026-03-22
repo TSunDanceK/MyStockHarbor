@@ -3352,7 +3352,7 @@ return (
             </div>
           </div>
 
-          <h1
+          <div
             style={{
               margin: 0,
               fontWeight: 950,
@@ -3362,7 +3362,7 @@ return (
             }}
           >
             Stock Analysis Tools, Stock Pickers & Market Insights
-          </h1>
+          </div>
 
           <div
             style={{
@@ -3799,7 +3799,26 @@ return (
             </Link>
 
             <div>
-              <div style={{ marginTop: 6, color: COLORS.mutedFg, fontSize: 13, fontWeight: 700 }}>
+              <h1
+                style={{
+                  margin: 0,
+                  fontWeight: 950,
+                  fontSize: 28,
+                  lineHeight: 1.05,
+                  letterSpacing: "-0.03em",
+                }}
+              >
+                Stock Analysis Tools, Stock Pickers & Market Insights
+              </h1>
+
+              <div
+                style={{
+                  marginTop: 6,
+                  color: COLORS.mutedFg,
+                  fontSize: 13,
+                  fontWeight: 700,
+                }}
+              >
                 Learn charts. Discover stocks. Trade smarter.
               </div>
             </div>
