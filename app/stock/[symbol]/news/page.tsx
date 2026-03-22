@@ -1003,13 +1003,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   return {
     title: `${upper} Stock News, Summary & Analysis | MyStockHarbor`,
-    description: `Read ${upper} stock news with a beginner-friendly summary, news score, earnings tone, and technical context on MyStockHarbor.`,
+      description: `Read ${upper} stock news with beginner-friendly summaries, headline tone, earnings context and technical analysis on MyStockHarbor.`,
     alternates: {
       canonical: `/stock/${upper}/news`,
     },
     openGraph: {
       title: `${upper} Stock News & Analysis | MyStockHarbor`,
-      description: `Latest ${upper} stock news with beginner-friendly summaries, tone scoring, and chart context.`,
+      description: `Latest ${upper} stock news with beginner-friendly summaries, earnings context and chart-based analysis.`,
       url: `/stock/${upper}/news`,
       siteName: "MyStockHarbor",
       type: "article",
@@ -1602,34 +1602,65 @@ export default async function StockNewsPage({ params }: Props) {
         dangerouslySetInnerHTML={{
           __html: JSON.stringify({
             "@context": "https://schema.org",
-            "@type": "WebPage",
-            name: `${upper} Stock News, Summary & Analysis`,
-            url: `https://mystockharbor.com/stock/${encodeURIComponent(upper)}/news`,
-            description: leadSummary,
-            hasPart: structuredNews(news, summaryByTitle),
-            breadcrumb: {
-              "@type": "BreadcrumbList",
-              itemListElement: [
-                {
-                  "@type": "ListItem",
-                  position: 1,
-                  name: "Home",
-                  item: "https://mystockharbor.com/",
+            "@graph": [
+              {
+                "@type": "WebPage",
+                "@id": `https://www.mystockharbor.com/stock/${encodeURIComponent(upper)}/news#webpage`,
+                url: `https://www.mystockharbor.com/stock/${encodeURIComponent(upper)}/news`,
+                name: `${upper} Stock News, Summary & Analysis | MyStockHarbor`,
+                description: leadSummary,
+                isPartOf: {
+                  "@id": "https://www.mystockharbor.com/#website",
                 },
-                {
-                  "@type": "ListItem",
-                  position: 2,
-                  name: `${upper} Stock Analysis`,
-                  item: `https://mystockharbor.com/stock/${encodeURIComponent(upper)}`,
+                about: {
+                  "@id": `https://www.mystockharbor.com/stock/${encodeURIComponent(upper)}#financialproduct`,
                 },
-                {
-                  "@type": "ListItem",
-                  position: 3,
-                  name: `${upper} Stock News`,
-                  item: `https://mystockharbor.com/stock/${encodeURIComponent(upper)}/news`,
+                breadcrumb: {
+                  "@id": `https://www.mystockharbor.com/stock/${encodeURIComponent(upper)}/news#breadcrumb`,
                 },
-              ],
-            },
+                mainEntity: {
+                  "@id": `https://www.mystockharbor.com/stock/${encodeURIComponent(upper)}/news#collection`,
+                },
+              },
+              {
+                "@type": "CollectionPage",
+                "@id": `https://www.mystockharbor.com/stock/${encodeURIComponent(upper)}/news#collection`,
+                url: `https://www.mystockharbor.com/stock/${encodeURIComponent(upper)}/news`,
+                name: `${upper} Stock News`,
+                description: `Latest ${upper} stock news with beginner-friendly summaries, news score, earnings tone and technical context.`,
+                isPartOf: {
+                  "@id": "https://www.mystockharbor.com/#website",
+                },
+                about: {
+                  "@id": `https://www.mystockharbor.com/stock/${encodeURIComponent(upper)}#financialproduct`,
+                },
+                hasPart: structuredNews(news, summaryByTitle),
+              },
+              {
+                "@type": "BreadcrumbList",
+                "@id": `https://www.mystockharbor.com/stock/${encodeURIComponent(upper)}/news#breadcrumb`,
+                itemListElement: [
+                  {
+                    "@type": "ListItem",
+                    position: 1,
+                    name: "Home",
+                    item: "https://www.mystockharbor.com/",
+                  },
+                  {
+                    "@type": "ListItem",
+                    position: 2,
+                    name: `${upper} Stock Analysis`,
+                    item: `https://www.mystockharbor.com/stock/${encodeURIComponent(upper)}`,
+                  },
+                  {
+                    "@type": "ListItem",
+                    position: 3,
+                    name: `${upper} Stock News`,
+                    item: `https://www.mystockharbor.com/stock/${encodeURIComponent(upper)}/news`,
+                  },
+                ],
+              },
+            ],
           }),
         }}
       />
