@@ -9,7 +9,9 @@ export type BlogPost = {
   title: string;
   date: string;
   excerpt: string;
-  symbol?: string | null;
+  symbol?: string;
+  timeframe: "d" | "w";
+  content: string;
 };
 
 export type InsightSnapshotPoint = {
@@ -42,6 +44,7 @@ export type BlogPostFull = {
   date: string;
   excerpt: string;
   symbol?: string | null;
+  timeframe: "d" | "w";
   content: string;
 };
 
@@ -77,6 +80,7 @@ export function getAllPosts(): BlogPost[] {
       date: formatFrontmatterDate(data.date),
       excerpt: String(data.excerpt || ""),
       symbol: data.symbol ? String(data.symbol) : null,
+      timeframe: data.timeframe === "w" ? "w" : "d",
     };
   });
 
@@ -100,6 +104,7 @@ export function getPostBySlug(slug: string): BlogPostFull {
     date: formatFrontmatterDate(data.date),
     excerpt: String(data.excerpt || ""),
     symbol: data.symbol ? String(data.symbol) : null,
+    timeframe: data.timeframe === "w" ? "w" : "d",
     content,
   };
 }
