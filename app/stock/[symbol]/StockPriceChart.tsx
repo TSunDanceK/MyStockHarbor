@@ -329,37 +329,6 @@ export default function StockPriceChart({
           </span>
         </div>
       </div>
-
-      <div
-        style={{
-          marginTop: 14,
-          display: "flex",
-          justifyContent: "flex-end",
-        }}
-      >
-        <Link
-          href={`/stock/${encodeURIComponent(symbol.toUpperCase())}/news`}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            minHeight: 42,
-            padding: "10px 14px",
-            borderRadius: 999,
-            border: "1px solid rgba(59,130,246,0.24)",
-            background:
-              "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(37,99,235,0.08))",
-            color: "#dbeafe",
-            textDecoration: "none",
-            fontSize: 13,
-            fontWeight: 850,
-            lineHeight: 1,
-            whiteSpace: "nowrap",
-          }}
-        >
-          Check out the {symbol.toUpperCase()} headlines →
-        </Link>
-      </div>
     </div>
   );
 }
