@@ -870,6 +870,18 @@ export default function InsightPostClient({
           transform: translateY(-1px);
         }
 
+                @media (min-width: 901px) {
+          .insightPriceValue {
+            font-size: 42px !important;
+            line-height: 1.05 !important;
+          }
+
+          .insightTrendValue {
+            font-size: 36px !important;
+            line-height: 1.05 !important;
+          }
+        }
+
         @media (max-width: 900px) {
           .wrap {
             padding: 18px 16px 34px !important;
