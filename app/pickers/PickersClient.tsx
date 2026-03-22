@@ -227,6 +227,7 @@ function HelpTip({ text }: { text: string }) {
 
   return (
     <span
+      className="pickers-help-tip"
       style={{
         position: "relative",
         display: "inline-flex",
@@ -592,6 +593,20 @@ const displaySections = useMemo(() => {
 
           .pickers-item-note {
             display: none !important;
+          }
+
+          .pickers-section-title {
+            flex-wrap: nowrap !important;
+            align-items: center !important;
+            gap: 8px !important;
+          }
+
+          .pickers-help-tip {
+            width: 22px !important;
+            height: 22px !important;
+            font-size: 13px !important;
+            margin-left: 0 !important;
+            flex: 0 0 22px !important;
           }
         }
       `}</style>
@@ -1211,6 +1226,7 @@ const displaySections = useMemo(() => {
                   >
                     <div style={{ minWidth: 0 }}>
                       <h2
+                        className="pickers-section-title"
                         style={{
                           margin: 0,
                           fontSize: 22,
