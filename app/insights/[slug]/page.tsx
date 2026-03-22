@@ -36,7 +36,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       openGraph: {
         title: `${post.title} | MyStockHarbor`,
         description: post.excerpt,
-        url: `https://mystockharbor.com/insights/${slug}`,
+        url: `https://www.mystockharbor.com/insights/${slug}`,
         siteName: "MyStockHarbor",
         type: "article",
       },
@@ -73,60 +73,80 @@ export default async function InsightPostPage({ params }: Props) {
     symbol: post.symbol ?? null,
   });
 
+  const insightUrl = `https://www.mystockharbor.com/insights/${post.slug}`;
+  const stockUrl = post.symbol
+    ? `https://www.mystockharbor.com/stock/${post.symbol.toUpperCase()}`
+    : null;
+
   const insightJsonLd = {
     "@context": "https://schema.org",
-    "@type": "BlogPosting",
-    headline: post.title,
-    description: post.excerpt,
-    datePublished: post.date,
-    dateModified: post.date,
-    mainEntityOfPage: `https://www.mystockharbor.com/insights/${post.slug}`,
-    url: `https://www.mystockharbor.com/insights/${post.slug}`,
-    author: {
-      "@type": "Organization",
-      name: "MyStockHarbor",
-    },
-    publisher: {
-      "@type": "Organization",
-      name: "MyStockHarbor",
-      logo: {
-        "@type": "ImageObject",
-        url: "https://www.mystockharbor.com/logo.png",
+    "@graph": [
+      {
+        "@type": "BlogPosting",
+        "@id": `${insightUrl}#article`,
+        headline: post.title,
+        description: post.excerpt,
+        datePublished: post.date,
+        dateModified: post.date,
+        mainEntityOfPage: {
+          "@type": "WebPage",
+          "@id": `${insightUrl}#webpage`,
+        },
+        url: insightUrl,
+        author: {
+          "@type": "Organization",
+          "@id": "https://www.mystockharbor.com/#organization",
+          name: "MyStockHarbor",
+        },
+        publisher: {
+          "@type": "Organization",
+          "@id": "https://www.mystockharbor.com/#organization",
+          name: "MyStockHarbor",
+          logo: {
+            "@type": "ImageObject",
+            url: "https://www.mystockharbor.com/logo.png",
+          },
+        },
+        isPartOf: {
+          "@id": "https://www.mystockharbor.com/#website",
+        },
+        articleSection: "Stock Market Insights",
+        keywords: post.symbol
+          ? [post.symbol, "stock analysis", "technical analysis", "market insights"]
+          : ["stock analysis", "technical analysis", "market insights"],
+        about: post.symbol
+          ? {
+              "@type": "Thing",
+              name: post.symbol,
+              url: stockUrl,
+            }
+          : undefined,
       },
-    },
-    articleSection: "Stock Market Insights",
-    keywords: post.symbol
-      ? [`${post.symbol}`, "stock analysis", "technical analysis", "market insights"]
-      : ["stock analysis", "technical analysis", "market insights"],
-    about: post.symbol
-      ? {
-          "@type": "Thing",
-          name: post.symbol,
-        }
-      : undefined,
-    breadcrumb: {
-      "@type": "BreadcrumbList",
-      itemListElement: [
-        {
-          "@type": "ListItem",
-          position: 1,
-          name: "Home",
-          item: "https://www.mystockharbor.com/",
-        },
-        {
-          "@type": "ListItem",
-          position: 2,
-          name: "Insights",
-          item: "https://www.mystockharbor.com/insights",
-        },
-        {
-          "@type": "ListItem",
-          position: 3,
-          name: post.title,
-          item: `https://www.mystockharbor.com/insights/${post.slug}`,
-        },
-      ],
-    },
+      {
+        "@type": "BreadcrumbList",
+        "@id": `${insightUrl}#breadcrumb`,
+        itemListElement: [
+          {
+            "@type": "ListItem",
+            position: 1,
+            name: "Home",
+            item: "https://www.mystockharbor.com/",
+          },
+          {
+            "@type": "ListItem",
+            position: 2,
+            name: "Insights",
+            item: "https://www.mystockharbor.com/insights",
+          },
+          {
+            "@type": "ListItem",
+            position: 3,
+            name: post.title,
+            item: insightUrl,
+          },
+        ],
+      },
+    ],
   };
 
   void submitInsightToIndexNowOnce(post.slug).catch((error) => {
