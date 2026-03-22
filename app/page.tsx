@@ -33,11 +33,53 @@ export default function Page() {
         dangerouslySetInnerHTML={{
           __html: JSON.stringify({
             "@context": "https://schema.org",
-            "@type": "WebSite",
-            name: "MyStockHarbor",
-            url: "https://www.mystockharbor.com",
-            description:
-              "Stock analysis tools, stock pickers, market insights and chart-based research from MyStockHarbor.",
+            "@graph": [
+              {
+                "@type": "WebSite",
+                "@id": "https://www.mystockharbor.com/#website",
+                name: "MyStockHarbor",
+                url: "https://www.mystockharbor.com",
+                description:
+                  "Stock analysis tools, stock pickers, market insights and chart-based research from MyStockHarbor.",
+                inLanguage: "en",
+                publisher: {
+                  "@id": "https://www.mystockharbor.com/#organization",
+                },
+              },
+              {
+                "@type": "Organization",
+                "@id": "https://www.mystockharbor.com/#organization",
+                name: "MyStockHarbor",
+                url: "https://www.mystockharbor.com",
+                logo: {
+                  "@type": "ImageObject",
+                  url: "https://www.mystockharbor.com/logo.png",
+                },
+              },
+              {
+                "@type": "WebApplication",
+                "@id": "https://www.mystockharbor.com/#webapp",
+                name: "MyStockHarbor",
+                url: "https://www.mystockharbor.com",
+                applicationCategory: "FinanceApplication",
+                operatingSystem: "Web",
+                browserRequirements: "Requires a modern web browser",
+                description:
+                  "A stock analysis web application with chart tools, stock pickers, market insights and educational investing resources.",
+                inLanguage: "en",
+                isPartOf: {
+                  "@id": "https://www.mystockharbor.com/#website",
+                },
+                publisher: {
+                  "@id": "https://www.mystockharbor.com/#organization",
+                },
+                offers: {
+                  "@type": "Offer",
+                  price: "0",
+                  priceCurrency: "USD",
+                },
+              },
+            ],
           }),
         }}
       />
