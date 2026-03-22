@@ -3,6 +3,109 @@ import Link from "next/link";
 import PickersClient from "./PickersClient";
 import BookmarkPromptButton from "./BookmarkPromptButton";
 
+const pickersJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  name: "Stock Pickers",
+  url: "https://mystockharbor.com/pickers",
+  description:
+    "Browse stock screener ideas including oversold stocks, overbought stocks, breakouts, stocks near MA200, divergence setups, unusual volume, and pullback ideas.",
+  mainEntity: {
+    "@type": "ItemList",
+    itemListElement: [
+      {
+        "@type": "ListItem",
+        position: 1,
+        item: {
+          "@type": "Thing",
+          name: "Oversold Stocks",
+          url: "https://mystockharbor.com/oversold-stocks",
+        },
+      },
+      {
+        "@type": "ListItem",
+        position: 2,
+        item: {
+          "@type": "Thing",
+          name: "Overbought Stocks",
+          url: "https://mystockharbor.com/overbought-stocks",
+        },
+      },
+      {
+        "@type": "ListItem",
+        position: 3,
+        item: {
+          "@type": "Thing",
+          name: "Breakout Stocks",
+          url: "https://mystockharbor.com/breakout-stocks",
+        },
+      },
+      {
+        "@type": "ListItem",
+        position: 4,
+        item: {
+          "@type": "Thing",
+          name: "Buy The Dip Stocks",
+          url: "https://mystockharbor.com/buy-the-dip-stocks",
+        },
+      },
+      {
+        "@type": "ListItem",
+        position: 5,
+        item: {
+          "@type": "Thing",
+          name: "Stocks Above 200 Day Moving Average",
+          url: "https://mystockharbor.com/stocks-above-200-day-moving-average",
+        },
+      },
+      {
+        "@type": "ListItem",
+        position: 6,
+        item: {
+          "@type": "Thing",
+          name: "Stocks Down From Highs",
+          url: "https://mystockharbor.com/stocks-down-from-highs",
+        },
+      },
+      {
+        "@type": "ListItem",
+        position: 7,
+        item: {
+          "@type": "Thing",
+          name: "Bullish Divergence Stocks",
+          url: "https://mystockharbor.com/bullish-divergence-stocks",
+        },
+      },
+      {
+        "@type": "ListItem",
+        position: 8,
+        item: {
+          "@type": "Thing",
+          name: "Bearish Divergence Stocks",
+          url: "https://mystockharbor.com/bearish-divergence-stocks",
+        },
+      },
+    ],
+  },
+  breadcrumb: {
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "Home",
+        item: "https://mystockharbor.com/",
+      },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Stock Pickers",
+        item: "https://mystockharbor.com/pickers",
+      },
+    ],
+  },
+};
+
 export const metadata: Metadata = {
   title: "Stock Pickers, Breakouts & Oversold Setups | MyStockHarbor",
   description:
