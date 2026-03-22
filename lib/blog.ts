@@ -9,11 +9,9 @@ export type BlogPost = {
   title: string;
   date: string;
   excerpt: string;
-  symbol?: string;
+  symbol?: string | null;
   timeframe: "d" | "w";
-  content: string;
 };
-
 export type InsightSnapshotPoint = {
   date: string;
   close: number;
