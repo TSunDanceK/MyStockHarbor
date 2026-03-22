@@ -343,6 +343,10 @@ export async function GET() {
 
   const debugErrors: any[] = [];
 
+  let historyChecks = 0;
+let historyQualified = 0;
+let historyRejected = 0;
+
   if (allowDiscoveryNow) {
     const nextSymbols = getNextDiscoveryBatch(state);
 
@@ -355,8 +359,16 @@ export async function GET() {
           const symbol = String(q.symbol ?? "").trim().toUpperCase();
           if (!symbol) continue;
 
-          const hasQualifiedHistory = await ensureQualifiedHistory(symbol);
-          if (!hasQualifiedHistory) continue;
+historyChecks++;
+
+const hasQualifiedHistory = await ensureQualifiedHistory(symbol);
+
+if (hasQualifiedHistory) {
+  historyQualified++;
+} else {
+  historyRejected++;
+  continue;
+}
 
           state.dynamic[symbol] = {
             quote: q,
@@ -446,6 +458,9 @@ export async function GET() {
     topRanges,
 
     debug: {
+historyChecks,
+historyQualified,
+historyRejected,
       discoveryIntervalMinutes: DISCOVERY_INTERVAL_MS / 60000,
       discoveryBatchSize: DISCOVERY_BATCH_SIZE,
       openMarketTtlMinutes: OPEN_MARKET_TTL_MS / 60000,
