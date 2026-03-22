@@ -5,8 +5,7 @@ import { useMemo } from "react";
 import StockPriceChart from "@/app/stock/[symbol]/StockPriceChart";
 import type { InsightSnapshot } from "@/lib/blog";
 
-/* ================= TYPES ================= */
-
+/* TYPES */
 type Point = {
   date: string;
   close: number;
@@ -25,8 +24,7 @@ type InsightPostData = {
   contentHtml: string;
 };
 
-/* ================= HELPERS ================= */
-
+/* HELPERS */
 function formatPostDate(dateString: string) {
   const date = new Date(dateString);
   if (Number.isNaN(date.getTime())) return dateString;
@@ -58,23 +56,19 @@ function aggregateToWeekly(points: Point[]): Point[] {
 
   for (const point of points) {
     const d = new Date(`${point.date}T00:00:00Z`);
-    const day = d.getUTCDay();
-    const diff = day === 0 ? -6 : 1 - day;
+    if (Number.isNaN(d.getTime())) continue;
+
+    const utcDay = d.getUTCDay();
+    const diffToMonday = utcDay === 0 ? -6 : 1 - utcDay;
 
     const monday = new Date(d);
-    monday.setUTCDate(d.getUTCDate() + diff);
+    monday.setUTCDate(d.getUTCDate() + diffToMonday);
 
     const key = monday.toISOString().slice(0, 10);
     const existing = buckets.get(key);
 
     if (!existing) {
-      buckets.set(key, {
-        date: point.date,
-        close: point.close,
-        high: point.high ?? point.close,
-        low: point.low ?? point.close,
-        volume: point.volume ?? 0,
-      });
+      buckets.set(key, { ...point });
     } else {
       existing.close = point.close;
       existing.high = Math.max(existing.high ?? 0, point.high ?? point.close);
@@ -91,8 +85,7 @@ function tradingViewHref(symbol: string) {
   return `/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`;
 }
 
-/* ================= COMPONENT ================= */
-
+/* COMPONENT */
 export default function InsightPostClient({
   post,
   snapshot,
@@ -105,7 +98,7 @@ export default function InsightPostClient({
     snapshot?.symbol?.toUpperCase() ??
     "";
 
-  const dailyPoints: Point[] = snapshot?.chartPoints ?? [];
+  const dailyPoints = snapshot?.chartPoints ?? [];
 
   const chartPoints =
     post.timeframe === "w"
@@ -130,55 +123,49 @@ export default function InsightPostClient({
     chartPoints[chartPoints.length - 1]?.close ??
     null;
 
-  const lastMA50 = ma50[ma50.length - 1];
-  const lastMA200 = ma200[ma200.length - 1];
-
   const timeframeLabel = post.timeframe === "w" ? "Weekly" : "Daily";
 
   return (
-    <main style={{ background: "#06080d", color: "#f1f5f9" }}>
+    <main style={{ minHeight: "100vh", background: "#06080d", color: "#f1f5f9" }}>
       <div className="wrap">
 
         {/* TOP BUTTONS */}
-        <div className="topBtns">
-          <Link href="/insights" className="btn blue">
-            ← Back
+        <div className="insightTopActions">
+          <Link href="/insights" style={topLinkStyle("blue")}>
+            ← Back to Insights
           </Link>
 
           {symbol && (
-            <Link href={`/stock/${symbol}`} className="btn gold">
-              <span className="desktop">View {symbol} Stock Page →</span>
-              <span className="mobile">View Stock Page →</span>
+            <Link href={`/stock/${symbol}`} style={topLinkStyle("gold")}>
+              <span className="desktopOnly">View {symbol} Stock Page →</span>
+              <span className="mobileOnly">View Stock Page →</span>
             </Link>
           )}
         </div>
 
         {/* HEADER */}
-        <div className="card">
+        <section className="card">
 
           {/* PILLS */}
-          <div className="pills">
-            <span className="pill blue">{symbol}</span>
-            <span className="pill red">Breakdown Risk</span>
-            <span className="pill neutral">
-              <span className="desktop">{timeframeLabel} Chart</span>
-              <span className="mobile">
+          <div className="pillRow">
+            <div className="pill blue">{symbol}</div>
+            <div className="pill red">Breakdown Risk</div>
+            <div className="pill neutral">
+              <span className="desktopOnly">{timeframeLabel} Chart</span>
+              <span className="mobileOnly">
                 {post.timeframe === "w" ? "W.CHART" : "D.CHART"}
               </span>
-            </span>
+            </div>
           </div>
 
-          {/* META */}
-          <div className="meta">
+          {/* DATES */}
+          <div className="dates">
             <div>Published: {formatPostDate(post.date)}</div>
             {snapshot?.snapshotDate && (
-              <div>
-                Snapshot: {formatPostDate(snapshot.snapshotDate)}
-              </div>
+              <div>Snapshot: {formatPostDate(snapshot.snapshotDate)}</div>
             )}
           </div>
 
-          {/* TITLE */}
           <h1>{post.title}</h1>
           <p className="excerpt">{post.excerpt}</p>
 
@@ -186,84 +173,112 @@ export default function InsightPostClient({
           <div className="stats">
             <div className="stat">
               <div>Last Price</div>
-              <div className="big">
+              <div className="price">
                 ${lastPrice?.toFixed(2) ?? "—"}
               </div>
             </div>
 
             <div className="stat">
               <div>Trend</div>
-              <div className="big red">
-                {snapshot?.trend ?? "—"}
-              </div>
+              <div className="trend">{snapshot?.trend}</div>
             </div>
           </div>
 
           {/* CHART */}
-          <div className="chartBox">
-            <StockPriceChart
-              symbol={symbol}
-              data={chartSlice}
-              ma50={ma50Slice}
-              ma200={ma200Slice}
-              height={420}
-            />
-          </div>
+          <StockPriceChart
+            symbol={symbol}
+            data={chartSlice}
+            ma50={ma50Slice}
+            ma200={ma200Slice}
+            height={360}
+          />
 
           {/* CTA */}
-          <div className="cta">
+          <div className="ctaRow">
+
+            {/* MOBILE ONLY */}
             <a
               href={tradingViewHref(symbol)}
               target="_blank"
-              className="btn green"
+              rel="noopener noreferrer sponsored"
+              className="mobileOnly"
+              style={chartActionStyle("green")}
             >
               Open in TradingView ↗
             </a>
 
-            <Link href="/pickers" className="btn purple desktop">
-              Stock Scanner →
-            </Link>
+            {/* DESKTOP ONLY */}
+            <div className="desktopOnly ctaDesktop">
+              <Link
+                href={`/?symbol=${symbol}`}
+                style={chartActionStyle("blue")}
+              >
+                Open chart dashboard →
+              </Link>
+
+              <Link
+                href="/pickers"
+                style={chartActionStyle("purple")}
+              >
+                Stock Scanner →
+              </Link>
+            </div>
           </div>
-        </div>
+
+          {/* BLOG */}
+          <section className="content">
+            <div dangerouslySetInnerHTML={{ __html: post.contentHtml }} />
+          </section>
+        </section>
       </div>
 
       <style>{`
         .wrap { max-width:1100px; margin:auto; padding:20px; }
 
-        .topBtns { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+        .pillRow {
+          display:flex;
+          gap:6px;
+          overflow-x:auto;
+          white-space:nowrap;
+        }
 
-        .btn { padding:10px; border-radius:12px; text-align:center; font-weight:900; }
-        .blue { background:#1d4ed8; }
-        .gold { background:#ca8a04; }
-        .green { background:#16a34a; }
-        .purple { background:#7c3aed; }
+        .pill {
+          padding:6px 10px;
+          border-radius:999px;
+          font-size:11px;
+          font-weight:900;
+        }
 
-        .card { margin-top:20px; padding:20px; border-radius:16px; background:#0b1220; }
+        .dates { margin-top:10px; font-size:13px; opacity:.8; }
 
-        .pills { display:flex; gap:6px; overflow:hidden; }
-        .pill { padding:6px 10px; border-radius:999px; font-size:11px; }
-        .pill.blue { background:#1d4ed8; }
-        .pill.red { background:#dc2626; }
-        .pill.neutral { background:#334155; }
+        .stats {
+          display:grid;
+          grid-template-columns:1fr 1fr;
+          gap:12px;
+          margin-top:16px;
+        }
 
-        .meta { margin-top:10px; font-size:12px; opacity:.7; }
+        .price { font-size:32px; font-weight:900; }
+        .trend { font-size:28px; font-weight:900; color:#ef4444; }
 
-        .stats { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px; }
-        .stat { background:#111827; padding:14px; border-radius:12px; }
-        .big { font-size:32px; font-weight:900; }
-        .big.red { color:#ef4444; }
+        .ctaRow { margin-top:16px; }
 
-        .chartBox { margin-top:20px; }
+        .ctaDesktop { display:flex; gap:10px; }
 
-        .cta { margin-top:16px; display:flex; gap:10px; }
+        .desktopOnly { display:inline-flex; }
+        .mobileOnly { display:none; }
 
-        .desktop { display:inline; }
-        .mobile { display:none; }
+        @media (max-width:640px){
+          .desktopOnly { display:none !important; }
+          .mobileOnly { display:inline-flex !important; }
 
-        @media(max-width:640px){
-          .desktop{display:none}
-          .mobile{display:inline}
-          .cta{flex-direction:column}
+          .price { font-size:24px; }
+          .trend { font-size:22px; }
+        }
+
+        @media (min-width:900px){
+          .price { font-size:44px; }
+          .trend { font-size:36px; }
         }
       `}</style>
     </main>
