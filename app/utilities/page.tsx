@@ -25,5 +25,81 @@ export const metadata: Metadata = {
 };
 
 export default function UtilitiesPage() {
-  return <UtilitiesClient />;
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "CollectionPage",
+            name: "Trading Risk Tools & Calculators",
+            url: "https://mystockharbor.com/utilities",
+            description:
+              "Use trading calculators to estimate position size, stop loss risk, liquidation price, and risk-reward before entering a trade.",
+            mainEntity: {
+              "@type": "ItemList",
+              itemListElement: [
+                {
+                  "@type": "ListItem",
+                  position: 1,
+                  item: {
+                    "@type": "SoftwareApplication",
+                    name: "Position Size Calculator",
+                    applicationCategory: "FinanceApplication",
+                  },
+                },
+                {
+                  "@type": "ListItem",
+                  position: 2,
+                  item: {
+                    "@type": "SoftwareApplication",
+                    name: "Risk Reward Calculator",
+                    applicationCategory: "FinanceApplication",
+                  },
+                },
+                {
+                  "@type": "ListItem",
+                  position: 3,
+                  item: {
+                    "@type": "SoftwareApplication",
+                    name: "Stop Loss Calculator",
+                    applicationCategory: "FinanceApplication",
+                  },
+                },
+                {
+                  "@type": "ListItem",
+                  position: 4,
+                  item: {
+                    "@type": "SoftwareApplication",
+                    name: "Liquidation Calculator",
+                    applicationCategory: "FinanceApplication",
+                  },
+                },
+              ],
+            },
+            breadcrumb: {
+              "@type": "BreadcrumbList",
+              itemListElement: [
+                {
+                  "@type": "ListItem",
+                  position: 1,
+                  name: "Home",
+                  item: "https://mystockharbor.com/",
+                },
+                {
+                  "@type": "ListItem",
+                  position: 2,
+                  name: "Utilities",
+                  item: "https://mystockharbor.com/utilities",
+                },
+              ],
+            },
+          }),
+        }}
+      />
+
+      <UtilitiesClient />
+    </>
+  );
 }
