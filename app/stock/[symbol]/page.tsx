@@ -13,12 +13,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: `${upper} Stock Analysis, Trend, Moving Averages & Technical Summary | MyStockHarbor`,
     description: `View ${upper} stock analysis with trend structure, moving averages, technical summary and a direct link into the MyStockHarbor chart dashboard.`,
     alternates: {
-      canonical: `/stock/${upper}`,
+      canonical: `https://www.mystockharbor.com/stock/${upper}`,
     },
     openGraph: {
       title: `${upper} Stock Analysis | MyStockHarbor`,
       description: `Trend, market structure and technical analysis for ${upper}.`,
-      url: `/stock/${upper}`,
+      url: `https://www.mystockharbor.com/stock/${upper}`,
       siteName: "MyStockHarbor",
       type: "article",
     },
@@ -102,7 +102,7 @@ export default async function StockPage({ params }: Props) {
                   {
                     "@type": "ListItem",
                     position: 2,
-                    name: upper,
+                    name: `${upper} Stock Analysis`,
                     item: `https://www.mystockharbor.com/stock/${upper}`,
                   },
                 ],
