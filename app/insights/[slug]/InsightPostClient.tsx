@@ -185,9 +185,14 @@ export default function InsightPostClient({
   const ma50 = useMemo(() => movingAverage(closes, 50), [closes]);
   const ma200 = useMemo(() => movingAverage(closes, 200), [closes]);
 
-  const chartSlice = chartPoints.slice(-240);
-  const ma50Slice = ma50.slice(-240);
-  const ma200Slice = ma200.slice(-240);
+  const chartSlice =
+    post.timeframe === "w" ? chartPoints : chartPoints.slice(-240);
+
+  const ma50Slice =
+    post.timeframe === "w" ? ma50 : ma50.slice(-240);
+
+  const ma200Slice =
+    post.timeframe === "w" ? ma200 : ma200.slice(-240);
 
   const hasSnapshot = Boolean(snapshot && chartPoints.length >= 2);
 
