@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MyStockHarbor | Free Trading Dashboard, Market Signals & Technical Analysis",
+  title: "MyStockHarbor (My Stock Harbor) | Free Trading Dashboard, Market Signals & Technical Analysis",
   description:
-    "MyStockHarbor helps traders track stocks, analyse technical indicators, monitor market benchmarks, and learn trading strategies with free educational tools and market insights.",
+    "MyStockHarbor (My Stock Harbor) helps traders track stocks, analyse technical indicators, monitor market benchmarks, and learn trading strategies with free educational tools, stock screeners, and market insights.",
   icons: {
     icon: "/icon.png",
   },
@@ -114,7 +114,7 @@ export default function RootLayout({
                     color: "rgba(241,245,249,0.78)",
                   }}
                 >
-                  MyStockHarbor is designed for educational purposes and general
+                  MyStockHarbor (My Stock Harbor) is designed for educational purposes and general
                   market research. Please do your own research before making
                   financial decisions.
                 </div>
