@@ -1005,12 +1005,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: `${upper} Stock News, Summary & Analysis | MyStockHarbor`,
       description: `Read ${upper} stock news with beginner-friendly summaries, headline tone, earnings context and technical analysis on MyStockHarbor.`,
     alternates: {
-      canonical: `/stock/${upper}/news`,
+      canonical: `https://www.mystockharbor.com/stock/${upper}/news`,
     },
     openGraph: {
       title: `${upper} Stock News & Analysis | MyStockHarbor`,
       description: `Latest ${upper} stock news with beginner-friendly summaries, earnings context and chart-based analysis.`,
-      url: `/stock/${upper}/news`,
+      url: `https://www.mystockharbor.com/stock/${upper}/news`,
       siteName: "MyStockHarbor",
       type: "article",
     },
