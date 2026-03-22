@@ -4,14 +4,14 @@ import Link from "next/link";
 import { lessonsByCategory } from "./lessons";
 
 export const metadata: Metadata = {
-  title: "Learn Stock Charts, Indicators & Trading Basics | MyStockHarbor",
+  title: "Learn Stock Charts, Indicators & Trading Basics",
   description:
-    "Learn stock charts, indicators, trading basics and risk management with beginner-friendly lessons from MyStockHarbor.",
+    "Beginner-friendly lessons on stock charts, indicators, trading basics and risk management.",
   alternates: {
     canonical: "https://www.mystockharbor.com/learn",
   },
   openGraph: {
-    title: "Learn Stock Charts, Indicators & Trading Basics | MyStockHarbor",
+    title: "Learn Stock Charts, Indicators & Trading Basics",
     description:
       "Beginner-friendly lessons on stock charts, indicators, trading basics and risk management.",
     url: "https://www.mystockharbor.com/learn",
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Learn Stock Charts, Indicators & Trading Basics | MyStockHarbor",
+    title: "Learn Stock Charts, Indicators & Trading Basics",
     description:
       "Beginner-friendly lessons on stock charts, indicators, trading basics and risk management.",
   },
