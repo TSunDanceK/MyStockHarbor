@@ -758,7 +758,7 @@ export default function InsightPostClient({
                         className="insightMobileButton insightPrimaryPickerCta"
                         style={chartActionStyle("picker")}
                       >
-                        Find Similar Setups →
+                        Find Similar Setups
                       </Link>
 
                       <Link
