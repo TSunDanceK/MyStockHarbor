@@ -1017,14 +1017,14 @@ if (comp) {
           const hasDailyMa200Proximity = !!dailyMa200Proximity;
           const hasWeeklyMa200Proximity = !!weeklyMa200Proximity;
 
-          const div = detectDivergenceFromHistory(pts, {
-            lookbackBars: 60,
-            leftRight: 2,
-            minPriceSwingPct: 1.0,
-            minRsiSwing: 4,
-            macdStdMult: 0.35,
-            maxPivot2AgeBars: 18,
-          });
+const div = detectDivergenceFromHistory(pts, {
+  lookbackBars: 45,
+  leftRight: 2,
+  minPriceSwingPct: 0.5,
+  minRsiSwing: 3,
+  macdStdMult: 0.25,
+  maxPivot2AgeBars: 25,
+});
 
           if (div) {
             const preferredIndicator =
