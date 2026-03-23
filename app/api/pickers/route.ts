@@ -82,6 +82,8 @@ type SignalRecord = {
   belowMA50: boolean;
   aboveMA200: boolean;
   belowMA200: boolean;
+  dailyMa200Proximity: boolean;
+  weeklyMa200Proximity: boolean;
 
   bullishRsiDivergence: boolean;
   bearishRsiDivergence: boolean;
@@ -972,7 +974,7 @@ if (comp) {
             });
           }
 
-                    const dailyMa200Proximity = computeMa200Proximity(pts, "d");
+          const dailyMa200Proximity = computeMa200Proximity(pts, "d");
           if (dailyMa200Proximity) {
             const side =
               dailyMa200Proximity.pctDistance >= 0 ? "above" : "below";
@@ -1011,6 +1013,9 @@ if (comp) {
               _score: dynamicBoost(symbol) + 200 + (100 - Math.abs(weeklyMa200Proximity.pctDistance)),
             });
           }
+
+          const hasDailyMa200Proximity = !!dailyMa200Proximity;
+          const hasWeeklyMa200Proximity = !!weeklyMa200Proximity;
 
           const div = detectDivergenceFromHistory(pts, {
             lookbackBars: 60,
@@ -1136,6 +1141,8 @@ if (comp) {
             belowMA50,
             aboveMA200,
             belowMA200,
+            dailyMa200Proximity: hasDailyMa200Proximity,
+            weeklyMa200Proximity: hasWeeklyMa200Proximity,
             bullishRsiDivergence,
             bearishRsiDivergence,
             bullishMacdDivergence,
