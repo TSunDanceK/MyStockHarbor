@@ -245,6 +245,11 @@ export function detectDivergenceFromHistory(points: Point[], opts?: DivergenceOp
     return Math.max(0, maxPivot2AgeBars - age) * 1.5;
   };
 
+    const scoreSpanBoost = (i1: number, i2: number) => {
+    const spanBars = Math.max(1, i2 - i1);
+    return Math.min(40, spanBars * 1.5);
+  };
+
   // ---------- Bullish divergence (pivot lows) ----------
   {
     const lowPivots = findPivotLows(closes, leftRight);
@@ -274,11 +279,12 @@ export function detectDivergenceFromHistory(points: Point[], opts?: DivergenceOp
       const rsiSwing = isFiniteNum(r1) && isFiniteNum(r2) ? r2 - r1 : null;
 
       const score =
-        priceSwingPct * 18 +
-        (isFiniteNum(rsiSwing) ? Math.abs(rsiSwing) * 3.5 : 0) +
-        (isFiniteNum(macdSwing) ? Math.abs(macdSwing) * 260 : 0) +
-        (hasRsi && hasMacd ? 35 : 0) +
-        scoreFreshnessBoost(i2) * 1.5;
+        priceSwingPct * 10 +
+        (isFiniteNum(rsiSwing) ? rsiSwing * 2 : 0) +
+        (isFiniteNum(macdSwing) ? Math.abs(macdSwing) * 200 : 0) +
+        (hasRsi && hasMacd ? 20 : 0) +
+        scoreFreshnessBoost(i2) +
+        scoreSpanBoost(i1, i2);
 
       const parts: string[] = [];
       if (hasRsi) parts.push("Bullish RSI div");
@@ -353,7 +359,8 @@ export function detectDivergenceFromHistory(points: Point[], opts?: DivergenceOp
         (isFiniteNum(rsiSwing) ? Math.abs(rsiSwing) * 2 : 0) +
         (isFiniteNum(macdSwing) ? Math.abs(macdSwing) * 200 : 0) +
         (hasRsi && hasMacd ? 20 : 0) +
-        scoreFreshnessBoost(i2);
+        scoreFreshnessBoost(i2) +
+        scoreSpanBoost(i1, i2);
 
       const parts: string[] = [];
       if (hasRsi) parts.push("Bearish RSI div");
