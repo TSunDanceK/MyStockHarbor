@@ -1433,7 +1433,7 @@ const displaySections = useMemo(() => {
               );
             })}
           </>
-        )})}
+        )}
 
         {!loading &&
         !err &&
