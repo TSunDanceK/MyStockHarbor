@@ -1335,6 +1335,7 @@ const displaySections = useMemo(() => {
                         ? `${items.length} stocks`
                         : "No matches yet"}
                     </div>
+                  </div>
 
                   <div
                     className="pickers-section-results-grid"
@@ -1432,7 +1433,7 @@ const displaySections = useMemo(() => {
               );
             })}
           </>
-        )}
+        )})}
 
         {!loading &&
         !err &&
