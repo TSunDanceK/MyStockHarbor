@@ -47,6 +47,8 @@ type PickerItem = {
 type PickerSection = {
   title: string;
   description?: string;
+  foundCount?: number;
+  shownCount?: number;
   items: {
     symbol: string;
     note?: string;
@@ -823,6 +825,24 @@ const PRESET_UNIVERSE: string[] = [
 
 /* --------------------------- builder function ------------------------ */
 
+function buildSection(args: {
+  title: string;
+  description?: string;
+  source: PickerItem[];
+  take: number;
+  opts?: { volumeFirstIfMany?: boolean };
+}): PickerSection {
+  const items = takeTop(args.source, args.take, args.opts);
+
+  return {
+    title: args.title,
+    description: args.description,
+    foundCount: args.source.length,
+    shownCount: items.length,
+    items,
+  };
+}
+
 async function buildPickersPayload(origin: string) {
   const market = await fetchMarket(origin);
 
@@ -1017,14 +1037,56 @@ if (comp) {
           const hasDailyMa200Proximity = !!dailyMa200Proximity;
           const hasWeeklyMa200Proximity = !!weeklyMa200Proximity;
 
-const div = detectDivergenceFromHistory(pts, {
-  lookbackBars: 45,
-  leftRight: 2,
-  minPriceSwingPct: 0.5,
-  minRsiSwing: 3,
-  macdStdMult: 0.25,
-  maxPivot2AgeBars: 25,
-});
+          const dailyDiv = detectDivergenceFromHistory(pts, {
+            lookbackBars: 45,
+            leftRight: 2,
+            minPriceSwingPct: 0.5,
+            minRsiSwing: 3,
+            macdStdMult: 0.25,
+            maxPivot2AgeBars: 25,
+          });
+
+          const weeklyPts = aggregatePoints(pts, "w").map((p) => ({
+            date: p.date,
+            close: p.close,
+            high: p.high,
+            low: p.low,
+            volume: p.volume,
+          }));
+
+          const weeklyDiv = detectDivergenceFromHistory(weeklyPts, {
+            lookbackBars: 30,
+            leftRight: 2,
+            minPriceSwingPct: 0.8,
+            minRsiSwing: 2.5,
+            macdStdMult: 0.2,
+            maxPivot2AgeBars: 12,
+          });
+
+          const scoredDailyDiv =
+            dailyDiv
+              ? {
+                  ...dailyDiv,
+                  timeframe: "D" as const,
+                  boostedScore: dailyDiv.score,
+                }
+              : null;
+
+          const scoredWeeklyDiv =
+            weeklyDiv
+              ? {
+                  ...weeklyDiv,
+                  timeframe: "W" as const,
+                  boostedScore: weeklyDiv.score + 100,
+                }
+              : null;
+
+          const div =
+            scoredDailyDiv && scoredWeeklyDiv
+              ? scoredWeeklyDiv.boostedScore >= scoredDailyDiv.boostedScore
+                ? scoredWeeklyDiv
+                : scoredDailyDiv
+              : scoredWeeklyDiv ?? scoredDailyDiv;
 
           if (div) {
             const preferredIndicator =
@@ -1036,12 +1098,13 @@ const div = detectDivergenceFromHistory(pts, {
                 ? "MACD(12,26,9)"
                 : undefined;
 
-            const preferredTimeframe: "D" = "D";
+            const preferredTimeframe: "D" | "W" = div.timeframe;
+            const timeframeLabel = div.timeframe === "W" ? "Weekly" : "Daily";
 
             divergences.push({
               symbol,
               tone: div.kind === "bullish" ? "green" : "red",
-              note: div.note,
+              note: `${timeframeLabel} ${div.note}`,
               timeframe: preferredTimeframe,
               indicator: preferredIndicator,
               dashboardHref: buildDashboardHref({
@@ -1049,7 +1112,7 @@ const div = detectDivergenceFromHistory(pts, {
                 timeframe: preferredTimeframe,
                 indicator: preferredIndicator,
               }),
-              _score: dynamicBoost(symbol) + div.score,
+              _score: dynamicBoost(symbol) + div.boostedScore,
             });
           }
 
@@ -1125,7 +1188,10 @@ const div = detectDivergenceFromHistory(pts, {
               ? "MACD(12,26,9)"
               : undefined;
 
-          const preferredTimeframe: "D" | undefined = preferredDivergenceIndicator ? "D" : undefined;
+          const preferredTimeframe: "D" | "W" | undefined =
+            preferredDivergenceIndicator && div
+              ? div.timeframe
+              : undefined;
 
           signalRecords.push({
             symbol,
@@ -1189,55 +1255,65 @@ const div = detectDivergenceFromHistory(pts, {
     );
   };
 
-  const sections: PickerSection[] = [
-    {
+ const sections: PickerSection[] = [
+    buildSection({
       title: "Oversold Stocks Today (Potential Rebound Setups)",
       description:
         "Stocks showing multiple oversold-style technical signals. These are often reviewed for possible rebounds or dip-style entries.",
-      items: takeTop(green, 20),
-    },
-    {
+      source: green,
+      take: 20,
+    }),
+    buildSection({
       title: "Best Trend Score Stocks",
       description:
         "Stocks with the strongest current trend structure based on price vs MA50 and MA200, MA50 vs MA200, and positive MACD momentum.",
-      items: takeTop(trendLeaders, 20),
-    },
-    {
+      source: trendLeaders,
+      take: 20,
+    }),
+    buildSection({
       title: "MA200 Proximity",
       description:
         "Stocks trading close to their Daily or Weekly MA200. Clicking a result opens the chart on the correct timeframe with MA200 selected.",
-      items: takeTop(ma200Proximity, 20),
-    },
-    {
+      source: ma200Proximity,
+      take: 20,
+    }),
+    buildSection({
       title: "Overbought Stocks Today (Potential Pullback Setups)",
       description:
         "Stocks showing extended or overbought conditions. These are often reviewed for possible pullbacks or weaker near-term conditions.",
-      items: takeTop(red, 20),
-    },
-    {
+      source: red,
+      take: 20,
+    }),
+    buildSection({
       title: "Bullish & Bearish Divergence Stocks (RSI & MACD Signals)",
       description:
         "Stocks where price and momentum may be starting to disagree. Clicking a result opens the chart on the strongest divergence indicator.",
-      items: takeTop(divergences, 20),
-    },
-    {
+      source: divergences,
+      take: 20,
+    }),
+    buildSection({
       title: "Stocks Down 20% From Recent Highs (Buy the Dip)",
       description:
         "Stocks that recently hit highs and are now 20%+ below them. These are pullback setups from stronger charts, not deep long-term breakdowns.",
-      items: takeTop(dips, 20),
-    },
-    {
+      source: dips,
+      take: 20,
+    }),
+    buildSection({
       title: "All-Time High Breakout Stocks",
       description:
         "Stocks trading at or very near all-time closing highs. These are the strongest blue-sky breakout setups.",
-      items: takeTop(athBreakouts, 20, { volumeFirstIfMany: true }),
-    },
-    {
+      source: athBreakouts,
+      take: 20,
+      opts: { volumeFirstIfMany: true },
+    }),
+    buildSection({
       title: "3-Month High Breakout Stocks",
       description:
         "Stocks breaking above their highest closing level from the last 3 months, excluding the most recent few bars.",
-      items: takeTop(threeMonthBreakouts, 20, { volumeFirstIfMany: true }),
-    },
+      source: threeMonthBreakouts,
+      take: 20,
+      opts: { volumeFirstIfMany: true },
+    }),
   ];
 
   return {
