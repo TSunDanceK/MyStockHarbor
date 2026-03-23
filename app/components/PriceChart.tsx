@@ -456,30 +456,6 @@ export default function PriceChart(props: Props) {
 
   const last = series[series.length - 1];
 
-  const macdDivLine = useMemo(() => {
-    if (activeLowerOverlay !== "MACD(12,26,9)") return null;
-    if (!divergence || !divergence.hasMacd) return null;
-
-    const i1 = divergence.p1.idx;
-    const i2 = divergence.p2.idx;
-
-    if (i1 < 0 || i2 < 0) return null;
-    if (i1 >= series.length || i2 >= series.length) return null;
-
-    const m1 = series[i1]?.macdLine;
-    const m2 = series[i2]?.macdLine;
-
-    if (typeof m1 !== "number" || !Number.isFinite(m1)) return null;
-    if (typeof m2 !== "number" || !Number.isFinite(m2)) return null;
-
-    return {
-      x1: x(i1),
-      y1: ySub(m1),
-      x2: x(i2),
-      y2: ySub(m2),
-    };
-  }, [activeLowerOverlay, divergence, series, x, ySub]);
-
   return (
     <div style={{ width: "100%" }}>
       <svg
@@ -735,24 +711,6 @@ export default function PriceChart(props: Props) {
                     strokeWidth="2"
                     opacity="0.95"
                     strokeDasharray="6 4"
-                  />
-                ) : null}
-
-                {macdDivLine ? (
-                  <line
-                    x1={macdDivLine.x1}
-                    y1={macdDivLine.y1}
-                    x2={macdDivLine.x2}
-                    y2={macdDivLine.y2}
-                    stroke={
-                      divergence?.kind === "bullish"
-                        ? CHART_COLORS.macdDivBull
-                        : CHART_COLORS.macdDivBear
-                    }
-                    strokeWidth={3.5}
-                    opacity={0.9}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
                   />
                 ) : null}
               </>
