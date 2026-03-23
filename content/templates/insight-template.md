@@ -29,6 +29,10 @@ Write what would strengthen the setup.
 
 Write what would invalidate the setup.
 
+## Bull vs bear scenarios
+
+Summarise the thesis clearly and simply.
+
 ## Bottom line
 
 Summarise the thesis clearly and simply.
