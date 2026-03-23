@@ -249,11 +249,78 @@ async function fetchQuoteBatch(symbols: string[], apiKey: string) {
   return { ok: res.ok, status: res.status, json, url };
 }
 
-function pruneDynamicCache(state: RedisDiscoveryState, now: number) {
-  const ttlMs = isDiscoveryWindowOpen() ? OPEN_MARKET_TTL_MS : CLOSED_MARKET_TTL_MS;
+function getEasternDateParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
 
+  return {
+    year: Number(parts.find((p) => p.type === "year")?.value ?? "0"),
+    month: Number(parts.find((p) => p.type === "month")?.value ?? "1"),
+    day: Number(parts.find((p) => p.type === "day")?.value ?? "1"),
+    weekday: parts.find((p) => p.type === "weekday")?.value ?? "",
+    hour: Number(parts.find((p) => p.type === "hour")?.value ?? "0"),
+    minute: Number(parts.find((p) => p.type === "minute")?.value ?? "0"),
+  };
+}
+
+function getNextTradingCarryExpiryUtcMs(fromMs: number) {
+  const fromDate = new Date(fromMs);
+  const { year, month, day, weekday, hour, minute } = getEasternDateParts(fromDate);
+  const totalMinutes = hour * 60 + minute;
+  const closeMinutes = 16 * 60;
+
+  const baseUtc = new Date(Date.UTC(year, month - 1, day));
+
+  let daysToAdd = 1;
+
+  if (weekday === "Fri" && totalMinutes >= closeMinutes) {
+    daysToAdd = 3;
+  } else if (weekday === "Sat") {
+    daysToAdd = 2;
+  } else if (weekday === "Sun") {
+    daysToAdd = 1;
+  } else if (weekday === "Fri") {
+    daysToAdd = 3;
+  } else {
+    daysToAdd = 1;
+  }
+
+  baseUtc.setUTCDate(baseUtc.getUTCDate() + daysToAdd);
+
+  const carryYear = baseUtc.getUTCFullYear();
+  const carryMonth = String(baseUtc.getUTCMonth() + 1).padStart(2, "0");
+  const carryDay = String(baseUtc.getUTCDate()).padStart(2, "0");
+
+  const easternCarryCutoff = `${carryYear}-${carryMonth}-${carryDay}T11:30:00-05:00`;
+  return new Date(easternCarryCutoff).getTime();
+}
+
+function shouldKeepDynamicRecord(record: DynamicQuoteRecord, now: number) {
+  if (!record) return false;
+
+  const ageMs = now - record.discoveredAt;
+
+  if (isDiscoveryWindowOpen(new Date(now))) {
+    if (ageMs <= OPEN_MARKET_TTL_MS) return true;
+  } else {
+    if (ageMs <= CLOSED_MARKET_TTL_MS) return true;
+  }
+
+  const carryExpiryUtcMs = getNextTradingCarryExpiryUtcMs(record.discoveredAt);
+  return now <= carryExpiryUtcMs;
+}
+
+function pruneDynamicCache(state: RedisDiscoveryState, now: number) {
   for (const [symbol, record] of Object.entries(state.dynamic)) {
-    if (!record || now - record.discoveredAt > ttlMs) {
+    if (!shouldKeepDynamicRecord(record, now)) {
       delete state.dynamic[symbol];
     }
   }
