@@ -1009,13 +1009,9 @@ const displaySections = useMemo(() => {
                 </p>
               </div>
 
-                    <div style={{ fontSize: 12, opacity: 0.7 }}>
-                      {typeof sec.foundCount === "number"
-                        ? `F${sec.foundCount} / S${items.length}`
-                        : items.length
-                        ? `${items.length} stocks`
-                        : "No matches yet"}
-                    </div>
+              <div style={{ fontSize: 12, opacity: 0.7 }}>
+                {customMatches.length} {customMatches.length === 1 ? "match" : "matches"}
+              </div>
             </div>
 
             {customMatches.length ? (
@@ -1333,9 +1329,12 @@ const displaySections = useMemo(() => {
                     </div>
 
                     <div style={{ fontSize: 12, opacity: 0.7 }}>
-                      {items.length ? `${items.length} stocks` : "No matches yet"}
+                      {typeof sec.foundCount === "number"
+                        ? `F${sec.foundCount} / S${items.length}`
+                        : items.length
+                        ? `${items.length} stocks`
+                        : "No matches yet"}
                     </div>
-                  </div>
 
                   <div
                     className="pickers-section-results-grid"
