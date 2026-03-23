@@ -1023,10 +1023,10 @@ if (comp) {
 const dailyDiv = detectDivergenceFromHistory(pts, {
   lookbackBars: 45,
   leftRight: 2,
-  minPriceSwingPct: 1.2,
-  minRsiSwing: 5,
-  macdStdMult: 0.4,
-  maxPivot2AgeBars: 18,
+  minPriceSwingPct: 1.6,
+  minRsiSwing: 6,
+  macdStdMult: 0.5,
+  maxPivot2AgeBars: 16,
 });
 
           const weeklyPts = aggregatePoints(pts, "w").map((p) => ({
@@ -1040,12 +1040,12 @@ const dailyDiv = detectDivergenceFromHistory(pts, {
 const weeklyDiv = detectDivergenceFromHistory(weeklyPts, {
   lookbackBars: 30,
   leftRight: 2,
-  minPriceSwingPct: 1.5,
-  minRsiSwing: 4,
-  macdStdMult: 0.3,
+  minPriceSwingPct: 2.0,
+  minRsiSwing: 5,
+  macdStdMult: 0.35,
   maxPivot2AgeBars: 10,
 });
-
+          
           const scoredDailyDiv =
             dailyDiv
               ? {
@@ -1087,7 +1087,7 @@ const weeklyDiv = detectDivergenceFromHistory(weeklyPts, {
             divergences.push({
               symbol,
               tone: div.kind === "bullish" ? "green" : "red",
-              note: `${timeframeLabel} ${div.note}`,
+              note: `${timeframeLabel} ${div.note} • ${div.priceSwingPct.toFixed(1)}% • ${div.pivotSpanBars} bars`,
               timeframe: preferredTimeframe,
               indicator: preferredIndicator,
               dashboardHref: buildDashboardHref({
