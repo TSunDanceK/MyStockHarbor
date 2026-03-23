@@ -363,7 +363,7 @@ export function detectDivergenceFromHistory(points: Point[], opts?: DivergenceOp
         (isFiniteNum(macdSwing) ? Math.abs(macdSwing) * 320 : 0) +
         (hasRsi && hasMacd ? 40 : 0) +
         scoreFreshnessBoost(i2) * 1.5 +
-        scoreSpanBoost(i1, i2);;
+        scoreSpanBoost(i1, i2);
 
       const parts: string[] = [];
       if (hasRsi) parts.push("Bearish RSI div");
@@ -386,6 +386,7 @@ export function detectDivergenceFromHistory(points: Point[], opts?: DivergenceOp
         priceSwingPct,
         rsiSwing,
         macdSwing,
+        pivotSpanBars,
 
         p1: {
           idx: i1,
