@@ -36,6 +36,7 @@ export type DivResult = {
   priceSwingPct: number;
   rsiSwing: number | null;
   macdSwing: number | null;
+  pivotSpanBars: number;
 
   p1: DivergencePivot;
   p2: DivergencePivot;
@@ -245,11 +246,10 @@ export function detectDivergenceFromHistory(points: Point[], opts?: DivergenceOp
     return Math.max(0, maxPivot2AgeBars - age) * 1.5;
   };
 
-    const scoreSpanBoost = (i1: number, i2: number) => {
+  const scoreSpanBoost = (i1: number, i2: number) => {
     const spanBars = Math.max(1, i2 - i1);
-    return Math.min(40, spanBars * 1.5);
+    return Math.min(55, spanBars * 2);
   };
-
   // ---------- Bullish divergence (pivot lows) ----------
   {
     const lowPivots = findPivotLows(closes, leftRight);
@@ -277,13 +277,14 @@ export function detectDivergenceFromHistory(points: Point[], opts?: DivergenceOp
       if (!(hasRsi || hasMacd)) continue;
 
       const rsiSwing = isFiniteNum(r1) && isFiniteNum(r2) ? r2 - r1 : null;
+      const pivotSpanBars = Math.max(1, i2 - i1);
 
       const score =
-        priceSwingPct * 10 +
-        (isFiniteNum(rsiSwing) ? rsiSwing * 2 : 0) +
-        (isFiniteNum(macdSwing) ? Math.abs(macdSwing) * 200 : 0) +
-        (hasRsi && hasMacd ? 20 : 0) +
-        scoreFreshnessBoost(i2) +
+        priceSwingPct * 22 +
+        (isFiniteNum(rsiSwing) ? Math.abs(rsiSwing) * 5 : 0) +
+        (isFiniteNum(macdSwing) ? Math.abs(macdSwing) * 320 : 0) +
+        (hasRsi && hasMacd ? 40 : 0) +
+        scoreFreshnessBoost(i2) * 1.5 +
         scoreSpanBoost(i1, i2);
 
       const parts: string[] = [];
@@ -307,6 +308,7 @@ export function detectDivergenceFromHistory(points: Point[], opts?: DivergenceOp
         priceSwingPct,
         rsiSwing,
         macdSwing,
+        pivotSpanBars,
 
         p1: {
           idx: i1,
@@ -352,15 +354,16 @@ export function detectDivergenceFromHistory(points: Point[], opts?: DivergenceOp
 
       if (!(hasRsi || hasMacd)) continue;
 
-      const rsiSwing = isFiniteNum(r1) && isFiniteNum(r2) ? r2 - r1 : null;
+   const rsiSwing = isFiniteNum(r1) && isFiniteNum(r2) ? r2 - r1 : null;
+      const pivotSpanBars = Math.max(1, i2 - i1);
 
       const score =
-        priceSwingPct * 10 +
-        (isFiniteNum(rsiSwing) ? Math.abs(rsiSwing) * 2 : 0) +
-        (isFiniteNum(macdSwing) ? Math.abs(macdSwing) * 200 : 0) +
-        (hasRsi && hasMacd ? 20 : 0) +
-        scoreFreshnessBoost(i2) +
-        scoreSpanBoost(i1, i2);
+        priceSwingPct * 22 +
+        (isFiniteNum(rsiSwing) ? Math.abs(rsiSwing) * 5 : 0) +
+        (isFiniteNum(macdSwing) ? Math.abs(macdSwing) * 320 : 0) +
+        (hasRsi && hasMacd ? 40 : 0) +
+        scoreFreshnessBoost(i2) * 1.5 +
+        scoreSpanBoost(i1, i2);;
 
       const parts: string[] = [];
       if (hasRsi) parts.push("Bearish RSI div");
