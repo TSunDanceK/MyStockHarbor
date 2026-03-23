@@ -825,23 +825,23 @@ const PRESET_UNIVERSE: string[] = [
 
 /* --------------------------- builder function ------------------------ */
 
-function buildSection(args: {
-  title: string;
-  description?: string;
-  source: PickerItem[];
-  take: number;
-  opts?: { volumeFirstIfMany?: boolean };
-}): PickerSection {
-  const items = takeTop(args.source, args.take, args.opts);
+  const buildSection = (args: {
+    title: string;
+    description?: string;
+    source: PickerItem[];
+    take: number;
+    opts?: { volumeFirstIfMany?: boolean };
+  }): PickerSection => {
+    const items = takeTop(args.source, args.take, args.opts);
 
-  return {
-    title: args.title,
-    description: args.description,
-    foundCount: args.source.length,
-    shownCount: items.length,
-    items,
+    return {
+      title: args.title,
+      description: args.description,
+      foundCount: args.source.length,
+      shownCount: items.length,
+      items,
+    };
   };
-}
 
 async function buildPickersPayload(origin: string) {
   const market = await fetchMarket(origin);
