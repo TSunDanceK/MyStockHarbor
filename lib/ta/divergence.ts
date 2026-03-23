@@ -186,13 +186,22 @@ function findPivotHighs(values: number[], leftRight: number) {
   return pivots;
 }
 
-function lastTwo(pivots: number[]) {
-  if (pivots.length < 2) return null;
-  return [pivots[pivots.length - 2], pivots[pivots.length - 1]] as const;
+function recentPivotPairs(pivots: number[], maxPairs = 8) {
+  const out: Array<readonly [number, number]> = [];
+  if (pivots.length < 2) return out;
+
+  const start = Math.max(0, pivots.length - (maxPairs + 1));
+
+  for (let i = start; i < pivots.length - 1; i++) {
+    for (let j = i + 1; j < pivots.length; j++) {
+      out.push([pivots[i], pivots[j]] as const);
+    }
+  }
+
+  return out;
 }
 
 export function detectDivergenceFromHistory(points: Point[], opts?: DivergenceOptions): DivResult | null {
-  // looser defaults to “bring in more”, but still filter tiny stuff
   const lookbackBars = clamp(opts?.lookbackBars ?? 60, 20, 160);
   const leftRight = clamp(opts?.leftRight ?? 2, 1, 6);
   const minPriceSwingPct = clamp(opts?.minPriceSwingPct ?? 1.2, 0.2, 12);
@@ -204,7 +213,6 @@ export function detectDivergenceFromHistory(points: Point[], opts?: DivergenceOp
     .map((p) => ({ ...p, close: Number(p.close) }))
     .filter((p) => p.date && isFiniteNum(p.close));
 
-  // need enough history for RSI/MACD to stabilize
   if (clean.length < Math.max(lookbackBars + 40, 90)) return null;
 
   const n = clean.length;
@@ -214,7 +222,6 @@ export function detectDivergenceFromHistory(points: Point[], opts?: DivergenceOp
   const closes = slice.map((p) => p.close);
   const dates = slice.map((p) => p.date);
 
-  // compute oscillators on all history, slice for alignment
   const allCloses = clean.map((p) => p.close);
   const rsiAll = rsiWilder(allCloses, 14);
   const macdAll = macdLine(allCloses, 12, 26);
@@ -222,7 +229,6 @@ export function detectDivergenceFromHistory(points: Point[], opts?: DivergenceOp
   const rsi = rsiAll.slice(start);
   const macd = macdAll.slice(start);
 
-  // MACD volatility baseline (avoid microscopic calls)
   const macdNums = macd.filter(isFiniteNum);
   const macdSd = stddev(macdNums);
   const macdMinMove = Math.max(1e-12, macdSd * macdStdMult);
@@ -230,161 +236,162 @@ export function detectDivergenceFromHistory(points: Point[], opts?: DivergenceOp
   const candidates: DivResult[] = [];
 
   const tooOld = (pivot2Idx: number) => {
-    const age = (closes.length - 1) - pivot2Idx;
+    const age = closes.length - 1 - pivot2Idx;
     return age > maxPivot2AgeBars;
+  };
+
+  const scoreFreshnessBoost = (pivot2Idx: number) => {
+    const age = closes.length - 1 - pivot2Idx;
+    return Math.max(0, maxPivot2AgeBars - age) * 1.5;
   };
 
   // ---------- Bullish divergence (pivot lows) ----------
   {
     const lowPivots = findPivotLows(closes, leftRight);
-    const two = lastTwo(lowPivots);
-    if (two) {
-      const [i1, i2] = two;
-      if (tooOld(i2)) {
-        // ignore “already played out”
-      } else {
-        const p1 = closes[i1];
-        const p2 = closes[i2];
+    const pairs = recentPivotPairs(lowPivots, 8);
 
-        const priceSwingPct = p1 > 0 ? ((p1 - p2) / p1) * 100 : 0;
+    for (const [i1, i2] of pairs) {
+      if (tooOld(i2)) continue;
 
-        // price lower low by enough %
-        if (p2 < p1 && priceSwingPct >= minPriceSwingPct) {
-          const r1 = rsi[i1];
-          const r2 = rsi[i2];
-          const m1 = macd[i1];
-          const m2 = macd[i2];
+      const p1 = closes[i1];
+      const p2 = closes[i2];
 
-          const hasRsi = isFiniteNum(r1) && isFiniteNum(r2) && (r2 - r1) >= minRsiSwing;
+      const priceSwingPct = p1 > 0 ? ((p1 - p2) / p1) * 100 : 0;
+      if (!(p2 < p1 && priceSwingPct >= minPriceSwingPct)) continue;
 
-          const macdSwing = isFiniteNum(m1) && isFiniteNum(m2) ? (m2 - m1) : null;
-          const hasMacd = isFiniteNum(macdSwing) && macdSwing >= macdMinMove;
+      const r1 = rsi[i1];
+      const r2 = rsi[i2];
+      const m1 = macd[i1];
+      const m2 = macd[i2];
 
-          if (hasRsi || hasMacd) {
-            const rsiSwing = isFiniteNum(r1) && isFiniteNum(r2) ? (r2 - r1) : null;
+      const hasRsi = isFiniteNum(r1) && isFiniteNum(r2) && r2 - r1 >= minRsiSwing;
 
-            const score =
-              priceSwingPct * 10 +
-              (isFiniteNum(rsiSwing) ? rsiSwing * 2 : 0) +
-              (isFiniteNum(macdSwing) ? Math.abs(macdSwing) * 200 : 0);
+      const macdSwing = isFiniteNum(m1) && isFiniteNum(m2) ? m2 - m1 : null;
+      const hasMacd = isFiniteNum(macdSwing) && macdSwing >= macdMinMove;
 
-            const parts: string[] = [];
-            if (hasRsi) parts.push("Bullish RSI div");
-            if (hasMacd) parts.push("Bullish MACD div");
+      if (!(hasRsi || hasMacd)) continue;
 
-            candidates.push({
-              kind: "bullish",
-              hasRsi,
-              hasMacd,
-              note: parts.join(" • "),
-              score,
+      const rsiSwing = isFiniteNum(r1) && isFiniteNum(r2) ? r2 - r1 : null;
 
-              lookbackBars,
-              leftRight,
-              minPriceSwingPct,
-              minRsiSwing,
-              macdStdMult,
-              maxPivot2AgeBars,
+      const score =
+        priceSwingPct * 10 +
+        (isFiniteNum(rsiSwing) ? rsiSwing * 2 : 0) +
+        (isFiniteNum(macdSwing) ? Math.abs(macdSwing) * 200 : 0) +
+        (hasRsi && hasMacd ? 20 : 0) +
+        scoreFreshnessBoost(i2);
 
-              priceSwingPct,
-              rsiSwing,
-              macdSwing,
+      const parts: string[] = [];
+      if (hasRsi) parts.push("Bullish RSI div");
+      if (hasMacd) parts.push("Bullish MACD div");
 
-              p1: {
-                idx: i1,
-                date: dates[i1],
-                price: p1,
-                rsi: isFiniteNum(r1) ? r1 : null,
-                macd: isFiniteNum(m1) ? m1 : null,
-              },
-              p2: {
-                idx: i2,
-                date: dates[i2],
-                price: p2,
-                rsi: isFiniteNum(r2) ? r2 : null,
-                macd: isFiniteNum(m2) ? m2 : null,
-              },
-            });
-          }
-        }
-      }
+      candidates.push({
+        kind: "bullish",
+        hasRsi,
+        hasMacd,
+        note: parts.join(" • "),
+        score,
+
+        lookbackBars,
+        leftRight,
+        minPriceSwingPct,
+        minRsiSwing,
+        macdStdMult,
+        maxPivot2AgeBars,
+
+        priceSwingPct,
+        rsiSwing,
+        macdSwing,
+
+        p1: {
+          idx: i1,
+          date: dates[i1],
+          price: p1,
+          rsi: isFiniteNum(r1) ? r1 : null,
+          macd: isFiniteNum(m1) ? m1 : null,
+        },
+        p2: {
+          idx: i2,
+          date: dates[i2],
+          price: p2,
+          rsi: isFiniteNum(r2) ? r2 : null,
+          macd: isFiniteNum(m2) ? m2 : null,
+        },
+      });
     }
   }
 
   // ---------- Bearish divergence (pivot highs) ----------
   {
     const highPivots = findPivotHighs(closes, leftRight);
-    const two = lastTwo(highPivots);
-    if (two) {
-      const [i1, i2] = two;
-      if (tooOld(i2)) {
-        // ignore “already played out”
-      } else {
-        const p1 = closes[i1];
-        const p2 = closes[i2];
+    const pairs = recentPivotPairs(highPivots, 8);
 
-        const priceSwingPct = p1 > 0 ? ((p2 - p1) / p1) * 100 : 0;
+    for (const [i1, i2] of pairs) {
+      if (tooOld(i2)) continue;
 
-        // price higher high by enough %
-        if (p2 > p1 && priceSwingPct >= minPriceSwingPct) {
-          const r1 = rsi[i1];
-          const r2 = rsi[i2];
-          const m1 = macd[i1];
-          const m2 = macd[i2];
+      const p1 = closes[i1];
+      const p2 = closes[i2];
 
-          const hasRsi = isFiniteNum(r1) && isFiniteNum(r2) && (r1 - r2) >= minRsiSwing;
+      const priceSwingPct = p1 > 0 ? ((p2 - p1) / p1) * 100 : 0;
+      if (!(p2 > p1 && priceSwingPct >= minPriceSwingPct)) continue;
 
-          const macdSwing = isFiniteNum(m1) && isFiniteNum(m2) ? (m2 - m1) : null;
-          const hasMacd = isFiniteNum(macdSwing) && (-macdSwing) >= macdMinMove;
+      const r1 = rsi[i1];
+      const r2 = rsi[i2];
+      const m1 = macd[i1];
+      const m2 = macd[i2];
 
-          if (hasRsi || hasMacd) {
-            const rsiSwing = isFiniteNum(r1) && isFiniteNum(r2) ? (r2 - r1) : null;
+      const hasRsi = isFiniteNum(r1) && isFiniteNum(r2) && r1 - r2 >= minRsiSwing;
 
-            const score =
-              priceSwingPct * 10 +
-              (isFiniteNum(rsiSwing) ? Math.abs(rsiSwing) * 2 : 0) +
-              (isFiniteNum(macdSwing) ? Math.abs(macdSwing) * 200 : 0);
+      const macdSwing = isFiniteNum(m1) && isFiniteNum(m2) ? m2 - m1 : null;
+      const hasMacd = isFiniteNum(macdSwing) && -macdSwing >= macdMinMove;
 
-            const parts: string[] = [];
-            if (hasRsi) parts.push("Bearish RSI div");
-            if (hasMacd) parts.push("Bearish MACD div");
+      if (!(hasRsi || hasMacd)) continue;
 
-            candidates.push({
-              kind: "bearish",
-              hasRsi,
-              hasMacd,
-              note: parts.join(" • "),
-              score,
+      const rsiSwing = isFiniteNum(r1) && isFiniteNum(r2) ? r2 - r1 : null;
 
-              lookbackBars,
-              leftRight,
-              minPriceSwingPct,
-              minRsiSwing,
-              macdStdMult,
-              maxPivot2AgeBars,
+      const score =
+        priceSwingPct * 10 +
+        (isFiniteNum(rsiSwing) ? Math.abs(rsiSwing) * 2 : 0) +
+        (isFiniteNum(macdSwing) ? Math.abs(macdSwing) * 200 : 0) +
+        (hasRsi && hasMacd ? 20 : 0) +
+        scoreFreshnessBoost(i2);
 
-              priceSwingPct,
-              rsiSwing,
-              macdSwing,
+      const parts: string[] = [];
+      if (hasRsi) parts.push("Bearish RSI div");
+      if (hasMacd) parts.push("Bearish MACD div");
 
-              p1: {
-                idx: i1,
-                date: dates[i1],
-                price: p1,
-                rsi: isFiniteNum(r1) ? r1 : null,
-                macd: isFiniteNum(m1) ? m1 : null,
-              },
-              p2: {
-                idx: i2,
-                date: dates[i2],
-                price: p2,
-                rsi: isFiniteNum(r2) ? r2 : null,
-                macd: isFiniteNum(m2) ? m2 : null,
-              },
-            });
-          }
-        }
-      }
+      candidates.push({
+        kind: "bearish",
+        hasRsi,
+        hasMacd,
+        note: parts.join(" • "),
+        score,
+
+        lookbackBars,
+        leftRight,
+        minPriceSwingPct,
+        minRsiSwing,
+        macdStdMult,
+        maxPivot2AgeBars,
+
+        priceSwingPct,
+        rsiSwing,
+        macdSwing,
+
+        p1: {
+          idx: i1,
+          date: dates[i1],
+          price: p1,
+          rsi: isFiniteNum(r1) ? r1 : null,
+          macd: isFiniteNum(m1) ? m1 : null,
+        },
+        p2: {
+          idx: i2,
+          date: dates[i2],
+          price: p2,
+          rsi: isFiniteNum(r2) ? r2 : null,
+          macd: isFiniteNum(m2) ? m2 : null,
+        },
+      });
     }
   }
 
