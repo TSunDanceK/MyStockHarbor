@@ -16,6 +16,8 @@ type PickerItem = {
 type PickerSection = {
   title: string;
   description?: string;
+  foundCount?: number;
+  shownCount?: number;
   items: PickerItem[];
 };
 
@@ -1007,9 +1009,13 @@ const displaySections = useMemo(() => {
                 </p>
               </div>
 
-              <div style={{ fontSize: 12, opacity: 0.7 }}>
-                {customMatches.length} {customMatches.length === 1 ? "match" : "matches"}
-              </div>
+                    <div style={{ fontSize: 12, opacity: 0.7 }}>
+                      {typeof sec.foundCount === "number"
+                        ? `F${sec.foundCount} / S${items.length}`
+                        : items.length
+                        ? `${items.length} stocks`
+                        : "No matches yet"}
+                    </div>
             </div>
 
             {customMatches.length ? (
