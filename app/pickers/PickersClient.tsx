@@ -34,6 +34,8 @@ type SignalRecord = {
   belowMA50: boolean;
   aboveMA200: boolean;
   belowMA200: boolean;
+  dailyMa200Proximity: boolean;
+  weeklyMa200Proximity: boolean;
 
   bullishRsiDivergence: boolean;
   bearishRsiDivergence: boolean;
@@ -67,6 +69,8 @@ type FilterKey =
   | "belowMA50"
   | "aboveMA200"
   | "belowMA200"
+  | "dailyMa200Proximity"
+  | "weeklyMa200Proximity"
   | "bullishRsiDivergence"
   | "bearishRsiDivergence"
   | "bullishMacdDivergence"
@@ -89,6 +93,8 @@ const FILTER_DEFS: FilterDef[] = [
   { key: "belowMA50", label: "Below MA50", tone: "yellow" },
   { key: "aboveMA200", label: "Above MA200", tone: "yellow" },
   { key: "belowMA200", label: "Below MA200", tone: "yellow" },
+  { key: "dailyMa200Proximity", label: "D-MA200 Proximity", tone: "yellow" },
+  { key: "weeklyMa200Proximity", label: "W-MA200 Proximity", tone: "yellow" },
   { key: "bullishRsiDivergence", label: "Bullish RSI Divergence", tone: "green" },
   { key: "bearishRsiDivergence", label: "Bearish RSI Divergence", tone: "red" },
   { key: "bullishMacdDivergence", label: "Bullish MACD Divergence", tone: "green" },
@@ -120,6 +126,8 @@ function matchedSignalsForRecord(record: SignalRecord): FilterKey[] {
   if (record.belowMA50) out.push("belowMA50");
   if (record.aboveMA200) out.push("aboveMA200");
   if (record.belowMA200) out.push("belowMA200");
+  if (record.dailyMa200Proximity) out.push("dailyMa200Proximity");
+  if (record.weeklyMa200Proximity) out.push("weeklyMa200Proximity");
   if (record.bullishRsiDivergence) out.push("bullishRsiDivergence");
   if (record.bearishRsiDivergence) out.push("bearishRsiDivergence");
   if (record.bullishMacdDivergence) out.push("bullishMacdDivergence");
