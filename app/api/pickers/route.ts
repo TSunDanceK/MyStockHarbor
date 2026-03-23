@@ -1020,14 +1020,14 @@ if (comp) {
           const hasDailyMa200Proximity = !!dailyMa200Proximity;
           const hasWeeklyMa200Proximity = !!weeklyMa200Proximity;
 
-          const dailyDiv = detectDivergenceFromHistory(pts, {
-            lookbackBars: 45,
-            leftRight: 2,
-            minPriceSwingPct: 0.5,
-            minRsiSwing: 3,
-            macdStdMult: 0.25,
-            maxPivot2AgeBars: 25,
-          });
+const dailyDiv = detectDivergenceFromHistory(pts, {
+  lookbackBars: 45,
+  leftRight: 2,
+  minPriceSwingPct: 1.2,
+  minRsiSwing: 5,
+  macdStdMult: 0.4,
+  maxPivot2AgeBars: 18,
+});
 
           const weeklyPts = aggregatePoints(pts, "w").map((p) => ({
             date: p.date,
@@ -1037,14 +1037,14 @@ if (comp) {
             volume: p.volume,
           }));
 
-          const weeklyDiv = detectDivergenceFromHistory(weeklyPts, {
-            lookbackBars: 30,
-            leftRight: 2,
-            minPriceSwingPct: 0.8,
-            minRsiSwing: 2.5,
-            macdStdMult: 0.2,
-            maxPivot2AgeBars: 12,
-          });
+const weeklyDiv = detectDivergenceFromHistory(weeklyPts, {
+  lookbackBars: 30,
+  leftRight: 2,
+  minPriceSwingPct: 1.5,
+  minRsiSwing: 4,
+  macdStdMult: 0.3,
+  maxPivot2AgeBars: 10,
+});
 
           const scoredDailyDiv =
             dailyDiv
