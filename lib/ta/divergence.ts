@@ -274,11 +274,11 @@ export function detectDivergenceFromHistory(points: Point[], opts?: DivergenceOp
       const rsiSwing = isFiniteNum(r1) && isFiniteNum(r2) ? r2 - r1 : null;
 
       const score =
-        priceSwingPct * 10 +
-        (isFiniteNum(rsiSwing) ? rsiSwing * 2 : 0) +
-        (isFiniteNum(macdSwing) ? Math.abs(macdSwing) * 200 : 0) +
-        (hasRsi && hasMacd ? 20 : 0) +
-        scoreFreshnessBoost(i2);
+        priceSwingPct * 18 +
+        (isFiniteNum(rsiSwing) ? Math.abs(rsiSwing) * 3.5 : 0) +
+        (isFiniteNum(macdSwing) ? Math.abs(macdSwing) * 260 : 0) +
+        (hasRsi && hasMacd ? 35 : 0) +
+        scoreFreshnessBoost(i2) * 1.5;
 
       const parts: string[] = [];
       if (hasRsi) parts.push("Bullish RSI div");
