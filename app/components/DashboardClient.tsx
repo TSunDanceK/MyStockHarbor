@@ -2916,7 +2916,7 @@ return (
             atr14={atr14Arr}
             volume={volumeArr}
             divergence={divergence.div}
-            height={isMobile ? 250 : 430}
+            height={isMobile ? 340 : 430}
           />
 
           <div
