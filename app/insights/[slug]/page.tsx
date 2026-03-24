@@ -7,6 +7,7 @@ import html from "remark-html";
 import InsightPostClient from "./InsightPostClient";
 import { submitInsightToIndexNowOnce } from "@/lib/indexnowAuto";
 
+
 export const dynamic = "force-dynamic";
 
 type Props = {
@@ -27,29 +28,70 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   try {
     const post = getPostBySlug(slug);
 
+    const title = `${post.title} | MyStockHarbor`;
+    const description =
+      post.excerpt || "Latest stock market insight from MyStockHarbor.";
+    const url = `https://www.mystockharbor.com/insights/${slug}`;
+    const image = "https://www.mystockharbor.com/og-image.png";
+
     return {
-      title: `${post.title} | MyStockHarbor`,
-      description: post.excerpt,
+      title,
+      description,
       alternates: {
-        canonical: `https://www.mystockharbor.com/insights/${slug}`
+        canonical: url,
       },
       openGraph: {
-        title: `${post.title} | MyStockHarbor`,
-        description: post.excerpt,
-        url: `https://www.mystockharbor.com/insights/${slug}`,
+        title,
+        description,
+        url,
         siteName: "MyStockHarbor",
+        images: [
+          {
+            url: image,
+            width: 1200,
+            height: 630,
+            alt: post.title,
+          },
+        ],
+        locale: "en_GB",
         type: "article",
       },
       twitter: {
         card: "summary_large_image",
-        title: `${post.title} | MyStockHarbor`,
-        description: post.excerpt,
+        title,
+        description,
+        images: [image],
       },
     };
   } catch {
+  } catch {
+    const image = "https://www.mystockharbor.com/og-image.png";
+
     return {
       title: "Insight | MyStockHarbor",
       description: "Stock market insight from MyStockHarbor.",
+      openGraph: {
+        title: "Insight | MyStockHarbor",
+        description: "Stock market insight from MyStockHarbor.",
+        url: "https://www.mystockharbor.com/insights",
+        siteName: "MyStockHarbor",
+        images: [
+          {
+            url: image,
+            width: 1200,
+            height: 630,
+            alt: "MyStockHarbor insight",
+          },
+        ],
+        locale: "en_GB",
+        type: "article",
+      },
+      twitter: {
+        card: "summary_large_image",
+        title: "Insight | MyStockHarbor",
+        description: "Stock market insight from MyStockHarbor.",
+        images: [image],
+      },
     };
   }
 }
