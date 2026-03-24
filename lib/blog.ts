@@ -143,14 +143,15 @@ export function getPostBySlug(slug: string): BlogPostFull {
 
   const { data, content } = matter(fileContents);
 
-    return {
-      slug,
-      title: String(data.title || ""),
-      date: formatFrontmatterDate(data.date),
-      excerpt: String(data.excerpt || ""),
-      symbol: data.symbol ? String(data.symbol) : null,
-      timeframe: (data.timeframe === "w" ? "w" : "d") as "d" | "w",
-      chartBars: normalizeChartBars(data.chartBars),
-      chartIndicators: normalizeChartIndicators(data.chartIndicators),
-    };
+  return {
+    slug,
+    title: String(data.title || ""),
+    date: formatFrontmatterDate(data.date),
+    excerpt: String(data.excerpt || ""),
+    symbol: data.symbol ? String(data.symbol) : null,
+    timeframe: (data.timeframe === "w" ? "w" : "d") as "d" | "w",
+    chartBars: normalizeChartBars(data.chartBars),
+    chartIndicators: normalizeChartIndicators(data.chartIndicators),
+    content,
+  };
 }
