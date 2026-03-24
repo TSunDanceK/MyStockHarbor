@@ -45,7 +45,8 @@ twitter: {
   description:
     "MyStockHarbor (My Stock Harbor) helps traders track stocks, analyse technical indicators, monitor market benchmarks, and learn trading strategies with free educational tools, stock screeners, and market insights.",
   images: ["https://www.mystockharbor.com/og-image-v2.png"],
-},
+ },
+};
 
 export default function RootLayout({
   children,
