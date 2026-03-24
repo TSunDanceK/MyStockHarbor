@@ -2734,7 +2734,7 @@ return (
                 onClick={() => setIndicatorMenuOpen((v) => !v)}
                 style={{
                   marginTop: 6,
-                  width: isMobile ? "100%" : 280,
+                  width: "100%",
                   padding: "12px 14px",
                   borderRadius: 14,
                   border: `1px solid ${COLORS.controlBorder}`,
@@ -2771,13 +2771,16 @@ return (
                     left: 0,
                     zIndex: 40,
                     width: isMobile ? "100%" : 320,
+                    maxHeight: isMobile ? 320 : 420,
                     borderRadius: 16,
                     border: `1px solid ${COLORS.border}`,
                     background: COLORS.cardBg,
                     boxShadow: COLORS.isDark
                       ? "0 18px 34px rgba(0,0,0,0.40)"
                       : "0 18px 34px rgba(0,0,0,0.12)",
-                    overflow: "hidden",
+                    overflowY: "auto",
+                    overflowX: "hidden",
+                    WebkitOverflowScrolling: "touch",
                   }}
                 >
                   <button
@@ -3799,6 +3802,11 @@ return (
             align-items: center;
             justify-content: space-between;
             gap: 10px;
+            flex-wrap: wrap;
+          }
+
+          .msh-chart-head-row > div:first-child {
+            width: 100%;
           }
 
           .msh-timeframes {
@@ -3807,7 +3815,6 @@ return (
             gap: 6px;
             width: 100%;
           }
-
           .msh-timeframes > * {
             width: 100%;
             padding: 6px 0;
