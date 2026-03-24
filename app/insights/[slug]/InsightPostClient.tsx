@@ -499,7 +499,7 @@ export default function InsightPostClient({
   const stoch = useMemo(() => stochastic(chartPoints, 14, 3), [chartPoints]);
   const atr14 = useMemo(() => atr(chartPoints, 14), [chartPoints]);
 
-  const selectedIndicators = useMemo(() => {
+  const selectedIndicators = useMemo<Overlay[]>(() => {
     const normalized = normalizeInsightIndicators(post.chartIndicators);
     return normalized.length ? normalized : ["MA50", "MA200"];
   }, [post.chartIndicators]);
@@ -530,8 +530,6 @@ export default function InsightPostClient({
   const volumeSlice = chartPoints.slice(chartStart).map((p) =>
     typeof p.volume === "number" && Number.isFinite(p.volume) ? p.volume : null
   );
-
-  const hasSnapshot = Boolean(snapshot && chartPoints.length >= 2);
 
   const hasSnapshot = Boolean(snapshot && chartPoints.length >= 2);
 
