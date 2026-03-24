@@ -2231,7 +2231,7 @@ borderRadius: isMobile ? 8 : 10,
             lineHeight: 1,
           }}
         >
-{isMobile ? "⤢" : "MAX"}
+       MAX
         </button>
 
         <button
