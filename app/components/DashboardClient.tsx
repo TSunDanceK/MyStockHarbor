@@ -2106,9 +2106,17 @@ const [qRes, hRes] = await Promise.all([
     );
   }
 
-  function ChartToolbar() {
-    return (
-      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+function ChartToolbar() {
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: isMobile ? 6 : 8,
+        alignItems: "center",
+        flexWrap: "nowrap",
+        overflowX: "auto",
+      }}
+    >
         <button
           onClick={() =>
             setWindowOffset((o) => Math.min(maxOffset, o + Math.max(1, Math.floor(win * 0.2))))
@@ -2116,8 +2124,8 @@ const [qRes, hRes] = await Promise.all([
           disabled={offset >= maxOffset}
           title="Pan left (older)"
           style={{
-            padding: "8px 10px",
-            borderRadius: 10,
+padding: isMobile ? "6px 8px" : "8px 10px",
+borderRadius: isMobile ? 8 : 10,
             border: `1px solid ${COLORS.controlBorder}`,
             background: COLORS.controlBg,
             color: COLORS.controlFg,
@@ -2137,8 +2145,8 @@ const [qRes, hRes] = await Promise.all([
           disabled={offset <= 0}
           title="Pan right (newer)"
           style={{
-            padding: "8px 10px",
-            borderRadius: 10,
+padding: isMobile ? "6px 8px" : "8px 10px",
+borderRadius: isMobile ? 8 : 10,
             border: `1px solid ${COLORS.controlBorder}`,
             background: COLORS.controlBg,
             color: COLORS.controlFg,
@@ -2158,8 +2166,8 @@ const [qRes, hRes] = await Promise.all([
           }}
           title="Zoom in"
           style={{
-            padding: "8px 10px",
-            borderRadius: 10,
+padding: isMobile ? "6px 8px" : "8px 10px",
+borderRadius: isMobile ? 8 : 10,
             border: `1px solid ${COLORS.controlBorder}`,
             background: COLORS.controlBg,
             color: COLORS.controlFg,
@@ -2178,8 +2186,8 @@ const [qRes, hRes] = await Promise.all([
           }}
           title="Zoom out"
           style={{
-            padding: "8px 10px",
-            borderRadius: 10,
+padding: isMobile ? "6px 8px" : "8px 10px",
+borderRadius: isMobile ? 8 : 10,
             border: `1px solid ${COLORS.controlBorder}`,
             background: COLORS.controlBg,
             color: COLORS.controlFg,
@@ -2191,19 +2199,20 @@ const [qRes, hRes] = await Promise.all([
           −
         </button>
 
-        <div
-          style={{
-            padding: "8px 10px",
-            borderRadius: 10,
-            border: `1px solid ${COLORS.controlBorder}`,
-            background: COLORS.controlBg,
-            color: COLORS.mutedFg,
-            fontSize: 12,
-            fontWeight: 800,
-          }}
-        >
-          {Math.min(win, totalPoints)} bars
-        </div>
+<div
+  style={{
+    padding: isMobile ? "6px 8px" : "8px 10px",
+    borderRadius: isMobile ? 8 : 10,
+    border: `1px solid ${COLORS.controlBorder}`,
+    background: COLORS.controlBg,
+    color: COLORS.mutedFg,
+    fontSize: isMobile ? 11 : 12,
+    fontWeight: 800,
+    whiteSpace: "nowrap",
+  }}
+>
+  {Math.min(win, totalPoints)} bars
+</div>
 
         <button
           onClick={() => {
@@ -2212,8 +2221,8 @@ const [qRes, hRes] = await Promise.all([
           }}
           title="Show full chart"
           style={{
-            padding: "8px 10px",
-            borderRadius: 10,
+padding: isMobile ? "6px 8px" : "8px 10px",
+borderRadius: isMobile ? 8 : 10,
             border: `1px solid ${COLORS.controlBorder}`,
             background: COLORS.controlBg,
             color: COLORS.controlFg,
@@ -2222,15 +2231,15 @@ const [qRes, hRes] = await Promise.all([
             lineHeight: 1,
           }}
         >
-          MAX
+{isMobile ? "⤢" : "MAX"}
         </button>
 
         <button
           onClick={() => setExpanded(true)}
           title="Expand chart"
           style={{
-            padding: "8px 10px",
-            borderRadius: 10,
+padding: isMobile ? "6px 8px" : "8px 10px",
+borderRadius: isMobile ? 8 : 10,
             border: `1px solid ${COLORS.controlBorder}`,
             background: COLORS.controlBg,
             color: COLORS.controlFg,
