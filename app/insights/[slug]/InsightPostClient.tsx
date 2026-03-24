@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import StockPriceChart from "@/app/stock/[symbol]/StockPriceChart";
+import PriceChart, { type Overlay } from "@/app/components/PriceChart";
 import type { InsightSnapshot } from "@/lib/blog";
 
 type Point = {
@@ -20,6 +20,8 @@ type InsightPostData = {
   excerpt: string;
   symbol?: string | null;
   timeframe: "d" | "w";
+  chartBars: number | null;
+  chartIndicators: Overlay[];
   contentHtml: string;
 };
 
@@ -46,6 +48,308 @@ function movingAverage(values: number[], window: number): (number | null)[] {
   }
 
   return out;
+}
+
+function rollingStd(values: number[], window: number): (number | null)[] {
+  const out: (number | null)[] = Array(values.length).fill(null);
+
+  for (let i = window - 1; i < values.length; i++) {
+    let mean = 0;
+    for (let j = i - window + 1; j <= i; j++) mean += values[j];
+    mean /= window;
+
+    let variance = 0;
+    for (let j = i - window + 1; j <= i; j++) {
+      const d = values[j] - mean;
+      variance += d * d;
+    }
+    variance /= window;
+
+    out[i] = Math.sqrt(variance);
+  }
+
+  return out;
+}
+
+function bollinger(values: number[], window = 20, k = 2) {
+  const mid = movingAverage(values, window);
+  const sd = rollingStd(values, window);
+  const upper = mid.map((m, i) => (m == null || sd[i] == null ? null : m + k * sd[i]!));
+  const lower = mid.map((m, i) => (m == null || sd[i] == null ? null : m - k * sd[i]!));
+  return { upper, mid, lower };
+}
+
+function ema(values: number[], period: number): (number | null)[] {
+  const out: (number | null)[] = Array(values.length).fill(null);
+  if (!values.length) return out;
+
+  const k = 2 / (period + 1);
+  let emaPrev: number | null = null;
+  let sum = 0;
+
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i];
+
+    if (i < period) {
+      sum += v;
+      if (i === period - 1) {
+        emaPrev = sum / period;
+        out[i] = emaPrev;
+      }
+      continue;
+    }
+
+    emaPrev = emaPrev == null ? v : v * k + emaPrev * (1 - k);
+    out[i] = emaPrev;
+  }
+
+  return out;
+}
+
+function rsiWilder(values: number[], period = 14): (number | null)[] {
+  const out: (number | null)[] = Array(values.length).fill(null);
+  if (values.length < period + 1) return out;
+
+  let gain = 0;
+  let loss = 0;
+
+  for (let i = 1; i <= period; i++) {
+    const diff = values[i] - values[i - 1];
+    if (diff >= 0) gain += diff;
+    else loss += -diff;
+  }
+
+  let avgGain = gain / period;
+  let avgLoss = loss / period;
+
+  const rs0 = avgLoss === 0 ? Infinity : avgGain / avgLoss;
+  out[period] = 100 - 100 / (1 + rs0);
+
+  for (let i = period + 1; i < values.length; i++) {
+    const diff = values[i] - values[i - 1];
+    const g = diff > 0 ? diff : 0;
+    const l = diff < 0 ? -diff : 0;
+
+    avgGain = (avgGain * (period - 1) + g) / period;
+    avgLoss = (avgLoss * (period - 1) + l) / period;
+
+    const rs = avgLoss === 0 ? Infinity : avgGain / avgLoss;
+    out[i] = 100 - 100 / (1 + rs);
+  }
+
+  return out;
+}
+
+function macd(values: number[], fast = 12, slow = 26, signal = 9) {
+  const emaFast = ema(values, fast);
+  const emaSlow = ema(values, slow);
+
+  const line: (number | null)[] = values.map((_, i) => {
+    const f = emaFast[i];
+    const s = emaSlow[i];
+    if (typeof f !== "number" || !Number.isFinite(f)) return null;
+    if (typeof s !== "number" || !Number.isFinite(s)) return null;
+    return f - s;
+  });
+
+  const sig: (number | null)[] = Array(values.length).fill(null);
+  const hist: (number | null)[] = Array(values.length).fill(null);
+
+  const validMacd: { index: number; value: number }[] = [];
+  for (let i = 0; i < line.length; i++) {
+    const v = line[i];
+    if (typeof v === "number" && Number.isFinite(v)) {
+      validMacd.push({ index: i, value: v });
+    }
+  }
+
+  if (validMacd.length < signal) {
+    return { line, signal: sig, hist };
+  }
+
+  let signalSeed = 0;
+  for (let i = 0; i < signal; i++) {
+    signalSeed += validMacd[i].value;
+  }
+
+  let prevSignal = signalSeed / signal;
+  sig[validMacd[signal - 1].index] = prevSignal;
+
+  const k = 2 / (signal + 1);
+
+  for (let i = signal; i < validMacd.length; i++) {
+    prevSignal = validMacd[i].value * k + prevSignal * (1 - k);
+    sig[validMacd[i].index] = prevSignal;
+  }
+
+  for (let i = 0; i < line.length; i++) {
+    const l = line[i];
+    const s = sig[i];
+    if (typeof l === "number" && Number.isFinite(l) && typeof s === "number" && Number.isFinite(s)) {
+      hist[i] = l - s;
+    }
+  }
+
+  return { line, signal: sig, hist };
+}
+
+function vwma(values: number[], volumes: (number | undefined)[], window = 20): (number | null)[] {
+  const out: (number | null)[] = Array(values.length).fill(null);
+
+  for (let i = 0; i < values.length; i++) {
+    if (i < window - 1) continue;
+
+    let pvSum = 0;
+    let vSum = 0;
+
+    for (let j = i - window + 1; j <= i; j++) {
+      const price = values[j];
+      const volume = volumes[j];
+
+      if (
+        typeof price !== "number" ||
+        !Number.isFinite(price) ||
+        typeof volume !== "number" ||
+        !Number.isFinite(volume) ||
+        volume <= 0
+      ) {
+        continue;
+      }
+
+      pvSum += price * volume;
+      vSum += volume;
+    }
+
+    out[i] = vSum > 0 ? pvSum / vSum : null;
+  }
+
+  return out;
+}
+
+function stochastic(points: Point[], kPeriod = 14, dPeriod = 3) {
+  const k: (number | null)[] = Array(points.length).fill(null);
+
+  for (let i = 0; i < points.length; i++) {
+    if (i < kPeriod - 1) continue;
+
+    let highestHigh = -Infinity;
+    let lowestLow = Infinity;
+
+    for (let j = i - kPeriod + 1; j <= i; j++) {
+      const hh = points[j].high;
+      const ll = points[j].low;
+
+      if (typeof hh !== "number" || !Number.isFinite(hh)) {
+        highestHigh = NaN;
+        break;
+      }
+      if (typeof ll !== "number" || !Number.isFinite(ll)) {
+        lowestLow = NaN;
+        break;
+      }
+
+      if (hh > highestHigh) highestHigh = hh;
+      if (ll < lowestLow) lowestLow = ll;
+    }
+
+    if (!Number.isFinite(highestHigh) || !Number.isFinite(lowestLow)) continue;
+
+    const denom = highestHigh - lowestLow;
+    if (denom <= 0) continue;
+
+    k[i] = ((points[i].close - lowestLow) / denom) * 100;
+  }
+
+  const d = movingAverage(
+    k.map((v) => (typeof v === "number" ? v : 0)),
+    dPeriod
+  ).map((v, i) => (k[i] == null ? null : v));
+
+  return { k, d };
+}
+
+function atr(points: Point[], period = 14): (number | null)[] {
+  const tr: (number | null)[] = Array(points.length).fill(null);
+
+  for (let i = 0; i < points.length; i++) {
+    const h = points[i].high;
+    const l = points[i].low;
+    const cPrev = i > 0 ? points[i - 1].close : null;
+
+    if (typeof h !== "number" || !Number.isFinite(h)) continue;
+    if (typeof l !== "number" || !Number.isFinite(l)) continue;
+
+    const hl = h - l;
+    const hc = cPrev == null ? hl : Math.abs(h - cPrev);
+    const lc = cPrev == null ? hl : Math.abs(l - cPrev);
+
+    tr[i] = Math.max(hl, hc, lc);
+  }
+
+  const out: (number | null)[] = Array(points.length).fill(null);
+
+  let sum = 0;
+  let count = 0;
+  let prevATR: number | null = null;
+
+  for (let i = 0; i < points.length; i++) {
+    const v = tr[i];
+
+    if (v == null) {
+      out[i] = prevATR;
+      continue;
+    }
+
+    if (prevATR == null) {
+      sum += v;
+      count++;
+      if (count === period) {
+        prevATR = sum / period;
+        out[i] = prevATR;
+      }
+      continue;
+    }
+
+    prevATR = (prevATR * (period - 1) + v) / period;
+    out[i] = prevATR;
+  }
+
+  return out;
+}
+
+function normalizeInsightIndicators(indicators: Overlay[]) {
+  const allowed = new Set<Overlay>([
+    "MA50",
+    "MA200",
+    "EMA20",
+    "VWMA(20)",
+    "Bollinger(20,2)",
+    "RSI(14)",
+    "MACD(12,26,9)",
+    "Stochastic(14,3)",
+    "ATR(14)",
+    "Volume",
+  ]);
+
+  return indicators.filter((item): item is Overlay => allowed.has(item));
+}
+
+function getFocusedOverlay(indicators: Overlay[]): Overlay {
+  const lower = indicators.find(
+    (item) =>
+      item === "RSI(14)" ||
+      item === "MACD(12,26,9)" ||
+      item === "Stochastic(14,3)" ||
+      item === "ATR(14)" ||
+      item === "Volume"
+  );
+
+  return lower ?? "None";
+}
+
+function formatIndicatorLabel(indicators: Overlay[]) {
+  if (!indicators.length) return "price";
+  return indicators.join(" + ");
 }
 
 function aggregateToWeekly(points: Point[]): Point[] {
@@ -184,15 +488,50 @@ export default function InsightPostClient({
   const closes = useMemo(() => chartPoints.map((p) => p.close), [chartPoints]);
   const ma50 = useMemo(() => movingAverage(closes, 50), [closes]);
   const ma200 = useMemo(() => movingAverage(closes, 200), [closes]);
+  const ema20 = useMemo(() => ema(closes, 20), [closes]);
+  const boll = useMemo(() => bollinger(closes, 20, 2), [closes]);
+  const rsi14 = useMemo(() => rsiWilder(closes, 14), [closes]);
+  const macdValues = useMemo(() => macd(closes, 12, 26, 9), [closes]);
+  const vwma20 = useMemo(
+    () => vwma(chartPoints.map((p) => p.close), chartPoints.map((p) => p.volume), 20),
+    [chartPoints]
+  );
+  const stoch = useMemo(() => stochastic(chartPoints, 14, 3), [chartPoints]);
+  const atr14 = useMemo(() => atr(chartPoints, 14), [chartPoints]);
 
-  const chartSlice =
-    post.timeframe === "w" ? chartPoints : chartPoints.slice(-240);
+  const selectedIndicators = useMemo(() => {
+    const normalized = normalizeInsightIndicators(post.chartIndicators);
+    return normalized.length ? normalized : ["MA50", "MA200"];
+  }, [post.chartIndicators]);
 
-  const ma50Slice =
-    post.timeframe === "w" ? ma50 : ma50.slice(-240);
+  const focusedOverlay = useMemo(
+    () => getFocusedOverlay(selectedIndicators),
+    [selectedIndicators]
+  );
 
-  const ma200Slice =
-    post.timeframe === "w" ? ma200 : ma200.slice(-240);
+  const chartBars = post.chartBars ?? (post.timeframe === "w" ? 104 : 240);
+  const chartStart = Math.max(0, chartPoints.length - chartBars);
+
+  const chartSlice = chartPoints.slice(chartStart);
+  const ma50Slice = ma50.slice(chartStart);
+  const ma200Slice = ma200.slice(chartStart);
+  const ema20Slice = ema20.slice(chartStart);
+  const bollUpperSlice = boll.upper.slice(chartStart);
+  const bollMidSlice = boll.mid.slice(chartStart);
+  const bollLowerSlice = boll.lower.slice(chartStart);
+  const rsi14Slice = rsi14.slice(chartStart);
+  const macdLineSlice = macdValues.line.slice(chartStart);
+  const macdSignalSlice = macdValues.signal.slice(chartStart);
+  const macdHistSlice = macdValues.hist.slice(chartStart);
+  const vwma20Slice = vwma20.slice(chartStart);
+  const stochKSlice = stoch.k.slice(chartStart);
+  const stochDSlice = stoch.d.slice(chartStart);
+  const atr14Slice = atr14.slice(chartStart);
+  const volumeSlice = chartPoints.slice(chartStart).map((p) =>
+    typeof p.volume === "number" && Number.isFinite(p.volume) ? p.volume : null
+  );
+
+  const hasSnapshot = Boolean(snapshot && chartPoints.length >= 2);
 
   const hasSnapshot = Boolean(snapshot && chartPoints.length >= 2);
 
@@ -557,7 +896,7 @@ export default function InsightPostClient({
                   letterSpacing: "-0.03em",
                 }}
               >
-                {symbol} chart with {timeframeLabel} MA50 and {timeframeLabel} MA200
+                {symbol} chart showing {timeframeLabel.toLowerCase()} {formatIndicatorLabel(selectedIndicators)}
               </h2>
 
               <p
@@ -569,18 +908,33 @@ export default function InsightPostClient({
                   fontSize: 15,
                 }}
               >
-                This {post.timeframe === "w" ? "weekly" : "daily"} chart snapshot is frozen to the original article analysis date, so later readers see the same setup the post was based on.
+                This {post.timeframe === "w" ? "weekly" : "daily"} chart snapshot is frozen to the original article analysis date, showing the last {chartSlice.length} bars with the indicators chosen for this article.
               </p>
 
               {hasSnapshot ? (
                 <div>
                   <div style={{ marginTop: 16 }}>
-                    <StockPriceChart
+                    <PriceChart
                       symbol={symbol}
                       data={chartSlice}
                       ma50={ma50Slice}
                       ma200={ma200Slice}
-                      height={360}
+                      overlay={focusedOverlay}
+                      selectedIndicators={selectedIndicators}
+                      bollUpper={bollUpperSlice}
+                      bollMid={bollMidSlice}
+                      bollLower={bollLowerSlice}
+                      ema20={ema20Slice}
+                      vwma20={vwma20Slice}
+                      rsi14={rsi14Slice}
+                      macdLine={macdLineSlice}
+                      macdSignal={macdSignalSlice}
+                      macdHist={macdHistSlice}
+                      stochK={stochKSlice}
+                      stochD={stochDSlice}
+                      atr14={atr14Slice}
+                      volume={volumeSlice}
+                      height={420}
                     />
                   </div>
 
