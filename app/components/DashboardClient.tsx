@@ -781,6 +781,8 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [expanded, setExpanded] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [mobileChartOpen, setMobileChartOpen] = useState(false);
+  const mobileChartRef = useRef<HTMLDivElement | null>(null);
 
   const selectedTimeframe = useMemo(
     () => TIMEFRAMES.find((t) => t.label === activeTimeframe) ?? TIMEFRAMES[0],
@@ -1307,6 +1309,7 @@ const [qRes, hRes] = await Promise.all([
     setSelectedIndicators([]);
     setIndicator("None");
     setWindowOffset(0);
+    setMobileChartOpen(false);
   }
 
   function clearIndicatorSelection() {
@@ -2277,7 +2280,7 @@ const [qRes, hRes] = await Promise.all([
               {symbol} Stock Analysis
             </div>
 
-            <div
+             <div
               style={{
                 marginTop: 8,
                 fontSize: 14,
@@ -2285,7 +2288,7 @@ const [qRes, hRes] = await Promise.all([
                 color: COLORS.mutedFg,
               }}
             >
-              View the full stock page with the dedicated chart, indicators, trend view, and deeper breakdown.
+              Open the interactive chart for timeframe switching, indicator selection, zoom controls, and a deeper technical view.
             </div>
 
             <div
@@ -2354,8 +2357,17 @@ const [qRes, hRes] = await Promise.all([
               </div>
             </div>
 
-            <Link
-              href={`/stock/${encodeURIComponent(symbol)}`}
+            <button
+              type="button"
+              onClick={() => {
+                setMobileChartOpen(true);
+                requestAnimationFrame(() => {
+                  mobileChartRef.current?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                  });
+                });
+              }}
               style={{
                 marginTop: 14,
                 display: "inline-flex",
@@ -2372,10 +2384,11 @@ const [qRes, hRes] = await Promise.all([
                 textDecoration: "none",
                 fontWeight: 950,
                 fontSize: 15,
+                cursor: "pointer",
               }}
             >
-              Open {symbol} Stock Analysis →
-            </Link>
+              Open Interactive Chart →
+            </button>
           </div>
         </div>
       </SectionCard>
@@ -4022,6 +4035,12 @@ return (
             <div className="msh-lower-grid" style={{ marginTop: 0 }}>
               <MobileStockAnalysisCard />
             </div>
+
+            {mobileChartOpen ? (
+              <div className="msh-lower-grid" ref={mobileChartRef}>
+                <ChartPanel />
+              </div>
+            ) : null}
 
             <div className="msh-lower-grid">
               <OverviewPanel />
