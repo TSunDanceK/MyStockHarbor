@@ -64,7 +64,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       },
     };
   } catch {
-  } catch {
     const image = "https://www.mystockharbor.com/og-image.png";
 
     return {
