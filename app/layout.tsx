@@ -27,14 +27,14 @@ export const metadata: Metadata = {
       "MyStockHarbor (My Stock Harbor) helps traders track stocks, analyse technical indicators, monitor market benchmarks, and learn trading strategies with free educational tools, stock screeners, and market insights.",
     url: "https://www.mystockharbor.com",
     siteName: "MyStockHarbor",
-    images: [
-      {
-        url: "https://www.mystockharbor.com/icon.png",
-        width: 512,
-        height: 512,
-        alt: "MyStockHarbor logo",
-      },
-    ],
+images: [
+  {
+    url: "https://www.mystockharbor.com/og-image.png",
+    width: 1200,
+    height: 630,
+    alt: "MyStockHarbor trading dashboard",
+  },
+],
     locale: "en_GB",
     type: "website",
   },
