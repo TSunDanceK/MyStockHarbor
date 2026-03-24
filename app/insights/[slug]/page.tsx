@@ -32,7 +32,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const description =
       post.excerpt || "Latest stock market insight from MyStockHarbor.";
     const url = `https://www.mystockharbor.com/insights/${slug}`;
-    const image = "https://www.mystockharbor.com/og-image.png";
+    const image = "https://www.mystockharbor.com/og-image-v2.png";
 
     return {
       title,
