@@ -4,6 +4,18 @@ import matter from "gray-matter";
 
 const postsDirectory = path.join(process.cwd(), "content/insights");
 
+export type InsightChartIndicator =
+  | "MA50"
+  | "MA200"
+  | "EMA20"
+  | "VWMA(20)"
+  | "Bollinger(20,2)"
+  | "RSI(14)"
+  | "MACD(12,26,9)"
+  | "Stochastic(14,3)"
+  | "ATR(14)"
+  | "Volume";
+
 export type BlogPost = {
   slug: string;
   title: string;
@@ -11,6 +23,8 @@ export type BlogPost = {
   excerpt: string;
   symbol?: string | null;
   timeframe: "d" | "w";
+  chartBars: number | null;
+  chartIndicators: InsightChartIndicator[];
 };
 export type InsightSnapshotPoint = {
   date: string;
@@ -43,6 +57,8 @@ export type BlogPostFull = {
   excerpt: string;
   symbol?: string | null;
   timeframe: "d" | "w";
+  chartBars: number | null;
+  chartIndicators: InsightChartIndicator[];
   content: string;
 };
 
@@ -56,6 +72,35 @@ function formatFrontmatterDate(value: unknown): string {
   }
 
   return "";
+}
+
+function normalizeChartBars(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const rounded = Math.floor(value);
+  if (rounded < 20) return 20;
+  if (rounded > 400) return 400;
+  return rounded;
+}
+
+function normalizeChartIndicators(value: unknown): InsightChartIndicator[] {
+  const allowed = new Set<InsightChartIndicator>([
+    "MA50",
+    "MA200",
+    "EMA20",
+    "VWMA(20)",
+    "Bollinger(20,2)",
+    "RSI(14)",
+    "MACD(12,26,9)",
+    "Stochastic(14,3)",
+    "ATR(14)",
+    "Volume",
+  ]);
+
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => String(item).trim())
+    .filter((item): item is InsightChartIndicator => allowed.has(item as InsightChartIndicator));
 }
 
 export function getAllPosts(): BlogPost[] {
@@ -79,6 +124,8 @@ export function getAllPosts(): BlogPost[] {
       excerpt: String(data.excerpt || ""),
       symbol: data.symbol ? String(data.symbol) : null,
       timeframe: (data.timeframe === "w" ? "w" : "d") as "d" | "w",
+      chartBars: normalizeChartBars(data.chartBars),
+      chartIndicators: normalizeChartIndicators(data.chartIndicators),
     };
   });
 
@@ -96,13 +143,14 @@ export function getPostBySlug(slug: string): BlogPostFull {
 
   const { data, content } = matter(fileContents);
 
-  return {
-    slug,
-    title: String(data.title || ""),
-    date: formatFrontmatterDate(data.date),
-    excerpt: String(data.excerpt || ""),
-    symbol: data.symbol ? String(data.symbol) : null,
-    timeframe: (data.timeframe === "w" ? "w" : "d") as "d" | "w",
-    content,
-  };
+    return {
+      slug,
+      title: String(data.title || ""),
+      date: formatFrontmatterDate(data.date),
+      excerpt: String(data.excerpt || ""),
+      symbol: data.symbol ? String(data.symbol) : null,
+      timeframe: (data.timeframe === "w" ? "w" : "d") as "d" | "w",
+      chartBars: normalizeChartBars(data.chartBars),
+      chartIndicators: normalizeChartIndicators(data.chartIndicators),
+    };
 }
