@@ -1,6 +1,6 @@
-"use client";
 import type { Metadata } from "next";
 import Link from "next/link";
+import AffiliateLink from "../components/AffiliateLink";
 
 export const metadata: Metadata = {
   title: "Best Trading Platforms for Beginners & Chart Analysis | MyStockHarbor",
@@ -666,22 +666,15 @@ export default function PlatformsPage() {
                   <td style={{ padding: 12, fontWeight: 900, color: "#86efac" }}>
                     {item.score}
                   </td>
-                  <td style={{ padding: 12 }}>
-<a
-  href={item.affiliateHref}
-  style={smallVisitBtn()}
-  onClick={() => {
-    if (typeof window !== "undefined" && (window as any).gtag) {
-      (window as any).gtag("event", "affiliate_click", {
-        event_category: "affiliate",
-        event_label: item.name,
-      });
-    }
-  }}
->
-  Visit →
-</a>
-                  </td>
+<td style={{ padding: 12 }}>
+  <AffiliateLink
+    href={item.affiliateHref}
+    eventLabel={item.name}
+    style={smallVisitBtn()}
+  >
+    Visit →
+  </AffiliateLink>
+</td>
                 </tr>
               ))}
             </tbody>
@@ -724,20 +717,13 @@ export default function PlatformsPage() {
                     {item.score}
                   </div>
 
-<a
+<AffiliateLink
   href={item.affiliateHref}
+  eventLabel={item.name}
   style={smallVisitBtn()}
-  onClick={() => {
-    if (typeof window !== "undefined" && (window as any).gtag) {
-      (window as any).gtag("event", "affiliate_click", {
-        event_category: "affiliate",
-        event_label: item.name,
-      });
-    }
-  }}
 >
   Visit →
-</a>
+</AffiliateLink>
                 </div>
 
                 <div
@@ -954,59 +940,52 @@ export default function PlatformsPage() {
                       </p>
                     </div>
 
-<a
+<AffiliateLink
   href={item.affiliateHref}
-  aria-label={`Visit ${item.name}`}
+  eventLabel={item.name}
+  ariaLabel={`Visit ${item.name}`}
   style={{ textDecoration: "none", flex: "0 0 auto" }}
-  onClick={() => {
-    if (typeof window !== "undefined" && (window as any).gtag) {
-      (window as any).gtag("event", "affiliate_click", {
-        event_category: "affiliate",
-        event_label: item.name,
-      });
-    }
-  }}
 >
-                      <div
-                        className="platformLogoBox"
-                        style={{
-                          width: item.name === "TradingView" ? 148 : 76,
-                          height: item.name === "TradingView" ? 68 : 76,
-                          borderRadius: item.name === "TradingView" ? 18 : 16,
-                          border:
-                            item.name === "TradingView"
-                              ? "1px solid rgba(59,130,246,0.26)"
-                              : "1px solid rgba(255,255,255,0.12)",
-                          background:
-                            item.name === "TradingView"
-                              ? "linear-gradient(135deg, rgba(255,255,255,0.98), rgba(241,245,249,0.96))"
-                              : "#ffffff",
-                          boxShadow:
-                            item.name === "TradingView"
-                              ? "0 10px 24px rgba(0,0,0,0.22)"
-                              : "none",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          padding: item.name === "TradingView" ? "10px 16px" : 10,
-                          overflow: "hidden",
-                          cursor: "pointer",
-                        }}
-                      >
-                        <img
-                          src={item.logoSrc}
-                          alt={item.logoAlt}
-                          style={{
-                            width: "100%",
-                            height: item.name === "TradingView" ? "auto" : "100%",
-                            maxWidth: "100%",
-                            maxHeight: "100%",
-                            objectFit: "contain",
-                            display: "block",
-                          }}
-                        />
-                      </div>
-                    </a>
+  <div
+    className="platformLogoBox"
+    style={{
+      width: item.name === "TradingView" ? 148 : 76,
+      height: item.name === "TradingView" ? 68 : 76,
+      borderRadius: item.name === "TradingView" ? 18 : 16,
+      border:
+        item.name === "TradingView"
+          ? "1px solid rgba(59,130,246,0.26)"
+          : "1px solid rgba(255,255,255,0.12)",
+      background:
+        item.name === "TradingView"
+          ? "linear-gradient(135deg, rgba(255,255,255,0.98), rgba(241,245,249,0.96))"
+          : "#ffffff",
+      boxShadow:
+        item.name === "TradingView"
+          ? "0 10px 24px rgba(0,0,0,0.22)"
+          : "none",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: item.name === "TradingView" ? "10px 16px" : 10,
+      overflow: "hidden",
+      cursor: "pointer",
+    }}
+  >
+    <img
+      src={item.logoSrc}
+      alt={item.logoAlt}
+      style={{
+        width: "100%",
+        height: item.name === "TradingView" ? "auto" : "100%",
+        maxWidth: "100%",
+        maxHeight: "100%",
+        objectFit: "contain",
+        display: "block",
+      }}
+    />
+  </div>
+</AffiliateLink>
                   </div>
 
                   <p
@@ -1033,20 +1012,13 @@ export default function PlatformsPage() {
                     flex: "0 0 300px",
                   }}
                 >
-<a
+<AffiliateLink
   href={item.affiliateHref}
+  eventLabel={item.name}
   style={ctaBtn()}
-  onClick={() => {
-    if (typeof window !== "undefined" && (window as any).gtag) {
-      (window as any).gtag("event", "affiliate_click", {
-        event_category: "affiliate",
-        event_label: item.name,
-      });
-    }
-  }}
 >
   {item.ctaText} →
-</a>
+</AffiliateLink>
 
                   {item.name === "Trading 212" && (
                     <div
