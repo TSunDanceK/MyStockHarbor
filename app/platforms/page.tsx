@@ -666,9 +666,20 @@ export default function PlatformsPage() {
                     {item.score}
                   </td>
                   <td style={{ padding: 12 }}>
-                    <a href={item.affiliateHref} style={smallVisitBtn()}>
-                      Visit →
-                    </a>
+<a
+  href={item.affiliateHref}
+  style={smallVisitBtn()}
+  onClick={() => {
+    if (typeof window !== "undefined" && (window as any).gtag) {
+      (window as any).gtag("event", "affiliate_click", {
+        event_category: "affiliate",
+        event_label: item.name,
+      });
+    }
+  }}
+>
+  Visit →
+</a>
                   </td>
                 </tr>
               ))}
@@ -712,9 +723,20 @@ export default function PlatformsPage() {
                     {item.score}
                   </div>
 
-                  <a href={item.affiliateHref} style={smallVisitBtn()}>
-                    Visit →
-                  </a>
+<a
+  href={item.affiliateHref}
+  style={smallVisitBtn()}
+  onClick={() => {
+    if (typeof window !== "undefined" && (window as any).gtag) {
+      (window as any).gtag("event", "affiliate_click", {
+        event_category: "affiliate",
+        event_label: item.name,
+      });
+    }
+  }}
+>
+  Visit →
+</a>
                 </div>
 
                 <div
