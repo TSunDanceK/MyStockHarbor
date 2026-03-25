@@ -1,3 +1,4 @@
+"use client";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -953,11 +954,19 @@ export default function PlatformsPage() {
                       </p>
                     </div>
 
-                    <a
-                      href={item.affiliateHref}
-                      aria-label={`Visit ${item.name}`}
-                      style={{ textDecoration: "none", flex: "0 0 auto" }}
-                    >
+<a
+  href={item.affiliateHref}
+  aria-label={`Visit ${item.name}`}
+  style={{ textDecoration: "none", flex: "0 0 auto" }}
+  onClick={() => {
+    if (typeof window !== "undefined" && (window as any).gtag) {
+      (window as any).gtag("event", "affiliate_click", {
+        event_category: "affiliate",
+        event_label: item.name,
+      });
+    }
+  }}
+>
                       <div
                         className="platformLogoBox"
                         style={{
@@ -1024,9 +1033,20 @@ export default function PlatformsPage() {
                     flex: "0 0 300px",
                   }}
                 >
-                  <a href={item.affiliateHref} style={ctaBtn()}>
-                    {item.ctaText} →
-                  </a>
+<a
+  href={item.affiliateHref}
+  style={ctaBtn()}
+  onClick={() => {
+    if (typeof window !== "undefined" && (window as any).gtag) {
+      (window as any).gtag("event", "affiliate_click", {
+        event_category: "affiliate",
+        event_label: item.name,
+      });
+    }
+  }}
+>
+  {item.ctaText} →
+</a>
 
                   {item.name === "Trading 212" && (
                     <div
