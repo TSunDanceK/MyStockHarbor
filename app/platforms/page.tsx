@@ -482,132 +482,131 @@ export default function PlatformsPage() {
               Best Trading Platforms for Beginners, Chart Analysis, and Serious Traders
             </h1>
 
-            <div
-              className="platformHeroText"
-              style={{
-                marginTop: 8,
-                opacity: 0.78,
-                lineHeight: 1.55,
-                maxWidth: 860,
-              }}
-            >
-              Looking for the best trading platform for beginners, better stock chart
-              analysis, or a stronger long-term broker? This guide compares the best
-              trading platforms for different types of users, including{" "}
-              <strong>TradingView</strong> for charting, <strong>Trading 212</strong>{" "}
-              for beginners, and <strong>Interactive Brokers</strong> for more
-              serious traders.
-            </div>
+<div
+  className="platformHeroText"
+  style={{
+    marginTop: 8,
+    opacity: 0.78,
+    lineHeight: 1.55,
+    maxWidth: 860,
+  }}
+>
+  Looking for the best trading platform for beginners, better stock chart
+  analysis, or a simple broker to start with? This guide compares the best
+  trading platforms for different types of users, with <strong>TradingView</strong>{" "}
+  as the best overall charting platform and <strong>eToro</strong> as one of
+  the easiest modern broker platforms for newer investors.
+</div>
 
-            <div
-              className="platformMobileOnly"
-              style={{
-                marginTop: 12,
-                padding: "12px 14px",
-                borderRadius: 14,
-                border: "1px solid rgba(250,204,21,0.20)",
-                background:
-                  "linear-gradient(135deg, rgba(250,204,21,0.08), rgba(15,23,42,0.10))",
-                lineHeight: 1.55,
-                opacity: 0.88,
-              }}
-            >
-              <strong>Simple setup:</strong> analyse on <strong>TradingView</strong>,
-              then use a broker like <strong>Trading 212</strong> or{" "}
-              <strong>Interactive Brokers</strong> if you decide to invest.
-            </div>
+<div
+  className="platformMobileOnly"
+  style={{
+    marginTop: 12,
+    padding: "12px 14px",
+    borderRadius: 14,
+    border: "1px solid rgba(250,204,21,0.20)",
+    background:
+      "linear-gradient(135deg, rgba(250,204,21,0.08), rgba(15,23,42,0.10))",
+    lineHeight: 1.55,
+    opacity: 0.88,
+  }}
+>
+  <strong>Simple setup:</strong> analyse on <strong>TradingView</strong>,
+  then use a broker like <strong>eToro</strong> or <strong>Trading 212</strong>{" "}
+  if you decide to invest.
+</div>
           </div>
         </div>
 
-        <div
-          className="topCompareGrid platformDesktopOnly"
-          style={{
-            marginTop: 18,
-            display: "grid",
-            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-            gap: 14,
-          }}
-        >
-          <div
-            style={{
-              borderRadius: 16,
-              border: "1px solid rgba(34,197,94,0.28)",
-              background:
-                "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(59,130,246,0.08))",
-              padding: 16,
-            }}
-          >
-            <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>
-              BEST FOR CHARTING
-            </div>
-            <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900 }}>
-              TradingView
-            </div>
-            <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.55 }}>
-              Best overall if you want to learn technical analysis properly.
-            </div>
-          </div>
+<div
+  className="topCompareGrid platformDesktopOnly"
+  style={{
+    marginTop: 18,
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: 14,
+  }}
+>
+  <div
+    style={{
+      borderRadius: 16,
+      border: "1px solid rgba(34,197,94,0.28)",
+      background:
+        "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(59,130,246,0.08))",
+      padding: 16,
+    }}
+  >
+    <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>
+      BEST FOR CHARTING
+    </div>
+    <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900 }}>
+      TradingView
+    </div>
+    <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.55 }}>
+      Best overall if you want to learn technical analysis properly.
+    </div>
+  </div>
 
-          <div
-            style={{
-              borderRadius: 16,
-              border: "1px solid rgba(59,130,246,0.28)",
-              background:
-                "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(168,85,247,0.08))",
-              padding: 16,
-              position: "relative",
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                padding: "5px 10px",
-                borderRadius: 999,
-                background: "rgba(250,204,21,0.18)",
-                border: "1px solid rgba(250,204,21,0.30)",
-                color: "#fde68a",
-                fontSize: 11,
-                fontWeight: 900,
-                letterSpacing: "0.35px",
-                marginBottom: 10,
-              }}
-            >
-              ★ MOST BEGINNER-FRIENDLY
-            </div>
+  <div
+    style={{
+      borderRadius: 16,
+      border: "1px solid rgba(59,130,246,0.28)",
+      background:
+        "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(168,85,247,0.08))",
+      padding: 16,
+      position: "relative",
+      overflow: "hidden",
+    }}
+  >
+    <div
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "5px 10px",
+        borderRadius: 999,
+        background: "rgba(250,204,21,0.18)",
+        border: "1px solid rgba(250,204,21,0.30)",
+        color: "#fde68a",
+        fontSize: 11,
+        fontWeight: 900,
+        letterSpacing: "0.35px",
+        marginBottom: 10,
+      }}
+    >
+      ★ TOP SIMPLE BROKER PICK
+    </div>
 
-            <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>
-              BEST FOR BEGINNERS
-            </div>
-            <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900 }}>
-              Trading 212
-            </div>
-            <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.55 }}>
-              Best if you want the simplest route to buying stocks and ETFs.
-            </div>
-          </div>
+    <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>
+      BEST MODERN BROKER FEEL
+    </div>
+    <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900 }}>
+      eToro
+    </div>
+    <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.55 }}>
+      Best if you want a simple, modern broker platform with an easy app feel.
+    </div>
+  </div>
 
-          <div
-            style={{
-              borderRadius: 16,
-              border: "1px solid rgba(168,85,247,0.28)",
-              background:
-                "linear-gradient(135deg, rgba(168,85,247,0.14), rgba(59,130,246,0.08))",
-              padding: 16,
-            }}
-          >
-            <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>
-              BEST FOR SERIOUS USERS
-            </div>
-            <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900 }}>
-              Interactive Brokers
-            </div>
-            <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.55 }}>
-              Best if you want a broker you can grow into long term.
-            </div>
-          </div>
-        </div>
+  <div
+    style={{
+      borderRadius: 16,
+      border: "1px solid rgba(168,85,247,0.28)",
+      background:
+        "linear-gradient(135deg, rgba(168,85,247,0.14), rgba(59,130,246,0.08))",
+      padding: 16,
+    }}
+  >
+    <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>
+      BEST EXTRA BEGINNER OPTION
+    </div>
+    <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900 }}>
+      Trading 212
+    </div>
+    <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.55 }}>
+      Strong choice if you want a clean beginner-first route to buying stocks.
+    </div>
+  </div>
+</div>
 
         <div
           style={{
@@ -747,44 +746,43 @@ export default function PlatformsPage() {
               How to choose a platform
             </div>
 
-            <div
-              style={{
-                display: "grid",
-                gap: 10,
-              }}
-            >
-              <div style={{ opacity: 0.86, lineHeight: 1.55 }}>
-                <strong>If you are brand new:</strong> start with{" "}
-                <strong>Trading 212</strong> for the easiest route to buying stocks
-                and ETFs.
-              </div>
+<div
+  style={{
+    display: "grid",
+    gap: 10,
+  }}
+>
+  <div style={{ opacity: 0.86, lineHeight: 1.55 }}>
+    <strong>If you want the best charts:</strong> use{" "}
+    <strong>TradingView</strong> for analysis and chart reading.
+  </div>
 
-              <div style={{ opacity: 0.86, lineHeight: 1.55 }}>
-                <strong>If you want the best charts:</strong> use{" "}
-                <strong>TradingView</strong> for analysis and chart reading.
-              </div>
+  <div style={{ opacity: 0.86, lineHeight: 1.55 }}>
+    <strong>If you want a simple modern broker:</strong> start with{" "}
+    <strong>eToro</strong> for an easy app-based investing experience.
+  </div>
 
-              <div style={{ opacity: 0.86, lineHeight: 1.55 }}>
-                <strong>If you want a more serious broker:</strong> choose{" "}
-                <strong>Interactive Brokers</strong> for a stronger long-term
-                platform.
-              </div>
+  <div style={{ opacity: 0.86, lineHeight: 1.55 }}>
+    <strong>If you want a second beginner option:</strong> choose{" "}
+    <strong>Trading 212</strong> for a clean and beginner-friendly route
+    to buying stocks and ETFs.
+  </div>
 
-              <div
-                style={{
-                  marginTop: 6,
-                  paddingTop: 10,
-                  borderTop: "1px solid rgba(255,255,255,0.1)",
-                  opacity: 0.9,
-                  lineHeight: 1.55,
-                }}
-              >
-                <strong>Many users do this:</strong> analyse stocks on{" "}
-                <strong>TradingView</strong>, then use a broker like{" "}
-                <strong>Trading 212</strong> or{" "}
-                <strong>Interactive Brokers</strong> if they decide to invest.
-              </div>
-            </div>
+  <div
+    style={{
+      marginTop: 6,
+      paddingTop: 10,
+      borderTop: "1px solid rgba(255,255,255,0.1)",
+      opacity: 0.9,
+      lineHeight: 1.55,
+    }}
+  >
+    <strong>Many users do this:</strong> analyse stocks on{" "}
+    <strong>TradingView</strong>, then use a broker like{" "}
+    <strong>eToro</strong> or <strong>Trading 212</strong> if they decide
+    to invest.
+  </div>
+</div>
           </div>
         </div>
 
