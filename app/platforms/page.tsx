@@ -75,6 +75,36 @@ const PLATFORMS: PlatformItem[] = [
     recommended: true,
   },
   {
+    name: "eToro",
+    shortLabel: "Best social-style broker app",
+    logoSrc: "/platforms/etoro.png",
+    logoAlt: "eToro logo",
+    bestFor:
+      "People who want a modern investing platform with a simple layout and a more social, app-based feel.",
+    summary:
+      "eToro is a well-known beginner-friendly platform that feels modern and accessible. It is a strong option for people who want a simple broker experience, an easy app feel, and a less intimidating route into investing.",
+    pros: [
+      "Very approachable for newer users",
+      "Modern app feel",
+      "Easy to navigate compared with more complex broker platforms",
+      "Good for people who want a more casual investing experience",
+    ],
+    cons: [
+      "Charting is not the main reason to choose it",
+      "More serious chart-focused traders may outgrow it",
+      "Not everyone wants the more social-style platform feel",
+    ],
+    note:
+      "A strong choice for users who want a simple modern broker. Many users may prefer to analyse on TradingView first, then use eToro if they decide to invest.",
+    complianceNote:
+      "eToro is a multi-asset platform. Trading and investing involve risk. If you are promoting eToro under an affiliate arrangement, use the provider-approved risk warning text for your region, including the current CFD retail loss percentage where required.",
+    affiliateHref: "/api/go/etoro",
+    ctaText: "Visit eToro",
+    score: "9.0/10",
+    highlight: "Best simple modern broker",
+    recommended: true,
+  },
+  {
     name: "Trading 212",
     shortLabel: "Best beginner broker app",
     logoSrc: "/platforms/trading212.png",
@@ -102,36 +132,6 @@ const PLATFORMS: PlatformItem[] = [
     ctaText: "Visit Trading 212",
     score: "9.3/10",
     highlight: "Best for beginners",
-    recommended: true,
-  },
-  {
-    name: "eToro",
-    shortLabel: "Best social-style platform",
-    logoSrc: "/platforms/etoro.png",
-    logoAlt: "eToro logo",
-    bestFor:
-      "People who want a modern investing platform with a simple layout and a more social, app-based feel.",
-    summary:
-      "eToro is a well-known beginner-friendly platform that feels modern and accessible. It is often better suited to users who like a simple investing experience rather than a chart-heavy professional setup.",
-    pros: [
-      "Very approachable for newer users",
-      "Modern app feel",
-      "Easy to navigate compared with more complex broker platforms",
-      "Good for people who want a more casual investing experience",
-    ],
-    cons: [
-      "Charting is not the main reason to choose it",
-      "More serious chart-focused traders may outgrow it",
-      "Not everyone wants the more social-style platform feel",
-    ],
-    note:
-      "Good for users who want a simple and modern investing experience, but less ideal than TradingView for serious chart work.",
-    complianceNote:
-      "eToro is a multi-asset platform. Trading and investing involve risk. If you are promoting eToro under an affiliate arrangement, use the provider-approved risk warning text for your region, including the current CFD retail loss percentage where required.",
-    affiliateHref: "/api/go/etoro",
-    ctaText: "Visit eToro",
-    score: "9.0/10",
-    highlight: "Best modern investing feel",
   },
   {
     name: "Interactive Brokers",
