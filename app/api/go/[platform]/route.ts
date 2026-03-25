@@ -5,7 +5,7 @@ const affiliateLinks: Record<string, string> = {
   tradingview: "https://www.tradingview.com/?aff_id=164495",
   trading212:
     "https://helpcentre.trading212.com/hc/en-us/articles/360008095077-How-to-become-a-Trading-212-Affiliate",
-  etoro: "https://med.etoro.com/B12087_A128935_TClick_Splatforms_page.aspx",
+  etoro: "https://med.etoro.com/B12087_A128935_TClick_SPlatforms_Page.aspx",
   interactivebrokers:
     "https://www.interactivebrokers.com/en/general/about/affiliate-programs.php",
   saxo: "https://www.home.saxo/en-gb/campaigns/affiliate",
