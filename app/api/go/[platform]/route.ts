@@ -3,12 +3,14 @@ import { NextRequest } from "next/server";
 
 const affiliateLinks: Record<string, string> = {
   tradingview: "https://www.tradingview.com/?aff_id=164495",
-  trading212:
-    "https://helpcentre.trading212.com/hc/en-us/articles/360008095077-How-to-become-a-Trading-212-Affiliate",
-  etoro: "https://med.etoro.com/B12087_A128935_TClick_SPlatforms_Page.aspx",
+  trading212: "https://www.trading212.com/",
+  etoro: "https://www.etoro.com/",
   interactivebrokers:
-    "https://www.interactivebrokers.com/en/general/about/affiliate-programs.php",
-  saxo: "https://www.home.saxo/en-gb/campaigns/affiliate",
+    "https://www.interactivebrokers.com/en/trading/trading-platforms.php",
+  saxo: "https://www.home.saxo/",
+  webull: "https://www.webull.com/",
+  robinhood: "https://robinhood.com/us/en/",
+  moomoo: "https://www.moomoo.com/us",
 };
 
 export async function GET(
