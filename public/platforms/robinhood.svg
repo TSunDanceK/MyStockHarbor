@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Robinhood logo placeholder">
+  <rect width="160" height="160" rx="28" fill="#ffffff"></rect>
+  <circle cx="80" cy="80" r="54" fill="#00c805"></circle>
+  <path d="M80 42c8 15 11 31 11 43 0 20-7 36-11 43-4-7-11-23-11-43 0-12 3-28 11-43z" fill="#ffffff"></path>
+  <circle cx="80" cy="84" r="10" fill="#00c805"></circle>
+</svg>
