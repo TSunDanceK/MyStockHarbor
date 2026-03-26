@@ -1,30 +1,126 @@
+# MyStockHarbor Insight Template (STRICT SINGLE FORMAT)
+
+This template MUST be followed exactly. Output must be a SINGLE markdown file only.
+
 ---
-title: "Your insight title here"
-date: "2026-03-22"
-excerpt: "Write a short summary here."
-symbol: 
-timeframe: 
-chartBars: 
-chartIndicators:
-- "MA50"
-- "MA200"
-- "EMA20"
-- "VWMA(20)"
-- "Bollinger(20,2)"
-- "RSI(14)"
-- "MACD(12,26,9)"
-- "Stochastic(14,3)"
-- "ATR(14)"
-- "Volume"
+
+RULES:
+
+- Do NOT output explanations
+- Do NOT add extra sections
+- Do NOT change section order
+- Do NOT add extra frontmatter fields
+- chartIndicators MUST always be an array
+- Use ONLY allowed indicator names EXACTLY
+- timeframe MUST be "d" or "w"
+- chartBars MUST be between 20 and 400
+- Keep structure clean and readable
+
+---
+
+FRONTMATTER FORMAT (REQUIRED):
+
+---
+title: "TITLE HERE"
+date: "YYYY-MM-DD"
+excerpt: "SHORT ONE SENTENCE SUMMARY."
+symbol: "TICKER"
+timeframe: "d"
+chartBars: 250
+chartIndicators: ["MACD(12,26,9)"]
+---
+
+---
+
+ALLOWED INDICATORS (EXACT SPELLING ONLY):
+
+MA50  
+MA200  
+EMA20  
+VWMA(20)  
+Bollinger(20,2)  
+RSI(14)  
+MACD(12,26,9)  
+Stochastic(14,3)  
+ATR(14)  
+Volume  
+
+---
+
+INDICATOR RULES:
+
+Correct:
+chartIndicators: ["MACD(12,26,9)"]
+
+Correct (multiple):
+chartIndicators: ["RSI(14)", "MACD(12,26,9)", "Volume"]
+
+Incorrect (WILL BREAK SYSTEM):
+chartIndicators: MACD(12,26,9)
+MACD(12,26,9): true
+
+---
+
+CONTENT STRUCTURE (MANDATORY ORDER):
+
+## What happened
+
+## Why it matters
+
+## Levels to watch
+
+## What would confirm the idea
+
+## What would weaken the idea
+
+## Bull vs bear scenarios
+
+## Bottom line
+
+---
+
+CONTENT RULES:
+
+- Write clearly and simply (trader-focused tone)
+- No fluff or generic filler
+- Reference structure, trend, momentum, and levels
+- Mention indicators ONLY if included in chartIndicators
+- Keep it concise but insightful
+
+Levels to watch MUST use:
+
+- Support:
+- Resistance:
+- Moving averages:
+- Risk point:
+
+Bull vs bear MUST use:
+
+**Bullish scenario:**  
+
+**Bearish scenario:**  
+
+---
+
+FINAL OUTPUT TEMPLATE:
+
+---
+title: "TITLE HERE"
+date: "YYYY-MM-DD"
+excerpt: "SHORT SUMMARY HERE."
+symbol: "TICKER"
+timeframe: "d"
+chartBars: 250
+chartIndicators: ["MACD(12,26,9)"]
 ---
 
 ## What happened
 
-Write the setup in plain English.
+Write the setup clearly.
 
 ## Why it matters
 
-Explain the chart structure, trend, or catalyst.
+Explain why this setup is important.
 
 ## Levels to watch
 
@@ -35,16 +131,18 @@ Explain the chart structure, trend, or catalyst.
 
 ## What would confirm the idea
 
-Write what would strengthen the setup.
+Explain confirmation signals.
 
 ## What would weaken the idea
 
-Write what would invalidate the setup.
+Explain invalidation signals.
 
 ## Bull vs bear scenarios
 
-Summarise the thesis clearly and simply.
+**Bullish scenario:**  
+
+**Bearish scenario:**  
 
 ## Bottom line
 
-Summarise the thesis clearly and simply.
+Summarise the setup clearly.
