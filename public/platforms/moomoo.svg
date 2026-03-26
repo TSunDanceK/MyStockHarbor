@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Moomoo logo placeholder">
+  <rect width="160" height="160" rx="28" fill="#ffffff"></rect>
+  <circle cx="58" cy="62" r="18" fill="#ef4444"></circle>
+  <circle cx="102" cy="62" r="18" fill="#ef4444"></circle>
+  <path d="M44 84c8-10 20-15 36-15s28 5 36 15v22c0 15-16 26-36 26s-36-11-36-26V84z" fill="#ef4444"></path>
+  <circle cx="67" cy="93" r="6" fill="#ffffff"></circle>
+  <circle cx="93" cy="93" r="6" fill="#ffffff"></circle>
+</svg>
