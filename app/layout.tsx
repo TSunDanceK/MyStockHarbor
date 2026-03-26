@@ -20,32 +20,37 @@ export const metadata: Metadata = {
   icons: {
     icon: "/icon.png",
   },
-openGraph: {
-  title:
-    "MyStockHarbor (My Stock Harbor) | Free Trading Dashboard, Market Signals & Technical Analysis",
-  description:
-    "MyStockHarbor (My Stock Harbor) helps traders track stocks, analyse technical indicators, monitor market benchmarks, and learn trading strategies with free educational tools, stock screeners, and market insights.",
-  url: "https://www.mystockharbor.com",
-  siteName: "MyStockHarbor",
-  images: [
-    {
-      url: "https://www.mystockharbor.com/og-image-v2.png",
-      width: 1200,
-      height: 630,
-      alt: "MyStockHarbor trading dashboard",
-    },
-  ],
-  locale: "en_GB",
-  type: "website",
-},
-twitter: {
-  card: "summary_large_image",
-  title:
-    "MyStockHarbor (My Stock Harbor) | Free Trading Dashboard, Market Signals & Technical Analysis",
-  description:
-    "MyStockHarbor (My Stock Harbor) helps traders track stocks, analyse technical indicators, monitor market benchmarks, and learn trading strategies with free educational tools, stock screeners, and market insights.",
-  images: ["https://www.mystockharbor.com/og-image-v2.png"],
- },
+
+  openGraph: {
+    title:
+      "MyStockHarbor (My Stock Harbor) | Free Trading Dashboard, Market Signals & Technical Analysis",
+    description:
+      "MyStockHarbor (My Stock Harbor) helps traders track stocks, analyse technical indicators, monitor market benchmarks, and learn trading strategies with free educational tools, stock screeners, and market insights.",
+    url: "https://www.mystockharbor.com",
+    siteName: "MyStockHarbor",
+    images: [
+      {
+        url: "https://www.mystockharbor.com/og-image-v2.png",
+        width: 1200,
+        height: 630,
+        alt: "MyStockHarbor trading dashboard",
+      },
+    ],
+    locale: "en_GB",
+    type: "website",
+  },
+
+  twitter: {
+    card: "summary_large_image",
+    title:
+      "MyStockHarbor (My Stock Harbor) | Free Trading Dashboard, Market Signals & Technical Analysis",
+    description:
+      "MyStockHarbor (My Stock Harbor) helps traders track stocks, analyse technical indicators, monitor market benchmarks, and learn trading strategies with free educational tools, stock screeners, and market insights.",
+    images: ["https://www.mystockharbor.com/og-image-v2.png"],
+  },
+  other: {
+    "impact-site-verification": "cfd647ce-ddd8-4f2a-921f-3763ef298b2a",
+  },
 };
 
 export default function RootLayout({
