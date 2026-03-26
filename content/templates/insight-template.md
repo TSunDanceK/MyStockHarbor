@@ -21,7 +21,9 @@ RULES:
 FRONTMATTER FORMAT (REQUIRED):
 
 ---
-title: "TITLE HERE"
+Title MUST be under 60 characters
+- Include ticker where possible
+- Focus on ONE clear idea (support, resistance, breakout, divergence)
 date: "YYYY-MM-DD"
 excerpt: "SHORT ONE SENTENCE SUMMARY."
 symbol: "TICKER"
