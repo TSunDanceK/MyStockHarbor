@@ -704,34 +704,38 @@ start with <strong>TradingView</strong> for chart analysis, then open{" "}
             </div>
           </div>
 
-          <div
-            style={{
-              borderRadius: 16,
-              border: "1px solid rgba(59,130,246,0.28)",
-              background:
-                "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(168,85,247,0.08))",
-              padding: 16,
-              position: "relative",
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                padding: "5px 10px",
-                borderRadius: 999,
-                background: "rgba(250,204,21,0.18)",
-                border: "1px solid rgba(250,204,21,0.30)",
-                color: "#fde68a",
-                fontSize: 11,
-                fontWeight: 900,
-                letterSpacing: "0.35px",
-                marginBottom: 10,
-              }}
-            >
-              ★ TOP SIMPLE BROKER PICK
-            </div>
+<div
+  style={{
+    borderRadius: 16,
+    border: "1px solid rgba(59,130,246,0.28)",
+    background:
+      "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(168,85,247,0.08))",
+    padding: 16,
+    position: "relative",
+    overflow: "hidden",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "space-between",
+  }}
+>
+<div
+  style={{
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "5px 10px",
+    borderRadius: 999,
+    background: "rgba(250,204,21,0.18)",
+    border: "1px solid rgba(250,204,21,0.30)",
+    color: "#fde68a",
+    fontSize: 11,
+    fontWeight: 900,
+    letterSpacing: "0.35px",
+    marginTop: 14,
+    alignSelf: "flex-start",
+  }}
+>
+  ★ TOP SIMPLE BROKER PICK
+</div>
 
             <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>
               BEST MODERN BROKER FEEL
