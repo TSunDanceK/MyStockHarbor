@@ -632,6 +632,21 @@ export default function PlatformsClient({
               }}
             >
            
+            <div
+              style={{
+                marginTop: 14,
+                padding: "14px 16px",
+                borderRadius: 16,
+                border: "1px solid rgba(34,197,94,0.22)",
+                background:
+                  "linear-gradient(135deg, rgba(34,197,94,0.10), rgba(59,130,246,0.08))",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
               <div
                 style={{
                   fontSize: 14,
@@ -640,32 +655,17 @@ export default function PlatformsClient({
                   maxWidth: 760,
                 }}
               >
-                <strong>Best simple next step:</strong> start with <strong>TradingView</strong> for chart analysis, then open <strong>{topBrokerName}</strong> if you want a beginner-friendly broker.
+                <strong>Best simple next step:</strong> learn and analyse with <strong>TradingView</strong>, then open <strong>eToro</strong> if you want a beginner-friendly broker.
               </div>
 
-              <div
-                style={{
-                  display: "flex",
-                  gap: 10,
-                  flexWrap: "wrap",
-                }}
+              <AffiliateLink
+                href="/api/go/etoro"
+                eventLabel="Top Hero CTA eToro"
+                style={ctaBtn()}
               >
-                <AffiliateLink
-                  href="/api/go/tradingview"
-                  eventLabel="Top Hero CTA TradingView"
-                  style={ctaBtn()}
-                >
-                  Start with TradingView →
-                </AffiliateLink>
-
-                <AffiliateLink
-                  href={topBrokerHref}
-                  eventLabel={`Top Hero CTA ${topBrokerName}`}
-                  style={ctaBtn()}
-                >
-                  Visit {topBrokerName} →
-                </AffiliateLink>
-              </div>
+                Visit eToro →
+              </AffiliateLink>
+            </div>
             </div>
 
             <div
