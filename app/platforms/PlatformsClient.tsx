@@ -631,21 +631,7 @@ export default function PlatformsClient({
                 flexWrap: "wrap",
               }}
             >
-            <div
-              style={{
-                marginTop: 14,
-                padding: "14px 16px",
-                borderRadius: 16,
-                border: "1px solid rgba(34,197,94,0.22)",
-                background:
-                  "linear-gradient(135deg, rgba(34,197,94,0.10), rgba(59,130,246,0.08))",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-                flexWrap: "wrap",
-              }}
-            >
+           
               <div
                 style={{
                   fontSize: 14,
