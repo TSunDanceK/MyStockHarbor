@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 import { getAllPosts } from "@/lib/blog";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = "https://mystockharbor.com";
+const baseUrl = "https://www.mystockharbor.com";
   const now = new Date();
   const insightPosts = getAllPosts();
 
