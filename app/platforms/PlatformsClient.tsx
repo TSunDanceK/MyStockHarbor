@@ -467,6 +467,10 @@ export default function PlatformsClient({
     region === "US" ? "Webull" : "eToro";
   const extraBrokerName =
     region === "US" ? "Robinhood" : "Trading 212";
+    const topBrokerHref =
+    region === "US" ? "/api/go/webull" : "/api/go/etoro";
+  const topBrokerName =
+    region === "US" ? "Webull" : "eToro";
 
   return (
     <main
@@ -609,7 +613,7 @@ export default function PlatformsClient({
               <br />
               <strong>Use TradingView</strong> to analyse charts and learn setups.
               <br />
-              <strong>Use {simpleBrokerName}</strong> or <strong>{extraBrokerName}</strong> if you want a simple route into investing.
+              <strong>Use {simpleBrokerName}</strong> if you want a simple route into investing.
             </div>
 
             <div
@@ -635,15 +639,15 @@ export default function PlatformsClient({
                   maxWidth: 760,
                 }}
               >
-                <strong>Simple setup most beginners use:</strong> start with <strong>TradingView</strong> for chart analysis, then use <strong>{simpleBrokerName}</strong> or <strong>{extraBrokerName}</strong> if you decide to invest.
+                <strong>Best simple next step:</strong> start with <strong>TradingView</strong> for chart analysis, then open <strong>{topBrokerName}</strong> if you want a beginner-friendly broker.
               </div>
 
               <AffiliateLink
-                href="/api/go/tradingview"
-                eventLabel="Top Hero CTA TradingView"
+                href={topBrokerHref}
+                eventLabel={`Top Hero CTA ${topBrokerName}`}
                 style={ctaBtn()}
               >
-                Start with TradingView →
+                Visit {topBrokerName} →
               </AffiliateLink>
             </div>
 
