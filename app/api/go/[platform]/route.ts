@@ -9,7 +9,6 @@ const affiliateLinks: Record<string, string> = {
   saxo: "https://www.home.saxo/",
   webull: "https://www.webull.com/",
   robinhood: "https://robinhood.com/us/en/",
-  moomoo: "https://www.moomoo.com/us",
 };
 
 export async function GET(
