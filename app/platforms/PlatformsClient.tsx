@@ -672,22 +672,6 @@ start with <strong>TradingView</strong> for chart analysis, then open{" "}
               </AffiliateLink>
             </div>
       
-
-            <div
-              className="platformMobileOnly"
-              style={{
-                marginTop: 12,
-                padding: "12px 14px",
-                borderRadius: 14,
-                border: "1px solid rgba(250,204,21,0.20)",
-                background:
-                  "linear-gradient(135deg, rgba(250,204,21,0.08), rgba(15,23,42,0.10))",
-                lineHeight: 1.55,
-                opacity: 0.9,
-              }}
-            >
-              <strong>Simple setup:</strong> analyse on <strong>TradingView</strong>, then use <strong>{simpleBrokerName}</strong> or <strong>{extraBrokerName}</strong> if you decide to invest.
-            </div>
           </div>
         </div>
 
