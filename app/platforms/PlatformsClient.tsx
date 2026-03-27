@@ -704,21 +704,7 @@ start with <strong>TradingView</strong> for chart analysis, then open{" "}
             </div>
           </div>
 
-<div
-  style={{
-    borderRadius: 16,
-    border: "1px solid rgba(59,130,246,0.28)",
-    background:
-      "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(168,85,247,0.08))",
-    padding: 16,
-    position: "relative",
-    overflow: "hidden",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "space-between",
-  }}
->
- <div
+          <div
             style={{
               borderRadius: 16,
               border: "1px solid rgba(59,130,246,0.28)",
