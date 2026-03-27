@@ -295,35 +295,7 @@ const US_PLATFORMS: PlatformItem[] = [
     score: "9.2/10",
     highlight: "Best for serious traders",
   },
-  {
-    name: "Moomoo",
-    shortLabel: "Best alternative US beginner broker",
-    logoSrc: "/platforms/moomoo.svg",
-    logoAlt: "Moomoo logo",
-    bestFor:
-      "US users who want another modern broker option beyond Robinhood and Webull.",
-    summary:
-      "Moomoo gives you another US-focused modern broker option to round out the page and makes the US side feel properly built rather than thin.",
-    pros: [
-      "Modern US broker option",
-      "Good secondary beginner choice",
-      "Useful for making the US side look complete",
-      "Another potential affiliate target later",
-    ],
-    cons: [
-      "Less universally recognised than Robinhood",
-      "Charting is still better on TradingView",
-      "Not as strong a lead option as Webull for this page",
-    ],
-    note:
-      "A useful extra US option that helps complete the region-specific version of the page.",
-    complianceNote:
-      "Investing involves risk. Check the provider's official disclosures, fees, and account terms.",
-    affiliateHref: "/api/go/moomoo",
-    ctaText: "Visit Moomoo",
-    score: "8.8/10",
-    highlight: "Best extra US option",
-  },
+
 ];
 
 function ctaBtn(): React.CSSProperties {
