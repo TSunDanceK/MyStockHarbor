@@ -1,5 +1,4 @@
-import { permanentRedirect } from "next/navigation";
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const affiliateLinks: Record<string, string> = {
   tradingview: "https://www.tradingview.com/?aff_id=164495",
@@ -20,7 +19,8 @@ export async function GET(
   const { platform } = await context.params;
   const key = platform.toLowerCase();
 
-  let target = affiliateLinks[key] ?? "/platforms";
+  let target =
+    affiliateLinks[key] ?? "https://www.mystockharbor.com/platforms";
 
   if (key === "tradingview") {
     const rawSymbol = request.nextUrl.searchParams.get("symbol")?.trim();
@@ -34,5 +34,10 @@ export async function GET(
 
   console.log("Affiliate click:", key);
 
-  permanentRedirect(target);
+  return NextResponse.redirect(target, 308, {
+    headers: {
+      "X-Robots-Tag": "noindex, nofollow, noarchive",
+      "Cache-Control": "no-store",
+    },
+  });
 }
