@@ -718,33 +718,48 @@ start with <strong>TradingView</strong> for chart analysis, then open{" "}
     justifyContent: "space-between",
   }}
 >
-<div
-  style={{
-    display: "inline-flex",
-    alignItems: "center",
-    padding: "5px 10px",
-    borderRadius: 999,
-    background: "rgba(250,204,21,0.18)",
-    border: "1px solid rgba(250,204,21,0.30)",
-    color: "#fde68a",
-    fontSize: 11,
-    fontWeight: 900,
-    letterSpacing: "0.35px",
-    marginTop: 14,
-    alignSelf: "flex-start",
-  }}
->
-  ★ TOP SIMPLE BROKER PICK
-</div>
+ <div
+            style={{
+              borderRadius: 16,
+              border: "1px solid rgba(59,130,246,0.28)",
+              background:
+                "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(168,85,247,0.08))",
+              padding: 16,
+              minHeight: 176,
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>
+                BEST MODERN BROKER FEEL
+              </div>
+              <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900 }}>
+                {simpleBrokerName}
+              </div>
+              <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.55 }}>
+                Best if you want a simple, modern broker platform with an easy app feel.
+              </div>
+            </div>
 
-            <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>
-              BEST MODERN BROKER FEEL
-            </div>
-            <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900 }}>
-              {simpleBrokerName}
-            </div>
-            <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.55 }}>
-              Best if you want a simple, modern broker platform with an easy app feel.
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "5px 10px",
+                borderRadius: 999,
+                background: "rgba(250,204,21,0.18)",
+                border: "1px solid rgba(250,204,21,0.30)",
+                color: "#fde68a",
+                fontSize: 11,
+                fontWeight: 900,
+                letterSpacing: "0.35px",
+                alignSelf: "flex-start",
+                marginTop: 14,
+              }}
+            >
+              ★ TOP SIMPLE BROKER PICK
             </div>
           </div>
 
