@@ -596,17 +596,27 @@ export default function PlatformsClient({
               </div>
             </div>
 
-            <h1 className="platformHeroTitle">
+            <h1
+              className="platformHeroTitle"
+              style={{
+                margin: "10px 0 0",
+                fontSize: 40,
+                lineHeight: 1.12,
+                letterSpacing: "-0.8px",
+                maxWidth: 980,
+              }}
+            >
               Best Trading Platforms in the {region === "US" ? "US" : "UK"} for Beginners, Chart Analysis, and Serious Traders
             </h1>
 
             <div
               className="platformHeroText"
               style={{
-                marginTop: 8,
-                opacity: 0.86,
-                lineHeight: 1.6,
-                maxWidth: 860,
+                marginTop: 14,
+                opacity: 0.9,
+                lineHeight: 1.7,
+                maxWidth: 900,
+                fontSize: 19,
               }}
             >
               Looking for the best trading platform?
