@@ -34,10 +34,10 @@ export async function GET(
 
   console.log("Affiliate click:", key);
 
-  return NextResponse.redirect(target, 308, {
+  return NextResponse.redirect(target, {
+    status: 308,
     headers: {
       "X-Robots-Tag": "noindex, nofollow, noarchive",
       "Cache-Control": "no-store",
     },
   });
-}
