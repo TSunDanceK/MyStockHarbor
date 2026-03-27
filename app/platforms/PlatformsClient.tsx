@@ -600,17 +600,51 @@ export default function PlatformsClient({
               className="platformHeroText"
               style={{
                 marginTop: 8,
-                opacity: 0.78,
-                lineHeight: 1.55,
+                opacity: 0.86,
+                lineHeight: 1.6,
                 maxWidth: 860,
               }}
             >
-              Looking for the best trading platform for beginners, better stock
-              chart analysis, or a simple broker to start with? This guide compares
-              strong options for {region === "US" ? "US" : "UK"} users, with{" "}
-              <strong>TradingView</strong> as the best overall charting platform
-              and <strong>{simpleBrokerName}</strong> as one of the strongest
-              beginner-friendly broker options.
+              Looking for the best trading platform?
+              <br />
+              <strong>Use TradingView</strong> to analyse charts and learn setups.
+              <br />
+              <strong>Use {simpleBrokerName}</strong> or <strong>{extraBrokerName}</strong> if you want a simple route into investing.
+            </div>
+
+            <div
+              style={{
+                marginTop: 14,
+                padding: "14px 16px",
+                borderRadius: 16,
+                border: "1px solid rgba(34,197,94,0.22)",
+                background:
+                  "linear-gradient(135deg, rgba(34,197,94,0.10), rgba(59,130,246,0.08))",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 14,
+                  lineHeight: 1.55,
+                  color: "#dbeafe",
+                  maxWidth: 760,
+                }}
+              >
+                <strong>Simple setup most beginners use:</strong> start with <strong>TradingView</strong> for chart analysis, then use <strong>{simpleBrokerName}</strong> or <strong>{extraBrokerName}</strong> if you decide to invest.
+              </div>
+
+              <AffiliateLink
+                href="/api/go/tradingview"
+                eventLabel="Top Hero CTA TradingView"
+                style={ctaBtn()}
+              >
+                Start with TradingView →
+              </AffiliateLink>
             </div>
 
             <div
@@ -623,12 +657,10 @@ export default function PlatformsClient({
                 background:
                   "linear-gradient(135deg, rgba(250,204,21,0.08), rgba(15,23,42,0.10))",
                 lineHeight: 1.55,
-                opacity: 0.88,
+                opacity: 0.9,
               }}
             >
-              <strong>Simple setup:</strong> analyse on <strong>TradingView</strong>,
-              then use a broker like <strong>{simpleBrokerName}</strong> or{" "}
-              <strong>{extraBrokerName}</strong> if you decide to invest.
+              <strong>Simple setup:</strong> analyse on <strong>TradingView</strong>, then use <strong>{simpleBrokerName}</strong> or <strong>{extraBrokerName}</strong> if you decide to invest.
             </div>
           </div>
         </div>
