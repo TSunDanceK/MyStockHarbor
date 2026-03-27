@@ -665,7 +665,17 @@ export default function PlatformsClient({
                   maxWidth: 760,
                 }}
               >
-                <strong>Best simple next step:</strong> learn and analyse with <strong>TradingView</strong>, then open <strong>eToro</strong> if you want a beginner-friendly broker.
+                <span
+  style={{
+    fontSize: 16,
+    fontWeight: 900,
+    letterSpacing: "0.3px",
+  }}
+>
+  BEST SIMPLE NEXT STEP:
+</span>{" "}
+start with <strong>TradingView</strong> for chart analysis, then open{" "}
+<strong>{topBrokerName}</strong> if you want a beginner-friendly broker.
               </div>
 
               <AffiliateLink
