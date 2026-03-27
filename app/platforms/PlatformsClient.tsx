@@ -671,7 +671,7 @@ start with <strong>TradingView</strong> for chart analysis, then open{" "}
                 Visit eToro →
               </AffiliateLink>
             </div>
-            </div>
+      
 
             <div
               className="platformMobileOnly"
