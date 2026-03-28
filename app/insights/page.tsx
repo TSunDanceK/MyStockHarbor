@@ -3,25 +3,25 @@ import Link from "next/link";
 import { getAllPosts } from "@/lib/blog";
 
 export const metadata: Metadata = {
-  title: "Stock Market Insights & Trade Ideas | MyStockHarbor",
+  title: "Stock Market Insights, Trade Ideas & Market Analysis | MyStockHarbor",
   description:
-    "Read daily stock market insights, chart-based trade ideas, and technical analysis updates from MyStockHarbor.",
+    "Read daily stock market insights, chart-based trade ideas, technical analysis updates, and broader market analysis from MyStockHarbor.",
   alternates: {
     canonical: "https://www.mystockharbor.com/insights",
   },
   openGraph: {
-    title: "Stock Market Insights & Trade Ideas | MyStockHarbor",
+    title: "Stock Market Insights, Trade Ideas & Market Analysis | MyStockHarbor",
     description:
-      "Read daily stock market insights, chart-based trade ideas, and technical analysis updates from MyStockHarbor.",
+      "Read daily stock market insights, chart-based trade ideas, technical analysis updates, and broader market analysis from MyStockHarbor.",
     url: "https://www.mystockharbor.com/insights",
     siteName: "MyStockHarbor",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Stock Market Insights & Trade Ideas | MyStockHarbor",
+    title: "Stock Market Insights, Trade Ideas & Market Analysis | MyStockHarbor",
     description:
-      "Read daily stock market insights, chart-based trade ideas, and technical analysis updates from MyStockHarbor.",
+      "Read daily stock market insights, chart-based trade ideas, technical analysis updates, and broader market analysis from MyStockHarbor.",
   },
 };
 
@@ -209,6 +209,110 @@ export default function InsightsPage() {
           technical analysis write-ups focused on price structure, trend, support,
           resistance, and setups worth watching.
         </p>
+
+        <section
+          style={{
+            marginTop: 18,
+            borderRadius: 18,
+            border: "1px solid rgba(59,130,246,0.22)",
+            background:
+              "linear-gradient(135deg, rgba(59,130,246,0.10), rgba(34,197,94,0.06))",
+            padding: 18,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 12,
+              opacity: 0.78,
+              fontWeight: 900,
+              letterSpacing: "0.05em",
+              textTransform: "uppercase",
+            }}
+          >
+            Market hub
+          </div>
+
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: 24,
+              fontWeight: 900,
+              lineHeight: 1.2,
+              letterSpacing: "-0.03em",
+            }}
+          >
+            Looking for the bigger market picture?
+          </div>
+
+          <p
+            style={{
+              margin: "10px 0 0",
+              maxWidth: 820,
+              lineHeight: 1.7,
+              opacity: 0.84,
+              fontSize: 15,
+            }}
+          >
+            Read the S&amp;P 500 market page for a simple breakdown of SPX trend,
+            key levels, RSI, MACD, and how to analyse market pullbacks without
+            panicking.
+          </p>
+
+          <div
+            style={{
+              marginTop: 14,
+              display: "flex",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
+            <Link
+              href="/markets/spx"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "10px 14px",
+                borderRadius: 12,
+                border: "1px solid rgba(59,130,246,0.45)",
+                background:
+                  "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(37,99,235,0.12))",
+                color: "#eff6ff",
+                textDecoration: "none",
+                fontWeight: 900,
+                fontSize: 13,
+                whiteSpace: "nowrap",
+                boxShadow: "0 6px 16px rgba(0,0,0,0.25)",
+                transition: "all 140ms ease",
+              }}
+            >
+              Read S&amp;P 500 Analysis →
+            </Link>
+
+            <Link
+              href="/platforms"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "10px 14px",
+                borderRadius: 12,
+                border: "1px solid rgba(168,85,247,0.40)",
+                background:
+                  "linear-gradient(135deg, rgba(168,85,247,0.20), rgba(59,130,246,0.10))",
+                color: "#faf5ff",
+                textDecoration: "none",
+                fontWeight: 900,
+                fontSize: 13,
+                whiteSpace: "nowrap",
+                boxShadow: "0 6px 16px rgba(0,0,0,0.25)",
+                transition: "all 140ms ease",
+              }}
+            >
+              Compare Platforms →
+            </Link>
+          </div>
+        </section>
 
         {posts.length === 0 ? (
           <div
