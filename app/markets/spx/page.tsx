@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import AffiliateLink from "../../components/AffiliateLink";
+import SPXChartClient from "./SPXChartClient";
 
 export const metadata: Metadata = {
   title: "S&P 500 (SPX) Analysis (2026) | Market Outlook | MyStockHarbor",
@@ -24,6 +25,70 @@ export const metadata: Metadata = {
       "Learn how to analyse the S&P 500 (SPX), understand market pullbacks, and use charts, moving averages, RSI, and MACD to make calmer investing decisions.",
   },
 };
+
+type Point = {
+  date: string;
+  close: number;
+  high?: number;
+  low?: number;
+  volume?: number;
+};
+
+const SPX_STOOQ_SYMBOL = "^spx";
+
+async function getSpxChartPoints(): Promise<Point[]> {
+  try {
+    const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(SPX_STOOQ_SYMBOL)}&i=d`;
+
+    const response = await fetch(url, {
+      next: { revalidate: 60 * 60 },
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const csv = await response.text();
+    const lines = csv.trim().split("\n");
+
+    if (lines.length <= 1) {
+      return [];
+    }
+
+    const rows = lines.slice(1);
+    const points: Point[] = [];
+
+    for (const row of rows) {
+      const cols = row.split(",");
+
+      if (cols.length < 5) continue;
+
+      const [date, open, high, low, close, volume] = cols;
+
+      if (!date || !close) continue;
+      if (close.toLowerCase() === "null") continue;
+
+      const closeNum = Number(close);
+      const highNum = Number(high);
+      const lowNum = Number(low);
+      const volumeNum = Number(volume);
+
+      if (!Number.isFinite(closeNum)) continue;
+
+      points.push({
+        date,
+        close: closeNum,
+        high: Number.isFinite(highNum) ? highNum : undefined,
+        low: Number.isFinite(lowNum) ? lowNum : undefined,
+        volume: Number.isFinite(volumeNum) ? volumeNum : undefined,
+      });
+    }
+
+    return points;
+  } catch {
+    return [];
+  }
+}
 
 function primaryBtn(): React.CSSProperties {
   return {
@@ -81,7 +146,9 @@ function sectionCardStyle(): React.CSSProperties {
   };
 }
 
-export default function SPXPage() {
+export default async function SPXPage() {
+  const spxChartPoints = await getSpxChartPoints();
+
   return (
     <main
       style={{
@@ -410,7 +477,7 @@ export default function SPXPage() {
                 letterSpacing: "-0.4px",
               }}
             >
-              Chart snapshot
+              Weekly SPX chart snapshot
             </h2>
 
             <div
@@ -422,24 +489,12 @@ export default function SPXPage() {
                 maxWidth: 920,
               }}
             >
-              This section is where we should add your weekly SPX chart snapshot with moving averages.
-              That will give the page actual visual proof for the argument instead of relying on text alone.
+              This weekly chart helps show why the bigger picture matters more than short-term fear.
+              If the SPX is simply pulling back into higher-timeframe support after an overstretched rally,
+              that is a very different setup from a full structural breakdown.
             </div>
 
-            <div
-              style={{
-                marginTop: 16,
-                borderRadius: 16,
-                border: "1px dashed rgba(59,130,246,0.35)",
-                background: "rgba(59,130,246,0.06)",
-                padding: 18,
-                color: "#dbeafe",
-                lineHeight: 1.65,
-              }}
-            >
-              <strong>Planned chart setup:</strong> Weekly timeframe, SPX, moving averages enabled.
-              This should visually show whether price is simply correcting into higher-timeframe support or breaking long-term structure.
-            </div>
+            <SPXChartClient chartPoints={spxChartPoints} />
           </section>
 
           <section style={sectionCardStyle()}>
@@ -484,7 +539,7 @@ export default function SPXPage() {
                     A broader breakdown in weekly structure
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Momentum continuing to deteriorate rather than stabilise
+                    Momentum continuing to deteriorate rather than stabilising
                   </li>
                 </ul>
               </div>
