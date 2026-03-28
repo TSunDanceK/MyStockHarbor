@@ -4,7 +4,7 @@ import PlatformsClient from "./PlatformsClient";
 
 export const metadata: Metadata = {
   title:
-    "Best Trading Platforms UK & US (2026) – Compare Brokers, Apps & Charting Tools | MyStockHarbor",
+      "Best Trading Platforms UK & US (2026) – Compare Brokers & Apps | MyStockHarbor",
   description:
     "Compare the best trading platforms in the UK and US for 2026. Find beginner-friendly brokers, charting tools like TradingView, and simple investing apps like eToro, Webull, Robinhood, and Interactive Brokers.",
   alternates: {
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title:
-      "Best Trading Platforms UK & US (2026) – Compare Brokers, Apps & Charting Tools | MyStockHarbor",
+        "Best Trading Platforms UK & US (2026) – Compare Brokers & Apps | MyStockHarbor",
     description:
       "Compare the best trading platforms in the UK and US for 2026. Find beginner-friendly brokers, charting tools like TradingView, and simple investing apps like eToro, Webull, Robinhood, and Interactive Brokers.",
     url: "https://www.mystockharbor.com/platforms",
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title:
-      "Best Trading Platforms UK & US (2026) – Compare Brokers, Apps & Charting Tools | MyStockHarbor",
+      "Best Trading Platforms UK & US (2026) – Compare Brokers & Apps | MyStockHarbor",
     description:
       "Compare the best trading platforms in the UK and US for 2026. Find beginner-friendly brokers, charting tools like TradingView, and simple investing apps like eToro, Webull, Robinhood, and Interactive Brokers.",
   },
