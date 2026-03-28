@@ -1151,6 +1151,73 @@ export default function InsightPostClient({
               }}
             />
           </section>
+
+          <section
+            style={{
+              marginTop: 18,
+              border: "1px solid rgba(59,130,246,0.22)",
+              borderRadius: 18,
+              padding: 18,
+              background:
+                "linear-gradient(135deg, rgba(59,130,246,0.10), rgba(34,197,94,0.06))",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 12,
+                opacity: 0.78,
+                fontWeight: 900,
+                letterSpacing: "0.05em",
+                textTransform: "uppercase",
+              }}
+            >
+              Market context
+            </div>
+
+            <div
+              style={{
+                marginTop: 8,
+                fontSize: 24,
+                fontWeight: 900,
+                lineHeight: 1.2,
+                letterSpacing: "-0.03em",
+              }}
+            >
+              Want the bigger market picture?
+            </div>
+
+            <p
+              style={{
+                margin: "10px 0 0",
+                maxWidth: 820,
+                lineHeight: 1.7,
+                opacity: 0.84,
+                fontSize: 15,
+              }}
+            >
+              If you want to understand what the wider market is doing, read the
+              S&amp;P 500 page for a simple breakdown of SPX trend, support and
+              resistance, RSI, MACD, and how to analyse market pullbacks without
+              panicking.
+            </p>
+
+            <div
+              style={{
+                marginTop: 14,
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+              }}
+            >
+              <Link href="/markets/spx" style={ctaStyle("blue")}>
+                Read S&amp;P 500 (SPX) Analysis
+              </Link>
+
+              <Link href="/platforms" style={ctaStyle("purple")}>
+                Compare Platforms
+              </Link>
+            </div>
+          </section>
         </section>
 
         <section
@@ -1173,6 +1240,10 @@ export default function InsightPostClient({
 
             <Link href="/platforms" style={ctaStyle("purple")}>
               Compare Platforms
+            </Link>
+
+            <Link href="/markets/spx" style={ctaStyle("blue")}>
+              Read S&amp;P 500 Analysis
             </Link>
 
             {symbol ? (
@@ -1207,6 +1278,7 @@ export default function InsightPostClient({
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 12px;
+          align-items: stretch;
         }
 
         .insightMobileOnlyWrapper {
