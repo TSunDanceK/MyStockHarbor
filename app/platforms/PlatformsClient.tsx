@@ -463,11 +463,10 @@ export default function PlatformsClient({
   }
 
   const platforms = region === "US" ? US_PLATFORMS : UK_PLATFORMS;
-  const simpleBrokerName =
-const simpleBrokerName = region === "US" ? "Webull" : "eToro";
-const extraBrokerName = region === "US" ? "Robinhood" : "Trading 212";
-const topBrokerHref = region === "US" ? "/api/go/webull" : "/api/go/etoro";
-const topBrokerName = region === "US" ? "Webull" : "eToro";
+  const simpleBrokerName = region === "US" ? "Webull" : "eToro";
+  const extraBrokerName = region === "US" ? "Robinhood" : "Trading 212";
+  const topBrokerHref = region === "US" ? "/api/go/webull" : "/api/go/etoro";
+  const topBrokerName = region === "US" ? "Webull" : "eToro";
 
   return (
     <main
