@@ -56,15 +56,15 @@ const UK_PLATFORMS: PlatformItem[] = [
     highlight: "Best overall for charting",
     recommended: true,
   },
-  {
-    name: "eToro",
-    shortLabel: "Best social-style broker app",
+{
+  name: "eToro",
+  shortLabel: "Best simple beginner-friendly broker",
     logoSrc: "/platforms/etoro.png",
     logoAlt: "eToro logo",
-    bestFor:
-      "People who want a modern investing platform with a simple layout and a more social, app-based feel.",
-    summary:
-      "eToro is a well-known beginner-friendly platform that feels modern and accessible. It is a strong option for people who want a simple broker experience, an easy app feel, and a less intimidating route into investing.",
+bestFor:
+  "People who want a simple, beginner-friendly broker with a modern layout and an easy app feel.",
+summary:
+  "eToro is a well-known beginner-friendly broker that feels modern and accessible. It is a strong option for people who want a simple investing experience, an easy app feel, and a less intimidating route into buying stocks.",
     pros: [
       "Very approachable for newer users",
       "Modern app feel",
@@ -83,7 +83,7 @@ const UK_PLATFORMS: PlatformItem[] = [
     affiliateHref: "/api/go/etoro",
     ctaText: "Visit eToro",
     score: "9.0/10",
-    highlight: "Best simple modern broker",
+  highlight: "Best simple beginner broker",
     recommended: true,
   },
   {
@@ -464,13 +464,10 @@ export default function PlatformsClient({
 
   const platforms = region === "US" ? US_PLATFORMS : UK_PLATFORMS;
   const simpleBrokerName =
-    region === "US" ? "Webull" : "eToro";
-  const extraBrokerName =
-    region === "US" ? "Robinhood" : "Trading 212";
-    const topBrokerHref =
-    region === "US" ? "/api/go/webull" : "/api/go/etoro";
-  const topBrokerName =
-    region === "US" ? "Webull" : "eToro";
+const simpleBrokerName = region === "US" ? "Webull" : "eToro";
+const extraBrokerName = region === "US" ? "Robinhood" : "Trading 212";
+const topBrokerHref = region === "US" ? "/api/go/webull" : "/api/go/etoro";
+const topBrokerName = region === "US" ? "Webull" : "eToro";
 
   return (
     <main
@@ -596,35 +593,35 @@ export default function PlatformsClient({
               </div>
             </div>
 
-            <h1
-              className="platformHeroTitle"
-              style={{
-                margin: "10px 0 0",
-                fontSize: 40,
-                lineHeight: 1.12,
-                letterSpacing: "-0.8px",
-                maxWidth: 980,
-              }}
-            >
-              Best Trading Platforms in the {region === "US" ? "US" : "UK"} for Beginners, Chart Analysis, and Serious Traders
-            </h1>
+<h1
+  className="platformHeroTitle"
+  style={{
+    margin: "10px 0 0",
+    fontSize: 40,
+    lineHeight: 1.12,
+    letterSpacing: "-0.8px",
+    maxWidth: 980,
+  }}
+>
+  Best Trading Platforms {region === "US" ? "US" : "UK"} (Compare Brokers, Apps & Charting Tools)
+</h1>
 
-            <div
-              className="platformHeroText"
-              style={{
-                marginTop: 14,
-                opacity: 0.9,
-                lineHeight: 1.7,
-                maxWidth: 900,
-                fontSize: 19,
-              }}
-            >
-              Looking for the best trading platform?
-              <br />
-              <strong>Use TradingView</strong> to analyse charts and learn setups.
-              <br />
-              <strong>Use {simpleBrokerName}</strong> if you want a simple route into investing.
-            </div>
+<div
+  className="platformHeroText"
+  style={{
+    marginTop: 14,
+    opacity: 0.9,
+    lineHeight: 1.7,
+    maxWidth: 900,
+    fontSize: 19,
+  }}
+>
+  Compare the best trading platforms in the {region === "US" ? "US" : "UK"}.
+  <br />
+  <strong>Use TradingView</strong> to analyse charts and learn setups.
+  <br />
+  <strong>Choose {simpleBrokerName}</strong> if you want a simple, beginner-friendly way to start investing.
+</div>
 
             <div
               style={{
@@ -642,34 +639,34 @@ export default function PlatformsClient({
               }}
             >
            
-              <div
-                style={{
-                  fontSize: 14,
-                  lineHeight: 1.55,
-                  color: "#dbeafe",
-                  maxWidth: 760,
-                }}
-              >
-                <span
+<div
   style={{
-    fontSize: 16,
-    fontWeight: 900,
-    letterSpacing: "0.3px",
+    fontSize: 14,
+    lineHeight: 1.55,
+    color: "#dbeafe",
+    maxWidth: 760,
   }}
 >
-  BEST SIMPLE NEXT STEP:
-</span>{" "}
-start with <strong>TradingView</strong> for chart analysis, then open{" "}
-<strong>{topBrokerName}</strong> if you want a beginner-friendly broker.
-              </div>
+  <span
+    style={{
+      fontSize: 16,
+      fontWeight: 900,
+      letterSpacing: "0.3px",
+    }}
+  >
+    BEST SIMPLE NEXT STEP:
+  </span>{" "}
+  open <strong>{topBrokerName}</strong> if you want a simple, beginner-friendly broker, then use{" "}
+  <strong>TradingView</strong> alongside it for chart analysis and learning setups.
+</div>
 
-              <AffiliateLink
-                href="/api/go/etoro"
-                eventLabel="Top Hero CTA eToro"
-                style={ctaBtn()}
-              >
-                Visit eToro →
-              </AffiliateLink>
+<AffiliateLink
+  href={topBrokerHref}
+  eventLabel={`Top Hero CTA ${topBrokerName}`}
+  style={ctaBtn()}
+>
+  Visit {topBrokerName} →
+</AffiliateLink>
             </div>
       
           </div>
@@ -779,17 +776,33 @@ start with <strong>TradingView</strong> for chart analysis, then open{" "}
             overflowX: "auto",
           }}
         >
-          <div
-            style={{
-              padding: "12px 16px",
-              fontWeight: 900,
-              borderBottom: "1px solid rgba(255,255,255,0.1)",
-              fontSize: 14,
-              letterSpacing: "0.3px",
-            }}
-          >
-            Quick platform comparison
-          </div>
+<div
+  style={{
+    padding: "12px 16px",
+    borderBottom: "1px solid rgba(255,255,255,0.1)",
+  }}
+>
+  <div
+    style={{
+      fontWeight: 900,
+      fontSize: 14,
+      letterSpacing: "0.3px",
+    }}
+  >
+    Compare the best trading platforms {region === "US" ? "US" : "UK"}
+  </div>
+
+  <div
+    style={{
+      marginTop: 6,
+      fontSize: 12,
+      lineHeight: 1.5,
+      opacity: 0.72,
+    }}
+  >
+    Feature scores reflect overall platform tools and depth, not just beginner suitability.
+  </div>
+</div>
 
           <table
             className="platformCompareTable platformDesktopOnly"
@@ -809,7 +822,7 @@ start with <strong>TradingView</strong> for chart analysis, then open{" "}
               >
                 <th style={{ padding: 12 }}>Platform</th>
                 <th style={{ padding: 12 }}>Best For</th>
-                <th style={{ padding: 12 }}>Score</th>
+<th style={{ padding: 12 }}>Feature Score</th>
                 <th style={{ padding: 12 }}>Visit</th>
               </tr>
             </thead>
@@ -1081,12 +1094,12 @@ start with <strong>TradingView</strong> for chart analysis, then open{" "}
                           {item.score}
                         </div>
 
-                        <div
-                          className="platformScoreLabel"
-                          style={{ opacity: 0.74, fontSize: 14 }}
-                        >
-                          MyStockHarbor platform score
-                        </div>
+<div
+  className="platformScoreLabel"
+  style={{ opacity: 0.74, fontSize: 14 }}
+>
+  MyStockHarbor feature score
+</div>
                       </div>
 
                       <p
