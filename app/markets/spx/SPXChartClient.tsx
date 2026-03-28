@@ -108,7 +108,7 @@ export default function SPXChartClient({
     [fullWeeklyCloses]
   );
 
-  const chartStart = Math.max(0, weeklyPoints.length - 104);
+  const chartStart = Math.max(0, weeklyPoints.length - 350);
 
   const chartSlice = useMemo(() => {
     return weeklyPoints.slice(chartStart);
