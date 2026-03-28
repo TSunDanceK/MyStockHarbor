@@ -602,7 +602,7 @@ export default function PlatformsClient({
     maxWidth: 980,
   }}
 >
-  Best Trading Platforms {region === "US" ? "US" : "UK"} (Compare Brokers, Apps & Charting Tools)
+ Best Trading Platforms {region === "US" ? "US" : "UK"} (2026) – Compare Brokers, Apps & Charting Tools
 </h1>
 
 <div
