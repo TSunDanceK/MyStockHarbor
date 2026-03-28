@@ -3,25 +3,28 @@ import { headers } from "next/headers";
 import PlatformsClient from "./PlatformsClient";
 
 export const metadata: Metadata = {
-  title: "Best Trading Platforms in the UK & US | MyStockHarbor",
+  title:
+    "Best Trading Platforms UK & US (2026) – Compare Brokers, Apps & Charting Tools | MyStockHarbor",
   description:
-    "Compare beginner-friendly trading platforms and charting tools for UK and US users, including TradingView, Webull, Robinhood, eToro, Interactive Brokers, and more.",
+    "Compare the best trading platforms in the UK and US for 2026. Find beginner-friendly brokers, charting tools like TradingView, and simple investing apps like eToro, Webull, Robinhood, and Interactive Brokers.",
   alternates: {
     canonical: "https://www.mystockharbor.com/platforms",
   },
   openGraph: {
-    title: "Best Trading Platforms in the UK & US | MyStockHarbor",
+    title:
+      "Best Trading Platforms UK & US (2026) – Compare Brokers, Apps & Charting Tools | MyStockHarbor",
     description:
-      "Compare beginner-friendly trading platforms and charting tools for UK and US users, including TradingView, Webull, Robinhood, eToro, Interactive Brokers, and more.",
+      "Compare the best trading platforms in the UK and US for 2026. Find beginner-friendly brokers, charting tools like TradingView, and simple investing apps like eToro, Webull, Robinhood, and Interactive Brokers.",
     url: "https://www.mystockharbor.com/platforms",
     siteName: "MyStockHarbor",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Best Trading Platforms in the UK & US | MyStockHarbor",
+    title:
+      "Best Trading Platforms UK & US (2026) – Compare Brokers, Apps & Charting Tools | MyStockHarbor",
     description:
-      "Compare beginner-friendly trading platforms and charting tools for UK and US users, including TradingView, Webull, Robinhood, eToro, Interactive Brokers, and more.",
+      "Compare the best trading platforms in the UK and US for 2026. Find beginner-friendly brokers, charting tools like TradingView, and simple investing apps like eToro, Webull, Robinhood, and Interactive Brokers.",
   },
 };
 
