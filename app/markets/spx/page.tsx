@@ -17,14 +17,22 @@ export const metadata: Metadata = {
     url: "https://www.mystockharbor.com/markets/spx",
     siteName: "MyStockHarbor",
     type: "website",
+    images: [
+      {
+        url: "https://www.mystockharbor.com/og-image-v2.png",
+        width: 1200,
+        height: 630,
+        alt: "MyStockHarbor trading dashboard",
+      },
+    ],
   },
-twitter: {
-  card: "summary_large_image",
-  title: "S&P 500 (SPX) Analysis (2026) | Market Outlook | MyStockHarbor",
-  description:
-    "Learn how to analyse the S&P 500 (SPX), understand market pullbacks, and use charts, support levels, RSI, and MACD to make calmer investing decisions.",
-  images: ["https://www.mystockharbor.com/og-image-v2.png"],
-},
+  twitter: {
+    card: "summary_large_image",
+    title: "S&P 500 (SPX) Analysis (2026) | Market Outlook | MyStockHarbor",
+    description:
+      "Learn how to analyse the S&P 500 (SPX), understand market pullbacks, and use charts, moving averages, RSI, and MACD to make calmer investing decisions.",
+    images: ["https://www.mystockharbor.com/og-image-v2.png"],
+  },
 };
 
 type Point = {
