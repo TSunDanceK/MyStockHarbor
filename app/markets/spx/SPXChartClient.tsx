@@ -93,13 +93,29 @@ export default function SPXChartClient({
 }) {
   const weeklyPoints = useMemo(() => aggregateToWeekly(chartPoints), [chartPoints]);
 
-  const chartSlice = useMemo(() => {
-    return weeklyPoints.slice(Math.max(0, weeklyPoints.length - 104));
-  }, [weeklyPoints]);
+  const fullWeeklyCloses = useMemo(
+    () => weeklyPoints.map((p) => p.close),
+    [weeklyPoints]
+  );
 
-  const closes = useMemo(() => chartSlice.map((p) => p.close), [chartSlice]);
-  const ma50 = useMemo(() => movingAverage(closes, 50), [closes]);
-  const ma200 = useMemo(() => movingAverage(closes, 200), [closes]);
+  const fullWeeklyMA50 = useMemo(
+    () => movingAverage(fullWeeklyCloses, 50),
+    [fullWeeklyCloses]
+  );
+
+  const fullWeeklyMA200 = useMemo(
+    () => movingAverage(fullWeeklyCloses, 200),
+    [fullWeeklyCloses]
+  );
+
+  const chartStart = Math.max(0, weeklyPoints.length - 104);
+
+  const chartSlice = useMemo(() => {
+    return weeklyPoints.slice(chartStart);
+  }, [weeklyPoints, chartStart]);
+
+  const ma50 = useMemo(() => fullWeeklyMA50.slice(chartStart), [fullWeeklyMA50, chartStart]);
+  const ma200 = useMemo(() => fullWeeklyMA200.slice(chartStart), [fullWeeklyMA200, chartStart]);
 
   const lastPrice =
     chartSlice.length > 0 ? chartSlice[chartSlice.length - 1]?.close ?? null : null;
