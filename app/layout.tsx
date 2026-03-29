@@ -18,7 +18,9 @@ export const metadata: Metadata = {
   description:
     "MyStockHarbor (My Stock Harbor) helps traders track stocks, analyse technical indicators, monitor market benchmarks, and learn trading strategies with free educational tools, stock screeners, and market insights.",
   icons: {
-    icon: "/icon.png",
+    icon: "/logo-black.png",
+    shortcut: "/logo-black.png",
+    apple: "/logo-black.png",
   },
 
   openGraph: {
