@@ -112,6 +112,67 @@ function aggregate(points: Point[], interval: Interval) {
   return out;
 }
 
+function parseStooqDailyCsv(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed) return [] as Point[];
+
+  const lines = trimmed
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length < 2) return [] as Point[];
+
+  const header = lines[0].toLowerCase();
+  if (!header.includes("date") || !header.includes("close")) {
+    return [] as Point[];
+  }
+
+  const out: Point[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(",");
+
+    const date = cols[0]?.trim();
+    const high = Number(cols[2]);
+    const low = Number(cols[3]);
+    const close = Number(cols[4]);
+    const volume = Number(cols[5]);
+
+    if (!date || !Number.isFinite(close)) continue;
+
+    out.push({
+      date,
+      close,
+      high: Number.isFinite(high) ? high : undefined,
+      low: Number.isFinite(low) ? low : undefined,
+      volume: Number.isFinite(volume) ? volume : undefined,
+    });
+  }
+
+  return out;
+}
+
+async function fetchDailyHistoryDirect(symbol: string) {
+  const stooqSymbol = `${symbol.toLowerCase()}.us`;
+  const url = `https://stooq.com/q/d/l/?s=${stooqSymbol}&i=d`;
+
+  const res = await fetch(url, {
+    cache: "no-store",
+    headers: {
+      "user-agent": "Mozilla/5.0",
+      accept: "text/csv,text/plain;q=0.9,*/*;q=0.8",
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error(`Direct Stooq history request failed with status ${res.status}`);
+  }
+
+  const text = await res.text();
+  return parseStooqDailyCsv(text);
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
 
@@ -120,7 +181,12 @@ export async function GET(req: Request) {
   const interval = parseInterval(searchParams.get("interval"));
 
   try {
-    const daily = await getDailyHistory(symbol);
+    let daily = await getDailyHistory(symbol);
+
+    if (!Array.isArray(daily) || daily.length === 0) {
+      daily = await fetchDailyHistoryDirect(symbol);
+    }
+
     const points = aggregate(daily, interval);
 
     return NextResponse.json(
@@ -135,12 +201,21 @@ export async function GET(req: Request) {
         },
       }
     );
-  } catch {
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown history fetch error";
+
     return NextResponse.json(
-      { symbol, interval, points: [] as Point[] },
       {
+        symbol,
+        interval,
+        points: [] as Point[],
+        error: message,
+      },
+      {
+        status: 500,
         headers: {
-          "Cache-Control": getCacheControlHeader(),
+          "Cache-Control": "no-store",
         },
       }
     );
