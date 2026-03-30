@@ -17,7 +17,6 @@ function mapToChartPoints(data: Point[]) {
 }
 
 export default async function SPXPage() {
-  // FMP uses ^GSPC for S&P 500
   const symbol = "^GSPC";
 
   let chartPoints: { time: string; value: number }[] = [];
@@ -28,15 +27,15 @@ export default async function SPXPage() {
     if (Array.isArray(history) && history.length > 0) {
       chartPoints = mapToChartPoints(history);
     }
-  } catch (err) {
-    console.error("SPX history fetch failed:", err);
+  } catch (error) {
+    console.error("SPX history fetch failed:", error);
   }
 
   return (
     <div style={{ padding: "20px" }}>
-      <h1 style={{ marginBottom: "20px" }}>S&P 500 (SPX)</h1>
+      <h1 style={{ marginBottom: "20px" }}>S&amp;P 500 (SPX)</h1>
 
-      <SPXChartClient points={chartPoints} />
+      <SPXChartClient chartPoints={chartPoints} />
 
       {chartPoints.length === 0 && (
         <div style={{ marginTop: "20px", opacity: 0.6 }}>
