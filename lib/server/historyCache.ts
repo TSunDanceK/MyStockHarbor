@@ -21,7 +21,7 @@ const redis =
     ? Redis.fromEnv()
     : null;
 
-const REDIS_HISTORY_PREFIX = "msh:history:v3";
+const REDIS_HISTORY_PREFIX = "msh:history:v4";
 const REDIS_HISTORY_TTL_SECONDS = 6 * 60 * 60;
 const MIN_QUALIFIED_POINTS = 30;
 
@@ -34,10 +34,7 @@ type FmpHistoricalRow = {
   volume?: number | string;
 };
 
-type FmpHistoricalResponse = {
-  symbol?: string;
-  historical?: FmpHistoricalRow[];
-};
+type FmpHistoricalResponse = FmpHistoricalRow[] | { Error?: string };
 
 function getEasternParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -199,9 +196,9 @@ export async function fetchAndCacheDailyHistory(symbol: string) {
     throw new Error("Missing FMP_API_KEY environment variable");
   }
 
-  const url = `https://financialmodelingprep.com/api/v3/historical-price-full/${encodeURIComponent(
+  const url = `https://financialmodelingprep.com/stable/historical-price-eod/full?symbol=${encodeURIComponent(
     fmpSymbol
-  )}?serietype=line&apikey=${encodeURIComponent(apiKey)}`;
+  )}&apikey=${encodeURIComponent(apiKey)}`;
 
   const res = await fetch(url, {
     cache: "no-store",
@@ -214,11 +211,12 @@ export async function fetchAndCacheDailyHistory(symbol: string) {
     throw new Error(`FMP history request failed with status ${res.status} for ${normalized}`);
   }
 
-  const payload = (await res.json()) as FmpHistoricalResponse | { Error?: string };
+  const payload = (await res.json()) as FmpHistoricalResponse;
 
   if (
     payload &&
     typeof payload === "object" &&
+    !Array.isArray(payload) &&
     "Error" in payload &&
     typeof payload.Error === "string" &&
     payload.Error.trim()
@@ -226,11 +224,7 @@ export async function fetchAndCacheDailyHistory(symbol: string) {
     throw new Error(`FMP history error for ${normalized}: ${payload.Error}`);
   }
 
-  const daily = parseFmpHistoricalRows(
-    payload && typeof payload === "object" && "historical" in payload
-      ? payload.historical
-      : undefined
-  );
+  const daily = parseFmpHistoricalRows(Array.isArray(payload) ? payload : undefined);
 
   if (daily.length >= MIN_QUALIFIED_POINTS) {
     const entry: HistoryCacheEntry = {
