@@ -226,7 +226,6 @@ function topNavIcon(type: "dashboard" | "learn" | "pickers" | "platforms") {
   if (type === "pickers") return "📊";
   return "🏦";
 }
-
 export default async function SPXPage() {
   const spxChartPoints = await getSpxChartPoints();
 
@@ -308,152 +307,235 @@ export default async function SPXPage() {
               borderRadius: 22,
               border: "1px solid rgba(59,130,246,0.22)",
               background:
-                "linear-gradient(135deg, rgba(37,99,235,0.18), rgba(15,23,42,0.82))",
-              padding: 24,
+                "linear-gradient(135deg, rgba(37,99,235,0.16), rgba(15,23,42,0.92))",
+              padding: 22,
+              boxShadow: "0 18px 40px rgba(0,0,0,0.24)",
             }}
           >
             <div
-              className="spxTopGrid"
               style={{
-                display: "grid",
-                gridTemplateColumns: "minmax(0, 1.15fr) minmax(320px, 0.85fr)",
-                gap: 18,
-                alignItems: "stretch",
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "6px 10px",
+                borderRadius: 999,
+                border: "1px solid rgba(250,204,21,0.28)",
+                background: "rgba(250,204,21,0.12)",
+                color: "#fde68a",
+                fontSize: 12,
+                fontWeight: 900,
+                letterSpacing: "0.35px",
               }}
             >
-              <div style={{ display: "grid", gap: 14 }}>
-                <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 900 }}>
-                  MARKET OUTLOOK
-                </div>
+              SPX GUIDE
+            </div>
 
-                <h1
-                  style={{
-                    margin: 0,
-                    fontSize: 40,
-                    lineHeight: 1.05,
-                    letterSpacing: "-1px",
-                  }}
-                >
-                  S&amp;P 500 analysis:
-                  <br />
-                  buying opportunity
-                  <br />
-                  or early warning sign?
-                </h1>
+            <h1
+              style={{
+                margin: "12px 0 0",
+                fontSize: 42,
+                lineHeight: 1.08,
+                letterSpacing: "-0.9px",
+                maxWidth: 920,
+              }}
+            >
+              S&amp;P 500 (SPX) Analysis (2026) – What the Market Is Actually Doing Right Now
+            </h1>
 
-                <div
-                  style={{
-                    fontSize: 17,
-                    lineHeight: 1.8,
-                    opacity: 0.88,
-                    maxWidth: 760,
-                  }}
-                >
-                  Markets feel tense when the SPX pulls back sharply, but fear alone does not tell
-                  us whether this is a healthy reset or the start of something worse. What matters
-                  more is how the weekly structure, moving averages, RSI, and MACD are behaving in
-                  context.
-                </div>
+            <div
+              style={{
+                marginTop: 14,
+                maxWidth: 880,
+                fontSize: 19,
+                lineHeight: 1.7,
+                opacity: 0.92,
+              }}
+            >
+              The S&amp;P 500 has started to worry investors as short-term price action weakens.
+              On the daily chart, fear rises quickly when key moving averages start getting tested.
+              But when you zoom out to the weekly chart, the structure can look very different.
+            </div>
 
-                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 4 }}>
-                  <AffiliateLink
-                    href="/api/go/tradingview"
-                    eventLabel="SPX Hero CTA TradingView"
-                    style={primaryBtn()}
-                  >
-                    Open TradingView →
-                  </AffiliateLink>
-
-                  <AffiliateLink
-                    href="/api/go/etoro"
-                    eventLabel="SPX Hero CTA eToro"
-                    style={secondaryBtn()}
-                  >
-                    Visit eToro →
-                  </AffiliateLink>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  borderRadius: 18,
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  background: "rgba(255,255,255,0.05)",
-                  padding: 18,
-                  display: "grid",
-                  gap: 12,
-                }}
+            <div
+              style={{
+                marginTop: 16,
+                display: "flex",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <AffiliateLink
+                href="/api/go/tradingview"
+                eventLabel="SPX Page Hero CTA TradingView"
+                style={primaryBtn()}
               >
-                <div style={{ fontSize: 12, opacity: 0.72, fontWeight: 900 }}>
-                  QUICK READ
-                </div>
+                Use TradingView for SPX Charts →
+              </AffiliateLink>
 
-                <div style={{ lineHeight: 1.7, opacity: 0.9 }}>
-                  The S&amp;P 500 has become stretched before, and pullbacks often feel far worse
-                  in the moment than they look on higher timeframes. That is why experienced
-                  investors step back and check the weekly chart before reacting emotionally.
-                </div>
+              <AffiliateLink
+                href="/api/go/etoro"
+                eventLabel="SPX Page Hero CTA eToro"
+                style={secondaryBtn()}
+              >
+                Visit eToro →
+              </AffiliateLink>
+            </div>
 
-                <div style={{ display: "grid", gap: 10 }}>
-                  <div style={infoCardStyle()}>
-                    <div style={{ fontWeight: 900, marginBottom: 6 }}>Weekly chart focus</div>
-                    <div style={{ lineHeight: 1.6, opacity: 0.88 }}>
-                      The weekly view helps filter out short-term noise and shows whether the SPX is
-                      still respecting the broader uptrend.
-                    </div>
-                  </div>
-
-                  <div style={infoCardStyle()}>
-                    <div style={{ fontWeight: 900, marginBottom: 6 }}>Why this matters</div>
-                    <div style={{ lineHeight: 1.6, opacity: 0.88 }}>
-                      When markets are overstretched, even normal pullbacks can feel dramatic. The
-                      key is whether support and long-term structure are still holding.
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <div
+              style={{
+                marginTop: 16,
+                padding: "14px 16px",
+                borderRadius: 16,
+                border: "1px solid rgba(34,197,94,0.18)",
+                background:
+                  "linear-gradient(135deg, rgba(34,197,94,0.10), rgba(59,130,246,0.08))",
+                fontSize: 14,
+                lineHeight: 1.6,
+                color: "#dbeafe",
+                maxWidth: 900,
+              }}
+            >
+              <strong>Simple view:</strong> short-term fear is rising, but the bigger question is
+              whether the higher-timeframe structure has actually broken down. That is why the weekly chart matters here.
             </div>
           </section>
 
           <section
-            className="spxContextGrid"
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
               gap: 14,
             }}
+            className="spxTopGrid"
           >
-            <div
+            <div style={infoCardStyle()}>
+              <div style={{ fontSize: 12, opacity: 0.72, fontWeight: 900 }}>
+                DAILY CHART
+              </div>
+              <div style={{ marginTop: 8, fontSize: 22, fontWeight: 900 }}>
+                Fear rises faster
+              </div>
+              <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.6 }}>
+                On lower timeframes, weakness feels more dramatic. That is why many investors become nervous when the SPX starts losing short-term support.
+              </div>
+            </div>
+
+            <div style={infoCardStyle()}>
+              <div style={{ fontSize: 12, opacity: 0.72, fontWeight: 900 }}>
+                WEEKLY CHART
+              </div>
+              <div style={{ marginTop: 8, fontSize: 22, fontWeight: 900 }}>
+                Structure still matters more
+              </div>
+              <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.6 }}>
+                When you zoom out, the market can still look like it is going through a normal correction rather than a confirmed long-term breakdown.
+              </div>
+            </div>
+
+            <div style={infoCardStyle()}>
+              <div style={{ fontSize: 12, opacity: 0.72, fontWeight: 900 }}>
+                BIG PICTURE
+              </div>
+              <div style={{ marginTop: 8, fontSize: 22, fontWeight: 900 }}>
+                This market was stretched
+              </div>
+              <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.6 }}>
+                After a strong run led by major technology names and AI enthusiasm, a cooling phase was always a realistic possibility.
+              </div>
+            </div>
+          </section>
+
+          <section style={sectionCardStyle()}>
+            <h2
               style={{
-                borderRadius: 18,
-                border: "1px solid rgba(59,130,246,0.20)",
-                background:
-                  "linear-gradient(135deg, rgba(59,130,246,0.10), rgba(15,23,42,0.18))",
-                padding: 18,
+                margin: 0,
+                fontSize: 30,
+                letterSpacing: "-0.4px",
               }}
             >
-              <div
+              What’s actually happening in the market right now?
+            </h2>
+
+            <div
+              style={{
+                marginTop: 12,
+                opacity: 0.86,
+                lineHeight: 1.75,
+                fontSize: 16,
+                maxWidth: 920,
+                display: "grid",
+                gap: 14,
+              }}
+            >
+              <p style={{ margin: 0 }}>
+                Right now, markets are getting more fearful because the S&amp;P 500 is starting to look weaker on the <strong>daily timeframe</strong>.
+                When price loses momentum and approaches major moving averages on lower timeframes, sentiment usually deteriorates quickly.
+              </p>
+
+              <p style={{ margin: 0 }}>
+                However, the <strong>weekly chart</strong> paints a calmer picture. If this were a standard stock rather than the main US index,
+                many traders would likely describe this as a <strong>healthy correction</strong> rather than a reason to panic.
+              </p>
+
+              <p style={{ margin: 0 }}>
+                The reason is simple: the SPX had become very extended after a long run higher. Much of that strength was concentrated in major companies,
+                especially those lifted by the recent <strong>AI-driven rally</strong>. When markets get stretched too far above long-term averages,
+                pullbacks become more likely because price needs room to reset.
+              </p>
+
+              <p style={{ margin: 0 }}>
+                In other words, this is not just about fear. It is also about the market cooling after a period where price had moved too far, too fast.
+              </p>
+            </div>
+          </section>
+
+          <section
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1.15fr 0.85fr",
+              gap: 16,
+            }}
+            className="spxContextGrid"
+          >
+            <div style={sectionCardStyle()}>
+              <h2
                 style={{
-                  fontSize: 12,
-                  fontWeight: 900,
-                  letterSpacing: "0.3px",
-                  color: "#bfdbfe",
+                  margin: 0,
+                  fontSize: 30,
+                  letterSpacing: "-0.4px",
                 }}
               >
-                BIGGER PICTURE
-              </div>
+                Why the weekly chart matters more here
+              </h2>
 
-              <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
-                <div style={{ lineHeight: 1.6 }}>
-                  Sharp pullbacks do not automatically mean the market structure is broken.
-                </div>
-                <div style={{ lineHeight: 1.6 }}>
-                  Many corrections begin after price becomes extended above longer-term averages.
-                </div>
-                <div style={{ lineHeight: 1.6 }}>
-                  That is why investors watch support, trend structure, and momentum rather than
-                  reacting to fear alone.
-                </div>
+              <div
+                style={{
+                  marginTop: 12,
+                  opacity: 0.86,
+                  lineHeight: 1.75,
+                  fontSize: 16,
+                  display: "grid",
+                  gap: 14,
+                }}
+              >
+                <p style={{ margin: 0 }}>
+                  The weekly timeframe helps remove some of the noise that causes investors to overreact.
+                  A move that looks aggressive on the daily chart can appear much more controlled on the weekly chart.
+                </p>
+
+                <p style={{ margin: 0 }}>
+                  Historically, the S&amp;P 500 has often respected major higher-timeframe moving averages.
+                  That does not mean support must always hold, but it does mean context matters.
+                </p>
+
+                <p style={{ margin: 0 }}>
+                  If price is simply correcting back toward a long-term moving average after an overstretched rally,
+                  that is very different from a true structural collapse.
+                </p>
+
+                <p style={{ margin: 0 }}>
+                  That is why many investors are asking the real question now:
+                  <strong> is this a normal correction and potential opportunity, or the start of something worse?</strong>
+                </p>
               </div>
             </div>
 
@@ -515,8 +597,8 @@ export default async function SPXPage() {
               }}
             >
               This weekly chart helps show why the bigger picture matters more than short-term fear.
-              If the SPX is simply pulling back into higher-timeframe support after an overstretched
-              rally, that is a very different setup from a full structural breakdown.
+              If the SPX is simply pulling back into higher-timeframe support after an overstretched rally,
+              that is a very different setup from a full structural breakdown.
             </div>
 
             <SPXChartClient chartPoints={spxChartPoints} />
@@ -621,21 +703,20 @@ export default async function SPXPage() {
               }}
             >
               <p style={{ margin: 0 }}>
-                That is the question everyone is asking. As Warren Buffett’s famous line reminds
-                people, periods of fear often create interest in adding to positions.
+                That is the question everyone is asking. As Warren Buffett’s famous line reminds people,
+                periods of fear often create interest in adding to positions.
               </p>
 
               <p style={{ margin: 0 }}>
-                But the answer does not come from emotion. It comes from structure. If the weekly
-                chart continues to look like a standard pullback into support, many investors will
-                see that as a healthier reset than the headlines suggest.
+                But the answer does not come from emotion. It comes from structure.
+                If the weekly chart continues to look like a standard pullback into support,
+                many investors will see that as a healthier reset than the headlines suggest.
               </p>
 
               <p style={{ margin: 0 }}>
-                If the higher-timeframe structure starts failing more decisively, then the risk of a
-                deeper move increases. For now, the more balanced view is that the market is{" "}
-                <strong>correcting after becoming overstretched</strong>, not automatically
-                collapsing.
+                If the higher-timeframe structure starts failing more decisively, then the risk of a deeper move increases.
+                For now, the more balanced view is that the market is <strong>correcting after becoming overstretched</strong>,
+                not automatically collapsing.
               </p>
             </div>
           </section>
@@ -668,9 +749,8 @@ export default async function SPXPage() {
                 fontSize: 16,
               }}
             >
-              Use <strong>TradingView</strong> if you want to study the SPX properly and judge the
-              weekly structure for yourself. Use <strong>eToro</strong> if you want a simpler route
-              into investing after you have done your research.
+              Use <strong>TradingView</strong> if you want to study the SPX properly and judge the weekly structure for yourself.
+              Use <strong>eToro</strong> if you want a simpler route into investing after you have done your research.
             </div>
 
             <div
