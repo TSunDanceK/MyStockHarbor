@@ -171,6 +171,28 @@ async function fetchDailyHistoryDirect(symbol: string) {
 
   const contentType = res.headers.get("content-type") || "unknown";
   const finalUrl = res.url || url;
+  const text = await res.text();
+  const preview = text.slice(0, 500).replace(/\s+/g, " ").trim();
+
+  if (!res.ok) {
+    throw new Error(
+      `Direct Stooq history request failed with status ${res.status}; content-type=${contentType}; final-url=${finalUrl}; preview=${preview}`
+    );
+  }
+
+  const daily = parseStooqDailyCsv(text);
+
+  if (daily.length > 0) {
+    return daily;
+  }
+
+  throw new Error(
+    `Stooq history response was not valid CSV data; content-type=${contentType}; final-url=${finalUrl}; preview=${preview}`
+  );
+};
+
+  const contentType = res.headers.get("content-type") || "unknown";
+  const finalUrl = res.url || url;
 
   if (!res.ok) {
     const text = await res.text();
@@ -203,12 +225,7 @@ export async function GET(req: Request) {
   const interval = parseInterval(searchParams.get("interval"));
 
   try {
-    let daily = await getDailyHistory(symbol);
-
-    if (!Array.isArray(daily) || daily.length === 0) {
-      daily = await fetchDailyHistoryDirect(symbol);
-    }
-
+    const daily = await fetchDailyHistoryDirect(symbol);
     const points = aggregate(daily, interval);
 
     return NextResponse.json(
@@ -219,7 +236,7 @@ export async function GET(req: Request) {
       },
       {
         headers: {
-          "Cache-Control": getCacheControlHeader(),
+          "Cache-Control": "no-store",
         },
       }
     );
@@ -235,7 +252,7 @@ export async function GET(req: Request) {
         error: message,
         debugType: typeof error,
         debugNow: new Date().toISOString(),
-        debugVersion: "history-route-debug-v2",
+        debugVersion: "history-route-debug-v3-direct-only",
       },
       {
         status: 500,
