@@ -1,6 +1,7 @@
 // app/api/pickers/route.ts
 export const dynamic = "force-dynamic";
 
+import { Redis } from "@upstash/redis";
 import { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { detectDivergenceFromHistory } from "../../../lib/ta/divergence";
@@ -40,7 +41,6 @@ type PickerItem = {
   timeframe?: "D" | "W" | "M";
   indicator?: "MA200" | "RSI(14)" | "MACD(12,26,9)";
   dashboardHref?: string;
-  // internal sorting helpers (not returned)
   _score?: number;
 };
 
@@ -97,19 +97,44 @@ type SignalRecord = {
   dashboardHref?: string;
 };
 
-/* ----------------------------- caching ------------------------------ */
+type PickersPayload = {
+  updatedAt: string;
+  universeSize: number;
+  dynamicUniverseCount: number;
+  dynamicUniversePreview: string[];
+  dynamicSymbols: string[];
+  estimatedApiCalls: number;
+  sections: PickerSection[];
+  signalRecords: SignalRecord[];
+};
 
+type CachedPickersPayload = {
+  cachedAt: number;
+  data: PickersPayload;
+};
+
+const redis =
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+    ? Redis.fromEnv()
+    : null;
+
+/* ----------------------------- caching ------------------------------ */
 
 let memo:
   | {
       ts: number;
-      data: any;
+      data: PickersPayload;
     }
   | null = null;
 
-const CACHE_SECONDS = 60; // 1 minute CDN cache
-const STALE_SECONDS = 120; // short stale window
-const MEMORY_CACHE_MS = 60_000; // 1 minute in-memory cache
+const CACHE_SECONDS = 60 * 10;
+const STALE_SECONDS = 60 * 20;
+const MEMORY_CACHE_MS = 60_000;
+
+const PICKERS_REDIS_KEY = "msh:pickers:v2:main";
+const PICKERS_REDIS_TTL_SECONDS = 6 * 60 * 60;
+const PICKERS_LOCK_KEY = "msh:pickers:v2:main:lock";
+const PICKERS_LOCK_TTL_SECONDS = 120;
 
 /* ------------------------ small util helpers ------------------------ */
 
@@ -124,9 +149,6 @@ function lastNum(arr: Array<number | null>) {
   return arr.length ? arr[arr.length - 1] : null;
 }
 
-function clampNum(v: number, lo: number, hi: number) {
-  return Math.min(hi, Math.max(lo, v));
-}
 function buildDashboardHref(args: {
   symbol: string;
   timeframe?: "D" | "W" | "M";
@@ -144,6 +166,67 @@ function buildDashboardHref(args: {
   }
 
   return `/?${params.toString()}`;
+}
+
+async function readPickersCache() {
+  if (!redis) return null;
+
+  try {
+    const entry = await redis.get<CachedPickersPayload>(PICKERS_REDIS_KEY);
+    if (!entry || typeof entry !== "object") return null;
+    if (!entry.data || typeof entry.data !== "object") return null;
+    return entry;
+  } catch {
+    return null;
+  }
+}
+
+async function writePickersCache(data: PickersPayload) {
+  if (!redis) return;
+
+  try {
+    const entry: CachedPickersPayload = {
+      cachedAt: Date.now(),
+      data,
+    };
+
+    await redis.set(PICKERS_REDIS_KEY, entry, {
+      ex: PICKERS_REDIS_TTL_SECONDS,
+    });
+  } catch {
+    // fail open
+  }
+}
+
+async function acquirePickersLock() {
+  if (!redis) return "no-redis";
+
+  const token = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  try {
+    const result = await redis.set(PICKERS_LOCK_KEY, token, {
+      nx: true,
+      ex: PICKERS_LOCK_TTL_SECONDS,
+    });
+
+    if (result === "OK") return token;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function releasePickersLock(token: string | null) {
+  if (!redis || !token || token === "no-redis") return;
+
+  try {
+    const current = await redis.get<string>(PICKERS_LOCK_KEY);
+    if (current === token) {
+      await redis.del(PICKERS_LOCK_KEY);
+    }
+  } catch {
+    // fail open
+  }
 }
 
 /** Strict SMA over nullable values: returns null if any null in window. */
@@ -422,10 +505,7 @@ function computeMa200Proximity(
   points: Point[],
   interval: "d" | "w"
 ): { pctDistance: number; timeframe: "D" | "W" } | null {
-  const series =
-    interval === "d"
-      ? points
-      : aggregatePoints(points, "w");
+  const series = interval === "d" ? points : aggregatePoints(points, "w");
 
   const closes = series.map((p) => p.close).filter((x) => Number.isFinite(x));
   if (closes.length < 200) return null;
@@ -457,16 +537,27 @@ function computeMa200Proximity(
 /* --------------------- composite + picker logic ---------------------- */
 
 function compositeToneFromCounts(overbought: number, oversold: number, spikes: number) {
-  // net > 0 => overbought-heavy (red side), net < 0 => oversold-heavy (green side)
   const net = overbought - oversold;
-  const intensity = overbought + oversold + spikes; // 0..10-ish
+  const intensity = overbought + oversold + spikes;
 
   if (intensity <= 1) return { tone: "yellow" as const, tag: "Calm" };
 
-  if (net >= 2) return { tone: intensity >= 5 ? ("red" as const) : ("orange" as const), tag: "Overbought-leaning" };
+  if (net >= 2) {
+    return {
+      tone: intensity >= 5 ? ("red" as const) : ("orange" as const),
+      tag: "Overbought-leaning",
+    };
+  }
+
   if (net === 1) return { tone: "orange" as const, tag: "Slightly overbought" };
 
-  if (net <= -2) return { tone: intensity >= 5 ? ("green" as const) : ("yellow" as const), tag: "Oversold-leaning" };
+  if (net <= -2) {
+    return {
+      tone: intensity >= 5 ? ("green" as const) : ("yellow" as const),
+      tag: "Oversold-leaning",
+    };
+  }
+
   if (net === -1) return { tone: "yellow" as const, tag: "Slightly oversold" };
 
   return { tone: intensity >= 5 ? ("orange" as const) : ("yellow" as const), tag: "Mixed" };
@@ -481,7 +572,6 @@ function buildCompositeFromHistory(points: Point[]): CompositeResult | null {
   const lastClose = closes[closes.length - 1];
   if (!Number.isFinite(lastClose)) return null;
 
-  // Indicators
   const bb = bollinger(closes, 20, 2);
   const rsi14 = rsiWilder(closes, 14);
   const macdAll = macd(closes, 12, 26, 9);
@@ -515,55 +605,47 @@ function buildCompositeFromHistory(points: Point[]): CompositeResult | null {
   let oversold = 0;
   let spikes = 0;
 
-  // RSI
   if (typeof last.rsi === "number") {
     if (last.rsi >= 70) overbought++;
     else if (last.rsi <= 30) oversold++;
   }
 
-  // Bollinger extremes
   if (typeof last.bbU === "number" && lastClose > last.bbU) overbought++;
   else if (typeof last.bbL === "number" && lastClose < last.bbL) oversold++;
 
-  // EMA20 dist (5%)
   if (typeof last.ema20 === "number" && last.ema20 > 0) {
     const pct = (lastClose - last.ema20) / last.ema20;
     if (pct >= 0.05) overbought++;
     else if (pct <= -0.05) oversold++;
   }
 
-  // MA50 dist (5%)
   if (typeof last.ma50 === "number" && last.ma50 > 0) {
     const pct = (lastClose - last.ma50) / last.ma50;
     if (pct >= 0.05) overbought++;
     else if (pct <= -0.05) oversold++;
   }
 
-  // MA200 dist (5%)
   if (typeof last.ma200 === "number" && last.ma200 > 0) {
     const pct = (lastClose - last.ma200) / last.ma200;
     if (pct >= 0.05) overbought++;
     else if (pct <= -0.05) oversold++;
   }
 
-  // MACD hist magnitude vs price (0.2%)
   if (typeof last.macdHist === "number") {
     const thresh = Math.abs(lastClose) * 0.002;
     if (last.macdHist >= thresh) overbought++;
     else if (last.macdHist <= -thresh) oversold++;
   }
 
-  // Volume spike vs SMA20 (1.8x)
   if (typeof last.vol === "number" && typeof last.volSma === "number" && last.volSma > 0) {
     if (last.vol >= last.volSma * 1.8) spikes++;
   }
 
-  // ATR spike vs SMA20 (1.5x)
   if (typeof last.atr === "number" && typeof last.atrSma === "number" && last.atrSma > 0) {
     if (last.atr >= last.atrSma * 1.5) spikes++;
   }
 
-  const total = 8; // (we’re counting 8 checks here)
+  const total = 8;
   const flagged = overbought + oversold + spikes;
 
   const toneInfo = compositeToneFromCounts(overbought, oversold, spikes);
@@ -580,13 +662,10 @@ function buildCompositeFromHistory(points: Point[]): CompositeResult | null {
 }
 
 function pickIsGreenOverallSignal(c: CompositeResult) {
-  // “green overall signal” = oversold-leaning
-  // tweakable thresholds:
   return c.oversold >= 2 && c.oversold > c.overbought;
 }
 
 function pickIsRedOverallSignal(c: CompositeResult) {
-  // “red overall signal” = overbought-leaning
   return c.overbought >= 2 && c.overbought > c.oversold;
 }
 
@@ -637,25 +716,23 @@ function buildTrendScoreFromHistory(points: Point[]) {
     macdBullish,
   };
 }
+
 function computeBuyTheDip(points: Point[]) {
-  // Criteria: was at all-time high recently, now -20% within last 4 months (~120 trading days)
   const closes = points.map((p) => p.close).filter((x) => Number.isFinite(x));
   if (closes.length < 140) return null;
 
   const last = closes[closes.length - 1];
-
   const lookback = 120;
   const slice = closes.slice(-lookback);
   const recentHigh = Math.max(...slice);
   if (!Number.isFinite(recentHigh) || recentHigh <= 0) return null;
 
-  // “recently at ATH”: recentHigh equals all-time high (or within tiny epsilon)
   const allTimeHigh = Math.max(...closes);
-  const atAthRecently = Math.abs(recentHigh - allTimeHigh) / allTimeHigh <= 0.002; // within 0.2%
+  const atAthRecently = Math.abs(recentHigh - allTimeHigh) / allTimeHigh <= 0.002;
 
   if (!atAthRecently) return null;
 
-  const drawdown = (last - recentHigh) / recentHigh; // negative if down
+  const drawdown = (last - recentHigh) / recentHigh;
   if (drawdown <= -0.2) {
     return { drawdownPct: Math.abs(drawdown) * 100 };
   }
@@ -673,7 +750,7 @@ function computeAthBreakout(points: Point[]) {
   const allTimeHigh = Math.max(...closes);
   if (!Number.isFinite(allTimeHigh) || allTimeHigh <= 0) return null;
 
-  const eps = 0.01; // within 1%
+  const eps = 0.01;
   const isAtAth = lastClose >= allTimeHigh * (1 - eps);
 
   if (!isAtAth) return null;
@@ -692,7 +769,7 @@ function computeThreeMonthBreakout(points: Point[]) {
   const lastClose = closes[closes.length - 1];
   if (!Number.isFinite(lastClose)) return null;
 
-  const LOOKBACK_BARS = 63; // ~3 months
+  const LOOKBACK_BARS = 63;
   const EXCLUDE_RECENT_BARS = 5;
 
   const endExclusive = closes.length - EXCLUDE_RECENT_BARS;
@@ -706,7 +783,7 @@ function computeThreeMonthBreakout(points: Point[]) {
   const rangeHigh = Math.max(...breakoutWindow);
   if (!Number.isFinite(rangeHigh) || rangeHigh <= 0) return null;
 
-    const eps = 0.005; // within 0.5%
+  const eps = 0.005;
   if (lastClose < rangeHigh * (1 - eps)) return null;
 
   return {
@@ -718,7 +795,6 @@ function computeThreeMonthBreakout(points: Point[]) {
 
 /* -------------------------- concurrency limit ------------------------ */
 
-// small p-limit (no dependency)
 function pLimit(limit: number) {
   let active = 0;
   const queue: Array<() => void> = [];
@@ -823,10 +899,11 @@ const PRESET_UNIVERSE: string[] = [
   "LOW",
 ];
 
+const UNIVERSE_CAP = 200;
+
 /* --------------------------- builder function ------------------------ */
 
-
-async function buildPickersPayload(origin: string) {
+async function buildPickersPayload(origin: string): Promise<PickersPayload> {
   const market = await fetchMarket(origin);
 
   const topTraded = (market?.topTraded ?? [])
@@ -867,9 +944,9 @@ async function buildPickersPayload(origin: string) {
         .map((x) => String(x).trim().toUpperCase())
         .filter(Boolean)
     )
-  ).slice(0, 100);
+  ).slice(0, UNIVERSE_CAP);
 
-  const limit = pLimit(8);
+  const limit = pLimit(10);
   const days = 2600;
 
   const green: PickerItem[] = [];
@@ -894,29 +971,29 @@ async function buildPickersPayload(origin: string) {
 
           const comp = buildCompositeFromHistory(pts);
 
-if (comp) {
-  const closes = pts.map((p) => p.close).filter((x) => Number.isFinite(x));
-  const ma200Arr = closes.length ? movingAverage(closes, 200) : [];
-  const lastClose = closes.length ? closes[closes.length - 1] : null;
-  const lastMA200 = lastNum(ma200Arr);
+          if (comp) {
+            const closes = pts.map((p) => p.close).filter((x) => Number.isFinite(x));
+            const ma200Arr = closes.length ? movingAverage(closes, 200) : [];
+            const lastClose = closes.length ? closes[closes.length - 1] : null;
+            const lastMA200 = lastNum(ma200Arr);
 
-  const aboveMA200 =
-    typeof lastClose === "number" &&
-    typeof lastMA200 === "number" &&
-    lastClose > lastMA200;
+            const aboveMA200 =
+              typeof lastClose === "number" &&
+              typeof lastMA200 === "number" &&
+              lastClose > lastMA200;
 
-  if (pickIsGreenOverallSignal(comp) && aboveMA200) {
-    green.push({
-      symbol,
-      tone: "green",
-      note: `${comp.oversold} oversold • above MA200 • ${comp.flagged}/${comp.total} checks`,
-      _score:
-        dynamicBoost(symbol) +
-        comp.oversold * 50 +
-        comp.flagged * 10 +
-        200, // bonus for trend quality
-    });
-  }
+            if (pickIsGreenOverallSignal(comp) && aboveMA200) {
+              green.push({
+                symbol,
+                tone: "green",
+                note: `${comp.oversold} oversold • above MA200 • ${comp.flagged}/${comp.total} checks`,
+                _score:
+                  dynamicBoost(symbol) +
+                  comp.oversold * 50 +
+                  comp.flagged * 10 +
+                  200,
+              });
+            }
 
             if (pickIsRedOverallSignal(comp)) {
               red.push({
@@ -928,7 +1005,7 @@ if (comp) {
             }
           }
 
-                    const trendScore = buildTrendScoreFromHistory(pts);
+          const trendScore = buildTrendScoreFromHistory(pts);
           if (trendScore && trendScore.passed >= 3) {
             trendLeaders.push({
               symbol,
@@ -979,8 +1056,7 @@ if (comp) {
 
           const dailyMa200Proximity = computeMa200Proximity(pts, "d");
           if (dailyMa200Proximity) {
-            const side =
-              dailyMa200Proximity.pctDistance >= 0 ? "above" : "below";
+            const side = dailyMa200Proximity.pctDistance >= 0 ? "above" : "below";
 
             ma200Proximity.push({
               symbol,
@@ -999,8 +1075,7 @@ if (comp) {
 
           const weeklyMa200Proximity = computeMa200Proximity(pts, "w");
           if (weeklyMa200Proximity) {
-            const side =
-              weeklyMa200Proximity.pctDistance >= 0 ? "above" : "below";
+            const side = weeklyMa200Proximity.pctDistance >= 0 ? "above" : "below";
 
             ma200Proximity.push({
               symbol,
@@ -1020,14 +1095,14 @@ if (comp) {
           const hasDailyMa200Proximity = !!dailyMa200Proximity;
           const hasWeeklyMa200Proximity = !!weeklyMa200Proximity;
 
-const dailyDiv = detectDivergenceFromHistory(pts, {
-  lookbackBars: 45,
-  leftRight: 2,
-  minPriceSwingPct: 1.6,
-  minRsiSwing: 6,
-  macdStdMult: 0.5,
-  maxPivot2AgeBars: 16,
-});
+          const dailyDiv = detectDivergenceFromHistory(pts, {
+            lookbackBars: 45,
+            leftRight: 2,
+            minPriceSwingPct: 1.6,
+            minRsiSwing: 6,
+            macdStdMult: 0.5,
+            maxPivot2AgeBars: 16,
+          });
 
           const weeklyPts = aggregatePoints(pts, "w").map((p) => ({
             date: p.date,
@@ -1037,15 +1112,15 @@ const dailyDiv = detectDivergenceFromHistory(pts, {
             volume: p.volume,
           }));
 
-const weeklyDiv = detectDivergenceFromHistory(weeklyPts, {
-  lookbackBars: 30,
-  leftRight: 2,
-  minPriceSwingPct: 2.0,
-  minRsiSwing: 5,
-  macdStdMult: 0.35,
-  maxPivot2AgeBars: 10,
-});
-          
+          const weeklyDiv = detectDivergenceFromHistory(weeklyPts, {
+            lookbackBars: 30,
+            leftRight: 2,
+            minPriceSwingPct: 2.0,
+            minRsiSwing: 5,
+            macdStdMult: 0.35,
+            maxPivot2AgeBars: 10,
+          });
+
           const scoredDailyDiv =
             dailyDiv
               ? {
@@ -1076,10 +1151,10 @@ const weeklyDiv = detectDivergenceFromHistory(weeklyPts, {
               div.hasRsi && !div.hasMacd
                 ? "RSI(14)"
                 : !div.hasRsi && div.hasMacd
-                ? "MACD(12,26,9)"
-                : div.hasRsi && div.hasMacd
-                ? "MACD(12,26,9)"
-                : undefined;
+                  ? "MACD(12,26,9)"
+                  : div.hasRsi && div.hasMacd
+                    ? "MACD(12,26,9)"
+                    : undefined;
 
             const preferredTimeframe: "D" | "W" = div.timeframe;
             const timeframeLabel = div.timeframe === "W" ? "Weekly" : "Daily";
@@ -1168,13 +1243,11 @@ const weeklyDiv = detectDivergenceFromHistory(weeklyPts, {
                 ? "MACD(12,26,9)"
                 : "RSI(14)"
               : bullishMacdDivergence || bearishMacdDivergence
-              ? "MACD(12,26,9)"
-              : undefined;
+                ? "MACD(12,26,9)"
+                : undefined;
 
           const preferredTimeframe: "D" | "W" | undefined =
-            preferredDivergenceIndicator && div
-              ? div.timeframe
-              : undefined;
+            preferredDivergenceIndicator && div ? div.timeframe : undefined;
 
           signalRecords.push({
             symbol,
@@ -1238,7 +1311,7 @@ const weeklyDiv = detectDivergenceFromHistory(weeklyPts, {
     );
   };
 
-    const buildSection = (args: {
+  const buildSection = (args: {
     title: string;
     description?: string;
     source: PickerItem[];
@@ -1256,7 +1329,7 @@ const weeklyDiv = detectDivergenceFromHistory(weeklyPts, {
     };
   };
 
- const sections: PickerSection[] = [
+  const sections: PickerSection[] = [
     buildSection({
       title: "Oversold Stocks Today (Potential Rebound Setups)",
       description:
@@ -1317,6 +1390,14 @@ const weeklyDiv = detectDivergenceFromHistory(weeklyPts, {
     }),
   ];
 
+  const displayedSymbols = new Set(
+    sections.flatMap((section) => section.items.map((item) => item.symbol))
+  );
+
+  const filteredSignalRecords = signalRecords.filter((record) =>
+    displayedSymbols.has(record.symbol)
+  );
+
   return {
     updatedAt: new Date().toISOString(),
     universeSize: universe.length,
@@ -1328,9 +1409,9 @@ const weeklyDiv = detectDivergenceFromHistory(weeklyPts, {
     dynamicSymbols: dynamicUniverse,
     estimatedApiCalls: universe.length + 1,
     sections,
-    signalRecords,
+    signalRecords: filteredSignalRecords,
   };
-  }
+}
 
 /* -------------------------------- GET -------------------------------- */
 
@@ -1345,14 +1426,76 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const origin = originFromReq(req);
-  const data = await buildPickersPayload(origin);
+  const cached = await readPickersCache();
 
-  memo = { ts: now, data };
+  if (cached?.data) {
+    memo = { ts: now, data: cached.data };
 
-  return NextResponse.json(data, {
-    headers: {
-      "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
-    },
-  });
+    return NextResponse.json(cached.data, {
+      headers: {
+        "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+      },
+    });
+  }
+
+  const lockToken = await acquirePickersLock();
+
+  if (!lockToken && cached?.data) {
+    memo = { ts: now, data: cached.data };
+
+    return NextResponse.json(cached.data, {
+      headers: {
+        "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+      },
+    });
+  }
+
+  try {
+    const origin = originFromReq(req);
+    const data = await buildPickersPayload(origin);
+
+    memo = { ts: now, data };
+    await writePickersCache(data);
+
+    return NextResponse.json(data, {
+      headers: {
+        "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+      },
+    });
+  } catch (error) {
+    if (cached?.data) {
+      memo = { ts: now, data: cached.data };
+
+      return NextResponse.json(cached.data, {
+        headers: {
+          "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+        },
+      });
+    }
+
+    const message =
+      error instanceof Error ? error.message : "Unknown pickers error";
+
+    return NextResponse.json(
+      {
+        updatedAt: new Date().toISOString(),
+        universeSize: 0,
+        dynamicUniverseCount: 0,
+        dynamicUniversePreview: [],
+        dynamicSymbols: [],
+        estimatedApiCalls: 0,
+        sections: [],
+        signalRecords: [],
+        error: message,
+      },
+      {
+        status: 500,
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      }
+    );
+  } finally {
+    await releasePickersLock(lockToken);
+  }
 }
