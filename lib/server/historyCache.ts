@@ -51,21 +51,25 @@ function getNextMondayOpenUtcMsFromEastern(date = new Date()) {
   const { weekday, year, month, day } = getEasternParts(date);
 
   const weekdayIndex =
-    weekday === "Sun" ? 0 :
-    weekday === "Mon" ? 1 :
-    weekday === "Tue" ? 2 :
-    weekday === "Wed" ? 3 :
-    weekday === "Thu" ? 4 :
-    weekday === "Fri" ? 5 :
-    weekday === "Sat" ? 6 :
-    0;
+    weekday === "Sun"
+      ? 0
+      : weekday === "Mon"
+        ? 1
+        : weekday === "Tue"
+          ? 2
+          : weekday === "Wed"
+            ? 3
+            : weekday === "Thu"
+              ? 4
+              : weekday === "Fri"
+                ? 5
+                : weekday === "Sat"
+                  ? 6
+                  : 0;
 
   const jsDate = new Date(Date.UTC(year, month - 1, day));
   const daysUntilMonday =
-    weekdayIndex === 0 ? 1 :
-    weekdayIndex === 6 ? 2 :
-    weekdayIndex === 5 ? 3 :
-    0;
+    weekdayIndex === 0 ? 1 : weekdayIndex === 6 ? 2 : weekdayIndex === 5 ? 3 : 0;
 
   jsDate.setUTCDate(jsDate.getUTCDate() + daysUntilMonday);
 
@@ -98,19 +102,6 @@ function getHistoryRedisKey(symbol: string) {
   return `${REDIS_HISTORY_PREFIX}:${String(symbol).trim().toUpperCase()}`;
 }
 
-function parseStooqDailyCsv(text: string) {
-  const lines = text.trim().split("\n");
-  if (lines.length < 3) return [] as Point[];
-
-  const daily: Point[] = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(",");
-
-    const date = cols[0];
-    const high = Number(cols[2]);
-    const low = Number(cols[3]);
-    const close = Number(cols[4]);
 function parseStooqDailyCsv(text: string) {
   const trimmed = text.trim();
   if (!trimmed) return [] as Point[];
@@ -193,7 +184,7 @@ export async function fetchAndCacheDailyHistory(symbol: string) {
     cache: "no-store",
     headers: {
       "user-agent": "Mozilla/5.0",
-      "accept": "text/csv,text/plain;q=0.9,*/*;q=0.8",
+      accept: "text/csv,text/plain;q=0.9,*/*;q=0.8",
     },
   });
 
@@ -218,8 +209,7 @@ export async function fetchAndCacheDailyHistory(symbol: string) {
   }
 
   const looksLikeCsv =
-    text.toLowerCase().includes("date") &&
-    text.toLowerCase().includes("close");
+    text.toLowerCase().includes("date") && text.toLowerCase().includes("close");
 
   if (!looksLikeCsv) {
     throw new Error("Stooq history response was not valid CSV data");
