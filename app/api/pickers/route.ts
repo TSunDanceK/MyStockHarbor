@@ -95,6 +95,8 @@ type SignalRecord = {
   preferredTimeframe?: "D" | "W" | "M";
   preferredIndicator?: "MA200" | "RSI(14)" | "MACD(12,26,9)";
   dashboardHref?: string;
+
+  isDynamicUniverse?: boolean;
 };
 
 type PickersPayload = {
@@ -131,9 +133,9 @@ const CACHE_SECONDS = 60 * 10;
 const STALE_SECONDS = 60 * 20;
 const MEMORY_CACHE_MS = 60_000;
 
-const PICKERS_REDIS_KEY = "msh:pickers:v2:main";
+const PICKERS_REDIS_KEY = "msh:pickers:v3:main";
 const PICKERS_REDIS_TTL_SECONDS = 6 * 60 * 60;
-const PICKERS_LOCK_KEY = "msh:pickers:v2:main:lock";
+const PICKERS_LOCK_KEY = "msh:pickers:v3:main:lock";
 const PICKERS_LOCK_TTL_SECONDS = 120;
 
 /* ------------------------ small util helpers ------------------------ */
@@ -848,55 +850,16 @@ async function fetchHistory(symbol: string, days: number) {
 /* ------------------------------ universe ----------------------------- */
 
 const PRESET_UNIVERSE: string[] = [
-  "AAPL",
-  "MSFT",
-  "NVDA",
-  "AMZN",
-  "GOOGL",
-  "META",
-  "TSLA",
-  "BRK.B",
-  "AVGO",
-  "LLY",
-  "JPM",
-  "V",
-  "UNH",
-  "XOM",
-  "PG",
-  "MA",
-  "COST",
-  "HD",
-  "MRK",
-  "ABBV",
-  "CRM",
-  "NFLX",
-  "ORCL",
-  "BAC",
-  "KO",
-  "PEP",
-  "ADBE",
-  "TMO",
-  "WMT",
-  "CSCO",
-  "ACN",
-  "MCD",
-  "ABT",
-  "CVX",
-  "LIN",
-  "AMD",
-  "NKE",
-  "DHR",
-  "TXN",
-  "INTC",
-  "QCOM",
-  "PM",
-  "IBM",
-  "NOW",
-  "SBUX",
-  "CAT",
-  "GE",
-  "AMAT",
-  "LOW",
+  "AAPL","MSFT","NVDA","AMZN","GOOGL","META","TSLA","BRK.B","AVGO","LLY",
+  "JPM","V","UNH","XOM","PG","MA","COST","HD","MRK","ABBV",
+  "CRM","NFLX","ORCL","BAC","KO","PEP","ADBE","TMO","WMT","CSCO",
+  "ACN","MCD","ABT","CVX","LIN","AMD","NKE","DHR","TXN","INTC",
+  "QCOM","PM","IBM","NOW","SBUX","CAT","GE","AMAT","LOW","UBER",
+  "PANW","PLTR","SHOP","MU","KLAC","LRCX","ANET","SNOW","CRWD","MELI",
+  "ASML","APH","DE","PGR","VRTX","ADP","INTU","CMCSA","COP","AXP",
+  "BKNG","AMGN","HON","ISRG","TJX","SYK","UNP","GILD","MDT","ADI",
+  "CB","C","MO","GS","ETN","MMC","TMUS","CI","SO","DUK",
+  "ELV","SCHW","BLK","REGN","FI","TT","PH","PYPL","CDNS","MAR",
 ];
 
 const UNIVERSE_CAP = 200;
@@ -949,6 +912,7 @@ async function buildPickersPayload(origin: string): Promise<PickersPayload> {
   const limit = pLimit(10);
   const days = 2600;
 
+  const hotDynamicNames: PickerItem[] = [];
   const green: PickerItem[] = [];
   const red: PickerItem[] = [];
   const trendLeaders: PickerItem[] = [];
@@ -960,7 +924,7 @@ async function buildPickersPayload(origin: string): Promise<PickersPayload> {
   const signalRecords: SignalRecord[] = [];
 
   const isDynamicUniverse = (sym: string) => dynamicUniverseSet.has(sym);
-  const dynamicBoost = (sym: string) => (isDynamicUniverse(sym) ? 1000 : 0);
+  const dynamicBoost = (sym: string) => (isDynamicUniverse(sym) ? 10000 : 0);
 
   await Promise.all(
     universe.map((symbol) =>
@@ -969,6 +933,7 @@ async function buildPickersPayload(origin: string): Promise<PickersPayload> {
           const pts = await fetchHistory(symbol, days);
           if (!pts.length) return;
 
+          const dynamicName = isDynamicUniverse(symbol);
           const comp = buildCompositeFromHistory(pts);
 
           if (comp) {
@@ -981,6 +946,20 @@ async function buildPickersPayload(origin: string): Promise<PickersPayload> {
               typeof lastClose === "number" &&
               typeof lastMA200 === "number" &&
               lastClose > lastMA200;
+
+            const hotSignals =
+              (comp.oversold >= 2 ? 1 : 0) +
+              (comp.overbought >= 2 ? 1 : 0) +
+              (comp.spikes >= 1 ? 1 : 0);
+
+            if (dynamicName && hotSignals > 0) {
+              hotDynamicNames.push({
+                symbol,
+                tone: comp.tone,
+                note: `${comp.tag} • ${comp.flagged}/${comp.total} checks`,
+                _score: 10000 + comp.flagged * 100 + hotSignals * 1000,
+              });
+            }
 
             if (pickIsGreenOverallSignal(comp) && aboveMA200) {
               green.push({
@@ -1279,6 +1258,7 @@ async function buildPickersPayload(origin: string): Promise<PickersPayload> {
                     indicator: preferredDivergenceIndicator,
                   })
                 : undefined,
+            isDynamicUniverse: dynamicName,
           });
         } catch {
           // ignore per-symbol failures
@@ -1330,6 +1310,13 @@ async function buildPickersPayload(origin: string): Promise<PickersPayload> {
   };
 
   const sections: PickerSection[] = [
+    buildSection({
+      title: "Hot Market Names Right Now",
+      description:
+        "Names coming from the live dynamic universe that are also triggering meaningful technical conditions right now.",
+      source: hotDynamicNames,
+      take: 20,
+    }),
     buildSection({
       title: "Oversold Stocks Today (Potential Rebound Setups)",
       description:
