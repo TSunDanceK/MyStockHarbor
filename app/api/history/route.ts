@@ -1,58 +1,9 @@
 import { NextResponse } from "next/server";
-import { getDailyHistory, type Point } from "../../../lib/server/historyCache";
+import { type Point } from "../../../lib/server/historyCache";
 
 export const runtime = "nodejs";
 
-const ACTIVE_CACHE_SECONDS = 3600;
-const ACTIVE_STALE_SECONDS = 7200;
-
-const QUIET_CACHE_SECONDS = 60 * 60 * 14;
-const QUIET_STALE_SECONDS = 60 * 60 * 6;
-
 type Interval = "d" | "w" | "m";
-
-function getEasternParts(date = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    weekday: "short",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(date);
-
-  const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
-  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
-  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
-
-  return { weekday, hour, minute };
-}
-
-function isWeekendEastern(weekday: string) {
-  return weekday === "Sat" || weekday === "Sun";
-}
-
-function isActiveMarketWindow(date = new Date()) {
-  const { weekday, hour, minute } = getEasternParts(date);
-
-  if (isWeekendEastern(weekday)) return false;
-
-  const totalMinutes = hour * 60 + minute;
-  const start = 8 * 60 + 30;
-  const end = 17 * 60;
-
-  return totalMinutes >= start && totalMinutes <= end;
-}
-
-function getCacheControlHeader() {
-  if (isActiveMarketWindow()) {
-    return `public, s-maxage=${ACTIVE_CACHE_SECONDS}, stale-while-revalidate=${ACTIVE_STALE_SECONDS}`;
-  }
-
-  return `public, s-maxage=${QUIET_CACHE_SECONDS}, stale-while-revalidate=${QUIET_STALE_SECONDS}`;
-}
 
 function parseInterval(value: string | null): Interval {
   if (value === "w") return "w";
@@ -189,32 +140,6 @@ async function fetchDailyHistoryDirect(symbol: string) {
   throw new Error(
     `Stooq history response was not valid CSV data; content-type=${contentType}; final-url=${finalUrl}; preview=${preview}`
   );
-};
-
-  const contentType = res.headers.get("content-type") || "unknown";
-  const finalUrl = res.url || url;
-
-  if (!res.ok) {
-    const text = await res.text();
-    const preview = text.slice(0, 300).replace(/\s+/g, " ").trim();
-
-    throw new Error(
-      `Direct Stooq history request failed with status ${res.status}; content-type=${contentType}; final-url=${finalUrl}; preview=${preview}`
-    );
-  }
-
-  const text = await res.text();
-  const daily = parseStooqDailyCsv(text);
-
-  if (daily.length > 0) {
-    return daily;
-  }
-
-  const preview = text.slice(0, 300).replace(/\s+/g, " ").trim();
-
-  throw new Error(
-    `Stooq history response was not valid CSV data; content-type=${contentType}; final-url=${finalUrl}; preview=${preview}`
-  );
 }
 
 export async function GET(req: Request) {
@@ -233,6 +158,7 @@ export async function GET(req: Request) {
         symbol,
         interval,
         points: points.slice(-days),
+        debugVersion: "history-route-debug-v3-direct-only",
       },
       {
         headers: {
