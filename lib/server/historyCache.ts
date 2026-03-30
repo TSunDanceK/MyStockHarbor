@@ -132,26 +132,27 @@ function toFiniteNumber(value: unknown) {
 function parseFmpHistoricalRows(rows: FmpHistoricalRow[] | undefined) {
   if (!Array.isArray(rows) || rows.length === 0) return [] as Point[];
 
-  const daily: Point[] = rows
-    .map((row) => {
-      const date = typeof row.date === "string" ? row.date.trim() : "";
-      const close = toFiniteNumber(row.close);
-      const high = toFiniteNumber(row.high);
-      const low = toFiniteNumber(row.low);
-      const volume = toFiniteNumber(row.volume);
+  const daily: Point[] = [];
 
-      if (!date || close === null) return null;
+  for (const row of rows) {
+    const date = typeof row.date === "string" ? row.date.trim() : "";
+    const close = toFiniteNumber(row.close);
+    const high = toFiniteNumber(row.high);
+    const low = toFiniteNumber(row.low);
+    const volume = toFiniteNumber(row.volume);
 
-      return {
-        date,
-        close,
-        high: high ?? undefined,
-        low: low ?? undefined,
-        volume: volume ?? undefined,
-      } satisfies Point;
-    })
-    .filter((point): point is Point => point !== null)
-    .sort((a, b) => a.date.localeCompare(b.date));
+    if (!date || close === null) continue;
+
+    daily.push({
+      date,
+      close,
+      high: high ?? undefined,
+      low: low ?? undefined,
+      volume: volume ?? undefined,
+    });
+  }
+
+  daily.sort((a, b) => a.date.localeCompare(b.date));
 
   return daily;
 }
