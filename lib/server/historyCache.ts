@@ -21,9 +21,17 @@ const redis =
     ? Redis.fromEnv()
     : null;
 
-const REDIS_HISTORY_PREFIX = "msh:history:v4";
+const REDIS_HISTORY_PREFIX = "msh:history:v5";
 const REDIS_HISTORY_TTL_SECONDS = 6 * 60 * 60;
 const MIN_QUALIFIED_POINTS = 30;
+
+const HISTORY_LOCK_PREFIX = "msh:history-lock:v1";
+const HISTORY_LOCK_TTL_SECONDS = 45;
+
+const FMP_CALL_COUNTER_PREFIX = "msh:fmp-calls:v1";
+const FMP_SAFE_CALLS_PER_MINUTE = 650;
+const FMP_WAIT_STEP_MS = 400;
+const FMP_MAX_WAIT_MS = 20_000;
 
 type FmpHistoricalRow = {
   date?: string;
@@ -35,6 +43,10 @@ type FmpHistoricalRow = {
 };
 
 type FmpHistoricalResponse = FmpHistoricalRow[] | { Error?: string };
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
 
 function getEasternParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -113,6 +125,10 @@ function getHistoryRedisKey(symbol: string) {
   return `${REDIS_HISTORY_PREFIX}:${String(symbol).trim().toUpperCase()}`;
 }
 
+function getHistoryLockKey(symbol: string) {
+  return `${HISTORY_LOCK_PREFIX}:${String(symbol).trim().toUpperCase()}`;
+}
+
 function normalizeSymbol(symbol: string) {
   return String(symbol).trim().toUpperCase();
 }
@@ -152,6 +168,103 @@ function parseFmpHistoricalRows(rows: FmpHistoricalRow[] | undefined) {
   daily.sort((a, b) => a.date.localeCompare(b.date));
 
   return daily;
+}
+
+function getMinuteBucketParts(now = new Date()) {
+  const year = now.getUTCFullYear();
+  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(now.getUTCDate()).padStart(2, "0");
+  const hour = String(now.getUTCHours()).padStart(2, "0");
+  const minute = String(now.getUTCMinutes()).padStart(2, "0");
+
+  return {
+    bucket: `${year}${month}${day}${hour}${minute}`,
+    secondsRemaining: 60 - now.getUTCSeconds(),
+  };
+}
+
+function getFmpCounterKey(now = new Date()) {
+  const { bucket } = getMinuteBucketParts(now);
+  return `${FMP_CALL_COUNTER_PREFIX}:${bucket}`;
+}
+
+async function reserveFmpCallSlot() {
+  if (!redis) return;
+
+  const startedAt = Date.now();
+
+  while (true) {
+    const now = new Date();
+    const key = getFmpCounterKey(now);
+    const { secondsRemaining } = getMinuteBucketParts(now);
+
+    try {
+      const current = await redis.incr(key);
+
+      if (current === 1) {
+        await redis.expire(key, Math.max(2, secondsRemaining + 2));
+      }
+
+      if (current <= FMP_SAFE_CALLS_PER_MINUTE) {
+        return;
+      }
+    } catch {
+      return;
+    }
+
+    const elapsed = Date.now() - startedAt;
+    if (elapsed >= FMP_MAX_WAIT_MS) {
+      throw new Error("FMP call guard wait timeout");
+    }
+
+    await sleep(FMP_WAIT_STEP_MS);
+  }
+}
+
+async function acquireHistoryLock(symbol: string) {
+  if (!redis) return "no-redis";
+
+  const token = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const key = getHistoryLockKey(symbol);
+
+  try {
+    const result = await redis.set(key, token, {
+      nx: true,
+      ex: HISTORY_LOCK_TTL_SECONDS,
+    });
+
+    if (result === "OK") return token;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function releaseHistoryLock(symbol: string, token: string | null) {
+  if (!redis || !token || token === "no-redis") return;
+
+  const key = getHistoryLockKey(symbol);
+
+  try {
+    const current = await redis.get<string>(key);
+    if (current === token) {
+      await redis.del(key);
+    }
+  } catch {
+    // fail open
+  }
+}
+
+async function waitForHistoryCache(symbol: string, maxWaitMs = 12_000) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < maxWaitMs) {
+    const cached = await readHistoryEntry(symbol);
+    if (cached) return cached;
+    await sleep(300);
+  }
+
+  return null;
 }
 
 export async function readHistoryEntry(symbol: string) {
@@ -195,6 +308,8 @@ export async function fetchAndCacheDailyHistory(symbol: string) {
   if (!apiKey) {
     throw new Error("Missing FMP_API_KEY environment variable");
   }
+
+  await reserveFmpCallSlot();
 
   const url = `https://financialmodelingprep.com/stable/historical-price-eod/full?symbol=${encodeURIComponent(
     fmpSymbol
@@ -262,13 +377,31 @@ export async function getDailyHistory(symbol: string) {
     return [] as Point[];
   }
 
-  const fresh = await fetchAndCacheDailyHistory(normalized);
+  const lockToken = await acquireHistoryLock(normalized);
 
-  if (fresh.status === "qualified" && Array.isArray(fresh.daily)) {
-    return fresh.daily;
+  if (!lockToken) {
+    const waited = await waitForHistoryCache(normalized);
+
+    if (waited) {
+      if (waited.status === "qualified" && Array.isArray(waited.daily)) {
+        return waited.daily;
+      }
+
+      return [] as Point[];
+    }
   }
 
-  return [] as Point[];
+  try {
+    const fresh = await fetchAndCacheDailyHistory(normalized);
+
+    if (fresh.status === "qualified" && Array.isArray(fresh.daily)) {
+      return fresh.daily;
+    }
+
+    return [] as Point[];
+  } finally {
+    await releaseHistoryLock(normalized, lockToken);
+  }
 }
 
 export async function ensureQualifiedHistory(symbol: string) {
@@ -279,6 +412,6 @@ export async function ensureQualifiedHistory(symbol: string) {
     return cached.status === "qualified";
   }
 
-  const fresh = await fetchAndCacheDailyHistory(normalized);
-  return fresh.status === "qualified";
+  const daily = await getDailyHistory(normalized);
+  return Array.isArray(daily) && daily.length >= MIN_QUALIFIED_POINTS;
 }
