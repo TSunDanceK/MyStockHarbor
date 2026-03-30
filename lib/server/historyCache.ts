@@ -16,9 +16,12 @@ export type HistoryCacheEntry = {
   daily?: Point[];
 };
 
-const redis = Redis.fromEnv();
+const redis =
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+    ? Redis.fromEnv()
+    : null;
 
-const REDIS_HISTORY_PREFIX = "msh:history:v1";
+const REDIS_HISTORY_PREFIX = "msh:history:v2";
 const REDIS_HISTORY_TTL_SECONDS = 6 * 60 * 60;
 const MIN_QUALIFIED_POINTS = 30;
 
@@ -108,6 +111,31 @@ function parseStooqDailyCsv(text: string) {
     const high = Number(cols[2]);
     const low = Number(cols[3]);
     const close = Number(cols[4]);
+function parseStooqDailyCsv(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed) return [] as Point[];
+
+  const lines = trimmed
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length < 2) return [] as Point[];
+
+  const header = lines[0].toLowerCase();
+  if (!header.includes("date") || !header.includes("close")) {
+    return [] as Point[];
+  }
+
+  const daily: Point[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(",");
+
+    const date = cols[0]?.trim();
+    const high = Number(cols[2]);
+    const low = Number(cols[3]);
+    const close = Number(cols[4]);
     const volume = Number(cols[5]);
 
     if (!date || !Number.isFinite(close)) continue;
@@ -127,6 +155,8 @@ function parseStooqDailyCsv(text: string) {
 export async function readHistoryEntry(symbol: string) {
   const normalized = String(symbol).trim().toUpperCase();
 
+  if (!redis) return null;
+
   try {
     const entry = await redis.get<HistoryCacheEntry>(getHistoryRedisKey(normalized));
 
@@ -143,6 +173,8 @@ export async function readHistoryEntry(symbol: string) {
 export async function writeHistoryEntry(symbol: string, entry: HistoryCacheEntry) {
   const normalized = String(symbol).trim().toUpperCase();
 
+  if (!redis) return;
+
   try {
     await redis.set(getHistoryRedisKey(normalized), entry, {
       ex: getRedisHistoryTtlSeconds(),
@@ -157,44 +189,51 @@ export async function fetchAndCacheDailyHistory(symbol: string) {
   const stooqSymbol = `${normalized.toLowerCase()}.us`;
   const url = `https://stooq.com/q/d/l/?s=${stooqSymbol}&i=d`;
 
-  try {
-    const res = await fetch(url, { cache: "no-store" });
-    const text = await res.text();
-    const daily = parseStooqDailyCsv(text);
+  const res = await fetch(url, {
+    cache: "no-store",
+    headers: {
+      "user-agent": "Mozilla/5.0",
+      "accept": "text/csv,text/plain;q=0.9,*/*;q=0.8",
+    },
+  });
 
-    if (daily.length >= MIN_QUALIFIED_POINTS) {
-      const entry: HistoryCacheEntry = {
-        symbol: normalized,
-        status: "qualified",
-        checkedAt: Date.now(),
-        source: "stooq",
-        daily,
-      };
+  if (!res.ok) {
+    throw new Error(`Stooq history request failed with status ${res.status}`);
+  }
 
-      await writeHistoryEntry(normalized, entry);
-      return entry;
-    }
+  const text = await res.text();
+  const daily = parseStooqDailyCsv(text);
 
+  if (daily.length >= MIN_QUALIFIED_POINTS) {
     const entry: HistoryCacheEntry = {
       symbol: normalized,
-      status: "non_qualified",
+      status: "qualified",
       checkedAt: Date.now(),
       source: "stooq",
-    };
-
-    await writeHistoryEntry(normalized, entry);
-    return entry;
-  } catch {
-    const entry: HistoryCacheEntry = {
-      symbol: normalized,
-      status: "non_qualified",
-      checkedAt: Date.now(),
-      source: "stooq",
+      daily,
     };
 
     await writeHistoryEntry(normalized, entry);
     return entry;
   }
+
+  const looksLikeCsv =
+    text.toLowerCase().includes("date") &&
+    text.toLowerCase().includes("close");
+
+  if (!looksLikeCsv) {
+    throw new Error("Stooq history response was not valid CSV data");
+  }
+
+  const entry: HistoryCacheEntry = {
+    symbol: normalized,
+    status: "non_qualified",
+    checkedAt: Date.now(),
+    source: "stooq",
+  };
+
+  await writeHistoryEntry(normalized, entry);
+  return entry;
 }
 
 export async function getDailyHistory(symbol: string) {
