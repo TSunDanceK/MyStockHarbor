@@ -9,23 +9,22 @@ type Point = {
   volume?: number;
 };
 
-function mapToChartPoints(data: Point[]) {
-  return data.map((p) => ({
-    time: p.date,
-    value: p.close,
-  }));
-}
-
 export default async function SPXPage() {
   const symbol = "^GSPC";
 
-  let chartPoints: { time: string; value: number }[] = [];
+  let chartPoints: Point[] = [];
 
   try {
     const history = await getDailyHistory(symbol);
 
     if (Array.isArray(history) && history.length > 0) {
-      chartPoints = mapToChartPoints(history);
+      chartPoints = history.map((p) => ({
+        date: p.date,
+        close: p.close,
+        high: p.high,
+        low: p.low,
+        volume: p.volume,
+      }));
     }
   } catch (error) {
     console.error("SPX history fetch failed:", error);
