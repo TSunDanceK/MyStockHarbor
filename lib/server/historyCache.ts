@@ -12,7 +12,7 @@ export type HistoryCacheEntry = {
   symbol: string;
   status: "qualified" | "non_qualified";
   checkedAt: number;
-  source: "stooq";
+  source: "fmp";
   daily?: Point[];
 };
 
@@ -21,9 +21,23 @@ const redis =
     ? Redis.fromEnv()
     : null;
 
-const REDIS_HISTORY_PREFIX = "msh:history:v2";
+const REDIS_HISTORY_PREFIX = "msh:history:v3";
 const REDIS_HISTORY_TTL_SECONDS = 6 * 60 * 60;
 const MIN_QUALIFIED_POINTS = 30;
+
+type FmpHistoricalRow = {
+  date?: string;
+  open?: number | string;
+  high?: number | string;
+  low?: number | string;
+  close?: number | string;
+  volume?: number | string;
+};
+
+type FmpHistoricalResponse = {
+  symbol?: string;
+  historical?: FmpHistoricalRow[];
+};
 
 function getEasternParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -102,49 +116,48 @@ function getHistoryRedisKey(symbol: string) {
   return `${REDIS_HISTORY_PREFIX}:${String(symbol).trim().toUpperCase()}`;
 }
 
-function parseStooqDailyCsv(text: string) {
-  const trimmed = text.trim();
-  if (!trimmed) return [] as Point[];
+function normalizeSymbol(symbol: string) {
+  return String(symbol).trim().toUpperCase();
+}
 
-  const lines = trimmed
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
+function buildFmpSymbol(symbol: string) {
+  return normalizeSymbol(symbol).replace(/\./g, "-");
+}
 
-  if (lines.length < 2) return [] as Point[];
+function toFiniteNumber(value: unknown) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
 
-  const header = lines[0].toLowerCase();
-  if (!header.includes("date") || !header.includes("close")) {
-    return [] as Point[];
-  }
+function parseFmpHistoricalRows(rows: FmpHistoricalRow[] | undefined) {
+  if (!Array.isArray(rows) || rows.length === 0) return [] as Point[];
 
-  const daily: Point[] = [];
+  const daily: Point[] = rows
+    .map((row) => {
+      const date = typeof row.date === "string" ? row.date.trim() : "";
+      const close = toFiniteNumber(row.close);
+      const high = toFiniteNumber(row.high);
+      const low = toFiniteNumber(row.low);
+      const volume = toFiniteNumber(row.volume);
 
-  for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(",");
+      if (!date || close === null) return null;
 
-    const date = cols[0]?.trim();
-    const high = Number(cols[2]);
-    const low = Number(cols[3]);
-    const close = Number(cols[4]);
-    const volume = Number(cols[5]);
-
-    if (!date || !Number.isFinite(close)) continue;
-
-    daily.push({
-      date,
-      close,
-      high: Number.isFinite(high) ? high : undefined,
-      low: Number.isFinite(low) ? low : undefined,
-      volume: Number.isFinite(volume) ? volume : undefined,
-    });
-  }
+      return {
+        date,
+        close,
+        high: high ?? undefined,
+        low: low ?? undefined,
+        volume: volume ?? undefined,
+      } satisfies Point;
+    })
+    .filter((point): point is Point => point !== null)
+    .sort((a, b) => a.date.localeCompare(b.date));
 
   return daily;
 }
 
 export async function readHistoryEntry(symbol: string) {
-  const normalized = String(symbol).trim().toUpperCase();
+  const normalized = normalizeSymbol(symbol);
 
   if (!redis) return null;
 
@@ -154,6 +167,7 @@ export async function readHistoryEntry(symbol: string) {
     if (!entry || typeof entry !== "object") return null;
     if (entry.symbol !== normalized) return null;
     if (entry.status !== "qualified" && entry.status !== "non_qualified") return null;
+    if (entry.source !== "fmp") return null;
 
     return entry;
   } catch {
@@ -162,7 +176,7 @@ export async function readHistoryEntry(symbol: string) {
 }
 
 export async function writeHistoryEntry(symbol: string, entry: HistoryCacheEntry) {
-  const normalized = String(symbol).trim().toUpperCase();
+  const normalized = normalizeSymbol(symbol);
 
   if (!redis) return;
 
@@ -176,31 +190,53 @@ export async function writeHistoryEntry(symbol: string, entry: HistoryCacheEntry
 }
 
 export async function fetchAndCacheDailyHistory(symbol: string) {
-  const normalized = String(symbol).trim().toUpperCase();
-  const stooqSymbol = `${normalized.toLowerCase()}.us`;
-  const url = `https://stooq.com/q/d/l/?s=${stooqSymbol}&i=d`;
+  const normalized = normalizeSymbol(symbol);
+  const fmpSymbol = buildFmpSymbol(normalized);
+  const apiKey = process.env.FMP_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("Missing FMP_API_KEY environment variable");
+  }
+
+  const url = `https://financialmodelingprep.com/api/v3/historical-price-full/${encodeURIComponent(
+    fmpSymbol
+  )}?serietype=line&apikey=${encodeURIComponent(apiKey)}`;
 
   const res = await fetch(url, {
     cache: "no-store",
     headers: {
-      "user-agent": "Mozilla/5.0",
-      accept: "text/csv,text/plain;q=0.9,*/*;q=0.8",
+      accept: "application/json,text/plain;q=0.9,*/*;q=0.8",
     },
   });
 
   if (!res.ok) {
-    throw new Error(`Stooq history request failed with status ${res.status}`);
+    throw new Error(`FMP history request failed with status ${res.status} for ${normalized}`);
   }
 
-  const text = await res.text();
-  const daily = parseStooqDailyCsv(text);
+  const payload = (await res.json()) as FmpHistoricalResponse | { Error?: string };
+
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "Error" in payload &&
+    typeof payload.Error === "string" &&
+    payload.Error.trim()
+  ) {
+    throw new Error(`FMP history error for ${normalized}: ${payload.Error}`);
+  }
+
+  const daily = parseFmpHistoricalRows(
+    payload && typeof payload === "object" && "historical" in payload
+      ? payload.historical
+      : undefined
+  );
 
   if (daily.length >= MIN_QUALIFIED_POINTS) {
     const entry: HistoryCacheEntry = {
       symbol: normalized,
       status: "qualified",
       checkedAt: Date.now(),
-      source: "stooq",
+      source: "fmp",
       daily,
     };
 
@@ -208,18 +244,11 @@ export async function fetchAndCacheDailyHistory(symbol: string) {
     return entry;
   }
 
-  const looksLikeCsv =
-    text.toLowerCase().includes("date") && text.toLowerCase().includes("close");
-
-  if (!looksLikeCsv) {
-    throw new Error("Stooq history response was not valid CSV data");
-  }
-
   const entry: HistoryCacheEntry = {
     symbol: normalized,
     status: "non_qualified",
     checkedAt: Date.now(),
-    source: "stooq",
+    source: "fmp",
   };
 
   await writeHistoryEntry(normalized, entry);
@@ -227,7 +256,7 @@ export async function fetchAndCacheDailyHistory(symbol: string) {
 }
 
 export async function getDailyHistory(symbol: string) {
-  const normalized = String(symbol).trim().toUpperCase();
+  const normalized = normalizeSymbol(symbol);
   const cached = await readHistoryEntry(normalized);
 
   if (cached) {
@@ -248,7 +277,7 @@ export async function getDailyHistory(symbol: string) {
 }
 
 export async function ensureQualifiedHistory(symbol: string) {
-  const normalized = String(symbol).trim().toUpperCase();
+  const normalized = normalizeSymbol(symbol);
   const cached = await readHistoryEntry(normalized);
 
   if (cached) {
