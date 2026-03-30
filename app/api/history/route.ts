@@ -227,12 +227,15 @@ export async function GET(req: Request) {
     const message =
       error instanceof Error ? error.message : "Unknown history fetch error";
 
-    return NextResponse.json(
+    return Response.json(
       {
         symbol,
         interval,
         points: [] as Point[],
         error: message,
+        debugType: typeof error,
+        debugNow: new Date().toISOString(),
+        debugVersion: "history-route-debug-v2",
       },
       {
         status: 500,
