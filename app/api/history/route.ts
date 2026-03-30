@@ -159,18 +159,40 @@ async function fetchDailyHistoryDirect(symbol: string) {
 
   const res = await fetch(url, {
     cache: "no-store",
+    redirect: "follow",
     headers: {
-      "user-agent": "Mozilla/5.0",
-      accept: "text/csv,text/plain;q=0.9,*/*;q=0.8",
+      "user-agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+      accept: "text/csv,text/plain,text/html;q=0.9,*/*;q=0.8",
+      "accept-language": "en-GB,en-US;q=0.9,en;q=0.8",
+      referer: "https://stooq.com/",
     },
   });
 
+  const contentType = res.headers.get("content-type") || "unknown";
+  const finalUrl = res.url || url;
+
   if (!res.ok) {
-    throw new Error(`Direct Stooq history request failed with status ${res.status}`);
+    const text = await res.text();
+    const preview = text.slice(0, 300).replace(/\s+/g, " ").trim();
+
+    throw new Error(
+      `Direct Stooq history request failed with status ${res.status}; content-type=${contentType}; final-url=${finalUrl}; preview=${preview}`
+    );
   }
 
   const text = await res.text();
-  return parseStooqDailyCsv(text);
+  const daily = parseStooqDailyCsv(text);
+
+  if (daily.length > 0) {
+    return daily;
+  }
+
+  const preview = text.slice(0, 300).replace(/\s+/g, " ").trim();
+
+  throw new Error(
+    `Stooq history response was not valid CSV data; content-type=${contentType}; final-url=${finalUrl}; preview=${preview}`
+  );
 }
 
 export async function GET(req: Request) {
