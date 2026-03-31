@@ -1,35 +1,3 @@
-Context:
-- Market environment: (risk-on / risk-off / neutral)
-- Sector strength: (strong / weak / mixed)
-- Catalyst (if any): (earnings, news, macro, none)
-- Stock type: (growth / value / ETF / index)
-- Key narrative: (AI, rates, consumer, etc)
-
-Chart notes:
-- Trend: 
-- Structure: 
-- Momentum:
-- Anything unusual:
-
-Goal:
-Turn this into a high-quality trading insight that combines:
-- technical structure
-- trader positioning
-- real-world context
-- why it matters for THIS stock specifically
-
-Requirements:
-- Do NOT just describe price action
-- Explain what traders are likely doing
-- Explain why this setup matters specifically for this stock
-- Add one sentence of context about the company if relevant
-- Prioritise insight over description (tell me something useful, not just what I can already see)
-- - Include brief company context (what it does) if relevant
-- Include recent news or explicitly state if there is no major news driving the move
-- Explain whether the move is news-driven or positioning/technical
-
-
-
 # MyStockHarbor Insight Template (STRICT SINGLE FORMAT)
 
 This template MUST be followed exactly. Output must be a SINGLE markdown file only.
@@ -47,6 +15,7 @@ RULES:
 - timeframe MUST be "d" or "w"
 - chartBars MUST be between 20 and 400
 - Keep structure clean and readable
+- Prioritise insight over description (tell me something useful, not just what is visible)
 
 ---
 
@@ -117,9 +86,24 @@ CONTENT RULES:
 
 - Write clearly and simply (trader-focused tone)
 - No fluff or generic filler
-- Reference structure, trend, momentum, and levels
+- Focus on what traders need to know, not just what the chart shows
+- Explain structure, trend, momentum, and positioning
 - Mention indicators ONLY if included in chartIndicators
 - Keep it concise but insightful
+
+### Context Requirements (CRITICAL)
+
+- Briefly explain what the company does IF relevant (1 sentence max)
+- State whether there is any recent news or catalyst:
+  - If YES → include it briefly
+  - If NO → explicitly state that the move is not news-driven
+- Explain whether the move is driven by:
+  - technicals
+  - positioning
+  - macro / sector pressure
+- Connect the chart setup to the broader market or sector where relevant
+
+---
 
 Levels to watch MUST use:
 
@@ -128,11 +112,50 @@ Levels to watch MUST use:
 - Moving averages:
 - Risk point:
 
+---
+
 Bull vs bear MUST use:
 
 **Bullish scenario:**  
 
 **Bearish scenario:**  
+
+---
+
+SECTION GUIDANCE (HOW TO WRITE EACH PART):
+
+## What happened
+- Describe the current setup clearly
+- Include structure (trend change, breakdown, range, etc.)
+- Mention any key signals (divergence, rejection, breakout)
+
+## Why it matters
+- Explain WHY this setup is important (not just what happened)
+- Include:
+  - company context (what it does, briefly)
+  - whether news is driving the move or not
+  - what traders are likely doing
+- This is the MOST important section for depth
+
+## Levels to watch
+- Keep clean and precise
+- Use only key actionable levels
+
+## What would confirm the idea
+- Explain what price needs to do next
+- Focus on confirmation of structure or momentum shift
+
+## What would weaken the idea
+- Define invalidation clearly
+- Show what breaks the setup
+
+## Bull vs bear scenarios
+- Show both sides clearly
+- Reflect real market uncertainty
+
+## Bottom line
+- Summarise the trade idea in 1–2 strong sentences
+- Focus on decision point (not recap)
 
 ---
 
