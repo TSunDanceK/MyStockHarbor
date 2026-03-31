@@ -24,6 +24,9 @@ Requirements:
 - Explain why this setup matters specifically for this stock
 - Add one sentence of context about the company if relevant
 - Prioritise insight over description (tell me something useful, not just what I can already see)
+- - Include brief company context (what it does) if relevant
+- Include recent news or explicitly state if there is no major news driving the move
+- Explain whether the move is news-driven or positioning/technical
 
 
 
