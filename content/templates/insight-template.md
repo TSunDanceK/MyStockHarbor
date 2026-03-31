@@ -16,6 +16,9 @@ RULES:
 - chartBars MUST be between 20 and 400
 - Keep structure clean and readable
 - Prioritise insight over description (tell me something useful, not just what is visible)
+- If referencing news or catalysts, only include widely known or clearly stated information
+- If no clear news is provided, explicitly state that the move is not news-driven
+- Do NOT invent or assume specific news events
 
 ---
 
