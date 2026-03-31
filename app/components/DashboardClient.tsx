@@ -3575,23 +3575,32 @@ return (
         }
 
 .msh-topbar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "logo nav"
+    "title title";
+  column-gap: 18px;
+  row-gap: 12px;
   margin-bottom: 18px;
+  align-items: start;
 }
 
 .msh-top-left {
+  grid-area: logo;
   display: flex;
   align-items: center;
   gap: 14px;
-  flex-wrap: nowrap;
-  position: relative;
+  min-width: 0;
+}
+
+.msh-top-heading-block {
+  grid-area: title;
   min-width: 0;
 }
 
 .msh-desktop-nav-row {
+  grid-area: nav;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -3599,6 +3608,20 @@ return (
   flex-wrap: wrap;
   margin-bottom: 0;
   flex: 0 0 auto;
+}
+
+@media (max-width: 1180px) {
+  .msh-topbar {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "logo"
+      "nav"
+      "title";
+  }
+
+  .msh-desktop-nav-row {
+    justify-content: flex-start;
+  }
 }
 
         .msh-top-nav-btn:hover {
@@ -3833,57 +3856,57 @@ return (
       `}</style>
 
       <div className="msh-page-wrap">
-        <div className="msh-topbar">
-          <div className="msh-top-left">
-            <Link
-              href="/"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                textDecoration: "none",
-                flex: "0 0 auto",
-                marginRight: 8,
-              }}
-            >
-              <img
-                src="/logo.png"
-                alt="MyStockHarbor"
-                style={{
-                  height: 78,
-                  width: "auto",
-                  objectFit: "contain",
-                  display: "block",
-                }}
-              />
-            </Link>
+<div className="msh-topbar">
+  <div className="msh-top-left">
+    <Link
+      href="/"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        textDecoration: "none",
+        flex: "0 0 auto",
+        marginRight: 8,
+      }}
+    >
+      <img
+        src="/logo.png"
+        alt="MyStockHarbor"
+        style={{
+          height: 78,
+          width: "auto",
+          objectFit: "contain",
+          display: "block",
+        }}
+      />
+    </Link>
+  </div>
 
-            <div>
-              <h1
-                style={{
-                  margin: 0,
-                  fontWeight: 950,
-                  fontSize: 28,
-                  lineHeight: 1.05,
-                  letterSpacing: "-0.03em",
-                }}
-              >
-                Stock Analysis Tools, Stock Pickers & Market Insights
-              </h1>
+  <div className="msh-top-heading-block">
+    <h1
+      style={{
+        margin: 0,
+        fontWeight: 950,
+        fontSize: 28,
+        lineHeight: 1.05,
+        letterSpacing: "-0.03em",
+      }}
+    >
+      Stock Analysis Tools, Stock Pickers & Market Insights
+    </h1>
 
-              <div
-                style={{
-                  marginTop: 6,
-                  color: COLORS.mutedFg,
-                  fontSize: 13,
-                  fontWeight: 700,
-                }}
-              >
-                Learn charts. Discover stocks. Trade smarter.
-              </div>
-            </div>
-          </div>
+    <div
+      style={{
+        marginTop: 6,
+        color: COLORS.mutedFg,
+        fontSize: 13,
+        fontWeight: 700,
+      }}
+    >
+      Learn charts. Discover stocks. Trade smarter.
+    </div>
+  </div>
 
-          <div className="msh-desktop-nav-row">
+  <div className="msh-desktop-nav-row">
             <SmallNavLink href="/learn">Learn</SmallNavLink>
             <SmallNavLink href="/platforms">Platforms</SmallNavLink>
             <SmallNavLink href="/pickers">Stock Pickers</SmallNavLink>
