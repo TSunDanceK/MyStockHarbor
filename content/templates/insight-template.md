@@ -1,3 +1,32 @@
+Context:
+- Market environment: (risk-on / risk-off / neutral)
+- Sector strength: (strong / weak / mixed)
+- Catalyst (if any): (earnings, news, macro, none)
+- Stock type: (growth / value / ETF / index)
+- Key narrative: (AI, rates, consumer, etc)
+
+Chart notes:
+- Trend: 
+- Structure: 
+- Momentum:
+- Anything unusual:
+
+Goal:
+Turn this into a high-quality trading insight that combines:
+- technical structure
+- trader positioning
+- real-world context
+- why it matters for THIS stock specifically
+
+Requirements:
+- Do NOT just describe price action
+- Explain what traders are likely doing
+- Explain why this setup matters specifically for this stock
+- Add one sentence of context about the company if relevant
+- Prioritise insight over description (tell me something useful, not just what I can already see)
+
+
+
 # MyStockHarbor Insight Template (STRICT SINGLE FORMAT)
 
 This template MUST be followed exactly. Output must be a SINGLE markdown file only.
