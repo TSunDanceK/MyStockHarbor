@@ -2,8 +2,7 @@
 export const dynamic = "force-dynamic";
 
 import { Redis } from "@upstash/redis";
-import { NextRequest } from "next/server";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { detectDivergenceFromHistory } from "../../../lib/ta/divergence";
 import { getDailyHistory } from "../../../lib/server/historyCache";
 
@@ -115,6 +114,47 @@ type CachedPickersPayload = {
   data: PickersPayload;
 };
 
+type TrendScoreResult = {
+  total: number;
+  passed: number;
+  priceAboveMA200: boolean;
+  priceAboveMA50: boolean;
+  ma50AboveMA200: boolean;
+  macdBullish: boolean;
+};
+
+type Ma200Candidate = {
+  pctDistance: number;
+  timeframe: "D" | "W";
+  score: number;
+  deepUnderPct: number;
+  abovePct: number;
+  slopePct: number;
+};
+
+type OversoldCandidate = {
+  score: number;
+  note: string;
+};
+
+type OverboughtCandidate = {
+  score: number;
+  note: string;
+};
+
+type AthPullbackCandidate = {
+  score: number;
+  drawdownPct: number;
+  avgDollarVolume: number;
+};
+
+type BreakoutCandidate = {
+  score: number;
+  breakoutPct: number;
+  breakoutBarsAgo: number;
+  avgDollarVolume: number;
+};
+
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
     ? Redis.fromEnv()
@@ -133,9 +173,9 @@ const CACHE_SECONDS = 60 * 10;
 const STALE_SECONDS = 60 * 20;
 const MEMORY_CACHE_MS = 60_000;
 
-const PICKERS_REDIS_KEY = "msh:pickers:v3:main";
+const PICKERS_REDIS_KEY = "msh:pickers:v4:main";
 const PICKERS_REDIS_TTL_SECONDS = 6 * 60 * 60;
-const PICKERS_LOCK_KEY = "msh:pickers:v3:main:lock";
+const PICKERS_LOCK_KEY = "msh:pickers:v4:main:lock";
 const PICKERS_LOCK_TTL_SECONDS = 120;
 
 /* ------------------------ small util helpers ------------------------ */
@@ -149,6 +189,24 @@ function originFromReq(req: NextRequest) {
 
 function lastNum(arr: Array<number | null>) {
   return arr.length ? arr[arr.length - 1] : null;
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function safeNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function avg(values: number[]) {
+  if (!values.length) return 0;
+  return values.reduce((sum, v) => sum + v, 0) / values.length;
+}
+
+function pctChange(from: number, to: number) {
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from === 0) return 0;
+  return ((to - from) / from) * 100;
 }
 
 function buildDashboardHref(args: {
@@ -168,6 +226,35 @@ function buildDashboardHref(args: {
   }
 
   return `/?${params.toString()}`;
+}
+
+function scoreLinear(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return 0;
+  if (max <= min) return 0;
+  return clamp(((value - min) / (max - min)) * 100, 0, 100);
+}
+
+function scoreInverse(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return 0;
+  if (max <= min) return 0;
+  return clamp(((max - value) / (max - min)) * 100, 0, 100);
+}
+
+function scoreTargetBand(value: number, idealMin: number, idealMax: number, hardMin: number, hardMax: number) {
+  if (!Number.isFinite(value)) return 0;
+  if (value < hardMin || value > hardMax) return 0;
+  if (value >= idealMin && value <= idealMax) return 100;
+
+  if (value < idealMin) {
+    return clamp(((value - hardMin) / (idealMin - hardMin)) * 100, 0, 100);
+  }
+
+  return clamp(((hardMax - value) / (hardMax - idealMax)) * 100, 0, 100);
+}
+
+function readPickersNotePercent(points: Point[], bars: number) {
+  const slice = points.slice(-bars);
+  return slice.length ? slice : points;
 }
 
 async function readPickersCache() {
@@ -503,7 +590,7 @@ function aggregatePoints(points: Point[], interval: "w" | "m"): AggregatedPoint[
   return bucketed;
 }
 
-function computeMa200Proximity(
+function computeMa200ProximityBasic(
   points: Point[],
   interval: "d" | "w"
 ): { pctDistance: number; timeframe: "D" | "W" } | null {
@@ -536,7 +623,130 @@ function computeMa200Proximity(
   };
 }
 
-/* --------------------- composite + picker logic ---------------------- */
+function averageDollarVolume(points: Point[], lookback = 20) {
+  const slice = points.slice(-lookback);
+  const values = slice
+    .map((p) => {
+      if (
+        typeof p.close !== "number" ||
+        !Number.isFinite(p.close) ||
+        typeof p.volume !== "number" ||
+        !Number.isFinite(p.volume)
+      ) {
+        return null;
+      }
+      return p.close * p.volume;
+    })
+    .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+
+  return values.length ? avg(values) : 0;
+}
+
+function liquidityScore(points: Point[]) {
+  const adv = averageDollarVolume(points, 20);
+  return scoreLinear(Math.log10(Math.max(adv, 1)), 5, 8.7);
+}
+
+function recentVolatilityPct(points: Point[], lookback = 20) {
+  const slice = points.slice(-lookback).filter((p) => Number.isFinite(p.close));
+  if (slice.length < 2) return 0;
+
+  let total = 0;
+  let count = 0;
+
+  for (let i = 1; i < slice.length; i++) {
+    const prev = slice[i - 1].close;
+    const cur = slice[i].close;
+    if (!Number.isFinite(prev) || !Number.isFinite(cur) || prev === 0) continue;
+    total += Math.abs(((cur - prev) / prev) * 100);
+    count++;
+  }
+
+  return count ? total / count : 0;
+}
+
+function computeMa200Candidate(points: Point[], interval: "d" | "w"): Ma200Candidate | null {
+  const baseSeries = interval === "d" ? points : aggregatePoints(points, "w").map((p) => ({
+    date: p.date,
+    close: p.close,
+    high: p.high,
+    low: p.low,
+    volume: p.volume,
+  }));
+
+  if (baseSeries.length < 220) return null;
+
+  const closes = baseSeries.map((p) => p.close);
+  const ma200Arr = movingAverage(closes, 200);
+
+  const lastClose = closes[closes.length - 1];
+  const lastMA200 = lastNum(ma200Arr);
+
+  if (
+    typeof lastClose !== "number" ||
+    typeof lastMA200 !== "number" ||
+    !Number.isFinite(lastClose) ||
+    !Number.isFinite(lastMA200) ||
+    lastMA200 === 0
+  ) {
+    return null;
+  }
+
+  const pctDistance = pctChange(lastMA200, lastClose);
+  if (pctDistance < -1 || pctDistance > 3) return null;
+
+  const lookback = Math.min(interval === "d" ? 500 : 260, closes.length);
+  const start = Math.max(0, closes.length - lookback);
+
+  let counted = 0;
+  let deepUnder = 0;
+  let above = 0;
+
+  for (let i = start; i < closes.length; i++) {
+    const close = closes[i];
+    const ma200 = ma200Arr[i];
+    if (typeof close !== "number" || typeof ma200 !== "number" || ma200 <= 0) continue;
+
+    const distPct = ((close - ma200) / ma200) * 100;
+    counted++;
+    if (distPct < -7) deepUnder++;
+    if (distPct > 0) above++;
+  }
+
+  if (!counted) return null;
+
+  const deepUnderPct = (deepUnder / counted) * 100;
+  const abovePct = (above / counted) * 100;
+
+  const slopeLookback = Math.min(interval === "d" ? 30 : 12, ma200Arr.length - 1);
+  const oldMA200 = ma200Arr[ma200Arr.length - 1 - slopeLookback];
+  const slopePct =
+    typeof oldMA200 === "number" && oldMA200 > 0
+      ? ((lastMA200 - oldMA200) / oldMA200) * 100
+      : 0;
+
+  const distanceScore = scoreTargetBand(pctDistance, -0.25, 1.5, -1, 3);
+  const deepUnderScore = scoreInverse(deepUnderPct, 20, 60);
+  const aboveScore = scoreLinear(abovePct, 45, 85);
+  const slopeScore = scoreLinear(slopePct, -2, 4);
+  const liqScore = liquidityScore(points);
+
+  const score =
+    distanceScore * 0.28 +
+    deepUnderScore * 0.32 +
+    aboveScore * 0.18 +
+    slopeScore * 0.14 +
+    liqScore * 0.08;
+
+  return {
+    pctDistance,
+    timeframe: interval === "d" ? "D" : "W",
+    score,
+    deepUnderPct,
+    abovePct,
+    slopePct,
+  };
+}
 
 function compositeToneFromCounts(overbought: number, oversold: number, spikes: number) {
   const net = overbought - oversold;
@@ -671,7 +881,7 @@ function pickIsRedOverallSignal(c: CompositeResult) {
   return c.overbought >= 2 && c.overbought > c.oversold;
 }
 
-function buildTrendScoreFromHistory(points: Point[]) {
+function buildTrendScoreFromHistory(points: Point[]): TrendScoreResult | null {
   const closes = points.map((p) => p.close).filter((x) => Number.isFinite(x));
   if (closes.length < 220) return null;
 
@@ -719,51 +929,313 @@ function buildTrendScoreFromHistory(points: Point[]) {
   };
 }
 
-function computeBuyTheDip(points: Point[]) {
+function computeOversoldCandidate(points: Point[], comp: CompositeResult | null, trendScore: TrendScoreResult | null): OversoldCandidate | null {
   const closes = points.map((p) => p.close).filter((x) => Number.isFinite(x));
-  if (closes.length < 140) return null;
+  if (closes.length < 60 || !comp) return null;
+  if (!pickIsGreenOverallSignal(comp)) return null;
 
-  const last = closes[closes.length - 1];
-  const lookback = 120;
-  const slice = closes.slice(-lookback);
-  const recentHigh = Math.max(...slice);
-  if (!Number.isFinite(recentHigh) || recentHigh <= 0) return null;
+  const rsi14 = rsiWilder(closes, 14);
+  const ema20Arr = ema(closes, 20);
+  const ma50Arr = movingAverage(closes, 50);
+  const bb = bollinger(closes, 20, 2);
 
-  const allTimeHigh = Math.max(...closes);
-  const atAthRecently = Math.abs(recentHigh - allTimeHigh) / allTimeHigh <= 0.002;
+  const lastClose = closes[closes.length - 1];
+  const prevClose = closes[closes.length - 2] ?? lastClose;
+  const lastRsi = lastNum(rsi14);
+  const lastEma20 = lastNum(ema20Arr);
+  const lastMa50 = lastNum(ma50Arr);
+  const lastBbLower = lastNum(bb.lower);
 
-  if (!atAthRecently) return null;
+  const advScore = liquidityScore(points);
 
-  const drawdown = (last - recentHigh) / recentHigh;
-  if (drawdown <= -0.2) {
-    return { drawdownPct: Math.abs(drawdown) * 100 };
+  const oversoldStrength =
+    clamp(
+      (typeof lastRsi === "number" ? scoreInverse(lastRsi, 15, 35) : 0) * 0.45 +
+      comp.oversold * 12 +
+      comp.flagged * 3,
+      0,
+      100
+    );
+
+  const distFromEma20 =
+    typeof lastEma20 === "number" && lastEma20 > 0
+      ? Math.abs(((lastClose - lastEma20) / lastEma20) * 100)
+      : 0;
+
+  const distFromMa50 =
+    typeof lastMa50 === "number" && lastMa50 > 0
+      ? Math.abs(((lastClose - lastMa50) / lastMa50) * 100)
+      : 0;
+
+  const distanceScore = clamp(
+    scoreLinear(distFromEma20, 2, 12) * 0.6 + scoreLinear(distFromMa50, 3, 15) * 0.4,
+    0,
+    100
+  );
+
+  const dailyDrop1 = prevClose > 0 ? Math.max(0, ((prevClose - lastClose) / prevClose) * 100) : 0;
+  const dailyDrop5Base = closes.length >= 6 ? closes[closes.length - 6] : prevClose;
+  const dailyDrop5 = dailyDrop5Base > 0 ? Math.max(0, ((dailyDrop5Base - lastClose) / dailyDrop5Base) * 100) : 0;
+  const avgAbsMove = recentVolatilityPct(points, 20);
+
+  const exhaustionScore = clamp(
+    scoreLinear(dailyDrop1, 0.8, 6) * 0.4 +
+    scoreLinear(dailyDrop5, 2, 12) * 0.45 +
+    scoreLinear(avgAbsMove, 1.2, 4.5) * 0.15,
+    0,
+    100
+  );
+
+  let structureScore = 50;
+  if (trendScore) {
+    structureScore =
+      (trendScore.priceAboveMA200 ? 45 : 20) +
+      (trendScore.priceAboveMA50 ? 20 : 5) +
+      (trendScore.ma50AboveMA200 ? 20 : 5) +
+      (trendScore.macdBullish ? 15 : 5);
   }
+
+  if (typeof lastBbLower === "number" && lastClose < lastBbLower) {
+    structureScore += 5;
+  }
+
+  const recencyScore = 100;
+
+  let penalty = 0;
+  if (dailyDrop1 < 0.6 && dailyDrop5 < 3) penalty += 12;
+  if (advScore < 35) penalty += 25;
+  if (trendScore && !trendScore.priceAboveMA200 && !trendScore.ma50AboveMA200) penalty += 10;
+
+  const score =
+    oversoldStrength * 0.3 +
+    advScore * 0.25 +
+    exhaustionScore * 0.2 +
+    distanceScore * 0.15 +
+    clamp(structureScore, 0, 100) * 0.05 +
+    recencyScore * 0.05 -
+    penalty;
+
+  return {
+    score,
+    note: `${comp.oversold} oversold • liquid ${Math.round(advScore)} • exhaustion ${Math.round(exhaustionScore)}`,
+  };
+}
+
+function computeOverboughtCandidate(points: Point[], comp: CompositeResult | null, trendScore: TrendScoreResult | null): OverboughtCandidate | null {
+  const closes = points.map((p) => p.close).filter((x) => Number.isFinite(x));
+  if (closes.length < 60 || !comp) return null;
+  if (!pickIsRedOverallSignal(comp)) return null;
+
+  const rsi14 = rsiWilder(closes, 14);
+  const ema20Arr = ema(closes, 20);
+  const ma50Arr = movingAverage(closes, 50);
+  const bb = bollinger(closes, 20, 2);
+
+  const lastClose = closes[closes.length - 1];
+  const prevClose = closes[closes.length - 2] ?? lastClose;
+  const lastRsi = lastNum(rsi14);
+  const lastEma20 = lastNum(ema20Arr);
+  const lastMa50 = lastNum(ma50Arr);
+  const lastBbUpper = lastNum(bb.upper);
+
+  const advScore = liquidityScore(points);
+
+  const overboughtStrength =
+    clamp(
+      (typeof lastRsi === "number" ? scoreLinear(lastRsi, 65, 85) : 0) * 0.45 +
+      comp.overbought * 12 +
+      comp.flagged * 3,
+      0,
+      100
+    );
+
+  const distFromEma20 =
+    typeof lastEma20 === "number" && lastEma20 > 0
+      ? Math.abs(((lastClose - lastEma20) / lastEma20) * 100)
+      : 0;
+
+  const distFromMa50 =
+    typeof lastMa50 === "number" && lastMa50 > 0
+      ? Math.abs(((lastClose - lastMa50) / lastMa50) * 100)
+      : 0;
+
+  const distanceScore = clamp(
+    scoreLinear(distFromEma20, 2, 12) * 0.6 + scoreLinear(distFromMa50, 3, 15) * 0.4,
+    0,
+    100
+  );
+
+  const dailyJump1 = prevClose > 0 ? Math.max(0, ((lastClose - prevClose) / prevClose) * 100) : 0;
+  const dailyJump5Base = closes.length >= 6 ? closes[closes.length - 6] : prevClose;
+  const dailyJump5 = dailyJump5Base > 0 ? Math.max(0, ((lastClose - dailyJump5Base) / dailyJump5Base) * 100) : 0;
+  const avgAbsMove = recentVolatilityPct(points, 20);
+
+  const extensionScore = clamp(
+    scoreLinear(dailyJump1, 0.8, 6) * 0.4 +
+    scoreLinear(dailyJump5, 2, 12) * 0.45 +
+    scoreLinear(avgAbsMove, 1.2, 4.5) * 0.15,
+    0,
+    100
+  );
+
+  let structureScore = 50;
+  if (trendScore) {
+    structureScore =
+      (trendScore.priceAboveMA200 ? 35 : 10) +
+      (trendScore.priceAboveMA50 ? 25 : 5) +
+      (trendScore.ma50AboveMA200 ? 20 : 5) +
+      (trendScore.macdBullish ? 20 : 10);
+  }
+
+  if (typeof lastBbUpper === "number" && lastClose > lastBbUpper) {
+    structureScore += 5;
+  }
+
+  let penalty = 0;
+  if (dailyJump1 < 0.6 && dailyJump5 < 3) penalty += 12;
+  if (advScore < 35) penalty += 25;
+
+  const score =
+    overboughtStrength * 0.3 +
+    advScore * 0.25 +
+    extensionScore * 0.2 +
+    distanceScore * 0.15 +
+    clamp(structureScore, 0, 100) * 0.05 +
+    100 * 0.05 -
+    penalty;
+
+  return {
+    score,
+    note: `${comp.overbought} overbought • liquid ${Math.round(advScore)} • extension ${Math.round(extensionScore)}`,
+  };
+}
+
+function computeAthPullback(points: Point[]): AthPullbackCandidate | null {
+  const closes = points.map((p) => p.close).filter((x) => Number.isFinite(x));
+  if (closes.length < 220) return null;
+
+  const lastClose = closes[closes.length - 1];
+  const allTimeHigh = Math.max(...closes);
+  if (!Number.isFinite(allTimeHigh) || allTimeHigh <= 0) return null;
+
+  const drawdownPct = ((allTimeHigh - lastClose) / allTimeHigh) * 100;
+  if (drawdownPct < 20) return null;
+
+  const adv = averageDollarVolume(points, 20);
+  const advScore = liquidityScore(points);
+
+  const distanceScore = scoreTargetBand(drawdownPct, 20, 35, 20, 65);
+
+  const last20 = closes.slice(-20);
+  const max20 = Math.max(...last20);
+  const min20 = Math.min(...last20);
+  const rangePct = min20 > 0 ? ((max20 - min20) / min20) * 100 : 0;
+  const structureScore = scoreInverse(rangePct, 8, 35);
+
+  const ma200Arr = movingAverage(closes, 200);
+  const ma50Arr = movingAverage(closes, 50);
+  const lastMa200 = lastNum(ma200Arr);
+  const lastMa50 = lastNum(ma50Arr);
+
+  let trendContext = 35;
+  if (typeof lastMa200 === "number" && typeof lastMa50 === "number") {
+    trendContext =
+      (lastClose > lastMa200 ? 45 : 12) +
+      (lastClose > lastMa50 ? 25 : 8) +
+      (lastMa50 > lastMa200 ? 20 : 6);
+  }
+
+  const lookback10 = closes.length >= 11 ? closes[closes.length - 11] : closes[0];
+  const recentBehaviour = lookback10 > 0 ? scoreTargetBand(pctChange(lookback10, lastClose), -4, 6, -15, 12) : 40;
+
+  let penalty = 0;
+  if (drawdownPct > 50) penalty += 20;
+  if (drawdownPct > 60) penalty += 15;
+  if (advScore < 35) penalty += 30;
+  if (typeof lastMa200 === "number" && lastClose < lastMa200 * 0.85) penalty += 15;
+
+  const score =
+    distanceScore * 0.3 +
+    advScore * 0.3 +
+    structureScore * 0.2 +
+    clamp(trendContext, 0, 100) * 0.1 +
+    recentBehaviour * 0.1 -
+    penalty;
+
+  return {
+    score,
+    drawdownPct,
+    avgDollarVolume: adv,
+  };
+}
+
+function findMostRecentAthBreakoutBarsAgo(closes: number[]) {
+  if (closes.length < 2) return null;
+
+  for (let i = closes.length - 1; i >= 1; i--) {
+    const before = closes.slice(0, i);
+    if (!before.length) continue;
+    const priorHigh = Math.max(...before);
+    if (closes[i] >= priorHigh * 1.001) {
+      return closes.length - 1 - i;
+    }
+  }
+
   return null;
 }
 
-function computeAthBreakout(points: Point[]) {
+function computeAthBreakout(points: Point[]): BreakoutCandidate | null {
   const pts = points.filter((p) => p?.date && Number.isFinite(p.close));
-  if (pts.length < 80) return null;
+  if (pts.length < 120) return null;
 
   const closes = pts.map((p) => p.close);
   const lastClose = closes[closes.length - 1];
-  if (!Number.isFinite(lastClose)) return null;
-
   const allTimeHigh = Math.max(...closes);
   if (!Number.isFinite(allTimeHigh) || allTimeHigh <= 0) return null;
 
   const eps = 0.01;
   const isAtAth = lastClose >= allTimeHigh * (1 - eps);
-
   if (!isAtAth) return null;
 
+  const breakoutBarsAgo = findMostRecentAthBreakoutBarsAgo(closes);
+  const breakoutPct = ((lastClose - allTimeHigh) / allTimeHigh) * 100;
+  const adv = averageDollarVolume(points, 20);
+  const advScore = liquidityScore(points);
+
+  const recencyScore = breakoutBarsAgo == null ? 50 : scoreInverse(breakoutBarsAgo, 0, 25);
+  const extensionScore = scoreInverse(Math.abs(breakoutPct), 0, 8);
+
+  const volumeArr: (number | null)[] = pts.map((p) =>
+    typeof p.volume === "number" && Number.isFinite(p.volume) ? p.volume : null
+  );
+  const volSma20 = smaNullable(volumeArr, 20);
+  const lastVol = lastNum(volumeArr);
+  const lastVolSma = lastNum(volSma20);
+  const volumeScore =
+    typeof lastVol === "number" && typeof lastVolSma === "number" && lastVolSma > 0
+      ? scoreLinear(lastVol / lastVolSma, 0.9, 2.2)
+      : 45;
+
+  let penalty = 0;
+  if (advScore < 35) penalty += 25;
+  if (Math.abs(breakoutPct) > 6) penalty += 15;
+
+  const score =
+    recencyScore * 0.45 +
+    volumeScore * 0.25 +
+    advScore * 0.2 +
+    extensionScore * 0.1 -
+    penalty;
+
   return {
-    allTimeHigh,
-    breakoutPct: ((lastClose - allTimeHigh) / allTimeHigh) * 100,
+    score,
+    breakoutPct,
+    breakoutBarsAgo: breakoutBarsAgo ?? 999,
+    avgDollarVolume: adv,
   };
 }
 
-function computeThreeMonthBreakout(points: Point[]) {
+function computeThreeMonthBreakout(points: Point[]): BreakoutCandidate | null {
   const pts = points.filter((p) => p?.date && Number.isFinite(p.close));
   if (pts.length < 90) return null;
 
@@ -788,10 +1260,47 @@ function computeThreeMonthBreakout(points: Point[]) {
   const eps = 0.005;
   if (lastClose < rangeHigh * (1 - eps)) return null;
 
+  let breakoutBarsAgo = 0;
+  for (let i = closes.length - 1; i >= endExclusive; i--) {
+    if (closes[i] >= rangeHigh * (1 - eps)) {
+      breakoutBarsAgo = closes.length - 1 - i;
+    }
+  }
+
+  const breakoutPct = ((lastClose - rangeHigh) / rangeHigh) * 100;
+  const adv = averageDollarVolume(points, 20);
+  const advScore = liquidityScore(points);
+
+  const recencyScore = scoreInverse(breakoutBarsAgo, 0, 20);
+  const extensionScore = scoreInverse(Math.abs(breakoutPct), 0, 10);
+
+  const volumeArr: (number | null)[] = pts.map((p) =>
+    typeof p.volume === "number" && Number.isFinite(p.volume) ? p.volume : null
+  );
+  const volSma20 = smaNullable(volumeArr, 20);
+  const lastVol = lastNum(volumeArr);
+  const lastVolSma = lastNum(volSma20);
+  const volumeScore =
+    typeof lastVol === "number" && typeof lastVolSma === "number" && lastVolSma > 0
+      ? scoreLinear(lastVol / lastVolSma, 0.9, 2.2)
+      : 45;
+
+  let penalty = 0;
+  if (advScore < 35) penalty += 25;
+  if (Math.abs(breakoutPct) > 8) penalty += 12;
+
+  const score =
+    recencyScore * 0.45 +
+    volumeScore * 0.25 +
+    advScore * 0.2 +
+    extensionScore * 0.1 -
+    penalty;
+
   return {
-    rangeHigh,
-    breakoutPct: ((lastClose - rangeHigh) / rangeHigh) * 100,
-    lookbackBars: LOOKBACK_BARS,
+    score,
+    breakoutPct,
+    breakoutBarsAgo,
+    avgDollarVolume: adv,
   };
 }
 
@@ -924,7 +1433,7 @@ async function buildPickersPayload(origin: string): Promise<PickersPayload> {
   const signalRecords: SignalRecord[] = [];
 
   const isDynamicUniverse = (sym: string) => dynamicUniverseSet.has(sym);
-  const dynamicBoost = (sym: string) => (isDynamicUniverse(sym) ? 10000 : 0);
+  const dynamicBoost = (sym: string) => (isDynamicUniverse(sym) ? 10 : 0);
 
   await Promise.all(
     universe.map((symbol) =>
@@ -935,18 +1444,9 @@ async function buildPickersPayload(origin: string): Promise<PickersPayload> {
 
           const dynamicName = isDynamicUniverse(symbol);
           const comp = buildCompositeFromHistory(pts);
+          const trendScore = buildTrendScoreFromHistory(pts);
 
           if (comp) {
-            const closes = pts.map((p) => p.close).filter((x) => Number.isFinite(x));
-            const ma200Arr = closes.length ? movingAverage(closes, 200) : [];
-            const lastClose = closes.length ? closes[closes.length - 1] : null;
-            const lastMA200 = lastNum(ma200Arr);
-
-            const aboveMA200 =
-              typeof lastClose === "number" &&
-              typeof lastMA200 === "number" &&
-              lastClose > lastMA200;
-
             const hotSignals =
               (comp.oversold >= 2 ? 1 : 0) +
               (comp.overbought >= 2 ? 1 : 0) +
@@ -957,56 +1457,57 @@ async function buildPickersPayload(origin: string): Promise<PickersPayload> {
                 symbol,
                 tone: comp.tone,
                 note: `${comp.tag} • ${comp.flagged}/${comp.total} checks`,
-                _score: 10000 + comp.flagged * 100 + hotSignals * 1000,
-              });
-            }
-
-            if (pickIsGreenOverallSignal(comp) && aboveMA200) {
-              green.push({
-                symbol,
-                tone: "green",
-                note: `${comp.oversold} oversold • above MA200 • ${comp.flagged}/${comp.total} checks`,
-                _score:
-                  dynamicBoost(symbol) +
-                  comp.oversold * 50 +
-                  comp.flagged * 10 +
-                  200,
-              });
-            }
-
-            if (pickIsRedOverallSignal(comp)) {
-              red.push({
-                symbol,
-                tone: "red",
-                note: `${comp.overbought} overbought • ${comp.flagged}/${comp.total} checks`,
-                _score: dynamicBoost(symbol) + comp.overbought * 50 + comp.flagged * 10,
+                _score: hotSignals * 100 + comp.flagged * 10 + dynamicBoost(symbol),
               });
             }
           }
 
-          const trendScore = buildTrendScoreFromHistory(pts);
+          const oversoldCandidate = computeOversoldCandidate(pts, comp, trendScore);
+          if (oversoldCandidate) {
+            green.push({
+              symbol,
+              tone: "green",
+              note: oversoldCandidate.note,
+              _score: oversoldCandidate.score + dynamicBoost(symbol),
+            });
+          }
+
+          const overboughtCandidate = computeOverboughtCandidate(pts, comp, trendScore);
+          if (overboughtCandidate) {
+            red.push({
+              symbol,
+              tone: "red",
+              note: overboughtCandidate.note,
+              _score: overboughtCandidate.score + dynamicBoost(symbol),
+            });
+          }
+
           if (trendScore && trendScore.passed >= 3) {
+            const liqScore = liquidityScore(pts);
+            const score =
+              trendScore.passed * 20 +
+              (trendScore.priceAboveMA200 ? 18 : 0) +
+              (trendScore.priceAboveMA50 ? 12 : 0) +
+              (trendScore.ma50AboveMA200 ? 18 : 0) +
+              (trendScore.macdBullish ? 12 : 0) +
+              liqScore * 0.2 +
+              dynamicBoost(symbol);
+
             trendLeaders.push({
               symbol,
               tone: trendScore.passed === 4 ? "green" : "yellow",
               note: `${trendScore.passed}/${trendScore.total} trend checks`,
-              _score:
-                dynamicBoost(symbol) +
-                trendScore.passed * 100 +
-                (trendScore.priceAboveMA200 ? 20 : 0) +
-                (trendScore.priceAboveMA50 ? 10 : 0) +
-                (trendScore.ma50AboveMA200 ? 20 : 0) +
-                (trendScore.macdBullish ? 10 : 0),
+              _score: score,
             });
           }
 
-          const dip = computeBuyTheDip(pts);
-          if (dip) {
+          const athPullback = computeAthPullback(pts);
+          if (athPullback) {
             dips.push({
               symbol,
-              tone: "yellow",
-              note: `Down ${dip.drawdownPct.toFixed(1)}% from recent ATH`,
-              _score: dynamicBoost(symbol) + dip.drawdownPct,
+              tone: athPullback.drawdownPct <= 35 ? "yellow" : "orange",
+              note: `Down ${athPullback.drawdownPct.toFixed(1)}% from ATH • liquid ${Math.round(liquidityScore(pts))}`,
+              _score: athPullback.score + dynamicBoost(symbol),
             });
           }
 
@@ -1015,8 +1516,8 @@ async function buildPickersPayload(origin: string): Promise<PickersPayload> {
             athBreakouts.push({
               symbol,
               tone: "orange",
-              note: "At all-time high breakout",
-              _score: dynamicBoost(symbol) + 5000 + athBo.breakoutPct * 100,
+              note: `ATH breakout • ${athBo.breakoutBarsAgo} bars ago`,
+              _score: athBo.score + dynamicBoost(symbol),
             });
           }
 
@@ -1025,22 +1526,19 @@ async function buildPickersPayload(origin: string): Promise<PickersPayload> {
             threeMonthBreakouts.push({
               symbol,
               tone: "orange",
-              note: `Above ${threeMonthBo.lookbackBars}-bar high`,
-              _score:
-                dynamicBoost(symbol) +
-                1000 +
-                threeMonthBo.breakoutPct * 100,
+              note: `3-month breakout • ${threeMonthBo.breakoutBarsAgo} bars ago`,
+              _score: threeMonthBo.score + dynamicBoost(symbol),
             });
           }
 
-          const dailyMa200Proximity = computeMa200Proximity(pts, "d");
-          if (dailyMa200Proximity) {
-            const side = dailyMa200Proximity.pctDistance >= 0 ? "above" : "below";
+          const dailyMa200Candidate = computeMa200Candidate(pts, "d");
+          if (dailyMa200Candidate) {
+            const side = dailyMa200Candidate.pctDistance >= 0 ? "above" : "below";
 
             ma200Proximity.push({
               symbol,
-              tone: "yellow",
-              note: `Near Daily MA200 • ${Math.abs(dailyMa200Proximity.pctDistance).toFixed(1)}% ${side}`,
+              tone: dailyMa200Candidate.pctDistance >= 0 ? "yellow" : "orange",
+              note: `Near Daily MA200 • ${Math.abs(dailyMa200Candidate.pctDistance).toFixed(1)}% ${side} • deep-under ${dailyMa200Candidate.deepUnderPct.toFixed(0)}%`,
               timeframe: "D",
               indicator: "MA200",
               dashboardHref: buildDashboardHref({
@@ -1048,18 +1546,18 @@ async function buildPickersPayload(origin: string): Promise<PickersPayload> {
                 timeframe: "D",
                 indicator: "MA200",
               }),
-              _score: dynamicBoost(symbol) + (100 - Math.abs(dailyMa200Proximity.pctDistance)),
+              _score: dailyMa200Candidate.score + dynamicBoost(symbol),
             });
           }
 
-          const weeklyMa200Proximity = computeMa200Proximity(pts, "w");
-          if (weeklyMa200Proximity) {
-            const side = weeklyMa200Proximity.pctDistance >= 0 ? "above" : "below";
+          const weeklyMa200Candidate = computeMa200Candidate(pts, "w");
+          if (weeklyMa200Candidate) {
+            const side = weeklyMa200Candidate.pctDistance >= 0 ? "above" : "below";
 
             ma200Proximity.push({
               symbol,
-              tone: "yellow",
-              note: `Near Weekly MA200 • ${Math.abs(weeklyMa200Proximity.pctDistance).toFixed(1)}% ${side}`,
+              tone: weeklyMa200Candidate.pctDistance >= 0 ? "yellow" : "orange",
+              note: `Near Weekly MA200 • ${Math.abs(weeklyMa200Candidate.pctDistance).toFixed(1)}% ${side} • deep-under ${weeklyMa200Candidate.deepUnderPct.toFixed(0)}%`,
               timeframe: "W",
               indicator: "MA200",
               dashboardHref: buildDashboardHref({
@@ -1067,12 +1565,12 @@ async function buildPickersPayload(origin: string): Promise<PickersPayload> {
                 timeframe: "W",
                 indicator: "MA200",
               }),
-              _score: dynamicBoost(symbol) + 200 + (100 - Math.abs(weeklyMa200Proximity.pctDistance)),
+              _score: weeklyMa200Candidate.score + 12 + dynamicBoost(symbol),
             });
           }
 
-          const hasDailyMa200Proximity = !!dailyMa200Proximity;
-          const hasWeeklyMa200Proximity = !!weeklyMa200Proximity;
+          const hasDailyMa200Proximity = !!dailyMa200Candidate;
+          const hasWeeklyMa200Proximity = !!weeklyMa200Candidate;
 
           const dailyDiv = detectDivergenceFromHistory(pts, {
             lookbackBars: 45,
@@ -1100,56 +1598,85 @@ async function buildPickersPayload(origin: string): Promise<PickersPayload> {
             maxPivot2AgeBars: 10,
           });
 
-          const scoredDailyDiv =
-            dailyDiv
-              ? {
-                  ...dailyDiv,
-                  timeframe: "D" as const,
-                  boostedScore: dailyDiv.score,
-                }
-              : null;
+          const divergenceCandidates = [dailyDiv, weeklyDiv]
+            .filter(Boolean)
+            .map((div, idx) => {
+              const timeframe = idx === 0 ? ("D" as const) : ("W" as const);
+              const timeframeScore = timeframe === "W" ? 100 : 65;
+              const durationScore = scoreLinear(div!.pivotSpanBars, timeframe === "W" ? 5 : 6, timeframe === "W" ? 20 : 30);
+              const magnitudeScore = scoreLinear(Math.abs(div!.priceSwingPct), 2, 15);
+              const structureScore = scoreLinear(div!.score, 20, 95);
 
-          const scoredWeeklyDiv =
-            weeklyDiv
-              ? {
-                  ...weeklyDiv,
-                  timeframe: "W" as const,
-                  boostedScore: weeklyDiv.score + 100,
-                }
-              : null;
+              const closes = pts.map((p) => p.close).filter((x) => Number.isFinite(x));
+              const ma200Arr = movingAverage(closes, 200);
+              const lastClose = closes[closes.length - 1];
+              const lastMA200 = lastNum(ma200Arr);
+              const locationDist =
+                typeof lastClose === "number" && typeof lastMA200 === "number" && lastMA200 > 0
+                  ? Math.abs(((lastClose - lastMA200) / lastMA200) * 100)
+                  : 999;
+              const locationScore = scoreInverse(locationDist, 0, 12);
 
-          const div =
-            scoredDailyDiv && scoredWeeklyDiv
-              ? scoredWeeklyDiv.boostedScore >= scoredDailyDiv.boostedScore
-                ? scoredWeeklyDiv
-                : scoredDailyDiv
-              : scoredWeeklyDiv ?? scoredDailyDiv;
+              const reactionLookback = timeframe === "W" ? Math.min(4, weeklyPts.length - 1) : Math.min(5, pts.length - 1);
+              const reactionSeries = timeframe === "W" ? weeklyPts : pts;
+              const latestClose = reactionSeries[reactionSeries.length - 1]?.close ?? 0;
+              const oldClose = reactionSeries[reactionSeries.length - 1 - reactionLookback]?.close ?? latestClose;
+              const recentReactionPct = oldClose > 0 ? ((latestClose - oldClose) / oldClose) * 100 : 0;
 
-          if (div) {
+              let reactionScore = 50;
+              if (div!.kind === "bullish") {
+                reactionScore = scoreLinear(recentReactionPct, -2, 8);
+              } else {
+                reactionScore = scoreLinear(-recentReactionPct, -2, 8);
+              }
+
+              let penalties = 0;
+              if (liquidityScore(pts) < 35) penalties += 20;
+              if (Math.abs(div!.priceSwingPct) < 2.5) penalties += 10;
+              if (div!.pivotSpanBars < 4) penalties += 8;
+
+              const finalScore =
+                timeframeScore * 0.3 +
+                durationScore * 0.2 +
+                structureScore * 0.2 +
+                magnitudeScore * 0.15 +
+                locationScore * 0.1 +
+                reactionScore * 0.05 -
+                penalties;
+
+              return {
+                div: div!,
+                timeframe,
+                score: finalScore,
+              };
+            });
+
+          const bestDiv = divergenceCandidates.sort((a, b) => b.score - a.score)[0] ?? null;
+
+          if (bestDiv) {
             const preferredIndicator =
-              div.hasRsi && !div.hasMacd
+              bestDiv.div.hasRsi && !bestDiv.div.hasMacd
                 ? "RSI(14)"
-                : !div.hasRsi && div.hasMacd
+                : !bestDiv.div.hasRsi && bestDiv.div.hasMacd
                   ? "MACD(12,26,9)"
-                  : div.hasRsi && div.hasMacd
+                  : bestDiv.div.hasRsi && bestDiv.div.hasMacd
                     ? "MACD(12,26,9)"
                     : undefined;
 
-            const preferredTimeframe: "D" | "W" = div.timeframe;
-            const timeframeLabel = div.timeframe === "W" ? "Weekly" : "Daily";
+            const timeframeLabel = bestDiv.timeframe === "W" ? "Weekly" : "Daily";
 
             divergences.push({
               symbol,
-              tone: div.kind === "bullish" ? "green" : "red",
-              note: `${timeframeLabel} ${div.note} • ${div.priceSwingPct.toFixed(1)}% • ${div.pivotSpanBars} bars`,
-              timeframe: preferredTimeframe,
+              tone: bestDiv.div.kind === "bullish" ? "green" : "red",
+              note: `${timeframeLabel} ${bestDiv.div.note} • ${bestDiv.div.priceSwingPct.toFixed(1)}% • ${bestDiv.div.pivotSpanBars} bars`,
+              timeframe: bestDiv.timeframe,
               indicator: preferredIndicator,
               dashboardHref: buildDashboardHref({
                 symbol,
-                timeframe: preferredTimeframe,
+                timeframe: bestDiv.timeframe,
                 indicator: preferredIndicator,
               }),
-              _score: dynamicBoost(symbol) + div.boostedScore,
+              _score: bestDiv.score + dynamicBoost(symbol),
             });
           }
 
@@ -1173,10 +1700,9 @@ async function buildPickersPayload(origin: string): Promise<PickersPayload> {
           const lastAtr = lastNum(atrArr);
           const lastAtrSma20 = lastNum(atrSma20Arr);
 
-          const oversold = !!comp && comp.oversold >= 2 && comp.oversold > comp.overbought;
-          const overbought = !!comp && comp.overbought >= 2 && comp.overbought > comp.oversold;
-
-          const buyTheDip = !!dip;
+          const oversold = !!oversoldCandidate;
+          const overbought = !!overboughtCandidate;
+          const buyTheDip = !!athPullback;
           const breakout = !!athBo || !!threeMonthBo;
 
           const volumeSpike =
@@ -1211,10 +1737,12 @@ async function buildPickersPayload(origin: string): Promise<PickersPayload> {
             typeof lastMA200 === "number" &&
             lastClose < lastMA200;
 
-          const bullishRsiDivergence = !!div && div.kind === "bullish" && div.hasRsi;
-          const bearishRsiDivergence = !!div && div.kind === "bearish" && div.hasRsi;
-          const bullishMacdDivergence = !!div && div.kind === "bullish" && div.hasMacd;
-          const bearishMacdDivergence = !!div && div.kind === "bearish" && div.hasMacd;
+          const chosenDiv = bestDiv?.div ?? null;
+
+          const bullishRsiDivergence = !!chosenDiv && chosenDiv.kind === "bullish" && chosenDiv.hasRsi;
+          const bearishRsiDivergence = !!chosenDiv && chosenDiv.kind === "bearish" && chosenDiv.hasRsi;
+          const bullishMacdDivergence = !!chosenDiv && chosenDiv.kind === "bullish" && chosenDiv.hasMacd;
+          const bearishMacdDivergence = !!chosenDiv && chosenDiv.kind === "bearish" && chosenDiv.hasMacd;
 
           const preferredDivergenceIndicator =
             bullishRsiDivergence || bearishRsiDivergence
@@ -1226,7 +1754,7 @@ async function buildPickersPayload(origin: string): Promise<PickersPayload> {
                 : undefined;
 
           const preferredTimeframe: "D" | "W" | undefined =
-            preferredDivergenceIndicator && div ? div.timeframe : undefined;
+            preferredDivergenceIndicator && bestDiv ? bestDiv.timeframe : undefined;
 
           signalRecords.push({
             symbol,
@@ -1267,28 +1795,16 @@ async function buildPickersPayload(origin: string): Promise<PickersPayload> {
     )
   );
 
-  const takeTop = (
-    arr: PickerItem[],
-    n: number,
-    opts?: { volumeFirstIfMany?: boolean }
-  ) => {
-    const volumeFirst = opts?.volumeFirstIfMany === true && arr.length > 10;
-
-    const sorted = [...arr].sort((a, b) => {
-      if (volumeFirst) return (b._score ?? 0) - (a._score ?? 0);
-      return (b._score ?? 0) - (a._score ?? 0);
-    });
-
-    return sorted.slice(0, n).map(
-      ({ symbol, note, tone, timeframe, indicator, dashboardHref }) => ({
-        symbol,
-        note,
-        tone,
-        timeframe,
-        indicator,
-        dashboardHref,
-      })
-    );
+  const takeTop = (arr: PickerItem[], n: number) => {
+    const sorted = [...arr].sort((a, b) => (b._score ?? 0) - (a._score ?? 0));
+    return sorted.slice(0, n).map(({ symbol, note, tone, timeframe, indicator, dashboardHref }) => ({
+      symbol,
+      note,
+      tone,
+      timeframe,
+      indicator,
+      dashboardHref,
+    }));
   };
 
   const buildSection = (args: {
@@ -1296,9 +1812,8 @@ async function buildPickersPayload(origin: string): Promise<PickersPayload> {
     description?: string;
     source: PickerItem[];
     take: number;
-    opts?: { volumeFirstIfMany?: boolean };
   }): PickerSection => {
-    const items = takeTop(args.source, args.take, args.opts);
+    const items = takeTop(args.source, args.take);
 
     return {
       title: args.title,
@@ -1320,7 +1835,7 @@ async function buildPickersPayload(origin: string): Promise<PickersPayload> {
     buildSection({
       title: "Oversold Stocks Today (Potential Rebound Setups)",
       description:
-        "Stocks showing multiple oversold-style technical signals. These are often reviewed for possible rebounds or dip-style entries.",
+        "Oversold setups ranked by signal strength, liquidity, move exhaustion and short-term stretch rather than simple raw matches.",
       source: green,
       take: 20,
     }),
@@ -1334,46 +1849,44 @@ async function buildPickersPayload(origin: string): Promise<PickersPayload> {
     buildSection({
       title: "MA200 Proximity",
       description:
-        "Stocks trading close to their Daily or Weekly MA200. Clicking a result opens the chart on the correct timeframe with MA200 selected.",
+        "Stocks trading close to their Daily or Weekly MA200, with ranking favouring constructive MA200 behaviour over messy long-term weakness.",
       source: ma200Proximity,
       take: 20,
     }),
     buildSection({
       title: "Overbought Stocks Today (Potential Pullback Setups)",
       description:
-        "Stocks showing extended or overbought conditions. These are often reviewed for possible pullbacks or weaker near-term conditions.",
+        "Overbought setups ranked by signal strength, liquidity, extension and short-term stretch rather than simple raw matches.",
       source: red,
       take: 20,
     }),
     buildSection({
       title: "Bullish & Bearish Divergence Stocks (RSI & MACD Signals)",
       description:
-        "Stocks where price and momentum may be starting to disagree. Clicking a result opens the chart on the strongest divergence indicator.",
+        "Divergences ranked by timeframe, duration, structure quality, magnitude and location context. Clicking a result opens the strongest divergence view.",
       source: divergences,
       take: 20,
     }),
     buildSection({
-      title: "Stocks Down 20% From Recent Highs (Buy the Dip)",
+      title: "Stocks Down 20% From All-Time Highs",
       description:
-        "Stocks that recently hit highs and are now 20%+ below them. These are pullback setups from stronger charts, not deep long-term breakdowns.",
+        "Stocks at least 20% below their all-time highs, ranked to favour liquid, tradable pullbacks over weak broken charts.",
       source: dips,
       take: 20,
     }),
     buildSection({
       title: "All-Time High Breakout Stocks",
       description:
-        "Stocks trading at or very near all-time closing highs. These are the strongest blue-sky breakout setups.",
+        "Stocks trading at or very near all-time closing highs, ranked by breakout recency, liquidity and breakout quality.",
       source: athBreakouts,
       take: 20,
-      opts: { volumeFirstIfMany: true },
     }),
     buildSection({
       title: "3-Month High Breakout Stocks",
       description:
-        "Stocks breaking above their highest closing level from the last 3 months, excluding the most recent few bars.",
+        "Stocks breaking above their highest closing level from the last 3 months, ranked by breakout recency, liquidity and breakout quality.",
       source: threeMonthBreakouts,
       take: 20,
-      opts: { volumeFirstIfMany: true },
     }),
   ];
 
