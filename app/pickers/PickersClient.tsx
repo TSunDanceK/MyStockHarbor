@@ -47,6 +47,7 @@ type SignalRecord = {
   preferredTimeframe?: "D" | "W" | "M";
   preferredIndicator?: "MA200" | "RSI(14)" | "MACD(12,26,9)";
   dashboardHref?: string;
+  isDynamicUniverse?: boolean;
 };
 
 type PickersPayload = {
@@ -87,7 +88,7 @@ type FilterDef = {
 const FILTER_DEFS: FilterDef[] = [
   { key: "oversold", label: "Oversold", tone: "green" },
   { key: "overbought", label: "Overbought", tone: "red" },
-  { key: "buyTheDip", label: "20%+ From Recent ATH", tone: "yellow" },
+  { key: "buyTheDip", label: "20%+ From ATH", tone: "yellow" },
   { key: "breakout", label: "Breakout", tone: "orange" },
   { key: "volumeSpike", label: "Volume Spike", tone: "orange" },
   { key: "atrSpike", label: "ATR Spike", tone: "orange" },
@@ -144,20 +145,17 @@ function chooseCardTone(
 ): PickerTone | undefined {
   for (const key of matchedFilters) {
     const def = FILTER_DEFS.find((f) => f.key === key);
-    if (!def) continue;
-    if (def.tone === "green") return "green";
+    if (def?.tone === "green") return "green";
   }
 
   for (const key of matchedFilters) {
     const def = FILTER_DEFS.find((f) => f.key === key);
-    if (!def) continue;
-    if (def.tone === "red") return "red";
+    if (def?.tone === "red") return "red";
   }
 
   for (const key of matchedFilters) {
     const def = FILTER_DEFS.find((f) => f.key === key);
-    if (!def) continue;
-    if (def.tone === "orange") return "orange";
+    if (def?.tone === "orange") return "orange";
   }
 
   return record.tone;
@@ -195,41 +193,46 @@ function getSellSignalCount(record: SignalRecord) {
 
 function getHeaderHelp(title: string) {
   if (title.includes("Buy Signals")) {
-    return "These highlight stocks showing multiple bullish technical conditions at the same time. Some may be trending strongly already, so review the chart before chasing strength.";
+    return "These highlight stocks showing multiple bullish technical conditions at the same time. Some may already be strong movers, so always review the chart before entering.";
   }
 
   if (title.includes("Sell Signals")) {
-    return "These highlight stocks showing multiple bearish technical conditions. Some traders review these for pullback risk, weaker trends, or possible short setups.";
+    return "These highlight stocks showing multiple bearish technical conditions. Traders often review these for pullback risk, weaker trends, or possible short-side weakness.";
   }
 
   if (title.includes("Oversold")) {
-    return "Oversold signals highlight stocks that have dropped or stretched downward. Some traders review these for rebound or dip-buy setups.";
+    return "These are ranked oversold setups, not just raw matches. The list leans toward stronger oversold readings, better liquidity, sharper exhaustion moves and cleaner rebound potential.";
   }
-    if (title.includes("Best Trend Score")) {
+
+  if (title.includes("Best Trend Score")) {
     return "These stocks have the strongest current trend structure based on price relative to MA50 and MA200, moving average alignment, and positive MACD momentum.";
   }
 
   if (title.includes("Overbought")) {
-    return "Overbought signals highlight stocks that may be extended after strong moves and could experience pullbacks.";
+    return "These are ranked overbought setups, not just raw matches. The list leans toward stronger extension, better liquidity and cleaner pullback-risk profiles.";
   }
 
   if (title.includes("Divergence")) {
-    return "Divergence occurs when price and momentum indicators move differently, which can sometimes signal weakening trends or possible reversals. Clicking a result opens the chart on the strongest divergence indicator.";
+    return "Divergence is ranked by timeframe, duration, structure quality, magnitude and context. Weekly divergences usually carry more weight than daily ones.";
   }
 
-  if (title.includes("Buy the Dip") || title.includes("Recent Highs")) {
-    return "These setups are more about pullbacks from stronger recent charts. Traders often review these when looking for dip entries rather than buying pure strength near the top.";
+  if (title.includes("All-Time Highs")) {
+    return "These are pullback setups from all-time highs, ranked to favour liquid, tradable names over weak broken charts. A stock being down more does not automatically make it better.";
   }
 
   if (title.includes("MA200 Proximity")) {
-    return "These stocks are trading close to their Daily or Weekly 200-period moving average. Clicking a result opens the chart on the matching timeframe with MA200 selected.";
+    return "These stocks are close to their Daily or Weekly MA200, but the ranking also considers how constructively the stock has behaved around the MA200 rather than just raw proximity.";
   }
 
   if (title.includes("Breakout")) {
-    return "Breakout setups focus on stocks making fresh all-time highs or breaking above their highest level from the last 3 months. These can work well in trending markets, but some breakouts can still fail if the move is already stretched.";
+    return "Breakouts are ranked to favour newer, cleaner and more liquid breakouts over older or more stretched moves.";
   }
 
-  return "These stocks match multiple technical signals worth reviewing on the chart.";
+  if (title.includes("Hot Market Names")) {
+    return "These names come from the current dynamic universe and are also triggering meaningful technical conditions right now.";
+  }
+
+  return "These stocks match multiple technical conditions worth reviewing on the chart.";
 }
 
 function HelpTip({ text }: { text: string }) {
@@ -312,9 +315,7 @@ export default function PickersClient() {
     setErr(null);
 
     try {
-      const res = await fetch(force ? "/api/pickers?force=1" : "/api/pickers", {
-        cache: "no-store",
-      });
+      const res = await fetch(force ? "/api/pickers?force=1" : "/api/pickers");
 
       if (!res.ok) throw new Error("Pickers API failed");
 
@@ -376,7 +377,7 @@ export default function PickersClient() {
       setErr(null);
 
       try {
-        const res = await fetch("/api/pickers", { cache: "no-store" });
+        const res = await fetch("/api/pickers");
         if (!res.ok) throw new Error("Pickers API failed");
 
         const data = (await res.json()) as PickersPayload;
@@ -447,7 +448,7 @@ export default function PickersClient() {
     return Array.isArray(signalRecords) ? signalRecords : [];
   }, [signalRecords]);
 
-    const signalRecordMap = useMemo(() => {
+  const signalRecordMap = useMemo(() => {
     const map = new Map<string, SignalRecord>();
 
     for (const record of safeSignalRecords) {
@@ -470,6 +471,8 @@ export default function PickersClient() {
       .map((record) => ({
         symbol: record.symbol,
         buyCount: getBuySignalCount(record),
+        dashboardHref:
+          record.dashboardHref ?? `/?symbol=${encodeURIComponent(record.symbol)}`,
       }))
       .filter((item) => item.buyCount > 0)
       .sort((a, b) => {
@@ -481,6 +484,7 @@ export default function PickersClient() {
         symbol: item.symbol,
         note: `${item.buyCount} buy signal${item.buyCount === 1 ? "" : "s"}`,
         tone: "green" as PickerTone,
+        dashboardHref: item.dashboardHref,
       }));
 
     if (!items.length) return null;
@@ -488,7 +492,7 @@ export default function PickersClient() {
     return {
       title: "Top Stocks With Buy Signals (Live Scan)",
       description:
-        "Stocks showing multiple bullish technical signals right now, ranked by how many buy signals are currently active.",
+        "Stocks showing multiple bullish technical conditions right now, ranked by how many buy signals are currently active.",
       items,
     };
   }, [safeSignalRecords]);
@@ -498,6 +502,8 @@ export default function PickersClient() {
       .map((record) => ({
         symbol: record.symbol,
         sellCount: getSellSignalCount(record),
+        dashboardHref:
+          record.dashboardHref ?? `/?symbol=${encodeURIComponent(record.symbol)}`,
       }))
       .filter((item) => item.sellCount > 0)
       .sort((a, b) => {
@@ -509,6 +515,7 @@ export default function PickersClient() {
         symbol: item.symbol,
         note: `${item.sellCount} sell signal${item.sellCount === 1 ? "" : "s"}`,
         tone: "red" as PickerTone,
+        dashboardHref: item.dashboardHref,
       }));
 
     if (!items.length) return null;
@@ -521,51 +528,48 @@ export default function PickersClient() {
     };
   }, [safeSignalRecords]);
 
-const displaySections = useMemo(() => {
-  const out: PickerSection[] = [];
+  const displaySections = useMemo(() => {
+    const out: PickerSection[] = [];
 
-  const ma200Section = safeSections.find((section) =>
-    section.title.includes("MA200 Proximity")
-  );
+    const ma200Section = safeSections.find((section) =>
+      section.title.includes("MA200 Proximity")
+    );
 
-  const buyTheDipSection = safeSections.find(
-    (section) =>
-      section.title === "Buy-the-Dip Setups" ||
-      section.title.includes("Buy the Dip") ||
-      section.title.includes("Recent Highs")
-  );
+    const buyTheDipSection = safeSections.find((section) =>
+      section.title.includes("All-Time Highs")
+    );
 
-  const athBreakoutSection = safeSections.find((section) =>
-    section.title.includes("All-Time High Breakout")
-  );
+    const athBreakoutSection = safeSections.find((section) =>
+      section.title.includes("All-Time High Breakout")
+    );
 
-  const threeMonthBreakoutSection = safeSections.find((section) =>
-    section.title.includes("3-Month High Breakout")
-  );
+    const threeMonthBreakoutSection = safeSections.find((section) =>
+      section.title.includes("3-Month High Breakout")
+    );
 
-  const oversoldSection = safeSections.find((section) =>
-    section.title.toLowerCase().includes("oversold")
-  );
+    const oversoldSection = safeSections.find((section) =>
+      section.title.toLowerCase().includes("oversold")
+    );
 
-  const otherSections = safeSections.filter(
-    (section) =>
-      section !== ma200Section &&
-      section !== buyTheDipSection &&
-      section !== athBreakoutSection &&
-      section !== threeMonthBreakoutSection &&
-      section !== oversoldSection
-  );
+    const otherSections = safeSections.filter(
+      (section) =>
+        section !== ma200Section &&
+        section !== buyTheDipSection &&
+        section !== athBreakoutSection &&
+        section !== threeMonthBreakoutSection &&
+        section !== oversoldSection
+    );
 
-  if (ma200Section) out.push(ma200Section);
-  if (topBuySection) out.push(topBuySection);
-  if (buyTheDipSection) out.push(buyTheDipSection);
-  if (athBreakoutSection) out.push(athBreakoutSection);
-  if (threeMonthBreakoutSection) out.push(threeMonthBreakoutSection);
-  if (topSellSection) out.push(topSellSection);
-  if (oversoldSection) out.push(oversoldSection);
+    if (ma200Section) out.push(ma200Section);
+    if (topBuySection) out.push(topBuySection);
+    if (buyTheDipSection) out.push(buyTheDipSection);
+    if (athBreakoutSection) out.push(athBreakoutSection);
+    if (threeMonthBreakoutSection) out.push(threeMonthBreakoutSection);
+    if (topSellSection) out.push(topSellSection);
+    if (oversoldSection) out.push(oversoldSection);
 
-  return [...out, ...otherSections];
-}, [safeSections, signalRecordMap, dynamicSymbolSet, topBuySection, topSellSection]);
+    return [...out, ...otherSections];
+  }, [safeSections, topBuySection, topSellSection]);
 
   const customMode = selectedFilters.length > 0;
 
@@ -635,48 +639,49 @@ const displaySections = useMemo(() => {
           50% { transform: translateX(140%); opacity: 0.95; }
           100% { transform: translateX(320%); opacity: 0.55; }
         }
+
         @keyframes pickersPulseCard {
-  0%, 100% {
-    box-shadow: 0 0 0 1px rgba(255,255,255,0.08) inset,
-                0 10px 30px rgba(59,130,246,0.10);
-    filter: brightness(1);
-  }
-  50% {
-    box-shadow: 0 0 0 1px rgba(255,255,255,0.14) inset,
-                0 14px 40px rgba(59,130,246,0.22);
-    filter: brightness(1.08);
-  }
-}
+          0%, 100% {
+            box-shadow: 0 0 0 1px rgba(255,255,255,0.08) inset,
+                        0 10px 30px rgba(59,130,246,0.10);
+            filter: brightness(1);
+          }
+          50% {
+            box-shadow: 0 0 0 1px rgba(255,255,255,0.14) inset,
+                        0 14px 40px rgba(59,130,246,0.22);
+            filter: brightness(1.08);
+          }
+        }
 
-@keyframes pickersShimmer {
-  0% {
-    transform: translateX(-120%);
-  }
-  70%, 100% {
-    transform: translateX(140%);
-  }
-}
+        @keyframes pickersShimmer {
+          0% {
+            transform: translateX(-120%);
+          }
+          70%, 100% {
+            transform: translateX(140%);
+          }
+        }
 
-.pickers-loading-card {
-  position: relative;
-  overflow: hidden;
-  animation: pickersPulseCard 2.6s ease-in-out infinite;
-}
+        .pickers-loading-card {
+          position: relative;
+          overflow: hidden;
+          animation: pickersPulseCard 2.6s ease-in-out infinite;
+        }
 
-.pickers-loading-card::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    120deg,
-    rgba(255,255,255,0) 0%,
-    rgba(255,255,255,0.18) 50%,
-    rgba(255,255,255,0) 100%
-  );
-  transform: translateX(-120%);
-  animation: pickersShimmer 3.2s ease-in-out infinite;
-  pointer-events: none;
-}
+        .pickers-loading-card::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(
+            120deg,
+            rgba(255,255,255,0) 0%,
+            rgba(255,255,255,0.18) 50%,
+            rgba(255,255,255,0) 100%
+          );
+          transform: translateX(-120%);
+          animation: pickersShimmer 3.2s ease-in-out infinite;
+          pointer-events: none;
+        }
 
         .pickers-shell {
           width: 100%;
@@ -727,31 +732,21 @@ const displaySections = useMemo(() => {
             display: none;
           }
 
-.pickers-item-note {
-  display: none !important;
-}
+          .pickers-item-note {
+            display: none !important;
+          }
 
-.pickers-item-note.pickers-item-note-show-mobile {
-  display: inline !important;
-}
+          .pickers-item-note.pickers-item-note-show-mobile {
+            display: inline !important;
+          }
 
-.pickers-note-mobile {
-  display: none;
-}
+          .pickers-note-mobile {
+            display: none;
+          }
 
-.pickers-note-desktop {
-  display: inline;
-}
-
-@media (max-width: 640px) {
-  .pickers-note-desktop {
-    display: none;
-  }
-
-  .pickers-note-mobile {
-    display: inline;
-  }
-}
+          .pickers-note-desktop {
+            display: inline;
+          }
 
           .pickers-section-title {
             flex-wrap: nowrap !important;
@@ -767,11 +762,21 @@ const displaySections = useMemo(() => {
             flex: 0 0 22px !important;
           }
         }
+
+        @media (max-width: 640px) {
+          .pickers-note-desktop {
+            display: none;
+          }
+
+          .pickers-note-mobile {
+            display: inline;
+          }
+        }
       `}</style>
 
       {loading ? (
-<div
-  className="pickers-shell pickers-loading-card"
+        <div
+          className="pickers-shell pickers-loading-card"
           style={{
             border: "1px solid rgba(255,255,255,0.12)",
             borderRadius: 18,
@@ -1053,7 +1058,6 @@ const displaySections = useMemo(() => {
           boxSizing: "border-box",
         }}
       >
-      
         {customMode ? (
           <section
             style={{
@@ -1341,11 +1345,7 @@ const displaySections = useMemo(() => {
                     .map((it) => {
                       const symbol = String(it.symbol ?? "").trim().toUpperCase();
                       const record = signalRecordMap.get(symbol);
-
-                      const checkCount = record
-                        ? matchedSignalsForRecord(record).length
-                        : 0;
-
+                      const checkCount = record ? matchedSignalsForRecord(record).length : 0;
                       const isDynamic = dynamicSymbolSet.has(symbol);
 
                       return {
@@ -1354,11 +1354,6 @@ const displaySections = useMemo(() => {
                         checkCount,
                         isDynamic,
                       };
-                    })
-                    .sort((a, b) => {
-                      if (b.checkCount !== a.checkCount) return b.checkCount - a.checkCount;
-                      if (a.isDynamic !== b.isDynamic) return a.isDynamic ? -1 : 1;
-                      return a.symbol.localeCompare(b.symbol);
                     })
                     .slice(0, 10)
                 : [];
@@ -1420,8 +1415,8 @@ const displaySections = useMemo(() => {
                       {typeof sec.foundCount === "number"
                         ? `F${sec.foundCount} / S${items.length}`
                         : items.length
-                        ? `${items.length} stocks`
-                        : "No matches yet"}
+                          ? `${items.length} stocks`
+                          : "No matches yet"}
                     </div>
                   </div>
 
@@ -1475,31 +1470,31 @@ const displaySections = useMemo(() => {
                           />
                           <span style={{ minWidth: 0 }}>{it.symbol}</span>
 
-{it.note ? (
-  <span
-    className={`pickers-item-note${
-      /MA200/i.test(it.note) ? " pickers-item-note-show-mobile" : ""
-    }`}
-    style={{
-      fontSize: 12,
-      opacity: 0.65,
-      fontWeight: 700,
-      minWidth: 0,
-      whiteSpace: "nowrap",
-      overflow: "hidden",
-      textOverflow: "ellipsis",
-    }}
-  >
-    <span className="pickers-note-desktop">{it.note}</span>
-    <span className="pickers-note-mobile">
-      {/Weekly/i.test(it.note)
-        ? "Weekly"
-        : /Daily/i.test(it.note)
-        ? "Daily"
-        : ""}
-    </span>
-  </span>
-) : null}
+                          {it.note ? (
+                            <span
+                              className={`pickers-item-note${
+                                /MA200/i.test(it.note) ? " pickers-item-note-show-mobile" : ""
+                              }`}
+                              style={{
+                                fontSize: 12,
+                                opacity: 0.65,
+                                fontWeight: 700,
+                                minWidth: 0,
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                              }}
+                            >
+                              <span className="pickers-note-desktop">{it.note}</span>
+                              <span className="pickers-note-mobile">
+                                {/Weekly/i.test(it.note)
+                                  ? "Weekly"
+                                  : /Daily/i.test(it.note)
+                                    ? "Daily"
+                                    : ""}
+                              </span>
+                            </span>
+                          ) : null}
                         </a>
 
                         <a
