@@ -727,13 +727,31 @@ const displaySections = useMemo(() => {
             display: none;
           }
 
-          .pickers-item-note {
-            display: none !important;
-          }
+.pickers-item-note {
+  display: none !important;
+}
 
-          .pickers-item-note.pickers-item-note-show-mobile {
-            display: inline !important;
-          }
+.pickers-item-note.pickers-item-note-show-mobile {
+  display: inline !important;
+}
+
+.pickers-note-mobile {
+  display: none;
+}
+
+.pickers-note-desktop {
+  display: inline;
+}
+
+@media (max-width: 640px) {
+  .pickers-note-desktop {
+    display: none;
+  }
+
+  .pickers-note-mobile {
+    display: inline;
+  }
+}
 
           .pickers-section-title {
             flex-wrap: nowrap !important;
@@ -1457,24 +1475,31 @@ const displaySections = useMemo(() => {
                           />
                           <span style={{ minWidth: 0 }}>{it.symbol}</span>
 
-                          {it.note ? (
-                            <span
-                              className={`pickers-item-note${
-                                /MA200/i.test(it.note) ? " pickers-item-note-show-mobile" : ""
-                              }`}
-                              style={{
-                                fontSize: 12,
-                                opacity: 0.65,
-                                fontWeight: 700,
-                                minWidth: 0,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                              }}
-                            >
-                              {it.note}
-                            </span>
-                          ) : null}
+{it.note ? (
+  <span
+    className={`pickers-item-note${
+      /MA200/i.test(it.note) ? " pickers-item-note-show-mobile" : ""
+    }`}
+    style={{
+      fontSize: 12,
+      opacity: 0.65,
+      fontWeight: 700,
+      minWidth: 0,
+      whiteSpace: "nowrap",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+    }}
+  >
+    <span className="pickers-note-desktop">{it.note}</span>
+    <span className="pickers-note-mobile">
+      {/Weekly/i.test(it.note)
+        ? "Weekly"
+        : /Daily/i.test(it.note)
+        ? "Daily"
+        : ""}
+    </span>
+  </span>
+) : null}
                         </a>
 
                         <a
