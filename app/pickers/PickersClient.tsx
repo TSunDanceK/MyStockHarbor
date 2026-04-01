@@ -1383,6 +1383,7 @@ export default function PickersClient() {
                     overflow: "hidden",
                   }}
                 >
+
                   <div
                     style={{
                       display: "flex",
@@ -1410,19 +1411,21 @@ export default function PickersClient() {
                         <HelpTip text={getHeaderHelp(sec.title)} />
                       </h2>
 
-{sec.description ? (
-  <p
-    className="pickers-section-description"
-    style={{
-      margin: "8px 0 0",
-      fontSize: 14,
-      opacity: 0.72,
-      lineHeight: 1.6,
-    }}
-  >
-    {sec.description}
-  </p>
-) : null}
+                      {sec.description ? (
+                        <p
+                          className="pickers-section-description"
+                          style={{
+                            margin: "8px 0 0",
+                            fontSize: 14,
+                            opacity: 0.72,
+                            lineHeight: 1.6,
+                          }}
+                        >
+                          {sec.description}
+                        </p>
+                      ) : null}
+                    </div>
+
                     <div style={{ fontSize: 12, opacity: 0.7 }}>
                       {typeof sec.foundCount === "number"
                         ? `F${sec.foundCount} / S${items.length}`
@@ -1431,6 +1434,7 @@ export default function PickersClient() {
                           : "No matches yet"}
                     </div>
                   </div>
+                  
 
                   <div
                     className="pickers-section-results-grid"
