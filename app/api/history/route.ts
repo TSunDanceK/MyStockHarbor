@@ -2,12 +2,16 @@ import { NextResponse } from "next/server";
 import { getDailyHistory, type Point } from "../../../lib/server/historyCache";
 
 export const runtime = "nodejs";
+export const revalidate = 900;
 
 const ACTIVE_CACHE_SECONDS = 60 * 15;
 const ACTIVE_STALE_SECONDS = 60 * 15;
 
 const QUIET_CACHE_SECONDS = 60 * 60;
 const QUIET_STALE_SECONDS = 60 * 60;
+
+const ERROR_CACHE_SECONDS = 60;
+const ERROR_STALE_SECONDS = 300;
 
 type Interval = "d" | "w" | "m";
 
@@ -49,6 +53,10 @@ function getCacheControlHeader() {
   }
 
   return `public, s-maxage=${QUIET_CACHE_SECONDS}, stale-while-revalidate=${QUIET_STALE_SECONDS}`;
+}
+
+function getErrorCacheControlHeader() {
+  return `public, s-maxage=${ERROR_CACHE_SECONDS}, stale-while-revalidate=${ERROR_STALE_SECONDS}`;
 }
 
 function parseInterval(value: string | null): Interval {
@@ -146,7 +154,7 @@ export async function GET(req: Request) {
       {
         status: 500,
         headers: {
-          "Cache-Control": "no-store",
+          "Cache-Control": getErrorCacheControlHeader(),
         },
       }
     );
