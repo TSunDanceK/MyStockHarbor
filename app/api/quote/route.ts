@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 export const runtime = "edge";
+export const revalidate = 60;
 
 type Quote = {
   symbol: string;
@@ -18,11 +19,15 @@ export async function GET(req: Request) {
   const url = `https://stooq.com/q/l/?s=${stooqSymbol}&f=sd2t2l&h&e=csv`;
 
   try {
-    const res = await fetch(url, { cache: "no-store" });
+    const res = await fetch(url, {
+      next: { revalidate: 60 },
+    });
+
     const text = await res.text();
 
     const lines = text.trim().split("\n");
     if (lines.length < 2) throw new Error("No data");
+
     const row = lines[1].split(",");
 
     const sym = row[0] ?? symbol;
@@ -39,11 +44,20 @@ export async function GET(req: Request) {
       source: "stooq.com",
     };
 
-    return NextResponse.json(payload);
+    return NextResponse.json(payload, {
+      headers: {
+        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+      },
+    });
   } catch {
     return NextResponse.json(
       { symbol, price: null, date: null, time: null, source: "stooq.com" } satisfies Quote,
-      { status: 200 }
+      {
+        status: 200,
+        headers: {
+          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+        },
+      }
     );
   }
 }
