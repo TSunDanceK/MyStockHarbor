@@ -3903,13 +3903,13 @@ return (
           </div>
         </div>
 
-       {isMobile ? MobileHero() : null}
-
         <div className="msh-mobile-nav">
           <SmallNavLink href="/learn">Learn</SmallNavLink>
           <SmallNavLink href="/platforms">Platforms</SmallNavLink>
           <SmallNavLink href="/utilities">Calculators</SmallNavLink>
         </div>
+
+        {isMobile ? MobileHero() : null}
 
         <div className="msh-toolbar-grid">
           <div style={{ position: "relative", minWidth: 0 }}>
