@@ -1501,6 +1501,45 @@ const displaySections = useMemo(() => {
           </>
         )}
 
+        {!loading && !err && SHOW_FORCE_FETCH_BUTTON ? (
+          <div
+            style={{
+              marginTop: 18,
+              display: "flex",
+              justifyContent: "center",
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                void loadPickers(true);
+              }}
+              disabled={forceRefreshing}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                minHeight: 44,
+                padding: "10px 16px",
+                borderRadius: 12,
+                fontWeight: 900,
+                fontSize: 14,
+                cursor: forceRefreshing ? "wait" : "pointer",
+                transition: "all 0.2s ease",
+                whiteSpace: "nowrap",
+                border: "1px solid rgba(59,130,246,0.28)",
+                background: forceRefreshing
+                  ? "rgba(59,130,246,0.12)"
+                  : "rgba(59,130,246,0.08)",
+                color: "#dbeafe",
+                opacity: forceRefreshing ? 0.78 : 1,
+              }}
+            >
+              {forceRefreshing ? "Force refreshing…" : "Force Refresh Pickers"}
+            </button>
+          </div>
+        ) : null}
+
         {!loading &&
         !err &&
         (updatedAt || universeSize || dynamicUniverseCount || estimatedApiCalls) ? (
