@@ -112,6 +112,12 @@ function toneDot(tone?: string) {
   return "rgba(255,255,255,0.35)";
 }
 
+function toChartHref(href: string) {
+  if (!href) return "/#chart";
+  if (href.includes("#chart")) return href;
+  return `${href}#chart`;
+}
+
 function getFilterLabel(key: FilterKey) {
   return FILTER_DEFS.find((f) => f.key === key)?.label ?? key;
 }
