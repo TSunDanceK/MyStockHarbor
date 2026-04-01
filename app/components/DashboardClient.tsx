@@ -781,8 +781,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [expanded, setExpanded] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [mobileChartOpen, setMobileChartOpen] = useState(false);
-  const mobileChartRef = useRef<HTMLDivElement | null>(null);
+    setMobileChartOpen(false);
 
   const selectedTimeframe = useMemo(
     () => TIMEFRAMES.find((t) => t.label === activeTimeframe) ?? TIMEFRAMES[0],
@@ -2265,36 +2264,12 @@ borderRadius: isMobile ? 8 : 10,
           >
             <div
               style={{
-                fontSize: 12,
-                fontWeight: 900,
-                letterSpacing: "0.04em",
-                textTransform: "uppercase",
-                color: COLORS.mutedFg,
-              }}
-            >
-              Open full chart
-            </div>
-
-            <div
-              style={{
-                marginTop: 8,
                 fontSize: 22,
                 fontWeight: 950,
                 lineHeight: 1.1,
               }}
             >
               {symbol} Stock Analysis
-            </div>
-
-             <div
-              style={{
-                marginTop: 8,
-                fontSize: 14,
-                lineHeight: 1.6,
-                color: COLORS.mutedFg,
-              }}
-            >
-              Open the interactive chart for timeframe switching, indicator selection, zoom controls, and a deeper technical view.
             </div>
 
             <div
@@ -2362,39 +2337,6 @@ borderRadius: isMobile ? 8 : 10,
                 </div>
               </div>
             </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setMobileChartOpen(true);
-                requestAnimationFrame(() => {
-                  mobileChartRef.current?.scrollIntoView({
-                    behavior: "smooth",
-                    block: "start",
-                  });
-                });
-              }}
-              style={{
-                marginTop: 14,
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: "100%",
-                padding: "14px 16px",
-                borderRadius: 16,
-                border: `1px solid rgba(59,130,246,0.45)`,
-                background: COLORS.isDark
-                  ? "linear-gradient(135deg, rgba(37,99,235,0.24), rgba(29,78,216,0.14))"
-                  : "linear-gradient(135deg, rgba(37,99,235,0.14), rgba(29,78,216,0.08))",
-                color: COLORS.controlFg,
-                textDecoration: "none",
-                fontWeight: 950,
-                fontSize: 15,
-                cursor: "pointer",
-              }}
-            >
-              Open Interactive Chart →
-            </button>
           </div>
         </div>
       </SectionCard>
@@ -4072,11 +4014,15 @@ return (
               <MobileStockAnalysisCard />
             </div>
 
-            {mobileChartOpen ? (
-              <div className="msh-lower-grid" ref={mobileChartRef}>
-                <ChartPanel />
-              </div>
-            ) : null}
+        {isMobile ? (
+          <>
+            <div className="msh-lower-grid" style={{ marginTop: 0 }}>
+              <MobileStockAnalysisCard />
+            </div>
+
+            <div className="msh-lower-grid">
+              <ChartPanel />
+            </div>
 
             <div className="msh-lower-grid">
               <OverviewPanel />
