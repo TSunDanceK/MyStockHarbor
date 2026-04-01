@@ -1128,7 +1128,7 @@ export default function PickersClient() {
                       background: "rgba(255,255,255,0.04)",
                       boxSizing: "border-box",
                     }}
-                    title={item.note ?? "Open in dashboard"}
+                   title={`View ${item.symbol} chart`}
                   >
                     <div
                       style={{
@@ -1241,16 +1241,27 @@ export default function PickersClient() {
                           flex: "0 0 auto",
                         }}
                       >
-                        <div
-                          style={{
-                            fontSize: 12,
-                            opacity: 0.72,
-                            fontWeight: 800,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          Open chart →
-                        </div>
+<a
+  href={item.dashboardHref ?? `/?symbol=${encodeURIComponent(item.symbol)}`}
+  onClick={(e) => e.stopPropagation()}
+  style={{
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "8px 12px",
+    borderRadius: 10,
+    border: "1px solid rgba(34,197,94,0.35)",
+    background: "rgba(34,197,94,0.12)",
+    color: "#bbf7d0",
+    textDecoration: "none",
+    fontSize: 12,
+    fontWeight: 900,
+    whiteSpace: "nowrap",
+  }}
+  title={`Open ${item.symbol} chart`}
+>
+  Open chart ↗
+</a>
 
                         <a
                           href={`/stock/${encodeURIComponent(item.symbol)}`}
@@ -1505,9 +1516,9 @@ export default function PickersClient() {
                             justifyContent: "center",
                             padding: "8px 11px",
                             borderRadius: 10,
-                            border: "1px solid rgba(59,130,246,0.24)",
-                            background: "rgba(59,130,246,0.08)",
-                            color: "#dbeafe",
+background: "rgba(148,163,184,0.06)",
+border: "1px solid rgba(148,163,184,0.18)",
+color: "#cbd5f5",
                             textDecoration: "none",
                             fontSize: 12,
                             fontWeight: 900,
