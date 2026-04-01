@@ -471,8 +471,9 @@ export default function PickersClient() {
       .map((record) => ({
         symbol: record.symbol,
         buyCount: getBuySignalCount(record),
-        dashboardHref:
-          record.dashboardHref ?? `/?symbol=${encodeURIComponent(record.symbol)}`,
+        dashboardHref: record.dashboardHref?.includes("#chart")
+          ? record.dashboardHref
+          : `${record.dashboardHref ?? `/?symbol=${encodeURIComponent(record.symbol)}`}#chart`,
       }))
       .filter((item) => item.buyCount > 0)
       .sort((a, b) => {
@@ -502,8 +503,9 @@ export default function PickersClient() {
       .map((record) => ({
         symbol: record.symbol,
         sellCount: getSellSignalCount(record),
-        dashboardHref:
-          record.dashboardHref ?? `/?symbol=${encodeURIComponent(record.symbol)}`,
+        dashboardHref: record.dashboardHref?.includes("#chart")
+          ? record.dashboardHref
+          : `${record.dashboardHref ?? `/?symbol=${encodeURIComponent(record.symbol)}`}#chart`,
       }))
       .filter((item) => item.sellCount > 0)
       .sort((a, b) => {
@@ -1118,7 +1120,7 @@ export default function PickersClient() {
                 {customMatches.map((item) => (
                   <a
                     key={item.symbol}
-                    href={item.dashboardHref ?? `/?symbol=${encodeURIComponent(item.symbol)}`}
+                    href={item.dashboardHref ?? `/?symbol=${encodeURIComponent(item.symbol)}#chart`}
                     style={{
                       display: "block",
                       minWidth: 0,
@@ -1459,7 +1461,7 @@ export default function PickersClient() {
                         }}
                       >
                         <a
-                          href={it.dashboardHref ?? `/?symbol=${encodeURIComponent(it.symbol)}`}
+                          href={it.dashboardHref ?? `/?symbol=${encodeURIComponent(it.symbol)}#chart`}
                           style={{
                             display: "inline-flex",
                             alignItems: "center",
