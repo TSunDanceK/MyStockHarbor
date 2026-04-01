@@ -764,6 +764,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   const [selectedIndicators, setSelectedIndicators] = useState<Overlay[]>([]);
   const [indicatorMenuOpen, setIndicatorMenuOpen] = useState(false);
   const indicatorMenuRef = useRef<HTMLDivElement | null>(null);
+  const chartSectionRef = useRef<HTMLDivElement | null>(null);
 
   const [quote, setQuote] = useState<Quote | null>(null);
   const [historyAll, setHistoryAll] = useState<Point[]>([]);
@@ -1045,6 +1046,22 @@ const [qRes, hRes] = await Promise.all([
       cancelled = true;
     };
   }, []);
+  
+  useEffect(() => {
+    const hash = typeof window !== "undefined" ? window.location.hash : "";
+    if (hash !== "#chart") return;
+    if (!historyAll.length) return;
+
+    const t = window.setTimeout(() => {
+      chartSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 80);
+
+    return () => window.clearTimeout(t);
+  }, [historyAll, symbol]);
+
 
   useEffect(() => {
     let cancelled = false;
@@ -2634,262 +2651,273 @@ return (
 
   function ChartPanel() {
     return (
-      <SectionCard title="" right={null} bodyStyle={{ padding: 0 }} style={{ minHeight: isMobile ? "auto" : 0 }}>
-        <div style={{ padding: 16, borderBottom: `1px solid ${COLORS.border}` }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-              flexWrap: "wrap",
-            }}
-          >
-            <div style={{ fontWeight: 900, fontSize: 15 }}>Price ({chartIndicatorName})</div>
-
-            <div className="msh-timeframes">
-              {TIMEFRAMES.map((t) => (
-                <TimeframeButton
-                  key={t.label}
-                  label={t.label}
-                  active={activeTimeframe === t.label}
-                  onClick={() => {
-                    setActiveTimeframe(t.label);
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="msh-chart-head-row" style={{ marginTop: 14 }}>
-            <div style={{ minWidth: 0, position: "relative" }} ref={indicatorMenuRef}>
-              <div
-                style={{
-                  fontSize: 12,
-                  color: COLORS.mutedFg,
-                  fontWeight: 900,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.04em",
-                }}
-              >
-                Indicator
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setIndicatorMenuOpen((v) => !v)}
-                style={{
-                  marginTop: 6,
-                  width: "100%",
-                  padding: "12px 14px",
-                  borderRadius: 14,
-                  border: `1px solid ${COLORS.controlBorder}`,
-                  background: COLORS.controlBgSolid,
-                  color: COLORS.controlFg,
-                  fontWeight: 900,
-                  fontSize: 16,
-                  textAlign: "left",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  cursor: "pointer",
-                }}
-              >
-                <span
-                  style={{
-                    minWidth: 0,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {selectedIndicators.length ? chartIndicatorName : "Overview"}
-                </span>
-                <span aria-hidden="true">▾</span>
-              </button>
-
-              {indicatorMenuOpen ? (
-                <div
-                  style={{
-                    position: "absolute",
-                    top: "calc(100% + 8px)",
-                    left: 0,
-                    zIndex: 40,
-                    width: isMobile ? "100%" : 320,
-                    maxHeight: isMobile ? 320 : 420,
-                    borderRadius: 16,
-                    border: `1px solid ${COLORS.border}`,
-                    background: COLORS.cardBg,
-                    boxShadow: COLORS.isDark
-                      ? "0 18px 34px rgba(0,0,0,0.40)"
-                      : "0 18px 34px rgba(0,0,0,0.12)",
-                    overflowY: "auto",
-                    overflowX: "hidden",
-                    WebkitOverflowScrolling: "touch",
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={clearIndicatorSelection}
-                    style={{
-                      width: "100%",
-                      padding: "12px 14px",
-                      border: "none",
-                      borderBottom: `1px solid ${COLORS.border}`,
-                      background: COLORS.controlBg,
-                      color: COLORS.cardFg,
-                      textAlign: "left",
-                      fontWeight: 900,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Clear all / Overview
-                  </button>
-
-                  <div
-                    style={{
-                      padding: "10px 14px 8px",
-                      fontSize: 11,
-                      fontWeight: 900,
-                      color: COLORS.mutedFg,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.04em",
-                    }}
-                  >
-                    Price overlays
-                  </div>
-
-                  {PRICE_OVERLAY_OPTIONS.map((opt) => {
-                    const checked = selectedIndicators.includes(opt);
-                    return (
-                      <label
-                        key={opt}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 10,
-                          padding: "10px 14px",
-                          borderTop: `1px solid ${COLORS.border}`,
-                          cursor: "pointer",
-                          fontWeight: 800,
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleIndicatorSelection(opt)}
-                        />
-                        <span>{opt}</span>
-                      </label>
-                    );
-                  })}
-
-                  <div
-                    style={{
-                      padding: "10px 14px 8px",
-                      fontSize: 11,
-                      fontWeight: 900,
-                      color: COLORS.mutedFg,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.04em",
-                      borderTop: `1px solid ${COLORS.border}`,
-                    }}
-                  >
-                    Lower indicator (1 max)
-                  </div>
-
-                  {LOWER_OVERLAY_OPTIONS.map((opt) => {
-                    const checked = selectedIndicators.includes(opt);
-                    return (
-                      <label
-                        key={opt}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 10,
-                          padding: "10px 14px",
-                          borderTop: `1px solid ${COLORS.border}`,
-                          cursor: "pointer",
-                          fontWeight: 800,
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleIndicatorSelection(opt)}
-                        />
-                        <span>{opt}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>
-
-            <ChartToolbar />
-          </div>
-        </div>
-
-        <div style={{ padding: 16 }}>
-          <PriceChart
-            symbol={symbol}
-            data={displayedHistory}
-            ma50={ma50}
-            ma200={ma200}
-            overlay={indicator}
-            selectedIndicators={selectedIndicators}
-            bollUpper={bollUpper}
-            bollMid={bollMid}
-            bollLower={bollLower}
-            ema20={ema20Arr}
-            vwma20={vwma20Arr}
-            rsi14={rsi14Arr}
-            macdLine={macdLine}
-            macdSignal={macdSignal}
-            macdHist={macdHist}
-            stochK={stochK}
-            stochD={stochD}
-            atr14={atr14Arr}
-            volume={volumeArr}
-            divergence={divergence.div}
-            height={isMobile ? 340 : 430}
-          />
-
-          <div
-            style={{
-              marginTop: 12,
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: 12,
-              flexWrap: "wrap",
-              fontSize: 13,
-              fontWeight: 700,
-              color: COLORS.mutedFg,
-            }}
-          >
-            <div>
-              {displayedHistory.length
-                ? `From ${displayedHistory[0].date} → ${displayedHistory[displayedHistory.length - 1].date}`
-                : "No chart data"}
-            </div>
-
-            <Link
-              href="/platforms"
+      <div
+        id="chart"
+        ref={chartSectionRef}
+        style={{ scrollMarginTop: isMobile ? 12 : 24 }}
+      >
+        <SectionCard
+          title=""
+          right={null}
+          bodyStyle={{ padding: 0 }}
+          style={{ minHeight: isMobile ? "auto" : 0 }}
+        >
+          <div style={{ padding: 16, borderBottom: `1px solid ${COLORS.border}` }}>
+            <div
               style={{
-                fontSize: 12,
-                color: COLORS.isDark ? "#93c5fd" : "#2563eb",
-                textDecoration: "none",
-                fontWeight: 800,
-                whiteSpace: "nowrap",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                flexWrap: "wrap",
               }}
             >
-              Compare platforms →
-            </Link>
+              <div style={{ fontWeight: 900, fontSize: 15 }}>Price ({chartIndicatorName})</div>
+
+              <div className="msh-timeframes">
+                {TIMEFRAMES.map((t) => (
+                  <TimeframeButton
+                    key={t.label}
+                    label={t.label}
+                    active={activeTimeframe === t.label}
+                    onClick={() => {
+                      setActiveTimeframe(t.label);
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="msh-chart-head-row" style={{ marginTop: 14 }}>
+              <div style={{ minWidth: 0, position: "relative" }} ref={indicatorMenuRef}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: COLORS.mutedFg,
+                    fontWeight: 900,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  Indicator
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIndicatorMenuOpen((v) => !v)}
+                  style={{
+                    marginTop: 6,
+                    width: "100%",
+                    padding: "12px 14px",
+                    borderRadius: 14,
+                    border: `1px solid ${COLORS.controlBorder}`,
+                    background: COLORS.controlBgSolid,
+                    color: COLORS.controlFg,
+                    fontWeight: 900,
+                    fontSize: 16,
+                    textAlign: "left",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    cursor: "pointer",
+                  }}
+                >
+                  <span
+                    style={{
+                      minWidth: 0,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {selectedIndicators.length ? chartIndicatorName : "Overview"}
+                  </span>
+                  <span aria-hidden="true">▾</span>
+                </button>
+
+                {indicatorMenuOpen ? (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 8px)",
+                      left: 0,
+                      zIndex: 40,
+                      width: isMobile ? "100%" : 320,
+                      maxHeight: isMobile ? 320 : 420,
+                      borderRadius: 16,
+                      border: `1px solid ${COLORS.border}`,
+                      background: COLORS.cardBg,
+                      boxShadow: COLORS.isDark
+                        ? "0 18px 34px rgba(0,0,0,0.40)"
+                        : "0 18px 34px rgba(0,0,0,0.12)",
+                      overflowY: "auto",
+                      overflowX: "hidden",
+                      WebkitOverflowScrolling: "touch",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={clearIndicatorSelection}
+                      style={{
+                        width: "100%",
+                        padding: "12px 14px",
+                        border: "none",
+                        borderBottom: `1px solid ${COLORS.border}`,
+                        background: COLORS.controlBg,
+                        color: COLORS.cardFg,
+                        textAlign: "left",
+                        fontWeight: 900,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Clear all / Overview
+                    </button>
+
+                    <div
+                      style={{
+                        padding: "10px 14px 8px",
+                        fontSize: 11,
+                        fontWeight: 900,
+                        color: COLORS.mutedFg,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.04em",
+                      }}
+                    >
+                      Price overlays
+                    </div>
+
+                    {PRICE_OVERLAY_OPTIONS.map((opt) => {
+                      const checked = selectedIndicators.includes(opt);
+                      return (
+                        <label
+                          key={opt}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 10,
+                            padding: "10px 14px",
+                            borderTop: `1px solid ${COLORS.border}`,
+                            cursor: "pointer",
+                            fontWeight: 800,
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleIndicatorSelection(opt)}
+                          />
+                          <span>{opt}</span>
+                        </label>
+                      );
+                    })}
+
+                    <div
+                      style={{
+                        padding: "10px 14px 8px",
+                        fontSize: 11,
+                        fontWeight: 900,
+                        color: COLORS.mutedFg,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.04em",
+                        borderTop: `1px solid ${COLORS.border}`,
+                      }}
+                    >
+                      Lower indicator (1 max)
+                    </div>
+
+                    {LOWER_OVERLAY_OPTIONS.map((opt) => {
+                      const checked = selectedIndicators.includes(opt);
+                      return (
+                        <label
+                          key={opt}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 10,
+                            padding: "10px 14px",
+                            borderTop: `1px solid ${COLORS.border}`,
+                            cursor: "pointer",
+                            fontWeight: 800,
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleIndicatorSelection(opt)}
+                          />
+                          <span>{opt}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+
+              <ChartToolbar />
+            </div>
           </div>
-        </div>
-      </SectionCard>
+
+          <div style={{ padding: 16 }}>
+            <PriceChart
+              symbol={symbol}
+              data={displayedHistory}
+              ma50={ma50}
+              ma200={ma200}
+              overlay={indicator}
+              selectedIndicators={selectedIndicators}
+              bollUpper={bollUpper}
+              bollMid={bollMid}
+              bollLower={bollLower}
+              ema20={ema20Arr}
+              vwma20={vwma20Arr}
+              rsi14={rsi14Arr}
+              macdLine={macdLine}
+              macdSignal={macdSignal}
+              macdHist={macdHist}
+              stochK={stochK}
+              stochD={stochD}
+              atr14={atr14Arr}
+              volume={volumeArr}
+              divergence={divergence.div}
+              height={isMobile ? 340 : 430}
+            />
+
+            <div
+              style={{
+                marginTop: 12,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
+                flexWrap: "wrap",
+                fontSize: 13,
+                fontWeight: 700,
+                color: COLORS.mutedFg,
+              }}
+            >
+              <div>
+                {displayedHistory.length
+                  ? `From ${displayedHistory[0].date} → ${displayedHistory[displayedHistory.length - 1].date}`
+                  : "No chart data"}
+              </div>
+
+              <Link
+                href="/platforms"
+                style={{
+                  fontSize: 12,
+                  color: COLORS.isDark ? "#93c5fd" : "#2563eb",
+                  textDecoration: "none",
+                  fontWeight: 800,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Compare platforms →
+              </Link>
+            </div>
+          </div>
+        </SectionCard>
+      </div>
     );
   }
 
