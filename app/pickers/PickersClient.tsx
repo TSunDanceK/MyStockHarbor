@@ -288,12 +288,15 @@ function HelpTip({ text }: { text: string }) {
 }
 
 export default function PickersClient() {
+  const SHOW_FORCE_FETCH_BUTTON = false;
+
   const [sections, setSections] = useState<PickerSection[]>([]);
   const [signalRecords, setSignalRecords] = useState<SignalRecord[]>([]);
   const [selectedFilters, setSelectedFilters] = useState<FilterKey[]>([]);
   const [screenerOpen, setScreenerOpen] = useState(false);
 
   const [loading, setLoading] = useState(true);
+  const [forceRefreshing, setForceRefreshing] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [universeSize, setUniverseSize] = useState<number | null>(null);
@@ -301,6 +304,69 @@ export default function PickersClient() {
   const [dynamicUniversePreview, setDynamicUniversePreview] = useState<string[] | null>(null);
   const [dynamicSymbols, setDynamicSymbols] = useState<string[]>([]);
   const [estimatedApiCalls, setEstimatedApiCalls] = useState<number | null>(null);
+
+  async function loadPickers(force = false) {
+    const setBusy = force ? setForceRefreshing : setLoading;
+
+    setBusy(true);
+    setErr(null);
+
+    try {
+      const res = await fetch(force ? "/api/pickers?force=1" : "/api/pickers", {
+        cache: "no-store",
+      });
+
+      if (!res.ok) throw new Error("Pickers API failed");
+
+      const data = (await res.json()) as PickersPayload;
+      const safeSections = Array.isArray(data?.sections) ? data.sections : [];
+      const safeSignalRecords = Array.isArray(data?.signalRecords)
+        ? data.signalRecords
+        : [];
+
+      setSections(safeSections);
+      setSignalRecords(safeSignalRecords);
+      setUpdatedAt(typeof data?.updatedAt === "string" ? data.updatedAt : null);
+      setUniverseSize(typeof data?.universeSize === "number" ? data.universeSize : null);
+      setDynamicUniverseCount(
+        typeof data?.dynamicUniverseCount === "number"
+          ? data.dynamicUniverseCount
+          : null
+      );
+      setDynamicUniversePreview(
+        Array.isArray(data?.dynamicUniversePreview)
+          ? data.dynamicUniversePreview
+          : null
+      );
+      setDynamicSymbols(
+        Array.isArray(data?.dynamicSymbols)
+          ? data.dynamicSymbols
+              .map((x) => String(x).trim().toUpperCase())
+              .filter(Boolean)
+          : []
+      );
+      setEstimatedApiCalls(
+        typeof data?.estimatedApiCalls === "number"
+          ? data.estimatedApiCalls
+          : null
+      );
+    } catch {
+      setErr(force ? "Force refresh failed." : "Failed to load stock ideas.");
+
+      if (!force) {
+        setSections([]);
+        setSignalRecords([]);
+        setUpdatedAt(null);
+        setUniverseSize(null);
+        setDynamicUniverseCount(null);
+        setDynamicUniversePreview(null);
+        setDynamicSymbols([]);
+        setEstimatedApiCalls(null);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
