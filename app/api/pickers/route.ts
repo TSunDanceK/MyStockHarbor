@@ -1404,8 +1404,9 @@ async function buildPickersPayload(origin: string): Promise<PickersPayload> {
 
 export async function GET(req: NextRequest) {
   const now = Date.now();
+  const forceRefresh = req.nextUrl.searchParams.get("force") === "1";
 
-  if (memo && now - memo.ts < MEMORY_CACHE_MS) {
+  if (!forceRefresh && memo && now - memo.ts < MEMORY_CACHE_MS) {
     return NextResponse.json(memo.data, {
       headers: {
         "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
@@ -1413,9 +1414,9 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const cached = await readPickersCache();
+  const cached = forceRefresh ? null : await readPickersCache();
 
-  if (cached?.data) {
+  if (!forceRefresh && cached?.data) {
     memo = { ts: now, data: cached.data };
 
     return NextResponse.json(cached.data, {
@@ -1446,7 +1447,9 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(data, {
       headers: {
-        "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+        "Cache-Control": forceRefresh
+          ? "no-store"
+          : `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
       },
     });
   } catch (error) {
