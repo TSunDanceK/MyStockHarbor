@@ -765,6 +765,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   const [indicatorMenuOpen, setIndicatorMenuOpen] = useState(false);
   const indicatorMenuRef = useRef<HTMLDivElement | null>(null);
   const chartSectionRef = useRef<HTMLDivElement | null>(null);
+  const [highlightChart, setHighlightChart] = useState(false);
 
   const [quote, setQuote] = useState<Quote | null>(null);
   const [historyAll, setHistoryAll] = useState<Point[]>([]);
@@ -1047,20 +1048,26 @@ const [qRes, hRes] = await Promise.all([
     };
   }, []);
   
-  useEffect(() => {
-    const hash = typeof window !== "undefined" ? window.location.hash : "";
-    if (hash !== "#chart") return;
-    if (!historyAll.length) return;
+useEffect(() => {
+  const hash = typeof window !== "undefined" ? window.location.hash : "";
+  if (hash !== "#chart") return;
+  if (!historyAll.length) return;
 
-    const t = window.setTimeout(() => {
-      chartSectionRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }, 80);
+  const t = window.setTimeout(() => {
+    chartSectionRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
 
-    return () => window.clearTimeout(t);
-  }, [historyAll, symbol]);
+    // trigger highlight
+    setHighlightChart(true);
+
+    // remove highlight after short delay
+    setTimeout(() => setHighlightChart(false), 1200);
+  }, 80);
+
+  return () => window.clearTimeout(t);
+}, [historyAll, symbol]);
 
 
   useEffect(() => {
