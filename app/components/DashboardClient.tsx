@@ -781,7 +781,6 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [expanded, setExpanded] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-    setMobileChartOpen(false);
 
   const selectedTimeframe = useMemo(
     () => TIMEFRAMES.find((t) => t.label === activeTimeframe) ?? TIMEFRAMES[0],
@@ -1305,7 +1304,6 @@ const [qRes, hRes] = await Promise.all([
     setSelectedIndicators([]);
     setIndicator("None");
     setWindowOffset(0);
-    setMobileChartOpen(false);
   }
 
   function clearIndicatorSelection() {
