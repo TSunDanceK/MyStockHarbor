@@ -33,7 +33,7 @@ type DynamicQuoteRecord = {
   discoveredAt: number;
 };
 
-const PAYLOAD_CACHE_MS = 60 * 1000;
+const PAYLOAD_CACHE_MS = 5 * 60 * 1000;
 
 const DISCOVERY_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const OPEN_MARKET_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
@@ -243,7 +243,7 @@ async function fetchQuoteBatch(symbols: string[], apiKey: string) {
   const list = symbols.join(",");
   const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(list)}&apikey=${encodeURIComponent(apiKey)}`;
 
-  const res = await fetch(url, { cache: "no-store" });
+ const res = await fetch(url, { next: { revalidate: 300 } });
   const json = await res.json().catch(() => null);
 
   return { ok: res.ok, status: res.status, json, url };
