@@ -4014,12 +4014,6 @@ return (
               <MobileStockAnalysisCard />
             </div>
 
-        {isMobile ? (
-          <>
-            <div className="msh-lower-grid" style={{ marginTop: 0 }}>
-              <MobileStockAnalysisCard />
-            </div>
-
             <div className="msh-lower-grid">
               <ChartPanel />
             </div>
