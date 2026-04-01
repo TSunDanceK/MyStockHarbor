@@ -1498,7 +1498,7 @@ export default function PickersClient() {
                         </a>
 
                         <a
-                          href={`/stock/${encodeURIComponent(it.symbol)}`}
+                          href={it.dashboardHref ?? `/?symbol=${encodeURIComponent(it.symbol)}`}
                           style={{
                             display: "inline-flex",
                             alignItems: "center",
@@ -1514,9 +1514,9 @@ export default function PickersClient() {
                             whiteSpace: "nowrap",
                             flex: "0 0 auto",
                           }}
-                          title={`Open ${it.symbol} stock page`}
+                          title={`Open ${it.symbol} chart`}
                         >
-                          Stock page ↗
+                          Open chart ↗
                         </a>
                       </div>
                     ))}
