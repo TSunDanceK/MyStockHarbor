@@ -7,9 +7,9 @@ const pickersJsonLd = {
   "@context": "https://schema.org",
   "@type": "CollectionPage",
   name: "Stock Pickers",
-  url: "https://www.mystockharbor.com/oversold-stocks",
+  url: "https://www.mystockharbor.com/pickers",
   description:
-    "Browse stock screener ideas including oversold stocks, overbought stocks, breakouts, stocks near MA200, divergence setups, unusual volume, and pullback ideas.",
+    "Browse screened stock ideas including oversold stocks, overbought stocks, breakouts, stocks near MA200, divergence setups, unusual volume, and pullback ideas.",
   mainEntity: {
     "@type": "ItemList",
     itemListElement: [
@@ -19,7 +19,7 @@ const pickersJsonLd = {
         item: {
           "@type": "Thing",
           name: "Oversold Stocks",
-          url: "https://mystockharbor.com/oversold-stocks",
+          url: "https://www.mystockharbor.com/oversold-stocks",
         },
       },
       {
@@ -64,7 +64,7 @@ const pickersJsonLd = {
         item: {
           "@type": "Thing",
           name: "Stocks Down From Highs",
-           url: "https://www.mystockharbor.com/stocks-down-from-highs",
+          url: "https://www.mystockharbor.com/stocks-down-from-highs",
         },
       },
       {
@@ -73,7 +73,7 @@ const pickersJsonLd = {
         item: {
           "@type": "Thing",
           name: "Bullish Divergence Stocks",
-          uurl: "https://www.mystockharbor.com/bullish-divergence-stocks",
+          url: "https://www.mystockharbor.com/bullish-divergence-stocks",
         },
       },
       {
@@ -109,14 +109,14 @@ const pickersJsonLd = {
 export const metadata: Metadata = {
   title: "Stock Pickers, Breakouts & Oversold Setups | MyStockHarbor (My Stock Harbor)",
   description:
-    "Find stock ideas using breakout, oversold, divergence and dip-buy setup filters. Open any stock in the MyStockHarbor dashboard for deeper chart analysis.",
+    "Find screened stock ideas using breakout, oversold, divergence and dip-buy setup filters. Open any stock in the MyStockHarbor dashboard for deeper chart analysis.",
   alternates: {
     canonical: "https://www.mystockharbor.com/pickers",
   },
   openGraph: {
     title: "Stock Pickers, Breakouts & Oversold Setups | MyStockHarbor",
     description:
-      "Explore stock ideas using breakout, oversold, divergence and dip-buy setup filters.",
+      "Explore screened stock ideas using breakout, oversold, divergence and dip-buy setup filters.",
     url: "https://www.mystockharbor.com/pickers",
     siteName: "MyStockHarbor",
     type: "website",
@@ -125,9 +125,10 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Stock Pickers, Breakouts & Oversold Setups | MyStockHarbor",
     description:
-      "Explore stock ideas using breakout, oversold, divergence and dip-buy setup filters.",
+      "Explore screened stock ideas using breakout, oversold, divergence and dip-buy setup filters.",
   },
 };
+
 const panelStyle: React.CSSProperties = {
   marginTop: 22,
   border: "1px solid rgba(255,255,255,0.08)",
@@ -190,9 +191,10 @@ export default function PickersPage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(pickersJsonLd) }}
       />
+
       <div className="wrap">
         <div style={{ display: "grid", gap: 14 }}>
-              <div
+          <div
             className="topNavRow"
             style={{
               display: "flex",
@@ -300,33 +302,34 @@ export default function PickersPage() {
                 <BookmarkPromptButton compact />
               </div>
 
-<h1
-  className="pickersHeroTitle"
-  style={{
-    margin: "14px 0 0 0",
-    fontSize: 44,
-    lineHeight: 1.04,
-    letterSpacing: "-0.05em",
-  }}
->
-  Stock Pickers & Technical Setup Ideas
-</h1>
+              <h1
+                className="pickersHeroTitle"
+                style={{
+                  margin: "14px 0 0 0",
+                  fontSize: 44,
+                  lineHeight: 1.04,
+                  letterSpacing: "-0.05em",
+                }}
+              >
+                Stock Pickers & Technical Setup Ideas
+              </h1>
 
-<p
-  className="pickersHeroText"
-  style={{
-    marginTop: 12,
-    fontSize: 17,
-    lineHeight: 1.65,
-    opacity: 0.84,
-    maxWidth: 700,
-  }}
->
-  Discover stock ideas using technical setups including oversold conditions,
-  breakouts, divergence signals, MA200 tests, dip-buy opportunities and other
-  chart-based filters. Open any stock in the dashboard to explore charts and
-  indicators in more detail.
-</p>
+              <p
+                className="pickersHeroText"
+                style={{
+                  marginTop: 12,
+                  fontSize: 17,
+                  lineHeight: 1.65,
+                  opacity: 0.84,
+                  maxWidth: 700,
+                }}
+              >
+                Browse screened stock ideas across oversold conditions, breakouts,
+                divergence signals, MA200 tests, pullback setups and other
+                chart-based themes. These lists are filtered to surface cleaner,
+                more relevant setups to review, then ranked to help the strongest
+                opportunities rise higher.
+              </p>
 
               <div
                 className="heroMiniStats"
@@ -350,7 +353,6 @@ export default function PickersPage() {
                   tint="amber"
                 />
               </div>
-              
 
               <div
                 className="scrollCueBox"
@@ -448,27 +450,27 @@ export default function PickersPage() {
               >
                 <SignalCard
                   title="Oversold Rebound Signals"
-                  text="Downside stretch with possible rebound potential."
+                  text="Screened for stretched downside conditions that may be worth reviewing for rebound potential."
                   tint="green"
                 />
                 <SignalCard
                   title="MA200 Proximity Signals"
-                  text="Stocks trading close to a major long-term moving average."
+                  text="Filtered to highlight stocks trading close to a major long-term moving average."
                   tint="red"
                 />
                 <SignalCard
                   title="Divergence Signals"
-                  text="Momentum and price may be starting to disagree."
+                  text="Filtered to surface charts where price and momentum may be starting to disagree."
                   tint="amber"
                 />
                 <SignalCard
-                  title="Buy-the-Dip Setups"
-                  text="Pullback setups that may still fit a stronger trend."
+                  title="Pullback Setups"
+                  text="Screened for controlled weakness or retracements that may still fit a stronger chart."
                   tint="teal"
                 />
                 <SignalCard
                   title="Breakout Setups"
-                  text="Strength, resistance pressure or momentum expansion."
+                  text="Filtered to highlight strength, resistance pressure or momentum expansion worth checking."
                   tint="blue"
                 />
               </div>
@@ -552,9 +554,22 @@ export default function PickersPage() {
               }}
             >
               These screened results are designed to help you find charts worth
-              reviewing. They are starting points for analysis, not buy or sell
-              recommendations. Click any symbol to open the full chart in the
-              dashboard.
+              reviewing faster. The lists are filtered to reduce weaker,
+              messier or less relevant setups, then ranked to bring stronger
+              candidates closer to the top. They are starting points for
+              analysis, not buy or sell recommendations.
+            </p>
+
+            <p
+              style={{
+                margin: "10px 0 0 0",
+                lineHeight: 1.65,
+                opacity: 0.68,
+                maxWidth: 820,
+                fontSize: 13,
+              }}
+            >
+              The latest update time appears beneath the live results.
             </p>
           </div>
 
@@ -605,7 +620,7 @@ export default function PickersPage() {
           >
             Start with the Trading Setups Hub, Indicators Hub or Stock
             Scanners Hub. These pages explain the patterns, momentum shifts,
-            chart signals and screening methods traders review when analysing
+            chart signals and screening concepts traders review when analysing
             stock charts.
           </p>
 
@@ -623,7 +638,7 @@ export default function PickersPage() {
                 Trading Setups Hub
               </div>
               <div style={smallLinkTextStyle}>
-                Explore the main hub for breakouts, oversold setups, dip buys
+                Explore the main hub for breakouts, oversold setups, pullbacks
                 and divergence ideas.
               </div>
             </Link>
@@ -873,7 +888,7 @@ export default function PickersPage() {
               </h3>
               <p style={{ margin: "8px 0 0", lineHeight: 1.7, opacity: 0.76 }}>
                 Yes. It works like a stock idea screener built around technical
-                setups such as oversold conditions, divergence, dip-buy setups
+                setups such as oversold conditions, divergence, pullback setups
                 and breakouts.
               </p>
             </div>
@@ -885,6 +900,18 @@ export default function PickersPage() {
               <p style={{ margin: "8px 0 0", lineHeight: 1.7, opacity: 0.76 }}>
                 No. These are idea filters only. They help you narrow down
                 charts to review, but they are not personal financial advice.
+              </p>
+            </div>
+
+            <div>
+              <h3 style={{ margin: 0, fontSize: 17 }}>
+                Why are some stocks ranked higher than others?
+              </h3>
+              <p style={{ margin: "8px 0 0", lineHeight: 1.7, opacity: 0.76 }}>
+                The lists are filtered and ranked to surface cleaner, more
+                relevant setups first. A stock appearing lower down does not
+                automatically make it unusable, but higher-ranked results are
+                usually the first charts worth reviewing.
               </p>
             </div>
 
