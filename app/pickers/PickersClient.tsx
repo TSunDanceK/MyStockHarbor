@@ -721,47 +721,51 @@ export default function PickersClient() {
           display: block;
         }
 
-        @media (max-width: 640px) {
-          .pickers-filter-grid,
-          .pickers-card-grid,
-          .pickers-section-results-grid {
-            grid-template-columns: minmax(0, 1fr);
-          }
+@media (max-width: 640px) {
+  .pickers-filter-grid,
+  .pickers-card-grid,
+  .pickers-section-results-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 
-          .pickers-desktop-only {
-            display: none;
-          }
+  .pickers-desktop-only {
+    display: none;
+  }
 
-          .pickers-item-note {
-            display: none !important;
-          }
+  .pickers-section-description {
+    display: none;
+  }
 
-          .pickers-item-note.pickers-item-note-show-mobile {
-            display: inline !important;
-          }
+  .pickers-item-note {
+    display: none !important;
+  }
 
-          .pickers-note-mobile {
-            display: none;
-          }
+  .pickers-item-note.pickers-item-note-show-mobile {
+    display: inline !important;
+  }
 
-          .pickers-note-desktop {
-            display: inline;
-          }
+  .pickers-note-mobile {
+    display: none;
+  }
 
-          .pickers-section-title {
-            flex-wrap: nowrap !important;
-            align-items: center !important;
-            gap: 8px !important;
-          }
+  .pickers-note-desktop {
+    display: inline;
+  }
 
-          .pickers-help-tip {
-            width: 22px !important;
-            height: 22px !important;
-            font-size: 13px !important;
-            margin-left: 0 !important;
-            flex: 0 0 22px !important;
-          }
-        }
+  .pickers-section-title {
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    gap: 8px !important;
+  }
+
+  .pickers-help-tip {
+    width: 22px !important;
+    height: 22px !important;
+    font-size: 13px !important;
+    margin-left: 0 !important;
+    flex: 0 0 22px !important;
+  }
+}
 
         @media (max-width: 640px) {
           .pickers-note-desktop {
@@ -1425,7 +1429,6 @@ export default function PickersClient() {
     {sec.description}
   </p>
 ) : null}
-
                     <div style={{ fontSize: 12, opacity: 0.7 }}>
                       {typeof sec.foundCount === "number"
                         ? `F${sec.foundCount} / S${items.length}`
