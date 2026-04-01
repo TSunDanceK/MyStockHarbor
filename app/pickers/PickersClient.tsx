@@ -771,7 +771,11 @@ export default function PickersClient() {
           .pickers-note-mobile {
             display: inline;
           }
+          .pickers-section-description {
+           display: none;
+          }
         }
+        
       `}</style>
 
       {loading ? (
@@ -1408,19 +1412,19 @@ export default function PickersClient() {
                         <HelpTip text={getHeaderHelp(sec.title)} />
                       </h2>
 
-                      {sec.description ? (
-                        <p
-                          style={{
-                            margin: "8px 0 0",
-                            fontSize: 14,
-                            opacity: 0.72,
-                            lineHeight: 1.6,
-                          }}
-                        >
-                          {sec.description}
-                        </p>
-                      ) : null}
-                    </div>
+{sec.description ? (
+  <p
+    className="pickers-section-description"
+    style={{
+      margin: "8px 0 0",
+      fontSize: 14,
+      opacity: 0.72,
+      lineHeight: 1.6,
+    }}
+  >
+    {sec.description}
+  </p>
+) : null}
 
                     <div style={{ fontSize: 12, opacity: 0.7 }}>
                       {typeof sec.foundCount === "number"
