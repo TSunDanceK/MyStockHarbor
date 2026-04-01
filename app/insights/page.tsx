@@ -289,28 +289,6 @@ export default function InsightsPage() {
               Read S&amp;P 500 Analysis →
             </Link>
 
-            <Link
-              href="/platforms"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "10px 14px",
-                borderRadius: 12,
-                border: "1px solid rgba(168,85,247,0.40)",
-                background:
-                  "linear-gradient(135deg, rgba(168,85,247,0.20), rgba(59,130,246,0.10))",
-                color: "#faf5ff",
-                textDecoration: "none",
-                fontWeight: 900,
-                fontSize: 13,
-                whiteSpace: "nowrap",
-                boxShadow: "0 6px 16px rgba(0,0,0,0.25)",
-                transition: "all 140ms ease",
-              }}
-            >
-              Compare Platforms →
-            </Link>
           </div>
         </section>
 
