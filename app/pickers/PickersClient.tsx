@@ -1126,7 +1126,9 @@ export default function PickersClient() {
                 {customMatches.map((item) => (
                   <a
                     key={item.symbol}
-                    href={item.dashboardHref ?? `/?symbol=${encodeURIComponent(item.symbol)}#chart`}
+                    href={toChartHref(
+                     item.dashboardHref ?? `/?symbol=${encodeURIComponent(item.symbol)}`
+                     )}
                     style={{
                       display: "block",
                       minWidth: 0,
@@ -1252,7 +1254,9 @@ export default function PickersClient() {
                         }}
                       >
 <a
-  href={item.dashboardHref ?? `/?symbol=${encodeURIComponent(item.symbol)}`}
+href={toChartHref(
+  item.dashboardHref ?? `/?symbol=${encodeURIComponent(item.symbol)}`
+)}
   onClick={(e) => e.stopPropagation()}
   style={{
     display: "inline-flex",
@@ -1467,7 +1471,9 @@ export default function PickersClient() {
                         }}
                       >
                         <a
-                          href={it.dashboardHref ?? `/?symbol=${encodeURIComponent(it.symbol)}#chart`}
+                          href={toChartHref(
+                          it.dashboardHref ?? `/?symbol=${encodeURIComponent(it.symbol)}`
+                           )}
                           style={{
                             display: "inline-flex",
                             alignItems: "center",
@@ -1522,7 +1528,9 @@ export default function PickersClient() {
                         </a>
 
                         <a
-                          href={it.dashboardHref ?? `/?symbol=${encodeURIComponent(it.symbol)}`}
+                          href={toChartHref(
+                          it.dashboardHref ?? `/?symbol=${encodeURIComponent(it.symbol)}`
+                          )}
                           style={{
                             display: "inline-flex",
                             alignItems: "center",
