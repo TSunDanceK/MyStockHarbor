@@ -896,7 +896,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
 
     async function resolve() {
       try {
-        const res = await fetch(`/api/symbols?q=${encodeURIComponent(symbol)}`, { cache: "no-store" });
+        const res = await fetch(`/api/symbols?q=${encodeURIComponent(symbol)}`);
         if (!res.ok) throw new Error("symbols lookup failed");
 
         const data = (await res.json()) as { results?: SymbolResult[] };
@@ -936,10 +936,9 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
      const historyDays = selectedTimeframe.fetchBars;
 
 const [qRes, hRes] = await Promise.all([
-  fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" }),
+  fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`),
   fetch(
-    `/api/history?symbol=${encodeURIComponent(symbol)}&days=${historyDays}&interval=${chartInterval}`,
-    { cache: "no-store" }
+    `/api/history?symbol=${encodeURIComponent(symbol)}&days=${historyDays}&interval=${chartInterval}`
   ),
 ]);
 
@@ -999,7 +998,7 @@ const [qRes, hRes] = await Promise.all([
 
     const t = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/symbols?q=${encodeURIComponent(q)}`, { cache: "no-store" });
+        const res = await fetch(`/api/symbols?q=${encodeURIComponent(q)}`);
         const data = (await res.json()) as { results: SymbolResult[] };
         if (cancelled) return;
         setResults(Array.isArray(data.results) ? data.results : []);
@@ -1020,7 +1019,7 @@ const [qRes, hRes] = await Promise.all([
 
     async function loadBench() {
       try {
-        const res = await fetch("/api/benchmarks", { cache: "no-store" });
+        const res = await fetch("/api/benchmarks");
         if (!res.ok) throw new Error("Benchmarks API failed");
 
         const raw = (await res.json()) as any;
@@ -1054,7 +1053,7 @@ const [qRes, hRes] = await Promise.all([
 
     async function loadNews() {
       try {
-        const res = await fetch(`/api/internal-news?symbol=${encodeURIComponent(symbol)}`, {
+        const res = await fetch(`/api/internal-news?symbol=${encodeURIComponent(symbol)}`);
           cache: "no-store",
         });
 
