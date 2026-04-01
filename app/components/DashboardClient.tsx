@@ -717,7 +717,7 @@ type TimeframePreset = {
 };
 
 const TIMEFRAMES: TimeframePreset[] = [
-  { label: "D", interval: "d", fetchBars: 1200, defaultVisibleBars: 75 },
+  { label: "D", interval: "d", fetchBars: 2600, defaultVisibleBars: 75 },
   { label: "W", interval: "w", fetchBars: 780, defaultVisibleBars: 75 },
   { label: "M", interval: "m", fetchBars: 360, defaultVisibleBars: 75 },
 ];
