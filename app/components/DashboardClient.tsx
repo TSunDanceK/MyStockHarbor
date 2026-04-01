@@ -1054,8 +1054,6 @@ const [qRes, hRes] = await Promise.all([
     async function loadNews() {
       try {
         const res = await fetch(`/api/internal-news?symbol=${encodeURIComponent(symbol)}`);
-          cache: "no-store",
-        });
 
         if (!res.ok) throw new Error("Internal news API failed");
 
