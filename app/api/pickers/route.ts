@@ -823,7 +823,7 @@ function pLimit(limit: number) {
 /* ------------------------------ fetchers ----------------------------- */
 
 async function fetchJSON<T>(url: string) {
-  const res = await fetch(url, { cache: "no-store" });
+  const res = await fetch(url, { next: { revalidate: 300 } });
   if (!res.ok) throw new Error(`Fetch failed: ${url}`);
   return (await res.json()) as T;
 }
