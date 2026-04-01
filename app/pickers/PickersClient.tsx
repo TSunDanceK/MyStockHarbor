@@ -288,7 +288,7 @@ function HelpTip({ text }: { text: string }) {
 }
 
 export default function PickersClient() {
-  const SHOW_FORCE_FETCH_BUTTON = false;
+  const SHOW_FORCE_FETCH_BUTTON = true;
 
   const [sections, setSections] = useState<PickerSection[]>([]);
   const [signalRecords, setSignalRecords] = useState<SignalRecord[]>([]);
