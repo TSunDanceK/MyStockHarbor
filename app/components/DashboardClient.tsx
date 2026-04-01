@@ -2667,7 +2667,13 @@ return (
           title=""
           right={null}
           bodyStyle={{ padding: 0 }}
-          style={{ minHeight: isMobile ? "auto" : 0 }}
+          style={{
+            minHeight: isMobile ? "auto" : 0,
+            transition: "box-shadow 0.4s ease, transform 0.4s ease",
+            boxShadow: highlightChart
+              ? "0 0 0 2px rgba(59,130,246,0.35), 0 10px 30px rgba(59,130,246,0.25)"
+              : undefined,
+          }}
         >
           <div style={{ padding: 16, borderBottom: `1px solid ${COLORS.border}` }}>
             <div
