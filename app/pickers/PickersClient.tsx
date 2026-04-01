@@ -731,6 +731,10 @@ const displaySections = useMemo(() => {
             display: none !important;
           }
 
+          .pickers-item-note.pickers-item-note-show-mobile {
+            display: inline !important;
+          }
+
           .pickers-section-title {
             flex-wrap: nowrap !important;
             align-items: center !important;
@@ -1455,7 +1459,9 @@ const displaySections = useMemo(() => {
 
                           {it.note ? (
                             <span
-                              className="pickers-item-note"
+                              className={`pickers-item-note${
+                                /MA200/i.test(it.note) ? " pickers-item-note-show-mobile" : ""
+                              }`}
                               style={{
                                 fontSize: 12,
                                 opacity: 0.65,
