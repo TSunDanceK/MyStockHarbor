@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
+export const revalidate = 300;
 
 type StooqRow = {
   symbol?: string;
@@ -29,7 +30,7 @@ type BenchPayload = {
   items: BenchItem[];
 };
 
-const CACHE_MS = 60_000; // 1 min
+const CACHE_MS = 5 * 60_000; // 5 min
 let cache: { at: number; payload: BenchPayload } | null = null;
 
 function toNum(x: unknown): number | null {
@@ -46,7 +47,10 @@ async function fetchStooqQuote(symbol: string): Promise<StooqRow | null> {
    */
   const url = `https://stooq.com/q/l/?s=${encodeURIComponent(symbol)}&f=sd2t2oc&h&e=json`;
 
-  const res = await fetch(url, { cache: "no-store" });
+  const res = await fetch(url, {
+    next: { revalidate: 300 },
+  });
+
   if (!res.ok) return null;
 
   const json = (await res.json()) as any;
@@ -58,13 +62,16 @@ async function fetchStooqQuote(symbol: string): Promise<StooqRow | null> {
 
 export async function GET() {
   if (cache && Date.now() - cache.at < CACHE_MS) {
-    return NextResponse.json(cache.payload);
+    return NextResponse.json(cache.payload, {
+      headers: {
+        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+      },
+    });
   }
 
-  // Use free Stooq symbols for broad market benchmarks
   const defs = [
     { key: "spy", label: "S&P 500 (via SPY)", symbol: "spy.us" },
-   { key: "ndx", label: "Nasdaq 100", symbol: "qqq.us" },
+    { key: "ndx", label: "Nasdaq 100", symbol: "qqq.us" },
     { key: "dia", label: "Dow Jones (via DIA)", symbol: "dia.us" },
     { key: "iwm", label: "Russell 2000 (via IWM)", symbol: "iwm.us" },
   ] as const;
@@ -83,14 +90,16 @@ export async function GET() {
       const base = prev ?? open ?? null;
 
       const changePct =
-        close != null && base != null && base !== 0 ? ((close - base) / base) * 100 : null;
+        close != null && base != null && base !== 0
+          ? ((close - base) / base) * 100
+          : null;
 
       return {
         key: d.key,
         label: d.label,
         symbol: d.symbol,
-        date: typeof r?.date === "string" ? r!.date! : null,
-        time: typeof r?.time === "string" ? r!.time! : null,
+        date: typeof r?.date === "string" ? r.date : null,
+        time: typeof r?.time === "string" ? r.time : null,
         close,
         prevClose: base,
         changePct,
@@ -104,13 +113,23 @@ export async function GET() {
     };
 
     cache = { at: Date.now(), payload };
-    return NextResponse.json(payload);
+
+    return NextResponse.json(payload, {
+      headers: {
+        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+      },
+    });
   } catch {
     const payload: BenchPayload = {
       updatedAt: new Date().toISOString(),
-     scope: "Benchmarks (Stooq, free)",
+      scope: "Benchmarks (Stooq, free)",
       items: [],
     };
-    return NextResponse.json(payload);
+
+    return NextResponse.json(payload, {
+      headers: {
+        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+      },
+    });
   }
 }
