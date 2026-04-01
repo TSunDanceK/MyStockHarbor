@@ -633,154 +633,148 @@ export default function PickersClient() {
         minWidth: 0,
       }}
     >
-      <style>{`
-        @keyframes pickersBar {
-          0% { transform: translateX(-60%); opacity: 0.55; }
-          50% { transform: translateX(140%); opacity: 0.95; }
-          100% { transform: translateX(320%); opacity: 0.55; }
-        }
+  <style>{`
+  @keyframes pickersBar {
+    0% { transform: translateX(-60%); opacity: 0.55; }
+    50% { transform: translateX(140%); opacity: 0.95; }
+    100% { transform: translateX(320%); opacity: 0.55; }
+  }
 
-        @keyframes pickersPulseCard {
-          0%, 100% {
-            box-shadow: 0 0 0 1px rgba(255,255,255,0.08) inset,
-                        0 10px 30px rgba(59,130,246,0.10);
-            filter: brightness(1);
-          }
-          50% {
-            box-shadow: 0 0 0 1px rgba(255,255,255,0.14) inset,
-                        0 14px 40px rgba(59,130,246,0.22);
-            filter: brightness(1.08);
-          }
-        }
+  @keyframes pickersPulseCard {
+    0%, 100% {
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.08) inset,
+                  0 10px 30px rgba(59,130,246,0.10);
+      filter: brightness(1);
+    }
+    50% {
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.14) inset,
+                  0 14px 40px rgba(59,130,246,0.22);
+      filter: brightness(1.08);
+    }
+  }
 
-        @keyframes pickersShimmer {
-          0% {
-            transform: translateX(-120%);
-          }
-          70%, 100% {
-            transform: translateX(140%);
-          }
-        }
+  @keyframes pickersShimmer {
+    0% {
+      transform: translateX(-120%);
+    }
+    70%, 100% {
+      transform: translateX(140%);
+    }
+  }
 
-        .pickers-loading-card {
-          position: relative;
-          overflow: hidden;
-          animation: pickersPulseCard 2.6s ease-in-out infinite;
-        }
+  .pickers-loading-card {
+    position: relative;
+    overflow: hidden;
+    animation: pickersPulseCard 2.6s ease-in-out infinite;
+  }
 
-        .pickers-loading-card::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          background: linear-gradient(
-            120deg,
-            rgba(255,255,255,0) 0%,
-            rgba(255,255,255,0.18) 50%,
-            rgba(255,255,255,0) 100%
-          );
-          transform: translateX(-120%);
-          animation: pickersShimmer 3.2s ease-in-out infinite;
-          pointer-events: none;
-        }
+  .pickers-loading-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      120deg,
+      rgba(255,255,255,0) 0%,
+      rgba(255,255,255,0.18) 50%,
+      rgba(255,255,255,0) 100%
+    );
+    transform: translateX(-120%);
+    animation: pickersShimmer 3.2s ease-in-out infinite;
+    pointer-events: none;
+  }
 
-        .pickers-shell {
-          width: 100%;
-          max-width: 980px;
-          min-width: 0;
-        }
+  .pickers-shell {
+    width: 100%;
+    max-width: 980px;
+    min-width: 0;
+  }
 
-        .pickers-filter-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-          gap: 10px;
-        }
+  .pickers-filter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 10px;
+  }
 
-        .pickers-card-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-          gap: 12px;
-        }
+  .pickers-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+  }
 
-        .pickers-section-results-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 10px;
-        }
-
-        @media (max-width: 820px) {
-          .pickers-filter-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-
-          .pickers-card-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-        }
-
-        .pickers-desktop-only {
-          display: block;
-        }
-
-@media (max-width: 640px) {
-  .pickers-filter-grid,
-  .pickers-card-grid,
   .pickers-section-results-grid {
-    grid-template-columns: minmax(0, 1fr);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  @media (max-width: 820px) {
+    .pickers-filter-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .pickers-card-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
 
   .pickers-desktop-only {
-    display: none;
+    display: block;
   }
 
-  .pickers-section-description {
-    display: none;
+  @media (max-width: 640px) {
+    .pickers-filter-grid,
+    .pickers-card-grid,
+    .pickers-section-results-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .pickers-desktop-only {
+      display: none;
+    }
+
+    .pickers-section-description {
+      display: none;
+    }
+
+    .pickers-item-note {
+      display: none !important;
+    }
+
+    .pickers-item-note.pickers-item-note-show-mobile {
+      display: inline !important;
+    }
+
+    .pickers-note-mobile {
+      display: none;
+    }
+
+    .pickers-note-desktop {
+      display: inline;
+    }
+
+    .pickers-section-title {
+      flex-wrap: nowrap !important;
+      align-items: center !important;
+      gap: 8px !important;
+    }
+
+    .pickers-help-tip {
+      width: 22px !important;
+      height: 22px !important;
+      font-size: 13px !important;
+      margin-left: 0 !important;
+      flex: 0 0 22px !important;
+    }
+
+    .pickers-note-desktop {
+      display: none;
+    }
+
+    .pickers-note-mobile {
+      display: inline;
+    }
   }
-
-  .pickers-item-note {
-    display: none !important;
-  }
-
-  .pickers-item-note.pickers-item-note-show-mobile {
-    display: inline !important;
-  }
-
-  .pickers-note-mobile {
-    display: none;
-  }
-
-  .pickers-note-desktop {
-    display: inline;
-  }
-
-  .pickers-section-title {
-    flex-wrap: nowrap !important;
-    align-items: center !important;
-    gap: 8px !important;
-  }
-
-  .pickers-help-tip {
-    width: 22px !important;
-    height: 22px !important;
-    font-size: 13px !important;
-    margin-left: 0 !important;
-    flex: 0 0 22px !important;
-  }
-}
-
-        @media (max-width: 640px) {
-          .pickers-note-desktop {
-            display: none;
-          }
-
-          .pickers-note-mobile {
-            display: inline;
-          }
-          .pickers-section-description {
-           display: none;
-          }
-        }
-        
-      `}</style>
+`}</style>
 
       {loading ? (
         <div
