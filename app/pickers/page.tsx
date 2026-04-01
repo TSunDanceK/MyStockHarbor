@@ -544,21 +544,18 @@ export default function PickersPage() {
               Screened setups across the market
             </h2>
 
-            <p
-              style={{
-                margin: "10px 0 0 0",
-                lineHeight: 1.65,
-                opacity: 0.82,
-                maxWidth: 820,
-                fontSize: 15,
-              }}
-            >
-              These screened results are designed to help you find charts worth
-              reviewing faster. The lists are filtered to reduce weaker,
-              messier or less relevant setups, then ranked to bring stronger
-              candidates closer to the top. They are starting points for
-              analysis, not buy or sell recommendations.
-            </p>
+<p
+  className="pickers-mobile-hide"
+  style={{
+    margin: "8px 0 0 0",
+    fontSize: 14,
+    lineHeight: 1.65,
+    opacity: 0.76,
+    maxWidth: 760,
+  }}
+>
+  These screened results are designed to help you find charts worth reviewing faster. The lists are filtered to reduce weaker, messier or less relevant setups, then ranked to bring stronger candidates closer to the top. They are starting points for analysis, not buy or sell recommendations.
+</p>
 
             <p
               style={{
@@ -1039,6 +1036,10 @@ export default function PickersPage() {
           .topNavHideOnMobile {
             display: none !important;
           }
+          
+          .pickers-mobile-hide {
+           display: none !important;
+           }
 
           .heroPanel {
             padding: 14px !important;
