@@ -910,7 +910,7 @@ async function buildPickersPayload(origin: string): Promise<PickersPayload> {
   ).slice(0, UNIVERSE_CAP);
 
   const limit = pLimit(10);
-  const days = 2600;
+  const days = 1300;
 
   const hotDynamicNames: PickerItem[] = [];
   const green: PickerItem[] = [];
