@@ -344,12 +344,15 @@ export async function fetchAndCacheDailyHistory(symbol: string) {
     throw new Error(`FMP history error for ${normalized}: ${payload.Error}`);
   }
 
-   const daily = parseFmpHistoricalRows(
-    payload && typeof payload === "object" && "historical" in payload
-      ? payload.historical
-      : undefined
-  );
+  const historicalRows =
+    payload &&
+    typeof payload === "object" &&
+    "historical" in payload &&
+    Array.isArray(payload.historical)
+      ? (payload.historical as FmpHistoricalRow[])
+      : undefined;
 
+  const daily = parseFmpHistoricalRows(historicalRows);
   if (daily.length >= MIN_QUALIFIED_POINTS) {
     const entry: HistoryCacheEntry = {
       symbol: normalized,
