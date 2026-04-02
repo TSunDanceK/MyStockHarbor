@@ -42,7 +42,12 @@ type FmpHistoricalRow = {
   volume?: number | string;
 };
 
-type FmpHistoricalResponse = FmpHistoricalRow[] | { Error?: string };
+type FmpHistoricalResponse =
+  | {
+      historical?: FmpHistoricalRow[];
+      Error?: string;
+    }
+  | { Error?: string };
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -311,9 +316,9 @@ export async function fetchAndCacheDailyHistory(symbol: string) {
 
   await reserveFmpCallSlot();
 
-  const url = `https://financialmodelingprep.com/stable/historical-price-eod/full?symbol=${encodeURIComponent(
+  const url = `https://financialmodelingprep.com/api/v3/historical-price-full/${encodeURIComponent(
     fmpSymbol
-  )}&apikey=${encodeURIComponent(apiKey)}`;
+  )}?apikey=${encodeURIComponent(apiKey)}`;
 
   const res = await fetch(url, {
     cache: "no-store",
@@ -339,7 +344,11 @@ export async function fetchAndCacheDailyHistory(symbol: string) {
     throw new Error(`FMP history error for ${normalized}: ${payload.Error}`);
   }
 
-  const daily = parseFmpHistoricalRows(Array.isArray(payload) ? payload : undefined);
+   const daily = parseFmpHistoricalRows(
+    payload && typeof payload === "object" && "historical" in payload
+      ? payload.historical
+      : undefined
+  );
 
   if (daily.length >= MIN_QUALIFIED_POINTS) {
     const entry: HistoryCacheEntry = {
