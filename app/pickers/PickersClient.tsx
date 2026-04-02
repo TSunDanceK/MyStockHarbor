@@ -1553,6 +1553,35 @@ color: "#cbd5f5",
                       </div>
                     ))}
                   </div>
+                  {sec.title.toLowerCase().includes("200") ? (
+  <div
+    style={{
+      marginTop: 12,
+      display: "flex",
+      justifyContent: "flex-end",
+    }}
+  >
+    <a
+      href="/stocks-near-200-day-moving-average"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "8px 12px",
+        borderRadius: 10,
+        border: "1px solid rgba(59,130,246,0.22)",
+        background: "rgba(59,130,246,0.08)",
+        color: "#dbeafe",
+        textDecoration: "none",
+        fontSize: 12,
+        fontWeight: 900,
+        whiteSpace: "nowrap",
+      }}
+    >
+      See all stocks near 200-day MA →
+    </a>
+  </div>
+) : null}
                 </section>
               );
             })}
