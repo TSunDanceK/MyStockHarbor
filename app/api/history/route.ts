@@ -127,6 +127,13 @@ export async function GET(req: Request) {
   try {
     const daily = await getDailyHistory(symbol);
     const points = aggregate(daily, interval);
+    console.log("history debug", {
+  symbol,
+  interval,
+  requestedDays: days,
+  dailyCount: daily.length,
+  aggregatedCount: points.length,
+});
 
     return NextResponse.json(
       {
