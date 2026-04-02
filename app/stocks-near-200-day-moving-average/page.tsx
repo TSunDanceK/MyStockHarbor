@@ -566,19 +566,16 @@ export default async function StocksNear200DayMovingAveragePage() {
             Stocks currently screening near the daily or weekly MA200
           </h2>
 
-          <p
-            style={{
-              margin: "10px 0 0",
-              lineHeight: 1.7,
-              opacity: 0.8,
-              maxWidth: 860,
-            }}
-          >
-            Every result below is typed out with the ticker in the page content,
-            which helps make the page clearer for readers and stronger for search
-            engines. Click any result to open the full stock page and review the
-            chart in more detail.
-          </p>
+<p
+  style={{
+    margin: "10px 0 0",
+    lineHeight: 1.7,
+    opacity: 0.8,
+    maxWidth: 860,
+  }}
+>
+  Review the current MA200 setups below, then open any result to inspect the full stock page or jump straight to the chart.
+</p>
 
           <div className="ma200-grid" style={{ marginTop: 18 }}>
             {entries.length > 0 ? (
@@ -653,20 +650,46 @@ export default async function StocksNear200DayMovingAveragePage() {
                     </div>
                   </div>
 
-                  <p
-                    style={{
-                      margin: "12px 0 0 0",
-                      fontSize: 15,
-                      lineHeight: 1.75,
-                      opacity: 0.86,
-                    }}
-                  >
-                    <strong>{entry.symbol} stock</strong> is currently screening
-                    near its <strong>{entry.timeframe.toLowerCase()} 200 day
-                    moving average</strong>, which makes it a chart traders may
-                    review for support, resistance, trend continuation or a
-                    larger decision point around the MA200 level.
-                  </p>
+<div
+  style={{
+    marginTop: 12,
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 6,
+  }}
+>
+  <span
+    style={{
+      fontSize: 12,
+      fontWeight: 900,
+      padding: "6px 10px",
+      borderRadius: 999,
+      border: "1px solid rgba(59,130,246,0.25)",
+      background:
+        "linear-gradient(135deg, rgba(59,130,246,0.12), rgba(37,99,235,0.08))",
+      color: "#dbeafe",
+    }}
+  >
+    {entry.timeframe === "Weekly"
+      ? "Higher timeframe level"
+      : "Active MA200 test"}
+  </span>
+
+  <span
+    style={{
+      fontSize: 12,
+      fontWeight: 900,
+      padding: "6px 10px",
+      borderRadius: 999,
+      border: "1px solid rgba(34,197,94,0.25)",
+      background:
+        "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(22,163,74,0.08))",
+      color: "#bbf7d0",
+    }}
+  >
+    Watch reaction
+  </span>
+</div>
 
                   <div
                     style={{
