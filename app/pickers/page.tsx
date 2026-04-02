@@ -8,8 +8,8 @@ const pickersJsonLd = {
   "@type": "CollectionPage",
   name: "Stock Pickers",
   url: "https://www.mystockharbor.com/pickers",
-  description:
-    "Browse screened stock ideas including oversold stocks, overbought stocks, breakouts, stocks near MA200, divergence setups, unusual volume, and pullback ideas.",
+description:
+  "Browse screened stock ideas including oversold stocks, overbought stocks, breakout setups, stocks near the 200-day moving average, divergence setups, unusual volume stocks, and pullback setups.",
   mainEntity: {
     "@type": "ItemList",
     itemListElement: [
@@ -36,7 +36,7 @@ const pickersJsonLd = {
         position: 3,
         item: {
           "@type": "Thing",
-          name: "Breakout Stocks",
+          name: "Breakout Setups",
           url: "https://www.mystockharbor.com/breakout-stocks",
         },
       },
@@ -45,7 +45,7 @@ const pickersJsonLd = {
         position: 4,
         item: {
           "@type": "Thing",
-          name: "Buy The Dip Stocks",
+          name: "Pullback Setups",
           url: "https://www.mystockharbor.com/buy-the-dip-stocks",
         },
       },
@@ -54,7 +54,7 @@ const pickersJsonLd = {
         position: 5,
         item: {
           "@type": "Thing",
-          name: "Stocks Above 200 Day Moving Average",
+          name: "Stocks Near 200-Day Moving Average",
           url: "https://www.mystockharbor.com/stocks-above-200-day-moving-average",
         },
       },
@@ -63,7 +63,7 @@ const pickersJsonLd = {
         position: 6,
         item: {
           "@type": "Thing",
-          name: "Stocks Down From Highs",
+          name: "Pullback Setups (From Highs)",
           url: "https://www.mystockharbor.com/stocks-down-from-highs",
         },
       },
@@ -72,7 +72,7 @@ const pickersJsonLd = {
         position: 7,
         item: {
           "@type": "Thing",
-          name: "Bullish Divergence Stocks",
+          name: "Bullish Divergence Setups",
           url: "https://www.mystockharbor.com/bullish-divergence-stocks",
         },
       },
@@ -81,7 +81,7 @@ const pickersJsonLd = {
         position: 8,
         item: {
           "@type": "Thing",
-          name: "Bearish Divergence Stocks",
+          name: "Bearish Divergence Setups",
           url: "https://www.mystockharbor.com/bearish-divergence-stocks",
         },
       },
@@ -325,8 +325,8 @@ export default function PickersPage() {
                 }}
               >
                 Browse screened stock ideas across oversold conditions, breakouts,
-                divergence signals, MA200 tests, pullback setups and other
-                chart-based themes. These lists are filtered to surface cleaner,
+                divergence setups, 200-day moving average tests, pullback setups and other
+                chart-based trading ideas. These lists are filtered to surface cleaner,
                 more relevant setups to review, then ranked to help the strongest
                 opportunities rise higher.
               </p>
@@ -454,12 +454,12 @@ export default function PickersPage() {
                   tint="green"
                 />
                 <SignalCard
-                  title="MA200 Proximity Signals"
-                  text="Filtered to highlight stocks trading close to a major long-term moving average."
+                  title="Near 200-Day MA Setups"
+                  text="Filtered to highlight stocks trading close to the 200-day moving average, a key long-term level traders watch."
                   tint="red"
                 />
                 <SignalCard
-                  title="Divergence Signals"
+                  title="Divergence Setups"
                   text="Filtered to surface charts where price and momentum may be starting to disagree."
                   tint="amber"
                 />
