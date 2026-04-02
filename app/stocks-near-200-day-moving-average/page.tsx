@@ -693,7 +693,27 @@ export default async function StocksNear200DayMovingAveragePage() {
                         color: "#eff6ff",
                       }}
                     >
-                      Open {entry.symbol} stock page →
+                      Stock Page →
+                    </Link>
+
+                    <Link
+                      href={`/?symbol=${encodeURIComponent(entry.symbol)}#chart`}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        minHeight: 42,
+                        padding: "10px 14px",
+                        borderRadius: 12,
+                        textDecoration: "none",
+                        fontWeight: 900,
+                        border: "1px solid rgba(34,197,94,0.35)",
+                        background:
+                          "linear-gradient(135deg, rgba(21,128,61,0.22), rgba(22,163,74,0.12))",
+                        color: "#dcfce7",
+                      }}
+                    >
+                      Chart →
                     </Link>
                   </div>
                 </article>
