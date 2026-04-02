@@ -650,46 +650,27 @@ export default async function StocksNear200DayMovingAveragePage() {
                     </div>
                   </div>
 
-<div
+<ul
   style={{
     marginTop: 12,
-    display: "flex",
-    flexWrap: "wrap",
-    gap: 6,
+    paddingLeft: 18,
+    fontSize: 14,
+    lineHeight: 1.6,
+    opacity: 0.8,
   }}
 >
-  <span
-    style={{
-      fontSize: 12,
-      fontWeight: 900,
-      padding: "6px 10px",
-      borderRadius: 999,
-      border: "1px solid rgba(59,130,246,0.25)",
-      background:
-        "linear-gradient(135deg, rgba(59,130,246,0.12), rgba(37,99,235,0.08))",
-      color: "#dbeafe",
-    }}
-  >
-    {entry.timeframe === "Weekly"
-      ? "Higher timeframe level"
-      : "Active MA200 test"}
-  </span>
-
-  <span
-    style={{
-      fontSize: 12,
-      fontWeight: 900,
-      padding: "6px 10px",
-      borderRadius: 999,
-      border: "1px solid rgba(34,197,94,0.25)",
-      background:
-        "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(22,163,74,0.08))",
-      color: "#bbf7d0",
-    }}
-  >
-    Watch reaction
-  </span>
-</div>
+  {entry.timeframe === "Weekly" ? (
+    <>
+      <li>Higher timeframe MA200 level</li>
+      <li>Slower, bigger-picture reaction zone</li>
+    </>
+  ) : (
+    <>
+      <li>Active MA200 test on daily chart</li>
+      <li>Watch for support or rejection</li>
+    </>
+  )}
+</ul>
 
                   <div
                     style={{
