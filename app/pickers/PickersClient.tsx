@@ -96,8 +96,8 @@ const FILTER_DEFS: FilterDef[] = [
   { key: "belowMA50", label: "Below MA50", tone: "yellow" },
   { key: "aboveMA200", label: "Above MA200", tone: "yellow" },
   { key: "belowMA200", label: "Below MA200", tone: "yellow" },
-  { key: "dailyMa200Proximity", label: "D-MA200 Proximity", tone: "yellow" },
-  { key: "weeklyMa200Proximity", label: "W-MA200 Proximity", tone: "yellow" },
+{ key: "dailyMa200Proximity", label: "Near 200-Day MA (Daily)", tone: "yellow" },
+{ key: "weeklyMa200Proximity", label: "Near 200-Day MA (Weekly)", tone: "yellow" },
   { key: "bullishRsiDivergence", label: "Bullish RSI Divergence", tone: "green" },
   { key: "bearishRsiDivergence", label: "Bearish RSI Divergence", tone: "red" },
   { key: "bullishMacdDivergence", label: "Bullish MACD Divergence", tone: "green" },
@@ -226,9 +226,9 @@ function getHeaderHelp(title: string) {
     return "These are pullback setups from all-time highs, ranked to favour liquid, tradable names over weak broken charts. A stock being down more does not automatically make it better.";
   }
 
-  if (title.includes("MA200 Proximity")) {
-    return "These stocks are close to their Daily or Weekly MA200, but the ranking also considers how constructively the stock has behaved around the MA200 rather than just raw proximity.";
-  }
+if (title.toLowerCase().includes("200-day")) {
+  return "These stocks are trading near the 200-day moving average, a key long-term level many traders watch for support, resistance and trend direction.";
+}
 
   if (title.includes("Breakout")) {
     return "Breakouts are ranked to favour newer, cleaner and more liquid breakouts over older or more stretched moves.";
@@ -540,7 +540,7 @@ export default function PickersClient() {
     const out: PickerSection[] = [];
 
     const ma200Section = safeSections.find((section) =>
-      section.title.includes("MA200 Proximity")
+      section.title.toLowerCase().includes("200-day")
     );
 
     const buyTheDipSection = safeSections.find((section) =>
