@@ -21,7 +21,7 @@ const redis =
     ? Redis.fromEnv()
     : null;
 
-const REDIS_HISTORY_PREFIX = "msh:history:v5";
+const REDIS_HISTORY_PREFIX = "msh:history:v6";
 const REDIS_HISTORY_TTL_SECONDS = 6 * 60 * 60;
 const MIN_QUALIFIED_POINTS = 30;
 
