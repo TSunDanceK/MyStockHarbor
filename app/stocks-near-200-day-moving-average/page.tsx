@@ -301,42 +301,102 @@ export default async function StocksNear200DayMovingAveragePage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
-      <style
-        dangerouslySetInnerHTML={{
-          __html: `
-            .wrap {
-              max-width: 1100px;
-              margin: 0 auto;
-              padding: 28px 16px 72px;
-              box-sizing: border-box;
-            }
+<style
+  dangerouslySetInnerHTML={{
+    __html: `
+      .wrap {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 28px 16px 72px;
+        box-sizing: border-box;
+      }
 
-            .ma200-grid {
-              display: grid;
-              grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-              gap: 14px;
-            }
+      .ma200-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 14px;
+      }
 
-            .topNavRow a:hover {
-              filter: brightness(1.04);
-            }
+      .topNavRow a:hover {
+        filter: brightness(1.04);
+      }
 
-            @media (max-width: 760px) {
-              .topNavRow {
-                justify-content: center !important;
-              }
+      /* ✅ CTA ANIMATIONS START */
 
-              .heroTitle {
-                font-size: 34px !important;
-              }
+      .ctaPulse {
+        animation: ctaPulseGlow 2.8s ease-in-out infinite;
+      }
 
-              .heroText {
-                font-size: 15px !important;
-              }
-            }
-          `,
-        }}
-      />
+      @keyframes ctaPulseGlow {
+        0% {
+          box-shadow: 0 0 0 rgba(239,68,68,0.0);
+        }
+        50% {
+          box-shadow: 0 0 18px rgba(239,68,68,0.25);
+        }
+        100% {
+          box-shadow: 0 0 0 rgba(239,68,68,0.0);
+        }
+      }
+
+      .ctaHover {
+        transition: transform 140ms ease, box-shadow 140ms ease;
+      }
+
+      .ctaHover:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 28px rgba(239,68,68,0.25);
+      }
+
+      .ctaShimmer {
+        position: relative;
+        overflow: hidden;
+      }
+
+      .ctaShimmer::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -120%;
+        width: 60%;
+        height: 100%;
+        background: linear-gradient(
+          120deg,
+          transparent,
+          rgba(255,255,255,0.12),
+          transparent
+        );
+        transform: skewX(-20deg);
+        animation: shimmerMove 3.5s infinite;
+      }
+
+      @keyframes shimmerMove {
+        0% {
+          left: -120%;
+        }
+        100% {
+          left: 140%;
+        }
+      }
+
+      /* ✅ CTA ANIMATIONS END */
+
+      @media (max-width: 760px) {
+        .topNavRow {
+          justify-content: center !important;
+        }
+
+        .heroTitle {
+          font-size: 34px !important;
+        }
+
+        .heroText {
+          font-size: 15px !important;
+        }
+      }
+    `,
+  }}
+/>
 
       <div className="wrap">
         <div style={{ display: "grid", gap: 14 }}>
@@ -826,6 +886,7 @@ export default async function StocksNear200DayMovingAveragePage() {
         >
 <Link
   href="/pickers"
+  className="ctaPulse ctaHover ctaShimmer"
   style={{
     border: "1px solid rgba(239,68,68,0.35)",
     borderRadius: 16,
