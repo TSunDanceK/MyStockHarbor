@@ -404,7 +404,8 @@ export const LESSONS: Lesson[] = [
     slug: "rsi",
     title: "RSI (14)",
     category: "Indicators",
-    summary: "Oscillator that helps identify momentum extremes (not a magic buy/sell).",
+   summary:
+  "Oscillator that helps identify momentum extremes, overbought and oversold conditions, and possible divergence setups.",
     sections: [
       {
         heading: "What it is",
@@ -417,8 +418,8 @@ export const LESSONS: Lesson[] = [
       {
         heading: "How to identify it",
         body: [
-          "RSI near/above 70 can signal stretched upside momentum.",
-          "RSI near/below 30 can signal stretched downside momentum.",
+          "RSI near/above 70 can signal stretched upside momentum and often appears in overbought conditions.",
+          "RSI near/below 30 can signal stretched downside momentum and often appears in oversold conditions.",
           "In strong trends, RSI can stay high or low for a long time.",
         ],
       },
@@ -427,7 +428,7 @@ export const LESSONS: Lesson[] = [
         body: [
           "Overbought doesn’t mean “must sell” — it can mean strong trend.",
           "Oversold doesn’t mean “must buy” — it can mean strong downtrend.",
-          "RSI divergence can warn momentum is weakening.",
+          "RSI divergence can warn momentum is weakening and may sometimes appear before a reversal setup develops.",
         ],
       },
       {
@@ -443,7 +444,7 @@ export const LESSONS: Lesson[] = [
         body: [
           "Helps spot stretched momentum conditions.",
           "Helps confirm trend strength (RSI tends to stay elevated in uptrends).",
-          "Helps warn of weakening momentum via divergence.",
+          "Helps identify overbought, oversold, and divergence conditions that traders often monitor closely.",
         ],
       },
     ],
