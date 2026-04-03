@@ -595,6 +595,33 @@ export default async function OversoldStocksTodayPage() {
               </div>
             </div>
           </section>
+                  <section
+          style={{
+            marginTop: 22,
+            maxWidth: 860,
+            lineHeight: 1.7,
+            opacity: 0.82,
+          }}
+        >
+          <p>
+            Stocks appearing as oversold are often showing extended downside
+            pressure, which can create conditions for a potential rebound if
+            selling begins to slow. These setups can be useful for traders
+            looking for exhaustion rather than strength.
+          </p>
+
+          <ul style={{ marginTop: 10, paddingLeft: 18 }}>
+            <li>Price stretched to the downside after sustained weakness</li>
+            <li>Can signal potential exhaustion or bounce zones</li>
+            <li>Often attracts traders looking for reversal setups</li>
+            <li>Still requires confirmation that selling pressure is fading</li>
+          </ul>
+
+          <p style={{ marginTop: 10 }}>
+            The stocks listed below are currently screening as oversold and may
+            be worth reviewing for possible rebound setups.
+          </p>
+        </section>
         </div>
 
         <section style={panelStyle}>
