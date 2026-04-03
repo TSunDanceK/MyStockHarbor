@@ -1562,9 +1562,24 @@ color: "#cbd5f5",
   let seoBackground = "rgba(59,130,246,0.08)";
   let seoColor = "#dbeafe";
 
-  if (title.includes("200")) {
-    seoHref = "/stocks-near-200-day-moving-average";
-    seoLabel = "See all stocks near 200-day MA →";
+  if (title.includes("all-time high breakout")) {
+    seoHref = "/all-time-high-breakout-stocks";
+    seoLabel = "See all all-time high breakout stocks →";
+    seoBorder = "1px solid rgba(251,146,60,0.22)";
+    seoBackground = "rgba(251,146,60,0.08)";
+    seoColor = "#fed7aa";
+  } else if (title.includes("3-month high breakout")) {
+    seoHref = "/3-month-high-breakout-stocks";
+    seoLabel = "See all 3-month high breakout stocks →";
+    seoBorder = "1px solid rgba(251,146,60,0.22)";
+    seoBackground = "rgba(251,146,60,0.08)";
+    seoColor = "#fed7aa";
+  } else if (title.includes("all-time highs")) {
+    seoHref = "/stocks-down-20-from-all-time-highs";
+    seoLabel = "See all stocks down from all-time highs →";
+    seoBorder = "1px solid rgba(234,179,8,0.22)";
+    seoBackground = "rgba(234,179,8,0.08)";
+    seoColor = "#fef3c7";
   } else if (title.includes("buy signals")) {
     seoHref = "/top-stocks-with-buy-signals";
     seoLabel = "See all buy signal stocks →";
@@ -1577,24 +1592,6 @@ color: "#cbd5f5",
     seoBorder = "1px solid rgba(239,68,68,0.22)";
     seoBackground = "rgba(239,68,68,0.08)";
     seoColor = "#fecaca";
-  } else if (title.includes("all-time highs")) {
-    seoHref = "/stocks-down-20-from-all-time-highs";
-    seoLabel = "See all stocks down from all-time highs →";
-    seoBorder = "1px solid rgba(234,179,8,0.22)";
-    seoBackground = "rgba(234,179,8,0.08)";
-    seoColor = "#fef3c7";
-  } else if (title.includes("all-time high breakout")) {
-    seoHref = "/all-time-high-breakout-stocks";
-    seoLabel = "See all all-time high breakout stocks →";
-    seoBorder = "1px solid rgba(251,146,60,0.22)";
-    seoBackground = "rgba(251,146,60,0.08)";
-    seoColor = "#fed7aa";
-  } else if (title.includes("3-month high breakout")) {
-    seoHref = "/3-month-high-breakout-stocks";
-    seoLabel = "See all 3-month high breakout stocks →";
-    seoBorder = "1px solid rgba(251,146,60,0.22)";
-    seoBackground = "rgba(251,146,60,0.08)";
-    seoColor = "#fed7aa";
   } else if (title.includes("oversold")) {
     seoHref = "/oversold-stocks-today";
     seoLabel = "See all oversold stocks today →";
@@ -1622,6 +1619,9 @@ color: "#cbd5f5",
     seoBorder = "1px solid rgba(168,85,247,0.22)";
     seoBackground = "rgba(168,85,247,0.08)";
     seoColor = "#f3e8ff";
+  } else if (title.includes("200")) {
+    seoHref = "/stocks-near-200-day-moving-average";
+    seoLabel = "See all stocks near 200-day MA →";
   }
 
   if (!seoHref) return null;
