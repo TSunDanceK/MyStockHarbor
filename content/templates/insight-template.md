@@ -20,6 +20,19 @@ RULES:
 - If no clear news is provided, explicitly state that the move is not news-driven
 - Do NOT invent or assume specific news events
 - WRITING STANDARD (CRITICAL):
+- - Where relevant, include one contextual internal link to the most relevant live setup page:
+  - /oversold-stocks-today
+  - /overbought-stocks-today
+  - /all-time-high-breakout-stocks
+  - /3-month-high-breakout-stocks
+  - /best-trend-score-stocks
+  - /top-stocks-with-buy-signals
+  - /top-stocks-with-sell-signals
+  - /bullish-bearish-divergence-stocks
+  - /stocks-near-200-day-moving-average
+  - /hot-market-names-right-now
+  - /stocks-down-20-from-all-time-highs
+- If none clearly fits, link to /pickers instead.
 
 Write like a professional trader explaining a setup to another trader.
 
@@ -155,6 +168,7 @@ SECTION GUIDANCE (HOW TO WRITE EACH PART):
   - whether news is driving the move or not
   - what traders are likely doing
 - This is the MOST important section for depth
+- - If there is a strong setup match, include one natural internal link to the most relevant live setup page.
 
 ## Levels to watch
 - Keep clean and precise
