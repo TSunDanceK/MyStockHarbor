@@ -14,7 +14,8 @@ export const LESSONS: Lesson[] = [
     slug: "support-and-resistance",
     title: "Support & Resistance",
     category: "Basics",
-    summary: "How to spot important price levels where markets often react.",
+    summary:
+  "How to spot important price levels where markets often react, including support, resistance, and key breakout zones.",
     sections: [
       {
         heading: "What it is",
@@ -36,9 +37,9 @@ export const LESSONS: Lesson[] = [
       {
         heading: "What it means",
         body: [
-          "At support, demand has shown up before — price may bounce or pause again.",
-          "At resistance, supply has shown up before — price may reject or stall again.",
-          "If a level breaks, price often moves faster because the “wall” is gone.",
+          "At support, demand has shown up before and price may bounce or pause again.",
+          "At resistance, supply has shown up before and price may reject or stall again.",
+          "If a level breaks, price often moves faster as resistance or support is no longer holding.",
         ],
       },
       {
@@ -54,8 +55,8 @@ export const LESSONS: Lesson[] = [
         body: [
           "Helps plan entries near areas where price often reacts.",
           "Helps place stops logically (beyond the zone, not inside it).",
-          "Helps set targets (next resistance / next support).",
-          "Helps recognize breakouts and false breakouts.",
+          "Helps set targets based on nearby support and resistance levels.",
+          "Helps recognise breakouts, breakdowns, and key decision points.",
         ],
       },
     ],
@@ -64,7 +65,8 @@ export const LESSONS: Lesson[] = [
   slug: "how-to-identify-stock-trends",
   title: "How to Identify Stock Trends",
   category: "Basics",
-  summary: "Learn how to recognise uptrends, downtrends, and sideways markets using price structure and moving averages.",
+  summary:
+  "Learn how to recognise uptrends, downtrends, and sideways markets using price structure, moving averages, and momentum.",
   sections: [
     {
       heading: "What it is",
@@ -75,23 +77,23 @@ export const LESSONS: Lesson[] = [
         "A sideways market means price is ranging without a clear direction.",
       ],
     },
-    {
-      heading: "How to identify it",
-      body: [
-        "Start with price structure first: higher highs and higher lows usually signal an uptrend.",
-        "Use moving averages like MA50 and MA200 to help simplify the chart.",
-        "Check whether momentum indicators like RSI or MACD agree with the move.",
-        "Use higher timeframes for the bigger picture before focusing on lower timeframes.",
-      ],
-    },
-    {
-      heading: "What it means",
-      body: [
-        "A strong trend gives context to the rest of the chart.",
-        "It helps you judge whether pullbacks are normal or whether the move may be weakening.",
-        "Trend direction can shape how you interpret indicators, support, and resistance.",
-      ],
-    },
+      {
+        heading: "How to identify it",
+        body: [
+          "Start with price structure first: higher highs and higher lows usually signal an uptrend.",
+          "Use moving averages like MA50 and MA200 to help simplify the chart and confirm direction.",
+          "Check whether momentum indicators like RSI or MACD agree with the move.",
+          "Use higher timeframes for the bigger picture before focusing on lower timeframes.",
+        ],
+      },
+      {
+        heading: "What it means",
+        body: [
+          "A strong trend gives context to the rest of the chart.",
+          "It helps you judge whether pullbacks are normal or whether the move may be weakening.",
+          "Strong trends often lead to continuation setups, including breakouts and sustained momentum moves.",
+        ],
+      },
     {
       heading: "Common mistakes",
       body: [
@@ -100,14 +102,14 @@ export const LESSONS: Lesson[] = [
         "Ignoring the wider market context when judging a stock move.",
       ],
     },
-    {
-      heading: "Why it’s useful",
-      body: [
-        "Trend is one of the most important building blocks in chart reading.",
-        "It helps traders align with stronger moves instead of fighting them.",
-        "It makes signals from indicators and levels much easier to interpret.",
-      ],
-    },
+      {
+        heading: "Why it’s useful",
+        body: [
+          "Trend is one of the most important building blocks in chart reading.",
+          "It helps traders align with stronger moves instead of fighting them.",
+          "It helps identify stronger stocks showing momentum, leadership, and breakout potential.",
+        ],
+      },
   ],
 },
   {
@@ -308,7 +310,8 @@ export const LESSONS: Lesson[] = [
     slug: "macd",
     title: "MACD (12,26,9)",
     category: "Indicators",
-    summary: "A momentum indicator that shows trend strength and shifts.",
+    summary:
+  "A momentum indicator that helps show trend strength, momentum shifts, and possible divergence setups.",
     sections: [
       {
         heading: "What it is",
@@ -330,8 +333,8 @@ export const LESSONS: Lesson[] = [
         heading: "What it means",
         body: [
           "Momentum can weaken before price reverses (useful early warning).",
-          "In strong trends, MACD can stay positive/negative for long periods.",
-          "Divergence (price up, MACD down) can hint momentum is fading.",
+          "In strong trends, MACD can stay positive or negative for long periods.",
+          "Divergence, where price keeps pushing but MACD does not, can hint that momentum is fading.",
         ],
       },
       {
@@ -346,8 +349,8 @@ export const LESSONS: Lesson[] = [
         heading: "Why it’s useful",
         body: [
           "Helps spot momentum shifts earlier than price alone.",
-          "Helps confirm trend direction (positive/negative bias).",
-          "Helps identify possible weakening via divergence.",
+          "Helps confirm trend direction (positive or negative bias).",
+          "Helps identify divergence and possible weakening in otherwise strong-looking moves.",
         ],
       },
     ],
@@ -356,7 +359,8 @@ export const LESSONS: Lesson[] = [
     slug: "moving-averages",
     title: "Moving Averages (MA50 / MA200)",
     category: "Indicators",
-    summary: "What moving averages measure and how traders use them.",
+    summary:
+  "What moving averages measure, how traders use MA50 and MA200, and how they relate to trend structure and key levels.",
     sections: [
       {
         heading: "What it is",
@@ -371,15 +375,15 @@ export const LESSONS: Lesson[] = [
         body: [
           "Price above MA200 often suggests long-term bullish bias (not a rule).",
           "Price below MA200 often suggests long-term bearish bias.",
-          "MA50 crossing MA200 is a popular signal — but it’s lagging.",
+          "MA50 crossing MA200 is a popular signal, but it reacts after much of the move has already happened.",
         ],
       },
       {
         heading: "What it means",
         body: [
-          "Moving averages can act like dynamic support/resistance zones.",
-          "A strong trend often respects MA50/MA200 on pullbacks.",
-          "Crossovers happen after much of the move already happened.",
+          "Moving averages can act like dynamic support and resistance zones.",
+          "A strong trend often respects MA50 or MA200 during pullbacks.",
+          "The 200-day moving average is widely watched and can act as a key long-term decision level.",
         ],
       },
       {
@@ -395,7 +399,7 @@ export const LESSONS: Lesson[] = [
         body: [
           "Helps quickly identify long-term trend direction.",
           "Helps map likely pullback areas in trending markets.",
-          "Adds structure and reduces emotional trading decisions.",
+          "Helps highlight key levels like MA200 that many traders monitor for reactions.",
         ],
       },
     ],
