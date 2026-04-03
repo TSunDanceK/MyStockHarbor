@@ -594,6 +594,33 @@ export default async function StocksNear200DayMovingAveragePage() {
               </div>
             </div>
           </section>
+        <section
+          style={{
+            marginTop: 22,
+            maxWidth: 860,
+            lineHeight: 1.7,
+            opacity: 0.82,
+          }}
+        >
+          <p>
+            Stocks near the 200 day moving average often sit at key decision
+            points. This level is widely watched as a long-term trend reference,
+            so reactions here can matter.
+          </p>
+
+          <ul style={{ marginTop: 10, paddingLeft: 18 }}>
+            <li>Price testing long-term support or resistance</li>
+            <li>Potential trend continuation or breakdown zone</li>
+            <li>Higher timeframe level many traders monitor closely</li>
+            <li>Can lead to strong reactions, reclaim attempts or reversals</li>
+          </ul>
+
+          <p style={{ marginTop: 10 }}>
+            The live stocks listed below are currently screening near the daily
+            or weekly 200 day moving average, making them worth reviewing for
+            possible setups.
+          </p>
+        </section>
         </div>
 
         <section style={panelStyle}>
