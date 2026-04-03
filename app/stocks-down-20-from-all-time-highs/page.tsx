@@ -596,6 +596,33 @@ export default async function StocksDown20FromAllTimeHighsPage() {
               </div>
             </div>
           </section>
+                  <section
+          style={{
+            marginTop: 22,
+            maxWidth: 860,
+            lineHeight: 1.7,
+            opacity: 0.82,
+          }}
+        >
+          <p>
+            Stocks trading well below their all-time highs often attract attention
+            because they may be moving into more interesting risk and reward zones.
+            Some pullbacks happen inside strong trends, while others signal
+            weakness.
+          </p>
+
+          <ul style={{ marginTop: 10, paddingLeft: 18 }}>
+            <li>Large pullbacks from prior highs can reset price structure</li>
+            <li>May highlight potential rebound or continuation setups</li>
+            <li>Can attract traders looking for better entry zones</li>
+            <li>Still requires full chart review before acting</li>
+          </ul>
+
+          <p style={{ marginTop: 10 }}>
+            The stocks listed below are currently down from all-time highs and are
+            being flagged as pullback setups worth reviewing.
+          </p>
+        </section>
         </div>
 
         <section style={panelStyle}>
