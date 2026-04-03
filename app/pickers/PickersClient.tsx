@@ -1553,35 +1553,109 @@ color: "#cbd5f5",
                       </div>
                     ))}
                   </div>
-                  {sec.title.toLowerCase().includes("200") ? (
-  <div
-    style={{
-      marginTop: 12,
-      display: "flex",
-      justifyContent: "flex-end",
-    }}
-  >
-    <a
-      href="/stocks-near-200-day-moving-average"
+{(() => {
+  const title = sec.title.toLowerCase();
+
+  let seoHref = "";
+  let seoLabel = "";
+  let seoBorder = "1px solid rgba(59,130,246,0.22)";
+  let seoBackground = "rgba(59,130,246,0.08)";
+  let seoColor = "#dbeafe";
+
+  if (title.includes("200")) {
+    seoHref = "/stocks-near-200-day-moving-average";
+    seoLabel = "See all stocks near 200-day MA →";
+  } else if (title.includes("buy signals")) {
+    seoHref = "/top-stocks-with-buy-signals";
+    seoLabel = "See all buy signal stocks →";
+    seoBorder = "1px solid rgba(34,197,94,0.22)";
+    seoBackground = "rgba(34,197,94,0.08)";
+    seoColor = "#dcfce7";
+  } else if (title.includes("sell signals")) {
+    seoHref = "/top-stocks-with-sell-signals";
+    seoLabel = "See all sell signal stocks →";
+    seoBorder = "1px solid rgba(239,68,68,0.22)";
+    seoBackground = "rgba(239,68,68,0.08)";
+    seoColor = "#fecaca";
+  } else if (title.includes("all-time highs")) {
+    seoHref = "/stocks-down-20-from-all-time-highs";
+    seoLabel = "See all stocks down from all-time highs →";
+    seoBorder = "1px solid rgba(234,179,8,0.22)";
+    seoBackground = "rgba(234,179,8,0.08)";
+    seoColor = "#fef3c7";
+  } else if (title.includes("all-time high breakout")) {
+    seoHref = "/all-time-high-breakout-stocks";
+    seoLabel = "See all all-time high breakout stocks →";
+    seoBorder = "1px solid rgba(251,146,60,0.22)";
+    seoBackground = "rgba(251,146,60,0.08)";
+    seoColor = "#fed7aa";
+  } else if (title.includes("3-month high breakout")) {
+    seoHref = "/3-month-high-breakout-stocks";
+    seoLabel = "See all 3-month high breakout stocks →";
+    seoBorder = "1px solid rgba(251,146,60,0.22)";
+    seoBackground = "rgba(251,146,60,0.08)";
+    seoColor = "#fed7aa";
+  } else if (title.includes("oversold")) {
+    seoHref = "/oversold-stocks-today";
+    seoLabel = "See all oversold stocks today →";
+    seoBorder = "1px solid rgba(34,197,94,0.22)";
+    seoBackground = "rgba(34,197,94,0.08)";
+    seoColor = "#dcfce7";
+  } else if (title.includes("overbought")) {
+    seoHref = "/overbought-stocks-today";
+    seoLabel = "See all overbought stocks today →";
+    seoBorder = "1px solid rgba(239,68,68,0.22)";
+    seoBackground = "rgba(239,68,68,0.08)";
+    seoColor = "#fecaca";
+  } else if (title.includes("best trend score")) {
+    seoHref = "/best-trend-score-stocks";
+    seoLabel = "See all best trend score stocks →";
+    seoBorder = "1px solid rgba(34,197,94,0.22)";
+    seoBackground = "rgba(34,197,94,0.08)";
+    seoColor = "#dcfce7";
+  } else if (title.includes("hot market names")) {
+    seoHref = "/hot-market-names-right-now";
+    seoLabel = "See all hot market names →";
+  } else if (title.includes("divergence")) {
+    seoHref = "/bullish-bearish-divergence-stocks";
+    seoLabel = "See all divergence stocks →";
+    seoBorder = "1px solid rgba(168,85,247,0.22)";
+    seoBackground = "rgba(168,85,247,0.08)";
+    seoColor = "#f3e8ff";
+  }
+
+  if (!seoHref) return null;
+
+  return (
+    <div
       style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "8px 12px",
-        borderRadius: 10,
-        border: "1px solid rgba(59,130,246,0.22)",
-        background: "rgba(59,130,246,0.08)",
-        color: "#dbeafe",
-        textDecoration: "none",
-        fontSize: 12,
-        fontWeight: 900,
-        whiteSpace: "nowrap",
+        marginTop: 12,
+        display: "flex",
+        justifyContent: "flex-end",
       }}
     >
-      See all stocks near 200-day MA →
-    </a>
-  </div>
-) : null}
+      <a
+        href={seoHref}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "8px 12px",
+          borderRadius: 10,
+          border: seoBorder,
+          background: seoBackground,
+          color: seoColor,
+          textDecoration: "none",
+          fontSize: 12,
+          fontWeight: 900,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {seoLabel}
+      </a>
+    </div>
+  );
+})()}
                 </section>
               );
             })}
