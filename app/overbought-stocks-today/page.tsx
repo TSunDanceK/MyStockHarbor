@@ -597,6 +597,33 @@ export default async function OverboughtStocksTodayPage() {
               </div>
             </div>
           </section>
+                  <section
+          style={{
+            marginTop: 22,
+            maxWidth: 860,
+            lineHeight: 1.7,
+            opacity: 0.82,
+          }}
+        >
+          <p>
+            Stocks screening as overbought are often showing extended upside
+            strength, which can create conditions for a potential pause or
+            pullback if momentum starts to fade. These setups can be useful for
+            traders looking for stretch rather than fresh strength.
+          </p>
+
+          <ul style={{ marginTop: 10, paddingLeft: 18 }}>
+            <li>Price extended higher after a strong move</li>
+            <li>Can signal possible exhaustion or pullback zones</li>
+            <li>Often attracts traders watching for momentum fade</li>
+            <li>Still requires confirmation that strength is weakening</li>
+          </ul>
+
+          <p style={{ marginTop: 10 }}>
+            The stocks listed below are currently screening as overbought and may
+            be worth reviewing for possible pullback setups.
+          </p>
+        </section>
         </div>
 
         <section style={panelStyle}>
