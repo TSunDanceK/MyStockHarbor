@@ -597,6 +597,33 @@ export default async function HotMarketNamesRightNowPage() {
               </div>
             </div>
           </section>
+                  <section
+          style={{
+            marginTop: 22,
+            maxWidth: 860,
+            lineHeight: 1.7,
+            opacity: 0.82,
+          }}
+        >
+          <p>
+            Hot market names often stand out because they are attracting current
+            attention, activity, and technical relevance. These are the stocks
+            traders often want to review first when looking for where the market
+            focus is right now.
+          </p>
+
+          <ul style={{ marginTop: 10, paddingLeft: 18 }}>
+            <li>Names drawing stronger attention than the average stock</li>
+            <li>Can highlight where momentum or interest is building</li>
+            <li>Useful for finding charts worth reviewing quickly</li>
+            <li>Still needs full context before acting</li>
+          </ul>
+
+          <p style={{ marginTop: 10 }}>
+            The stocks listed below are currently standing out as hot market
+            names and may be worth reviewing for active setups.
+          </p>
+        </section>
         </div>
 
         <section style={panelStyle}>
