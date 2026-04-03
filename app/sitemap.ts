@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { getAllPosts } from "@/lib/blog";
+import { LESSONS } from "@/app/learn/lessons";
 
 const baseUrl = "https://www.mystockharbor.com";
 
@@ -25,12 +26,7 @@ const seoGuides = [
   "/what-is-macd-indicator",
   "/what-is-vwap-indicator",
   "/stocks-down-from-highs",
-  "/oversold-stocks",
-  "/breakout-stocks",
   "/buy-the-dip-stocks",
-  "/bullish-divergence-stocks",
-  "/bearish-divergence-stocks",
-  "/overbought-stocks",
   "/stock-market-setups",
   "/trading-setups",
   "/stock-screener-for-breakouts",
@@ -48,12 +44,23 @@ const seoGuides = [
   "/stocks-with-high-rsi",
   "/stocks-with-low-rsi",
   "/stocks-with-unusual-volume",
-  "/stocks-above-200-day-moving-average",
   "/position-sizing-guide",
   "/stop-loss-strategy",
   "/risk-reward-ratio",
   "/margin-trading-explained",
   "/trading-risk-management",
+
+  // live setup / picker SEO pages
+  "/oversold-stocks-today",
+  "/overbought-stocks-today",
+  "/all-time-high-breakout-stocks",
+  "/3-month-high-breakout-stocks",
+  "/bullish-bearish-divergence-stocks",
+  "/best-trend-score-stocks",
+  "/top-stocks-with-buy-signals",
+  "/top-stocks-with-sell-signals",
+  "/stocks-near-200-day-moving-average",
+  "/hot-market-names-right-now",
 ];
 
 const coreMegaCaps = [
@@ -264,6 +271,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.72,
   }));
 
+    const learnEntries: MetadataRoute.Sitemap = LESSONS.map((lesson) => ({
+    url: toAbsoluteUrl(`/learn/${encodeURIComponent(lesson.slug)}`),
+    lastModified: now,
+    changeFrequency: "monthly",
+    priority: 0.68,
+  }));
+
   const stockEntries: MetadataRoute.Sitemap = stocks.map((symbol) => ({
     url: toAbsoluteUrl(`/stock/${encodeURIComponent(symbol.toUpperCase())}`),
     lastModified: now,
@@ -296,6 +310,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     ...mainPageEntries,
     ...seoGuideEntries,
     ...insightEntries,
+    ...learnEntries,
     ...stockEntries,
     ...stockNewsEntries,
     ...etfEntries,
