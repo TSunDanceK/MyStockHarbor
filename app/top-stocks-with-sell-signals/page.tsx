@@ -606,6 +606,33 @@ export default async function TopStocksWithSellSignalsPage() {
               </div>
             </div>
           </section>
+                  <section
+          style={{
+            marginTop: 22,
+            maxWidth: 860,
+            lineHeight: 1.7,
+            opacity: 0.82,
+          }}
+        >
+          <p>
+            Stocks appearing in a sell signal scan are often showing multiple
+            signs of weakness at the same time. This can include overbought
+            conditions, breakdowns below key levels, or bearish momentum
+            divergence.
+          </p>
+
+          <ul style={{ marginTop: 10, paddingLeft: 18 }}>
+            <li>Multiple bearish technical signals aligning</li>
+            <li>Can highlight weakening trends or breakdown setups</li>
+            <li>Useful for spotting potential short or exit opportunities</li>
+            <li>Still requires full chart confirmation before acting</li>
+          </ul>
+
+          <p style={{ marginTop: 10 }}>
+            The stocks listed below are currently appearing in the sell signal
+            scan and may be worth reviewing for potential bearish setups.
+          </p>
+        </section>
         </div>
 
         <section style={panelStyle}>
