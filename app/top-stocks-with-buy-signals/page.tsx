@@ -4,26 +4,32 @@ import { headers } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
-type PickerSectionEntry = {
-  symbol?: string;
-  stockHref?: string;
-  label?: string;
-};
-
-type PickerSection = {
-  title?: string;
-  entries?: PickerSectionEntry[];
+type SignalRecord = {
+  symbol: string;
+  note?: string;
+  oversold?: boolean;
+  buyTheDip?: boolean;
+  breakout?: boolean;
+  volumeSpike?: boolean;
+  atrSpike?: boolean;
+  aboveMA50?: boolean;
+  aboveMA200?: boolean;
+  bullishRsiDivergence?: boolean;
+  bullishMacdDivergence?: boolean;
+  dashboardHref?: string;
 };
 
 type PickersPayload = {
   updatedAt?: string;
-  sections?: PickerSection[];
+  signalRecords?: SignalRecord[];
 };
 
 type BuySignalEntry = {
   symbol: string;
   label: string;
   stockHref: string;
+  chartHref: string;
+  buyCount: number;
 };
 
 export const metadata: Metadata = {
@@ -64,6 +70,24 @@ async function getOriginFromHeaders() {
   return `${proto}://${host}`;
 }
 
+function getBuySignalCount(record: SignalRecord) {
+  if (!record.aboveMA200) return 0;
+
+  let count = 0;
+
+  if (record.oversold) count += 1;
+  if (record.buyTheDip) count += 1;
+  if (record.breakout) count += 1;
+  if (record.volumeSpike) count += 1;
+  if (record.atrSpike) count += 1;
+  if (record.aboveMA50) count += 1;
+  if (record.aboveMA200) count += 1;
+  if (record.bullishRsiDivergence) count += 1;
+  if (record.bullishMacdDivergence) count += 1;
+
+  return count;
+}
+
 async function getBuySignalEntries(): Promise<{
   updatedAt: string | null;
   entries: BuySignalEntry[];
@@ -79,46 +103,40 @@ async function getBuySignalEntries(): Promise<{
     }
 
     const data = (await res.json()) as PickersPayload;
-    const sections = Array.isArray(data?.sections) ? data.sections : [];
-
-    const buySignalsSection =
-      sections.find(
-        (section) =>
-          section?.title?.trim().toLowerCase() ===
-          "top stocks with buy signals"
-      ) ||
-      sections.find(
-        (section) =>
-          section?.title?.trim().toLowerCase() ===
-          "top stocks with buy signals (live scan)"
-      ) ||
-      sections.find((section) =>
-        section?.title?.toLowerCase().includes("buy signal")
-      );
-
-    const rawEntries = Array.isArray(buySignalsSection?.entries)
-      ? buySignalsSection.entries
+    const signalRecords = Array.isArray(data?.signalRecords)
+      ? data.signalRecords
       : [];
 
-    const entries: BuySignalEntry[] = rawEntries
-      .map((entry) => {
-        const symbol = String(entry?.symbol || "")
-          .trim()
-          .toUpperCase();
-
+    const entries: BuySignalEntry[] = signalRecords
+      .map((record) => {
+        const symbol = String(record?.symbol || "").trim().toUpperCase();
         if (!symbol) return null;
+
+        const buyCount = getBuySignalCount(record);
+        if (buyCount <= 0) return null;
+
+        const stockHref = `/stock/${encodeURIComponent(symbol)}`;
+        const chartBase =
+          typeof record?.dashboardHref === "string" && record.dashboardHref.trim()
+            ? record.dashboardHref
+            : `/?symbol=${encodeURIComponent(symbol)}`;
 
         return {
           symbol,
-          label: String(entry?.label || "Buy Signal").trim() || "Buy Signal",
-          stockHref:
-            typeof entry?.stockHref === "string" && entry.stockHref.trim()
-              ? entry.stockHref
-              : `/stock/${encodeURIComponent(symbol)}`,
+          label: `${buyCount} Buy Signal${buyCount === 1 ? "" : "s"}`,
+          stockHref,
+          chartHref: chartBase.includes("#chart")
+            ? chartBase
+            : `${chartBase}#chart`,
+          buyCount,
         };
       })
       .filter((entry): entry is BuySignalEntry => Boolean(entry))
-      .sort((a, b) => a.symbol.localeCompare(b.symbol));
+      .sort((a, b) => {
+        if (b.buyCount !== a.buyCount) return b.buyCount - a.buyCount;
+        return a.symbol.localeCompare(b.symbol);
+      })
+      .slice(0, 10);
 
     return {
       updatedAt: typeof data?.updatedAt === "string" ? data.updatedAt : null,
@@ -716,18 +734,18 @@ export default async function TopStocksWithBuySignalsPage() {
                     </div>
                   </div>
 
-                  <ul
-                    style={{
-                      marginTop: 12,
-                      paddingLeft: 18,
-                      fontSize: 14,
-                      lineHeight: 1.6,
-                      opacity: 0.8,
-                    }}
-                  >
-                    <li>Appearing in the current live buy signal scan</li>
-                    <li>Review chart structure before acting</li>
-                  </ul>
+<ul
+  style={{
+    marginTop: 12,
+    paddingLeft: 18,
+    fontSize: 14,
+    lineHeight: 1.6,
+    opacity: 0.8,
+  }}
+>
+  <li>{entry.buyCount} bullish technical signals active</li>
+  <li>Review chart structure before acting</li>
+</ul>
 
                   <div
                     style={{
@@ -758,7 +776,7 @@ export default async function TopStocksWithBuySignalsPage() {
                     </Link>
 
                     <Link
-                      href={`/?symbol=${encodeURIComponent(entry.symbol)}#chart`}
+                      href={entry.chartHref}
                       style={{
                         display: "inline-flex",
                         alignItems: "center",
