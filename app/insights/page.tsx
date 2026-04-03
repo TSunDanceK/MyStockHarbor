@@ -288,6 +288,28 @@ export default function InsightsPage() {
             >
               Read S&amp;P 500 Analysis →
             </Link>
+            
+            <Link
+  href="/pickers"
+  style={{
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "10px 14px",
+    borderRadius: 12,
+    border: "1px solid rgba(34,197,94,0.45)",
+    background:
+      "linear-gradient(135deg, rgba(34,197,94,0.22), rgba(59,130,246,0.12))",
+    color: "#ecfdf5",
+    textDecoration: "none",
+    fontWeight: 900,
+    fontSize: 13,
+    whiteSpace: "nowrap",
+    boxShadow: "0 6px 16px rgba(0,0,0,0.25)",
+  }}
+>
+  Explore Live Stock Setups →
+</Link>
 
           </div>
         </section>
