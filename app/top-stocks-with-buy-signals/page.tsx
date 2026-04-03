@@ -617,6 +617,33 @@ export default async function TopStocksWithBuySignalsPage() {
               </div>
             </div>
           </section>
+                  <section
+          style={{
+            marginTop: 22,
+            maxWidth: 860,
+            lineHeight: 1.7,
+            opacity: 0.82,
+          }}
+        >
+          <p>
+            Stocks appearing in a buy signal scan are often showing multiple
+            bullish conditions at the same time. That can make them useful
+            starting points for traders looking for strength, trend continuation,
+            or improving momentum.
+          </p>
+
+          <ul style={{ marginTop: 10, paddingLeft: 18 }}>
+            <li>Multiple bullish technical conditions lining up</li>
+            <li>Can highlight strength, momentum or cleaner trend structure</li>
+            <li>Useful for building a shortlist faster</li>
+            <li>Still needs chart review before acting</li>
+          </ul>
+
+          <p style={{ marginTop: 10 }}>
+            The live stocks listed below are currently appearing in the buy
+            signal scan, making them worth checking for possible bullish setups.
+          </p>
+        </section>
         </div>
 
         <section style={panelStyle}>
