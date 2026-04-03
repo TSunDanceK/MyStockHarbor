@@ -824,20 +824,20 @@ export default async function StocksNear200DayMovingAveragePage() {
             boxSizing: "border-box",
           }}
         >
-          <Link
-            href="/pickers"
-            style={{
-              border: "1px solid rgba(59,130,246,0.22)",
-              borderRadius: 16,
-              padding: 16,
-              background:
-                "linear-gradient(180deg, rgba(8,16,30,0.92), rgba(6,10,20,0.96))",
-              textDecoration: "none",
-              color: "#f1f5f9",
-              display: "block",
-              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
-            }}
-          >
+<Link
+  href="/pickers"
+  style={{
+    border: "1px solid rgba(239,68,68,0.35)",
+    borderRadius: 16,
+    padding: 16,
+    background:
+      "linear-gradient(180deg, rgba(60,10,10,0.92), rgba(30,6,6,0.96))",
+    textDecoration: "none",
+    color: "#fee2e2",
+    display: "block",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+  }}
+>
             <div style={{ fontSize: 18, fontWeight: 950 }}>
               Open the full Stock Pickers page
             </div>
