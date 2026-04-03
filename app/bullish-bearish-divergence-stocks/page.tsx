@@ -649,6 +649,34 @@ export default async function BullishBearishDivergenceStocksPage() {
               </div>
             </div>
           </section>
+                  <section
+          style={{
+            marginTop: 22,
+            maxWidth: 860,
+            lineHeight: 1.7,
+            opacity: 0.82,
+          }}
+        >
+          <p>
+            Divergence setups appear when price and momentum stop moving in sync,
+            which can sometimes signal early signs of a potential shift in
+            direction. Traders often watch for these conditions when looking for
+            reversal or exhaustion setups.
+          </p>
+
+          <ul style={{ marginTop: 10, paddingLeft: 18 }}>
+            <li>Price and momentum beginning to move out of alignment</li>
+            <li>Can signal potential reversal or trend exhaustion</li>
+            <li>Includes both bullish and bearish divergence setups</li>
+            <li>Still requires confirmation from price structure</li>
+          </ul>
+
+          <p style={{ marginTop: 10 }}>
+            The stocks listed below are currently showing divergence signals and
+            may be worth reviewing for potential reversal or continuation shift
+            setups.
+          </p>
+        </section>
         </div>
 
         <section style={panelStyle}>
