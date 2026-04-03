@@ -1564,7 +1564,7 @@ color: "#cbd5f5",
 
   if (title.includes("all-time high breakout")) {
     seoHref = "/all-time-high-breakout-stocks";
-    seoLabel = "See all all-time high breakout stocks →";
+    seoLabel = "See all ATH breakout stocks →";
     seoBorder = "1px solid rgba(251,146,60,0.22)";
     seoBackground = "rgba(251,146,60,0.08)";
     seoColor = "#fed7aa";
