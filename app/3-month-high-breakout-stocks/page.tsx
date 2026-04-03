@@ -599,6 +599,33 @@ export default async function ThreeMonthHighBreakoutStocksPage() {
               </div>
             </div>
           </section>
+                  <section
+          style={{
+            marginTop: 22,
+            maxWidth: 860,
+            lineHeight: 1.7,
+            opacity: 0.82,
+          }}
+        >
+          <p>
+            Stocks pushing into 3-month highs often highlight improving momentum
+            and relative strength before they ever reach all-time highs. That can
+            make them useful for traders looking for earlier-stage breakout setups.
+          </p>
+
+          <ul style={{ marginTop: 10, paddingLeft: 18 }}>
+            <li>Can signal improving trend strength and momentum</li>
+            <li>Often breaks through recent resistance zones</li>
+            <li>May develop before a larger breakout into fresh highs</li>
+            <li>Still needs clean follow-through and chart confirmation</li>
+          </ul>
+
+          <p style={{ marginTop: 10 }}>
+            The stocks listed below are currently pushing into 3-month high
+            breakout territory and may be worth reviewing for momentum-based
+            setups.
+          </p>
+        </section>
         </div>
 
         <section style={panelStyle}>
