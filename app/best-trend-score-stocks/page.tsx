@@ -598,6 +598,33 @@ export default async function BestTrendScoreStocksPage() {
               </div>
             </div>
           </section>
+                  <section
+          style={{
+            marginTop: 22,
+            maxWidth: 860,
+            lineHeight: 1.7,
+            opacity: 0.82,
+          }}
+        >
+          <p>
+            Stocks with strong trend scores are often showing cleaner structure,
+            better momentum, and stronger alignment than weaker charts. That can
+            make them useful for traders looking for leadership rather than lagging
+            names.
+          </p>
+
+          <ul style={{ marginTop: 10, paddingLeft: 18 }}>
+            <li>Can highlight stronger trend structure and momentum</li>
+            <li>Often shows better alignment across key technical signals</li>
+            <li>Useful for finding potential market leaders</li>
+            <li>Still needs pullback quality and chart context checked</li>
+          </ul>
+
+          <p style={{ marginTop: 10 }}>
+            The stocks listed below are currently ranking as trend strength leaders
+            and may be worth reviewing for continuation-style setups.
+          </p>
+        </section>
         </div>
 
         <section style={panelStyle}>
