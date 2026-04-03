@@ -405,21 +405,21 @@ export default function LearnPage() {
                 </div>
               </Link>
 
-              <Link href="/oversold-stocks" style={learnGuideCard()}>
+              <Link href="/oversold-stocks-today" style={learnGuideCard()}>
                 <div style={{ fontWeight: 900, fontSize: 16 }}>Oversold Stocks</div>
                 <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
                   Learn how traders identify stretched downside moves.
                 </div>
               </Link>
 
-              <Link href="/overbought-stocks" style={learnGuideCard()}>
+             <Link href="/overbought-stocks-today" style={learnGuideCard()}>
                 <div style={{ fontWeight: 900, fontSize: 16 }}>Overbought Stocks</div>
                 <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
                   Understand when stocks may be stretched to the upside.
                 </div>
               </Link>
 
-              <Link href="/breakout-stocks" style={learnGuideCard()}>
+              <Link href="/all-time-high-breakout-stocks" style={learnGuideCard()}>
                 <div style={{ fontWeight: 900, fontSize: 16 }}>Breakout Stocks</div>
                 <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
                   Learn how traders identify strong momentum breakouts.
@@ -440,19 +440,36 @@ export default function LearnPage() {
                 </div>
               </Link>
 
-              <Link href="/bullish-divergence-stocks" style={learnGuideCard()}>
+              <Link href="/bullish-bearish-divergence-stocks" style={learnGuideCard()}>
                 <div style={{ fontWeight: 900, fontSize: 16 }}>Bullish Divergence</div>
                 <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
                   Learn how divergence can signal weakening downside momentum.
                 </div>
               </Link>
 
-              <Link href="/bearish-divergence-stocks" style={learnGuideCard()}>
+              <Link href="/bullish-bearish-divergence-stocks" style={learnGuideCard()}>
                 <div style={{ fontWeight: 900, fontSize: 16 }}>Bearish Divergence</div>
                 <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
                   Understand when momentum may be weakening in rising stocks.
                 </div>
               </Link>
+
+              <Link href="/best-trend-score-stocks" style={learnGuideCard()}>
+              <div style={{ fontWeight: 900, fontSize: 16 }}>Best Trend Score Stocks</div>
+              <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
+               Review stocks showing stronger trend structure, momentum and leadership.
+               </div>
+             </Link>
+
+              <Link href="/stocks-near-200-day-moving-average" style={learnGuideCard()}>
+              <div style={{ fontWeight: 900, fontSize: 16 }}>
+               Stocks Near 200-Day Moving Average
+              </div>
+             <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
+             Explore stocks testing a widely watched long-term trend level.
+             </div>
+             </Link>
+              
             </div>
           </section>
         </div>
