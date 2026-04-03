@@ -198,6 +198,130 @@ function nextLessonBottomStyle(): React.CSSProperties {
   };
 }
 
+function relatedSetupsForSlug(slug: string) {
+  const s = String(slug || "").trim().toLowerCase();
+
+  if (s === "rsi") {
+    return [
+      {
+        href: "/oversold-stocks-today",
+        title: "Oversold Stocks Today",
+        text: "Review live stocks currently screening as oversold and compare RSI extremes on real charts.",
+      },
+      {
+        href: "/overbought-stocks-today",
+        title: "Overbought Stocks Today",
+        text: "Explore stocks screening as overbought and see how stretched momentum looks in practice.",
+      },
+      {
+        href: "/bullish-bearish-divergence-stocks",
+        title: "Bullish & Bearish Divergence Stocks",
+        text: "Review live divergence setups where RSI or MACD may be disagreeing with price.",
+      },
+    ];
+  }
+
+  if (s === "macd") {
+    return [
+      {
+        href: "/bullish-bearish-divergence-stocks",
+        title: "Bullish & Bearish Divergence Stocks",
+        text: "Review live divergence setups where MACD or RSI may be showing momentum disagreement.",
+      },
+      {
+        href: "/best-trend-score-stocks",
+        title: "Best Trend Score Stocks",
+        text: "Explore stocks showing stronger trend structure and momentum alignment.",
+      },
+    ];
+  }
+
+  if (s === "moving-averages") {
+    return [
+      {
+        href: "/stocks-near-200-day-moving-average",
+        title: "Stocks Near 200-Day Moving Average",
+        text: "Review live stocks currently testing a key long-term moving average level.",
+      },
+      {
+        href: "/best-trend-score-stocks",
+        title: "Best Trend Score Stocks",
+        text: "Compare moving average structure with stocks currently showing strong trend alignment.",
+      },
+    ];
+  }
+
+  if (s === "how-to-identify-stock-trends") {
+    return [
+      {
+        href: "/best-trend-score-stocks",
+        title: "Best Trend Score Stocks",
+        text: "Review live stocks showing stronger trend structure, leadership and momentum.",
+      },
+      {
+        href: "/all-time-high-breakout-stocks",
+        title: "All-Time High Breakout Stocks",
+        text: "Explore stocks pushing into fresh highs where strong trend continuation can matter.",
+      },
+      {
+        href: "/top-stocks-with-buy-signals",
+        title: "Top Stocks With Buy Signals",
+        text: "Compare strong trends with stocks currently showing broader bullish signal alignment.",
+      },
+    ];
+  }
+
+  if (s === "support-and-resistance") {
+    return [
+      {
+        href: "/stocks-near-200-day-moving-average",
+        title: "Stocks Near 200-Day Moving Average",
+        text: "Review stocks trading around a widely watched long-term support or resistance area.",
+      },
+      {
+        href: "/all-time-high-breakout-stocks",
+        title: "All-Time High Breakout Stocks",
+        text: "Explore charts where resistance is being broken and momentum is expanding.",
+      },
+    ];
+  }
+
+  if (s === "rsi-divergence" || s === "macd-divergence") {
+    return [
+      {
+        href: "/bullish-bearish-divergence-stocks",
+        title: "Bullish & Bearish Divergence Stocks",
+        text: "Review live divergence setups currently being flagged across the market.",
+      },
+      {
+        href: "/oversold-stocks-today",
+        title: "Oversold Stocks Today",
+        text: "Compare bullish divergence with oversold charts that may be approaching exhaustion.",
+      },
+      {
+        href: "/overbought-stocks-today",
+        title: "Overbought Stocks Today",
+        text: "Compare bearish divergence with overextended charts that may be vulnerable to pullback.",
+      },
+    ];
+  }
+
+  return [];
+}
+
+function relatedSetupCard(): React.CSSProperties {
+  return {
+    border: "1px solid rgba(255,255,255,0.14)",
+    borderRadius: 14,
+    padding: 14,
+    background: "rgba(255,255,255,0.06)",
+    color: "#f1f5f9",
+    textDecoration: "none",
+    display: "block",
+    transition: "transform 120ms ease, background 120ms ease",
+  };
+}
+
 export default async function LessonPage({ params }: Props) {
   // Defensive: some builds pass params strangely (or as a Promise)
   const resolvedParams: any = await Promise.resolve(params as any);
@@ -205,6 +329,7 @@ export default async function LessonPage({ params }: Props) {
 
   const lesson = getLesson(slug);
   const nextLesson = getNextLesson(slug);
+  const relatedSetups = relatedSetupsForSlug(slug);
 
   if (!lesson) {
     return (
@@ -467,6 +592,62 @@ export default async function LessonPage({ params }: Props) {
             you understand it.
           </TipBox>
         </div>
+
+                {relatedSetups.length ? (
+          <section
+            style={{
+              marginTop: 18,
+              border: "1px solid rgba(239,68,68,0.24)",
+              borderRadius: 18,
+              padding: 18,
+              background: "linear-gradient(180deg, rgba(24,12,12,0.96), rgba(14,7,7,0.98))",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+            }}
+          >
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "7px 12px",
+                borderRadius: 999,
+                background:
+                  "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.12))",
+                border: "1px solid rgba(239,68,68,0.36)",
+                color: "#fee2e2",
+                fontWeight: 950,
+                letterSpacing: "0.08em",
+                fontSize: 12,
+              }}
+            >
+              RELATED LIVE SETUPS
+            </div>
+
+            <div
+              style={{
+                marginTop: 14,
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                gap: 12,
+              }}
+            >
+              {relatedSetups.map((item) => (
+                <Link key={item.href} href={item.href} style={relatedSetupCard()}>
+                  <div style={{ fontWeight: 900, fontSize: 16 }}>{item.title}</div>
+                  <div
+                    style={{
+                      marginTop: 6,
+                      fontSize: 13,
+                      opacity: 0.75,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {item.text}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {nextLesson ? (
           <div style={{ marginTop: 18 }}>
