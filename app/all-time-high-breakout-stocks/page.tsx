@@ -599,6 +599,34 @@ export default async function AllTimeHighBreakoutStocksPage() {
               </div>
             </div>
           </section>
+                  <section
+          style={{
+            marginTop: 22,
+            maxWidth: 860,
+            lineHeight: 1.7,
+            opacity: 0.82,
+          }}
+        >
+          <p>
+            Stocks breaking into all-time highs are often showing strong trend
+            conditions, where demand is outweighing supply. With no prior price
+            history above, these moves can develop into powerful continuation
+            trends if momentum holds.
+          </p>
+
+          <ul style={{ marginTop: 10, paddingLeft: 18 }}>
+            <li>No overhead resistance from previous price levels</li>
+            <li>Often driven by strong momentum and trend strength</li>
+            <li>Can lead to continuation moves if buyers stay in control</li>
+            <li>Still requires confirmation and follow-through</li>
+          </ul>
+
+          <p style={{ marginTop: 10 }}>
+            The stocks listed below are currently pushing into all-time high
+            breakout territory and may be worth reviewing for momentum-based
+            setups.
+          </p>
+        </section>
         </div>
 
         <section style={panelStyle}>
