@@ -1,7 +1,7 @@
 ---
 title: "Intel Reclaim Attempt After AI Catalyst"
 date: "2026-04-07"
-excerpt: "Intel is attempting to reclaim structure after a sentiment shift driven by AI partnership news."
+excerpt: "Intel attempts to reclaim its structural floor following news of a massive Terafab partnership."
 symbol: "INTC"
 timeframe: "d"
 chartBars: 250
