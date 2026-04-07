@@ -34,13 +34,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const url = `https://www.mystockharbor.com/insights/${slug}`;
     const image = "https://www.mystockharbor.com/og-image-v2.png";
 
-    return {
-      title,
-      description,
-      alternates: {
-        canonical: url,
-      },
-      openGraph: {
+return {
+  title,
+  description,
+  alternates: {
+    canonical: url,
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  openGraph: {
         title,
         description,
         url,
@@ -66,10 +70,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   } catch {
     const image = "https://www.mystockharbor.com/og-image.png";
 
-    return {
-      title: "Insight | MyStockHarbor",
-      description: "Stock market insight from MyStockHarbor.",
-      openGraph: {
+return {
+  title: "Insight | MyStockHarbor",
+  description: "Stock market insight from MyStockHarbor.",
+  robots: {
+    index: true,
+    follow: true,
+  },
+  openGraph: {
         title: "Insight | MyStockHarbor",
         description: "Stock market insight from MyStockHarbor.",
         url: "https://www.mystockharbor.com/insights",
