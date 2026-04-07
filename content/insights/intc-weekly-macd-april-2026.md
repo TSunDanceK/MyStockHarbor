@@ -8,31 +8,38 @@ chartBars: 250
 chartIndicators: ["MACD(12,26,9)", "Volume"]
 ---
 
-What happened
+## What happened
+
 Intel (INTC) is attempting to reclaim a multi-year breakdown zone following a period of deep institutional accumulation. The weekly structure has shifted from a persistent "death spiral" into a high-conviction higher-low formation. We are seeing a "handshake rally" that has pushed price back toward the 2025 pivot point, though a clean weekly close above resistance remains the missing piece of the puzzle.
 
-Why it matters
+## Why it matters
+
 Intel is a legacy semiconductor manufacturer now pivoting into a high-scale foundry model. The move is driven by today's widely reported partnership with Elon Musk’s Terafab project to produce one terawatt of AI compute power. Traders are likely front-running the "Sovereign Monopoly" thesis, betting that Intel’s US-based fabs will serve as the physical backbone for the SpaceX/xAI orbital grid. This repositioning is visible in the volume expansion preceding the news, suggesting smart money began rotating into this /hot-market-names-right-now setup as early as November 2025.
 
-Levels to watch
-Support: November 2025 accumulation base
+## Levels to watch
 
-Resistance: Prior 2025 breakdown zone sitting immediately above
+-Support: November 2025 accumulation base
+-Resistance: Prior 2025 breakdown zone sitting immediately above
+-Moving averages: Short-term averages currently curling to provide trailing support
+-Risk point: Loss of the March 2026 higher-low structure
 
-Moving averages: Short-term averages currently curling to provide trailing support
+## What would confirm the idea
 
-Risk point: Loss of the March 2026 higher-low structure
+A clean reclaim and hold above resistance, followed by continuation and higher highs, would confirm a structural shift from base into trend.
 
-What would confirm the idea
+Sustained volume and expanding MACD would support the move as more than a short-term reaction.
+
+## What would weaken the idea
+
 A clean weekly reclaim and hold above the prior breakdown resistance would confirm the structural shift from a "Value Trap" into a new trend. Continued expansion in MACD and sustained volume above the 20-period average would indicate that institutional repositioning has transitioned into a long-term trend.
+## Bull vs bear scenarios
 
-What would weaken the idea
-A rejection at the current resistance zone would signal a "Bull Trap" where the news catalyst was insufficient to clear the overhead supply. If price returns to the previous range on drying volume, it suggests the Musk-catalyst was a temporary sentiment spike rather than a fundamental pivot.
+**Bullish scenario:**  
+Price reclaims and flips the breakdown zone to support, initiating a multi-quarter rally as capital rotates out of overextended AI names and into Intel’s foundational foundry play.
 
-Bull vs bear scenarios
-Bullish scenario: Price reclaims and flips the breakdown zone to support, initiating a multi-quarter rally as capital rotates out of overextended AI names and into Intel’s foundational foundry play.
+**Bearish scenario:**  
+Price fails at resistance and drifts back toward the November lows, confirming that the market still views Intel’s foundry losses as too significant to offset the speculative AI upside.
 
-Bearish scenario: Price fails at resistance and drifts back toward the November lows, confirming that the market still views Intel’s foundry losses as too significant to offset the speculative AI upside.
+## Bottom line
 
-Bottom line
 This is a high-stakes reclaim attempt fueled by a massive sovereign infrastructure catalyst. If Intel holds above resistance, it marks the end of the bear cycle; if it rejects, the structural decay continues.
