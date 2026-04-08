@@ -1,5 +1,10 @@
 import { unstable_cache } from "next/cache";
-import { getAiNewsBriefs, getAiNewsInsight, type AiNewsBrief, type AiNewsInsight } from "@/lib/ai-news-briefs";
+import {
+  getAiNewsBriefs,
+  getAiNewsInsight,
+  type AiNewsBrief,
+  type AiNewsInsight,
+} from "@/lib/ai-news-briefs";
 
 export type Quote = {
   symbol: string;
@@ -248,7 +253,9 @@ async function fetchNews(symbol: string, companyName: string): Promise<NewsItem[
     if (!res.ok) return [];
 
     const xml = await res.text();
-    return parseRss(xml).slice(0, 8);
+
+    // Pull a wider pool first, then rank it later.
+    return parseRss(xml).slice(0, 24);
   } catch {
     return [];
   }
@@ -385,28 +392,28 @@ function scoreNewsItem(item: NewsItem) {
   if (
     keywordHits(title, [
       "earnings",
-      "results",
       "guidance",
+      "results",
       "revenue",
       "profit",
-      "margin",
       "forecast",
-      "analyst",
-      "upgrade",
-      "downgrade",
       "partnership",
-      "approval",
-      "launch",
-      "deliveries",
-      "production",
-      "buyback",
-      "dividend",
-      "investigation",
+      "deal",
+      "agreement",
+      "joins",
+      "project",
+      "contract",
+      "funding",
+      "investment",
+      "acquisition",
+      "merger",
       "lawsuit",
+      "probe",
+      "investigation",
       "recall",
     ])
   ) {
-    score += 5;
+    score += 6;
   }
 
   if (
@@ -415,34 +422,67 @@ function scoreNewsItem(item: NewsItem) {
       "misses",
       "raises",
       "cuts",
-      "strong",
-      "weak",
-      "warning",
-      "record",
-      "plunge",
       "surge",
+      "plunge",
       "slump",
+      "record",
+      "warning",
       "growth",
       "demand",
-      "probe",
-      "delay",
     ])
   ) {
     score += 4;
   }
 
   if (
-    ["reuters", "bloomberg", "cnbc", "marketwatch", "barron's", "yahoo"].some((name) =>
+    keywordHits(title, [
+      "elon",
+      "musk",
+      "tesla",
+      "spacex",
+      "xai",
+      "openai",
+      "nvidia",
+      "amd",
+      "tsmc",
+      "amazon",
+      "microsoft",
+      "google",
+      "meta",
+      "government",
+      "pentagon",
+      "white house",
+      "chips act",
+    ])
+  ) {
+    score += 6;
+  }
+
+  if (
+    keywordHits(title, ["partnership", "joins", "deal", "project"]) &&
+    keywordHits(title, ["ai", "chip", "factory", "data center"])
+  ) {
+    score += 5;
+  }
+
+  if (["reuters", "bloomberg", "ap"].some((name) => source.includes(name))) {
+    score += 8;
+  } else if (
+    ["cnbc", "marketwatch", "barron's", "wsj", "ft"].some((name) =>
       source.includes(name)
     )
   ) {
-    score += 3;
+    score += 5;
+  } else if (["yahoo"].some((name) => source.includes(name))) {
+    score += 2;
   }
 
   if (item.pubDate) {
     const ageHours = Math.max(0, (Date.now() - new Date(item.pubDate).getTime()) / 36e5);
-    if (ageHours <= 24) score += 3;
-    else if (ageHours <= 72) score += 2;
+
+    if (ageHours <= 12) score += 6;
+    else if (ageHours <= 24) score += 5;
+    else if (ageHours <= 72) score += 3;
     else if (ageHours <= 168) score += 1;
   }
 
@@ -451,10 +491,56 @@ function scoreNewsItem(item: NewsItem) {
   }
 
   if (isLowValueNewsItem(item)) {
-    score -= 6;
+    score -= 8;
   }
 
   return score;
+}
+
+function normaliseTitleForDedupe(title: string) {
+  return title
+    .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .replace(
+      /\b(the|a|an|and|or|for|to|of|in|on|with|from|at|by|stock|shares)\b/g,
+      " "
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function dedupeNews(items: NewsItem[]): NewsItem[] {
+  const seen = new Set<string>();
+  const deduped: NewsItem[] = [];
+
+  for (const item of items) {
+    const key = normaliseTitleForDedupe(item.title)
+      .split(" ")
+      .slice(0, 8)
+      .join(" ");
+
+    if (!key || seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    deduped.push(item);
+  }
+
+  return deduped;
+}
+
+function rankNews(news: NewsItem[]) {
+  return dedupeNews(
+    [...news].sort((a, b) => {
+      const scoreDiff = scoreNewsItem(b) - scoreNewsItem(a);
+      if (scoreDiff !== 0) return scoreDiff;
+
+      const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+      const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
+      return bTime - aTime;
+    })
+  );
 }
 
 function scoreNews(news: NewsItem[]): NewsScoreResult {
@@ -471,15 +557,7 @@ function scoreNews(news: NewsItem[]): NewsScoreResult {
     };
   }
 
-  const ranked = [...news].sort((a, b) => {
-    const scoreDiff = scoreNewsItem(b) - scoreNewsItem(a);
-    if (scoreDiff !== 0) return scoreDiff;
-
-    const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
-    const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
-    return bTime - aTime;
-  });
-
+  const ranked = rankNews(news);
   const highValue = ranked.filter((item) => !isLowValueNewsItem(item));
   const candidates = (highValue.length ? highValue : ranked).slice(0, 5);
 
@@ -781,14 +859,7 @@ async function buildStockNewsBaseData(
   const newsScore = scoreNews(news);
   const earningsScore = scoreEarnings(news);
 
-  const rankedNews = [...news].sort((a, b) => {
-    const scoreDiff = scoreNewsItem(b) - scoreNewsItem(a);
-    if (scoreDiff !== 0) return scoreDiff;
-
-    const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
-    const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
-    return bTime - aTime;
-  });
+  const rankedNews = rankNews(news);
 
   const highValueNews = rankedNews.filter((item) => !isLowValueNewsItem(item));
   const fallbackNews = rankedNews.filter((item) => isLowValueNewsItem(item));
@@ -908,7 +979,7 @@ const getCachedStockNewsBaseData = unstable_cache(
 
     return buildStockNewsBaseData(parsed.symbol, parsed.options);
   },
-  ["msh-stock-news-base-data-v1"],
+  ["msh-stock-news-base-data-v2"],
   {
     revalidate: 1800,
   }
@@ -942,5 +1013,3 @@ export async function getStockNewsData(
     ...aiData,
   };
 }
-
-
