@@ -240,22 +240,40 @@ async function fetchCompanyName(symbol: string): Promise<string> {
 }
 
 async function fetchNews(symbol: string, companyName: string): Promise<NewsItem[]> {
-  const baseQuery = companyName ? `${companyName} ${symbol} stock` : `${symbol} stock`;
-  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(
-    baseQuery
-  )}&hl=en-GB&gl=GB&ceid=GB:en`;
+  const company = companyName.trim();
+  const baseNameQuery = company ? `${company} ${symbol}` : symbol;
+
+  const queries = [
+    `${baseNameQuery} stock`,
+    baseNameQuery,
+    `${symbol} partnership OR deal OR joins OR project`,
+    `${company || symbol} Elon OR Musk OR SpaceX OR xAI`,
+    `${company || symbol} AI chip project`,
+  ];
 
   try {
-    const res = await fetch(url, {
-      next: { revalidate: 1800 },
-    });
+    const results = await Promise.all(
+      queries.map(async (query) => {
+        const url = `https://news.google.com/rss/search?q=${encodeURIComponent(
+          query
+        )}&hl=en-GB&gl=GB&ceid=GB:en`;
 
-    if (!res.ok) return [];
+        try {
+          const res = await fetch(url, {
+            next: { revalidate: 1800 },
+          });
 
-    const xml = await res.text();
+          if (!res.ok) return [];
 
-    // Pull a wider pool first, then rank it later.
-    return parseRss(xml).slice(0, 24);
+          const xml = await res.text();
+          return parseRss(xml).slice(0, 12);
+        } catch {
+          return [];
+        }
+      })
+    );
+
+    return mergeNewsPools(results).slice(0, 40);
   } catch {
     return [];
   }
@@ -273,6 +291,23 @@ function movingAverage(values: number[], window: number): (number | null)[] {
 
   return out;
 }
+
+function mergeNewsPools(pools: NewsItem[][]): NewsItem[] {
+  const merged: NewsItem[] = [];
+  const seenLinks = new Set<string>();
+
+  for (const pool of pools) {
+    for (const item of pool) {
+      const key = item.link.trim();
+      if (!key || seenLinks.has(key)) continue;
+      seenLinks.add(key);
+      merged.push(item);
+    }
+  }
+
+  return merged;
+}
+
 
 function rsiWilder(values: number[], period = 14): (number | null)[] {
   const out: (number | null)[] = Array(values.length).fill(null);
