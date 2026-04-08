@@ -100,7 +100,9 @@ async function generateAiNewsBriefs(input: BatchInput): Promise<AiNewsBrief[]> {
     "Return one output item for each input article in the exact same order. " +
     "Do not include or rewrite the headline. " +
     "Make each summary clearly specific to that article, not a reusable template. " +
-    "If the article appears too vague or low-information, say so cautiously and explain what traders may be watching instead. " +
+    "Treat importance and tone as separate ideas. A story can sound neutral in wording but still be an important market catalyst. " +
+    "When an article appears to describe a major partnership, earnings shift, guidance change, funding event, regulatory action, major customer relationship, or other meaningful corporate development, say that plainly in calm language. " +
+    "If the article appears vague, recycled, thin, or low-information, say so cautiously and explain what traders may be watching instead. " +
     "Do not invent facts. Do not imply full article access or independent verification. " +
     "Keep attribution light and natural, such as 'Reuters reports that' or 'Barron's highlights'. " +
     "Do not copy likely article wording. Paraphrase clearly. " +
@@ -110,6 +112,7 @@ async function generateAiNewsBriefs(input: BatchInput): Promise<AiNewsBrief[]> {
     "The second sentence should explain how traders or investors may interpret it. " +
     "A third sentence is allowed only when it adds genuinely useful context. " +
     "Each whyItMatters line should be 1 sentence in plain English and should differ across articles when the headlines differ. " +
+    "Use 'Neutral' when the item is informative without a clear directional lean. Use 'Mixed' only when the article contains genuinely offsetting positives and negatives. " +
     "Avoid hype, predictions, sensational language, fake certainty, and filler.";
 
   const userPrompt = JSON.stringify(input);
@@ -188,9 +191,9 @@ const getCachedAiNewsBriefs = unstable_cache(
     const payload = JSON.parse(payloadJson) as BatchInput;
     return generateAiNewsBriefs(payload);
   },
-  ["msh-ai-news-briefs-v1"],
+  ["msh-ai-news-briefs-v2"],
   {
-    revalidate: 60 * 60 * 12,
+    revalidate: 60 * 30,
   }
 );
 
@@ -267,8 +270,10 @@ async function generateAiNewsInsight(input: InsightInput): Promise<AiNewsInsight
     "You write concise stock-news insight copy for MyStockHarbor, a beginner-friendly stock analysis site. " +
     "Use only the provided symbol, company name, trend, news score, earnings tone, RSI, distance vs moving averages, recent range levels, and the provided top article details. " +
     "Do not invent facts. Do not imply full article access or independent verification. " +
-    "Your job is to synthesise the news flow and chart context into one calm editorial read. " +
-    "The beyondHeadline field should be one paragraph of 80 to 140 words. It should explain the main theme in the current coverage, what is uncertain, and what traders may be watching next. " +
+    "Your job is to identify the dominant current catalyst in the provided coverage, then combine that with the chart context into one calm editorial read. " +
+    "Weight the freshest and most consequential article most heavily. Use older, weaker, or more generic stories only as supporting background. Do not give equal emphasis to every item if one story clearly leads the narrative. " +
+    "Do not flatten a clearly important development into a generic blended summary. " +
+    "The beyondHeadline field should be one paragraph of 80 to 140 words. It should explain the leading theme in the current coverage, what remains uncertain, and what traders may be watching next. " +
     "The whatItMeans field should return 2 to 3 short plain-English bullet-style lines, each one sentence, each distinct, and each useful for a beginner. " +
     "Be specific, not generic. Avoid filler, hype, certainty, predictions, and dramatic language.";
 
@@ -359,9 +364,9 @@ const getCachedAiNewsInsight = unstable_cache(
     const payload = JSON.parse(payloadJson) as InsightInput;
     return generateAiNewsInsight(payload);
   },
-  ["msh-ai-news-insight-v1"],
+  ["msh-ai-news-insight-v2"],
   {
-    revalidate: 60 * 60 * 12,
+    revalidate: 60 * 30,
   }
 );
 
