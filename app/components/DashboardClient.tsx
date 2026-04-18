@@ -2397,7 +2397,7 @@ return (
           whiteSpace: "nowrap",
         }}
       >
-        Open stock page →
+        Company Overview →
       </Link>
     }
   >
