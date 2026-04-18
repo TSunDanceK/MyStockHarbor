@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getAiStockAnalysis } from "@/lib/ai-stock-analysis";
 import StockSymbolPageClient from "./StockSymbolPageClient";
 
 type Props = {
@@ -10,14 +11,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const upper = symbol.toUpperCase();
 
   return {
-    title: `${upper} Stock Analysis, Trend, Moving Averages & Technical Summary | MyStockHarbor`,
-    description: `View ${upper} stock analysis with trend structure, moving averages, technical summary and a direct link into the MyStockHarbor chart dashboard.`,
+    title: `${upper} Stock Analysis, Company Overview, Scores & Technical Summary | MyStockHarbor`,
+    description: `View ${upper} stock analysis with company overview, AI outlook, fundamentals-style scores, moving averages and chart context from MyStockHarbor.`,
     alternates: {
       canonical: `https://www.mystockharbor.com/stock/${upper}`,
     },
     openGraph: {
       title: `${upper} Stock Analysis | MyStockHarbor`,
-      description: `Trend, market structure and technical analysis for ${upper}.`,
+      description: `Company overview, AI outlook and technical analysis for ${upper}.`,
       url: `https://www.mystockharbor.com/stock/${upper}`,
       siteName: "MyStockHarbor",
       type: "article",
@@ -25,7 +26,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     twitter: {
       card: "summary_large_image",
       title: `${upper} Stock Analysis | MyStockHarbor`,
-      description: `Trend, moving averages and technical summary for ${upper}.`,
+      description: `Company overview, AI outlook and technical summary for ${upper}.`,
     },
   };
 }
@@ -33,6 +34,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function StockPage({ params }: Props) {
   const { symbol } = await params;
   const upper = symbol.toUpperCase();
+  const aiAnalysis = await getAiStockAnalysis(upper);
 
   return (
     <>
@@ -66,7 +68,7 @@ export default async function StockPage({ params }: Props) {
                 "@id": `https://www.mystockharbor.com/stock/${upper}#webpage`,
                 url: `https://www.mystockharbor.com/stock/${upper}`,
                 name: `${upper} Stock Analysis | MyStockHarbor`,
-                description: `View ${upper} stock analysis with trend structure, moving averages, technical summary and chart-based insights from MyStockHarbor.`,
+                description: `View ${upper} stock analysis with company overview, AI outlook, technical summary and chart-based insights from MyStockHarbor.`,
                 isPartOf: {
                   "@id": "https://www.mystockharbor.com/#website",
                 },
@@ -87,7 +89,7 @@ export default async function StockPage({ params }: Props) {
                   "@id": "https://www.mystockharbor.com/#organization",
                 },
                 url: `https://www.mystockharbor.com/stock/${upper}`,
-                description: `${upper} stock analysis, technical summary, moving averages and chart-based market context.`,
+                description: `${upper} stock analysis with AI business overview, outlook scores and chart-based market context.`,
               },
               {
                 "@type": "BreadcrumbList",
@@ -129,7 +131,7 @@ export default async function StockPage({ params }: Props) {
             letterSpacing: "-0.02em",
           }}
         >
-          {upper} Stock Analysis, Trend & Technical Summary
+          {upper} Stock Analysis, Company Overview & Technical Summary
         </h1>
 
         <p
@@ -141,12 +143,12 @@ export default async function StockPage({ params }: Props) {
             color: "rgba(241,245,249,0.72)",
           }}
         >
-          Explore {upper} stock analysis with trend structure, moving averages,
-          technical context and chart-based insights from MyStockHarbor.
+          Explore {upper} stock analysis with chart context, AI business overview,
+          future potential commentary and technical insights from MyStockHarbor.
         </p>
       </section>
 
-      <StockSymbolPageClient symbol={upper} />
+      <StockSymbolPageClient symbol={upper} aiAnalysis={aiAnalysis} />
     </>
   );
 }
