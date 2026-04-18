@@ -599,7 +599,7 @@ export default function StockSymbolPageClient({
                       fontSize: 12,
                     }}
                   >
-                    AI COMPANY OUTLOOK
+                    COMPANY OUTLOOK
                   </div>
 
                   <h2
@@ -610,7 +610,7 @@ export default function StockSymbolPageClient({
                       letterSpacing: "-0.03em",
                     }}
                   >
-                    Business snapshot, score read and future potential for {symbol}
+                    Company snapshot, outlook scores and future potential for {symbol}
                   </h2>
 
                   <p
@@ -622,9 +622,7 @@ export default function StockSymbolPageClient({
                       fontSize: 15,
                     }}
                   >
-                    This section is AI-generated, cached for a week, and designed to give a
-                    broader business and outlook read without changing your live chart data.
-                    It is educational only and not financial advice.
+                    Review a broader business snapshot, outlook summary, and key points investors may want to watch alongside the live chart view.
                   </p>
 
                   <div
@@ -691,7 +689,7 @@ export default function StockSymbolPageClient({
                         background: "rgba(255,255,255,0.04)",
                       }}
                     >
-                      <div style={miniLabelStyle}>AI analysis updated</div>
+                      <div style={miniLabelStyle}>Summary updated</div>
                       <div style={{ marginTop: 8, fontSize: 28, fontWeight: 950 }}>
                         {formatAiUpdatedLabel(aiAnalysis.generatedAt)}
                       </div>
@@ -816,10 +814,9 @@ export default function StockSymbolPageClient({
                     fontSize: 15,
                   }}
                 >
-                  This chart gives Google readable page content and gives real visitors a useful
-                  visual snapshot straight away. For the full tool experience, open the interactive dashboard.
+                  Use this chart to quickly review recent price action, moving averages and overall trend structure before opening the full dashboard.
                 </p>
-
+                
                 <div style={{ marginTop: 16 }}>
                   <StockPriceChart
                     symbol={symbol}
