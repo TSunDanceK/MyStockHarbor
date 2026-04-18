@@ -236,8 +236,10 @@ const etfs = [
   "HYG",
 ];
 
-const stocks = Array.from(
-  new Set([...coreMegaCaps, ...retailInterestStocks, ...recognizableMidCaps])
+
+
+const priorityStocks = Array.from(
+  new Set([...coreMegaCaps, ...retailInterestStocks])
 );
 
 const uniqueEtfs = Array.from(new Set(etfs));
@@ -278,14 +280,14 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.68,
   }));
 
-  const stockEntries: MetadataRoute.Sitemap = stocks.map((symbol) => ({
+  const stockEntries: MetadataRoute.Sitemap = priorityStocks.map((symbol) => ({
     url: toAbsoluteUrl(`/stock/${encodeURIComponent(symbol.toUpperCase())}`),
     lastModified: now,
     changeFrequency: "weekly",
     priority: 0.72,
   }));
 
-  const stockNewsEntries: MetadataRoute.Sitemap = stocks.map((symbol) => ({
+  const stockNewsEntries: MetadataRoute.Sitemap = priorityStocks.map((symbol) => ({
     url: toAbsoluteUrl(`/stock/${encodeURIComponent(symbol.toUpperCase())}/news`),
     lastModified: now,
     changeFrequency: "daily",
