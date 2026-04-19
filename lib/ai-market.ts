@@ -179,7 +179,7 @@ const getCachedSpxMarketAnalysis = unstable_cache(
   async () => generateSpxMarketAnalysis(),
   ["msh-spx-market-analysis-v1"],
   {
-    revalidate: 60 * 60 * 12,
+    revalidate: 60
   }
 );
 
