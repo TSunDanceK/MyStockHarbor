@@ -1,3 +1,4 @@
+import type React from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import AffiliateLink from "../../components/AffiliateLink";
@@ -63,25 +64,6 @@ async function getSpxChartPoints(): Promise<Point[]> {
   }
 }
 
-function statCardStyle(): React.CSSProperties {
-  return {
-    borderRadius: 16,
-    border: "1px solid rgba(255,255,255,0.10)",
-    background: "rgba(255,255,255,0.03)",
-    padding: 16,
-  };
-}
-
-function statLabelStyle(): React.CSSProperties {
-  return {
-    fontSize: 12,
-    opacity: 0.72,
-    fontWeight: 900,
-    textTransform: "uppercase",
-    letterSpacing: "0.05em",
-  };
-}
-
 function primaryBtn(): React.CSSProperties {
   return {
     display: "inline-flex",
@@ -135,6 +117,25 @@ function sectionCardStyle(): React.CSSProperties {
     border: "1px solid rgba(255,255,255,0.12)",
     background: "rgba(255,255,255,0.04)",
     padding: 18,
+  };
+}
+
+function statCardStyle(): React.CSSProperties {
+  return {
+    borderRadius: 16,
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(255,255,255,0.03)",
+    padding: 16,
+  };
+}
+
+function statLabelStyle(): React.CSSProperties {
+  return {
+    fontSize: 12,
+    opacity: 0.72,
+    fontWeight: 900,
+    textTransform: "uppercase",
+    letterSpacing: "0.05em",
   };
 }
 
@@ -246,6 +247,7 @@ function topNavIcon(type: "dashboard" | "learn" | "pickers" | "platforms") {
   if (type === "pickers") return "📊";
   return "🏦";
 }
+
 export default async function SPXPage() {
   const spxChartPoints = await getSpxChartPoints();
   const marketAnalysis = await getSpxMarketAnalysis();
@@ -419,6 +421,97 @@ export default async function SPXPage() {
               whether the higher-timeframe structure has actually broken down. That is why the weekly chart matters here.
             </div>
           </section>
+
+          {marketAnalysis ? (
+            <section
+              style={{
+                marginTop: 4,
+                border: "1px solid rgba(59,130,246,0.22)",
+                borderRadius: 18,
+                padding: 18,
+                background:
+                  "linear-gradient(180deg, rgba(8,14,28,0.98), rgba(6,10,18,0.98))",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 900,
+                  letterSpacing: "0.08em",
+                  color: "#dbeafe",
+                }}
+              >
+                MARKET OVERVIEW
+              </div>
+
+              <h2
+                style={{
+                  margin: "10px 0 0",
+                  fontSize: 26,
+                  letterSpacing: "-0.03em",
+                }}
+              >
+                Current S&amp;P 500 market backdrop
+              </h2>
+
+              <p
+                style={{
+                  marginTop: 10,
+                  opacity: 0.82,
+                  lineHeight: 1.7,
+                  maxWidth: 820,
+                }}
+              >
+                {marketAnalysis.summary}
+              </p>
+
+              <div
+                style={{
+                  marginTop: 16,
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: 14,
+                }}
+              >
+                <div style={statCardStyle()}>
+                  <div style={statLabelStyle()}>Bullish factors</div>
+                  <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                    {marketAnalysis.bullish.map((item) => (
+                      <div key={item} style={{ lineHeight: 1.6, opacity: 0.88 }}>
+                        • {item}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={statCardStyle()}>
+                  <div style={statLabelStyle()}>Risk factors</div>
+                  <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                    {marketAnalysis.bearish.map((item) => (
+                      <div key={item} style={{ lineHeight: 1.6, opacity: 0.88 }}>
+                        • {item}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={statCardStyle()}>
+                  <div style={statLabelStyle()}>What to watch</div>
+                  <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                    {marketAnalysis.watch.map((item) => (
+                      <div key={item} style={{ lineHeight: 1.6, opacity: 0.88 }}>
+                        • {item}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 12, fontSize: 12, opacity: 0.6 }}>
+                Updated: {new Date(marketAnalysis.generatedAt).toLocaleString("en-GB")}
+              </div>
+            </section>
+          ) : null}
 
           <section
             style={{
@@ -622,97 +715,9 @@ export default async function SPXPage() {
               that is a very different setup from a full structural breakdown.
             </div>
 
-                      {marketAnalysis ? (
-              <section
-                style={{
-                  marginTop: 18,
-                  border: "1px solid rgba(59,130,246,0.22)",
-                  borderRadius: 18,
-                  padding: 18,
-                  background:
-                    "linear-gradient(180deg, rgba(8,14,28,0.98), rgba(6,10,18,0.98))",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 900,
-                    letterSpacing: "0.08em",
-                    color: "#dbeafe",
-                  }}
-                >
-                  MARKET OVERVIEW
-                </div>
-
-                <h2
-                  style={{
-                    margin: "10px 0 0",
-                    fontSize: 26,
-                    letterSpacing: "-0.03em",
-                  }}
-                >
-                  Current S&amp;P 500 market backdrop
-                </h2>
-
-                <p
-                  style={{
-                    marginTop: 10,
-                    opacity: 0.82,
-                    lineHeight: 1.7,
-                    maxWidth: 820,
-                  }}
-                >
-                  {marketAnalysis.summary}
-                </p>
-
-                <div
-                  style={{
-                    marginTop: 16,
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                    gap: 14,
-                  }}
-                >
-                  <div style={statCardStyle()}>
-                    <div style={statLabelStyle()}>Bullish factors</div>
-                    <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-                      {marketAnalysis.bullish.map((item) => (
-                        <div key={item} style={{ lineHeight: 1.6, opacity: 0.88 }}>
-                          • {item}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div style={statCardStyle()}>
-                    <div style={statLabelStyle()}>Risk factors</div>
-                    <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-                      {marketAnalysis.bearish.map((item) => (
-                        <div key={item} style={{ lineHeight: 1.6, opacity: 0.88 }}>
-                          • {item}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div style={statCardStyle()}>
-                    <div style={statLabelStyle()}>What to watch</div>
-                    <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-                      {marketAnalysis.watch.map((item) => (
-                        <div key={item} style={{ lineHeight: 1.6, opacity: 0.88 }}>
-                          • {item}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ marginTop: 12, fontSize: 12, opacity: 0.6 }}>
-                  Updated: {new Date(marketAnalysis.generatedAt).toLocaleString("en-GB")}
-                </div>
-              </section>
-            ) : null}
-            <SPXChartClient chartPoints={spxChartPoints} />
+            <div style={{ marginTop: 18 }}>
+              <SPXChartClient chartPoints={spxChartPoints} />
+            </div>
           </section>
 
           <section style={sectionCardStyle()}>
