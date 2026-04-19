@@ -177,9 +177,9 @@ async function generateSpxMarketAnalysis(): Promise<MarketAnalysis | null> {
 
 const getCachedSpxMarketAnalysis = unstable_cache(
   async () => generateSpxMarketAnalysis(),
-  ["msh-spx-market-analysis-v1"],
+  ["msh-spx-market-analysis-v2"],
   {
-    revalidate: 60
+    revalidate: 60 * 60 * 12,
   }
 );
 
