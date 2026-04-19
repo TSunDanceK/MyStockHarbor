@@ -6,6 +6,8 @@ import SPXChartClient from "./SPXChartClient";
 import { getDailyHistory } from "@/lib/server/historyCache";
 import { getSpxMarketAnalysis } from "@/lib/ai-market";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "S&P 500 (SPX) Analysis (2026) | Market Outlook | MyStockHarbor",
   description:
