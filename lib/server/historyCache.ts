@@ -29,7 +29,7 @@ const HISTORY_LOCK_PREFIX = "msh:history-lock:v1";
 const HISTORY_LOCK_TTL_SECONDS = 45;
 
 const FMP_CALL_COUNTER_PREFIX = "msh:fmp-calls:v1";
-const FMP_SAFE_CALLS_PER_MINUTE = 650;
+const FMP_SAFE_CALLS_PER_MINUTE = 300;
 const FMP_WAIT_STEP_MS = 400;
 const FMP_MAX_WAIT_MS = 20_000;
 
