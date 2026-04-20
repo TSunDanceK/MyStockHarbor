@@ -169,12 +169,12 @@ let memo:
     }
   | null = null;
 
-const CACHE_SECONDS = 60 * 10;
-const STALE_SECONDS = 60 * 20;
+const CACHE_SECONDS = 60 * 6;
+const STALE_SECONDS = 60 * 6;
 const MEMORY_CACHE_MS = 60_000;
 
 const PICKERS_REDIS_KEY = "msh:pickers:v4:main";
-const PICKERS_REDIS_TTL_SECONDS = 6 * 60 * 60;
+const PICKERS_REDIS_TTL_SECONDS = 6 * 60;
 const PICKERS_LOCK_KEY = "msh:pickers:v4:main:lock";
 const PICKERS_LOCK_TTL_SECONDS = 120;
 
