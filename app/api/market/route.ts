@@ -35,9 +35,9 @@ type DynamicQuoteRecord = {
   discoveredAt: number;
 };
 
-const PAYLOAD_CACHE_MS = 5 * 60 * 1000;
+const PAYLOAD_CACHE_MS = 6 * 60 * 1000;
 
-const DISCOVERY_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const DISCOVERY_INTERVAL_MS = 6 * 60 * 1000; // 5 minutes
 const DYNAMIC_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 const DYNAMIC_MAX_SIZE = 500;
 const DISCOVERY_BATCH_SIZE = 25;
