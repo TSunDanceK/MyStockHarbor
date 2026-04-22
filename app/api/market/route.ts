@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
-import { ensureQualifiedHistory } from "../../../lib/server/historyCache";
+import {
+  ensureQualifiedHistory,
+  hasFmpCapacity,
+  reserveFmpCallSlot,
+} from "../../../lib/server/historyCache";
 
 export const runtime = "nodejs";
 
@@ -9,15 +13,13 @@ const REDIS_KEY = "msh:market:state";
 
 type Quote = {
   symbol: string;
-  open?: string;
-  high?: string;
-  low?: string;
-  close?: string;
-  previous_close?: string;
-  percent_change?: string;
-  volume?: string;
-  status?: string;
-  message?: string;
+  price?: number | string;
+  open?: number | string;
+  dayHigh?: number | string;
+  dayLow?: number | string;
+  changesPercentage?: number | string;
+  volume?: number | string;
+  name?: string;
 };
 
 type Row = {
@@ -36,10 +38,11 @@ type DynamicQuoteRecord = {
 const PAYLOAD_CACHE_MS = 5 * 60 * 1000;
 
 const DISCOVERY_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
-const OPEN_MARKET_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
-const CLOSED_MARKET_TTL_MS = 16 * 60 * 60 * 1000; // 16 hours
-const DYNAMIC_MAX_SIZE = 96; // effectively your natural rolling pool target for now
-const DISCOVERY_BATCH_SIZE = 4; // 4 symbols per cycle
+const DYNAMIC_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+const DYNAMIC_MAX_SIZE = 500;
+const DISCOVERY_BATCH_SIZE = 25;
+const DISCOVERY_ESTIMATED_MAX_CALLS = 26; // 1 batch quote + up to 25 history fills
+const DISCOVERY_MIN_HEADROOM_CALLS = 100;
 
 let payloadCache: { at: number; payload: any } | null = null;
 
@@ -130,6 +133,7 @@ function toNum(x: unknown): number | null {
 function uniqUpper(arr: string[]) {
   const out: string[] = [];
   const seen = new Set<string>();
+
   for (const s of arr) {
     const u = String(s).trim().toUpperCase();
     if (!u) continue;
@@ -137,23 +141,8 @@ function uniqUpper(arr: string[]) {
     seen.add(u);
     out.push(u);
   }
+
   return out;
-}
-
-function getEasternParts(date = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(date);
-
-  const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
-  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
-  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
-
-  return { weekday, hour, minute };
 }
 
 function getEasternDayKey(date = new Date()) {
@@ -171,13 +160,14 @@ function getEasternDayKey(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
-
 function shuffleArray<T>(arr: T[]) {
   const out = [...arr];
+
   for (let i = out.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [out[i], out[j]] = [out[j], out[i]];
   }
+
   return out;
 }
 
@@ -198,124 +188,35 @@ function ensureDailyShuffledMasterList(state: RedisDiscoveryState) {
   state.pointer = 0;
 }
 
-function isDiscoveryWindowOpen(date = new Date()) {
-  const { weekday, hour, minute } = getEasternParts(date);
-
-  if (weekday === "Sat" || weekday === "Sun") return false;
-
-  const totalMinutes = hour * 60 + minute;
-  const start = 9 * 60;
-  const end = 17 * 60;
-
-  return totalMinutes >= start && totalMinutes <= end;
-}
-
 function extractQuotesFromBatch(json: any): Quote[] {
-  if (!json || typeof json !== "object") return [];
+  if (!Array.isArray(json)) return [];
 
-  if (json.status === "error") return [];
-  if (typeof json.code === "number" && json.message) return [];
-
-  if (Array.isArray(json.data)) return json.data as Quote[];
-  if (Array.isArray(json)) return json as Quote[];
-
-  const out: Quote[] = [];
-  for (const [, v] of Object.entries(json)) {
-    if (!v || typeof v !== "object") continue;
-    const vv: any = v;
-
-    if (vv.status === "ok" && vv.data && typeof vv.data === "object") {
-      if (typeof vv.data.symbol === "string") out.push(vv.data as Quote);
-      continue;
-    }
-
-    if (typeof vv.symbol === "string") {
-      if (vv.status === "error") continue;
-      out.push(vv as Quote);
-      continue;
-    }
-  }
-
-  return out;
+  return json
+    .filter((item) => item && typeof item === "object" && typeof item.symbol === "string")
+    .map((item) => item as Quote);
 }
 
 async function fetchQuoteBatch(symbols: string[], apiKey: string) {
   const list = symbols.join(",");
-  const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(list)}&apikey=${encodeURIComponent(apiKey)}`;
+  const url = `https://financialmodelingprep.com/stable/batch-quote?symbols=${encodeURIComponent(
+    list
+  )}&apikey=${encodeURIComponent(apiKey)}`;
 
- const res = await fetch(url, { next: { revalidate: 300 } });
+  const res = await fetch(url, {
+    cache: "no-store",
+    headers: {
+      accept: "application/json,text/plain;q=0.9,*/*;q=0.8",
+    },
+  });
+
   const json = await res.json().catch(() => null);
 
   return { ok: res.ok, status: res.status, json, url };
 }
 
-function getEasternDateParts(date = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(date);
-
-  return {
-    year: Number(parts.find((p) => p.type === "year")?.value ?? "0"),
-    month: Number(parts.find((p) => p.type === "month")?.value ?? "1"),
-    day: Number(parts.find((p) => p.type === "day")?.value ?? "1"),
-    weekday: parts.find((p) => p.type === "weekday")?.value ?? "",
-    hour: Number(parts.find((p) => p.type === "hour")?.value ?? "0"),
-    minute: Number(parts.find((p) => p.type === "minute")?.value ?? "0"),
-  };
-}
-
-function getNextTradingCarryExpiryUtcMs(fromMs: number) {
-  const fromDate = new Date(fromMs);
-  const { year, month, day, weekday, hour, minute } = getEasternDateParts(fromDate);
-  const totalMinutes = hour * 60 + minute;
-  const closeMinutes = 16 * 60;
-
-  const baseUtc = new Date(Date.UTC(year, month - 1, day));
-
-  let daysToAdd = 1;
-
-  if (weekday === "Fri" && totalMinutes >= closeMinutes) {
-    daysToAdd = 3;
-  } else if (weekday === "Sat") {
-    daysToAdd = 2;
-  } else if (weekday === "Sun") {
-    daysToAdd = 1;
-  } else if (weekday === "Fri") {
-    daysToAdd = 3;
-  } else {
-    daysToAdd = 1;
-  }
-
-  baseUtc.setUTCDate(baseUtc.getUTCDate() + daysToAdd);
-
-  const carryYear = baseUtc.getUTCFullYear();
-  const carryMonth = String(baseUtc.getUTCMonth() + 1).padStart(2, "0");
-  const carryDay = String(baseUtc.getUTCDate()).padStart(2, "0");
-
-  const easternCarryCutoff = `${carryYear}-${carryMonth}-${carryDay}T11:30:00-05:00`;
-  return new Date(easternCarryCutoff).getTime();
-}
-
 function shouldKeepDynamicRecord(record: DynamicQuoteRecord, now: number) {
   if (!record) return false;
-
-  const ageMs = now - record.discoveredAt;
-
-  if (isDiscoveryWindowOpen(new Date(now))) {
-    if (ageMs <= OPEN_MARKET_TTL_MS) return true;
-  } else {
-    if (ageMs <= CLOSED_MARKET_TTL_MS) return true;
-  }
-
-  const carryExpiryUtcMs = getNextTradingCarryExpiryUtcMs(record.discoveredAt);
-  return now <= carryExpiryUtcMs;
+  return now - record.discoveredAt <= DYNAMIC_TTL_MS;
 }
 
 function pruneDynamicCache(state: RedisDiscoveryState, now: number) {
@@ -338,9 +239,7 @@ function pruneDynamicCache(state: RedisDiscoveryState, now: number) {
 
 function getNextDiscoveryBatch(state: RedisDiscoveryState) {
   const curatedSet = new Set(uniqUpper(CURATED_UNIVERSE));
-  const master = Array.isArray(state.shuffledMasterList)
-    ? state.shuffledMasterList
-    : [];
+  const master = Array.isArray(state.shuffledMasterList) ? state.shuffledMasterList : [];
 
   if (!master.length) return [];
 
@@ -368,33 +267,40 @@ function buildRowsFromQuotes(quotes: Quote[]): Row[] {
   return quotes
     .map((q) => {
       const open = toNum(q.open);
-      const high = toNum(q.high);
-      const low = toNum(q.low);
-      const close = toNum(q.close);
-      const pct = toNum(q.percent_change);
+      const high = toNum(q.dayHigh);
+      const low = toNum(q.dayLow);
+      const last = toNum(q.price);
+      const pct = toNum(q.changesPercentage);
       const vol = toNum(q.volume);
 
       let rangePct: number | null = null;
-      const denom = open && open > 0 ? open : close && close > 0 ? close : null;
-      if (denom && high != null && low != null) rangePct = ((high - low) / denom) * 100;
+      const denom = open && open > 0 ? open : last && last > 0 ? last : null;
+
+      if (denom && high != null && low != null) {
+        rangePct = ((high - low) / denom) * 100;
+      }
 
       return {
-        symbol: String(q.symbol ?? "").toUpperCase(),
+        symbol: String(q.symbol ?? "").trim().toUpperCase(),
         changePct: pct,
         rangePct,
-        last: close,
+        last,
         volume: vol,
       };
     })
-    .filter((r) => r.symbol && (r.last != null || r.changePct != null || r.rangePct != null || r.volume != null));
+    .filter(
+      (r) =>
+        r.symbol &&
+        (r.last != null || r.changePct != null || r.rangePct != null || r.volume != null)
+    );
 }
 
 /* ----------------------------- GET ----------------------------- */
 
 export async function GET() {
-  const apiKey = process.env.TWELVEDATA_API_KEY;
+  const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) {
-    return NextResponse.json({ error: "Missing TWELVEDATA_API_KEY env var." }, { status: 500 });
+    return NextResponse.json({ error: "Missing FMP_API_KEY env var." }, { status: 500 });
   }
 
   const now = Date.now();
@@ -404,36 +310,40 @@ export async function GET() {
 
   pruneDynamicCache(state, now);
 
-  const allowDiscoveryNow =
-    now - state.lastDiscoveryAt >= DISCOVERY_INTERVAL_MS &&
-    (isDiscoveryWindowOpen() || Object.keys(state.dynamic).length === 0);
+  const intervalElapsed = now - state.lastDiscoveryAt >= DISCOVERY_INTERVAL_MS;
+  const hasCapacity = await hasFmpCapacity(
+    DISCOVERY_ESTIMATED_MAX_CALLS,
+    DISCOVERY_MIN_HEADROOM_CALLS
+  );
+  const allowDiscoveryNow = intervalElapsed && hasCapacity;
 
   const debugErrors: any[] = [];
 
-let discoveryRan = false;
-let discoveryReason: string | null = null;
-let attemptedSymbols: string[] = [];
-let historyChecks = 0;
-let historyQualified = 0;
-let historyRejected = 0;
+  let discoveryRan = false;
+  let discoveryReason: string | null = null;
+  let attemptedSymbols: string[] = [];
+  let historyChecks = 0;
+  let historyQualified = 0;
+  let historyRejected = 0;
 
-if (!allowDiscoveryNow) {
-  if (now - state.lastDiscoveryAt < DISCOVERY_INTERVAL_MS) {
-    discoveryReason = "interval_not_elapsed";
-  } else if (!isDiscoveryWindowOpen() && Object.keys(state.dynamic).length > 0) {
-    discoveryReason = "outside_market_hours";
-  } else {
-    discoveryReason = "unknown_block";
+  if (!allowDiscoveryNow) {
+    if (!intervalElapsed) {
+      discoveryReason = "interval_not_elapsed";
+    } else if (!hasCapacity) {
+      discoveryReason = "insufficient_fmp_headroom";
+    } else {
+      discoveryReason = "unknown_block";
+    }
   }
-}
 
   if (allowDiscoveryNow) {
     const nextSymbols = getNextDiscoveryBatch(state);
-attemptedSymbols = nextSymbols;
-discoveryRan = true;
+    attemptedSymbols = nextSymbols;
+    discoveryRan = true;
 
     if (nextSymbols.length > 0) {
       try {
+        await reserveFmpCallSlot();
         const r = await fetchQuoteBatch(nextSymbols, apiKey);
         const quotes = extractQuotesFromBatch(r.json);
 
@@ -441,16 +351,16 @@ discoveryRan = true;
           const symbol = String(q.symbol ?? "").trim().toUpperCase();
           if (!symbol) continue;
 
-historyChecks++;
+          historyChecks++;
 
-const hasQualifiedHistory = await ensureQualifiedHistory(symbol);
+          const hasQualifiedHistory = await ensureQualifiedHistory(symbol);
 
-if (hasQualifiedHistory) {
-  historyQualified++;
-} else {
-  historyRejected++;
-  continue;
-}
+          if (hasQualifiedHistory) {
+            historyQualified++;
+          } else {
+            historyRejected++;
+            continue;
+          }
 
           state.dynamic[symbol] = {
             quote: q,
@@ -515,21 +425,24 @@ if (hasQualifiedHistory) {
     .sort((a, b) => b.rangePct! - a.rangePct!)
     .slice(0, 30);
 
-  const isRateLimited = debugErrors.some(
-    (e) =>
-      typeof e?.message === "string" &&
-      e.message.toLowerCase().includes("run out of api credits")
-  );
+  const isRateLimited = debugErrors.some((e) => {
+    const message = typeof e?.message === "string" ? e.message.toLowerCase() : "";
+    return (
+      message.includes("run out of api credits") ||
+      message.includes("rate limit") ||
+      message.includes("too many requests")
+    );
+  });
 
   const dynamicSymbols = Object.keys(state.dynamic).sort();
 
   const payload = {
     updatedAt: new Date().toISOString(),
     scope: "Rolling Dynamic Discovery Universe",
-    provider: "twelvedata",
+    provider: "fmp",
     curatedUniverseSize: uniqUpper(CURATED_UNIVERSE).length,
     masterListSize: uniqUpper(DISCOVERY_MASTER_LIST).length,
-    dynamicUniverseSize: Object.keys(state.dynamic).length,
+    dynamicUniverseSize: dynamicSymbols.length,
     dynamicSymbols,
     quotesReturned: quotes.length,
     rowsBuilt: rows.length,
@@ -540,18 +453,19 @@ if (hasQualifiedHistory) {
     topRanges,
 
     debug: {
-historyChecks,
-historyQualified,
-historyRejected,
-discoveryRan,
-discoveryReason,
-attemptedSymbols,
+      historyChecks,
+      historyQualified,
+      historyRejected,
+      discoveryRan,
+      discoveryReason,
+      attemptedSymbols,
       discoveryIntervalMinutes: DISCOVERY_INTERVAL_MS / 60000,
       discoveryBatchSize: DISCOVERY_BATCH_SIZE,
-      openMarketTtlMinutes: OPEN_MARKET_TTL_MS / 60000,
-      closedMarketTtlMinutes: CLOSED_MARKET_TTL_MS / 60000,
+      dynamicTtlMinutes: DYNAMIC_TTL_MS / 60000,
       dynamicMaxSize: DYNAMIC_MAX_SIZE,
-      discoveryWindowOpen: isDiscoveryWindowOpen(),
+      estimatedDiscoveryMaxCalls: DISCOVERY_ESTIMATED_MAX_CALLS,
+      requiredHeadroomCalls: DISCOVERY_MIN_HEADROOM_CALLS,
+      fmpCapacityAvailable: hasCapacity,
       pointer: state.pointer,
       lastDiscoveryAt:
         state.lastDiscoveryAt > 0
