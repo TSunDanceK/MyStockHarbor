@@ -14,6 +14,9 @@ const REDIS_KEY = "msh:market:state";
 type Quote = {
   symbol: string;
   price?: number | string;
+  open?: number | string;
+  dayHigh?: number | string;
+  dayLow?: number | string;
   change?: number | string;
   changesPercentage?: number | string;
   volume?: number | string;
