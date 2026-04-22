@@ -169,8 +169,8 @@ let memo:
     }
   | null = null;
 
-const CACHE_SECONDS = 60 * 6;
-const STALE_SECONDS = 60 * 6;
+const CACHE_SECONDS = 60 * 6; // 6 minutes
+const STALE_SECONDS = 60 * 6; // 6 minutes
 const MEMORY_CACHE_MS = 60_000;
 
 const PICKERS_REDIS_KEY = "msh:pickers:v4:main";
