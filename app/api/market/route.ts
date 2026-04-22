@@ -39,7 +39,7 @@ const DISCOVERY_INTERVAL_MS = 6 * 60 * 1000; // 5 minutes
 const DYNAMIC_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 const DYNAMIC_MAX_SIZE = 500;
 const DISCOVERY_BATCH_SIZE = 25;
-const DISCOVERY_ESTIMATED_MAX_CALLS = 26; // 1 batch quote + up to 25 history fills
+const DISCOVERY_ESTIMATED_MAX_CALLS = 50; // up to 25 quote calls + up to 25 history fills
 const DISCOVERY_MIN_HEADROOM_CALLS = 100;
 
 let payloadCache: { at: number; payload: any } | null = null;
@@ -186,19 +186,32 @@ function ensureDailyShuffledMasterList(state: RedisDiscoveryState) {
   state.pointer = 0;
 }
 
-function extractQuotesFromBatch(json: any): Quote[] {
-  if (!Array.isArray(json)) return [];
+function extractSingleQuote(json: any, fallbackSymbol: string): Quote | null {
+  if (!json || typeof json !== "object") return null;
 
-  return json
-    .filter((item) => item && typeof item === "object" && typeof item.symbol === "string")
-    .map((item) => item as Quote);
+  const symbol =
+    typeof json.symbol === "string" && json.symbol.trim()
+      ? json.symbol.trim().toUpperCase()
+      : fallbackSymbol.trim().toUpperCase();
+
+  if (!symbol) return null;
+
+  return {
+    symbol,
+    price: json.price,
+    open: json.open,
+    dayHigh: json.dayHigh,
+    dayLow: json.dayLow,
+    changesPercentage: json.changesPercentage,
+    volume: json.volume,
+    name: json.name,
+  };
 }
 
-async function fetchQuoteBatch(symbols: string[], apiKey: string) {
-  const list = symbols.join(",");
-const url = `https://financialmodelingprep.com/stable/batch-quote-short?symbols=${encodeURIComponent(
-  list
-)}&apikey=${encodeURIComponent(apiKey)}`;
+async function fetchSingleQuote(symbol: string, apiKey: string) {
+  const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(
+    symbol
+  )}&apikey=${encodeURIComponent(apiKey)}`;
 
   const res = await fetch(url, {
     cache: "no-store",
@@ -338,11 +351,30 @@ export async function GET() {
 
     if (nextSymbols.length > 0) {
       try {
-        await reserveFmpCallSlot();
-        const r = await fetchQuoteBatch(nextSymbols, apiKey);
-        const quotes = extractQuotesFromBatch(r.json);
+        for (const attemptedSymbol of nextSymbols) {
+          await reserveFmpCallSlot();
+          const r = await fetchSingleQuote(attemptedSymbol, apiKey);
 
-        for (const q of quotes) {
+          const rawJson = Array.isArray(r.json) ? r.json[0] : r.json;
+          const q = extractSingleQuote(rawJson, attemptedSymbol);
+
+          if (!r.ok || !q) {
+            const msg =
+              (rawJson && (rawJson.message || rawJson.error)) ||
+              (typeof r.text === "string" ? r.text.slice(0, 300) : null) ||
+              null;
+
+            debugErrors.push({
+              httpOk: r.ok,
+              httpStatus: r.status,
+              message: msg,
+              sampleKeys:
+                rawJson && typeof rawJson === "object" ? Object.keys(rawJson).slice(0, 8) : null,
+              attemptedSymbols: [attemptedSymbol],
+            });
+            continue;
+          }
+
           const symbol = String(q.symbol ?? "").trim().toUpperCase();
           if (!symbol) continue;
 
@@ -361,22 +393,6 @@ export async function GET() {
             quote: q,
             discoveredAt: now,
           };
-        }
-
-        if (!quotes.length) {
-          const msg =
-            (r.json && (r.json.message || r.json.error)) ||
-            (r.json && r.json.status === "error" ? "status:error" : null) ||
-            null;
-
-          debugErrors.push({
-            httpOk: r.ok,
-            httpStatus: r.status,
-            message: msg ?? (typeof r.text === "string" ? r.text.slice(0, 300) : null),
-            sampleKeys:
-              r.json && typeof r.json === "object" ? Object.keys(r.json).slice(0, 8) : null,
-            attemptedSymbols: nextSymbols,
-          });
         }
       } catch (e: any) {
         debugErrors.push({
