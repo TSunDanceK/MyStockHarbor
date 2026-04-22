@@ -188,7 +188,7 @@ function getFmpCounterKey(now = new Date()) {
   return `${FMP_CALL_COUNTER_PREFIX}:${bucket}`;
 }
 
-async function reserveFmpCallSlot() {
+export async function reserveFmpCallSlot() {
   if (!redis) return;
 
   const startedAt = Date.now();
@@ -219,6 +219,22 @@ async function reserveFmpCallSlot() {
 
     await sleep(FMP_WAIT_STEP_MS);
   }
+}
+
+export async function getFmpMinuteUsage() {
+  if (!redis) return 0;
+
+  try {
+    const current = await redis.get<number>(getFmpCounterKey(new Date()));
+    return typeof current === "number" && Number.isFinite(current) ? current : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export async function hasFmpCapacity(requiredCalls = 1, minHeadroomCalls = 0) {
+  const current = await getFmpMinuteUsage();
+  return current + requiredCalls + minHeadroomCalls <= FMP_SAFE_CALLS_PER_MINUTE;
 }
 
 async function acquireHistoryLock(symbol: string) {
