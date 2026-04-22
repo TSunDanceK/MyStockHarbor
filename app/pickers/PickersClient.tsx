@@ -321,7 +321,11 @@ export default function PickersClient() {
     setErr(null);
 
     try {
-      const res = await fetch(force ? "/api/pickers?force=1" : "/api/pickers");
+const url = force
+  ? `/api/pickers?force=1&t=${Date.now()}`
+  : `/api/pickers?t=${Date.now()}`;
+
+const res = await fetch(url, { cache: "no-store" });
 
       if (!res.ok) throw new Error("Pickers API failed");
 
@@ -383,7 +387,9 @@ export default function PickersClient() {
       setErr(null);
 
       try {
-        const res = await fetch("/api/pickers");
+const res = await fetch(`/api/pickers?t=${Date.now()}`, {
+  cache: "no-store",
+});
         if (!res.ok) throw new Error("Pickers API failed");
 
         const data = (await res.json()) as PickersPayload;
