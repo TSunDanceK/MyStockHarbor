@@ -14,9 +14,7 @@ const REDIS_KEY = "msh:market:state";
 type Quote = {
   symbol: string;
   price?: number | string;
-  open?: number | string;
-  dayHigh?: number | string;
-  dayLow?: number | string;
+  change?: number | string;
   changesPercentage?: number | string;
   volume?: number | string;
   name?: string;
@@ -198,9 +196,9 @@ function extractQuotesFromBatch(json: any): Quote[] {
 
 async function fetchQuoteBatch(symbols: string[], apiKey: string) {
   const list = symbols.join(",");
-  const url = `https://financialmodelingprep.com/stable/batch-quote?symbols=${encodeURIComponent(
-    list
-  )}&apikey=${encodeURIComponent(apiKey)}`;
+const url = `https://financialmodelingprep.com/stable/batch-quote-short?symbols=${encodeURIComponent(
+  list
+)}&apikey=${encodeURIComponent(apiKey)}`;
 
   const res = await fetch(url, {
     cache: "no-store",
@@ -209,9 +207,16 @@ async function fetchQuoteBatch(symbols: string[], apiKey: string) {
     },
   });
 
-  const json = await res.json().catch(() => null);
+  const text = await res.text();
+  let json: any = null;
 
-  return { ok: res.ok, status: res.status, json, url };
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = null;
+  }
+
+  return { ok: res.ok, status: res.status, json, text, url };
 }
 
 function shouldKeepDynamicRecord(record: DynamicQuoteRecord, now: number) {
@@ -266,24 +271,14 @@ function getNextDiscoveryBatch(state: RedisDiscoveryState) {
 function buildRowsFromQuotes(quotes: Quote[]): Row[] {
   return quotes
     .map((q) => {
-      const open = toNum(q.open);
-      const high = toNum(q.dayHigh);
-      const low = toNum(q.dayLow);
       const last = toNum(q.price);
       const pct = toNum(q.changesPercentage);
       const vol = toNum(q.volume);
 
-      let rangePct: number | null = null;
-      const denom = open && open > 0 ? open : last && last > 0 ? last : null;
-
-      if (denom && high != null && low != null) {
-        rangePct = ((high - low) / denom) * 100;
-      }
-
       return {
         symbol: String(q.symbol ?? "").trim().toUpperCase(),
         changePct: pct,
-        rangePct,
+        rangePct: null,
         last,
         volume: vol,
       };
@@ -377,7 +372,7 @@ export async function GET() {
           debugErrors.push({
             httpOk: r.ok,
             httpStatus: r.status,
-            message: msg,
+            message: msg ?? (typeof r.text === "string" ? r.text.slice(0, 300) : null),
             sampleKeys:
               r.json && typeof r.json === "object" ? Object.keys(r.json).slice(0, 8) : null,
             attemptedSymbols: nextSymbols,
