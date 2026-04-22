@@ -1331,14 +1331,20 @@ function pLimit(limit: number) {
 
 /* ------------------------------ fetchers ----------------------------- */
 
-async function fetchJSON<T>(url: string) {
-  const res = await fetch(url, { next: { revalidate: 300 } });
+async function fetchJSON<T>(url: string, forceFresh = false) {
+  const res = await fetch(
+    forceFresh ? `${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}` : url,
+    forceFresh
+      ? { cache: "no-store" }
+      : { next: { revalidate: 300 } }
+  );
+
   if (!res.ok) throw new Error(`Fetch failed: ${url}`);
   return (await res.json()) as T;
 }
 
-async function fetchMarket(origin: string) {
-  return fetchJSON<MarketPayload>(`${origin}/api/market`);
+async function fetchMarket(origin: string, forceFresh = false) {
+  return fetchJSON<MarketPayload>(`${origin}/api/market`, forceFresh);
 }
 
 async function fetchHistory(symbol: string, days: number) {
@@ -1375,8 +1381,8 @@ const UNIVERSE_CAP = 200;
 
 /* --------------------------- builder function ------------------------ */
 
-async function buildPickersPayload(origin: string): Promise<PickersPayload> {
-  const market = await fetchMarket(origin);
+async function buildPickersPayload(origin: string, forceFreshMarket = false): Promise<PickersPayload> {
+  const market = await fetchMarket(origin, forceFreshMarket);
 
   const topTraded = (market?.topTraded ?? [])
     .map((x) => x.symbol)
@@ -1953,7 +1959,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const origin = originFromReq(req);
-    const data = await buildPickersPayload(origin);
+    const data = await buildPickersPayload(origin, forceRefresh);
 
     memo = { ts: now, data };
     await writePickersCache(data);
