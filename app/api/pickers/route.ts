@@ -1831,13 +1831,13 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
   };
 
   const sections: PickerSection[] = [
-    buildSection({
-      title: "Hot Market Names Right Now",
-      description:
-        "Names coming from the live dynamic universe that are also triggering meaningful technical conditions right now.",
-      source: hotDynamicNames,
-      take: 20,
-    }),
+buildSection({
+  title: "Hot Market Names Right Now",
+  description:
+    "Stocks from the dynamic universe showing multiple active technical signals, ranked by signal strength and overall activity.",
+  source: hotDynamicNames,
+  take: 20,
+}),
     buildSection({
       title: "Oversold Stocks Today (Potential Rebound Setups)",
       description:
