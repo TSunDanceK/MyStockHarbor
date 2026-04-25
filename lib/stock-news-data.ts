@@ -1745,8 +1745,6 @@ async function getAiScoredNews(args: {
     "Only choose Positive or Strong Positive earnings when there are actual reported results with clear beats, raised guidance, strong revenue/EPS, strong margins, improving profitability, or clearly positive financial results.",
     "If revenue declined, revenue missed guidance, losses remain large, subscribers/users declined, demand weakened, margins were pressured, or guidance disappointed, earningsScore should be Weak or Mixed unless a stronger actual beat-and-raise clearly outweighs those negatives.",
     "Use positives and negatives to explain the score. Positives must be meaningful. Negatives must include the real risk drivers. Keep the language concise and beginner-friendly. Do not invent facts.",
-    "Do not ignore older relevant headlines if they contain major risk signals. Insider selling, executive share sales, lawsuits, investigations, settlements, weak guidance, missed estimates, revenue decline, or large losses should still affect the score even if they appear lower in the supplied headline list.",
-    "If the newest headlines are mostly irrelevant noise but older relevant headlines contain bearish company-specific risks, the score should lean Neutral to Bearish, not Bullish.",
   ].join(" ");
 
   const userPrompt = JSON.stringify({
