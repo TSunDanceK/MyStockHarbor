@@ -5,6 +5,7 @@ import AffiliateLink from "../../components/AffiliateLink";
 import SPXChartClient from "./SPXChartClient";
 import { getDailyHistory } from "@/lib/server/historyCache";
 import { getSpxMarketAnalysis } from "@/lib/ai-market";
+import { buildMarketMoodScore } from "@/lib/market-mood";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +65,58 @@ async function getSpxChartPoints(): Promise<Point[]> {
   } catch {
     return [];
   }
+}
+
+function movingAverage(values: number[], window: number): number | null {
+  if (values.length < window) return null;
+
+  const slice = values.slice(-window);
+  const sum = slice.reduce((total, value) => total + value, 0);
+
+  return sum / window;
+}
+
+function rsiWilder(values: number[], period = 14): number | null {
+  if (values.length < period + 1) return null;
+
+  let gain = 0;
+  let loss = 0;
+
+  for (let i = values.length - period; i < values.length; i++) {
+    const diff = values[i] - values[i - 1];
+    if (diff >= 0) gain += diff;
+    else loss += Math.abs(diff);
+  }
+
+  const avgGain = gain / period;
+  const avgLoss = loss / period;
+
+  if (avgLoss === 0) return 100;
+
+  const rs = avgGain / avgLoss;
+  return 100 - 100 / (1 + rs);
+}
+
+function marketMoodCardStyle(score: number): React.CSSProperties {
+  const tone =
+    score >= 56 ? "green" : score <= 44 ? "red" : "yellow";
+
+  return {
+    borderRadius: 18,
+    border:
+      tone === "green"
+        ? "1px solid rgba(34,197,94,0.26)"
+        : tone === "red"
+        ? "1px solid rgba(248,113,113,0.26)"
+        : "1px solid rgba(250,204,21,0.26)",
+    background:
+      tone === "green"
+        ? "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(7,16,12,0.96))"
+        : tone === "red"
+        ? "linear-gradient(135deg, rgba(248,113,113,0.14), rgba(18,10,10,0.96))"
+        : "linear-gradient(135deg, rgba(250,204,21,0.14), rgba(18,16,8,0.96))",
+    padding: 18,
+  };
 }
 
 function primaryBtn(): React.CSSProperties {
@@ -253,6 +306,19 @@ function topNavIcon(type: "dashboard" | "learn" | "pickers" | "platforms") {
 export default async function SPXPage() {
   const spxChartPoints = await getSpxChartPoints();
   const marketAnalysis = await getSpxMarketAnalysis();
+
+  const closes = spxChartPoints.map((point) => point.close);
+  const lastClose = closes.length ? closes[closes.length - 1] : null;
+  const ma50 = movingAverage(closes, 50);
+  const ma200 = movingAverage(closes, 200);
+  const rsi = rsiWilder(closes, 14);
+
+  const marketMood = buildMarketMoodScore({
+    lastClose,
+    ma50,
+    ma200,
+    rsi,
+  });
 
   return (
     <main
@@ -475,6 +541,42 @@ export default async function SPXPage() {
                   gap: 14,
                 }}
               >
+                <div style={marketMoodCardStyle(marketMood.score)}>
+  <div style={statLabelStyle()}>Market mood</div>
+
+  <div
+    style={{
+      marginTop: 8,
+      fontSize: 42,
+      lineHeight: 1,
+      fontWeight: 950,
+      letterSpacing: "-0.06em",
+    }}
+  >
+    {marketMood.score}/100
+  </div>
+
+  <div
+    style={{
+      marginTop: 10,
+      fontSize: 16,
+      fontWeight: 900,
+    }}
+  >
+    {marketMood.label}
+  </div>
+
+  <div
+    style={{
+      marginTop: 10,
+      fontSize: 14,
+      lineHeight: 1.6,
+      opacity: 0.82,
+    }}
+  >
+    A MyStockHarbor market mood read based on SPX trend, moving-average structure and RSI momentum.
+  </div>
+</div>
                 <div style={statCardStyle()}>
                   <div style={statLabelStyle()}>Bullish factors</div>
                   <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
