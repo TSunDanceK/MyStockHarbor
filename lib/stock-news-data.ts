@@ -1727,9 +1727,10 @@ async function getAiScoredNews(args: {
     "Low-quality positives include: upcoming earnings-date announcements, conference-call notices, generic analyst upside, price-target chatter, vague AI mentions, possible/speculative projects, CEO pay packages, compensation awards, management awards, routine filings, or routine insider-plan activity.",
     "Low-quality positives must not push the stock above Neutral by themselves.",
     "Important bearish signals include: revenue decline, widening loss, large net loss, weak or softening demand, competition pressure, cash burn, delayed profitability, weak guidance, guidance cuts, missed estimates, investigations, lawsuits, recalls, downgrades, insider selling, CFO selling, executive selling, RSU sales, 10b5-1 plans, or stock sales.",
-    "For turnaround, cash-burning, loss-making, or challenged consumer companies, be strict: an earnings beat is not bullish if revenue is falling, losses remain large, demand is weakening, or competition is pressuring the business.",
-    "For those weaker businesses, if real negatives dominate and positives are mostly 'less bad than feared', choose Bearish or Neutral, not Bullish.",
-    "If revenue decline plus large loss or demand weakness appears in the supplied text, the stock should usually be Bearish or at most Neutral unless there is a clearly stronger confirmed catalyst.",
+    "For turnaround, cash-burning, loss-making, or challenged consumer companies, be very strict: an earnings beat is not bullish if revenue is falling, losses remain large, demand is weakening, EPS missed, subscribers/users are soft, or competition is pressuring the business.",
+    "For those weaker businesses, analyst upside, price targets, speculative partnerships, conference-call announcements, and 'less bad than feared' earnings must be treated as weak positives only.",
+    "If revenue decline, large loss, EPS miss, softening demand, or competition pressure appears in the supplied text, the stock should usually be Bearish or Neutral unless there is a clearly stronger confirmed catalyst that directly improves fundamentals.",
+    "If the positive drivers are mostly analyst opinion, projected upside, upcoming earnings dates, routine partnerships, or speculative partnerships while the negatives include real business weakness, choose Neutral or Bearish and keep the score below 50.",
     "For strong AI/platform leaders, do not under-score real confirmed ecosystem expansion simply because one headline mentions a short-term stock slip.",
     "Partnerships are bullish only when they are confirmed and plausibly material. Speculative partnerships, possible involvement, or hype words like AI/chip/project without clear business impact should be Neutral.",
     "Price action in a headline is supporting evidence only. It should not dominate the score unless attached to a real fundamental catalyst.",
@@ -2195,7 +2196,7 @@ const getCachedStockNewsBaseData = unstable_cache(
 
     return buildStockNewsBaseData(parsed.symbol, parsed.options);
   },
-  ["msh-stock-news-base-data-v16"],
+  ["msh-stock-news-base-data-v17"],
   {
     revalidate: 60,
   }
