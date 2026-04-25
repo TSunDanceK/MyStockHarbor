@@ -404,14 +404,19 @@ export default function StockSymbolPageClient({
   const ma200Pct = pctFromBase(lastClose, typeof lastMA200 === "number" ? lastMA200 : null);
 
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        background: "#06080d",
-        color: "#f1f5f9",
-        fontFamily: "system-ui, Arial",
-      }}
-    >
+<main
+  style={{
+    minHeight: "100vh",
+    background:
+      trendScore.passed >= 3
+        ? "radial-gradient(circle at top left, rgba(37,99,235,0.18), transparent 22%), radial-gradient(circle at top right, rgba(34,197,94,0.16), transparent 24%), #06080d"
+        : trendScore.passed === 2
+        ? "radial-gradient(circle at top left, rgba(37,99,235,0.16), transparent 22%), radial-gradient(circle at top right, rgba(250,204,21,0.14), transparent 24%), #06080d"
+        : "radial-gradient(circle at top left, rgba(37,99,235,0.14), transparent 22%), radial-gradient(circle at top right, rgba(239,68,68,0.16), transparent 24%), #06080d",
+    color: "#f1f5f9",
+    fontFamily: "system-ui, Arial",
+  }}
+>
       <div className="wrap">
 
         <section
@@ -450,10 +455,9 @@ export default function StockSymbolPageClient({
 <h1
 style={{
   margin: "14px 0 0 0",
-  fontSize: 36,
-  lineHeight: 1.15,
-  letterSpacing: "-0.02em",
-  fontWeight: 800,
+  fontSize: 34,
+  lineHeight: 1.2,
+  fontWeight: 700,
 }}
 >
   {symbol} Stock Analysis, Chart Overview, Trend Signals & Technical Summary
