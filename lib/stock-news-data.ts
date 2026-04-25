@@ -1783,7 +1783,10 @@ async function getAiScoredNews(args: {
     if (!rawText) return null;
 
     const parsed = JSON.parse(rawText) as {
-      newsScore?: Partial<NewsScoreResult> & { dominantTone?: DominantNewsTone };
+      beyondHeadline?: string;
+      whatItMeans?: string[];
+      newsScore?: number;
+    };
       earningsScore?: Partial<EarningsScoreResult> & { dominantTone?: DominantEarningsTone };
     };
 
