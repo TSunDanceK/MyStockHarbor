@@ -1782,13 +1782,10 @@ async function getAiScoredNews(args: {
     const rawText = extractOpenAiResponseText(data);
     if (!rawText) return null;
 
-    const parsed = JSON.parse(rawText) as {
-      beyondHeadline?: string;
-      whatItMeans?: string[];
-      newsScore?: number;
-    };
-      earningsScore?: Partial<EarningsScoreResult> & { dominantTone?: DominantEarningsTone };
-    };
+const parsed = JSON.parse(rawText) as {
+  newsScore?: Partial<NewsScoreResult> & { dominantTone?: DominantNewsTone };
+  earningsScore?: Partial<EarningsScoreResult> & { dominantTone?: DominantEarningsTone };
+};
 
     const aiNewsScore = applyDominantNewsToneBand(
       clampScore(parsed.newsScore?.score),
