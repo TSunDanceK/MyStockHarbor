@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import type { CSSProperties } from "react";
+import Link from "next/link";
 import { getAiStockAnalysis } from "@/lib/ai-stock-analysis";
 import StockSymbolPageClient from "./StockSymbolPageClient";
 import StockTickerJump from "./StockTickerJump";
@@ -32,8 +34,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-function stockTopBtnStyle(type: "gold" | "green" | "red" | "blue"): React.CSSProperties {
-  const base: React.CSSProperties = {
+function stockTopBtnStyle(type: "gold" | "green" | "red" | "blue"): CSSProperties {
+  const base: CSSProperties = {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
