@@ -1460,10 +1460,10 @@ const articleStyle: React.CSSProperties = {
 
 const articleHeadingStyle: React.CSSProperties = {
   margin: 0,
-  fontSize: 24,
-  fontWeight: 900,
-  lineHeight: 1.15,
-  letterSpacing: "-0.03em",
+  fontSize: 21,
+  fontWeight: 600,
+  lineHeight: 1.3,
+  letterSpacing: "-0.005em",
 };
 
 const articleTextStyle: React.CSSProperties = {
