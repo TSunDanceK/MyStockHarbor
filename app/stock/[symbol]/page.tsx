@@ -143,8 +143,10 @@ export default async function StockPage({ params }: Props) {
             color: "rgba(241,245,249,0.72)",
           }}
         >
-          Explore {upper} stock analysis with chart context, AI business overview,
-          future potential commentary and technical insights from MyStockHarbor.
+Explore {upper} stock analysis with chart context, AI business overview, technical summary,
+moving-average context, momentum indicators and risk signals from MyStockHarbor. This page is
+designed to help traders quickly understand whether {upper} is showing bullish, bearish or
+neutral conditions based on recent market structure.
         </p>
       </section>
 
