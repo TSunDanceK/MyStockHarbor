@@ -32,6 +32,58 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
+function stockTopBtnStyle(type: "gold" | "green" | "red" | "blue"): React.CSSProperties {
+  const base: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    minHeight: 40,
+    padding: "9px 14px",
+    borderRadius: 14,
+    textDecoration: "none",
+    fontSize: 13,
+    fontWeight: 900,
+    lineHeight: 1,
+    whiteSpace: "nowrap",
+    boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+  };
+
+  if (type === "gold") {
+    return {
+      ...base,
+      border: "1px solid rgba(250,204,21,0.34)",
+      background: "linear-gradient(135deg, rgba(250,204,21,0.18), rgba(202,138,4,0.08))",
+      color: "#fef3c7",
+    };
+  }
+
+  if (type === "green") {
+    return {
+      ...base,
+      border: "1px solid rgba(34,197,94,0.30)",
+      background: "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))",
+      color: "#dcfce7",
+    };
+  }
+
+  if (type === "red") {
+    return {
+      ...base,
+      border: "1px solid rgba(248,113,113,0.28)",
+      background: "linear-gradient(135deg, rgba(248,113,113,0.16), rgba(185,28,28,0.08))",
+      color: "#fee2e2",
+    };
+  }
+
+  return {
+    ...base,
+    border: "1px solid rgba(59,130,246,0.30)",
+    background: "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(37,99,235,0.08))",
+    color: "#dbeafe",
+  };
+}
+
 export default async function StockPage({ params }: Props) {
   const { symbol } = await params;
   const upper = symbol.toUpperCase();
@@ -123,35 +175,71 @@ export default async function StockPage({ params }: Props) {
     fontFamily: "system-ui, Arial",
   }}
 >
-        <h1
-          style={{
-            margin: 0,
-            fontSize: 32,
-            lineHeight: 1.1,
-            fontWeight: 950,
-            letterSpacing: "-0.02em",
-          }}
-        >
-          {upper} Stock Analysis, Company Overview & Technical Summary
-        </h1>
+  <h1
+    style={{
+      margin: 0,
+      fontSize: 32,
+      lineHeight: 1.1,
+      fontWeight: 950,
+      letterSpacing: "-0.02em",
+    }}
+  >
+    {upper} Stock Analysis, Company Overview & Technical Summary
+  </h1>
 
-<p
-  style={{
-    margin: "10px 0 0",
-    maxWidth: 720,
-    fontSize: 15,
-    lineHeight: 1.7,
-    color: "rgba(241,245,249,0.72)",
-  }}
->
-Explore {upper} stock analysis with chart context, AI business overview, technical summary,
-moving-average context, momentum indicators and risk signals from MyStockHarbor. This page is
-designed to help traders quickly understand whether {upper} is showing bullish, bearish or
-neutral conditions based on recent market structure.
-</p>
+  <p
+    style={{
+      margin: "10px 0 0",
+      maxWidth: 720,
+      fontSize: 15,
+      lineHeight: 1.7,
+      color: "rgba(241,245,249,0.72)",
+    }}
+  >
+    Explore {upper} stock analysis with chart context, AI business overview, technical summary,
+    moving-average context, momentum indicators and risk signals from MyStockHarbor. This page is
+    designed to help traders quickly understand whether {upper} is showing bullish, bearish or
+    neutral conditions based on recent market structure.
+  </p>
 
-<StockTickerJump currentSymbol={upper} />
+  <div
+    style={{
+      marginTop: 22,
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "flex-end",
+      gap: 18,
+      flexWrap: "wrap",
+    }}
+  >
+    <StockTickerJump currentSymbol={upper} />
 
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "flex-end",
+        gap: 10,
+        flexWrap: "wrap",
+      }}
+    >
+      <Link href={`/?symbol=${encodeURIComponent(upper)}`} style={stockTopBtnStyle("gold")}>
+        📈 Dashboard
+      </Link>
+
+      <Link href="/platforms" style={stockTopBtnStyle("green")}>
+        🏦 Platforms
+      </Link>
+
+      <Link href="/pickers" style={stockTopBtnStyle("red")}>
+        📊 Stock Pickers
+      </Link>
+
+      <Link href="/learn" style={stockTopBtnStyle("blue")}>
+        📘 Learn
+      </Link>
+    </div>
+  </div>
 </section>
 
       <StockSymbolPageClient symbol={upper} aiAnalysis={aiAnalysis} />
