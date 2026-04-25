@@ -1749,7 +1749,7 @@ export default async function StockNewsPage({ params }: Props) {
   }}
 >
   <strong style={{ color: "#93c5fd" }}>HEADLINE TAKE:</strong>{" "}
-  {newsScore.summary}
+  {newsScore.reason}
 </div>
 
             <StockNewsTickerJump currentSymbol={upper} />
@@ -2467,7 +2467,6 @@ function NewsScoreGauge({ newsScore }: { newsScore: NewsScoreResult }) {
         <div style={{ color: "#86efac", textAlign: "right" }}>Bullish</div>
       </div>
 
-      <p style={scoreReasonStyle}>{newsScore.reason}</p>
     </div>
   );
 }
