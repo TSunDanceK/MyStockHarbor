@@ -494,6 +494,45 @@ export default async function SPXPage() {
               <strong>Simple view:</strong> short-term fear is rising, but the bigger question is
               whether the higher-timeframe structure has actually broken down. That is why the weekly chart matters here.
             </div>
+
+      </div>
+
+  <div style={marketMoodCardStyle(marketMood.score)}>
+    <div style={statLabelStyle()}>Market mood</div>
+
+    <div
+      style={{
+        marginTop: 8,
+        fontSize: 42,
+        lineHeight: 1,
+        fontWeight: 950,
+        letterSpacing: "-0.06em",
+      }}
+    >
+      {marketMood.score}/100
+    </div>
+
+    <div
+      style={{
+        marginTop: 10,
+        fontSize: 16,
+        fontWeight: 900,
+      }}
+    >
+      {marketMood.label}
+    </div>
+
+    <div
+      style={{
+        marginTop: 10,
+        fontSize: 14,
+        lineHeight: 1.6,
+        opacity: 0.82,
+      }}
+    >
+      MyStockHarbor mood read based on SPX trend, moving averages and RSI momentum.
+    </div>
+  </div>
           </section>
 
           {marketAnalysis ? (
@@ -979,12 +1018,17 @@ export default async function SPXPage() {
         .topNavShowMobile {
           display: none;
         }
+        
 
         @media (max-width: 900px) {
           .spxTopGrid {
             grid-template-columns: 1fr !important;
           }
-
+@media (max-width: 900px) {
+  .spxHeroGrid {
+    grid-template-columns: 1fr !important;
+  }
+}
           .spxTwoCol {
             grid-template-columns: 1fr !important;
           }
