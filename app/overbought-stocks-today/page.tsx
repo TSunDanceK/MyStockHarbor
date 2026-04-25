@@ -489,7 +489,7 @@ export default async function OverboughtStocksTodayPage() {
                 letterSpacing: "-0.05em",
               }}
             >
-              Overbought Stocks Today
+              Overbought Stocks Today (Potential Pullback Setups)
             </h1>
 
             <p
@@ -502,10 +502,10 @@ export default async function OverboughtStocksTodayPage() {
                 maxWidth: 760,
               }}
             >
-              This page shows stocks currently screening as overbought using live
-              MyStockHarbor picker data. It is built for traders who want to
-              review potential pullback setups, identify stretched charts, and
-              quickly inspect whether strength may be becoming vulnerable.
+Explore overbought stocks today using live MyStockHarbor data. These stocks are
+showing signs of recent upside extension and may present potential pullback setups
+if momentum begins to fade. Use this page to quickly identify stocks that could
+be approaching exhaustion, resistance or short-term stretch zones.
             </p>
 
             <p
