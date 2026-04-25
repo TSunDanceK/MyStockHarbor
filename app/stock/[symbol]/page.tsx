@@ -205,6 +205,7 @@ export default async function StockPage({ params }: Props) {
   </p>
 
   <div
+    className="stockHeaderControlRow"
     style={{
       marginTop: 22,
       display: "flex",
@@ -217,6 +218,7 @@ export default async function StockPage({ params }: Props) {
     <StockTickerJump currentSymbol={upper} />
 
     <div
+      className="stockHeaderNavRow"
       style={{
         display: "flex",
         alignItems: "center",
@@ -242,6 +244,28 @@ export default async function StockPage({ params }: Props) {
       </Link>
     </div>
   </div>
+</section>
+
+        <style>{`
+    @media (max-width: 820px) {
+      .stockHeaderControlRow {
+        flex-direction: column-reverse !important;
+        align-items: stretch !important;
+      }
+
+      .stockHeaderNavRow {
+        width: 100% !important;
+        justify-content: stretch !important;
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 10px !important;
+      }
+
+      .stockHeaderNavRow a {
+        width: 100% !important;
+      }
+    }
+  `}</style>
 </section>
 
       <StockSymbolPageClient symbol={upper} aiAnalysis={aiAnalysis} />
