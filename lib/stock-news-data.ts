@@ -1137,12 +1137,13 @@ function getEarningsQualityGuardrails(items: NewsItem[]) {
   const newerRoutineAnnouncementExists =
     newestRoutineTime > 0 && (!newestActualTime || newestRoutineTime > newestActualTime);
 
+  // If the latest earnings-related item is only an upcoming earnings date/call,
+  // the previous earnings result should not keep driving a bullish/weak earnings tone.
+  // In that case, treat earnings as stale/no clear current read.
   const staleActualResults =
     !actualResults.length ||
     (typeof newestActualAgeDays === "number" && newestActualAgeDays > 75) ||
-    (newerRoutineAnnouncementExists &&
-      typeof newestActualAgeDays === "number" &&
-      newestActualAgeDays > 35);
+    newerRoutineAnnouncementExists;
 
   let earningsCap: number | null = null;
   let earningsFloor: number | null = null;
