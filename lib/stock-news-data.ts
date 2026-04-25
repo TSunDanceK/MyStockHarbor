@@ -958,19 +958,34 @@ function getAiScoreGuardrails(items: NewsItem[]) {
         "supply deal",
         "chip deal",
         "ai chip deal",
+        "terafab",
+        "launch of",
+        "launches",
+        "joining the project",
+        "joins the project",
+        "joins terafab",
+        "applied materials joining",
+        "intel joining",
+        "confirmed partner",
+        "major partner",
       ]) ||
-      (containsAny(text, ["partnership", "joins", "deal", "project", "collaboration"]) &&
-        containsAny(text, ["ai", "chip", "data center", "major", "tesla", "nvidia", "amazon", "microsoft", "meta", "google"]) &&
+      (containsAny(text, ["partnership", "joins", "joining", "deal", "project", "launch", "collaboration", "terafab"]) &&
+        containsAny(text, ["ai", "chip", "semiconductor", "data center", "major", "tesla", "nvidia", "amazon", "microsoft", "meta", "google", "intel", "applied materials"]) &&
         !speculative);
 
     const weakBullish = analystOnly || speculative;
 
     const bearish = containsAny(text, [
       "insider sale",
+      "insider resale",
       "stock sale",
       "share sale",
       "sells shares",
       "sold shares",
+      "10b5-1",
+      "rsu sale",
+      "restricted stock",
+      "coo executes",
       "weak demand",
       "softening demand",
       "demand pressure",
@@ -1033,10 +1048,12 @@ function getAiScoreGuardrails(items: NewsItem[]) {
   let newsCap: number | null = null;
   let earningsCap: number | null = null;
 
-  if (strongBullishCatalysts === 0 && bearishCatalysts >= 1) {
-    newsCap = 45;
+  if (strongBullishCatalysts === 0 && bearishCatalysts >= 2) {
+    newsCap = 42;
+  } else if (strongBullishCatalysts === 0 && bearishCatalysts >= 1) {
+    newsCap = 48;
   } else if (strongBullishCatalysts === 0 && weakBullishOnlyCatalysts >= 1) {
-    newsCap = 58;
+    newsCap = 56;
   }
 
   if (actualEarningsResultCatalysts === 0) {
@@ -1100,8 +1117,21 @@ function getCatalystFloors(items: NewsItem[]) {
     "major deal",
     "customer win",
     "confirmed partnership",
+    "major partnership",
+    "supply deal",
+    "chip deal",
+    "ai chip deal",
+    "terafab",
+    "launch of",
+    "launches",
+    "joining the project",
+    "joins the project",
+    "joins terafab",
+    "applied materials joining",
+    "intel joining",
     "ai demand",
     "data center demand",
+    "foundry ambitions",
   ];
 
   const bearishTerms = [
@@ -1119,6 +1149,14 @@ function getCatalystFloors(items: NewsItem[]) {
     "probe",
     "lawsuit",
     "recall",
+    "insider resale",
+    "insider sale",
+    "stock sale",
+    "share sale",
+    "10b5-1",
+    "softening demand",
+    "weak demand",
+    "competition",
   ];
 
   const earningsTerms = [
@@ -1138,7 +1176,9 @@ function getCatalystFloors(items: NewsItem[]) {
   for (const item of relevant) {
     const text = headlineText(item);
     const isEarnings = containsAny(text, earningsTerms);
-    const bullish = containsAny(text, bullishTerms);
+    const speculative = containsAny(text, ["speculation", "speculative", "rumor", "rumour", "may ", "could ", "might ", "potential", "possible"]);
+    const analystOnly = containsAny(text, ["analyst", "price target", "upside", "projected upside", "rating"]);
+    const bullish = containsAny(text, bullishTerms) && !speculative && !analystOnly;
     const bearish = containsAny(text, bearishTerms);
 
     if (bullish) bullishCatalysts += 1;
@@ -1151,10 +1191,11 @@ function getCatalystFloors(items: NewsItem[]) {
   let newsFloor: number | null = null;
   let earningsFloor: number | null = null;
 
-  if (bullishCatalysts >= 2 && bearishCatalysts === 0) newsFloor = 76;
-  else if (bullishCatalysts >= 1 && bearishCatalysts === 0) newsFloor = 70;
-  else if (bullishCatalysts >= 2 && bearishCatalysts <= 1) newsFloor = 72;
-  else if (bullishCatalysts >= 1 && bearishCatalysts <= 1) newsFloor = 64;
+  if (bullishCatalysts >= 2 && bearishCatalysts === 0) newsFloor = 78;
+  else if (bullishCatalysts >= 1 && bearishCatalysts === 0) newsFloor = 72;
+  else if (bullishCatalysts >= 2 && bearishCatalysts <= 1) newsFloor = 74;
+  else if (bullishCatalysts >= 1 && bearishCatalysts <= 1) newsFloor = 68;
+  else if (bullishCatalysts >= 1 && bearishCatalysts <= 2) newsFloor = 64;
 
   if (bullishEarningsCatalysts >= 2 && bearishEarningsCatalysts === 0) earningsFloor = 78;
   else if (bullishEarningsCatalysts >= 1 && bearishEarningsCatalysts === 0) earningsFloor = 72;
@@ -1258,12 +1299,13 @@ async function getAiScoredNews(args: {
     "First identify whether there is a real catalyst. Real bullish catalysts include: earnings beat, revenue or EPS above estimates, raised guidance, shares rallying after results, a confirmed major customer win, a confirmed major deal, strong demand data, or a meaningful strategic partnership. " +
     "Weak positives include: analyst price targets, projected upside, routine earnings-date announcements, routine insider/RSU filings, partnership speculation, merger rumours, or vague optimism. Weak positives should not create a bullish score by themselves. " +
     "If headlines are mostly routine, speculative, or analyst-opinion based, keep the news score near neutral or below neutral even when the wording sounds optimistic. " +
-    "Do NOT score above 60 unless there is at least one real bullish catalyst. Do NOT score above 70 unless the real catalyst clearly dominates the risk headlines. " +
-    "Insider selling, softening demand, intensifying competition, weak guidance, misses, liquidity stress, investigations, recalls, lawsuits, and bankruptcy risk are bearish catalysts. " +
+    "Use catalyst bands: if there is no real bullish catalyst, keep the score in the 35-60 range and usually below 50 when real bearish catalysts are present. If there is a real bullish catalyst and only secondary risks, score 65-78. If a real bullish catalyst clearly dominates and the market reaction or strategic impact is strong, score 75-85. Do not stay near neutral when a genuine major catalyst is present. " +
+    "Do NOT score above 60 unless there is at least one real bullish catalyst. Do NOT score above 70 unless the real catalyst clearly dominates the risk headlines. But if it does dominate, lean into the bullish range rather than using a cautious neutral score. " +
+    "Insider selling, 10b5-1 stock sales, RSU resale notices, softening demand, intensifying competition, weak guidance, misses, liquidity stress, investigations, recalls, lawsuits, and bankruptcy risk are bearish catalysts. " +
     "Analyst upside and absence of severe negative news are not enough to offset weak demand, insider selling, or competition. " +
     "Layoffs, cost cuts, restructurings, asset sales, and turnaround plans are mixed: they are bearish if paired with weak demand or missed guidance, but can be neutral-to-bullish if the main headline is a beat, better guidance, or a credible turnaround plan. " +
     "For earningsScore, only score strongly positive when there are actual earnings results, revenue/EPS beats, strong guidance, or clearly positive earnings commentary. An announcement of an upcoming earnings date or conference call is neutral, not positive. " +
-    "If there are no actual earnings-result headlines, keep earningsScore between 45 and 55 unless there is clear earnings-related weakness. " +
+    "If there are no actual earnings-result headlines, keep earningsScore between 45 and 55 unless there is clear earnings-related weakness. If there is an actual earnings beat, strong revenue/EPS, raised guidance, or positive market reaction after results, earningsScore should normally be 65-85 unless a severe earnings warning offsets it. " +
     "Keep the reason short, calm, and suitable for beginner investors. Do not invent facts beyond the supplied text.";
 
   const userPrompt = JSON.stringify({
