@@ -448,13 +448,13 @@ export default function StockSymbolPageClient({
           <div className="stockAnalysisHeroGrid">
             <div>
 <h1
-  style={{
-    margin: "14px 0 0 0",
-    fontSize: 42,
-    lineHeight: 1.04,
-    letterSpacing: "-0.05em",
-    fontWeight: 950,
-  }}
+style={{
+  margin: "14px 0 0 0",
+  fontSize: 36,
+  lineHeight: 1.15,
+  letterSpacing: "-0.02em",
+  fontWeight: 800,
+}}
 >
   {symbol} Stock Analysis, Chart Overview, Trend Signals & Technical Summary
 </h1>
