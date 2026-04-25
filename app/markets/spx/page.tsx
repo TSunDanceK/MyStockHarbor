@@ -646,24 +646,7 @@ export default async function SPXPage() {
                     }}
                   />
 
-                  <div
-                    style={{
-                      position: "absolute",
-                      left: 0,
-                      top: 7,
-                      display: "grid",
-                      gap: 14,
-                      fontSize: 11,
-                      fontWeight: 900,
-                      opacity: 0.76,
-                    }}
-                  >
-                    <span>100</span>
-                    <span>75</span>
-                    <span>50</span>
-                    <span>25</span>
-                    <span>0</span>
-                  </div>
+                
                 </div>
 
                 <div>
