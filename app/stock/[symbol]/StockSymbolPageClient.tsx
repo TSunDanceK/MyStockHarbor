@@ -126,6 +126,32 @@ function toneColor(tone: "green" | "yellow" | "red") {
   return "#ef4444";
 }
 
+
+function toneSoftBackground(tone: "green" | "yellow" | "red") {
+  if (tone === "green") return "linear-gradient(135deg, rgba(34,197,94,0.14), rgba(255,255,255,0.035))";
+  if (tone === "yellow") return "linear-gradient(135deg, rgba(250,204,21,0.13), rgba(255,255,255,0.035))";
+  return "linear-gradient(135deg, rgba(239,68,68,0.13), rgba(255,255,255,0.035))";
+}
+
+function toneBorder(tone: "green" | "yellow" | "red") {
+  if (tone === "green") return "1px solid rgba(34,197,94,0.26)";
+  if (tone === "yellow") return "1px solid rgba(250,204,21,0.26)";
+  return "1px solid rgba(239,68,68,0.26)";
+}
+
+function metricToneFromPct(value: number | null): "green" | "yellow" | "red" {
+  if (typeof value !== "number") return "yellow";
+  if (value >= 0) return "green";
+  return "red";
+}
+
+function rsiTone(value: number | null): "green" | "yellow" | "red" {
+  if (typeof value !== "number") return "yellow";
+  if (value >= 70 || value <= 30) return "red";
+  if (value >= 55) return "green";
+  return "yellow";
+}
+
 function pctFromBase(last: number | null, base: number | null) {
   if (
     typeof last !== "number" ||
@@ -482,7 +508,7 @@ export default function StockSymbolPageClient({
               color: "#dbeafe",
             }}
           >
-            STOCK ANALYSIS PAGE
+            <span aria-hidden="true">📈</span> STOCK ANALYSIS PAGE
           </div>
 
           <div className="stockAnalysisHeroGrid">
@@ -515,16 +541,39 @@ style={{
           <div style={{ marginTop: 18, maxWidth: 520 }}>
             <StockTickerJump currentSymbol={symbol} />
           </div>
+
+          <div
+            style={{
+              marginTop: 16,
+              borderRadius: 16,
+              border: "1px solid rgba(34,197,94,0.28)",
+              background:
+                "linear-gradient(135deg, rgba(34,197,94,0.11), rgba(8,18,30,0.86))",
+              padding: "14px 16px",
+              display: "flex",
+              gap: 12,
+              alignItems: "flex-start",
+              maxWidth: 780,
+            }}
+          >
+            <div style={circleIconStyle("green")}>💡</div>
+            <div style={{ fontSize: 14, lineHeight: 1.65, opacity: 0.9 }}>
+              <strong style={{ color: "#86efac" }}>Simple view:</strong> this page combines the latest available price, trend checks, moving averages and RSI so you can judge whether {symbol} looks constructive, stretched, weak or mixed before opening the full dashboard.
+            </div>
+          </div>
             </div>
 
             {!loading && !err ? (
               <div className="stockAnalysisSidePanel">
                 <div style={featuredMetricCardStyle(trendTone)}>
-                  <div style={miniLabelStyle}>Trend score</div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                    <div style={miniLabelStyle}>Trend score</div>
+                    <div style={circleIconStyle(trendTone)}>{trendTone === "green" ? "↗" : trendTone === "red" ? "↘" : "↔"}</div>
+                  </div>
                   <div
                     style={{
                       marginTop: 8,
-                      fontSize: 42,
+                      fontSize: 44,
                       lineHeight: 1,
                       fontWeight: 950,
                       letterSpacing: "-0.06em",
@@ -533,8 +582,13 @@ style={{
                   >
                     {trendScore.passed}/{trendScore.total}
                   </div>
-                  <div style={{ marginTop: 10, fontSize: 14, lineHeight: 1.65, opacity: 0.8 }}>
+                  <div style={{ marginTop: 10, fontSize: 14, lineHeight: 1.65, opacity: 0.84 }}>
                     Price vs MA50, price vs MA200 and MA50 vs MA200.
+                  </div>
+                  <div style={{ marginTop: 12, display: "grid", gap: 8, fontSize: 13 }}>
+                    <div style={{ opacity: 0.86 }}>• Price above MA50</div>
+                    <div style={{ opacity: 0.86 }}>• Price above MA200</div>
+                    <div style={{ opacity: 0.86 }}>• MA50 above MA200</div>
                   </div>
                 </div>
 
@@ -625,15 +679,11 @@ style={{
                       gap: 14,
                     }}
                   >
-                    <div
-                      style={{
-                        border: "1px solid rgba(255,255,255,0.10)",
-                        borderRadius: 18,
-                        padding: 18,
-                        background: "rgba(255,255,255,0.04)",
-                      }}
-                    >
-                      <div style={miniLabelStyle}>Fundamentals score</div>
+                    <div style={scoreOverviewCardStyle(scoreTone(aiAnalysis.fundamentalsScore))}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                        <div style={miniLabelStyle}>Fundamentals score</div>
+                        <div style={circleIconStyle(scoreTone(aiAnalysis.fundamentalsScore))}>🧱</div>
+                      </div>
                       <div
                         style={{
                           marginTop: 8,
@@ -644,20 +694,16 @@ style={{
                       >
                         {aiAnalysis.fundamentalsScore}/100
                       </div>
-                      <div style={{ marginTop: 8, fontSize: 13, opacity: 0.72 }}>
+                      <div style={{ marginTop: 8, fontSize: 13, opacity: 0.76 }}>
                         {scoreBandLabel(aiAnalysis.fundamentalsScore)}
                       </div>
                     </div>
 
-                    <div
-                      style={{
-                        border: "1px solid rgba(255,255,255,0.10)",
-                        borderRadius: 18,
-                        padding: 18,
-                        background: "rgba(255,255,255,0.04)",
-                      }}
-                    >
-                      <div style={miniLabelStyle}>Future potential score</div>
+                    <div style={scoreOverviewCardStyle(scoreTone(aiAnalysis.futurePotentialScore))}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                        <div style={miniLabelStyle}>Future potential score</div>
+                        <div style={circleIconStyle(scoreTone(aiAnalysis.futurePotentialScore))}>🚀</div>
+                      </div>
                       <div
                         style={{
                           marginTop: 8,
@@ -668,24 +714,20 @@ style={{
                       >
                         {aiAnalysis.futurePotentialScore}/100
                       </div>
-                      <div style={{ marginTop: 8, fontSize: 13, opacity: 0.72 }}>
+                      <div style={{ marginTop: 8, fontSize: 13, opacity: 0.76 }}>
                         {scoreBandLabel(aiAnalysis.futurePotentialScore)}
                       </div>
                     </div>
 
-                    <div
-                      style={{
-                        border: "1px solid rgba(255,255,255,0.10)",
-                        borderRadius: 18,
-                        padding: 18,
-                        background: "rgba(255,255,255,0.04)",
-                      }}
-                    >
-                      <div style={miniLabelStyle}>Summary updated</div>
+                    <div style={scoreOverviewCardStyle("blue")}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                        <div style={miniLabelStyle}>Summary updated</div>
+                        <div style={circleIconStyle("blue")}>⏱</div>
+                      </div>
                       <div style={{ marginTop: 8, fontSize: 28, fontWeight: 950 }}>
                         {formatAiUpdatedLabel(aiAnalysis.generatedAt)}
                       </div>
-                      <div style={{ marginTop: 8, fontSize: 13, opacity: 0.72 }}>
+                      <div style={{ marginTop: 8, fontSize: 13, opacity: 0.76 }}>
                         Refreshed separately from live price and chart data.
                       </div>
                     </div>
@@ -699,17 +741,17 @@ style={{
                     }}
                   >
                     <article style={articleStyle}>
-                      <h3 style={articleHeadingStyle}>What this company broadly does</h3>
+                      <h3 style={articleHeadingStyle}><span style={articleIconStyle("blue")}>🏢</span> What this company broadly does</h3>
                       <p style={articleTextStyle}>{aiAnalysis.businessSummary}</p>
                     </article>
 
                     <article style={articleStyle}>
-                      <h3 style={articleHeadingStyle}>Fundamentals-style read</h3>
+                      <h3 style={articleHeadingStyle}><span style={articleIconStyle("green")}>🧱</span> Fundamentals-style read</h3>
                       <p style={articleTextStyle}>{aiAnalysis.fundamentalsSummary}</p>
                     </article>
 
                     <article style={articleStyle}>
-                      <h3 style={articleHeadingStyle}>Future potential analysis</h3>
+                      <h3 style={articleHeadingStyle}><span style={articleIconStyle("yellow")}>🚀</span> Future potential analysis</h3>
                       <p style={articleTextStyle}>{aiAnalysis.futurePotentialSummary}</p>
                     </article>
                   </div>
@@ -722,8 +764,11 @@ style={{
                       gap: 14,
                     }}
                   >
-                    <div style={statCardStyle}>
-                      <div style={pillStyle("green")}>Bullish factors</div>
+                    <div style={factorCardStyle("green")}>
+                      <div style={factorHeaderStyle}>
+                        <div style={circleIconStyle("green")}>↗</div>
+                        <div style={pillStyle("green")}>Bullish factors</div>
+                      </div>
                       <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
                         {aiAnalysis.bullishFactors.map((item) => (
                           <div key={item} style={articleTextStyle}>
@@ -733,8 +778,11 @@ style={{
                       </div>
                     </div>
 
-                    <div style={statCardStyle}>
-                      <div style={pillStyle("red")}>Risk factors</div>
+                    <div style={factorCardStyle("red")}>
+                      <div style={factorHeaderStyle}>
+                        <div style={circleIconStyle("red")}>🛡</div>
+                        <div style={pillStyle("red")}>Risk factors</div>
+                      </div>
                       <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
                         {aiAnalysis.bearishFactors.map((item) => (
                           <div key={item} style={articleTextStyle}>
@@ -744,8 +792,11 @@ style={{
                       </div>
                     </div>
 
-                    <div style={statCardStyle}>
-                      <div style={pillStyle("yellow")}>What investors may watch</div>
+                    <div style={factorCardStyle("yellow")}>
+                      <div style={factorHeaderStyle}>
+                        <div style={circleIconStyle("yellow")}>👁</div>
+                        <div style={pillStyle("yellow")}>What investors may watch</div>
+                      </div>
                       <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
                         {aiAnalysis.watchPoints.map((item) => (
                           <div key={item} style={articleTextStyle}>
@@ -783,7 +834,7 @@ style={{
                     fontSize: 12,
                   }}
                 >
-                  CHART VIEW
+                  <span aria-hidden="true" style={{ marginRight: 8 }}>📊</span> CHART VIEW
                 </div>
 
                 <h2
@@ -913,18 +964,18 @@ style={{
                   gap: 18,
                 }}
               >
-                <article style={articleStyle}>
-                  <h2 style={articleHeadingStyle}>Trend summary for {symbol}</h2>
+                <article style={summaryArticleStyle("blue")}>
+                  <h2 style={articleHeadingStyle}><span style={articleIconStyle("blue")}>🧭</span> Trend summary for {symbol}</h2>
                   <p style={articleTextStyle}>{longSummary.trendParagraph}</p>
                 </article>
 
-                <article style={articleStyle}>
-                  <h2 style={articleHeadingStyle}>Momentum and stretch context</h2>
+                <article style={summaryArticleStyle("yellow")}>
+                  <h2 style={articleHeadingStyle}><span style={articleIconStyle("yellow")}>⚡</span> Momentum and stretch context</h2>
                   <p style={articleTextStyle}>{longSummary.momentumParagraph}</p>
                 </article>
 
-                <article style={articleStyle}>
-                  <h2 style={articleHeadingStyle}>What traders may watch next</h2>
+                <article style={summaryArticleStyle("green")}>
+                  <h2 style={articleHeadingStyle}><span style={articleIconStyle("green")}>👁</span> What traders may watch next</h2>
                   <p style={articleTextStyle}>{longSummary.structureParagraph}</p>
                 </article>
               </section>
@@ -937,8 +988,11 @@ style={{
                   gap: 14,
                 }}
               >
-                <div style={statCardStyle}>
-                  <div style={statLabelStyle}>MA50</div>
+                <div style={technicalMetricCardStyle(metricToneFromPct(ma50Pct))}>
+                  <div style={metricHeaderStyle}>
+                    <div style={statLabelStyle}>MA50</div>
+                    <div style={circleIconStyle(metricToneFromPct(ma50Pct))}>50</div>
+                  </div>
                   <div style={statValueStyle}>
                     {typeof lastMA50 === "number" ? `$${lastMA50.toFixed(2)}` : "—"}
                   </div>
@@ -949,8 +1003,11 @@ style={{
                   </div>
                 </div>
 
-                <div style={statCardStyle}>
-                  <div style={statLabelStyle}>MA200</div>
+                <div style={technicalMetricCardStyle(metricToneFromPct(ma200Pct))}>
+                  <div style={metricHeaderStyle}>
+                    <div style={statLabelStyle}>MA200</div>
+                    <div style={circleIconStyle(metricToneFromPct(ma200Pct))}>200</div>
+                  </div>
                   <div style={statValueStyle}>
                     {typeof lastMA200 === "number" ? `$${lastMA200.toFixed(2)}` : "—"}
                   </div>
@@ -961,8 +1018,11 @@ style={{
                   </div>
                 </div>
 
-                <div style={statCardStyle}>
-                  <div style={statLabelStyle}>RSI(14)</div>
+                <div style={technicalMetricCardStyle(rsiTone(typeof lastRsi === "number" ? lastRsi : null))}>
+                  <div style={metricHeaderStyle}>
+                    <div style={statLabelStyle}>RSI(14)</div>
+                    <div style={circleIconStyle(rsiTone(typeof lastRsi === "number" ? lastRsi : null))}>⚡</div>
+                  </div>
                   <div style={statValueStyle}>
                     {typeof lastRsi === "number" ? lastRsi.toFixed(1) : "—"}
                   </div>
@@ -1019,21 +1079,21 @@ style={{
 
                 <div className="learnGrid" style={{ marginTop: 16 }}>
                   <Link href="/learn/moving-averages" style={learnCardStyle("blue")}>
-                    <div style={{ fontSize: 17, fontWeight: 950 }}>Moving Averages</div>
+                    <div style={{ fontSize: 17, fontWeight: 950 }}>📏 Moving Averages</div>
                     <div style={learnTextStyle}>
                       Learn how traders use MA50 and MA200 to judge medium and long-term structure.
                     </div>
                   </Link>
 
                   <Link href="/learn/rsi" style={learnCardStyle("green")}>
-                    <div style={{ fontSize: 17, fontWeight: 950 }}>RSI Guide</div>
+                    <div style={{ fontSize: 17, fontWeight: 950 }}>⚡ RSI Guide</div>
                     <div style={learnTextStyle}>
                       Understand how RSI highlights momentum, overbought conditions and oversold conditions.
                     </div>
                   </Link>
 
                   <Link href="/learn/macd" style={learnCardStyle("red")}>
-                    <div style={{ fontSize: 17, fontWeight: 950 }}>MACD Guide</div>
+                    <div style={{ fontSize: 17, fontWeight: 950 }}>〽️ MACD Guide</div>
                     <div style={learnTextStyle}>
                       Explore how MACD helps traders read momentum strength and weakening trend behaviour.
                     </div>
@@ -1089,19 +1149,19 @@ style={{
     }}
   >
     <Link href="/oversold-stocks-today" style={learnCardStyle("green")}>
-      Oversold Stocks (Potential Rebounds)
+      🟢 Oversold Stocks (Potential Rebounds)
     </Link>
 
     <Link href="/overbought-stocks-today" style={learnCardStyle("red")}>
-      Overbought Stocks (Pullback Watch)
+      🔴 Overbought Stocks (Pullback Watch)
     </Link>
 
     <Link href="/stocks-ready-to-break-out" style={learnCardStyle("blue")}>
-      Breakout Stocks
+      🔵 Breakout Stocks
     </Link>
 
 <Link href="/stocks-near-200-day-moving-average" style={learnCardStyle("yellow")}>
-  Stocks Near 200-Day Moving Average
+  🟡 Stocks Near 200-Day Moving Average
 </Link>
   </div>
 </section>
@@ -1131,7 +1191,7 @@ style={{
                     fontSize: 12,
                   }}
                 >
-                  FAQ
+                  <span aria-hidden="true" style={{ marginRight: 8 }}>❓</span> FAQ
                 </div>
 
                 <h2
@@ -1278,6 +1338,112 @@ style={{
     </main>
   );
 }
+
+
+
+function circleIconStyle(tone: "green" | "yellow" | "red" | "blue"): React.CSSProperties {
+  const color =
+    tone === "green" ? "#4ade80" : tone === "red" ? "#f87171" : tone === "yellow" ? "#facc15" : "#60a5fa";
+  const bg =
+    tone === "green" ? "rgba(34,197,94,0.16)" : tone === "red" ? "rgba(239,68,68,0.16)" : tone === "yellow" ? "rgba(250,204,21,0.16)" : "rgba(59,130,246,0.16)";
+  const border =
+    tone === "green" ? "1px solid rgba(34,197,94,0.32)" : tone === "red" ? "1px solid rgba(239,68,68,0.32)" : tone === "yellow" ? "1px solid rgba(250,204,21,0.32)" : "1px solid rgba(59,130,246,0.32)";
+
+  return {
+    width: 38,
+    height: 38,
+    borderRadius: 999,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flex: "0 0 auto",
+    fontSize: 17,
+    fontWeight: 950,
+    lineHeight: 1,
+    color,
+    background: bg,
+    border,
+    boxShadow: `0 0 18px ${bg}`,
+  };
+}
+
+function scoreOverviewCardStyle(tone: "green" | "yellow" | "red" | "blue"): React.CSSProperties {
+  if (tone === "blue") {
+    return {
+      border: "1px solid rgba(59,130,246,0.24)",
+      borderRadius: 18,
+      padding: 18,
+      background: "linear-gradient(135deg, rgba(59,130,246,0.12), rgba(255,255,255,0.035))",
+      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+    };
+  }
+
+  return {
+    border: toneBorder(tone),
+    borderRadius: 18,
+    padding: 18,
+    background: toneSoftBackground(tone),
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+  };
+}
+
+function factorCardStyle(tone: "green" | "yellow" | "red"): React.CSSProperties {
+  return {
+    border: toneBorder(tone),
+    borderRadius: 18,
+    padding: 18,
+    background: toneSoftBackground(tone),
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+  };
+}
+
+const factorHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+};
+
+function articleIconStyle(tone: "green" | "yellow" | "red" | "blue"): React.CSSProperties {
+  return {
+    ...circleIconStyle(tone),
+    width: 34,
+    height: 34,
+    fontSize: 15,
+    marginRight: 10,
+    verticalAlign: "middle",
+  };
+}
+
+function summaryArticleStyle(tone: "green" | "yellow" | "red" | "blue"): React.CSSProperties {
+  if (tone === "blue") {
+    return {
+      ...articleStyle,
+      border: "1px solid rgba(59,130,246,0.22)",
+      background: "linear-gradient(135deg, rgba(59,130,246,0.09), rgba(255,255,255,0.03))",
+    };
+  }
+
+  return {
+    ...articleStyle,
+    border: tone === "green" ? "1px solid rgba(34,197,94,0.22)" : tone === "red" ? "1px solid rgba(239,68,68,0.22)" : "1px solid rgba(250,204,21,0.22)",
+    background: tone === "green" ? "linear-gradient(135deg, rgba(34,197,94,0.09), rgba(255,255,255,0.03))" : tone === "red" ? "linear-gradient(135deg, rgba(239,68,68,0.09), rgba(255,255,255,0.03))" : "linear-gradient(135deg, rgba(250,204,21,0.10), rgba(255,255,255,0.03))",
+  };
+}
+
+function technicalMetricCardStyle(tone: "green" | "yellow" | "red"): React.CSSProperties {
+  return {
+    ...statCardStyle,
+    border: toneBorder(tone),
+    background: toneSoftBackground(tone),
+  };
+}
+
+const metricHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+};
 
 const topUtilityRowStyle: React.CSSProperties = {
   display: "flex",
