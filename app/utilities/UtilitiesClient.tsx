@@ -793,7 +793,6 @@ export default function UtilitiesClientPage() {
                   against you while using leverage.
                 </p>
               </div>
-            </div>
 
             <div className="calcFieldGrid" style={{ marginTop: 18 }}>
               <div>
@@ -938,7 +937,6 @@ export default function UtilitiesClientPage() {
                   within a sensible risk limit.
                 </p>
               </div>
-            </div>
 
             <div className="calcFieldGrid" style={{ marginTop: 18 }}>
               <div>
