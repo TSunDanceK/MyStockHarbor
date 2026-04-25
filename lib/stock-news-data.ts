@@ -1734,6 +1734,10 @@ async function getAiScoredNews(args: {
     "For strong AI/platform leaders, do not under-score real confirmed ecosystem expansion simply because one headline mentions a short-term stock slip.",
     "Partnerships are bullish only when they are confirmed and plausibly material. Speculative partnerships, possible involvement, or hype words like AI/chip/project without clear business impact should be Neutral.",
     "Price action in a headline is supporting evidence only. It should not dominate the score unless attached to a real fundamental catalyst.",
+    "Before scoring, judge headline relevance. If headlines are unrelated to the company, ticker, or business model, treat them as low-quality noise, not positive or negative evidence.",
+    "Examples of irrelevant noise include generic uses of the company name as a normal word, sports stories, retail deals, shopping articles, transfer news, or unrelated local news.",
+    "If most supplied headlines are irrelevant, generic, or low-information, confidence should be Low or Medium and newsScore should usually stay Neutral or below.",
+    "A score above 60 requires multiple relevant, company-specific, high-quality headlines. One relevant positive headline surrounded by unrelated noise is not enough for Bullish.",
     "For earningsScore, use ONLY earningsHeadlines. Do not infer earnings tone from general partnership, product, analyst, stock-price, or project headlines.",
     "Classify earningsScore.dominantTone exactly as No earnings signal, Weak, Mixed, Positive, or Strong Positive.",
     "The earnings score must fit the chosen band: No earnings signal 45-55, Weak 20-42, Mixed 45-60, Positive 64-80, Strong Positive 75-90.",
@@ -2196,7 +2200,7 @@ const getCachedStockNewsBaseData = unstable_cache(
 
     return buildStockNewsBaseData(parsed.symbol, parsed.options);
   },
-  ["msh-stock-news-base-data-v17"],
+  ["msh-stock-news-base-data-v18"],
   {
     revalidate: 60,
   }
