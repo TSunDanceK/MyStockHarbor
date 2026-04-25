@@ -899,11 +899,21 @@ async function buildStockNewsBaseData(
   const highValueNews = rankedNews.filter((item) => !isLowValueNewsItem(item));
   const fallbackNews = rankedNews.filter((item) => isLowValueNewsItem(item));
 
-  const detailedNews = [...highValueNews, ...fallbackNews].slice(0, maxDetailedItems);
+const newestFirst = (items: NewsItem[]) =>
+  [...items].sort((a, b) => {
+    const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+    const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
 
-  const compactNews = rankedNews
-    .filter((item) => !detailedNews.some((picked) => picked.link === item.link))
-    .slice(0, 6);
+    return bTime - aTime;
+  });
+
+const aiFilteredNews = newestFirst([...highValueNews, ...fallbackNews]);
+
+const detailedNews = aiFilteredNews.slice(0, maxDetailedItems);
+
+const compactNews = aiFilteredNews
+  .filter((item) => !detailedNews.some((picked) => picked.link === item.link))
+  .slice(0, 6);
 
   return {
     symbol: upper,
