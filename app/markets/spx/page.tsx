@@ -181,7 +181,8 @@ function marketMoodCardStyle(score: number): React.CSSProperties {
         ? "linear-gradient(135deg, rgba(248,113,113,0.14), rgba(18,10,10,0.96))"
         : "linear-gradient(135deg, rgba(250,204,21,0.14), rgba(18,16,8,0.96))",
     padding: 18,
-    minHeight: "100%",
+    minHeight: "auto",
+    height: "fit-content",
     boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
   };
 }
@@ -507,7 +508,7 @@ export default async function SPXPage() {
               display: "grid",
               gridTemplateColumns: "minmax(0, 1fr) 330px",
               gap: 22,
-              alignItems: "stretch",
+              alignItems: "start",
             }}
           >
             <div>
@@ -581,6 +582,161 @@ export default async function SPXPage() {
                 </AffiliateLink>
               </div>
 
+
+            </div>
+
+            <aside style={marketMoodCardStyle(marketMood.score)}>
+              <div style={statLabelStyle()}>Market mood</div>
+
+              <div
+                style={{
+                  marginTop: 12,
+                  display: "grid",
+                  gridTemplateColumns: "64px minmax(0, 1fr)",
+                  gap: 14,
+                  alignItems: "center",
+                }}
+              >
+                <div
+                  style={{
+                    position: "relative",
+                    height: 154,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <div
+                    style={{
+                      position: "relative",
+                      width: 32,
+                      height: 112,
+                      borderRadius: 999,
+                      border: "3px solid rgba(255,255,255,0.48)",
+                      background: "rgba(2,6,23,0.62)",
+                      overflow: "hidden",
+                      boxShadow: "0 0 24px rgba(255,255,255,0.10)",
+                    }}
+                  >
+                    <div style={thermometerFillStyle(marketMood.score)} />
+                  </div>
+
+                  <div
+                    style={{
+                      position: "absolute",
+                      bottom: 0,
+                      width: 48,
+                      height: 48,
+                      borderRadius: 999,
+                      border: "3px solid rgba(255,255,255,0.48)",
+                      background:
+                        marketMood.score >= 56
+                          ? "#22c55e"
+                          : marketMood.score <= 44
+                          ? "#ef4444"
+                          : "#eab308",
+                      boxShadow:
+                        marketMood.score >= 56
+                          ? "0 0 20px rgba(34,197,94,0.45)"
+                          : marketMood.score <= 44
+                          ? "0 0 20px rgba(239,68,68,0.45)"
+                          : "0 0 20px rgba(234,179,8,0.42)",
+                    }}
+                  />
+
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: 0,
+                      top: 7,
+                      display: "grid",
+                      gap: 14,
+                      fontSize: 11,
+                      fontWeight: 900,
+                      opacity: 0.76,
+                    }}
+                  >
+                    <span>100</span>
+                    <span>75</span>
+                    <span>50</span>
+                    <span>25</span>
+                    <span>0</span>
+                  </div>
+                </div>
+
+                <div>
+                  <div
+                    style={{
+                      fontSize: 38,
+                      lineHeight: 1,
+                      fontWeight: 950,
+                      letterSpacing: "-0.06em",
+                    }}
+                  >
+                    {marketMood.score}/100
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 10,
+                      fontSize: 18,
+                      fontWeight: 950,
+                      color:
+                        marketMood.score >= 56
+                          ? "#86efac"
+                          : marketMood.score <= 44
+                          ? "#fecaca"
+                          : "#fde68a",
+                    }}
+                  >
+                    {marketMood.label}
+                  </div>
+
+                  <p
+                    style={{
+                      margin: "10px 0 0",
+                      fontSize: 13,
+                      lineHeight: 1.55,
+                      opacity: 0.82,
+                    }}
+                  >
+                    MyStockHarbor mood read based on SPX trend, moving averages and RSI momentum.
+                  </p>
+
+                  <div
+                    style={{
+                      marginTop: 10,
+                      paddingTop: 10,
+                      borderTop: "1px solid rgba(255,255,255,0.12)",
+                      display: "grid",
+                      gap: 8,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 950,
+                        letterSpacing: "0.08em",
+                        opacity: 0.72,
+                      }}
+                    >
+                      KEY DRIVERS
+                    </div>
+
+                    <div style={{ fontSize: 12, lineHeight: 1.45, opacity: 0.86 }}>
+                      • Price vs MA50 and MA200
+                    </div>
+                    <div style={{ fontSize: 12, lineHeight: 1.45, opacity: 0.86 }}>
+                      • MA50 vs MA200 structure
+                    </div>
+                    <div style={{ fontSize: 12, lineHeight: 1.45, opacity: 0.86 }}>
+                      • RSI momentum reading
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </aside>
+
 <div
   style={{
     marginTop: 16,
@@ -592,7 +748,8 @@ export default async function SPXPage() {
     fontSize: 15,
     lineHeight: 1.65,
     color: "#e5e7eb",
-    maxWidth: 760,
+    maxWidth: "100%",
+    gridColumn: "1 / -1",
     display: "flex",
     gap: 14,
     alignItems: "flex-start",
@@ -623,160 +780,6 @@ export default async function SPXPage() {
     structure has actually broken down. That is why the weekly chart matters here.
   </div>
 </div>
-
-            </div>
-
-            <aside style={marketMoodCardStyle(marketMood.score)}>
-              <div style={statLabelStyle()}>Market mood</div>
-
-              <div
-                style={{
-                  marginTop: 14,
-                  display: "grid",
-                  gridTemplateColumns: "76px minmax(0, 1fr)",
-                  gap: 16,
-                  alignItems: "center",
-                }}
-              >
-                <div
-                  style={{
-                    position: "relative",
-                    height: 230,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <div
-                    style={{
-                      position: "relative",
-                      width: 32,
-                      height: 178,
-                      borderRadius: 999,
-                      border: "3px solid rgba(255,255,255,0.48)",
-                      background: "rgba(2,6,23,0.62)",
-                      overflow: "hidden",
-                      boxShadow: "0 0 24px rgba(255,255,255,0.10)",
-                    }}
-                  >
-                    <div style={thermometerFillStyle(marketMood.score)} />
-                  </div>
-
-                  <div
-                    style={{
-                      position: "absolute",
-                      bottom: 4,
-                      width: 56,
-                      height: 56,
-                      borderRadius: 999,
-                      border: "3px solid rgba(255,255,255,0.48)",
-                      background:
-                        marketMood.score >= 56
-                          ? "#22c55e"
-                          : marketMood.score <= 44
-                          ? "#ef4444"
-                          : "#eab308",
-                      boxShadow:
-                        marketMood.score >= 56
-                          ? "0 0 20px rgba(34,197,94,0.45)"
-                          : marketMood.score <= 44
-                          ? "0 0 20px rgba(239,68,68,0.45)"
-                          : "0 0 20px rgba(234,179,8,0.42)",
-                    }}
-                  />
-
-                  <div
-                    style={{
-                      position: "absolute",
-                      left: 0,
-                      top: 7,
-                      display: "grid",
-                      gap: 28,
-                      fontSize: 11,
-                      fontWeight: 900,
-                      opacity: 0.76,
-                    }}
-                  >
-                    <span>100</span>
-                    <span>75</span>
-                    <span>50</span>
-                    <span>25</span>
-                    <span>0</span>
-                  </div>
-                </div>
-
-                <div>
-                  <div
-                    style={{
-                      fontSize: 42,
-                      lineHeight: 1,
-                      fontWeight: 950,
-                      letterSpacing: "-0.06em",
-                    }}
-                  >
-                    {marketMood.score}/100
-                  </div>
-
-                  <div
-                    style={{
-                      marginTop: 10,
-                      fontSize: 18,
-                      fontWeight: 950,
-                      color:
-                        marketMood.score >= 56
-                          ? "#86efac"
-                          : marketMood.score <= 44
-                          ? "#fecaca"
-                          : "#fde68a",
-                    }}
-                  >
-                    {marketMood.label}
-                  </div>
-
-                  <p
-                    style={{
-                      margin: "12px 0 0",
-                      fontSize: 14,
-                      lineHeight: 1.62,
-                      opacity: 0.82,
-                    }}
-                  >
-                    MyStockHarbor mood read based on SPX trend, moving averages and RSI momentum.
-                  </p>
-
-                  <div
-                    style={{
-                      marginTop: 14,
-                      paddingTop: 12,
-                      borderTop: "1px solid rgba(255,255,255,0.12)",
-                      display: "grid",
-                      gap: 8,
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 950,
-                        letterSpacing: "0.08em",
-                        opacity: 0.72,
-                      }}
-                    >
-                      KEY DRIVERS
-                    </div>
-
-                    <div style={{ fontSize: 12, lineHeight: 1.45, opacity: 0.86 }}>
-                      • Price vs MA50 and MA200
-                    </div>
-                    <div style={{ fontSize: 12, lineHeight: 1.45, opacity: 0.86 }}>
-                      • MA50 vs MA200 structure
-                    </div>
-                    <div style={{ fontSize: 12, lineHeight: 1.45, opacity: 0.86 }}>
-                      • RSI momentum reading
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </aside>
           </section>
 
           {marketAnalysis ? (
