@@ -535,30 +535,80 @@ function scoreNewsItem(item: NewsItem) {
 function normaliseTitleForDedupe(title: string) {
   return title
     .toLowerCase()
+    .replace(/&amp;/g, " and ")
     .replace(/[^\w\s]/g, " ")
     .replace(
-      /\b(the|a|an|and|or|for|to|of|in|on|with|from|at|by|stock|shares)\b/g,
+      /\b(the|a|an|and|or|for|to|of|in|on|with|from|at|by|stock|stocks|share|shares|company|inc|corp|ltd|plc|says|said|report|reports)\b/g,
       " "
     )
     .replace(/\s+/g, " ")
     .trim();
 }
 
+function storySignature(item: NewsItem) {
+  const text = normaliseTitleForDedupe(`${item.title} ${item.description ?? ""}`);
+
+  const themeWords = text
+    .split(" ")
+    .filter((word) => word.length > 2)
+    .filter((word) =>
+      [
+        "amazon",
+        "meta",
+        "chip",
+        "chips",
+        "ai",
+        "deal",
+        "partnership",
+        "anthropic",
+        "aws",
+        "graviton",
+        "tesla",
+        "elon",
+        "musk",
+        "spacex",
+        "xai",
+        "earnings",
+        "revenue",
+        "guidance",
+        "profit",
+        "lawsuit",
+        "probe",
+        "investigation",
+        "upgrade",
+        "downgrade",
+        "analyst",
+        "price",
+        "target",
+      ].includes(word)
+    );
+
+  if (themeWords.length >= 2) {
+    return [...new Set(themeWords)].slice(0, 5).sort().join("-");
+  }
+
+  return text.split(" ").slice(0, 7).join(" ");
+}
+
 function dedupeNews(items: NewsItem[]): NewsItem[] {
-  const seen = new Set<string>();
+  const seenLinks = new Set<string>();
+  const seenStories = new Set<string>();
   const deduped: NewsItem[] = [];
 
   for (const item of items) {
-    const key = normaliseTitleForDedupe(item.title)
-      .split(" ")
-      .slice(0, 8)
-      .join(" ");
+    const linkKey = item.link.trim();
+    const storyKey = storySignature(item);
 
-    if (!key || seen.has(key)) {
+    if (!linkKey || seenLinks.has(linkKey)) {
       continue;
     }
 
-    seen.add(key);
+    if (!storyKey || seenStories.has(storyKey)) {
+      continue;
+    }
+
+    seenLinks.add(linkKey);
+    seenStories.add(storyKey);
     deduped.push(item);
   }
 
@@ -907,7 +957,7 @@ const newestFirst = (items: NewsItem[]) =>
     return bTime - aTime;
   });
 
-const aiFilteredNews = newestFirst([...highValueNews, ...fallbackNews]);
+const aiFilteredNews = dedupeNews(newestFirst([...highValueNews, ...fallbackNews]));
 
 const detailedNews = aiFilteredNews.slice(0, maxDetailedItems);
 
@@ -1024,7 +1074,7 @@ const getCachedStockNewsBaseData = unstable_cache(
 
     return buildStockNewsBaseData(parsed.symbol, parsed.options);
   },
-  ["msh-stock-news-base-data-v2"],
+  ["msh-stock-news-base-data-v3"],
   {
     revalidate: 1800,
   }
