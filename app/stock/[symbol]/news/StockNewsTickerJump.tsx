@@ -203,25 +203,30 @@ export default function StockNewsTickerJump({
         ) : null}
       </div>
 
-      <button
-        type="button"
-        onClick={goToNews}
-        disabled={!canGo}
-        style={{
-          minHeight: 44,
-          padding: "0 15px",
-          borderRadius: 14,
-          border: "1px solid rgba(248,113,113,0.30)",
-          background:
-            "linear-gradient(135deg, rgba(248,113,113,0.16), rgba(185,28,28,0.08))",
-          color: "#fee2e2",
-          fontWeight: 900,
-          cursor: canGo ? "pointer" : "not-allowed",
-          opacity: canGo ? 1 : 0.45,
-        }}
-      >
-        Latest News →
-      </button>
+<div style={{ flexBasis: "100%" }}>
+  <div
+    style={{
+      fontSize: 12,
+      fontWeight: 950,
+      letterSpacing: "0.08em",
+      textTransform: "uppercase",
+      color: "rgba(191,219,254,0.86)",
+      marginBottom: 4,
+    }}
+  >
+    Change stock
+  </div>
+
+  <div
+    style={{
+      fontSize: 13,
+      lineHeight: 1.5,
+      color: "rgba(241,245,249,0.66)",
+    }}
+  >
+    Search another ticker to view its latest news page.
+  </div>
+</div>
 
       <button
         type="button"
