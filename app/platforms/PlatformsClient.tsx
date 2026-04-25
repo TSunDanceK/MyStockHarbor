@@ -443,6 +443,108 @@ function topNavIcon(type: "dashboard" | "learn" | "pickers" | "calculators") {
   return "🧮";
 }
 
+
+function platformTheme(type: "green" | "blue" | "purple" | "yellow" | "red") {
+  if (type === "green") {
+    return {
+      border: "1px solid rgba(34,197,94,0.28)",
+      background: "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(59,130,246,0.06), rgba(255,255,255,0.025))",
+      color: "#86efac",
+      iconBg: "rgba(34,197,94,0.16)",
+      shadow: "0 0 18px rgba(34,197,94,0.14)",
+    };
+  }
+
+  if (type === "blue") {
+    return {
+      border: "1px solid rgba(59,130,246,0.30)",
+      background: "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(168,85,247,0.06), rgba(255,255,255,0.025))",
+      color: "#93c5fd",
+      iconBg: "rgba(59,130,246,0.16)",
+      shadow: "0 0 18px rgba(59,130,246,0.14)",
+    };
+  }
+
+  if (type === "purple") {
+    return {
+      border: "1px solid rgba(168,85,247,0.30)",
+      background: "linear-gradient(135deg, rgba(168,85,247,0.14), rgba(59,130,246,0.06), rgba(255,255,255,0.025))",
+      color: "#c4b5fd",
+      iconBg: "rgba(168,85,247,0.16)",
+      shadow: "0 0 18px rgba(168,85,247,0.14)",
+    };
+  }
+
+  if (type === "red") {
+    return {
+      border: "1px solid rgba(239,68,68,0.28)",
+      background: "linear-gradient(135deg, rgba(239,68,68,0.11), rgba(255,255,255,0.025))",
+      color: "#fca5a5",
+      iconBg: "rgba(239,68,68,0.16)",
+      shadow: "0 0 18px rgba(239,68,68,0.14)",
+    };
+  }
+
+  return {
+    border: "1px solid rgba(250,204,21,0.28)",
+    background: "linear-gradient(135deg, rgba(250,204,21,0.13), rgba(249,115,22,0.06), rgba(255,255,255,0.025))",
+    color: "#fde68a",
+    iconBg: "rgba(250,204,21,0.16)",
+    shadow: "0 0 18px rgba(250,204,21,0.14)",
+  };
+}
+
+function platformInfoCardStyle(type: "green" | "blue" | "purple" | "yellow" | "red"): React.CSSProperties {
+  const theme = platformTheme(type);
+
+  return {
+    borderRadius: 18,
+    border: theme.border,
+    background: theme.background,
+    padding: 16,
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.045)",
+  };
+}
+
+function platformIconStyle(type: "green" | "blue" | "purple" | "yellow" | "red"): React.CSSProperties {
+  const theme = platformTheme(type);
+
+  return {
+    width: 42,
+    height: 42,
+    borderRadius: 999,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flex: "0 0 auto",
+    background: theme.iconBg,
+    border: theme.border,
+    color: theme.color,
+    fontSize: 20,
+    boxShadow: theme.shadow,
+  };
+}
+
+function platformCardTitleStyle(type: "green" | "blue" | "purple" | "yellow" | "red"): React.CSSProperties {
+  const theme = platformTheme(type);
+
+  return {
+    fontSize: 12,
+    fontWeight: 950,
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+    color: theme.color,
+  };
+}
+
+function platformSectionHeaderStyle(type: "green" | "blue" | "purple" | "yellow" | "red"): React.CSSProperties {
+  return {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+  };
+}
+
 export default function PlatformsClient({
   initialRegion,
 }: {
@@ -640,23 +742,30 @@ export default function PlatformsClient({
            
 <div
   style={{
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 12,
     fontSize: 14,
     lineHeight: 1.55,
     color: "#dbeafe",
     maxWidth: 760,
   }}
 >
-  <span
-    style={{
-      fontSize: 16,
-      fontWeight: 900,
-      letterSpacing: "0.3px",
-    }}
-  >
-    BEST SIMPLE NEXT STEP:
-  </span>{" "}
-  open <strong>{topBrokerName}</strong> if you want a simple, beginner-friendly broker, then use{" "}
-  <strong>TradingView</strong> alongside it for chart analysis and learning setups.
+  <div style={platformIconStyle("green")}>✅</div>
+  <div>
+    <span
+      style={{
+        fontSize: 16,
+        fontWeight: 900,
+        letterSpacing: "0.08em",
+        color: "#86efac",
+      }}
+    >
+      BEST SIMPLE NEXT STEP:
+    </span>{" "}
+    open <strong>{topBrokerName}</strong> if you want a simple, beginner-friendly broker, then use{" "}
+    <strong>TradingView</strong> alongside it for chart analysis and learning setups.
+  </div>
 </div>
 
 <AffiliateLink
@@ -680,33 +789,24 @@ export default function PlatformsClient({
             gap: 14,
           }}
         >
-          <div
-            style={{
-              borderRadius: 16,
-              border: "1px solid rgba(34,197,94,0.28)",
-              background:
-                "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(59,130,246,0.08))",
-              padding: 16,
-            }}
-          >
-            <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>
-              BEST FOR CHARTING
+          <div style={platformInfoCardStyle("green")}>
+            <div style={platformSectionHeaderStyle("green")}>
+              <div style={platformIconStyle("green")}>📈</div>
+              <div>
+                <div style={platformCardTitleStyle("green")}>Best for charting</div>
+                <div style={{ marginTop: 6, fontSize: 22, fontWeight: 950 }}>
+                  TradingView
+                </div>
+              </div>
             </div>
-            <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900 }}>
-              TradingView
-            </div>
-            <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.55 }}>
+            <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.55 }}>
               Best overall if you want to learn technical analysis properly.
             </div>
           </div>
 
           <div
             style={{
-              borderRadius: 16,
-              border: "1px solid rgba(59,130,246,0.28)",
-              background:
-                "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(168,85,247,0.08))",
-              padding: 16,
+              ...platformInfoCardStyle("blue"),
               minHeight: 176,
               display: "flex",
               flexDirection: "column",
@@ -714,13 +814,16 @@ export default function PlatformsClient({
             }}
           >
             <div>
-              <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>
-                BEST MODERN BROKER FEEL
+              <div style={platformSectionHeaderStyle("blue")}>
+                <div style={platformIconStyle("blue")}>🧭</div>
+                <div>
+                  <div style={platformCardTitleStyle("blue")}>Best modern broker feel</div>
+                  <div style={{ marginTop: 6, fontSize: 22, fontWeight: 950 }}>
+                    {simpleBrokerName}
+                  </div>
+                </div>
               </div>
-              <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900 }}>
-                {simpleBrokerName}
-              </div>
-              <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.55 }}>
+              <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.55 }}>
                 Best if you want a simple, modern broker platform with an easy app feel.
               </div>
             </div>
@@ -745,22 +848,17 @@ export default function PlatformsClient({
             </div>
           </div>
 
-          <div
-            style={{
-              borderRadius: 16,
-              border: "1px solid rgba(168,85,247,0.28)",
-              background:
-                "linear-gradient(135deg, rgba(168,85,247,0.14), rgba(59,130,246,0.08))",
-              padding: 16,
-            }}
-          >
-            <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900 }}>
-              BEST EXTRA BEGINNER OPTION
+          <div style={platformInfoCardStyle("purple")}>
+            <div style={platformSectionHeaderStyle("purple")}>
+              <div style={platformIconStyle("purple")}>🌱</div>
+              <div>
+                <div style={platformCardTitleStyle("purple")}>Best extra beginner option</div>
+                <div style={{ marginTop: 6, fontSize: 22, fontWeight: 950 }}>
+                  {extraBrokerName}
+                </div>
+              </div>
             </div>
-            <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900 }}>
-              {extraBrokerName}
-            </div>
-            <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.55 }}>
+            <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.55 }}>
               Strong choice if you want a clean beginner-first route to buying stocks.
             </div>
           </div>
@@ -918,14 +1016,20 @@ export default function PlatformsClient({
           <div
             style={{
               marginTop: 18,
-              borderRadius: 16,
-              border: "1px solid rgba(255,255,255,0.12)",
-              background: "rgba(255,255,255,0.04)",
-              padding: 16,
+              borderRadius: 18,
+              border: "1px solid rgba(59,130,246,0.22)",
+              background: "linear-gradient(135deg, rgba(59,130,246,0.08), rgba(255,255,255,0.035))",
+              padding: 18,
             }}
           >
-            <div style={{ fontWeight: 950, marginBottom: 10 }}>
-              How to choose a platform
+            <div style={platformSectionHeaderStyle("blue")}>
+              <div style={platformIconStyle("blue")}>🧠</div>
+              <div>
+                <div style={platformCardTitleStyle("blue")}>Simple framework</div>
+                <div style={{ marginTop: 4, fontWeight: 950, fontSize: 22 }}>
+                  How to choose a platform
+                </div>
+              </div>
             </div>
 
             <div
@@ -972,10 +1076,14 @@ export default function PlatformsClient({
             <section
               key={item.name}
               style={{
-                border: "1px solid rgba(255,255,255,0.14)",
-                borderRadius: 18,
+                border: item.recommended
+                  ? "1px solid rgba(34,197,94,0.24)"
+                  : "1px solid rgba(59,130,246,0.16)",
+                borderRadius: 20,
                 padding: 18,
-                background: "rgba(255,255,255,0.03)",
+                background: item.recommended
+                  ? "linear-gradient(135deg, rgba(34,197,94,0.08), rgba(59,130,246,0.045), rgba(255,255,255,0.025))"
+                  : "linear-gradient(135deg, rgba(59,130,246,0.055), rgba(255,255,255,0.025))",
               }}
             >
               <div
@@ -1268,29 +1376,29 @@ export default function PlatformsClient({
               >
                 <div
                   style={{
-                    borderRadius: 14,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(255,255,255,0.04)",
+                    ...platformInfoCardStyle("blue"),
                     padding: 14,
                   }}
                 >
-                  <div style={{ fontWeight: 950, marginBottom: 8 }}>
-                    Why choose it
+                  <div style={platformSectionHeaderStyle("blue")}>
+                    <div style={{ ...platformIconStyle("blue"), width: 34, height: 34, fontSize: 16 }}>🔎</div>
+                    <div style={platformCardTitleStyle("blue")}>Why choose it</div>
                   </div>
-                  <div style={{ opacity: 0.84, lineHeight: 1.55 }}>{item.note}</div>
+                  <div style={{ marginTop: 10, opacity: 0.84, lineHeight: 1.55 }}>{item.note}</div>
                 </div>
 
                 <div
                   style={{
-                    borderRadius: 14,
-                    border: "1px solid rgba(34,197,94,0.22)",
-                    background: "rgba(34,197,94,0.06)",
+                    ...platformInfoCardStyle("green"),
                     padding: 14,
                   }}
                 >
-                  <div style={{ fontWeight: 950, marginBottom: 8 }}>Pros</div>
+                  <div style={platformSectionHeaderStyle("green")}>
+                    <div style={{ ...platformIconStyle("green"), width: 34, height: 34, fontSize: 16 }}>✅</div>
+                    <div style={platformCardTitleStyle("green")}>Pros</div>
+                  </div>
                   <ul
-                    style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 8 }}
+                    style={{ margin: "10px 0 0", paddingLeft: 18, display: "grid", gap: 8 }}
                   >
                     {item.pros.map((pro) => (
                       <li key={pro} style={{ opacity: 0.88, lineHeight: 1.5 }}>
@@ -1302,15 +1410,16 @@ export default function PlatformsClient({
 
                 <div
                   style={{
-                    borderRadius: 14,
-                    border: "1px solid rgba(239,68,68,0.22)",
-                    background: "rgba(239,68,68,0.06)",
+                    ...platformInfoCardStyle("red"),
                     padding: 14,
                   }}
                 >
-                  <div style={{ fontWeight: 950, marginBottom: 8 }}>Cons</div>
+                  <div style={platformSectionHeaderStyle("red")}>
+                    <div style={{ ...platformIconStyle("red"), width: 34, height: 34, fontSize: 16 }}>⚠</div>
+                    <div style={platformCardTitleStyle("red")}>Cons</div>
+                  </div>
                   <ul
-                    style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 8 }}
+                    style={{ margin: "10px 0 0", paddingLeft: 18, display: "grid", gap: 8 }}
                   >
                     {item.cons.map((con) => (
                       <li key={con} style={{ opacity: 0.88, lineHeight: 1.5 }}>
