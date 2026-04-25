@@ -113,7 +113,7 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
 
   function goToStockPage() {
     if (!selected?.symbol) return;
-    router.push(`/stock/${encodeURIComponent(selected.symbol)}`);
+   router.push(`/stock/${encodeURIComponent(selected.symbol)}/news`);
   }
 
   return (
@@ -232,7 +232,7 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
             opacity: canGo ? 1 : 0.45,
           }}
         >
-          Stock Page →
+          News Page →
         </button>
       </div>
     </div>
