@@ -393,16 +393,22 @@ export default async function SPXPage() {
             </div>
           </div>
 
-          <section
-            style={{
-              borderRadius: 22,
-              border: "1px solid rgba(59,130,246,0.22)",
-              background:
-                "linear-gradient(135deg, rgba(37,99,235,0.16), rgba(15,23,42,0.92))",
-              padding: 22,
-              boxShadow: "0 18px 40px rgba(0,0,0,0.24)",
-            }}
-          >
+<section
+  className="spxHeroGrid"
+  style={{
+    borderRadius: 22,
+    border: "1px solid rgba(59,130,246,0.22)",
+    background:
+      "linear-gradient(135deg, rgba(37,99,235,0.16), rgba(15,23,42,0.92))",
+    padding: 22,
+    boxShadow: "0 18px 40px rgba(0,0,0,0.24)",
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1.45fr) minmax(260px, 0.55fr)",
+    gap: 22,
+    alignItems: "start",
+  }}
+>
+  <div>
             <div
               style={{
                 display: "inline-flex",
@@ -541,42 +547,6 @@ export default async function SPXPage() {
                   gap: 14,
                 }}
               >
-                <div style={marketMoodCardStyle(marketMood.score)}>
-  <div style={statLabelStyle()}>Market mood</div>
-
-  <div
-    style={{
-      marginTop: 8,
-      fontSize: 42,
-      lineHeight: 1,
-      fontWeight: 950,
-      letterSpacing: "-0.06em",
-    }}
-  >
-    {marketMood.score}/100
-  </div>
-
-  <div
-    style={{
-      marginTop: 10,
-      fontSize: 16,
-      fontWeight: 900,
-    }}
-  >
-    {marketMood.label}
-  </div>
-
-  <div
-    style={{
-      marginTop: 10,
-      fontSize: 14,
-      lineHeight: 1.6,
-      opacity: 0.82,
-    }}
-  >
-    A MyStockHarbor market mood read based on SPX trend, moving-average structure and RSI momentum.
-  </div>
-</div>
                 <div style={statCardStyle()}>
                   <div style={statLabelStyle()}>Bullish factors</div>
                   <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
