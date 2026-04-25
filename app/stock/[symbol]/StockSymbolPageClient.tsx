@@ -731,7 +731,7 @@ export default function StockSymbolPageClient({
                     }}
                   >
                     <div style={statCardStyle}>
-                      <div style={statLabelStyle}>Bullish factors</div>
+                      <div style={pillStyle("green")}>Bullish factors</div>
                       <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
                         {aiAnalysis.bullishFactors.map((item) => (
                           <div key={item} style={articleTextStyle}>
@@ -742,7 +742,7 @@ export default function StockSymbolPageClient({
                     </div>
 
                     <div style={statCardStyle}>
-                      <div style={statLabelStyle}>Risk factors</div>
+                      <div style={pillStyle("red")}>Risk factors</div>
                       <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
                         {aiAnalysis.bearishFactors.map((item) => (
                           <div key={item} style={articleTextStyle}>
@@ -753,7 +753,7 @@ export default function StockSymbolPageClient({
                     </div>
 
                     <div style={statCardStyle}>
-                      <div style={statLabelStyle}>What investors may watch</div>
+                      <div style={pillStyle("yellow")}>What investors may watch</div>
                       <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
                         {aiAnalysis.watchPoints.map((item) => (
                           <div key={item} style={articleTextStyle}>
@@ -1275,6 +1275,57 @@ const topUtilityInnerStyle: React.CSSProperties = {
   flexWrap: "wrap",
   justifyContent: "flex-end",
 };
+
+function pillStyle(tone: "green" | "red" | "yellow"): React.CSSProperties {
+  if (tone === "green") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      width: "fit-content",
+      padding: "7px 12px",
+      borderRadius: 999,
+      border: "1px solid rgba(34,197,94,0.30)",
+      background: "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))",
+      color: "#dcfce7",
+      fontSize: 12,
+      fontWeight: 950,
+      textTransform: "uppercase",
+      letterSpacing: "0.06em",
+    };
+  }
+
+  if (tone === "red") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      width: "fit-content",
+      padding: "7px 12px",
+      borderRadius: 999,
+      border: "1px solid rgba(248,113,113,0.30)",
+      background: "linear-gradient(135deg, rgba(248,113,113,0.16), rgba(185,28,28,0.08))",
+      color: "#fee2e2",
+      fontSize: 12,
+      fontWeight: 950,
+      textTransform: "uppercase",
+      letterSpacing: "0.06em",
+    };
+  }
+
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    width: "fit-content",
+    padding: "7px 12px",
+    borderRadius: 999,
+    border: "1px solid rgba(250,204,21,0.30)",
+    background: "linear-gradient(135deg, rgba(250,204,21,0.16), rgba(202,138,4,0.08))",
+    color: "#fef3c7",
+    fontSize: 12,
+    fontWeight: 950,
+    textTransform: "uppercase",
+    letterSpacing: "0.06em",
+  };
+}
 
 function topUtilityBtnStyle(
   type: "gold" | "green" | "red" | "blue"
