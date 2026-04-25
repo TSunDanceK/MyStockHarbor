@@ -56,11 +56,29 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
       return;
     }
 
-    const exactStillSelected = selected?.symbol.toUpperCase() === q.toUpperCase();
+const exactStillSelected =
+  selected?.symbol.toUpperCase() === q.toUpperCase();
 
-    if (!exactStillSelected) {
-      setSelected(null);
-    }
+if (!exactStillSelected) {
+  const exactResult = results.find(
+    (result) => result.symbol.toUpperCase() === q.toUpperCase()
+  );
+
+  if (exactResult) {
+    setSelected({
+      ...exactResult,
+      symbol: exactResult.symbol.trim().toUpperCase(),
+    });
+  } else if (/^[A-Z.]{1,6}$/.test(q.toUpperCase())) {
+    setSelected({
+      symbol: q.toUpperCase(),
+      name: "",
+      exchange: "",
+    });
+  } else {
+    setSelected(null);
+  }
+}
 
     const timer = window.setTimeout(async () => {
       try {
