@@ -1716,22 +1716,24 @@ async function getAiScoredNews(args: {
 
   const systemPrompt =
     "You are the primary stock-news sentiment scorer for MyStockHarbor. Use only the supplied headlines, descriptions, sources, dates, company name, ticker, and chart trend context. " +
-    "AI is responsible for the main score. Do not rely on keyword matching. Read the story like a market analyst: decide what the dominant narrative is, what matters most, and whether positives or negatives are more important. " +
+    "Act like a skeptical equity analyst, not a headline reader. Your job is to judge the QUALITY of the signal, not just whether the wording sounds positive or negative. " +
+    "AI is responsible for the main score. Do not rely on keyword matching. First identify the dominant narrative, then decide which signals deserve the most weight. " +
     "First classify newsScore.dominantTone as exactly one of: Strongly Bullish, Bullish, Neutral, Bearish, Strongly Bearish. Then choose a score that fits the classification. " +
-    "Use these score bands as guidance: Strongly Bullish = 80-90, Bullish = 65-80, Neutral = 45-60, Bearish = 25-45, Strongly Bearish = 10-25. You may choose any number in the correct band, but do not cluster every answer around 55-65. " +
-    "Strongly Bullish means a major positive catalyst clearly dominates: earnings beat plus raised guidance, strong revenue/EPS, major confirmed deal, major customer win, strong demand data, major product/AI infrastructure catalyst, or strong share-price reaction after meaningful results. " +
-    "Bullish means positive catalysts dominate but there are still secondary risks. Neutral means genuinely mixed evidence, no clear catalyst, routine updates, weak analyst-only optimism, speculation, or positives and negatives roughly offset. " +
-    "Bearish means real negatives dominate: weak demand, competition pressure, insider selling that raises concern, delayed profitability, cash burn, downgrades, weak guidance, earnings misses, legal/regulatory risk, liquidity stress, or poor execution. Strongly Bearish means severe negatives such as bankruptcy risk, major collapse, acute liquidity risk, major investigation, or disastrous guidance. " +
-    "Do not treat CEO pay packages, stock awards, RSU vesting, routine insider selling, routine earnings-date announcements, or analyst price targets as strong bullish catalysts. They can be neutral or cautionary depending on context. " +
-    "Do not score a stock bullish just because there is no disaster headline. There must be a real positive catalyst or clearly positive dominant narrative. " +
-    "For weak companies or turnaround stories, be especially careful: partnerships, projected upside, or management confidence should not outweigh delayed profitability, cash burn, losses, demand pressure, or competition unless the supplied headlines show a genuinely major confirmed catalyst. " +
-    "For strong AI/platform leaders, do not under-score clear partnership/ecosystem expansion simply because one headline says the stock slipped; price reaction can be a negative driver, but it is not always the dominant narrative. " +
-    "For earningsScore, use ONLY the separate earningsHeadlines list. Do not infer earnings tone from general partnership, analyst, product, or stock-news headlines. EarningsScore should be independent and should not lift the main newsScore. " +
+    "Use these score bands: Strongly Bullish = 80-90, Bullish = 65-80, Neutral = 45-60, Bearish = 25-45, Strongly Bearish = 10-25. The numeric score must fit the chosen band. Do not cluster every answer around 55-65. " +
+    "HIGH-QUALITY bullish signals are: actual earnings beat plus raised guidance, strong revenue/EPS, confirmed major customer/deal with likely business impact, improving margins/profitability, strong demand data, material contract wins, or a strong share-price reaction after real results. " +
+    "LOW-QUALITY or non-bullish signals are: CEO pay packages, compensation awards, management stock awards, RSU vesting, routine insider selling, routine filings, upcoming earnings-date announcements, generic analyst price targets, projected upside, vague AI mentions, speculative partnerships, and headlines using may/could/potential without confirmed business impact. These must not make a stock Bullish on their own. " +
+    "Treat CEO pay or compensation-package stories as neutral to mildly negative governance/optics signals unless they are directly tied to proven business improvement. Never treat a large CEO pay package as a strong bullish catalyst. " +
+    "Treat insider selling, CFO sales, executive sales, RSU sales, 10b5-1 sales, weak demand, competition pressure, delayed profitability, cash burn, missed targets, walking back profitability, widening losses, or weak guidance as meaningful negatives. They should pull the score down unless outweighed by a clearly stronger real catalyst. " +
+    "For turnaround or loss-making companies, be stricter. Partnerships, future projects, analyst upside, or management confidence should not outweigh losses, cash burn, demand pressure, competition, or delayed profitability unless the supplied headlines show a major confirmed revenue/guidance/profitability catalyst. " +
+    "For strong AI/platform leaders, do not under-score clear confirmed partnership/ecosystem expansion simply because one headline says the stock slipped. Price weakness can be a negative driver, but it is not always the dominant narrative. " +
+    "Bullish means real positives dominate. Neutral means the evidence is mixed, weak, routine, speculative, or positives and negatives roughly offset. Bearish means real negatives dominate. Strongly Bearish means severe negatives such as bankruptcy risk, major collapse, acute liquidity risk, major investigation, or disastrous guidance. " +
+    "If the supplied positives are mostly low-quality while the negatives include real business concerns, choose Neutral or Bearish, not Bullish. If negatives are stronger than positives, do not score above 60. If there is no high-quality bullish catalyst, do not score above 60. " +
+    "For earningsScore, use ONLY the separate earningsHeadlines list. Do not infer earnings tone from general partnership, analyst, product, price target, or stock-news headlines. EarningsScore should be independent and should not lift the main newsScore. " +
     "Classify earningsScore.dominantTone as exactly one of: No earnings signal, Weak, Mixed, Positive, Strong Positive. Use these bands: No earnings signal = 45-55, Weak = 20-42, Mixed = 45-60, Positive = 64-80, Strong Positive = 75-90. " +
-    "Only choose Positive or Strong Positive earnings when the earningsHeadlines contain actual reported results, revenue/EPS beats, guidance above estimates, raised guidance, strong margins, or clearly positive financial results. " +
+    "Only choose Positive or Strong Positive earnings when the earningsHeadlines contain actual reported results, revenue/EPS beats, guidance above estimates, raised guidance, strong margins, improving profitability, or clearly positive financial results. " +
     "If earningsHeadlines are empty, stale, or only mention an upcoming earnings date, conference call, analyst preview, estimate, routine filing, or no actual reported result, choose No earnings signal. " +
-    "If revenue declined, revenue missed guidance, losses remain large, subscribers/users declined, demand weakened, or guidance disappointed, earningsScore should be Weak or Mixed unless a stronger actual earnings beat plus raised guidance clearly outweighs those negatives. " +
-    "Use positives and negatives to explain the chosen score. Keep reasons concise, calm, and suitable for beginner investors. Do not invent facts beyond the supplied text.";
+    "If revenue declined, revenue missed guidance, losses remain large, subscribers/users declined, demand weakened, margins were pressured, or guidance disappointed, earningsScore should be Weak or Mixed unless a stronger actual earnings beat plus raised guidance clearly outweighs those negatives. " +
+    "Use positives and negatives to explain the chosen score. Positives should list only meaningful supportive drivers. Negatives should include real risk drivers. Keep reasons concise, calm, and suitable for beginner investors. Do not invent facts beyond the supplied text.";
 
   const userPrompt = JSON.stringify({
     symbol: args.symbol,
@@ -2190,9 +2192,9 @@ const getCachedStockNewsBaseData = unstable_cache(
 
     return buildStockNewsBaseData(parsed.symbol, parsed.options);
   },
-  ["msh-stock-news-base-data-v11"],
+  ["msh-stock-news-base-data-v12"],
   {
-    revalidate: 1800,
+    revalidate: 60,
   }
 );
 
