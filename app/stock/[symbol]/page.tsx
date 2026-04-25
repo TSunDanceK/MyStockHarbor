@@ -134,16 +134,15 @@ export default async function StockPage({ params }: Props) {
           {upper} Stock Analysis, Company Overview & Technical Summary
         </h1>
 
-        <p
-          style={{
-maxWidth: 720,
-margin: "10px 0 0",
-            maxWidth: 860,
-            fontSize: 15,
-            lineHeight: 1.7,
-            color: "rgba(241,245,249,0.72)",
-          }}
-        >
+<p
+  style={{
+    margin: "10px 0 0",
+    maxWidth: 720,
+    fontSize: 15,
+    lineHeight: 1.7,
+    color: "rgba(241,245,249,0.72)",
+  }}
+>
 Explore {upper} stock analysis with chart context, AI business overview, technical summary,
 moving-average context, momentum indicators and risk signals from MyStockHarbor. This page is
 designed to help traders quickly understand whether {upper} is showing bullish, bearish or
