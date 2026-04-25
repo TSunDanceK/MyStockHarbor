@@ -97,28 +97,6 @@ function rsiWilder(values: number[], period = 14): number | null {
   return 100 - 100 / (1 + rs);
 }
 
-function marketMoodCardStyle(score: number): React.CSSProperties {
-  const tone =
-    score >= 56 ? "green" : score <= 44 ? "red" : "yellow";
-
-  return {
-    borderRadius: 18,
-    border:
-      tone === "green"
-        ? "1px solid rgba(34,197,94,0.26)"
-        : tone === "red"
-        ? "1px solid rgba(248,113,113,0.26)"
-        : "1px solid rgba(250,204,21,0.26)",
-    background:
-      tone === "green"
-        ? "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(7,16,12,0.96))"
-        : tone === "red"
-        ? "linear-gradient(135deg, rgba(248,113,113,0.14), rgba(18,10,10,0.96))"
-        : "linear-gradient(135deg, rgba(250,204,21,0.14), rgba(18,16,8,0.96))",
-    padding: 18,
-  };
-}
-
 function primaryBtn(): React.CSSProperties {
   return {
     display: "inline-flex",
@@ -194,6 +172,45 @@ function statLabelStyle(): React.CSSProperties {
   };
 }
 
+function marketMoodCardStyle(score: number): React.CSSProperties {
+  const tone = score >= 56 ? "green" : score <= 44 ? "red" : "yellow";
+
+  return {
+    borderRadius: 20,
+    border:
+      tone === "green"
+        ? "1px solid rgba(34,197,94,0.30)"
+        : tone === "red"
+        ? "1px solid rgba(248,113,113,0.30)"
+        : "1px solid rgba(250,204,21,0.30)",
+    background:
+      tone === "green"
+        ? "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(7,16,12,0.96))"
+        : tone === "red"
+        ? "linear-gradient(135deg, rgba(248,113,113,0.14), rgba(18,10,10,0.96))"
+        : "linear-gradient(135deg, rgba(250,204,21,0.14), rgba(18,16,8,0.96))",
+    padding: 18,
+    minHeight: "100%",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+  };
+}
+
+function thermometerFillStyle(score: number): React.CSSProperties {
+  const safeScore = Math.max(0, Math.min(100, score));
+
+  return {
+    position: "absolute",
+    left: 7,
+    right: 7,
+    bottom: 7,
+    height: `${Math.max(7, safeScore)}%`,
+    borderRadius: 999,
+    background:
+      "linear-gradient(0deg, #ef4444 0%, #f97316 28%, #eab308 50%, #84cc16 72%, #22c55e 100%)",
+    boxShadow: "0 0 18px rgba(34,197,94,0.35)",
+  };
+}
+
 const topNavIconWrapStyle: React.CSSProperties = {
   fontSize: 15,
   lineHeight: 1,
@@ -205,76 +222,7 @@ const topNavIconWrapStyle: React.CSSProperties = {
 function topNavBtnStyle(
   type: "dashboard" | "learn" | "pickers" | "platforms"
 ): React.CSSProperties {
-  if (type === "dashboard") {
-    return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-      minHeight: 42,
-      padding: "9px 13px",
-      borderRadius: 14,
-      border: "1px solid rgba(250,204,21,0.45)",
-      background:
-        "linear-gradient(135deg, rgba(250,204,21,0.20), rgba(202,138,4,0.10))",
-      color: "#fefce8",
-      textDecoration: "none",
-      fontWeight: 900,
-      fontSize: 14,
-      whiteSpace: "nowrap",
-      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-      transition:
-        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-    };
-  }
-
-  if (type === "learn") {
-    return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-      minHeight: 42,
-      padding: "9px 13px",
-      borderRadius: 14,
-      border: "1px solid rgba(59,130,246,0.45)",
-      background:
-        "linear-gradient(135deg, rgba(59,130,246,0.20), rgba(37,99,235,0.10))",
-      color: "#eff6ff",
-      textDecoration: "none",
-      fontWeight: 900,
-      fontSize: 14,
-      whiteSpace: "nowrap",
-      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-      transition:
-        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-    };
-  }
-
-  if (type === "pickers") {
-    return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-      minHeight: 42,
-      padding: "9px 13px",
-      borderRadius: 14,
-      border: "1px solid rgba(239,68,68,0.45)",
-      background:
-        "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.10))",
-      color: "#fef2f2",
-      textDecoration: "none",
-      fontWeight: 900,
-      fontSize: 14,
-      whiteSpace: "nowrap",
-      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-      transition:
-        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-    };
-  }
-
-  return {
+  const base: React.CSSProperties = {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
@@ -282,10 +230,6 @@ function topNavBtnStyle(
     minHeight: 42,
     padding: "9px 13px",
     borderRadius: 14,
-    border: "1px solid rgba(168,85,247,0.45)",
-    background:
-      "linear-gradient(135deg, rgba(168,85,247,0.20), rgba(139,92,246,0.10))",
-    color: "#faf5ff",
     textDecoration: "none",
     fontWeight: 900,
     fontSize: 14,
@@ -293,6 +237,44 @@ function topNavBtnStyle(
     boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
     transition:
       "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
+  };
+
+  if (type === "dashboard") {
+    return {
+      ...base,
+      border: "1px solid rgba(250,204,21,0.45)",
+      background:
+        "linear-gradient(135deg, rgba(250,204,21,0.20), rgba(202,138,4,0.10))",
+      color: "#fefce8",
+    };
+  }
+
+  if (type === "learn") {
+    return {
+      ...base,
+      border: "1px solid rgba(59,130,246,0.45)",
+      background:
+        "linear-gradient(135deg, rgba(59,130,246,0.20), rgba(37,99,235,0.10))",
+      color: "#eff6ff",
+    };
+  }
+
+  if (type === "pickers") {
+    return {
+      ...base,
+      border: "1px solid rgba(239,68,68,0.45)",
+      background:
+        "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.10))",
+      color: "#fef2f2",
+    };
+  }
+
+  return {
+    ...base,
+    border: "1px solid rgba(168,85,247,0.45)",
+    background:
+      "linear-gradient(135deg, rgba(168,85,247,0.20), rgba(139,92,246,0.10))",
+    color: "#faf5ff",
   };
 }
 
@@ -393,146 +375,263 @@ export default async function SPXPage() {
             </div>
           </div>
 
-<section
-  className="spxHeroGrid"
-  style={{
-    borderRadius: 22,
-    border: "1px solid rgba(59,130,246,0.22)",
-    background:
-      "linear-gradient(135deg, rgba(37,99,235,0.16), rgba(15,23,42,0.92))",
-    padding: 22,
-    boxShadow: "0 18px 40px rgba(0,0,0,0.24)",
-    display: "grid",
-    gridTemplateColumns: "minmax(0, 1.45fr) minmax(260px, 0.55fr)",
-    gap: 22,
-    alignItems: "start",
-  }}
->
-  <div>
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                padding: "6px 10px",
-                borderRadius: 999,
-                border: "1px solid rgba(250,204,21,0.28)",
-                background: "rgba(250,204,21,0.12)",
-                color: "#fde68a",
-                fontSize: 12,
-                fontWeight: 900,
-                letterSpacing: "0.35px",
-              }}
-            >
-              SPX GUIDE
-            </div>
-
-            <h1
-              style={{
-                margin: "12px 0 0",
-                fontSize: 42,
-                lineHeight: 1.08,
-                letterSpacing: "-0.9px",
-                maxWidth: 920,
-              }}
-            >
-              S&amp;P 500 (SPX) Analysis (2026) – What the Market Is Actually Doing Right Now
-            </h1>
-
-            <div
-              style={{
-                marginTop: 14,
-                maxWidth: 880,
-                fontSize: 19,
-                lineHeight: 1.7,
-                opacity: 0.92,
-              }}
-            >
-              The S&amp;P 500 has started to worry investors as short-term price action weakens.
-              On the daily chart, fear rises quickly when key moving averages start getting tested.
-              But when you zoom out to the weekly chart, the structure can look very different.
-            </div>
-
-            <div
-              style={{
-                marginTop: 16,
-                display: "flex",
-                gap: 12,
-                flexWrap: "wrap",
-              }}
-            >
-              <AffiliateLink
-                href="/api/go/tradingview"
-                eventLabel="SPX Page Hero CTA TradingView"
-                style={primaryBtn()}
+          <section
+            className="spxHeroGrid"
+            style={{
+              borderRadius: 22,
+              border: "1px solid rgba(59,130,246,0.22)",
+              background:
+                "linear-gradient(135deg, rgba(37,99,235,0.16), rgba(15,23,42,0.92))",
+              padding: 22,
+              boxShadow: "0 18px 40px rgba(0,0,0,0.24)",
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1fr) 330px",
+              gap: 22,
+              alignItems: "stretch",
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(250,204,21,0.28)",
+                  background: "rgba(250,204,21,0.12)",
+                  color: "#fde68a",
+                  fontSize: 12,
+                  fontWeight: 900,
+                  letterSpacing: "0.35px",
+                }}
               >
-                Use TradingView for SPX Charts →
-              </AffiliateLink>
+                SPX GUIDE
+              </div>
 
-              <AffiliateLink
-                href="/api/go/etoro"
-                eventLabel="SPX Page Hero CTA eToro"
-                style={secondaryBtn()}
+              <h1
+                style={{
+                  margin: "12px 0 0",
+                  fontSize: 42,
+                  lineHeight: 1.08,
+                  letterSpacing: "-0.9px",
+                  maxWidth: 760,
+                  fontWeight: 500,
+                }}
               >
-                Visit eToro →
-              </AffiliateLink>
+                S&amp;P 500 (SPX) Analysis (2026) – What the Market Is Actually Doing Right Now
+              </h1>
+
+              <div
+                style={{
+                  marginTop: 14,
+                  maxWidth: 760,
+                  fontSize: 19,
+                  lineHeight: 1.7,
+                  opacity: 0.92,
+                }}
+              >
+                The S&amp;P 500 has started to worry investors as short-term price action
+                weakens. On the daily chart, fear rises quickly when key moving averages start
+                getting tested. But when you zoom out to the weekly chart, the structure can look
+                very different.
+              </div>
+
+              <div
+                style={{
+                  marginTop: 16,
+                  display: "flex",
+                  gap: 12,
+                  flexWrap: "wrap",
+                }}
+              >
+                <AffiliateLink
+                  href="/api/go/tradingview"
+                  eventLabel="SPX Page Hero CTA TradingView"
+                  style={primaryBtn()}
+                >
+                  Use TradingView for SPX Charts →
+                </AffiliateLink>
+
+                <AffiliateLink
+                  href="/api/go/etoro"
+                  eventLabel="SPX Page Hero CTA eToro"
+                  style={secondaryBtn()}
+                >
+                  Visit eToro →
+                </AffiliateLink>
+              </div>
+
+              <div
+                style={{
+                  marginTop: 16,
+                  padding: "14px 16px",
+                  borderRadius: 16,
+                  border: "1px solid rgba(34,197,94,0.18)",
+                  background:
+                    "linear-gradient(135deg, rgba(34,197,94,0.10), rgba(59,130,246,0.08))",
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                  color: "#dbeafe",
+                  maxWidth: 760,
+                }}
+              >
+                <strong>Simple view:</strong> short-term fear is rising, but the bigger question is
+                whether the higher-timeframe structure has actually broken down. That is why the
+                weekly chart matters here.
+              </div>
             </div>
 
-            <div
-              style={{
-                marginTop: 16,
-                padding: "14px 16px",
-                borderRadius: 16,
-                border: "1px solid rgba(34,197,94,0.18)",
-                background:
-                  "linear-gradient(135deg, rgba(34,197,94,0.10), rgba(59,130,246,0.08))",
-                fontSize: 14,
-                lineHeight: 1.6,
-                color: "#dbeafe",
-                maxWidth: 900,
-              }}
-            >
-              <strong>Simple view:</strong> short-term fear is rising, but the bigger question is
-              whether the higher-timeframe structure has actually broken down. That is why the weekly chart matters here.
-            </div>
+            <aside style={marketMoodCardStyle(marketMood.score)}>
+              <div style={statLabelStyle()}>Market mood</div>
 
-      </div>
+              <div
+                style={{
+                  marginTop: 14,
+                  display: "grid",
+                  gridTemplateColumns: "76px minmax(0, 1fr)",
+                  gap: 16,
+                  alignItems: "center",
+                }}
+              >
+                <div
+                  style={{
+                    position: "relative",
+                    height: 230,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <div
+                    style={{
+                      position: "relative",
+                      width: 32,
+                      height: 178,
+                      borderRadius: 999,
+                      border: "3px solid rgba(255,255,255,0.48)",
+                      background: "rgba(2,6,23,0.62)",
+                      overflow: "hidden",
+                      boxShadow: "0 0 24px rgba(255,255,255,0.10)",
+                    }}
+                  >
+                    <div style={thermometerFillStyle(marketMood.score)} />
+                  </div>
 
-  <div style={marketMoodCardStyle(marketMood.score)}>
-    <div style={statLabelStyle()}>Market mood</div>
+                  <div
+                    style={{
+                      position: "absolute",
+                      bottom: 4,
+                      width: 56,
+                      height: 56,
+                      borderRadius: 999,
+                      border: "3px solid rgba(255,255,255,0.48)",
+                      background:
+                        marketMood.score >= 56
+                          ? "#22c55e"
+                          : marketMood.score <= 44
+                          ? "#ef4444"
+                          : "#eab308",
+                      boxShadow:
+                        marketMood.score >= 56
+                          ? "0 0 20px rgba(34,197,94,0.45)"
+                          : marketMood.score <= 44
+                          ? "0 0 20px rgba(239,68,68,0.45)"
+                          : "0 0 20px rgba(234,179,8,0.42)",
+                    }}
+                  />
 
-    <div
-      style={{
-        marginTop: 8,
-        fontSize: 42,
-        lineHeight: 1,
-        fontWeight: 950,
-        letterSpacing: "-0.06em",
-      }}
-    >
-      {marketMood.score}/100
-    </div>
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: 0,
+                      top: 7,
+                      display: "grid",
+                      gap: 28,
+                      fontSize: 11,
+                      fontWeight: 900,
+                      opacity: 0.76,
+                    }}
+                  >
+                    <span>100</span>
+                    <span>75</span>
+                    <span>50</span>
+                    <span>25</span>
+                    <span>0</span>
+                  </div>
+                </div>
 
-    <div
-      style={{
-        marginTop: 10,
-        fontSize: 16,
-        fontWeight: 900,
-      }}
-    >
-      {marketMood.label}
-    </div>
+                <div>
+                  <div
+                    style={{
+                      fontSize: 42,
+                      lineHeight: 1,
+                      fontWeight: 950,
+                      letterSpacing: "-0.06em",
+                    }}
+                  >
+                    {marketMood.score}/100
+                  </div>
 
-    <div
-      style={{
-        marginTop: 10,
-        fontSize: 14,
-        lineHeight: 1.6,
-        opacity: 0.82,
-      }}
-    >
-      MyStockHarbor mood read based on SPX trend, moving averages and RSI momentum.
-    </div>
-  </div>
+                  <div
+                    style={{
+                      marginTop: 10,
+                      fontSize: 18,
+                      fontWeight: 950,
+                      color:
+                        marketMood.score >= 56
+                          ? "#86efac"
+                          : marketMood.score <= 44
+                          ? "#fecaca"
+                          : "#fde68a",
+                    }}
+                  >
+                    {marketMood.label}
+                  </div>
+
+                  <p
+                    style={{
+                      margin: "12px 0 0",
+                      fontSize: 14,
+                      lineHeight: 1.62,
+                      opacity: 0.82,
+                    }}
+                  >
+                    MyStockHarbor mood read based on SPX trend, moving averages and RSI momentum.
+                  </p>
+
+                  <div
+                    style={{
+                      marginTop: 14,
+                      paddingTop: 12,
+                      borderTop: "1px solid rgba(255,255,255,0.12)",
+                      display: "grid",
+                      gap: 8,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 950,
+                        letterSpacing: "0.08em",
+                        opacity: 0.72,
+                      }}
+                    >
+                      KEY DRIVERS
+                    </div>
+
+                    <div style={{ fontSize: 12, lineHeight: 1.45, opacity: 0.86 }}>
+                      • Price vs MA50 and MA200
+                    </div>
+                    <div style={{ fontSize: 12, lineHeight: 1.45, opacity: 0.86 }}>
+                      • MA50 vs MA200 structure
+                    </div>
+                    <div style={{ fontSize: 12, lineHeight: 1.45, opacity: 0.86 }}>
+                      • RSI momentum reading
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </aside>
           </section>
 
           {marketAnalysis ? (
@@ -642,7 +741,8 @@ export default async function SPXPage() {
                 Fear rises faster
               </div>
               <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.6 }}>
-                On lower timeframes, weakness feels more dramatic. That is why many investors become nervous when the SPX starts losing short-term support.
+                On lower timeframes, weakness feels more dramatic. That is why many investors
+                become nervous when the SPX starts losing short-term support.
               </div>
             </div>
 
@@ -654,7 +754,8 @@ export default async function SPXPage() {
                 Structure still matters more
               </div>
               <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.6 }}>
-                When you zoom out, the market can still look like it is going through a normal correction rather than a confirmed long-term breakdown.
+                When you zoom out, the market can still look like it is going through a normal
+                correction rather than a confirmed long-term breakdown.
               </div>
             </div>
 
@@ -666,19 +767,14 @@ export default async function SPXPage() {
                 This market was stretched
               </div>
               <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.6 }}>
-                After a strong run led by major technology names and AI enthusiasm, a cooling phase was always a realistic possibility.
+                After a strong run led by major technology names and AI enthusiasm, a cooling phase
+                was always a realistic possibility.
               </div>
             </div>
           </section>
 
           <section style={sectionCardStyle()}>
-            <h2
-              style={{
-                margin: 0,
-                fontSize: 30,
-                letterSpacing: "-0.4px",
-              }}
-            >
+            <h2 style={{ margin: 0, fontSize: 30, letterSpacing: "-0.4px" }}>
               What’s actually happening in the market right now?
             </h2>
 
@@ -694,23 +790,28 @@ export default async function SPXPage() {
               }}
             >
               <p style={{ margin: 0 }}>
-                Right now, markets are getting more fearful because the S&amp;P 500 is starting to look weaker on the <strong>daily timeframe</strong>.
-                When price loses momentum and approaches major moving averages on lower timeframes, sentiment usually deteriorates quickly.
+                Right now, markets are getting more fearful because the S&amp;P 500 is starting to
+                look weaker on the <strong>daily timeframe</strong>. When price loses momentum and
+                approaches major moving averages on lower timeframes, sentiment usually deteriorates
+                quickly.
               </p>
 
               <p style={{ margin: 0 }}>
-                However, the <strong>weekly chart</strong> paints a calmer picture. If this were a standard stock rather than the main US index,
-                many traders would likely describe this as a <strong>healthy correction</strong> rather than a reason to panic.
+                However, the <strong>weekly chart</strong> paints a calmer picture. If this were a
+                standard stock rather than the main US index, many traders would likely describe this
+                as a <strong>healthy correction</strong> rather than a reason to panic.
               </p>
 
               <p style={{ margin: 0 }}>
-                The reason is simple: the SPX had become very extended after a long run higher. Much of that strength was concentrated in major companies,
-                especially those lifted by the recent <strong>AI-driven rally</strong>. When markets get stretched too far above long-term averages,
-                pullbacks become more likely because price needs room to reset.
+                The reason is simple: the SPX had become very extended after a long run higher. Much
+                of that strength was concentrated in major companies, especially those lifted by the
+                recent <strong>AI-driven rally</strong>. When markets get stretched too far above
+                long-term averages, pullbacks become more likely because price needs room to reset.
               </p>
 
               <p style={{ margin: 0 }}>
-                In other words, this is not just about fear. It is also about the market cooling after a period where price had moved too far, too fast.
+                In other words, this is not just about fear. It is also about the market cooling after
+                a period where price had moved too far, too fast.
               </p>
             </div>
           </section>
@@ -724,13 +825,7 @@ export default async function SPXPage() {
             className="spxContextGrid"
           >
             <div style={sectionCardStyle()}>
-              <h2
-                style={{
-                  margin: 0,
-                  fontSize: 30,
-                  letterSpacing: "-0.4px",
-                }}
-              >
+              <h2 style={{ margin: 0, fontSize: 30, letterSpacing: "-0.4px" }}>
                 Why the weekly chart matters more here
               </h2>
 
@@ -745,23 +840,29 @@ export default async function SPXPage() {
                 }}
               >
                 <p style={{ margin: 0 }}>
-                  The weekly timeframe helps remove some of the noise that causes investors to overreact.
-                  A move that looks aggressive on the daily chart can appear much more controlled on the weekly chart.
+                  The weekly timeframe helps remove some of the noise that causes investors to
+                  overreact. A move that looks aggressive on the daily chart can appear much more
+                  controlled on the weekly chart.
                 </p>
 
                 <p style={{ margin: 0 }}>
-                  Historically, the S&amp;P 500 has often respected major higher-timeframe moving averages.
-                  That does not mean support must always hold, but it does mean context matters.
+                  Historically, the S&amp;P 500 has often respected major higher-timeframe moving
+                  averages. That does not mean support must always hold, but it does mean context
+                  matters.
                 </p>
 
                 <p style={{ margin: 0 }}>
-                  If price is simply correcting back toward a long-term moving average after an overstretched rally,
-                  that is very different from a true structural collapse.
+                  If price is simply correcting back toward a long-term moving average after an
+                  overstretched rally, that is very different from a true structural collapse.
                 </p>
 
                 <p style={{ margin: 0 }}>
                   That is why many investors are asking the real question now:
-                  <strong> is this a normal correction and potential opportunity, or the start of something worse?</strong>
+                  <strong>
+                    {" "}
+                    is this a normal correction and potential opportunity, or the start of something
+                    worse?
+                  </strong>
                 </p>
               </div>
             </div>
@@ -804,13 +905,7 @@ export default async function SPXPage() {
           </section>
 
           <section style={sectionCardStyle()}>
-            <h2
-              style={{
-                margin: 0,
-                fontSize: 30,
-                letterSpacing: "-0.4px",
-              }}
-            >
+            <h2 style={{ margin: 0, fontSize: 30, letterSpacing: "-0.4px" }}>
               Weekly SPX chart snapshot
             </h2>
 
@@ -824,8 +919,8 @@ export default async function SPXPage() {
               }}
             >
               This weekly chart helps show why the bigger picture matters more than short-term fear.
-              If the SPX is simply pulling back into higher-timeframe support after an overstretched rally,
-              that is a very different setup from a full structural breakdown.
+              If the SPX is simply pulling back into higher-timeframe support after an overstretched
+              rally, that is a very different setup from a full structural breakdown.
             </div>
 
             <div style={{ marginTop: 18 }}>
@@ -834,13 +929,7 @@ export default async function SPXPage() {
           </section>
 
           <section style={sectionCardStyle()}>
-            <h2
-              style={{
-                margin: 0,
-                fontSize: 30,
-                letterSpacing: "-0.4px",
-              }}
-            >
+            <h2 style={{ margin: 0, fontSize: 30, letterSpacing: "-0.4px" }}>
               What should investors watch next?
             </h2>
 
@@ -910,13 +999,7 @@ export default async function SPXPage() {
           </section>
 
           <section style={sectionCardStyle()}>
-            <h2
-              style={{
-                margin: 0,
-                fontSize: 30,
-                letterSpacing: "-0.4px",
-              }}
-            >
+            <h2 style={{ margin: 0, fontSize: 30, letterSpacing: "-0.4px" }}>
               So is this a buying opportunity or the start of a bigger downfall?
             </h2>
 
@@ -932,20 +1015,21 @@ export default async function SPXPage() {
               }}
             >
               <p style={{ margin: 0 }}>
-                That is the question everyone is asking. As Warren Buffett’s famous line reminds people,
-                periods of fear often create interest in adding to positions.
+                That is the question everyone is asking. As Warren Buffett’s famous line reminds
+                people, periods of fear often create interest in adding to positions.
               </p>
 
               <p style={{ margin: 0 }}>
-                But the answer does not come from emotion. It comes from structure.
-                If the weekly chart continues to look like a standard pullback into support,
-                many investors will see that as a healthier reset than the headlines suggest.
+                But the answer does not come from emotion. It comes from structure. If the weekly
+                chart continues to look like a standard pullback into support, many investors will
+                see that as a healthier reset than the headlines suggest.
               </p>
 
               <p style={{ margin: 0 }}>
-                If the higher-timeframe structure starts failing more decisively, then the risk of a deeper move increases.
-                For now, the more balanced view is that the market is <strong>correcting after becoming overstretched</strong>,
-                not automatically collapsing.
+                If the higher-timeframe structure starts failing more decisively, then the risk of a
+                deeper move increases. For now, the more balanced view is that the market is{" "}
+                <strong>correcting after becoming overstretched</strong>, not automatically
+                collapsing.
               </p>
             </div>
           </section>
@@ -959,13 +1043,7 @@ export default async function SPXPage() {
               padding: 20,
             }}
           >
-            <h2
-              style={{
-                margin: 0,
-                fontSize: 30,
-                letterSpacing: "-0.4px",
-              }}
-            >
+            <h2 style={{ margin: 0, fontSize: 30, letterSpacing: "-0.4px" }}>
               Best next step
             </h2>
 
@@ -978,8 +1056,9 @@ export default async function SPXPage() {
                 fontSize: 16,
               }}
             >
-              Use <strong>TradingView</strong> if you want to study the SPX properly and judge the weekly structure for yourself.
-              Use <strong>eToro</strong> if you want a simpler route into investing after you have done your research.
+              Use <strong>TradingView</strong> if you want to study the SPX properly and judge the
+              weekly structure for yourself. Use <strong>eToro</strong> if you want a simpler route
+              into investing after you have done your research.
             </div>
 
             <div
@@ -1018,17 +1097,16 @@ export default async function SPXPage() {
         .topNavShowMobile {
           display: none;
         }
-        
 
         @media (max-width: 900px) {
+          .spxHeroGrid {
+            grid-template-columns: 1fr !important;
+          }
+
           .spxTopGrid {
             grid-template-columns: 1fr !important;
           }
-@media (max-width: 900px) {
-  .spxHeroGrid {
-    grid-template-columns: 1fr !important;
-  }
-}
+
           .spxTwoCol {
             grid-template-columns: 1fr !important;
           }
