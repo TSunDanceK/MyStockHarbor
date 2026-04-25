@@ -13,10 +13,21 @@ const nextConfig: NextConfig = {
         has: [
           {
             type: "host",
+            value: "mystockharbor.com",
+          },
+        ],
+        destination: "https://www.mystockharbor.com/:path*",
+        permanent: true,
+      },
+      {
+        source: "/:path*",
+        has: [
+          {
+            type: "host",
             value: "mystockharbour.com",
           },
         ],
-        destination: "https://mystockharbor.com/:path*",
+        destination: "https://www.mystockharbor.com/:path*",
         permanent: true,
       },
       {
@@ -27,7 +38,7 @@ const nextConfig: NextConfig = {
             value: "www.mystockharbour.com",
           },
         ],
-        destination: "https://mystockharbor.com/:path*",
+        destination: "https://www.mystockharbor.com/:path*",
         permanent: true,
       },
     ];
