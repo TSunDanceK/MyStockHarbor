@@ -1050,6 +1050,71 @@ export default function StockSymbolPageClient({
               </section>
 
               <section
+  style={{
+    marginTop: 22,
+    border: "1px solid rgba(59,130,246,0.22)",
+    borderRadius: 20,
+    padding: 20,
+    background:
+      "linear-gradient(180deg, rgba(8,14,28,0.98), rgba(6,10,18,0.98))",
+  }}
+>
+  <div
+    style={{
+      display: "inline-flex",
+      alignItems: "center",
+      padding: "7px 12px",
+      borderRadius: 999,
+      background:
+        "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
+      border: "1px solid rgba(59,130,246,0.32)",
+      color: "#dbeafe",
+      fontWeight: 950,
+      letterSpacing: "0.08em",
+      fontSize: 12,
+    }}
+  >
+    EXPLORE MORE
+  </div>
+
+  <h2
+    style={{
+      margin: "14px 0 0 0",
+      fontSize: 24,
+      lineHeight: 1.15,
+      letterSpacing: "-0.03em",
+    }}
+  >
+    Explore more stock opportunities
+  </h2>
+
+  <div
+    style={{
+      marginTop: 16,
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+      gap: 12,
+    }}
+  >
+    <Link href="/oversold-stocks-today" style={learnCardStyle("green")}>
+      Oversold Stocks (Potential Rebounds)
+    </Link>
+
+    <Link href="/overbought-stocks-today" style={learnCardStyle("red")}>
+      Overbought Stocks (Pullback Watch)
+    </Link>
+
+    <Link href="/stocks-ready-to-break-out" style={learnCardStyle("blue")}>
+      Breakout Stocks
+    </Link>
+
+    <Link href="/best-trend-score-stocks" style={learnCardStyle("blue")}>
+      Strong Trend Stocks
+    </Link>
+  </div>
+</section>
+
+              <section
                 style={{
                   marginTop: 22,
                   border: "1px solid rgba(255,255,255,0.08)",
