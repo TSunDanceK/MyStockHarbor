@@ -284,10 +284,10 @@ async function fetchEarningsNews(symbol: string, companyName: string): Promise<N
   const baseNameQuery = company ? `${company} ${symbol}` : symbol;
 
   const queries = [
-    `${baseNameQuery} latest earnings results revenue EPS guidance`,
-    `${baseNameQuery} quarterly financial results revenue guidance`,
-    `${baseNameQuery} earnings beat miss guidance revenue`,
-    `${baseNameQuery} investor relations financial results earnings`,
+    `${baseNameQuery} reported earnings results revenue EPS guidance`,
+    `${baseNameQuery} quarterly financial results revenue guidance net loss`,
+    `${baseNameQuery} earnings beat miss guidance revenue net loss`,
+    `${baseNameQuery} investor relations financial results earnings revenue`,
   ];
 
   try {
@@ -1081,6 +1081,91 @@ function getAiScoreGuardrails(items: NewsItem[]) {
   };
 }
 
+function getEarningsQualityGuardrails(items: NewsItem[]) {
+  const relevant = items
+    .filter((item) => !isLowValueNewsItem(item) && isActualEarningsResultNews(item))
+    .slice(0, 8);
+
+  let positiveActualResults = 0;
+  let strongPositiveActualResults = 0;
+  let negativeActualResults = 0;
+  let severeNegativeActualResults = 0;
+
+  for (const item of relevant) {
+    const text = headlineText(item);
+
+    const positive = containsAny(text, [
+      "beat", "beats", "tops estimates", "top estimates", "above estimates",
+      "better than expected", "better-than-expected", "revenue beat", "eps beat",
+      "raises guidance", "raised guidance", "guidance above", "outlook above", "forecast above",
+      "strong earnings", "solid earnings", "positive earnings", "shares jump", "shares surge",
+      "stock jumps", "stock surges", "rallies after",
+    ]);
+
+    const strongPositive = containsAny(text, [
+      "beat and raise", "beat and raised", "beats and raises",
+      "beat estimates and raised guidance", "beats estimates and raises guidance",
+      "revenue beat", "eps beat", "guidance above", "outlook above",
+      "raises guidance", "raised guidance",
+    ]);
+
+    const negative = containsAny(text, [
+      "miss", "misses", "missed estimates", "below estimates", "below guidance",
+      "cuts guidance", "cut guidance", "guidance cut", "guidance below", "weak guidance",
+      "warning", "disappointing guidance", "revenue fell", "revenue declined",
+      "revenue decline", "declining revenue", "sales fell", "sales declined", "net loss",
+      "big loss", "wider loss", "loss widened", "losses remain", "subscriber decline",
+      "subscribers declined", "users declined", "demand pressure", "weak demand",
+      "softening demand", "competition pressure", "margin pressure",
+    ]);
+
+    const severeNegative = containsAny(text, [
+      "revenue fell", "revenue declined", "revenue decline", "declining revenue",
+      "net loss", "big loss", "wider loss", "loss widened", "below guidance",
+      "cuts guidance", "weak guidance", "subscriber decline", "subscribers declined",
+      "weak demand", "softening demand",
+    ]);
+
+    if (positive) positiveActualResults += 1;
+    if (strongPositive) strongPositiveActualResults += 1;
+    if (negative) negativeActualResults += 1;
+    if (severeNegative) severeNegativeActualResults += 1;
+  }
+
+  let earningsCap: number | null = null;
+  let earningsFloor: number | null = null;
+
+  if (!relevant.length) {
+    earningsCap = 55;
+  } else if (severeNegativeActualResults >= 2) {
+    earningsCap = 45;
+  } else if (severeNegativeActualResults >= 1 && positiveActualResults >= 1) {
+    earningsCap = 55;
+  } else if (negativeActualResults >= 2 && positiveActualResults <= 1) {
+    earningsCap = 50;
+  } else if (negativeActualResults >= 1 && positiveActualResults === 0) {
+    earningsCap = 42;
+  }
+
+  if (negativeActualResults === 0 && severeNegativeActualResults === 0) {
+    if (strongPositiveActualResults >= 1 || positiveActualResults >= 2) {
+      earningsFloor = 72;
+    } else if (positiveActualResults >= 1) {
+      earningsFloor = 64;
+    }
+  }
+
+  return {
+    earningsCap,
+    earningsFloor,
+    actualEarningsResultCatalysts: relevant.length,
+    positiveActualResults,
+    strongPositiveActualResults,
+    negativeActualResults,
+    severeNegativeActualResults,
+  };
+}
+
 function applyScoreCap(score: number, cap: number | null) {
   if (typeof cap !== "number") return score;
   return Math.min(score, cap);
@@ -1430,11 +1515,8 @@ async function getAiScoredNews(args: {
 
   const catalystFloors = getCatalystFloors(args.rankedNews);
   const aiGuardrails = getAiScoreGuardrails(args.rankedNews);
-  const earningsCatalystFloors = getCatalystFloors(args.rankedEarningsNews);
-  const earningsGuardrails = getAiScoreGuardrails(args.rankedEarningsNews);
-  const hasActualEarningsHeadlines = args.rankedEarningsNews.some((item) =>
-    !isLowValueNewsItem(item) && isActualEarningsResultNews(item)
-  );
+  const earningsQualityGuardrails = getEarningsQualityGuardrails(args.rankedEarningsNews);
+  const hasActualEarningsHeadlines = earningsQualityGuardrails.actualEarningsResultCatalysts > 0;
 
   const schema = {
     name: "stock_news_scores",
@@ -1508,6 +1590,7 @@ async function getAiScoredNews(args: {
     "Use earnings bands: No earnings signal = 45-55, Weak = 20-42, Mixed = 45-60, Positive = 64-80, Strong Positive = 75-90. An announcement of an upcoming earnings date or conference call is No earnings signal, not Positive. " +
     "Only choose Positive or Strong Positive earnings when the earningsHeadlines contain actual reported results, revenue/EPS beats, guidance above estimates, raised guidance, strong earnings commentary, or positive market reaction after results. " +
     "If revenue declined, revenue missed guidance, losses remain large, subscribers/users declined, or guidance disappointed, earningsScore should be Weak or Mixed unless there is a clear stronger offsetting beat plus raised guidance. " +
+    "If an earnings set has both positive words such as beat/raised guidance and negative fundamentals such as revenue decline, net loss, subscriber decline, weak demand, or margin pressure, choose Mixed unless the positive beat clearly outweighs those negatives. Do not score that as Positive simply because one article says shares surged. " +
     "If newer actual earnings headlines conflict with older positive earnings headlines, weight the newer actual results more heavily. " +
     "If the earningsHeadlines are empty or only mention an upcoming earnings date, conference call, routine filing, analyst preview, or no actual reported results, choose No earnings signal. " +
     "Layoffs, cost cuts, restructurings, asset sales, and turnaround plans are mixed: bearish if paired with weak demand or missed guidance, but neutral-to-bullish if the main headline is a beat, better guidance, or credible turnaround progress. " +
@@ -1580,8 +1663,8 @@ async function getAiScoredNews(args: {
     );
     const aiEarningsScore = hasActualEarningsHeadlines
       ? applyScoreCap(
-          applyCatalystFloor(bandedEarningsScore, earningsCatalystFloors.earningsFloor),
-          earningsGuardrails.earningsCap
+          applyCatalystFloor(bandedEarningsScore, earningsQualityGuardrails.earningsFloor),
+          earningsQualityGuardrails.earningsCap
         )
       : 50;
 
@@ -1714,8 +1797,11 @@ function scoreEarnings(news: NewsItem[]): EarningsScoreResult {
 
   let score = Math.max(0, Math.min(100, Math.round(50 + signal * 7)));
 
-  const floors = getCatalystFloors(ranked);
-  score = applyCatalystFloor(score, floors.earningsFloor);
+  const earningsQualityGuardrails = getEarningsQualityGuardrails(ranked);
+  score = applyScoreCap(
+    applyCatalystFloor(score, earningsQualityGuardrails.earningsFloor),
+    earningsQualityGuardrails.earningsCap
+  );
 
   let label = "Mixed earnings tone";
   let tone: ScoreTone = "yellow";
@@ -1806,20 +1892,17 @@ async function buildStockNewsBaseData(
 
   const catalystFloors = getCatalystFloors(rankedNews);
   const aiGuardrails = getAiScoreGuardrails(rankedNews);
-  const earningsCatalystFloors = getCatalystFloors(rankedEarningsNews);
-  const earningsGuardrails = getAiScoreGuardrails(rankedEarningsNews);
+  const earningsQualityGuardrails = getEarningsQualityGuardrails(rankedEarningsNews);
 
   const fallbackNewsScoreValue = applyScoreCap(
     applyCatalystFloor(keywordNewsScore.score, catalystFloors.newsFloor),
     aiGuardrails.newsCap
   );
-  const hasActualEarningsHeadlines = rankedEarningsNews.some((item) =>
-    !isLowValueNewsItem(item) && isActualEarningsResultNews(item)
-  );
+  const hasActualEarningsHeadlines = earningsQualityGuardrails.actualEarningsResultCatalysts > 0;
   const fallbackEarningsScoreValue = hasActualEarningsHeadlines
     ? applyScoreCap(
-        applyCatalystFloor(keywordEarningsScore.score, earningsCatalystFloors.earningsFloor),
-        earningsGuardrails.earningsCap
+        applyCatalystFloor(keywordEarningsScore.score, earningsQualityGuardrails.earningsFloor),
+        earningsQualityGuardrails.earningsCap
       )
     : 50;
 
