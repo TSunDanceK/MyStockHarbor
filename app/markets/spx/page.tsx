@@ -887,7 +887,17 @@ export default async function SPXPage() {
           >
             <div style={insightCardStyle("red")}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={insightIconStyle("red")}>⚠️</div>
+               <div
+  style={{
+    ...insightIconStyle("red"),
+    lineHeight: 1,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  }}
+>
+  <span style={{ transform: "translateY(1px)" }}>⚠️</span>
+</div>
                 <div>
                   <div style={{ ...statLabelStyle(), color: "#fca5a5", opacity: 1 }}>
                     Daily chart
