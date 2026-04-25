@@ -1734,6 +1734,8 @@ export default async function StockNewsPage({ params }: Props) {
               {leadSummary}
             </p>
 
+            <StockNewsTickerJump currentSymbol={upper} />
+
             <div className="newsHeroCtaRow" style={heroCtaRowStyle}>
               <a
                 href={`/api/go/tradingview?symbol=${encodeURIComponent(upper)}`}
