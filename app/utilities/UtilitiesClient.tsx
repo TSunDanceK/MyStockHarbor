@@ -58,59 +58,6 @@ function HelpTip({ text }: { text: string }) {
   );
 }
 
-function utilCardStyle(type: "green" | "red" | "blue" | "yellow"): React.CSSProperties {
-  return {
-    borderRadius: 18,
-    padding: 18,
-    border:
-      type === "green"
-        ? "1px solid rgba(34,197,94,0.24)"
-        : type === "red"
-        ? "1px solid rgba(239,68,68,0.24)"
-        : type === "blue"
-        ? "1px solid rgba(59,130,246,0.24)"
-        : "1px solid rgba(250,204,21,0.24)",
-    background:
-      type === "green"
-        ? "linear-gradient(135deg, rgba(34,197,94,0.10), rgba(255,255,255,0.035))"
-        : type === "red"
-        ? "linear-gradient(135deg, rgba(239,68,68,0.10), rgba(255,255,255,0.035))"
-        : type === "blue"
-        ? "linear-gradient(135deg, rgba(59,130,246,0.12), rgba(255,255,255,0.035))"
-        : "linear-gradient(135deg, rgba(250,204,21,0.12), rgba(255,255,255,0.035))",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
-  };
-}
-
-function utilIconStyle(type: "green" | "red" | "blue" | "yellow"): React.CSSProperties {
-  return {
-    width: 42,
-    height: 42,
-    borderRadius: 999,
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: 20,
-    flex: "0 0 auto",
-    background:
-      type === "green"
-        ? "rgba(34,197,94,0.18)"
-        : type === "red"
-        ? "rgba(239,68,68,0.18)"
-        : type === "blue"
-        ? "rgba(59,130,246,0.18)"
-        : "rgba(250,204,21,0.18)",
-    border:
-      type === "green"
-        ? "1px solid rgba(34,197,94,0.34)"
-        : type === "red"
-        ? "1px solid rgba(239,68,68,0.34)"
-        : type === "blue"
-        ? "1px solid rgba(59,130,246,0.34)"
-        : "1px solid rgba(250,204,21,0.34)",
-  };
-}
-
 function topNavBtnStyle(
   type: "learn" | "pickers" | "dashboard" | "platforms" | "utilities"
 ): React.CSSProperties {
@@ -240,11 +187,13 @@ function topNavIcon(
 
 function calculatorPanelStyle(): React.CSSProperties {
   return {
-    border: "1px solid rgba(59,130,246,0.22)",
-    borderRadius: 18,
+    border: "1px solid rgba(59,130,246,0.24)",
+    borderRadius: 20,
     padding: 18,
-    background: "linear-gradient(180deg, rgba(8,22,45,0.88), rgba(7,18,36,0.96))",
-    boxShadow: "0 0 0 1px rgba(59,130,246,0.05) inset",
+    background:
+      "linear-gradient(180deg, rgba(8,22,45,0.94), rgba(7,18,36,0.98))",
+    boxShadow:
+      "0 16px 34px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.05)",
   };
 }
 
@@ -316,17 +265,19 @@ function baseResultBoxStyle(): React.CSSProperties {
   return {
     borderRadius: 14,
     border: "1px solid rgba(255,255,255,0.12)",
-    background: "#13233b",
+    background: "linear-gradient(135deg, rgba(19,35,59,0.96), rgba(15,23,42,0.92))",
     padding: 14,
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.045)",
   };
 }
 
 function infoCardStyle(): React.CSSProperties {
   return {
     borderRadius: 14,
-    border: "1px solid rgba(255,255,255,0.12)",
-    background: "#13233b",
+    border: "1px solid rgba(59,130,246,0.18)",
+    background: "linear-gradient(135deg, rgba(59,130,246,0.08), rgba(19,35,59,0.94))",
     padding: 14,
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
   };
 }
 
@@ -357,23 +308,107 @@ function resultLabelStyle(): React.CSSProperties {
 
 function guideCardStyle(): React.CSSProperties {
   return {
-    border: "1px solid rgba(255,255,255,0.14)",
-    borderRadius: 14,
-    padding: 14,
-    background: "rgba(255,255,255,0.04)",
+    border: "1px solid rgba(59,130,246,0.20)",
+    borderRadius: 16,
+    padding: 15,
+    background:
+      "linear-gradient(135deg, rgba(59,130,246,0.09), rgba(255,255,255,0.035))",
     color: "#f1f5f9",
     textDecoration: "none",
     display: "block",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.045)",
   };
 }
 
 function infoSectionStyle(): React.CSSProperties {
   return {
     marginTop: 24,
-    border: "1px solid rgba(255,255,255,0.14)",
-    borderRadius: 18,
+    border: "1px solid rgba(59,130,246,0.18)",
+    borderRadius: 20,
     padding: 18,
-    background: "rgba(255,255,255,0.03)",
+    background: "linear-gradient(135deg, rgba(59,130,246,0.07), rgba(255,255,255,0.03))",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.045)",
+  };
+}
+
+function sectionEyebrowStyle(type: "blue" | "green" | "red" | "yellow"): React.CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    fontSize: 12,
+    fontWeight: 950,
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+    color:
+      type === "green"
+        ? "#86efac"
+        : type === "red"
+        ? "#fca5a5"
+        : type === "yellow"
+        ? "#fde68a"
+        : "#93c5fd",
+  };
+}
+
+function utilityIconStyle(type: "blue" | "green" | "red" | "yellow"): React.CSSProperties {
+  return {
+    width: 42,
+    height: 42,
+    borderRadius: 999,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flex: "0 0 auto",
+    fontSize: 21,
+    background:
+      type === "green"
+        ? "rgba(34,197,94,0.18)"
+        : type === "red"
+        ? "rgba(239,68,68,0.18)"
+        : type === "yellow"
+        ? "rgba(250,204,21,0.18)"
+        : "rgba(59,130,246,0.18)",
+    border:
+      type === "green"
+        ? "1px solid rgba(34,197,94,0.34)"
+        : type === "red"
+        ? "1px solid rgba(239,68,68,0.34)"
+        : type === "yellow"
+        ? "1px solid rgba(250,204,21,0.34)"
+        : "1px solid rgba(59,130,246,0.34)",
+    boxShadow:
+      type === "green"
+        ? "0 0 18px rgba(34,197,94,0.16)"
+        : type === "red"
+        ? "0 0 18px rgba(239,68,68,0.16)"
+        : type === "yellow"
+        ? "0 0 18px rgba(250,204,21,0.16)"
+        : "0 0 18px rgba(59,130,246,0.16)",
+  };
+}
+
+function calloutCardStyle(type: "blue" | "green" | "red" | "yellow"): React.CSSProperties {
+  return {
+    borderRadius: 16,
+    border:
+      type === "green"
+        ? "1px solid rgba(34,197,94,0.24)"
+        : type === "red"
+        ? "1px solid rgba(239,68,68,0.24)"
+        : type === "yellow"
+        ? "1px solid rgba(250,204,21,0.24)"
+        : "1px solid rgba(59,130,246,0.24)",
+    background:
+      type === "green"
+        ? "linear-gradient(135deg, rgba(34,197,94,0.10), rgba(255,255,255,0.035))"
+        : type === "red"
+        ? "linear-gradient(135deg, rgba(239,68,68,0.10), rgba(255,255,255,0.035))"
+        : type === "yellow"
+        ? "linear-gradient(135deg, rgba(250,204,21,0.12), rgba(255,255,255,0.035))"
+        : "linear-gradient(135deg, rgba(59,130,246,0.12), rgba(255,255,255,0.035))",
+    padding: 16,
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.045)",
   };
 }
 
@@ -699,57 +734,68 @@ export default function UtilitiesClientPage() {
         </div>
 
         <section style={infoSectionStyle()} className="mobileHideIntroSection">
-          <h2 style={{ margin: 0, fontSize: 24, lineHeight: 1.2 }}>
-            Free trading calculators for risk management
-          </h2>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+            <div style={utilityIconStyle("blue")}>🧮</div>
+            <div>
+              <div style={sectionEyebrowStyle("blue")}>Trading calculators</div>
+              <h2 style={{ margin: "8px 0 0", fontSize: 24, lineHeight: 1.2 }}>
+                Free trading calculators for risk management
+              </h2>
 
-          <p
-            style={{
-              margin: "10px 0 0",
-              opacity: 0.84,
-              lineHeight: 1.7,
-              maxWidth: 980,
-            }}
-          >
-            These trading calculators are designed to help you manage risk before
-            you enter a position. Use the liquidation calculator to estimate
-            where leverage could become dangerous, and use the position size
-            calculator to work out how many shares fit your stop loss and risk
-            amount.
-          </p>
+              <p
+                style={{
+                  margin: "10px 0 0",
+                  opacity: 0.84,
+                  lineHeight: 1.7,
+                  maxWidth: 980,
+                }}
+              >
+                These trading calculators are designed to help you manage risk before
+                you enter a position. Use the liquidation calculator to estimate
+                where leverage could become dangerous, and use the position size
+                calculator to work out how many shares fit your stop loss and risk
+                amount.
+              </p>
 
-          <p
-            style={{
-              margin: "10px 0 0",
-              opacity: 0.84,
-              lineHeight: 1.7,
-              maxWidth: 980,
-            }}
-          >
-            Traders often focus too much on entries and not enough on downside
-            control. These tools help you plan trade size, stop distance and
-            risk-reward more clearly before putting capital at risk.
-          </p>
+              <p
+                style={{
+                  margin: "10px 0 0",
+                  opacity: 0.84,
+                  lineHeight: 1.7,
+                  maxWidth: 980,
+                }}
+              >
+                Traders often focus too much on entries and not enough on downside
+                control. These tools help you plan trade size, stop distance and
+                risk-reward more clearly before putting capital at risk.
+              </p>
+            </div>
+          </div>
         </section>
 
         <div style={{ marginTop: 22 }} className="grid2">
           <section style={calculatorPanelStyle()}>
-            <div style={badgeStyle("blue")}>MARGIN TOOL</div>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+              <div style={utilityIconStyle("blue")}>🧊</div>
+              <div>
+                <div style={badgeStyle("blue")}>MARGIN TOOL</div>
 
-            <h2
-              style={{
-                margin: "12px 0 0",
-                fontSize: 28,
-                letterSpacing: "-0.3px",
-              }}
-            >
-              Margin / Liquidation Calculator
-            </h2>
+                <h2
+                  style={{
+                    margin: "12px 0 0",
+                    fontSize: 28,
+                    letterSpacing: "-0.3px",
+                  }}
+                >
+                  Margin / Liquidation Calculator
+                </h2>
 
-            <p style={{ margin: "10px 0 0", opacity: 0.84, lineHeight: 1.6 }}>
-              Estimate where your trade could be liquidated if the market moves
-              against you while using leverage.
-            </p>
+                <p style={{ margin: "10px 0 0", opacity: 0.84, lineHeight: 1.6 }}>
+                  Estimate where your trade could be liquidated if the market moves
+                  against you while using leverage.
+                </p>
+              </div>
+            </div>
 
             <div className="calcFieldGrid" style={{ marginTop: 18 }}>
               <div>
@@ -850,9 +896,10 @@ export default function UtilitiesClientPage() {
               </div>
             </div>
 
-            <div style={{ marginTop: 18, ...infoCardStyle() }}>
-              <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                What this tool does
+            <div style={{ marginTop: 18, ...calloutCardStyle("blue") }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                <div style={utilityIconStyle("blue")}>ℹ️</div>
+                <div style={{ fontWeight: 900 }}>What this tool does</div>
               </div>
               <div style={{ opacity: 0.84, lineHeight: 1.6 }}>
                 This calculator estimates the price at which your broker could
@@ -860,9 +907,10 @@ export default function UtilitiesClientPage() {
               </div>
             </div>
 
-            <div style={{ marginTop: 14, ...infoCardStyle() }}>
-              <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                Why it matters
+            <div style={{ marginTop: 14, ...calloutCardStyle("red") }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                <div style={utilityIconStyle("red")}>⚠</div>
+                <div style={{ fontWeight: 900 }}>Why it matters</div>
               </div>
               <div style={{ opacity: 0.84, lineHeight: 1.6 }}>
                 If you use leverage without understanding liquidation, even a
@@ -874,22 +922,27 @@ export default function UtilitiesClientPage() {
           </section>
 
           <section style={calculatorPanelStyle()}>
-            <div style={badgeStyle("green")}>RISK TOOL</div>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+              <div style={utilityIconStyle("green")}>🛡</div>
+              <div>
+                <div style={badgeStyle("green")}>RISK TOOL</div>
 
-            <h2
-              style={{
-                margin: "12px 0 0",
-                fontSize: 28,
-                letterSpacing: "-0.3px",
-              }}
-            >
-              Position Size / Stop Loss Calculator
-            </h2>
+                <h2
+                  style={{
+                    margin: "12px 0 0",
+                    fontSize: 28,
+                    letterSpacing: "-0.3px",
+                  }}
+                >
+                  Position Size / Stop Loss Calculator
+                </h2>
 
-            <p style={{ margin: "10px 0 0", opacity: 0.84, lineHeight: 1.6 }}>
-              Work out how many shares you can buy while keeping your loss
-              within a sensible risk limit.
-            </p>
+                <p style={{ margin: "10px 0 0", opacity: 0.84, lineHeight: 1.6 }}>
+                  Work out how many shares you can buy while keeping your loss
+                  within a sensible risk limit.
+                </p>
+              </div>
+            </div>
 
             <div className="calcFieldGrid" style={{ marginTop: 18 }}>
               <div>
@@ -1003,9 +1056,10 @@ export default function UtilitiesClientPage() {
                 </div>
               </div>
             </div>
-            <div style={{ marginTop: 18, ...infoCardStyle() }}>
-              <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                What this tool does
+            <div style={{ marginTop: 18, ...calloutCardStyle("green") }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                <div style={utilityIconStyle("green")}>✅</div>
+                <div style={{ fontWeight: 900 }}>What this tool does</div>
               </div>
               <div style={{ opacity: 0.84, lineHeight: 1.6 }}>
                 This calculator helps you decide how many shares to buy based on
@@ -1013,9 +1067,10 @@ export default function UtilitiesClientPage() {
               </div>
             </div>
 
-            <div style={{ marginTop: 14, ...infoCardStyle() }}>
-              <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                Why it matters
+            <div style={{ marginTop: 14, ...calloutCardStyle("yellow") }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                <div style={utilityIconStyle("yellow")}>📏</div>
+                <div style={{ fontWeight: 900 }}>Why it matters</div>
               </div>
               <div style={{ opacity: 0.84, lineHeight: 1.6 }}>
                 Good traders control their risk before entering a trade.
@@ -1028,9 +1083,15 @@ export default function UtilitiesClientPage() {
         </div>
 
 <section style={infoSectionStyle()}>
-  <h2 style={{ margin: 0, fontSize: 24, lineHeight: 1.2 }}>
-    Related risk management guides
-  </h2>
+  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+    <div style={utilityIconStyle("blue")}>📘</div>
+    <div>
+      <div style={sectionEyebrowStyle("blue")}>Learn next</div>
+      <h2 style={{ margin: "6px 0 0", fontSize: 24, lineHeight: 1.2 }}>
+        Related risk management guides
+      </h2>
+    </div>
+  </div>
 
   <div
     style={{
@@ -1145,7 +1206,13 @@ export default function UtilitiesClientPage() {
 </section>
 
         <section style={infoSectionStyle()}>
-          <h2 style={{ margin: 0, fontSize: 24, lineHeight: 1.2 }}>FAQ</h2>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={utilityIconStyle("yellow")}>❓</div>
+            <div>
+              <div style={sectionEyebrowStyle("yellow")}>Quick answers</div>
+              <h2 style={{ margin: "6px 0 0", fontSize: 24, lineHeight: 1.2 }}>FAQ</h2>
+            </div>
+          </div>
 
           <div style={{ marginTop: 16, display: "grid", gap: 16 }}>
             <div>
