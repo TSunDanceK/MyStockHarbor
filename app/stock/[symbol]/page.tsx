@@ -116,11 +116,10 @@ export default async function StockPage({ params }: Props) {
 
 <section
   style={{
-    maxWidth: 900,
+    maxWidth: 1100,
     margin: "0 auto",
-    padding: "28px 16px 0",
+    padding: "20px 16px 0",
     fontFamily: "system-ui, Arial",
-    textAlign: "center",
   }}
 >
         <h1
@@ -137,8 +136,8 @@ export default async function StockPage({ params }: Props) {
 
         <p
           style={{
-            maxWidth: 700,
-            margin: "10px auto 0",
+maxWidth: 720,
+margin: "10px 0 0",
             maxWidth: 860,
             fontSize: 15,
             lineHeight: 1.7,
