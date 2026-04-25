@@ -1108,9 +1108,9 @@ export default function StockSymbolPageClient({
       Breakout Stocks
     </Link>
 
-    <Link href="/best-trend-score-stocks" style={learnCardStyle("blue")}>
-      Strong Trend Stocks
-    </Link>
+<Link href="/stocks-near-200-day-moving-average" style={learnCardStyle("yellow")}>
+  Stocks Near 200-Day Moving Average
+</Link>
   </div>
 </section>
 
@@ -1393,7 +1393,7 @@ const statMetaStyle: React.CSSProperties = {
 };
 
 function learnCardStyle(
-  tint: "blue" | "green" | "red"
+  tint: "blue" | "green" | "red" | "yellow"
 ): React.CSSProperties {
   if (tint === "green") {
     return {
@@ -1424,6 +1424,21 @@ function learnCardStyle(
       transition: "transform 120ms ease, filter 120ms ease, background 120ms ease",
     };
   }
+  
+  if (tint === "yellow") {
+  return {
+    display: "block",
+    textDecoration: "none",
+    color: "#f1f5f9",
+    borderRadius: 14,
+    padding: 14,
+    border: "1px solid rgba(250,204,21,0.20)",
+    background:
+      "linear-gradient(135deg, rgba(250,204,21,0.10), rgba(202,138,4,0.05))",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+    transition: "transform 120ms ease, filter 120ms ease, background 120ms ease",
+  };
+}
 
   return {
     display: "block",
