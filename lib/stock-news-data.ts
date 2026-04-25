@@ -3,7 +3,7 @@ import {
   getAiNewsBriefs,
   getAiNewsInsight,
   type AiNewsBrief,
-  type AiNewsInsight,
+  type AiNewsInsight, 
 } from "@/lib/ai-news-briefs";
 
 export type Quote = {
