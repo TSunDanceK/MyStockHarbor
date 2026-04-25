@@ -2211,7 +2211,7 @@ const getCachedStockNewsBaseData = unstable_cache(
 
     return buildStockNewsBaseData(parsed.symbol, parsed.options);
   },
-  ["msh-stock-news-base-data-v7"],
+  ["msh-stock-news-base-data-v8"],
   {
     revalidate: 1800,
   }
