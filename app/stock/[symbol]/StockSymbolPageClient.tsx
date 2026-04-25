@@ -444,32 +444,76 @@ export default function StockSymbolPageClient({
             STOCK ANALYSIS PAGE
           </div>
 
-          <div
-            style={{
-              margin: "14px 0 0 0",
-              fontSize: 42,
-              lineHeight: 1.04,
-              letterSpacing: "-0.05em",
-              fontWeight: 950,
-            }}
-          >
-            {symbol} Stock Analysis
+          <div className="stockAnalysisHeroGrid">
+            <div>
+              <div
+                style={{
+                  margin: "14px 0 0 0",
+                  fontSize: 42,
+                  lineHeight: 1.04,
+                  letterSpacing: "-0.05em",
+                  fontWeight: 950,
+                }}
+              >
+                {symbol} Stock Analysis
+              </div>
+
+              <p
+                style={{
+                  marginTop: 12,
+                  fontSize: 16,
+                  lineHeight: 1.7,
+                  opacity: 0.84,
+                  maxWidth: 760,
+                }}
+              >
+                {companyName || `${symbol} technical overview`}{" "}
+                {companyName ? `(${symbol})` : ""}. Review the chart, trend structure,
+                moving averages and momentum context in a more readable, beginner-friendly way.
+              </p>
+            </div>
+
+            {!loading && !err ? (
+              <div className="stockAnalysisSidePanel">
+                <div style={featuredMetricCardStyle(trendTone)}>
+                  <div style={miniLabelStyle}>Trend score</div>
+                  <div
+                    style={{
+                      marginTop: 8,
+                      fontSize: 42,
+                      lineHeight: 1,
+                      fontWeight: 950,
+                      letterSpacing: "-0.06em",
+                      color: toneColor(trendTone),
+                    }}
+                  >
+                    {trendScore.passed}/{trendScore.total}
+                  </div>
+                  <div style={{ marginTop: 10, fontSize: 14, lineHeight: 1.65, opacity: 0.8 }}>
+                    Price vs MA50, price vs MA200 and MA50 vs MA200.
+                  </div>
+                </div>
+
+                <div className="stockAnalysisMiniGrid">
+                  <div style={miniMetricCardStyle}>
+                    <div style={miniLabelStyle}>Last price</div>
+                    <div style={miniMetricValueStyle}>
+                      {typeof quote?.price === "number" ? `$${quote.price.toFixed(2)}` : "—"}
+                    </div>
+                    <div style={miniMetricSubStyle}>
+                      {quote?.date && quote?.time ? `${quote.date} ${quote.time}` : "Timestamp unavailable"}
+                    </div>
+                  </div>
+
+                  <div style={miniMetricCardStyle}>
+                    <div style={miniLabelStyle}>Regime</div>
+                    <div style={miniMetricValueStyle}>{trend}</div>
+                    <div style={miniMetricSubStyle}>Overall chart structure</div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
-
-          <p
-            style={{
-              marginTop: 12,
-              fontSize: 16,
-              lineHeight: 1.7,
-              opacity: 0.84,
-              maxWidth: 860,
-            }}
-          >
-            {companyName || `${symbol} technical overview`}{" "}
-            {companyName ? `(${symbol})` : ""}. Review the chart, trend structure,
-            moving averages and momentum context in a more readable, beginner-friendly way.
-          </p>
-
           {loading ? (
             <div style={{ marginTop: 18, opacity: 0.8 }}>Loading stock page…</div>
           ) : err ? (
