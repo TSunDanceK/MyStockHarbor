@@ -1209,6 +1209,44 @@ function applyCatalystFloor(score: number, floor: number | null) {
   return Math.max(score, floor);
 }
 
+type DominantNewsTone =
+  | "Strongly Bearish"
+  | "Bearish"
+  | "Neutral"
+  | "Bullish"
+  | "Strongly Bullish";
+
+type DominantEarningsTone =
+  | "No earnings signal"
+  | "Weak"
+  | "Mixed"
+  | "Positive"
+  | "Strong Positive";
+
+function clampToBand(score: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, score));
+}
+
+function applyDominantNewsToneBand(score: number, tone: unknown) {
+  if (tone === "Strongly Bullish") return clampToBand(score, 80, 90);
+  if (tone === "Bullish") return clampToBand(score, 65, 80);
+  if (tone === "Neutral") return clampToBand(score, 45, 60);
+  if (tone === "Bearish") return clampToBand(score, 25, 45);
+  if (tone === "Strongly Bearish") return clampToBand(score, 10, 25);
+
+  return score;
+}
+
+function applyDominantEarningsToneBand(score: number, tone: unknown) {
+  if (tone === "Strong Positive") return clampToBand(score, 75, 90);
+  if (tone === "Positive") return clampToBand(score, 64, 80);
+  if (tone === "Mixed") return clampToBand(score, 45, 60);
+  if (tone === "No earnings signal") return clampToBand(score, 45, 55);
+  if (tone === "Weak") return clampToBand(score, 20, 42);
+
+  return score;
+}
+
 type AiScorePayload = {
   newsScore: NewsScoreResult;
   earningsScore: EarningsScoreResult;
@@ -1271,8 +1309,12 @@ async function getAiScoredNews(args: {
               type: "string",
               enum: ["Low", "Medium", "High"],
             },
+            dominantTone: {
+              type: "string",
+              enum: ["Strongly Bearish", "Bearish", "Neutral", "Bullish", "Strongly Bullish"],
+            },
           },
-          required: ["score", "label", "reason", "positives", "negatives", "confidence"],
+          required: ["score", "label", "reason", "positives", "negatives", "confidence", "dominantTone"],
         },
         earningsScore: {
           type: "object",
@@ -1284,8 +1326,12 @@ async function getAiScoredNews(args: {
               enum: ["Weak earnings tone", "Mixed earnings tone", "Positive earnings tone", "Neutral earnings tone"],
             },
             reason: { type: "string" },
+            dominantTone: {
+              type: "string",
+              enum: ["No earnings signal", "Weak", "Mixed", "Positive", "Strong Positive"],
+            },
           },
-          required: ["score", "label", "reason"],
+          required: ["score", "label", "reason", "dominantTone"],
         },
       },
       required: ["newsScore", "earningsScore"],
@@ -1294,19 +1340,18 @@ async function getAiScoredNews(args: {
 
   const systemPrompt =
     "You score stock headline flow for MyStockHarbor. Use only the supplied headlines, descriptions, sources, dates, company name, ticker, and chart trend context. " +
-    "Score the latest headline flow from 0 to 100, where 100 is maximally bullish, 50 is neutral, and 0 is maximally bearish. " +
-    "Think like a cautious market analyst, not a promoter. A stock is not bullish simply because there is no disaster headline. " +
-    "First identify whether there is a real catalyst. Real bullish catalysts include: earnings beat, revenue or EPS above estimates, raised guidance, shares rallying after results, a confirmed major customer win, a confirmed major deal, strong demand data, or a meaningful strategic partnership. " +
-    "Weak positives include: analyst price targets, projected upside, routine earnings-date announcements, routine insider/RSU filings, partnership speculation, merger rumours, or vague optimism. Weak positives should not create a bullish score by themselves. " +
-    "If headlines are mostly routine, speculative, or analyst-opinion based, keep the news score near neutral or below neutral even when the wording sounds optimistic. " +
-    "Use catalyst bands: if there is no real bullish catalyst, keep the score in the 35-60 range and usually below 50 when real bearish catalysts are present. If there is a real bullish catalyst and only secondary risks, score 65-78. If a real bullish catalyst clearly dominates and the market reaction or strategic impact is strong, score 75-85. Do not stay near neutral when a genuine major catalyst is present. " +
-    "Do NOT score above 60 unless there is at least one real bullish catalyst. Do NOT score above 70 unless the real catalyst clearly dominates the risk headlines. But if it does dominate, lean into the bullish range rather than using a cautious neutral score. " +
-    "Insider selling, 10b5-1 stock sales, RSU resale notices, softening demand, intensifying competition, weak guidance, misses, liquidity stress, investigations, recalls, lawsuits, and bankruptcy risk are bearish catalysts. " +
-    "Analyst upside and absence of severe negative news are not enough to offset weak demand, insider selling, or competition. " +
-    "Layoffs, cost cuts, restructurings, asset sales, and turnaround plans are mixed: they are bearish if paired with weak demand or missed guidance, but can be neutral-to-bullish if the main headline is a beat, better guidance, or a credible turnaround plan. " +
-    "For earningsScore, only score strongly positive when there are actual earnings results, revenue/EPS beats, strong guidance, or clearly positive earnings commentary. An announcement of an upcoming earnings date or conference call is neutral, not positive. " +
-    "If there are no actual earnings-result headlines, keep earningsScore between 45 and 55 unless there is clear earnings-related weakness. If there is an actual earnings beat, strong revenue/EPS, raised guidance, or positive market reaction after results, earningsScore should normally be 65-85 unless a severe earnings warning offsets it. " +
-    "Keep the reason short, calm, and suitable for beginner investors. Do not invent facts beyond the supplied text.";
+    "Your main job is to choose a clear dominant headline tone first, then score from the matching band. Do not compress everything into the 55-65 range. " +
+    "First classify newsScore.dominantTone as exactly one of: Strongly Bullish, Bullish, Neutral, Bearish, Strongly Bearish. " +
+    "Use these score bands: Strongly Bullish = 80-90, Bullish = 65-80, Neutral = 45-60, Bearish = 25-45, Strongly Bearish = 10-25. The numeric score must match the dominantTone band. " +
+    "Strongly Bullish means a clear positive catalyst dominates: earnings beat, raised guidance, strong revenue/EPS, major confirmed deal, major customer win, strong demand data, or strong share-price reaction after results. " +
+    "Bullish means positive catalysts dominate but there are still secondary risks. Neutral means no strong catalyst, routine updates, analyst opinion only, or genuinely mixed evidence. Bearish means real negatives dominate, such as insider selling, weak demand, competition pressure, downgrades, weak guidance, misses, legal/regulatory risk, liquidity stress, or poor execution. Strongly Bearish means severe negatives such as bankruptcy risk, collapse, major investigation, disastrous guidance, or acute liquidity concerns. " +
+    "A stock is not bullish simply because there is no disaster headline. Analyst price targets, projected upside, routine earnings-date announcements, routine insider/RSU filings, partnership speculation, merger rumours, or vague optimism are weak positives and should usually be Neutral at best unless supported by real catalysts. " +
+    "If there is no real bullish catalyst, do not choose Bullish or Strongly Bullish. If a real bullish catalyst clearly dominates and negatives are secondary, do not choose Neutral. " +
+    "For earningsScore, classify earningsScore.dominantTone as exactly one of: No earnings signal, Weak, Mixed, Positive, Strong Positive. " +
+    "Use earnings bands: No earnings signal = 45-55, Weak = 20-42, Mixed = 45-60, Positive = 64-80, Strong Positive = 75-90. An announcement of an upcoming earnings date or conference call is No earnings signal, not Positive. " +
+    "Only choose Positive or Strong Positive earnings when there are actual results, revenue/EPS beats, guidance above estimates, raised guidance, strong earnings commentary, or positive market reaction after results. " +
+    "Layoffs, cost cuts, restructurings, asset sales, and turnaround plans are mixed: bearish if paired with weak demand or missed guidance, but neutral-to-bullish if the main headline is a beat, better guidance, or credible turnaround progress. " +
+    "Use positives and negatives to explain the chosen lane. Keep reasons short, calm, and suitable for beginner investors. Do not invent facts beyond the supplied text.";
 
   const userPrompt = JSON.stringify({
     symbol: args.symbol,
@@ -1355,16 +1400,25 @@ async function getAiScoredNews(args: {
     if (!rawText) return null;
 
     const parsed = JSON.parse(rawText) as {
-      newsScore?: Partial<NewsScoreResult>;
-      earningsScore?: Partial<EarningsScoreResult>;
+      newsScore?: Partial<NewsScoreResult> & { dominantTone?: DominantNewsTone };
+      earningsScore?: Partial<EarningsScoreResult> & { dominantTone?: DominantEarningsTone };
     };
 
+    const bandedNewsScore = applyDominantNewsToneBand(
+      clampScore(parsed.newsScore?.score),
+      parsed.newsScore?.dominantTone
+    );
+    const bandedEarningsScore = applyDominantEarningsToneBand(
+      clampScore(parsed.earningsScore?.score),
+      parsed.earningsScore?.dominantTone
+    );
+
     const aiNewsScore = applyScoreCap(
-      applyCatalystFloor(clampScore(parsed.newsScore?.score), catalystFloors.newsFloor),
+      applyCatalystFloor(bandedNewsScore, catalystFloors.newsFloor),
       aiGuardrails.newsCap
     );
     const aiEarningsScore = applyScoreCap(
-      applyCatalystFloor(clampScore(parsed.earningsScore?.score), catalystFloors.earningsFloor),
+      applyCatalystFloor(bandedEarningsScore, catalystFloors.earningsFloor),
       aiGuardrails.earningsCap
     );
 
