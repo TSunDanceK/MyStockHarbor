@@ -488,7 +488,7 @@ export default async function OversoldStocksTodayPage() {
                 letterSpacing: "-0.05em",
               }}
             >
-              Oversold Stocks Today
+              Oversold Stocks Today (Potential Rebound Setups)
             </h1>
 
             <p
@@ -501,10 +501,10 @@ export default async function OversoldStocksTodayPage() {
                 maxWidth: 760,
               }}
             >
-              This page shows stocks currently screening as oversold using live
-              MyStockHarbor picker data. It is built for traders who want to
-              review potential rebound setups, identify charts under pressure,
-              and quickly inspect whether weakness may be turning into opportunity.
+Explore oversold stocks today using live MyStockHarbor data. These stocks are
+showing signs of recent downside pressure and may present potential rebound setups
+if momentum begins to stabilise. Use this page to quickly identify stocks that could
+be approaching exhaustion or reversal zones.
             </p>
 
             <p
