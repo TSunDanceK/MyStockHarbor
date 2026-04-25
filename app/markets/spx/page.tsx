@@ -153,15 +153,6 @@ function sectionCardStyle(): React.CSSProperties {
   };
 }
 
-function statCardStyle(): React.CSSProperties {
-  return {
-    borderRadius: 16,
-    border: "1px solid rgba(255,255,255,0.10)",
-    background: "rgba(255,255,255,0.03)",
-    padding: 16,
-  };
-}
-
 function statLabelStyle(): React.CSSProperties {
   return {
     fontSize: 12,
@@ -561,6 +552,8 @@ export default async function SPXPage() {
   </div>
 </div>
 
+            </div>
+
             <aside style={marketMoodCardStyle(marketMood.score)}>
               <div style={statLabelStyle()}>Market mood</div>
 
@@ -815,6 +808,8 @@ export default async function SPXPage() {
     ))}
   </div>
 </div>
+
+              </div>
 
               <div style={{ marginTop: 12, fontSize: 12, opacity: 0.6 }}>
                 Updated: {new Date(marketAnalysis.generatedAt).toLocaleString("en-GB")}
