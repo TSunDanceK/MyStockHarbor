@@ -775,8 +775,6 @@ export default function UtilitiesClientPage() {
 
         <div style={{ marginTop: 22 }} className="grid2">
           <section style={calculatorPanelStyle()}>
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-              <div style={utilityIconStyle("blue")}>🧊</div>
               <div>
                 <div style={badgeStyle("blue")}>MARGIN TOOL</div>
 
@@ -922,8 +920,6 @@ export default function UtilitiesClientPage() {
           </section>
 
           <section style={calculatorPanelStyle()}>
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-              <div style={utilityIconStyle("green")}>🛡</div>
               <div>
                 <div style={badgeStyle("green")}>RISK TOOL</div>
 
