@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getAiStockAnalysis } from "@/lib/ai-stock-analysis";
 import StockSymbolPageClient from "./StockSymbolPageClient";
+import StockTickerJump from "./StockTickerJump";
 
 type Props = {
   params: Promise<{ symbol: string }>;
@@ -147,8 +148,11 @@ Explore {upper} stock analysis with chart context, AI business overview, technic
 moving-average context, momentum indicators and risk signals from MyStockHarbor. This page is
 designed to help traders quickly understand whether {upper} is showing bullish, bearish or
 neutral conditions based on recent market structure.
-        </p>
-      </section>
+</p>
+
+<StockTickerJump currentSymbol={upper} />
+
+</section>
 
       <StockSymbolPageClient symbol={upper} aiAnalysis={aiAnalysis} />
     </>
