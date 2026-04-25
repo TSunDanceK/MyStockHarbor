@@ -836,6 +836,256 @@ function scoreNews(news: NewsItem[]): NewsScoreResult {
   };
 }
 
+
+function extractOpenAiResponseText(payload: unknown): string {
+  if (!payload || typeof payload !== "object") return "";
+
+  const record = payload as {
+    output_text?: string;
+    output?: Array<{
+      content?: Array<{
+        type?: string;
+        text?: string;
+      }>;
+    }>;
+  };
+
+  if (typeof record.output_text === "string" && record.output_text.trim()) {
+    return record.output_text.trim();
+  }
+
+  if (Array.isArray(record.output)) {
+    const text = record.output
+      .flatMap((item) => (Array.isArray(item.content) ? item.content : []))
+      .find((part) => part?.type === "output_text" && typeof part.text === "string")?.text;
+
+    return typeof text === "string" ? text.trim() : "";
+  }
+
+  return "";
+}
+
+function scoreToTone(score: number): ScoreTone {
+  if (score >= 58) return "green";
+  if (score <= 42) return "red";
+  return "yellow";
+}
+
+function scoreToNewsLabel(score: number) {
+  if (score >= 66) return "Bullish";
+  if (score >= 58) return "Slightly Bullish";
+  if (score <= 34) return "Bearish";
+  if (score <= 42) return "Slightly Bearish";
+  return "Neutral";
+}
+
+function scoreToEarningsLabel(score: number) {
+  if (score >= 64) return "Positive earnings tone";
+  if (score <= 36) return "Weak earnings tone";
+  return "Mixed earnings tone";
+}
+
+function clampScore(value: unknown) {
+  const score = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(score)) return 50;
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+function cleanStringArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    .map((item) => item.trim())
+    .slice(0, 3);
+}
+
+type AiScorePayload = {
+  newsScore: NewsScoreResult;
+  earningsScore: EarningsScoreResult;
+};
+
+async function getAiScoredNews(args: {
+  symbol: string;
+  companyName: string;
+  trend: string;
+  rankedNews: NewsItem[];
+  keywordNewsScore: NewsScoreResult;
+  keywordEarningsScore: EarningsScoreResult;
+}): Promise<AiScorePayload | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  const model = process.env.OPENAI_NEWS_MODEL || "gpt-4.1-mini";
+
+  if (!apiKey) return null;
+
+  const candidates = args.rankedNews
+    .filter((item) => !isLowValueNewsItem(item))
+    .slice(0, 8)
+    .map((item) => ({
+      title: item.title,
+      source: item.source,
+      pubDate: item.pubDate,
+      description: item.description,
+    }));
+
+  if (!candidates.length) return null;
+
+  const schema = {
+    name: "stock_news_scores",
+    strict: true,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        newsScore: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            score: { type: "number" },
+            label: {
+              type: "string",
+              enum: ["Bearish", "Slightly Bearish", "Neutral", "Slightly Bullish", "Bullish"],
+            },
+            reason: { type: "string" },
+            positives: {
+              type: "array",
+              items: { type: "string" },
+            },
+            negatives: {
+              type: "array",
+              items: { type: "string" },
+            },
+            confidence: {
+              type: "string",
+              enum: ["Low", "Medium", "High"],
+            },
+          },
+          required: ["score", "label", "reason", "positives", "negatives", "confidence"],
+        },
+        earningsScore: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            score: { type: "number" },
+            label: {
+              type: "string",
+              enum: ["Weak earnings tone", "Mixed earnings tone", "Positive earnings tone", "Neutral earnings tone"],
+            },
+            reason: { type: "string" },
+          },
+          required: ["score", "label", "reason"],
+        },
+      },
+      required: ["newsScore", "earningsScore"],
+    },
+  };
+
+  const systemPrompt =
+    "You score stock headline flow for MyStockHarbor. Use only the supplied headlines, descriptions, sources, dates, company name, ticker, and chart trend context. " +
+    "Score the latest headline flow from 0 to 100, where 100 is maximally bullish, 50 is neutral, and 0 is maximally bearish. " +
+    "Be meaningfully smarter than keyword matching: decide whether positive catalysts dominate negative caveats. " +
+    "Earnings beats, stronger-than-expected guidance, shares rallying after results, major customer wins, major AI/data-center demand, analyst upgrades, and strategic partnerships are bullish catalysts. " +
+    "Misses, guidance cuts, investigations, recalls, regulatory blocks, liquidity stress, and worsening demand are bearish catalysts. " +
+    "Layoffs, cost cuts, restructurings, asset sales, and turnaround plans are mixed: they are bearish if paired with weak demand or missed guidance, but can be neutral-to-bullish if the main headline is a beat, better guidance, or a credible turnaround plan. " +
+    "Do not over-penalise words like loss, weak, cuts, or layoffs when the article's main market read is positive. " +
+    "Separate recent headline tone from long-term company quality. Do not score high just because the company is popular. " +
+    "If the top recent earnings story says revenue/guidance is above estimates or the stock jumps after results, the earnings score should normally be positive unless the same coverage clearly says the outlook is deteriorating. " +
+    "Keep the reason short, calm, and suitable for beginner investors. Do not invent facts beyond the supplied text.";
+
+  const userPrompt = JSON.stringify({
+    symbol: args.symbol,
+    companyName: args.companyName,
+    trend: args.trend,
+    keywordFallback: {
+      newsScore: args.keywordNewsScore,
+      earningsScore: args.keywordEarningsScore,
+    },
+    headlines: candidates,
+  });
+
+  try {
+    const res = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        max_output_tokens: 900,
+        input: [
+          {
+            role: "system",
+            content: [{ type: "input_text", text: systemPrompt }],
+          },
+          {
+            role: "user",
+            content: [{ type: "input_text", text: userPrompt }],
+          },
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            ...schema,
+          },
+        },
+      }),
+    });
+
+    if (!res.ok) return null;
+
+    const data = (await res.json()) as unknown;
+    const rawText = extractOpenAiResponseText(data);
+    if (!rawText) return null;
+
+    const parsed = JSON.parse(rawText) as {
+      newsScore?: Partial<NewsScoreResult>;
+      earningsScore?: Partial<EarningsScoreResult>;
+    };
+
+    const aiNewsScore = clampScore(parsed.newsScore?.score);
+    const aiEarningsScore = clampScore(parsed.earningsScore?.score);
+
+    const newsTone = scoreToTone(aiNewsScore);
+    const earningsTone = scoreToTone(aiEarningsScore);
+
+    const newsScore: NewsScoreResult = {
+      score: aiNewsScore,
+      tone: newsTone,
+      label: parsed.newsScore?.label || scoreToNewsLabel(aiNewsScore),
+      reason:
+        typeof parsed.newsScore?.reason === "string" && parsed.newsScore.reason.trim()
+          ? parsed.newsScore.reason.trim()
+          : args.keywordNewsScore.reason,
+      positives: cleanStringArray(parsed.newsScore?.positives),
+      negatives: cleanStringArray(parsed.newsScore?.negatives),
+      confidence:
+        parsed.newsScore?.confidence === "High" ||
+        parsed.newsScore?.confidence === "Medium" ||
+        parsed.newsScore?.confidence === "Low"
+          ? parsed.newsScore.confidence
+          : args.keywordNewsScore.confidence,
+    };
+
+    const earningsScore: EarningsScoreResult = {
+      score: aiEarningsScore,
+      tone: earningsTone,
+      label: parsed.earningsScore?.label || scoreToEarningsLabel(aiEarningsScore),
+      reason:
+        typeof parsed.earningsScore?.reason === "string" && parsed.earningsScore.reason.trim()
+          ? parsed.earningsScore.reason.trim()
+          : args.keywordEarningsScore.reason,
+    };
+
+    return {
+      newsScore,
+      earningsScore,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function scoreEarnings(news: NewsItem[]): EarningsScoreResult {
   const earningsItems = news.filter((item) =>
     keywordHits(item.title.toLowerCase(), [
@@ -941,10 +1191,21 @@ async function buildStockNewsBaseData(
     ? Math.min(...trailing.map((point) => point.low ?? point.close))
     : null;
 
-  const newsScore = scoreNews(news);
-  const earningsScore = scoreEarnings(news);
-
   const rankedNews = rankNews(news);
+
+  const keywordNewsScore = scoreNews(news);
+  const keywordEarningsScore = scoreEarnings(news);
+  const aiScores = await getAiScoredNews({
+    symbol: upper,
+    companyName,
+    trend,
+    rankedNews,
+    keywordNewsScore,
+    keywordEarningsScore,
+  });
+
+  const newsScore = aiScores?.newsScore ?? keywordNewsScore;
+  const earningsScore = aiScores?.earningsScore ?? keywordEarningsScore;
 
   const highValueNews = rankedNews.filter((item) => !isLowValueNewsItem(item));
   const fallbackNews = rankedNews.filter((item) => isLowValueNewsItem(item));
@@ -1097,7 +1358,7 @@ const getCachedStockNewsBaseData = unstable_cache(
 
     return buildStockNewsBaseData(parsed.symbol, parsed.options);
   },
-  ["msh-stock-news-base-data-v4"],
+  ["msh-stock-news-base-data-v5"],
   {
     revalidate: 1800,
   }
