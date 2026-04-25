@@ -74,7 +74,23 @@ export default function StockNewsTickerJump({
         }
 
         const data = (await res.json()) as { results?: SymbolResult[] };
-        setResults(Array.isArray(data.results) ? data.results : []);
+        const rows = Array.isArray(data.results) ? data.results : [];
+const cleanedQuery = q.toUpperCase();
+
+const sortedRows = [...rows].sort((a, b) => {
+  const aSymbol = a.symbol.toUpperCase();
+  const bSymbol = b.symbol.toUpperCase();
+
+  if (aSymbol === cleanedQuery && bSymbol !== cleanedQuery) return -1;
+  if (bSymbol === cleanedQuery && aSymbol !== cleanedQuery) return 1;
+
+  if (aSymbol.startsWith(cleanedQuery) && !bSymbol.startsWith(cleanedQuery)) return -1;
+  if (bSymbol.startsWith(cleanedQuery) && !aSymbol.startsWith(cleanedQuery)) return 1;
+
+  return aSymbol.localeCompare(bSymbol);
+});
+
+setResults(sortedRows);
       } catch {
         setResults([]);
       }
