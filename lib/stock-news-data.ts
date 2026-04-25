@@ -404,7 +404,6 @@ function isLowValueNewsItem(item: NewsItem) {
 
   const lowValueSources = [
     "etfdailynews",
-    "investing.com",
     "benzinga",
     "zacks",
     "marketbeat",
@@ -900,6 +899,116 @@ function cleanStringArray(value: unknown) {
     .slice(0, 3);
 }
 
+function headlineText(item: NewsItem) {
+  return `${item.title} ${item.description ?? ""}`.toLowerCase();
+}
+
+function containsAny(text: string, words: string[]) {
+  return words.some((word) => text.includes(word));
+}
+
+function getCatalystFloors(items: NewsItem[]) {
+  const relevant = items.filter((item) => !isLowValueNewsItem(item)).slice(0, 8);
+
+  let bullishCatalysts = 0;
+  let bearishCatalysts = 0;
+  let bullishEarningsCatalysts = 0;
+  let bearishEarningsCatalysts = 0;
+
+  const bullishTerms = [
+    "beat",
+    "beats",
+    "tops estimates",
+    "top estimates",
+    "above estimates",
+    "better than expected",
+    "better-than-expected",
+    "strong earnings",
+    "good earnings",
+    "solid earnings",
+    "revenue beat",
+    "eps beat",
+    "raises guidance",
+    "guidance above",
+    "outlook above",
+    "forecast above",
+    "shares jump",
+    "shares surge",
+    "stock jumps",
+    "stock surges",
+    "rallies after",
+    "strategic win",
+    "major deal",
+    "partnership",
+    "customer win",
+    "ai demand",
+    "data center demand",
+  ];
+
+  const bearishTerms = [
+    "misses estimates",
+    "missed estimates",
+    "below estimates",
+    "cuts guidance",
+    "guidance cut",
+    "warning",
+    "weak guidance",
+    "shares plunge",
+    "stock plunges",
+    "downgrade",
+    "investigation",
+    "probe",
+    "lawsuit",
+    "recall",
+  ];
+
+  const earningsTerms = [
+    "earnings",
+    "results",
+    "revenue",
+    "guidance",
+    "quarter",
+    "eps",
+    "profit",
+    "q1",
+    "q2",
+    "q3",
+    "q4",
+  ];
+
+  for (const item of relevant) {
+    const text = headlineText(item);
+    const isEarnings = containsAny(text, earningsTerms);
+    const bullish = containsAny(text, bullishTerms);
+    const bearish = containsAny(text, bearishTerms);
+
+    if (bullish) bullishCatalysts += 1;
+    if (bearish) bearishCatalysts += 1;
+
+    if (isEarnings && bullish) bullishEarningsCatalysts += 1;
+    if (isEarnings && bearish) bearishEarningsCatalysts += 1;
+  }
+
+  let newsFloor: number | null = null;
+  let earningsFloor: number | null = null;
+
+  if (bullishCatalysts >= 2 && bearishCatalysts === 0) newsFloor = 76;
+  else if (bullishCatalysts >= 1 && bearishCatalysts === 0) newsFloor = 70;
+  else if (bullishCatalysts >= 2 && bearishCatalysts <= 1) newsFloor = 72;
+  else if (bullishCatalysts >= 1 && bearishCatalysts <= 1) newsFloor = 64;
+
+  if (bullishEarningsCatalysts >= 2 && bearishEarningsCatalysts === 0) earningsFloor = 78;
+  else if (bullishEarningsCatalysts >= 1 && bearishEarningsCatalysts === 0) earningsFloor = 72;
+  else if (bullishEarningsCatalysts >= 1 && bearishEarningsCatalysts <= 1) earningsFloor = 64;
+
+  return { newsFloor, earningsFloor };
+}
+
+function applyCatalystFloor(score: number, floor: number | null) {
+  if (typeof floor !== "number") return score;
+  return Math.max(score, floor);
+}
+
 type AiScorePayload = {
   newsScore: NewsScoreResult;
   earningsScore: EarningsScoreResult;
@@ -929,6 +1038,8 @@ async function getAiScoredNews(args: {
     }));
 
   if (!candidates.length) return null;
+
+  const catalystFloors = getCatalystFloors(args.rankedNews);
 
   const schema = {
     name: "stock_news_scores",
@@ -984,12 +1095,14 @@ async function getAiScoredNews(args: {
     "You score stock headline flow for MyStockHarbor. Use only the supplied headlines, descriptions, sources, dates, company name, ticker, and chart trend context. " +
     "Score the latest headline flow from 0 to 100, where 100 is maximally bullish, 50 is neutral, and 0 is maximally bearish. " +
     "Be meaningfully smarter than keyword matching: decide whether positive catalysts dominate negative caveats. " +
-    "Earnings beats, stronger-than-expected guidance, shares rallying after results, major customer wins, major AI/data-center demand, analyst upgrades, and strategic partnerships are bullish catalysts. " +
+    "Do not average every caveat equally. Identify the dominant recent market catalyst first, then score the headline flow around that catalyst. " +
+    "Earnings beats, revenue or EPS above estimates, stronger-than-expected guidance, shares rallying after results, major customer wins, major AI/data-center demand, analyst upgrades, and strategic partnerships are bullish catalysts. " +
     "Misses, guidance cuts, investigations, recalls, regulatory blocks, liquidity stress, and worsening demand are bearish catalysts. " +
     "Layoffs, cost cuts, restructurings, asset sales, and turnaround plans are mixed: they are bearish if paired with weak demand or missed guidance, but can be neutral-to-bullish if the main headline is a beat, better guidance, or a credible turnaround plan. " +
-    "Do not over-penalise words like loss, weak, cuts, or layoffs when the article's main market read is positive. " +
+    "Do not over-penalise words like loss, weak, cuts, restructuring, or layoffs when the article's main market read is positive. Treat them as risk modifiers, not as the whole story. " +
+    "If headlines include a clear earnings beat, above-estimate guidance, good/strong earnings, or stock jumping after earnings, the earnings score should normally be 70 or higher unless the same headlines clearly say the outlook is deteriorating. " +
+    "If the dominant recent news is a positive partnership/customer win/AI deal and no severe offsetting issue is present, the news score should normally be at least 70. " +
     "Separate recent headline tone from long-term company quality. Do not score high just because the company is popular. " +
-    "If the top recent earnings story says revenue/guidance is above estimates or the stock jumps after results, the earnings score should normally be positive unless the same coverage clearly says the outlook is deteriorating. " +
     "Keep the reason short, calm, and suitable for beginner investors. Do not invent facts beyond the supplied text.";
 
   const userPrompt = JSON.stringify({
@@ -1043,8 +1156,14 @@ async function getAiScoredNews(args: {
       earningsScore?: Partial<EarningsScoreResult>;
     };
 
-    const aiNewsScore = clampScore(parsed.newsScore?.score);
-    const aiEarningsScore = clampScore(parsed.earningsScore?.score);
+    const aiNewsScore = applyCatalystFloor(
+      clampScore(parsed.newsScore?.score),
+      catalystFloors.newsFloor
+    );
+    const aiEarningsScore = applyCatalystFloor(
+      clampScore(parsed.earningsScore?.score),
+      catalystFloors.earningsFloor
+    );
 
     const newsTone = scoreToTone(aiNewsScore);
     const earningsTone = scoreToTone(aiEarningsScore);
@@ -1052,7 +1171,7 @@ async function getAiScoredNews(args: {
     const newsScore: NewsScoreResult = {
       score: aiNewsScore,
       tone: newsTone,
-      label: parsed.newsScore?.label || scoreToNewsLabel(aiNewsScore),
+      label: scoreToNewsLabel(aiNewsScore),
       reason:
         typeof parsed.newsScore?.reason === "string" && parsed.newsScore.reason.trim()
           ? parsed.newsScore.reason.trim()
@@ -1070,7 +1189,7 @@ async function getAiScoredNews(args: {
     const earningsScore: EarningsScoreResult = {
       score: aiEarningsScore,
       tone: earningsTone,
-      label: parsed.earningsScore?.label || scoreToEarningsLabel(aiEarningsScore),
+      label: scoreToEarningsLabel(aiEarningsScore),
       reason:
         typeof parsed.earningsScore?.reason === "string" && parsed.earningsScore.reason.trim()
           ? parsed.earningsScore.reason.trim()
@@ -1087,8 +1206,9 @@ async function getAiScoredNews(args: {
 }
 
 function scoreEarnings(news: NewsItem[]): EarningsScoreResult {
-  const earningsItems = news.filter((item) =>
-    keywordHits(item.title.toLowerCase(), [
+  const ranked = rankNews(news);
+  const earningsItems = ranked.filter((item) =>
+    keywordHits(headlineText(item), [
       "earnings",
       "results",
       "revenue",
@@ -1096,6 +1216,10 @@ function scoreEarnings(news: NewsItem[]): EarningsScoreResult {
       "quarter",
       "profit",
       "eps",
+      "q1",
+      "q2",
+      "q3",
+      "q4",
     ])
   );
 
@@ -1109,20 +1233,72 @@ function scoreEarnings(news: NewsItem[]): EarningsScoreResult {
   }
 
   let signal = 0;
+  const positiveDrivers: string[] = [];
+  const negativeDrivers: string[] = [];
 
-  for (const item of earningsItems.slice(0, 4)) {
-    const title = item.title.toLowerCase();
+  for (const item of earningsItems.slice(0, 5)) {
+    const text = headlineText(item);
 
-    if (keywordHits(title, ["beat", "beats", "strong", "record", "raises", "growth"])) {
-      signal += 2;
+    const positive = containsAny(text, [
+      "beat",
+      "beats",
+      "tops estimates",
+      "top estimates",
+      "above estimates",
+      "better than expected",
+      "better-than-expected",
+      "good earnings",
+      "strong earnings",
+      "solid earnings",
+      "revenue beat",
+      "eps beat",
+      "raises guidance",
+      "guidance above",
+      "outlook above",
+      "forecast above",
+      "shares jump",
+      "shares surge",
+      "stock jumps",
+      "stock surges",
+      "rallies after",
+      "growth",
+      "record",
+    ]);
+
+    const negative = containsAny(text, [
+      "miss",
+      "misses",
+      "missed estimates",
+      "below estimates",
+      "cuts guidance",
+      "guidance cut",
+      "weak guidance",
+      "warning",
+      "slump",
+      "plunge",
+    ]);
+
+    if (positive) {
+      signal += 2.5;
+      positiveDrivers.push(item.title);
     }
 
-    if (keywordHits(title, ["miss", "misses", "weak", "cuts", "warning", "loss"])) {
-      signal -= 2;
+    if (negative) {
+      signal -= 2.5;
+      negativeDrivers.push(item.title);
+    }
+
+    // Losses or restructuring should only be a heavy negative when they are not paired with
+    // a positive earnings catalyst in the same headline/description.
+    if (!positive && containsAny(text, ["loss", "losses", "layoffs", "restructuring"])) {
+      signal -= 1;
     }
   }
 
-  const score = Math.max(0, Math.min(100, 50 + signal * 7));
+  let score = Math.max(0, Math.min(100, Math.round(50 + signal * 7)));
+
+  const floors = getCatalystFloors(ranked);
+  score = applyCatalystFloor(score, floors.earningsFloor);
 
   let label = "Mixed earnings tone";
   let tone: ScoreTone = "yellow";
@@ -1132,13 +1308,15 @@ function scoreEarnings(news: NewsItem[]): EarningsScoreResult {
   if (score >= 64) {
     label = "Positive earnings tone";
     tone = "green";
-    reason =
-      "The earnings-linked headlines look more constructive than negative, which may help support confidence in the next leg of the story.";
+    reason = positiveDrivers.length
+      ? "Recent earnings-linked headlines look constructive, with stronger signals around beats, guidance, revenue, or share-price reaction."
+      : "The earnings-linked headlines look more constructive than negative, which may help support confidence in the next leg of the story.";
   } else if (score <= 36) {
     label = "Weak earnings tone";
     tone = "red";
-    reason =
-      "The earnings-linked headlines look more pressured than supportive, which can weigh on sentiment until the business story improves again.";
+    reason = negativeDrivers.length
+      ? "Recent earnings-linked headlines look pressured, with weaker signals around misses, guidance cuts, or disappointing results."
+      : "The earnings-linked headlines look more pressured than supportive, which can weigh on sentiment until the business story improves again.";
   }
 
   return {
@@ -1204,8 +1382,30 @@ async function buildStockNewsBaseData(
     keywordEarningsScore,
   });
 
-  const newsScore = aiScores?.newsScore ?? keywordNewsScore;
-  const earningsScore = aiScores?.earningsScore ?? keywordEarningsScore;
+  const catalystFloors = getCatalystFloors(rankedNews);
+
+  const fallbackNewsScoreValue = applyCatalystFloor(
+    keywordNewsScore.score,
+    catalystFloors.newsFloor
+  );
+  const fallbackEarningsScoreValue = applyCatalystFloor(
+    keywordEarningsScore.score,
+    catalystFloors.earningsFloor
+  );
+
+  const newsScore = aiScores?.newsScore ?? {
+    ...keywordNewsScore,
+    score: fallbackNewsScoreValue,
+    tone: scoreToTone(fallbackNewsScoreValue),
+    label: scoreToNewsLabel(fallbackNewsScoreValue),
+  };
+
+  const earningsScore = aiScores?.earningsScore ?? {
+    ...keywordEarningsScore,
+    score: fallbackEarningsScoreValue,
+    tone: scoreToTone(fallbackEarningsScoreValue),
+    label: scoreToEarningsLabel(fallbackEarningsScoreValue),
+  };
 
   const highValueNews = rankedNews.filter((item) => !isLowValueNewsItem(item));
   const fallbackNews = rankedNews.filter((item) => isLowValueNewsItem(item));
@@ -1358,7 +1558,7 @@ const getCachedStockNewsBaseData = unstable_cache(
 
     return buildStockNewsBaseData(parsed.symbol, parsed.options);
   },
-  ["msh-stock-news-base-data-v5"],
+  ["msh-stock-news-base-data-v6"],
   {
     revalidate: 1800,
   }
