@@ -176,9 +176,10 @@ async function generateSpxMarketAnalysis(): Promise<MarketAnalysis | null> {
 }
 
 const getCachedSpxMarketAnalysis = unstable_cache(
-  async () => generateSpxMarketAnalysis(),
-  ["msh-spx-market-analysis-v3"],
-  {
+async () => {
+  const nowBucket = Math.floor(Date.now() / (1000 * 60 * 60 * 12)); // 12h bucket
+  return generateSpxMarketAnalysis(nowBucket);
+}
     revalidate: 60 * 60 * 12,
   }
 );
