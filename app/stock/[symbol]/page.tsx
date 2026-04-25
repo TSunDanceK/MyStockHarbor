@@ -169,106 +169,91 @@ export default async function StockPage({ params }: Props) {
         }}
       />
 
-<section
-  style={{
-    maxWidth: 1100,
-    margin: "0 auto",
-    padding: "20px 16px 0",
-    fontFamily: "system-ui, Arial",
-  }}
->
-  <h1
-    style={{
-      margin: 0,
-      fontSize: 32,
-      lineHeight: 1.1,
-      fontWeight: 950,
-      letterSpacing: "-0.02em",
-    }}
-  >
-    {upper} Stock Analysis, Company Overview & Technical Summary
-  </h1>
+      <section
+        style={{
+          maxWidth: 1100,
+          margin: "0 auto",
+          padding: "20px 16px 0",
+          fontFamily: "system-ui, Arial",
+        }}
+      >
+        <div className="stockHeaderNavRow" style={stockHeaderNavRowStyle}>
+          <Link href={`/?symbol=${encodeURIComponent(upper)}`} style={stockTopBtnStyle("gold")}>
+            📈 Dashboard
+          </Link>
 
-  <p
-    style={{
-      margin: "10px 0 0",
-      maxWidth: 720,
-      fontSize: 15,
-      lineHeight: 1.7,
-      color: "rgba(241,245,249,0.72)",
-    }}
-  >
-    Explore {upper} stock analysis with chart context, AI business overview, technical summary,
-    moving-average context, momentum indicators and risk signals from MyStockHarbor. This page is
-    designed to help traders quickly understand whether {upper} is showing bullish, bearish or
-    neutral conditions based on recent market structure.
-  </p>
+          <Link href="/platforms" style={stockTopBtnStyle("green")}>
+            🏦 Platforms
+          </Link>
 
-  <div
-    className="stockHeaderControlRow"
-    style={{
-      marginTop: 22,
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "flex-end",
-      gap: 18,
-      flexWrap: "wrap",
-    }}
-  >
-    <StockTickerJump currentSymbol={upper} />
+          <Link href="/pickers" style={stockTopBtnStyle("red")}>
+            📊 Stock Pickers
+          </Link>
 
-    <div
-      className="stockHeaderNavRow"
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "flex-end",
-        gap: 10,
-        flexWrap: "wrap",
-      }}
-    >
-      <Link href={`/?symbol=${encodeURIComponent(upper)}`} style={stockTopBtnStyle("gold")}>
-        📈 Dashboard
-      </Link>
+          <Link href="/learn" style={stockTopBtnStyle("blue")}>
+            📘 Learn
+          </Link>
+        </div>
 
-      <Link href="/platforms" style={stockTopBtnStyle("green")}>
-        🏦 Platforms
-      </Link>
+        <h1 style={pageTitleStyle}>
+          {upper} Stock Analysis, Company Overview & Technical Summary
+        </h1>
 
-      <Link href="/pickers" style={stockTopBtnStyle("red")}>
-        📊 Stock Pickers
-      </Link>
+        <p style={pageIntroStyle}>
+          Explore {upper} stock analysis with chart context, AI business overview, technical
+          summary, moving-average context, momentum indicators and risk signals from
+          MyStockHarbor. This page is designed to help traders quickly understand whether {upper}
+          is showing bullish, bearish or neutral conditions based on recent market structure.
+        </p>
 
-      <Link href="/learn" style={stockTopBtnStyle("blue")}>
-        📘 Learn
-      </Link>
-    </div>
-  </div>
-</section>
+        <div style={{ marginTop: 22 }}>
+          <StockTickerJump currentSymbol={upper} />
+        </div>
+      </section>
 
-        <style>{`
-    @media (max-width: 820px) {
-      .stockHeaderControlRow {
-        flex-direction: column-reverse !important;
-        align-items: stretch !important;
-      }
+      <style>{`
+        @media (max-width: 820px) {
+          .stockHeaderNavRow {
+            width: 100% !important;
+            justify-content: stretch !important;
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 10px !important;
+            margin-bottom: 22px !important;
+          }
 
-      .stockHeaderNavRow {
-        width: 100% !important;
-        justify-content: stretch !important;
-        display: grid !important;
-        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-        gap: 10px !important;
-      }
-
-      .stockHeaderNavRow a {
-        width: 100% !important;
-      }
-    }
-  `}</style>
-</section>
+          .stockHeaderNavRow a {
+            width: 100% !important;
+          }
+        }
+      `}</style>
 
       <StockSymbolPageClient symbol={upper} aiAnalysis={aiAnalysis} />
     </>
   );
 }
+
+const stockHeaderNavRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  gap: 10,
+  flexWrap: "wrap",
+  marginBottom: 22,
+};
+
+const pageTitleStyle: CSSProperties = {
+  margin: 0,
+  fontSize: 32,
+  lineHeight: 1.1,
+  fontWeight: 950,
+  letterSpacing: "-0.02em",
+};
+
+const pageIntroStyle: CSSProperties = {
+  margin: "10px 0 0",
+  maxWidth: 720,
+  fontSize: 15,
+  lineHeight: 1.7,
+  color: "rgba(241,245,249,0.72)",
+};
