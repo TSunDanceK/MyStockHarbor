@@ -331,35 +331,22 @@ function movingAverage(values: number[], window: number): (number | null)[] {
   return out;
 }
 
-function getCompanyIdentityTerms(symbol: string, companyName: string) {
-  const cleanedCompany = companyName
+function getCleanCompanyName(companyName: string) {
+  return companyName
     .toLowerCase()
-    .replace(/\b(inc|inc\.|corporation|corp|corp\.|company|co|co\.|ltd|plc|class a|common stock|ordinary shares)\b/g, "")
+    .replace(/\b(inc|inc\.|corporation|corp|corp\.|company|co|co\.|ltd|plc|class a|class b|common stock|ordinary shares|american depositary shares|ads|adr)\b/g, "")
     .replace(/[^\w\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-
-  const companyWords = cleanedCompany
-    .split(" ")
-    .filter((word) => word.length >= 4);
-
-  return [...new Set([
-    symbol.toLowerCase(),
-    cleanedCompany,
-    ...companyWords,
-  ].filter(Boolean))];
 }
 
 function isClearlyAboutRequestedCompany(item: NewsItem, symbol: string, companyName: string) {
-  const text = `${item.title} ${item.description ?? ""} ${item.source ?? ""}`
-    .toLowerCase()
-    .replace(/[^\w\s:$.-]/g, " ");
-
-  const terms = getCompanyIdentityTerms(symbol, companyName);
-
-  if (!terms.length) return true;
+  const rawText = `${item.title} ${item.description ?? ""} ${item.source ?? ""}`.toLowerCase();
+  const text = rawText.replace(/[^\w\s:$.-]/g, " ").replace(/\s+/g, " ");
 
   const ticker = symbol.toLowerCase();
+  const cleanedCompany = getCleanCompanyName(companyName);
+  const companyWords = cleanedCompany.split(" ").filter((word) => word.length >= 4);
 
   const explicitTickerSignals = [
     `${ticker} stock`,
@@ -368,19 +355,23 @@ function isClearlyAboutRequestedCompany(item: NewsItem, symbol: string, companyN
     `${ticker} revenue`,
     `${ticker} investor`,
     `${ticker} price target`,
+    `${ticker} class`,
     `nyse ${ticker}`,
     `nasdaq ${ticker}`,
     `ticker ${ticker}`,
     `$${ticker}`,
+    `(${ticker})`,
   ];
 
   if (explicitTickerSignals.some((term) => text.includes(term))) {
     return true;
   }
 
-  const companyTermHits = terms.filter((term) => term.length >= 4 && text.includes(term));
+  if (cleanedCompany && cleanedCompany.length >= 6 && text.includes(cleanedCompany)) {
+    return true;
+  }
 
-  if (companyTermHits.length >= 1) {
+  if (companyWords.length >= 2 && companyWords.every((word) => text.includes(word))) {
     return true;
   }
 
@@ -2261,7 +2252,7 @@ const getCachedStockNewsBaseData = unstable_cache(
 
     return buildStockNewsBaseData(parsed.symbol, parsed.options);
   },
-  ["msh-stock-news-base-data-v20"],
+  ["msh-stock-news-base-data-v21"],
   {
     revalidate: 60,
   }
