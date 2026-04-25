@@ -899,6 +899,165 @@ function cleanStringArray(value: unknown) {
     .slice(0, 3);
 }
 
+
+function getAiScoreGuardrails(items: NewsItem[]) {
+  const relevant = items.filter((item) => !isLowValueNewsItem(item)).slice(0, 8);
+
+  let strongBullishCatalysts = 0;
+  let weakBullishOnlyCatalysts = 0;
+  let bearishCatalysts = 0;
+  let actualEarningsResultCatalysts = 0;
+
+  for (const item of relevant) {
+    const text = headlineText(item);
+
+    const speculative = containsAny(text, [
+      "speculation",
+      "speculative",
+      "rumor",
+      "rumour",
+      "may ",
+      "could ",
+      "might ",
+      "potential",
+      "possible",
+    ]);
+
+    const analystOnly = containsAny(text, [
+      "analyst",
+      "price target",
+      "upside",
+      "projected upside",
+      "rating",
+    ]);
+
+    const strongBullish =
+      containsAny(text, [
+        "earnings beat",
+        "beats estimates",
+        "beat estimates",
+        "tops estimates",
+        "above estimates",
+        "better than expected",
+        "better-than-expected",
+        "raises guidance",
+        "guidance above",
+        "outlook above",
+        "forecast above",
+        "revenue above",
+        "eps above",
+        "shares jump",
+        "shares surge",
+        "stock jumps",
+        "stock surges",
+        "rallies after",
+        "major deal",
+        "customer win",
+        "strategic win",
+        "contract win",
+        "supply deal",
+        "chip deal",
+        "ai chip deal",
+      ]) ||
+      (containsAny(text, ["partnership", "joins", "deal", "project", "collaboration"]) &&
+        containsAny(text, ["ai", "chip", "data center", "major", "tesla", "nvidia", "amazon", "microsoft", "meta", "google"]) &&
+        !speculative);
+
+    const weakBullish = analystOnly || speculative;
+
+    const bearish = containsAny(text, [
+      "insider sale",
+      "stock sale",
+      "share sale",
+      "sells shares",
+      "sold shares",
+      "weak demand",
+      "softening demand",
+      "demand pressure",
+      "competition",
+      "competitive pressure",
+      "misses estimates",
+      "missed estimates",
+      "below estimates",
+      "cuts guidance",
+      "guidance cut",
+      "weak guidance",
+      "warning",
+      "downgrade",
+      "liquidity",
+      "bankruptcy",
+      "going concern",
+      "investigation",
+      "probe",
+      "lawsuit",
+      "recall",
+    ]);
+
+    const routineEarningsDate = containsAny(text, [
+      "announces date",
+      "conference call",
+      "earnings call",
+      "webcast",
+      "release date",
+      "to report",
+      "will report",
+    ]);
+
+    const actualEarningsResult =
+      !routineEarningsDate &&
+      containsAny(text, ["earnings", "results", "revenue", "guidance", "eps", "profit", "quarter"]) &&
+      containsAny(text, [
+        "beat",
+        "beats",
+        "miss",
+        "misses",
+        "above estimates",
+        "below estimates",
+        "better than expected",
+        "better-than-expected",
+        "raises guidance",
+        "cuts guidance",
+        "strong",
+        "weak",
+        "growth",
+        "decline",
+      ]);
+
+    if (strongBullish) strongBullishCatalysts += 1;
+    else if (weakBullish) weakBullishOnlyCatalysts += 1;
+
+    if (bearish) bearishCatalysts += 1;
+    if (actualEarningsResult) actualEarningsResultCatalysts += 1;
+  }
+
+  let newsCap: number | null = null;
+  let earningsCap: number | null = null;
+
+  if (strongBullishCatalysts === 0 && bearishCatalysts >= 1) {
+    newsCap = 45;
+  } else if (strongBullishCatalysts === 0 && weakBullishOnlyCatalysts >= 1) {
+    newsCap = 58;
+  }
+
+  if (actualEarningsResultCatalysts === 0) {
+    earningsCap = 55;
+  }
+
+  return {
+    newsCap,
+    earningsCap,
+    strongBullishCatalysts,
+    weakBullishOnlyCatalysts,
+    bearishCatalysts,
+    actualEarningsResultCatalysts,
+  };
+}
+
+function applyScoreCap(score: number, cap: number | null) {
+  if (typeof cap !== "number") return score;
+  return Math.min(score, cap);
+}
+
 function headlineText(item: NewsItem) {
   return `${item.title} ${item.description ?? ""}`.toLowerCase();
 }
@@ -939,8 +1098,8 @@ function getCatalystFloors(items: NewsItem[]) {
     "rallies after",
     "strategic win",
     "major deal",
-    "partnership",
     "customer win",
+    "confirmed partnership",
     "ai demand",
     "data center demand",
   ];
@@ -1040,6 +1199,7 @@ async function getAiScoredNews(args: {
   if (!candidates.length) return null;
 
   const catalystFloors = getCatalystFloors(args.rankedNews);
+  const aiGuardrails = getAiScoreGuardrails(args.rankedNews);
 
   const schema = {
     name: "stock_news_scores",
@@ -1094,15 +1254,16 @@ async function getAiScoredNews(args: {
   const systemPrompt =
     "You score stock headline flow for MyStockHarbor. Use only the supplied headlines, descriptions, sources, dates, company name, ticker, and chart trend context. " +
     "Score the latest headline flow from 0 to 100, where 100 is maximally bullish, 50 is neutral, and 0 is maximally bearish. " +
-    "Be meaningfully smarter than keyword matching: decide whether positive catalysts dominate negative caveats. " +
-    "Do not average every caveat equally. Identify the dominant recent market catalyst first, then score the headline flow around that catalyst. " +
-    "Earnings beats, revenue or EPS above estimates, stronger-than-expected guidance, shares rallying after results, major customer wins, major AI/data-center demand, analyst upgrades, and strategic partnerships are bullish catalysts. " +
-    "Misses, guidance cuts, investigations, recalls, regulatory blocks, liquidity stress, and worsening demand are bearish catalysts. " +
+    "Think like a cautious market analyst, not a promoter. A stock is not bullish simply because there is no disaster headline. " +
+    "First identify whether there is a real catalyst. Real bullish catalysts include: earnings beat, revenue or EPS above estimates, raised guidance, shares rallying after results, a confirmed major customer win, a confirmed major deal, strong demand data, or a meaningful strategic partnership. " +
+    "Weak positives include: analyst price targets, projected upside, routine earnings-date announcements, routine insider/RSU filings, partnership speculation, merger rumours, or vague optimism. Weak positives should not create a bullish score by themselves. " +
+    "If headlines are mostly routine, speculative, or analyst-opinion based, keep the news score near neutral or below neutral even when the wording sounds optimistic. " +
+    "Do NOT score above 60 unless there is at least one real bullish catalyst. Do NOT score above 70 unless the real catalyst clearly dominates the risk headlines. " +
+    "Insider selling, softening demand, intensifying competition, weak guidance, misses, liquidity stress, investigations, recalls, lawsuits, and bankruptcy risk are bearish catalysts. " +
+    "Analyst upside and absence of severe negative news are not enough to offset weak demand, insider selling, or competition. " +
     "Layoffs, cost cuts, restructurings, asset sales, and turnaround plans are mixed: they are bearish if paired with weak demand or missed guidance, but can be neutral-to-bullish if the main headline is a beat, better guidance, or a credible turnaround plan. " +
-    "Do not over-penalise words like loss, weak, cuts, restructuring, or layoffs when the article's main market read is positive. Treat them as risk modifiers, not as the whole story. " +
-    "If headlines include a clear earnings beat, above-estimate guidance, good/strong earnings, or stock jumping after earnings, the earnings score should normally be 70 or higher unless the same headlines clearly say the outlook is deteriorating. " +
-    "If the dominant recent news is a positive partnership/customer win/AI deal and no severe offsetting issue is present, the news score should normally be at least 70. " +
-    "Separate recent headline tone from long-term company quality. Do not score high just because the company is popular. " +
+    "For earningsScore, only score strongly positive when there are actual earnings results, revenue/EPS beats, strong guidance, or clearly positive earnings commentary. An announcement of an upcoming earnings date or conference call is neutral, not positive. " +
+    "If there are no actual earnings-result headlines, keep earningsScore between 45 and 55 unless there is clear earnings-related weakness. " +
     "Keep the reason short, calm, and suitable for beginner investors. Do not invent facts beyond the supplied text.";
 
   const userPrompt = JSON.stringify({
@@ -1156,13 +1317,13 @@ async function getAiScoredNews(args: {
       earningsScore?: Partial<EarningsScoreResult>;
     };
 
-    const aiNewsScore = applyCatalystFloor(
-      clampScore(parsed.newsScore?.score),
-      catalystFloors.newsFloor
+    const aiNewsScore = applyScoreCap(
+      applyCatalystFloor(clampScore(parsed.newsScore?.score), catalystFloors.newsFloor),
+      aiGuardrails.newsCap
     );
-    const aiEarningsScore = applyCatalystFloor(
-      clampScore(parsed.earningsScore?.score),
-      catalystFloors.earningsFloor
+    const aiEarningsScore = applyScoreCap(
+      applyCatalystFloor(clampScore(parsed.earningsScore?.score), catalystFloors.earningsFloor),
+      aiGuardrails.earningsCap
     );
 
     const newsTone = scoreToTone(aiNewsScore);
@@ -1383,14 +1544,15 @@ async function buildStockNewsBaseData(
   });
 
   const catalystFloors = getCatalystFloors(rankedNews);
+  const aiGuardrails = getAiScoreGuardrails(rankedNews);
 
-  const fallbackNewsScoreValue = applyCatalystFloor(
-    keywordNewsScore.score,
-    catalystFloors.newsFloor
+  const fallbackNewsScoreValue = applyScoreCap(
+    applyCatalystFloor(keywordNewsScore.score, catalystFloors.newsFloor),
+    aiGuardrails.newsCap
   );
-  const fallbackEarningsScoreValue = applyCatalystFloor(
-    keywordEarningsScore.score,
-    catalystFloors.earningsFloor
+  const fallbackEarningsScoreValue = applyScoreCap(
+    applyCatalystFloor(keywordEarningsScore.score, catalystFloors.earningsFloor),
+    aiGuardrails.earningsCap
   );
 
   const newsScore = aiScores?.newsScore ?? {
