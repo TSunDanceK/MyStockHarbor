@@ -447,17 +447,17 @@ export default function StockSymbolPageClient({
 
           <div className="stockAnalysisHeroGrid">
             <div>
-              <div
-                style={{
-                  margin: "14px 0 0 0",
-                  fontSize: 42,
-                  lineHeight: 1.04,
-                  letterSpacing: "-0.05em",
-                  fontWeight: 950,
-                }}
-              >
-                {symbol} Stock Analysis
-              </div>
+<h1
+  style={{
+    margin: "14px 0 0 0",
+    fontSize: 42,
+    lineHeight: 1.04,
+    letterSpacing: "-0.05em",
+    fontWeight: 950,
+  }}
+>
+  {symbol} Stock Analysis, Chart Overview, Trend Signals & Technical Summary
+</h1>
 
           <p
             style={{
