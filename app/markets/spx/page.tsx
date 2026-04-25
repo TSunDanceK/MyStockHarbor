@@ -278,6 +278,63 @@ function topNavBtnStyle(
   };
 }
 
+const overviewCardHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+};
+
+function overviewIconStyle(type: "green" | "red" | "blue"): React.CSSProperties {
+  return {
+    width: 44,
+    height: 44,
+    borderRadius: 999,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flex: "0 0 auto",
+    fontSize: 22,
+    fontWeight: 950,
+    background:
+      type === "green"
+        ? "rgba(34,197,94,0.18)"
+        : type === "red"
+        ? "rgba(239,68,68,0.18)"
+        : "rgba(59,130,246,0.18)",
+    border:
+      type === "green"
+        ? "1px solid rgba(34,197,94,0.34)"
+        : type === "red"
+        ? "1px solid rgba(239,68,68,0.34)"
+        : "1px solid rgba(59,130,246,0.34)",
+    color:
+      type === "green"
+        ? "#4ade80"
+        : type === "red"
+        ? "#f87171"
+        : "#60a5fa",
+  };
+}
+
+function themedOverviewCardStyle(type: "green" | "red" | "blue"): React.CSSProperties {
+  return {
+    borderRadius: 16,
+    padding: 16,
+    border:
+      type === "green"
+        ? "1px solid rgba(34,197,94,0.24)"
+        : type === "red"
+        ? "1px solid rgba(239,68,68,0.24)"
+        : "1px solid rgba(59,130,246,0.24)",
+    background:
+      type === "green"
+        ? "linear-gradient(135deg, rgba(34,197,94,0.10), rgba(255,255,255,0.03))"
+        : type === "red"
+        ? "linear-gradient(135deg, rgba(239,68,68,0.10), rgba(255,255,255,0.03))"
+        : "linear-gradient(135deg, rgba(59,130,246,0.12), rgba(255,255,255,0.03))",
+  };
+}
+
 function topNavIcon(type: "dashboard" | "learn" | "pickers" | "platforms") {
   if (type === "dashboard") return "📈";
   if (type === "learn") return "📘";
@@ -461,25 +518,48 @@ export default async function SPXPage() {
                 </AffiliateLink>
               </div>
 
-              <div
-                style={{
-                  marginTop: 16,
-                  padding: "14px 16px",
-                  borderRadius: 16,
-                  border: "1px solid rgba(34,197,94,0.18)",
-                  background:
-                    "linear-gradient(135deg, rgba(34,197,94,0.10), rgba(59,130,246,0.08))",
-                  fontSize: 14,
-                  lineHeight: 1.6,
-                  color: "#dbeafe",
-                  maxWidth: 760,
-                }}
-              >
-                <strong>Simple view:</strong> short-term fear is rising, but the bigger question is
-                whether the higher-timeframe structure has actually broken down. That is why the
-                weekly chart matters here.
-              </div>
-            </div>
+<div
+  style={{
+    marginTop: 16,
+    padding: "14px 16px",
+    borderRadius: 16,
+    border: "1px solid rgba(34,197,94,0.32)",
+    background:
+      "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(8,18,30,0.92))",
+    fontSize: 15,
+    lineHeight: 1.65,
+    color: "#e5e7eb",
+    maxWidth: 760,
+    display: "flex",
+    gap: 14,
+    alignItems: "flex-start",
+  }}
+>
+  <div
+    style={{
+      width: 42,
+      height: 42,
+      borderRadius: 999,
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      flex: "0 0 auto",
+      background: "rgba(34,197,94,0.18)",
+      border: "1px solid rgba(34,197,94,0.34)",
+      color: "#4ade80",
+      fontSize: 22,
+      boxShadow: "0 0 18px rgba(34,197,94,0.20)",
+    }}
+  >
+    💡
+  </div>
+
+  <div>
+    <strong style={{ color: "#4ade80", letterSpacing: "0.02em" }}>SIMPLE VIEW:</strong>{" "}
+    short-term fear is rising, but the bigger question is whether the higher-timeframe
+    structure has actually broken down. That is why the weekly chart matters here.
+  </div>
+</div>
 
             <aside style={marketMoodCardStyle(marketMood.score)}>
               <div style={statLabelStyle()}>Market mood</div>
@@ -685,39 +765,56 @@ export default async function SPXPage() {
                   gap: 14,
                 }}
               >
-                <div style={statCardStyle()}>
-                  <div style={statLabelStyle()}>Bullish factors</div>
-                  <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-                    {marketAnalysis.bullish.map((item) => (
-                      <div key={item} style={{ lineHeight: 1.6, opacity: 0.88 }}>
-                        • {item}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+<div style={themedOverviewCardStyle("green")}>
+  <div style={overviewCardHeaderStyle}>
+    <div style={overviewIconStyle("green")}>↗</div>
+    <div style={{ ...statLabelStyle(), color: "#4ade80", opacity: 1 }}>
+      Bullish factors
+    </div>
+  </div>
 
-                <div style={statCardStyle()}>
-                  <div style={statLabelStyle()}>Risk factors</div>
-                  <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-                    {marketAnalysis.bearish.map((item) => (
-                      <div key={item} style={{ lineHeight: 1.6, opacity: 0.88 }}>
-                        • {item}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+  <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+    {marketAnalysis.bullish.map((item) => (
+      <div key={item} style={{ lineHeight: 1.6, opacity: 0.88 }}>
+        • {item}
+      </div>
+    ))}
+  </div>
+</div>
 
-                <div style={statCardStyle()}>
-                  <div style={statLabelStyle()}>What to watch</div>
-                  <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-                    {marketAnalysis.watch.map((item) => (
-                      <div key={item} style={{ lineHeight: 1.6, opacity: 0.88 }}>
-                        • {item}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
+<div style={themedOverviewCardStyle("red")}>
+  <div style={overviewCardHeaderStyle}>
+    <div style={overviewIconStyle("red")}>🛡</div>
+    <div style={{ ...statLabelStyle(), color: "#f87171", opacity: 1 }}>
+      Risk factors
+    </div>
+  </div>
+
+  <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+    {marketAnalysis.bearish.map((item) => (
+      <div key={item} style={{ lineHeight: 1.6, opacity: 0.88 }}>
+        • {item}
+      </div>
+    ))}
+  </div>
+</div>
+
+<div style={themedOverviewCardStyle("blue")}>
+  <div style={overviewCardHeaderStyle}>
+    <div style={overviewIconStyle("blue")}>👁</div>
+    <div style={{ ...statLabelStyle(), color: "#60a5fa", opacity: 1 }}>
+      What to watch
+    </div>
+  </div>
+
+  <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+    {marketAnalysis.watch.map((item) => (
+      <div key={item} style={{ lineHeight: 1.6, opacity: 0.88 }}>
+        • {item}
+      </div>
+    ))}
+  </div>
+</div>
 
               <div style={{ marginTop: 12, fontSize: 12, opacity: 0.6 }}>
                 Updated: {new Date(marketAnalysis.generatedAt).toLocaleString("en-GB")}
