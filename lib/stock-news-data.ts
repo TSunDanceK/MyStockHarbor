@@ -957,7 +957,30 @@ const newestFirst = (items: NewsItem[]) =>
     return bTime - aTime;
   });
 
-const aiFilteredNews = dedupeNews(newestFirst([...highValueNews, ...fallbackNews]));
+function oneArticlePerDate(items: NewsItem[]) {
+  const seenDates = new Set<string>();
+  const filtered: NewsItem[] = [];
+
+  for (const item of items) {
+    const dateKey = item.pubDate
+      ? new Date(item.pubDate).toISOString().slice(0, 10)
+      : "unknown";
+
+    if (seenDates.has(dateKey)) continue;
+
+    seenDates.add(dateKey);
+    filtered.push(item);
+  }
+
+  return filtered;
+}
+
+const aiFilteredNews = oneArticlePerDate(
+  dedupeNews([
+    ...newestFirst(highValueNews),
+    ...newestFirst(fallbackNews),
+  ])
+);
 
 const detailedNews = aiFilteredNews.slice(0, maxDetailedItems);
 
