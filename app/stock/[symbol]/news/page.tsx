@@ -1764,10 +1764,7 @@ export default async function StockNewsPage({ params }: Props) {
 
           <div className="newsHeroRight" style={heroRightStyle}>
             <div style={scorePanelStyle(newsScore.tone)}>
-              <div style={scorePanelKickerStyle}>NEWS SCORE</div>
-              <div style={scoreValueStyle}>{newsScore.score}/100</div>
-              <div style={scoreLabelStyle(newsScore.tone)}>{newsScore.label}</div>
-              <p style={scoreReasonStyle}>{newsScore.reason}</p>
+              <NewsScoreGauge newsScore={newsScore} />
             </div>
 
             <div style={miniScoreGridStyle}>
@@ -2345,6 +2342,117 @@ const scorePanelKickerStyle: CSSProperties = {
   textTransform: "uppercase",
   color: "rgba(255,255,255,0.76)",
 };
+
+
+function newsGaugeColour(tone: ScoreTone) {
+  if (tone === "green") return "#22c55e";
+  if (tone === "red") return "#ef4444";
+  return "#eab308";
+}
+
+function NewsScoreGauge({ newsScore }: { newsScore: NewsScoreResult }) {
+  const safeScore = Math.max(0, Math.min(100, newsScore.score));
+  const colour = newsGaugeColour(newsScore.tone);
+  const markerX = 24 + (192 * safeScore) / 100;
+  const markerY = 122 - Math.sin((safeScore / 100) * Math.PI) * 96;
+
+  return (
+    <div>
+      <div style={scorePanelKickerStyle}>NEWS SCORE</div>
+
+      <div
+        style={{
+          marginTop: 14,
+          position: "relative",
+          minHeight: 178,
+        }}
+      >
+        <svg
+          viewBox="0 0 240 145"
+          role="img"
+          aria-label={`News score ${safeScore} out of 100: ${newsScore.label}`}
+          style={{
+            width: "100%",
+            display: "block",
+            overflow: "visible",
+          }}
+        >
+          <defs>
+            <linearGradient id="newsGaugeWarmGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#ef4444" />
+              <stop offset="48%" stopColor="#eab308" />
+              <stop offset="100%" stopColor="#22c55e" />
+            </linearGradient>
+          </defs>
+
+          <path
+            d="M 24 122 A 96 96 0 0 1 216 122"
+            fill="none"
+            stroke="rgba(148,163,184,0.22)"
+            strokeWidth="22"
+            strokeLinecap="round"
+            pathLength={100}
+          />
+
+          <path
+            d="M 24 122 A 96 96 0 0 1 216 122"
+            fill="none"
+            stroke="url(#newsGaugeWarmGradient)"
+            strokeWidth="22"
+            strokeLinecap="round"
+            strokeDasharray={`${safeScore} 100`}
+            pathLength={100}
+            style={{ filter: `drop-shadow(0 0 10px ${colour}55)` }}
+          />
+
+          <circle
+            cx={markerX}
+            cy={markerY}
+            r="8"
+            fill={colour}
+            stroke="rgba(255,255,255,0.88)"
+            strokeWidth="3"
+            style={{ filter: `drop-shadow(0 0 10px ${colour}88)` }}
+          />
+        </svg>
+
+        <div
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: 18,
+            display: "grid",
+            justifyItems: "center",
+            pointerEvents: "none",
+          }}
+        >
+          <div style={scoreValueStyle}>{safeScore}/100</div>
+          <div style={scoreLabelStyle(newsScore.tone)}>{newsScore.label}</div>
+        </div>
+      </div>
+
+      <div
+        style={{
+          marginTop: 8,
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: 8,
+          fontSize: 11,
+          fontWeight: 900,
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+        }}
+      >
+        <div style={{ color: "#fca5a5" }}>Bearish</div>
+        <div style={{ color: "#fde68a", textAlign: "center" }}>Neutral</div>
+        <div style={{ color: "#86efac", textAlign: "right" }}>Bullish</div>
+      </div>
+
+      <p style={scoreReasonStyle}>{newsScore.reason}</p>
+    </div>
+  );
+}
 
 const scoreValueStyle: CSSProperties = {
   marginTop: 8,
