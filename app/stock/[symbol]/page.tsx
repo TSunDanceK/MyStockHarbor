@@ -117,35 +117,7 @@ export default async function StockPage({ params }: Props) {
         }}
       />
 
-      <section
-        style={{
-          maxWidth: 1100,
-          margin: "0 auto",
-          padding: "20px 16px 0",
-          fontFamily: "system-ui, Arial",
-        }}
-      >
-
-      </section>
-
-      <style>{`
-        @media (max-width: 820px) {
-          .stockHeaderNavRow {
-            width: 100% !important;
-            justify-content: stretch !important;
-            display: grid !important;
-            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-            gap: 10px !important;
-            margin-bottom: 22px !important;
-          }
-
-          .stockHeaderNavRow a {
-            width: 100% !important;
-          }
-        }
-      `}</style>
-
-      <StockSymbolPageClient symbol={upper} aiAnalysis={aiAnalysis} />
+     <StockSymbolPageClient symbol={upper} aiAnalysis={aiAnalysis} />
     </>
   );
 }
