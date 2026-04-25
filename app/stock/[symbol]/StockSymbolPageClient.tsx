@@ -877,16 +877,16 @@ export default function StockSymbolPageClient({
                         justifyContent: "center",
                         padding: "12px 16px",
                         borderRadius: 14,
-                        border: "1px solid rgba(250,204,21,0.34)",
+                        border: "1px solid rgba(248,113,113,0.34)",
                         background:
-                          "linear-gradient(135deg, rgba(250,204,21,0.16), rgba(202,138,4,0.08))",
-                        color: "#fef3c7",
+                        "linear-gradient(135deg, rgba(248,113,113,0.18), rgba(185,28,28,0.10))",
+                        color: "#fee2e2",
                         textDecoration: "none",
                         fontWeight: 900,
                         whiteSpace: "nowrap",
                       }}
                     >
-                      Check out the {symbol} headlines →
+                      Latest News on {symbol} →
                     </Link>
 
                     <a
