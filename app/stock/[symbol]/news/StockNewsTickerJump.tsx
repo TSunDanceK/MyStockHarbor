@@ -111,12 +111,44 @@ export default function StockNewsTickerJump({
       ref={wrapRef}
       style={{
         marginTop: 18,
-        display: "flex",
-        flexWrap: "wrap",
+        display: "grid",
         gap: 10,
-        alignItems: "flex-start",
+        maxWidth: 520,
       }}
     >
+      <div>
+        <div
+          style={{
+            fontSize: 12,
+            fontWeight: 950,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            color: "rgba(191,219,254,0.86)",
+            marginBottom: 4,
+          }}
+        >
+          Change stock
+        </div>
+
+        <div
+          style={{
+            fontSize: 13,
+            lineHeight: 1.5,
+            color: "rgba(241,245,249,0.66)",
+          }}
+        >
+          Search another ticker to view its latest news page.
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 10,
+          alignItems: "flex-start",
+        }}
+      >
       <div style={{ position: "relative", width: 280, maxWidth: "100%" }}>
         <input
           value={query}
@@ -203,30 +235,6 @@ export default function StockNewsTickerJump({
         ) : null}
       </div>
 
-<div style={{ flexBasis: "100%" }}>
-  <div
-    style={{
-      fontSize: 12,
-      fontWeight: 950,
-      letterSpacing: "0.08em",
-      textTransform: "uppercase",
-      color: "rgba(191,219,254,0.86)",
-      marginBottom: 4,
-    }}
-  >
-    Change stock
-  </div>
-
-  <div
-    style={{
-      fontSize: 13,
-      lineHeight: 1.5,
-      color: "rgba(241,245,249,0.66)",
-    }}
-  >
-    Search another ticker to view its latest news page.
-  </div>
-</div>
 
       <button
         type="button"
@@ -247,6 +255,7 @@ export default function StockNewsTickerJump({
       >
         Stock Page →
       </button>
+      </div>
     </div>
   );
 }
