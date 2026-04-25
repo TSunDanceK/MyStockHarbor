@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import { Suspense } from "react";
+import StockNewsTickerJump from "./StockNewsTickerJump";
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
@@ -1732,7 +1733,7 @@ export default async function StockNewsPage({ params }: Props) {
             <p className="newsHeroLead" style={heroLeadStyle}>
               {leadSummary}
             </p>
-
+            <StockNewsTickerJump currentSymbol={upper} />
             <div className="newsHeroMetricRow" style={heroMetricRowStyle}>
               <div style={heroMetricStyle}>
                 <div style={heroMetricLabelStyle}>Last Price</div>
