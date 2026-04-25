@@ -58,6 +58,59 @@ function HelpTip({ text }: { text: string }) {
   );
 }
 
+function utilCardStyle(type: "green" | "red" | "blue" | "yellow"): React.CSSProperties {
+  return {
+    borderRadius: 18,
+    padding: 18,
+    border:
+      type === "green"
+        ? "1px solid rgba(34,197,94,0.24)"
+        : type === "red"
+        ? "1px solid rgba(239,68,68,0.24)"
+        : type === "blue"
+        ? "1px solid rgba(59,130,246,0.24)"
+        : "1px solid rgba(250,204,21,0.24)",
+    background:
+      type === "green"
+        ? "linear-gradient(135deg, rgba(34,197,94,0.10), rgba(255,255,255,0.035))"
+        : type === "red"
+        ? "linear-gradient(135deg, rgba(239,68,68,0.10), rgba(255,255,255,0.035))"
+        : type === "blue"
+        ? "linear-gradient(135deg, rgba(59,130,246,0.12), rgba(255,255,255,0.035))"
+        : "linear-gradient(135deg, rgba(250,204,21,0.12), rgba(255,255,255,0.035))",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+  };
+}
+
+function utilIconStyle(type: "green" | "red" | "blue" | "yellow"): React.CSSProperties {
+  return {
+    width: 42,
+    height: 42,
+    borderRadius: 999,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 20,
+    flex: "0 0 auto",
+    background:
+      type === "green"
+        ? "rgba(34,197,94,0.18)"
+        : type === "red"
+        ? "rgba(239,68,68,0.18)"
+        : type === "blue"
+        ? "rgba(59,130,246,0.18)"
+        : "rgba(250,204,21,0.18)",
+    border:
+      type === "green"
+        ? "1px solid rgba(34,197,94,0.34)"
+        : type === "red"
+        ? "1px solid rgba(239,68,68,0.34)"
+        : type === "blue"
+        ? "1px solid rgba(59,130,246,0.34)"
+        : "1px solid rgba(250,204,21,0.34)",
+  };
+}
+
 function topNavBtnStyle(
   type: "learn" | "pickers" | "dashboard" | "platforms" | "utilities"
 ): React.CSSProperties {
