@@ -326,6 +326,78 @@ function themedOverviewCardStyle(type: "green" | "red" | "blue"): React.CSSPrope
   };
 }
 
+
+function insightCardStyle(type: "red" | "blue" | "yellow"): React.CSSProperties {
+  return {
+    borderRadius: 18,
+    border:
+      type === "red"
+        ? "1px solid rgba(239,68,68,0.24)"
+        : type === "blue"
+        ? "1px solid rgba(59,130,246,0.24)"
+        : "1px solid rgba(250,204,21,0.24)",
+    background:
+      type === "red"
+        ? "linear-gradient(135deg, rgba(239,68,68,0.11), rgba(255,255,255,0.035))"
+        : type === "blue"
+        ? "linear-gradient(135deg, rgba(59,130,246,0.12), rgba(255,255,255,0.035))"
+        : "linear-gradient(135deg, rgba(250,204,21,0.12), rgba(255,255,255,0.035))",
+    padding: 18,
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.045)",
+  };
+}
+
+function insightIconStyle(type: "red" | "blue" | "yellow"): React.CSSProperties {
+  return {
+    width: 42,
+    height: 42,
+    borderRadius: 999,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flex: "0 0 auto",
+    fontSize: 21,
+    background:
+      type === "red"
+        ? "rgba(239,68,68,0.16)"
+        : type === "blue"
+        ? "rgba(59,130,246,0.16)"
+        : "rgba(250,204,21,0.16)",
+    border:
+      type === "red"
+        ? "1px solid rgba(239,68,68,0.34)"
+        : type === "blue"
+        ? "1px solid rgba(59,130,246,0.34)"
+        : "1px solid rgba(250,204,21,0.34)",
+    boxShadow:
+      type === "red"
+        ? "0 0 18px rgba(239,68,68,0.16)"
+        : type === "blue"
+        ? "0 0 18px rgba(59,130,246,0.16)"
+        : "0 0 18px rgba(250,204,21,0.16)",
+  };
+}
+
+function sectionEyebrowStyle(type: "green" | "red" | "blue" | "yellow"): React.CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    fontSize: 12,
+    fontWeight: 950,
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+    color:
+      type === "green"
+        ? "#86efac"
+        : type === "red"
+        ? "#fca5a5"
+        : type === "blue"
+        ? "#93c5fd"
+        : "#fde68a",
+  };
+}
+
 function topNavIcon(type: "dashboard" | "learn" | "pickers" | "platforms") {
   if (type === "dashboard") return "📈";
   if (type === "learn") return "📘";
@@ -825,58 +897,85 @@ export default async function SPXPage() {
             }}
             className="spxTopGrid"
           >
-            <div style={infoCardStyle()}>
-              <div style={{ fontSize: 12, opacity: 0.72, fontWeight: 900 }}>
-                DAILY CHART
+            <div style={insightCardStyle("red")}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={insightIconStyle("red")}>⚠️</div>
+                <div>
+                  <div style={{ ...statLabelStyle(), color: "#fca5a5", opacity: 1 }}>
+                    Daily chart
+                  </div>
+                  <div style={{ marginTop: 5, fontSize: 21, fontWeight: 950 }}>
+                    Fear rises faster
+                  </div>
+                </div>
               </div>
-              <div style={{ marginTop: 8, fontSize: 22, fontWeight: 900 }}>
-                Fear rises faster
-              </div>
-              <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.6 }}>
+              <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
                 On lower timeframes, weakness feels more dramatic. That is why many investors
                 become nervous when the SPX starts losing short-term support.
               </div>
             </div>
 
-            <div style={infoCardStyle()}>
-              <div style={{ fontSize: 12, opacity: 0.72, fontWeight: 900 }}>
-                WEEKLY CHART
+            <div style={insightCardStyle("blue")}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={insightIconStyle("blue")}>🔎</div>
+                <div>
+                  <div style={{ ...statLabelStyle(), color: "#93c5fd", opacity: 1 }}>
+                    Weekly chart
+                  </div>
+                  <div style={{ marginTop: 5, fontSize: 21, fontWeight: 950 }}>
+                    Structure still matters more
+                  </div>
+                </div>
               </div>
-              <div style={{ marginTop: 8, fontSize: 22, fontWeight: 900 }}>
-                Structure still matters more
-              </div>
-              <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.6 }}>
+              <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
                 When you zoom out, the market can still look like it is going through a normal
                 correction rather than a confirmed long-term breakdown.
               </div>
             </div>
 
-            <div style={infoCardStyle()}>
-              <div style={{ fontSize: 12, opacity: 0.72, fontWeight: 900 }}>
-                BIG PICTURE
+            <div style={insightCardStyle("yellow")}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={insightIconStyle("yellow")}>📏</div>
+                <div>
+                  <div style={{ ...statLabelStyle(), color: "#fde68a", opacity: 1 }}>
+                    Big picture
+                  </div>
+                  <div style={{ marginTop: 5, fontSize: 21, fontWeight: 950 }}>
+                    This market was stretched
+                  </div>
+                </div>
               </div>
-              <div style={{ marginTop: 8, fontSize: 22, fontWeight: 900 }}>
-                This market was stretched
-              </div>
-              <div style={{ marginTop: 8, opacity: 0.84, lineHeight: 1.6 }}>
+              <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
                 After a strong run led by major technology names and AI enthusiasm, a cooling phase
                 was always a realistic possibility.
               </div>
             </div>
           </section>
 
-          <section style={sectionCardStyle()}>
-            <h2 style={{ margin: 0, fontSize: 30, letterSpacing: "-0.4px" }}>
+          <section
+            style={{
+              ...sectionCardStyle(),
+              border: "1px solid rgba(59,130,246,0.22)",
+              background:
+                "linear-gradient(135deg, rgba(59,130,246,0.08), rgba(255,255,255,0.035))",
+            }}
+          >
+            <div style={sectionEyebrowStyle("blue")}>
+              <span aria-hidden="true">🌊</span>
+              Market read
+            </div>
+
+            <h2 style={{ margin: "10px 0 0", fontSize: 30, letterSpacing: "-0.4px" }}>
               What’s actually happening in the market right now?
             </h2>
 
             <div
               style={{
-                marginTop: 12,
-                opacity: 0.86,
+                marginTop: 14,
+                opacity: 0.87,
                 lineHeight: 1.75,
                 fontSize: 16,
-                maxWidth: 920,
+                maxWidth: 930,
                 display: "grid",
                 gap: 14,
               }}
@@ -894,16 +993,31 @@ export default async function SPXPage() {
                 as a <strong>healthy correction</strong> rather than a reason to panic.
               </p>
 
+              <div
+                style={{
+                  borderRadius: 16,
+                  border: "1px solid rgba(34,197,94,0.24)",
+                  background:
+                    "linear-gradient(135deg, rgba(34,197,94,0.10), rgba(8,18,30,0.82))",
+                  padding: 16,
+                  display: "flex",
+                  gap: 12,
+                  alignItems: "flex-start",
+                }}
+              >
+                <div style={overviewIconStyle("green")}>✅</div>
+                <div style={{ lineHeight: 1.65 }}>
+                  <strong style={{ color: "#86efac" }}>Key point:</strong> this is not just about
+                  fear. It is also about the market cooling after a period where price had moved too
+                  far, too fast.
+                </div>
+              </div>
+
               <p style={{ margin: 0 }}>
                 The reason is simple: the SPX had become very extended after a long run higher. Much
                 of that strength was concentrated in major companies, especially those lifted by the
                 recent <strong>AI-driven rally</strong>. When markets get stretched too far above
                 long-term averages, pullbacks become more likely because price needs room to reset.
-              </p>
-
-              <p style={{ margin: 0 }}>
-                In other words, this is not just about fear. It is also about the market cooling after
-                a period where price had moved too far, too fast.
               </p>
             </div>
           </section>
@@ -916,8 +1030,20 @@ export default async function SPXPage() {
             }}
             className="spxContextGrid"
           >
-            <div style={sectionCardStyle()}>
-              <h2 style={{ margin: 0, fontSize: 30, letterSpacing: "-0.4px" }}>
+            <div
+              style={{
+                ...sectionCardStyle(),
+                border: "1px solid rgba(59,130,246,0.22)",
+                background:
+                  "linear-gradient(135deg, rgba(59,130,246,0.07), rgba(255,255,255,0.035))",
+              }}
+            >
+              <div style={sectionEyebrowStyle("blue")}>
+                <span aria-hidden="true">🧭</span>
+                Timeframe context
+              </div>
+
+              <h2 style={{ margin: "10px 0 0", fontSize: 30, letterSpacing: "-0.4px" }}>
                 Why the weekly chart matters more here
               </h2>
 
@@ -962,36 +1088,56 @@ export default async function SPXPage() {
             <div
               style={{
                 borderRadius: 18,
-                border: "1px solid rgba(250,204,21,0.20)",
+                border: "1px solid rgba(250,204,21,0.26)",
                 background:
-                  "linear-gradient(135deg, rgba(250,204,21,0.12), rgba(249,115,22,0.08))",
+                  "linear-gradient(135deg, rgba(250,204,21,0.13), rgba(249,115,22,0.08), rgba(8,13,23,0.96))",
                 padding: 18,
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
               }}
             >
-              <div
-                style={{
-                  fontSize: 12,
-                  fontWeight: 900,
-                  letterSpacing: "0.3px",
-                  color: "#fde68a",
-                }}
-              >
-                CURRENT TAKE
+              <div style={sectionEyebrowStyle("yellow")}>
+                <span aria-hidden="true">💬</span>
+                Current take
               </div>
 
-              <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
-                <div style={{ lineHeight: 1.6 }}>
-                  <strong>Short-term:</strong> fear is rising
-                </div>
-                <div style={{ lineHeight: 1.6 }}>
-                  <strong>Bigger picture:</strong> weekly structure matters more
-                </div>
-                <div style={{ lineHeight: 1.6 }}>
-                  <strong>Main idea:</strong> stretched markets often need to reset
-                </div>
-                <div style={{ lineHeight: 1.6 }}>
-                  <strong>Current stance:</strong> on the weekly timeframe, we are not scared yet
-                </div>
+              <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
+                {[
+                  ["⚠️", "Short-term", "fear is rising"],
+                  ["🔎", "Bigger picture", "weekly structure matters more"],
+                  ["📏", "Main idea", "stretched markets often need to reset"],
+                  ["🟡", "Current stance", "on the weekly timeframe, we are not scared yet"],
+                ].map(([icon, label, text]) => (
+                  <div
+                    key={label}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "32px minmax(0, 1fr)",
+                      gap: 10,
+                      alignItems: "flex-start",
+                      padding: "10px 0",
+                      borderBottom: "1px solid rgba(255,255,255,0.08)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 999,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: "rgba(250,204,21,0.12)",
+                        border: "1px solid rgba(250,204,21,0.22)",
+                        fontSize: 15,
+                      }}
+                    >
+                      {icon}
+                    </div>
+                    <div style={{ lineHeight: 1.55 }}>
+                      <strong style={{ color: "#fde68a" }}>{label}:</strong> {text}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </section>
