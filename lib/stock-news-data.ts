@@ -1082,49 +1082,42 @@ function getAiScoreGuardrails(items: NewsItem[]) {
 }
 
 function getEarningsQualityGuardrails(items: NewsItem[]) {
-  const relevant = items
-    .filter((item) => !isLowValueNewsItem(item) && isActualEarningsResultNews(item))
+  const cleaned = items.filter((item) => !isLowValueNewsItem(item));
+  const actualResults = cleaned
+    .filter((item) => isActualEarningsResultNews(item))
     .slice(0, 8);
+  const routineAnnouncements = cleaned.filter((item) => isRoutineEarningsAnnouncement(item));
 
   let positiveActualResults = 0;
   let strongPositiveActualResults = 0;
   let negativeActualResults = 0;
   let severeNegativeActualResults = 0;
 
-  for (const item of relevant) {
+  for (const item of actualResults) {
     const text = headlineText(item);
 
-    const positive = containsAny(text, [
-      "beat", "beats", "tops estimates", "top estimates", "above estimates",
-      "better than expected", "better-than-expected", "revenue beat", "eps beat",
-      "raises guidance", "raised guidance", "guidance above", "outlook above", "forecast above",
-      "strong earnings", "solid earnings", "positive earnings", "shares jump", "shares surge",
-      "stock jumps", "stock surges", "rallies after",
-    ]);
+    const positive = containsFreshPositiveEarningsResult(text);
+    const strongPositive =
+      containsAny(text, [
+        "beat and raise",
+        "beat and raised",
+        "beats and raises",
+        "beat estimates and raised guidance",
+        "beats estimates and raises guidance",
+        "revenue beat",
+        "eps beat",
+        "guidance above",
+        "outlook above",
+        "raises guidance",
+        "raised guidance",
+      ]) ||
+      containsAll(text, [
+        ["beat", "beats", "above estimates", "better than expected", "better-than-expected"],
+        ["raises guidance", "raised guidance", "guidance above", "outlook above"],
+      ]);
 
-    const strongPositive = containsAny(text, [
-      "beat and raise", "beat and raised", "beats and raises",
-      "beat estimates and raised guidance", "beats estimates and raises guidance",
-      "revenue beat", "eps beat", "guidance above", "outlook above",
-      "raises guidance", "raised guidance",
-    ]);
-
-    const negative = containsAny(text, [
-      "miss", "misses", "missed estimates", "below estimates", "below guidance",
-      "cuts guidance", "cut guidance", "guidance cut", "guidance below", "weak guidance",
-      "warning", "disappointing guidance", "revenue fell", "revenue declined",
-      "revenue decline", "declining revenue", "sales fell", "sales declined", "net loss",
-      "big loss", "wider loss", "loss widened", "losses remain", "subscriber decline",
-      "subscribers declined", "users declined", "demand pressure", "weak demand",
-      "softening demand", "competition pressure", "margin pressure",
-    ]);
-
-    const severeNegative = containsAny(text, [
-      "revenue fell", "revenue declined", "revenue decline", "declining revenue",
-      "net loss", "big loss", "wider loss", "loss widened", "below guidance",
-      "cuts guidance", "weak guidance", "subscriber decline", "subscribers declined",
-      "weak demand", "softening demand",
-    ]);
+    const negative = containsNegativeEarningsResult(text);
+    const severeNegative = containsSevereNegativeEarningsResult(text);
 
     if (positive) positiveActualResults += 1;
     if (strongPositive) strongPositiveActualResults += 1;
@@ -1132,10 +1125,31 @@ function getEarningsQualityGuardrails(items: NewsItem[]) {
     if (severeNegative) severeNegativeActualResults += 1;
   }
 
+  const newestActualTime = actualResults.reduce(
+    (latest, item) => Math.max(latest, newsItemTime(item)),
+    0
+  );
+  const newestRoutineTime = routineAnnouncements.reduce(
+    (latest, item) => Math.max(latest, newsItemTime(item)),
+    0
+  );
+  const newestActualAgeDays = ageInDays(newestActualTime);
+  const newerRoutineAnnouncementExists =
+    newestRoutineTime > 0 && (!newestActualTime || newestRoutineTime > newestActualTime);
+
+  const staleActualResults =
+    !actualResults.length ||
+    (typeof newestActualAgeDays === "number" && newestActualAgeDays > 75) ||
+    (newerRoutineAnnouncementExists &&
+      typeof newestActualAgeDays === "number" &&
+      newestActualAgeDays > 35);
+
   let earningsCap: number | null = null;
   let earningsFloor: number | null = null;
 
-  if (!relevant.length) {
+  if (!actualResults.length) {
+    earningsCap = 55;
+  } else if (staleActualResults) {
     earningsCap = 55;
   } else if (severeNegativeActualResults >= 2) {
     earningsCap = 45;
@@ -1147,7 +1161,7 @@ function getEarningsQualityGuardrails(items: NewsItem[]) {
     earningsCap = 42;
   }
 
-  if (negativeActualResults === 0 && severeNegativeActualResults === 0) {
+  if (!staleActualResults && negativeActualResults === 0 && severeNegativeActualResults === 0) {
     if (strongPositiveActualResults >= 1 || positiveActualResults >= 2) {
       earningsFloor = 72;
     } else if (positiveActualResults >= 1) {
@@ -1158,11 +1172,15 @@ function getEarningsQualityGuardrails(items: NewsItem[]) {
   return {
     earningsCap,
     earningsFloor,
-    actualEarningsResultCatalysts: relevant.length,
+    actualEarningsResultCatalysts: staleActualResults ? 0 : actualResults.length,
+    rawActualEarningsResultCatalysts: actualResults.length,
     positiveActualResults,
     strongPositiveActualResults,
     negativeActualResults,
     severeNegativeActualResults,
+    staleActualResults,
+    newerRoutineAnnouncementExists,
+    newestActualAgeDays,
   };
 }
 
@@ -1173,6 +1191,101 @@ function applyScoreCap(score: number, cap: number | null) {
 
 function headlineText(item: NewsItem) {
   return `${item.title} ${item.description ?? ""}`.toLowerCase();
+}
+
+function newsItemTime(item: NewsItem) {
+  if (!item.pubDate) return 0;
+  const time = new Date(item.pubDate).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function ageInDays(time: number) {
+  if (!time) return null;
+  return (Date.now() - time) / (1000 * 60 * 60 * 24);
+}
+
+function containsAll(text: string, groups: string[][]) {
+  return groups.every((group) => containsAny(text, group));
+}
+
+function containsFreshPositiveEarningsResult(text: string) {
+  return containsAny(text, [
+    "beat",
+    "beats",
+    "tops estimates",
+    "top estimates",
+    "above estimates",
+    "better than expected",
+    "better-than-expected",
+    "revenue beat",
+    "eps beat",
+    "raises guidance",
+    "raised guidance",
+    "guidance above",
+    "outlook above",
+    "forecast above",
+    "strong earnings",
+    "solid earnings",
+    "positive earnings",
+    "profit jumps",
+    "loss narrowed",
+  ]);
+}
+
+function containsNegativeEarningsResult(text: string) {
+  return containsAny(text, [
+    "miss",
+    "misses",
+    "missed estimates",
+    "below estimates",
+    "below guidance",
+    "cuts guidance",
+    "cut guidance",
+    "guidance cut",
+    "guidance below",
+    "weak guidance",
+    "warning",
+    "disappointing guidance",
+    "revenue fell",
+    "revenue declined",
+    "revenue decline",
+    "declining revenue",
+    "sales fell",
+    "sales declined",
+    "net loss",
+    "big loss",
+    "wider loss",
+    "loss widened",
+    "losses remain",
+    "subscriber decline",
+    "subscribers declined",
+    "users declined",
+    "demand pressure",
+    "weak demand",
+    "softening demand",
+    "competition pressure",
+    "margin pressure",
+  ]);
+}
+
+function containsSevereNegativeEarningsResult(text: string) {
+  return containsAny(text, [
+    "revenue fell",
+    "revenue declined",
+    "revenue decline",
+    "declining revenue",
+    "net loss",
+    "big loss",
+    "wider loss",
+    "loss widened",
+    "below guidance",
+    "cuts guidance",
+    "weak guidance",
+    "subscriber decline",
+    "subscribers declined",
+    "weak demand",
+    "softening demand",
+  ]);
 }
 
 function containsAny(text: string, words: string[]) {
@@ -1256,6 +1369,7 @@ function isActualEarningsResultNews(item: NewsItem) {
     "better than expected",
     "better-than-expected",
     "raises guidance",
+    "raised guidance",
     "cuts guidance",
     "guidance above",
     "guidance below",
@@ -1272,20 +1386,45 @@ function isActualEarningsResultNews(item: NewsItem) {
 
   if (!hasEarningsContext || !hasActualResultSignal) return false;
 
-  if (isAnalystOrPreviewEarningsItem(item) && !containsAny(text, [
-    "reported",
-    "reports",
-    "financial results",
-    "revenue fell",
-    "revenue declined",
-    "net loss",
-    "beat",
-    "beats",
-    "miss",
-    "misses",
-    "raises guidance",
-    "cuts guidance",
-  ])) {
+  const isOnlyMarketReaction =
+    containsAny(text, ["shares jump", "shares surge", "stock jumps", "stock surges", "rallies after"]) &&
+    !containsAny(text, [
+      "reported",
+      "reports",
+      "financial results",
+      "revenue",
+      "eps",
+      "guidance",
+      "beat",
+      "beats",
+      "miss",
+      "misses",
+      "net loss",
+      "profit",
+      "margin",
+      "adjusted ebitda",
+    ]);
+
+  if (isOnlyMarketReaction) return false;
+
+  if (
+    isAnalystOrPreviewEarningsItem(item) &&
+    !containsAny(text, [
+      "reported",
+      "reports",
+      "financial results",
+      "revenue fell",
+      "revenue declined",
+      "net loss",
+      "beat",
+      "beats",
+      "miss",
+      "misses",
+      "raises guidance",
+      "raised guidance",
+      "cuts guidance",
+    ])
+  ) {
     return false;
   }
 
@@ -1592,7 +1731,7 @@ async function getAiScoredNews(args: {
     "If revenue declined, revenue missed guidance, losses remain large, subscribers/users declined, or guidance disappointed, earningsScore should be Weak or Mixed unless there is a clear stronger offsetting beat plus raised guidance. " +
     "If an earnings set has both positive words such as beat/raised guidance and negative fundamentals such as revenue decline, net loss, subscriber decline, weak demand, or margin pressure, choose Mixed unless the positive beat clearly outweighs those negatives. Do not score that as Positive simply because one article says shares surged. " +
     "If newer actual earnings headlines conflict with older positive earnings headlines, weight the newer actual results more heavily. " +
-    "If the earningsHeadlines are empty or only mention an upcoming earnings date, conference call, routine filing, analyst preview, or no actual reported results, choose No earnings signal. " +
+    "If the earningsHeadlines are empty, stale compared with a newer upcoming earnings-date announcement, or only mention an upcoming earnings date, conference call, routine filing, analyst preview, or no actual reported results, choose No earnings signal. Do not let old positive earnings articles overpower newer routine upcoming-earnings context. " +
     "Layoffs, cost cuts, restructurings, asset sales, and turnaround plans are mixed: bearish if paired with weak demand or missed guidance, but neutral-to-bullish if the main headline is a beat, better guidance, or credible turnaround progress. " +
     "Use positives and negatives to explain the chosen lane. Keep reasons short, calm, and suitable for beginner investors. Do not invent facts beyond the supplied text.";
 
