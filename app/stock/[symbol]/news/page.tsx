@@ -1734,7 +1734,21 @@ export default async function StockNewsPage({ params }: Props) {
               {leadSummary}
             </p>
             <StockNewsTickerJump currentSymbol={upper} />
-            <div className="newsHeroMetricRow" style={heroMetricRowStyle}>
+            <div style={miniScoreGridStyle}>
+              <div style={miniScoreCardStyle(earningsScore.tone)}>
+                <div style={miniScoreTitleStyle}>Earnings Tone</div>
+                <div style={miniScoreNumberStyle}>{earningsScore.score}</div>
+                <div style={miniScoreLabelStyle}>{earningsScore.label}</div>
+              </div>
+
+              <div style={miniScoreCardStyle(newsScore.tone)}>
+                <div style={miniScoreTitleStyle}>Confidence</div>
+                <div style={miniScoreNumberStyle}>{newsScore.confidence}</div>
+                <div style={miniScoreLabelStyle}>Headline depth</div>
+              </div>
+            </div>
+
+                        <div style={miniScoreGridStyle}>
               <div style={heroMetricStyle}>
                 <div style={heroMetricLabelStyle}>Last Price</div>
                 <div
@@ -1754,24 +1768,6 @@ export default async function StockNewsPage({ params }: Props) {
               <div style={heroMetricStyle}>
                 <div style={heroMetricLabelStyle}>Trend Context</div>
                 <div style={heroMetricValueStyle}>{trend}</div>
-              </div>
-
-              <div style={heroMetricStyle}>
-                <div style={heroMetricLabelStyle}>RSI (14)</div>
-                <div
-                  style={{
-                    ...heroMetricValueStyle,
-                    color: isDataUnavailable ? "#f59e0b" : "#f8fafc",
-                    fontSize: isDataUnavailable ? 14 : heroMetricValueStyle.fontSize,
-                    letterSpacing: isDataUnavailable ? "0.08em" : "-0.04em",
-                  }}
-                >
-                  {isDataUnavailable
-                    ? "DATA UNAVAILABLE"
-                    : typeof lastRsi === "number"
-                    ? lastRsi.toFixed(1)
-                    : "—"}
-                </div>
               </div>
             </div>
 
