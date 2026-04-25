@@ -45,7 +45,7 @@ function sanitizeLines(value: unknown, maxItems: number) {
     .slice(0, maxItems);
 }
 
-async function generateSpxMarketAnalysis(): Promise<MarketAnalysis | null> {
+async function generateSpxMarketAnalysis(_timeBucket?: number): Promise<MarketAnalysis | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   const model = process.env.OPENAI_NEWS_MODEL || "gpt-4.1-mini";
 
@@ -176,10 +176,12 @@ async function generateSpxMarketAnalysis(): Promise<MarketAnalysis | null> {
 }
 
 const getCachedSpxMarketAnalysis = unstable_cache(
-async () => {
-  const nowBucket = Math.floor(Date.now() / (1000 * 60 * 60 * 12)); // 12h bucket
-  return generateSpxMarketAnalysis(nowBucket);
-}
+  async () => {
+    const nowBucket = Math.floor(Date.now() / (1000 * 60 * 60 * 12));
+    return generateSpxMarketAnalysis(nowBucket);
+  },
+  ["msh-spx-market-analysis-v3"],
+  {
     revalidate: 60 * 60 * 12,
   }
 );
