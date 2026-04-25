@@ -412,41 +412,6 @@ export default function StockSymbolPageClient({
       }}
     >
       <div className="wrap">
-        <div className="analysisTopUtilityRow" style={topUtilityRowStyle}>
-          <div className="analysisTopUtilityInner" style={topUtilityInnerStyle}>
-            <Link
-              href={`/?symbol=${encodeURIComponent(symbol)}`}
-              className="analysisTopBtn"
-              style={topUtilityBtnStyle("gold")}
-            >
-              📈 Dashboard
-            </Link>
-
-            <Link
-              href="/platforms"
-              className="analysisTopBtn"
-              style={topUtilityBtnStyle("green")}
-            >
-              🏦 Platforms
-            </Link>
-
-            <Link
-              href="/pickers"
-              className="analysisTopBtn"
-              style={topUtilityBtnStyle("red")}
-            >
-              📊 Stock Pickers
-            </Link>
-
-            <Link
-              href="/learn"
-              className="analysisTopBtn"
-              style={topUtilityBtnStyle("blue")}
-            >
-              📘 Learn
-            </Link>
-          </div>
-        </div>
 
         <section
           style={{
