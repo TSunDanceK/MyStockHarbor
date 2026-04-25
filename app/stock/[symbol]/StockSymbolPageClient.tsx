@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { AiStockAnalysis } from "@/lib/ai-stock-analysis";
 import StockPriceChart from "./StockPriceChart";
+import StockTickerJump from "./StockTickerJump";
 
 type Quote = {
   symbol: string;
@@ -458,19 +459,23 @@ export default function StockSymbolPageClient({
                 {symbol} Stock Analysis
               </div>
 
-              <p
-                style={{
-                  marginTop: 12,
-                  fontSize: 16,
-                  lineHeight: 1.7,
-                  opacity: 0.84,
-                  maxWidth: 760,
-                }}
-              >
-                {companyName || `${symbol} technical overview`}{" "}
-                {companyName ? `(${symbol})` : ""}. Review the chart, trend structure,
-                moving averages and momentum context in a more readable, beginner-friendly way.
-              </p>
+          <p
+            style={{
+              marginTop: 12,
+              fontSize: 16,
+              lineHeight: 1.7,
+              opacity: 0.84,
+              maxWidth: 860,
+            }}
+          >
+            {companyName || `${symbol} technical overview`}{" "}
+            {companyName ? `(${symbol})` : ""}. Review the chart, trend structure,
+            moving averages and momentum context in a more readable, beginner-friendly way.
+          </p>
+
+          <div style={{ marginTop: 18, maxWidth: 520 }}>
+            <StockTickerJump currentSymbol={symbol} />
+          </div>
             </div>
 
             {!loading && !err ? (
