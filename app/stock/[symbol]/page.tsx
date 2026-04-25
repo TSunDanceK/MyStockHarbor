@@ -114,14 +114,15 @@ export default async function StockPage({ params }: Props) {
         }}
       />
 
-      <section
-        style={{
-          maxWidth: 1200,
-          margin: "0 auto",
-          padding: "20px 16px 0",
-          fontFamily: "system-ui, Arial",
-        }}
-      >
+<section
+  style={{
+    maxWidth: 900,
+    margin: "0 auto",
+    padding: "28px 16px 0",
+    fontFamily: "system-ui, Arial",
+    textAlign: "center",
+  }}
+>
         <h1
           style={{
             margin: 0,
