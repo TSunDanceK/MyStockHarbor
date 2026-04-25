@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
-import type { CSSProperties } from "react";
-import Link from "next/link";
+
 import { getAiStockAnalysis } from "@/lib/ai-stock-analysis";
 import StockSymbolPageClient from "./StockSymbolPageClient";
-import StockTickerJump from "./StockTickerJump";
+
 
 type Props = {
   params: Promise<{ symbol: string }>;
@@ -34,41 +33,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-
-  if (type === "gold") {
-    return {
-      ...base,
-      border: "1px solid rgba(250,204,21,0.34)",
-      background: "linear-gradient(135deg, rgba(250,204,21,0.18), rgba(202,138,4,0.08))",
-      color: "#fef3c7",
-    };
-  }
-
-  if (type === "green") {
-    return {
-      ...base,
-      border: "1px solid rgba(34,197,94,0.30)",
-      background: "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))",
-      color: "#dcfce7",
-    };
-  }
-
-  if (type === "red") {
-    return {
-      ...base,
-      border: "1px solid rgba(248,113,113,0.28)",
-      background: "linear-gradient(135deg, rgba(248,113,113,0.16), rgba(185,28,28,0.08))",
-      color: "#fee2e2",
-    };
-  }
-
-  return {
-    ...base,
-    border: "1px solid rgba(59,130,246,0.30)",
-    background: "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(37,99,235,0.08))",
-    color: "#dbeafe",
-  };
-}
 
 export default async function StockPage({ params }: Props) {
   const { symbol } = await params;
@@ -186,18 +150,3 @@ export default async function StockPage({ params }: Props) {
   );
 }
 
-const pageTitleStyle: CSSProperties = {
-  margin: 0,
-  fontSize: 32,
-  lineHeight: 1.1,
-  fontWeight: 950,
-  letterSpacing: "-0.02em",
-};
-
-const pageIntroStyle: CSSProperties = {
-  margin: "10px 0 0",
-  maxWidth: 720,
-  fontSize: 15,
-  lineHeight: 1.7,
-  color: "rgba(241,245,249,0.72)",
-};
