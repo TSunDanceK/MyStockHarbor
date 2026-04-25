@@ -1142,8 +1142,20 @@ export default async function SPXPage() {
             </div>
           </section>
 
-          <section style={sectionCardStyle()}>
-            <h2 style={{ margin: 0, fontSize: 30, letterSpacing: "-0.4px" }}>
+          <section
+            style={{
+              ...sectionCardStyle(),
+              border: "1px solid rgba(59,130,246,0.22)",
+              background:
+                "linear-gradient(135deg, rgba(59,130,246,0.07), rgba(255,255,255,0.035))",
+            }}
+          >
+            <div style={sectionEyebrowStyle("blue")}>
+              <span aria-hidden="true">📈</span>
+              Weekly chart
+            </div>
+
+            <h2 style={{ margin: "10px 0 0", fontSize: 30, letterSpacing: "-0.4px" }}>
               Weekly SPX chart snapshot
             </h2>
 
@@ -1166,8 +1178,20 @@ export default async function SPXPage() {
             </div>
           </section>
 
-          <section style={sectionCardStyle()}>
-            <h2 style={{ margin: 0, fontSize: 30, letterSpacing: "-0.4px" }}>
+          <section
+            style={{
+              ...sectionCardStyle(),
+              border: "1px solid rgba(255,255,255,0.12)",
+              background:
+                "linear-gradient(135deg, rgba(15,23,42,0.96), rgba(255,255,255,0.035))",
+            }}
+          >
+            <div style={sectionEyebrowStyle("yellow")}>
+              <span aria-hidden="true">👁</span>
+              What to watch
+            </div>
+
+            <h2 style={{ margin: "10px 0 0", fontSize: 30, letterSpacing: "-0.4px" }}>
               What should investors watch next?
             </h2>
 
@@ -1180,18 +1204,27 @@ export default async function SPXPage() {
               }}
               className="spxTwoCol"
             >
-              <div
-                style={{
-                  borderRadius: 14,
-                  border: "1px solid rgba(239,68,68,0.22)",
-                  background: "rgba(239,68,68,0.06)",
-                  padding: 16,
-                }}
-              >
-                <div style={{ fontWeight: 900, marginBottom: 10 }}>
-                  Signs that risk is increasing
+              <div style={themedOverviewCardStyle("red")}>
+                <div style={overviewCardHeaderStyle}>
+                  <div style={overviewIconStyle("red")}>
+                    <span
+                      style={{
+                        fontSize: 20,
+                        lineHeight: "20px",
+                        height: 20,
+                        display: "block",
+                        transform: "translateY(-1px)",
+                      }}
+                    >
+                      ⚠
+                    </span>
+                  </div>
+                  <div style={{ ...statLabelStyle(), color: "#f87171", opacity: 1 }}>
+                    Risk increasing
+                  </div>
                 </div>
-                <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 8 }}>
+
+                <ul style={{ margin: "12px 0 0", paddingLeft: 18, display: "grid", gap: 8 }}>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
                     Clear loss of major higher-timeframe support
                   </li>
@@ -1207,18 +1240,15 @@ export default async function SPXPage() {
                 </ul>
               </div>
 
-              <div
-                style={{
-                  borderRadius: 14,
-                  border: "1px solid rgba(34,197,94,0.22)",
-                  background: "rgba(34,197,94,0.06)",
-                  padding: 16,
-                }}
-              >
-                <div style={{ fontWeight: 900, marginBottom: 10 }}>
-                  Signs this is still a normal correction
+              <div style={themedOverviewCardStyle("green")}>
+                <div style={overviewCardHeaderStyle}>
+                  <div style={overviewIconStyle("green")}>↗</div>
+                  <div style={{ ...statLabelStyle(), color: "#4ade80", opacity: 1 }}>
+                    Normal correction
+                  </div>
                 </div>
-                <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 8 }}>
+
+                <ul style={{ margin: "12px 0 0", paddingLeft: 18, display: "grid", gap: 8 }}>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
                     Higher-timeframe support still attracting buyers
                   </li>
@@ -1236,14 +1266,26 @@ export default async function SPXPage() {
             </div>
           </section>
 
-          <section style={sectionCardStyle()}>
-            <h2 style={{ margin: 0, fontSize: 30, letterSpacing: "-0.4px" }}>
+          <section
+            style={{
+              ...sectionCardStyle(),
+              border: "1px solid rgba(250,204,21,0.22)",
+              background:
+                "linear-gradient(135deg, rgba(250,204,21,0.08), rgba(255,255,255,0.035))",
+            }}
+          >
+            <div style={sectionEyebrowStyle("yellow")}>
+              <span aria-hidden="true">⚖</span>
+              Balanced view
+            </div>
+
+            <h2 style={{ margin: "10px 0 0", fontSize: 30, letterSpacing: "-0.4px" }}>
               So is this a buying opportunity or the start of a bigger downfall?
             </h2>
 
             <div
               style={{
-                marginTop: 12,
+                marginTop: 14,
                 opacity: 0.86,
                 lineHeight: 1.75,
                 fontSize: 16,
@@ -1257,11 +1299,26 @@ export default async function SPXPage() {
                 people, periods of fear often create interest in adding to positions.
               </p>
 
-              <p style={{ margin: 0 }}>
-                But the answer does not come from emotion. It comes from structure. If the weekly
-                chart continues to look like a standard pullback into support, many investors will
-                see that as a healthier reset than the headlines suggest.
-              </p>
+              <div
+                style={{
+                  borderRadius: 16,
+                  border: "1px solid rgba(59,130,246,0.24)",
+                  background:
+                    "linear-gradient(135deg, rgba(59,130,246,0.10), rgba(8,18,30,0.82))",
+                  padding: 16,
+                  display: "flex",
+                  gap: 12,
+                  alignItems: "flex-start",
+                }}
+              >
+                <div style={overviewIconStyle("blue")}>🧭</div>
+                <div style={{ lineHeight: 1.65 }}>
+                  <strong style={{ color: "#93c5fd" }}>Structure matters:</strong> the answer does
+                  not come from emotion. If the weekly chart continues to look like a standard
+                  pullback into support, many investors will see that as a healthier reset than the
+                  headlines suggest.
+                </div>
+              </div>
 
               <p style={{ margin: 0 }}>
                 If the higher-timeframe structure starts failing more decisively, then the risk of a
@@ -1275,14 +1332,20 @@ export default async function SPXPage() {
           <section
             style={{
               borderRadius: 20,
-              border: "1px solid rgba(34,197,94,0.22)",
+              border: "1px solid rgba(34,197,94,0.24)",
               background:
-                "linear-gradient(135deg, rgba(34,197,94,0.10), rgba(59,130,246,0.08))",
+                "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(59,130,246,0.08), rgba(8,13,23,0.96))",
               padding: 20,
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
             }}
           >
-            <h2 style={{ margin: 0, fontSize: 30, letterSpacing: "-0.4px" }}>
+            <div style={sectionEyebrowStyle("green")}>
+              <span aria-hidden="true">✅</span>
               Best next step
+            </div>
+
+            <h2 style={{ margin: "10px 0 0", fontSize: 30, letterSpacing: "-0.4px" }}>
+              Check the weekly structure before making a decision
             </h2>
 
             <div
