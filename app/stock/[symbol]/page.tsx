@@ -206,9 +206,6 @@ export default async function StockPage({ params }: Props) {
           is showing bullish, bearish or neutral conditions based on recent market structure.
         </p>
 
-        <div style={{ marginTop: 22 }}>
-          <StockTickerJump currentSymbol={upper} />
-        </div>
       </section>
 
       <style>{`
