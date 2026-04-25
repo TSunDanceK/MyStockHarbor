@@ -24,11 +24,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       url: `https://www.mystockharbor.com/stock/${upper}`,
       siteName: "MyStockHarbor",
       type: "article",
+      images: [
+        {
+          url: "https://www.mystockharbor.com/og-image-v2.png",
+          width: 1200,
+          height: 630,
+          alt: "MyStockHarbor stock analysis dashboard",
+        },
+      ],
     },
     twitter: {
       card: "summary_large_image",
       title: `${upper} Stock Analysis | MyStockHarbor`,
       description: `Company overview, AI outlook and technical summary for ${upper}.`,
+      images: ["https://www.mystockharbor.com/og-image-v2.png"],
     },
   };
 }
@@ -117,7 +126,7 @@ export default async function StockPage({ params }: Props) {
         }}
       />
 
-     <StockSymbolPageClient symbol={upper} aiAnalysis={aiAnalysis} />
+      <StockSymbolPageClient symbol={upper} aiAnalysis={aiAnalysis} />
     </>
   );
 }
