@@ -137,7 +137,8 @@ export default async function StockPage({ params }: Props) {
 
         <p
           style={{
-            margin: "10px 0 0",
+            maxWidth: 700,
+            margin: "10px auto 0",
             maxWidth: 860,
             fontSize: 15,
             lineHeight: 1.7,
