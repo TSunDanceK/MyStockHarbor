@@ -331,6 +331,62 @@ function movingAverage(values: number[], window: number): (number | null)[] {
   return out;
 }
 
+function getCompanyIdentityTerms(symbol: string, companyName: string) {
+  const cleanedCompany = companyName
+    .toLowerCase()
+    .replace(/\b(inc|inc\.|corporation|corp|corp\.|company|co|co\.|ltd|plc|class a|common stock|ordinary shares)\b/g, "")
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const companyWords = cleanedCompany
+    .split(" ")
+    .filter((word) => word.length >= 4);
+
+  return [...new Set([
+    symbol.toLowerCase(),
+    cleanedCompany,
+    ...companyWords,
+  ].filter(Boolean))];
+}
+
+function isClearlyAboutRequestedCompany(item: NewsItem, symbol: string, companyName: string) {
+  const text = `${item.title} ${item.description ?? ""} ${item.source ?? ""}`
+    .toLowerCase()
+    .replace(/[^\w\s:$.-]/g, " ");
+
+  const terms = getCompanyIdentityTerms(symbol, companyName);
+
+  if (!terms.length) return true;
+
+  const ticker = symbol.toLowerCase();
+
+  const explicitTickerSignals = [
+    `${ticker} stock`,
+    `${ticker} shares`,
+    `${ticker} earnings`,
+    `${ticker} revenue`,
+    `${ticker} investor`,
+    `${ticker} price target`,
+    `nyse ${ticker}`,
+    `nasdaq ${ticker}`,
+    `ticker ${ticker}`,
+    `$${ticker}`,
+  ];
+
+  if (explicitTickerSignals.some((term) => text.includes(term))) {
+    return true;
+  }
+
+  const companyTermHits = terms.filter((term) => term.length >= 4 && text.includes(term));
+
+  if (companyTermHits.length >= 1) {
+    return true;
+  }
+
+  return false;
+}
+
 function mergeNewsPools(pools: NewsItem[][]): NewsItem[] {
   const merged: NewsItem[] = [];
   const seenLinks = new Set<string>();
@@ -653,9 +709,14 @@ function dedupeNews(items: NewsItem[]): NewsItem[] {
   return deduped;
 }
 
-function rankNews(news: NewsItem[]) {
+function rankNews(news: NewsItem[], symbol = "", companyName = "") {
+  const relevantNews =
+    symbol && companyName
+      ? news.filter((item) => isClearlyAboutRequestedCompany(item, symbol, companyName))
+      : news;
+
   return dedupeNews(
-    [...news].sort((a, b) => {
+    [...relevantNews].sort((a, b) => {
       const scoreDiff = scoreNewsItem(b) - scoreNewsItem(a);
       if (scoreDiff !== 0) return scoreDiff;
 
@@ -2014,7 +2075,7 @@ async function buildStockNewsBaseData(
     ? Math.min(...trailing.map((point) => point.low ?? point.close))
     : null;
 
-  const rankedNews = rankNews(news);
+  const rankedNews = rankNews(news, upper, companyName);
   const rankedEarningsNews = rankEarningsNews(earningsNews);
 
   const keywordNewsScore = scoreNews(news);
@@ -2200,7 +2261,7 @@ const getCachedStockNewsBaseData = unstable_cache(
 
     return buildStockNewsBaseData(parsed.symbol, parsed.options);
   },
-  ["msh-stock-news-base-data-v19"],
+  ["msh-stock-news-base-data-v20"],
   {
     revalidate: 60,
   }
