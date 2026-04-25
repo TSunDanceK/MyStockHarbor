@@ -101,16 +101,18 @@ setResults(sortedRows);
 
   const canGo = Boolean(selected?.symbol);
 
-  function chooseResult(result: SymbolResult) {
-    const clean = result.symbol.trim().toUpperCase();
+function chooseResult(result: SymbolResult) {
+  const clean = result.symbol.trim().toUpperCase();
 
-    setSelected({
-      ...result,
-      symbol: clean,
-    });
-    setQuery(clean);
-    setOpen(false);
-  }
+  setSelected({
+    ...result,
+    symbol: clean,
+  });
+  setQuery(clean);
+  setOpen(false);
+
+  router.push(`/stock/${encodeURIComponent(clean)}/news`);
+}
 
   function goToNews() {
     if (!selected?.symbol) return;
