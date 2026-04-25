@@ -520,67 +520,6 @@ export default function StockSymbolPageClient({
             <div style={{ marginTop: 18, opacity: 0.8 }}>{err}</div>
           ) : (
             <>
-              <div className="heroGrid" style={{ marginTop: 18 }}>
-                <div
-                  style={{
-                    border: "1px solid rgba(255,255,255,0.10)",
-                    borderRadius: 18,
-                    padding: 18,
-                    background: "rgba(255,255,255,0.04)",
-                  }}
-                >
-                  <div style={miniLabelStyle}>Last price</div>
-                  <div style={{ marginTop: 8, fontSize: 34, fontWeight: 950 }}>
-                    {typeof quote?.price === "number" ? `$${quote.price.toFixed(2)}` : "—"}
-                  </div>
-                  <div style={{ marginTop: 8, fontSize: 13, opacity: 0.72 }}>
-                    {quote?.date && quote?.time
-                      ? `${quote.date} ${quote.time}`
-                      : "Latest timestamp unavailable"}
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    border: "1px solid rgba(255,255,255,0.10)",
-                    borderRadius: 18,
-                    padding: 18,
-                    background: "rgba(255,255,255,0.04)",
-                  }}
-                >
-                  <div style={miniLabelStyle}>Trend score</div>
-                  <div
-                    style={{
-                      marginTop: 8,
-                      fontSize: 34,
-                      fontWeight: 950,
-                      color: toneColor(trendTone),
-                    }}
-                  >
-                    {trendScore.passed}/{trendScore.total}
-                  </div>
-                  <div style={{ marginTop: 8, fontSize: 13, opacity: 0.72 }}>
-                    Price vs MA50, price vs MA200 and MA50 vs MA200.
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    border: "1px solid rgba(255,255,255,0.10)",
-                    borderRadius: 18,
-                    padding: 18,
-                    background: "rgba(255,255,255,0.04)",
-                  }}
-                >
-                  <div style={miniLabelStyle}>Regime</div>
-                  <div style={{ marginTop: 8, fontSize: 34, fontWeight: 950 }}>
-                    {trend}
-                  </div>
-                  <div style={{ marginTop: 8, fontSize: 13, opacity: 0.72 }}>
-                    A quick read on overall chart structure.
-                  </div>
-                </div>
-              </div>
 
               {aiAnalysis ? (
                 <section
@@ -1199,14 +1138,33 @@ export default function StockSymbolPageClient({
         </section>
       </div>
 
-      <style>{`
-        .wrap {
-          max-width: 1100px;
-          margin: 0 auto;
-          padding: 28px 20px 40px;
-        }
+<style>{`
+  .wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 28px 20px 40px;
+  }
 
-        .heroGrid {
+  .stockAnalysisHeroGrid {
+    margin-top: 14px;
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+    gap: 18px;
+    align-items: start;
+  }
+
+  .stockAnalysisSidePanel {
+    display: grid;
+    gap: 14px;
+  }
+
+  .stockAnalysisMiniGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .heroGrid {
           display: grid;
           grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 14px;
@@ -1227,7 +1185,9 @@ export default function StockSymbolPageClient({
           .wrap {
             padding: 18px 16px 34px !important;
           }
-
+.stockAnalysisHeroGrid {
+  grid-template-columns: 1fr !important;
+}
           .heroGrid,
           .learnGrid {
             grid-template-columns: 1fr !important;
@@ -1261,6 +1221,10 @@ export default function StockSymbolPageClient({
             width: 100%;
           }
 
+          .stockAnalysisMiniGrid {
+  grid-template-columns: 1fr !important;
+}
+
           .analysisTopBtn {
             width: 100%;
             min-width: 0;
@@ -1276,6 +1240,47 @@ const topUtilityRowStyle: React.CSSProperties = {
   justifyContent: "flex-end",
   alignItems: "center",
   marginBottom: 18,
+};
+
+function featuredMetricCardStyle(tone: "green" | "yellow" | "red"): React.CSSProperties {
+  return {
+    border:
+      tone === "green"
+        ? "1px solid rgba(34,197,94,0.26)"
+        : tone === "red"
+        ? "1px solid rgba(248,113,113,0.24)"
+        : "1px solid rgba(250,204,21,0.24)",
+    borderRadius: 20,
+    padding: 18,
+    background:
+      tone === "green"
+        ? "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(7,16,12,0.96))"
+        : tone === "red"
+        ? "linear-gradient(135deg, rgba(248,113,113,0.16), rgba(18,10,10,0.96))"
+        : "linear-gradient(135deg, rgba(250,204,21,0.14), rgba(18,16,8,0.96))",
+  };
+}
+
+const miniMetricCardStyle: React.CSSProperties = {
+  border: "1px solid rgba(255,255,255,0.10)",
+  borderRadius: 16,
+  padding: 14,
+  background: "rgba(255,255,255,0.04)",
+};
+
+const miniMetricValueStyle: React.CSSProperties = {
+  marginTop: 8,
+  fontSize: 24,
+  lineHeight: 1.08,
+  fontWeight: 950,
+  letterSpacing: "-0.04em",
+};
+
+const miniMetricSubStyle: React.CSSProperties = {
+  marginTop: 7,
+  fontSize: 13,
+  lineHeight: 1.5,
+  opacity: 0.72,
 };
 
 const topUtilityInnerStyle: React.CSSProperties = {
