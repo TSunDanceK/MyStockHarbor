@@ -795,7 +795,7 @@ style={{
                     <div style={factorCardStyle("yellow")}>
                       <div style={factorHeaderStyle}>
                         <div style={circleIconStyle("yellow")}>👁</div>
-                        <div style={pillStyle("yellow")}>What investors may watch</div>
+                        <div style={pillStyle("yellow")}>WHAT TO WATCH</div>
                       </div>
                       <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
                         {aiAnalysis.watchPoints.map((item) => (
