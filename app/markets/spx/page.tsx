@@ -600,17 +600,19 @@ export default async function SPXPage() {
                 <div
                   style={{
                     position: "relative",
-                    height: 154,
+                    minHeight: 230,
+                    height: "100%",
                     display: "flex",
-                    alignItems: "center",
+                    alignItems: "stretch",
                     justifyContent: "center",
                   }}
                 >
                   <div
                     style={{
                       position: "relative",
-                      width: 32,
-                      height: 112,
+                      width: 34,
+                      height: "100%",
+                      minHeight: 210,
                       borderRadius: 999,
                       border: "3px solid rgba(255,255,255,0.48)",
                       background: "rgba(2,6,23,0.62)",
