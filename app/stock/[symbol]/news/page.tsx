@@ -1734,6 +1734,24 @@ export default async function StockNewsPage({ params }: Props) {
               {leadSummary}
             </p>
 
+            <div
+  style={{
+    marginTop: 18,
+    padding: "14px 16px",
+    borderRadius: 14,
+    border: "1px solid rgba(59,130,246,0.25)",
+    background:
+      "linear-gradient(135deg, rgba(59,130,246,0.10), rgba(8,18,30,0.92))",
+    fontSize: 14,
+    lineHeight: 1.6,
+    color: "#e5e7eb",
+    maxWidth: 620,
+  }}
+>
+  <strong style={{ color: "#93c5fd" }}>HEADLINE TAKE:</strong>{" "}
+  {newsScore.summary}
+</div>
+
             <StockNewsTickerJump currentSymbol={upper} />
 
             <div className="newsHeroCtaRow" style={heroCtaRowStyle}>
