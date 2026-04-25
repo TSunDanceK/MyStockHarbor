@@ -1083,8 +1083,7 @@ export default function UtilitiesClientPage() {
         </div>
 
 <section style={infoSectionStyle()}>
-  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-    <div style={utilityIconStyle("blue")}>📘</div>
+<div style={{ display: "flex", alignItems: "center" }}>
     <div>
       <div style={sectionEyebrowStyle("blue")}>Learn next</div>
       <h2 style={{ margin: "6px 0 0", fontSize: 24, lineHeight: 1.2 }}>
@@ -1206,8 +1205,7 @@ export default function UtilitiesClientPage() {
 </section>
 
         <section style={infoSectionStyle()}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={utilityIconStyle("yellow")}>❓</div>
+<div style={{ display: "flex", alignItems: "center" }}>
             <div>
               <div style={sectionEyebrowStyle("yellow")}>Quick answers</div>
               <h2 style={{ margin: "6px 0 0", fontSize: 24, lineHeight: 1.2 }}>FAQ</h2>
