@@ -195,17 +195,6 @@ export default async function StockPage({ params }: Props) {
           </Link>
         </div>
 
-        <h1 style={pageTitleStyle}>
-          {upper} Stock Analysis, Company Overview & Technical Summary
-        </h1>
-
-        <p style={pageIntroStyle}>
-          Explore {upper} stock analysis with chart context, AI business overview, technical
-          summary, moving-average context, momentum indicators and risk signals from
-          MyStockHarbor. This page is designed to help traders quickly understand whether {upper}
-          is showing bullish, bearish or neutral conditions based on recent market structure.
-        </p>
-
       </section>
 
       <style>{`
