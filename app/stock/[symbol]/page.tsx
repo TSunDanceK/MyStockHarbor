@@ -34,22 +34,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-function stockTopBtnStyle(type: "gold" | "green" | "red" | "blue"): CSSProperties {
-  const base: CSSProperties = {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    minHeight: 40,
-    padding: "9px 14px",
-    borderRadius: 14,
-    textDecoration: "none",
-    fontSize: 13,
-    fontWeight: 900,
-    lineHeight: 1,
-    whiteSpace: "nowrap",
-    boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-  };
 
   if (type === "gold") {
     return {
@@ -177,23 +161,6 @@ export default async function StockPage({ params }: Props) {
           fontFamily: "system-ui, Arial",
         }}
       >
-        <div className="stockHeaderNavRow" style={stockHeaderNavRowStyle}>
-          <Link href={`/?symbol=${encodeURIComponent(upper)}`} style={stockTopBtnStyle("gold")}>
-            📈 Dashboard
-          </Link>
-
-          <Link href="/platforms" style={stockTopBtnStyle("green")}>
-            🏦 Platforms
-          </Link>
-
-          <Link href="/pickers" style={stockTopBtnStyle("red")}>
-            📊 Stock Pickers
-          </Link>
-
-          <Link href="/learn" style={stockTopBtnStyle("blue")}>
-            📘 Learn
-          </Link>
-        </div>
 
       </section>
 
@@ -218,15 +185,6 @@ export default async function StockPage({ params }: Props) {
     </>
   );
 }
-
-const stockHeaderNavRowStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "flex-end",
-  gap: 10,
-  flexWrap: "wrap",
-  marginBottom: 22,
-};
 
 const pageTitleStyle: CSSProperties = {
   margin: 0,
