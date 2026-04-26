@@ -2,7 +2,7 @@ import { unstable_cache } from "next/cache";
 import {
   getAiNewsBriefs,
   getAiNewsInsight,
-  type AiNewsBrief,
+  type AiNewsBrief, 
   type AiNewsInsight, 
 } from "@/lib/ai-news-briefs";
 
