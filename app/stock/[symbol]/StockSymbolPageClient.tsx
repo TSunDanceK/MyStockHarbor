@@ -461,7 +461,7 @@ export default function StockSymbolPageClient({
   const [quote, setQuote] = useState<Quote | null>(null);
   const [history, setHistory] = useState<Point[]>([]);
   const [companyName, setCompanyName] = useState("");
-  const [loading, setLoading] = useState(true);
+const [priceLoading, setPriceLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [openScoreHelp, setOpenScoreHelp] = useState<"fundamentals" | "future" | null>(null);
 
@@ -469,7 +469,7 @@ export default function StockSymbolPageClient({
     let cancelled = false;
 
     async function load() {
-      setLoading(true);
+setPriceLoading(true);
       setErr(null);
 
       try {
@@ -519,7 +519,7 @@ export default function StockSymbolPageClient({
         setHistory([]);
         setCompanyName("");
       } finally {
-        if (!cancelled) setLoading(false);
+if (!cancelled) setPriceLoading(false);
       }
     }
 
@@ -730,7 +730,7 @@ style={{
           </div>
             </div>
 
-            {!loading && !err ? (
+{!priceLoading && !err ? (
               <div className="stockAnalysisSidePanel">
                 <div style={featuredMetricCardStyle(trendTone)}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
@@ -808,14 +808,14 @@ style={{
               </div>
             ) : null}
           </div>
-          {loading ? (
-            <div style={{ marginTop: 18, opacity: 0.8 }}>Loading stock page…</div>
-          ) : err ? (
+{priceLoading ? (
+  <div style={{ marginTop: 18, opacity: 0.8 }}>Loading chart and price data…</div>
+) : err ? (
             <div style={{ marginTop: 18, opacity: 0.8 }}>{err}</div>
           ) : (
             <>
 
-              {aiAnalysis ? (
+{aiAnalysis ? (
                 <section
                   style={{
                     marginTop: 18,
