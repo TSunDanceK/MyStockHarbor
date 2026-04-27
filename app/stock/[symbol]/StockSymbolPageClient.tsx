@@ -838,7 +838,7 @@ style={{
                       gap: 14,
                     }}
                   >
-                    <div style={scoreOverviewCardStyle(scoreTone(aiAnalysis.fundamentalsScore))}>
+                    <div style={{ ...scoreOverviewCardStyle(scoreTone(aiAnalysis.fundamentalsScore)), overflow: "visible" }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
 <div style={{ ...miniLabelStyle, position: "relative", zIndex: 5000 }}>
   Fundamentals score{" "}
@@ -876,7 +876,7 @@ style={{
                       </div>
                     </div>
 
-                    <div style={scoreOverviewCardStyle(scoreTone(aiAnalysis.futurePotentialScore))}>
+                   <div style={{ ...scoreOverviewCardStyle(scoreTone(aiAnalysis.futurePotentialScore)), overflow: "visible" }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
 <div style={{ ...miniLabelStyle, position: "relative", zIndex: 5000 }}>
   Future potential score{" "}
@@ -1942,15 +1942,17 @@ const scoreHelpBoxStyle: React.CSSProperties = {
   maxWidth: "min(320px, calc(100vw - 48px))",
   padding: 14,
   borderRadius: 14,
-  border: "1px solid rgba(148,163,184,0.45)",
-  background: "rgb(2, 6, 23)",
+  border: "1px solid rgba(148,163,184,0.55)",
+  background: "#020617",
+  backgroundColor: "#020617",
   color: "#f8fafc",
   fontSize: 13,
   lineHeight: 1.65,
   textTransform: "none",
   letterSpacing: 0,
   fontWeight: 700,
-  boxShadow: "0 24px 70px rgba(0,0,0,0.85)",
+  boxShadow: "0 24px 70px rgba(0,0,0,0.95)",
+  opacity: 1,
 };
 
 const articleStyle: React.CSSProperties = {
