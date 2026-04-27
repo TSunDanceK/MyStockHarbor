@@ -840,7 +840,7 @@ style={{
                   >
                     <div style={{ ...scoreOverviewCardStyle(scoreTone(aiAnalysis.fundamentalsScore)), overflow: "visible" }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-<div style={{ ...miniLabelStyle, position: "relative", zIndex: 5000 }}>
+<div style={miniLabelStyle}>
   Fundamentals score{" "}
   <button
     type="button"
@@ -852,15 +852,14 @@ style={{
   >
     ?
   </button>
-
-  {openScoreHelp === "fundamentals" ? (
-    <div onClick={(e) => e.stopPropagation()} style={scoreHelpBoxStyle}>
-      {scoreExplainText("fundamentals", aiAnalysis.fundamentalsScore)}
-    </div>
-  ) : null}
 </div>
                         <div style={circleIconStyle(scoreTone(aiAnalysis.fundamentalsScore))}>🧱</div>
                       </div>
+                      {openScoreHelp === "fundamentals" ? (
+                        <div onClick={(e) => e.stopPropagation()} style={scoreHelpInlineBoxStyle}>
+                          {scoreExplainText("fundamentals", aiAnalysis.fundamentalsScore)}
+                        </div>
+                      ) : null}
                       <div
                         style={{
                           marginTop: 8,
@@ -878,7 +877,7 @@ style={{
 
                    <div style={{ ...scoreOverviewCardStyle(scoreTone(aiAnalysis.futurePotentialScore)), overflow: "visible" }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-<div style={{ ...miniLabelStyle, position: "relative", zIndex: 5000 }}>
+<div style={miniLabelStyle}>
   Future potential score{" "}
   <button
     type="button"
@@ -890,15 +889,14 @@ style={{
   >
     ?
   </button>
-
-  {openScoreHelp === "future" ? (
-    <div onClick={(e) => e.stopPropagation()} style={scoreHelpBoxStyle}>
-      {scoreExplainText("future", aiAnalysis.futurePotentialScore)}
-    </div>
-  ) : null}
 </div>
                         <div style={circleIconStyle(scoreTone(aiAnalysis.futurePotentialScore))}>🚀</div>
                       </div>
+                      {openScoreHelp === "future" ? (
+                        <div onClick={(e) => e.stopPropagation()} style={scoreHelpInlineBoxStyle}>
+                          {scoreExplainText("future", aiAnalysis.futurePotentialScore)}
+                        </div>
+                      ) : null}
                       <div
                         style={{
                           marginTop: 8,
@@ -1933,26 +1931,20 @@ const scoreHelpButtonStyle: React.CSSProperties = {
   padding: 0,
 };
 
-const scoreHelpBoxStyle: React.CSSProperties = {
-  position: "absolute",
-  top: 26,
-  left: 0,
-  zIndex: 999999,
-  width: 320,
-  maxWidth: "min(320px, calc(100vw - 48px))",
-  padding: 14,
-  borderRadius: 14,
-  border: "1px solid rgba(148,163,184,0.55)",
+const scoreHelpInlineBoxStyle: React.CSSProperties = {
+  marginTop: 12,
+  padding: 12,
+  borderRadius: 12,
+  border: "1px solid rgba(148,163,184,0.45)",
   background: "#020617",
   backgroundColor: "#020617",
   color: "#f8fafc",
   fontSize: 13,
-  lineHeight: 1.65,
+  lineHeight: 1.6,
   textTransform: "none",
   letterSpacing: 0,
   fontWeight: 700,
-  boxShadow: "0 24px 70px rgba(0,0,0,0.95)",
-  opacity: 1,
+  boxShadow: "0 16px 40px rgba(0,0,0,0.65)",
 };
 
 const articleStyle: React.CSSProperties = {
