@@ -446,6 +446,14 @@ function buildTradeContext(args: {
   };
 }
 
+function trendCheckIconStyle(pass: boolean): React.CSSProperties {
+  return {
+    color: pass ? "#4ade80" : "#f87171",
+    fontWeight: 950,
+    marginRight: 7,
+  };
+}
+
 export default function StockSymbolPageClient({
   symbol,
   aiAnalysis,
@@ -746,15 +754,36 @@ style={{
 </div>
 <div style={{ marginTop: 12, display: "grid", gap: 8, fontSize: 13 }}>
   <div style={{ opacity: 0.9 }}>
-    {lastClose !== null && lastMA50 !== null && lastClose > lastMA50 ? "✓" : "✕"} Price above MA50
+    <span
+      style={trendCheckIconStyle(
+        lastClose !== null && lastMA50 !== null && lastClose > lastMA50
+      )}
+    >
+      {lastClose !== null && lastMA50 !== null && lastClose > lastMA50 ? "✓" : "✕"}
+    </span>
+    Price above MA50
   </div>
 
   <div style={{ opacity: 0.9 }}>
-    {lastClose !== null && lastMA200 !== null && lastClose > lastMA200 ? "✓" : "✕"} Price above MA200
+    <span
+      style={trendCheckIconStyle(
+        lastClose !== null && lastMA200 !== null && lastClose > lastMA200
+      )}
+    >
+      {lastClose !== null && lastMA200 !== null && lastClose > lastMA200 ? "✓" : "✕"}
+    </span>
+    Price above MA200
   </div>
 
   <div style={{ opacity: 0.9 }}>
-    {lastMA50 !== null && lastMA200 !== null && lastMA50 > lastMA200 ? "✓" : "✕"} MA50 above MA200
+    <span
+      style={trendCheckIconStyle(
+        lastMA50 !== null && lastMA200 !== null && lastMA50 > lastMA200
+      )}
+    >
+      {lastMA50 !== null && lastMA200 !== null && lastMA50 > lastMA200 ? "✓" : "✕"}
+    </span>
+    MA50 above MA200
   </div>
 </div>
                 </div>
