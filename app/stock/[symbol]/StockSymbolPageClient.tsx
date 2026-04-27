@@ -455,6 +455,7 @@ export default function StockSymbolPageClient({
   const [companyName, setCompanyName] = useState("");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [openScoreHelp, setOpenScoreHelp] = useState<"fundamentals" | "future" | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -588,6 +589,7 @@ export default function StockSymbolPageClient({
 
   return (
 <main
+  onClick={() => setOpenScoreHelp(null)}
   style={{
     minHeight: "100vh",
     background:
@@ -838,46 +840,24 @@ style={{
                   >
                     <div style={scoreOverviewCardStyle(scoreTone(aiAnalysis.fundamentalsScore))}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                        <div style={miniLabelStyle}>
+<div style={{ ...miniLabelStyle, position: "relative" }}>
   Fundamentals score{" "}
-  <details style={{ display: "inline-block", marginLeft: 6 }}>
-    <summary
-      style={{
-        display: "inline-flex",
-        cursor: "pointer",
-        width: 18,
-        height: 18,
-        borderRadius: 999,
-        alignItems: "center",
-        justifyContent: "center",
-        border: "1px solid rgba(255,255,255,0.22)",
-        fontSize: 12,
-        color: "#cbd5e1",
-      }}
-    >
-      ?
-    </summary>
-    <div
-      style={{
-        position: "absolute",
-        zIndex: 20,
-        marginTop: 8,
-        maxWidth: 280,
-        padding: 12,
-        borderRadius: 12,
-        border: "1px solid rgba(255,255,255,0.14)",
-        background: "#0f172a",
-        color: "#e2e8f0",
-        fontSize: 13,
-        lineHeight: 1.55,
-        textTransform: "none",
-        letterSpacing: 0,
-        fontWeight: 600,
-      }}
-    >
+  <button
+    type="button"
+    onClick={(e) => {
+      e.stopPropagation();
+      setOpenScoreHelp(openScoreHelp === "fundamentals" ? null : "fundamentals");
+    }}
+    style={scoreHelpButtonStyle}
+  >
+    ?
+  </button>
+
+  {openScoreHelp === "fundamentals" ? (
+    <div onClick={(e) => e.stopPropagation()} style={scoreHelpBoxStyle}>
       {scoreExplainText("fundamentals", aiAnalysis.fundamentalsScore)}
     </div>
-  </details>
+  ) : null}
 </div>
                         <div style={circleIconStyle(scoreTone(aiAnalysis.fundamentalsScore))}>🧱</div>
                       </div>
@@ -898,46 +878,24 @@ style={{
 
                     <div style={scoreOverviewCardStyle(scoreTone(aiAnalysis.futurePotentialScore))}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                        <div style={miniLabelStyle}>
+<div style={{ ...miniLabelStyle, position: "relative" }}>
   Future potential score{" "}
-  <details style={{ display: "inline-block", marginLeft: 6 }}>
-    <summary
-      style={{
-        display: "inline-flex",
-        cursor: "pointer",
-        width: 18,
-        height: 18,
-        borderRadius: 999,
-        alignItems: "center",
-        justifyContent: "center",
-        border: "1px solid rgba(255,255,255,0.22)",
-        fontSize: 12,
-        color: "#cbd5e1",
-      }}
-    >
-      ?
-    </summary>
-    <div
-      style={{
-        position: "absolute",
-        zIndex: 20,
-        marginTop: 8,
-        maxWidth: 280,
-        padding: 12,
-        borderRadius: 12,
-        border: "1px solid rgba(255,255,255,0.14)",
-        background: "#0f172a",
-        color: "#e2e8f0",
-        fontSize: 13,
-        lineHeight: 1.55,
-        textTransform: "none",
-        letterSpacing: 0,
-        fontWeight: 600,
-      }}
-    >
+  <button
+    type="button"
+    onClick={(e) => {
+      e.stopPropagation();
+      setOpenScoreHelp(openScoreHelp === "future" ? null : "future");
+    }}
+    style={scoreHelpButtonStyle}
+  >
+    ?
+  </button>
+
+  {openScoreHelp === "future" ? (
+    <div onClick={(e) => e.stopPropagation()} style={scoreHelpBoxStyle}>
       {scoreExplainText("future", aiAnalysis.futurePotentialScore)}
     </div>
-  </details>
+  ) : null}
 </div>
                         <div style={circleIconStyle(scoreTone(aiAnalysis.futurePotentialScore))}>🚀</div>
                       </div>
@@ -1956,6 +1914,43 @@ const miniLabelStyle: React.CSSProperties = {
   fontWeight: 900,
   textTransform: "uppercase",
   letterSpacing: "0.05em",
+};
+
+const scoreHelpButtonStyle: React.CSSProperties = {
+  marginLeft: 6,
+  width: 18,
+  height: 18,
+  borderRadius: 999,
+  border: "1px solid rgba(255,255,255,0.28)",
+  background: "rgba(15,23,42,0.98)",
+  color: "#e2e8f0",
+  fontSize: 12,
+  fontWeight: 900,
+  cursor: "pointer",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 0,
+};
+
+const scoreHelpBoxStyle: React.CSSProperties = {
+  position: "absolute",
+  top: 26,
+  left: 0,
+  zIndex: 100,
+  width: 300,
+  maxWidth: "calc(100vw - 48px)",
+  padding: 14,
+  borderRadius: 14,
+  border: "1px solid rgba(148,163,184,0.38)",
+  background: "#020617",
+  color: "#f8fafc",
+  fontSize: 13,
+  lineHeight: 1.65,
+  textTransform: "none",
+  letterSpacing: 0,
+  fontWeight: 700,
+  boxShadow: "0 22px 55px rgba(0,0,0,0.70)",
 };
 
 const articleStyle: React.CSSProperties = {
