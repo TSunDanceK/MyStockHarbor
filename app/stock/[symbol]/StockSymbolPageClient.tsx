@@ -302,6 +302,138 @@ function buildLongSummary(args: {
   };
 }
 
+
+
+type ContextTone = "green" | "yellow" | "red" | "blue";
+
+type TradeContextResult = {
+  alignment: "Strong" | "Constructive" | "Early" | "Mixed" | "Conflict" | "Weak";
+  tone: ContextTone;
+  businessContext: string;
+  technicalContext: string;
+  riskContext: string;
+  read: string;
+  watch: string;
+};
+
+function buildTradeContext(args: {
+  aiAnalysis: AiStockAnalysis | null;
+  lastClose: number | null;
+  ma50: number | null;
+  ma200: number | null;
+  rsi: number | null;
+  trendScore: { passed: number; total: number };
+}): TradeContextResult {
+  const { aiAnalysis, lastClose, ma50, ma200, rsi, trendScore } = args;
+
+  const fundamentalsScore = aiAnalysis?.fundamentalsScore ?? null;
+  const futurePotentialScore = aiAnalysis?.futurePotentialScore ?? null;
+  const hasBusinessScores =
+    typeof fundamentalsScore === "number" && typeof futurePotentialScore === "number";
+  const businessBlend = hasBusinessScores
+    ? (fundamentalsScore + futurePotentialScore) / 2
+    : null;
+
+  let businessContext = "Business context unavailable";
+  let businessState: "supportive" | "mixed" | "weak" | "unknown" = "unknown";
+
+  if (typeof businessBlend === "number") {
+    if (businessBlend >= 70 && futurePotentialScore !== null && futurePotentialScore >= 65) {
+      businessState = "supportive";
+      businessContext = "Supportive business backdrop";
+    } else if (businessBlend <= 45 || (fundamentalsScore !== null && fundamentalsScore <= 40)) {
+      businessState = "weak";
+      businessContext = "Weak business backdrop";
+    } else {
+      businessState = "mixed";
+      businessContext = "Mixed business backdrop";
+    }
+  }
+
+  const priceAbove50 =
+    typeof lastClose === "number" && typeof ma50 === "number" ? lastClose > ma50 : false;
+  const priceAbove200 =
+    typeof lastClose === "number" && typeof ma200 === "number" ? lastClose > ma200 : false;
+  const ma50Above200 = typeof ma50 === "number" && typeof ma200 === "number" ? ma50 > ma200 : false;
+  const nearMa200 =
+    typeof lastClose === "number" && typeof ma200 === "number" && ma200 > 0
+      ? Math.abs(((lastClose - ma200) / ma200) * 100) <= 7
+      : false;
+  const oversold = typeof rsi === "number" && rsi <= 35;
+  const extended = typeof rsi === "number" && rsi >= 70;
+
+  let technicalContext = "Technical context unavailable";
+  let technicalState: "supportive" | "early" | "mixed" | "weak" | "extended" = "mixed";
+
+  if (priceAbove50 && priceAbove200 && ma50Above200) {
+    technicalState = extended ? "extended" : "supportive";
+    technicalContext = extended ? "Strong trend, short-term extended" : "Above key trend levels";
+  } else if (priceAbove200 && (nearMa200 || !priceAbove50)) {
+    technicalState = "early";
+    technicalContext = "Near long-term trend support";
+  } else if (!priceAbove200 && oversold) {
+    technicalState = "early";
+    technicalContext = "Oversold recovery watch";
+  } else if (!priceAbove200 && trendScore.passed <= 1) {
+    technicalState = "weak";
+    technicalContext = "Below key trend levels";
+  } else {
+    technicalState = "mixed";
+    technicalContext = "Mixed technical structure";
+  }
+
+  let riskContext = "No single edge is strong enough to dominate the read.";
+  if (extended) riskContext = "Momentum may be stretched, so timing risk is higher.";
+  else if (oversold) riskContext = "Oversold can bounce, but it still needs confirmation.";
+  else if (businessState === "weak") riskContext = "The business read may limit confidence in technical bounces.";
+  else if (businessState === "supportive" && technicalState === "weak") riskContext = "The story is better than the current chart structure.";
+
+  let alignment: TradeContextResult["alignment"] = "Mixed";
+  let tone: ContextTone = "yellow";
+  let read = "The business read and chart structure are not giving a clean confirmation layer yet.";
+  let watch = "Look for a clearer agreement between story, trend and momentum before drawing stronger conclusions.";
+
+  if (businessState === "supportive" && technicalState === "supportive") {
+    alignment = "Strong";
+    tone = "green";
+    read = "The broader story and the chart structure are broadly aligned.";
+    watch = "Watch whether price can hold above the main moving averages without becoming too stretched.";
+  } else if (businessState === "supportive" && technicalState === "extended") {
+    alignment = "Constructive";
+    tone = "green";
+    read = "The story is supportive, but the chart may already be pricing in some strength.";
+    watch = "Watch for controlled pullbacks, bases or continued volume support rather than chasing every move.";
+  } else if (businessState === "supportive" && technicalState === "early") {
+    alignment = "Early";
+    tone = "blue";
+    read = "The story is improving, but the chart still needs more technical confirmation.";
+    watch = "Watch for a clean reclaim, support reaction, or improving momentum before treating it as stronger alignment.";
+  } else if (businessState === "weak" && technicalState === "weak") {
+    alignment = "Weak";
+    tone = "red";
+    read = "The business read and chart structure are both leaning cautious.";
+    watch = "Watch for signs of stabilisation before trusting rebounds.";
+  } else if (
+    (businessState === "supportive" && technicalState === "weak") ||
+    (businessState === "weak" && (technicalState === "supportive" || technicalState === "extended"))
+  ) {
+    alignment = "Conflict";
+    tone = "yellow";
+    read = "The story and chart are sending different messages.";
+    watch = "Check which side resolves first: improving price structure or a stronger business/news catalyst.";
+  }
+
+  return {
+    alignment,
+    tone,
+    businessContext,
+    technicalContext,
+    riskContext,
+    read,
+    watch,
+  };
+}
+
 export default function StockSymbolPageClient({
   symbol,
   aiAnalysis,
@@ -428,6 +560,19 @@ export default function StockSymbolPageClient({
 
   const ma50Pct = pctFromBase(lastClose, typeof lastMA50 === "number" ? lastMA50 : null);
   const ma200Pct = pctFromBase(lastClose, typeof lastMA200 === "number" ? lastMA200 : null);
+
+  const tradeContext = useMemo(
+    () =>
+      buildTradeContext({
+        aiAnalysis,
+        lastClose,
+        ma50: typeof lastMA50 === "number" ? lastMA50 : null,
+        ma200: typeof lastMA200 === "number" ? lastMA200 : null,
+        rsi: typeof lastRsi === "number" ? lastRsi : null,
+        trendScore,
+      }),
+    [aiAnalysis, lastClose, lastMA50, lastMA200, lastRsi, trendScore]
+  );
 
   return (
 <main
@@ -808,6 +953,102 @@ style={{
                   </div>
                 </section>
               ) : null}
+
+              <section
+                style={{
+                  marginTop: 18,
+                  border:
+                    tradeContext.tone === "blue"
+                      ? "1px solid rgba(59,130,246,0.26)"
+                      : toneBorder(tradeContext.tone),
+                  borderRadius: 18,
+                  padding: 18,
+                  background:
+                    tradeContext.tone === "blue"
+                      ? "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(8,14,28,0.98))"
+                      : toneSoftBackground(tradeContext.tone),
+                  boxShadow:
+                    "inset 0 1px 0 rgba(255,255,255,0.05), 0 12px 30px rgba(0,0,0,0.22)",
+                }}
+              >
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "7px 12px",
+                    borderRadius: 999,
+                    background:
+                      "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
+                    border: "1px solid rgba(59,130,246,0.32)",
+                    color: "#dbeafe",
+                    fontWeight: 950,
+                    letterSpacing: "0.08em",
+                    fontSize: 12,
+                  }}
+                >
+                  <span aria-hidden="true" style={{ marginRight: 8 }}>🧩</span> TRADE CONTEXT
+                </div>
+
+                <div className="tradeContextGrid" style={{ marginTop: 14 }}>
+                  <div>
+                    <h2
+                      style={{
+                        margin: 0,
+                        fontSize: 28,
+                        lineHeight: 1.1,
+                        letterSpacing: "-0.04em",
+                      }}
+                    >
+                      Context alignment: {tradeContext.alignment}
+                    </h2>
+                    <p
+                      style={{
+                        margin: "10px 0 0 0",
+                        fontSize: 15,
+                        lineHeight: 1.75,
+                        opacity: 0.84,
+                        maxWidth: 760,
+                      }}
+                    >
+                      {tradeContext.read} This is a confirmation layer, not a buy or sell signal.
+                    </p>
+                  </div>
+
+                  <div style={tradeContextCalloutStyle(tradeContext.tone)}>
+                    <div style={miniLabelStyle}>What to watch</div>
+                    <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.65, opacity: 0.9 }}>
+                      {tradeContext.watch}
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 16,
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+                    gap: 12,
+                  }}
+                >
+                  <div style={contextMiniCardStyle("blue")}>
+                    <div style={miniLabelStyle}>Business read</div>
+                    <div style={contextMiniValueStyle}>{tradeContext.businessContext}</div>
+                    <div style={contextMiniSubStyle}>Uses the company overview and outlook scores.</div>
+                  </div>
+
+                  <div style={contextMiniCardStyle(trendTone)}>
+                    <div style={miniLabelStyle}>Technical read</div>
+                    <div style={contextMiniValueStyle}>{tradeContext.technicalContext}</div>
+                    <div style={contextMiniSubStyle}>Uses price, MA50, MA200 and RSI context.</div>
+                  </div>
+
+                  <div style={contextMiniCardStyle(tradeContext.tone)}>
+                    <div style={miniLabelStyle}>Main caution</div>
+                    <div style={contextMiniValueStyle}>{tradeContext.riskContext}</div>
+                    <div style={contextMiniSubStyle}>Designed to reduce false confidence.</div>
+                  </div>
+                </div>
+              </section>
 
               <section
                 style={{
@@ -1268,6 +1509,13 @@ style={{
     gap: 12px;
   }
 
+  .tradeContextGrid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(240px, 0.75fr);
+    gap: 14px;
+    align-items: stretch;
+  }
+
   .heroGrid {
           display: grid;
           grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1289,7 +1537,8 @@ style={{
           .wrap {
             padding: 18px 16px 34px !important;
           }
-.stockAnalysisHeroGrid {
+.stockAnalysisHeroGrid,
+.tradeContextGrid {
   grid-template-columns: 1fr !important;
 }
           .heroGrid,
@@ -1665,6 +1914,56 @@ const statMetaStyle: React.CSSProperties = {
   fontSize: 13,
   opacity: 0.72,
   lineHeight: 1.6,
+};
+
+
+function contextMiniCardStyle(tone: "green" | "yellow" | "red" | "blue"): React.CSSProperties {
+  if (tone === "blue") {
+    return {
+      ...statCardStyle,
+      border: "1px solid rgba(59,130,246,0.22)",
+      background: "linear-gradient(135deg, rgba(59,130,246,0.10), rgba(255,255,255,0.03))",
+    };
+  }
+
+  return {
+    ...statCardStyle,
+    border: toneBorder(tone),
+    background: toneSoftBackground(tone),
+  };
+}
+
+function tradeContextCalloutStyle(tone: ContextTone): React.CSSProperties {
+  if (tone === "blue") {
+    return {
+      border: "1px solid rgba(59,130,246,0.24)",
+      borderRadius: 16,
+      padding: 16,
+      background: "linear-gradient(135deg, rgba(59,130,246,0.12), rgba(255,255,255,0.035))",
+    };
+  }
+
+  return {
+    border: toneBorder(tone),
+    borderRadius: 16,
+    padding: 16,
+    background: toneSoftBackground(tone),
+  };
+}
+
+const contextMiniValueStyle: React.CSSProperties = {
+  marginTop: 8,
+  fontSize: 18,
+  lineHeight: 1.25,
+  fontWeight: 900,
+  letterSpacing: "-0.02em",
+};
+
+const contextMiniSubStyle: React.CSSProperties = {
+  marginTop: 8,
+  fontSize: 13,
+  lineHeight: 1.55,
+  opacity: 0.74,
 };
 
 function learnCardStyle(
