@@ -174,6 +174,18 @@ function scoreBandLabel(score: number) {
   return "High risk";
 }
 
+function scoreExplainText(type: "fundamentals" | "future", score: number) {
+  if (type === "fundamentals") {
+    if (score >= 65) return "This score reflects a stronger current business-quality read, including resilience, profitability potential, demand quality and business durability.";
+    if (score >= 50) return "This score reflects a mixed current business-quality read. The company may have strengths, but there are still financial, execution or resilience questions.";
+    return "This score reflects a weaker current business-quality read, often linked to profitability pressure, cash burn, weak demand, balance-sheet risk or inconsistent execution.";
+  }
+
+  if (score >= 65) return "This score reflects stronger medium-to-long-term potential, usually linked to growth opportunity, product relevance, adoption, strategic positioning or a clear future narrative.";
+  if (score >= 50) return "This score reflects mixed future potential. There may be upside drivers, but execution risk, competition or unclear adoption still matter.";
+  return "This score reflects weaker future potential, usually because the growth path, demand picture, differentiation or long-term narrative is unclear.";
+}
+
 function scoreTone(score: number): "green" | "yellow" | "red" {
   if (score >= 65) return "green";
   if (score >= 50) return "yellow";
@@ -826,7 +838,47 @@ style={{
                   >
                     <div style={scoreOverviewCardStyle(scoreTone(aiAnalysis.fundamentalsScore))}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                        <div style={miniLabelStyle}>Fundamentals score</div>
+                        <div style={miniLabelStyle}>
+  Fundamentals score{" "}
+  <details style={{ display: "inline-block", marginLeft: 6 }}>
+    <summary
+      style={{
+        display: "inline-flex",
+        cursor: "pointer",
+        width: 18,
+        height: 18,
+        borderRadius: 999,
+        alignItems: "center",
+        justifyContent: "center",
+        border: "1px solid rgba(255,255,255,0.22)",
+        fontSize: 12,
+        color: "#cbd5e1",
+      }}
+    >
+      ?
+    </summary>
+    <div
+      style={{
+        position: "absolute",
+        zIndex: 20,
+        marginTop: 8,
+        maxWidth: 280,
+        padding: 12,
+        borderRadius: 12,
+        border: "1px solid rgba(255,255,255,0.14)",
+        background: "#0f172a",
+        color: "#e2e8f0",
+        fontSize: 13,
+        lineHeight: 1.55,
+        textTransform: "none",
+        letterSpacing: 0,
+        fontWeight: 600,
+      }}
+    >
+      {scoreExplainText("fundamentals", aiAnalysis.fundamentalsScore)}
+    </div>
+  </details>
+</div>
                         <div style={circleIconStyle(scoreTone(aiAnalysis.fundamentalsScore))}>🧱</div>
                       </div>
                       <div
@@ -846,7 +898,47 @@ style={{
 
                     <div style={scoreOverviewCardStyle(scoreTone(aiAnalysis.futurePotentialScore))}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                        <div style={miniLabelStyle}>Future potential score</div>
+                        <div style={miniLabelStyle}>
+  Future potential score{" "}
+  <details style={{ display: "inline-block", marginLeft: 6 }}>
+    <summary
+      style={{
+        display: "inline-flex",
+        cursor: "pointer",
+        width: 18,
+        height: 18,
+        borderRadius: 999,
+        alignItems: "center",
+        justifyContent: "center",
+        border: "1px solid rgba(255,255,255,0.22)",
+        fontSize: 12,
+        color: "#cbd5e1",
+      }}
+    >
+      ?
+    </summary>
+    <div
+      style={{
+        position: "absolute",
+        zIndex: 20,
+        marginTop: 8,
+        maxWidth: 280,
+        padding: 12,
+        borderRadius: 12,
+        border: "1px solid rgba(255,255,255,0.14)",
+        background: "#0f172a",
+        color: "#e2e8f0",
+        fontSize: 13,
+        lineHeight: 1.55,
+        textTransform: "none",
+        letterSpacing: 0,
+        fontWeight: 600,
+      }}
+    >
+      {scoreExplainText("future", aiAnalysis.futurePotentialScore)}
+    </div>
+  </details>
+</div>
                         <div style={circleIconStyle(scoreTone(aiAnalysis.futurePotentialScore))}>🚀</div>
                       </div>
                       <div
