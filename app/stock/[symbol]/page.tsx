@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 
-import { getAiStockAnalysis } from "@/lib/ai-stock-analysis";
 import StockSymbolPageClient from "./StockSymbolPageClient";
 
 
@@ -46,7 +45,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function StockPage({ params }: Props) {
   const { symbol } = await params;
   const upper = symbol.toUpperCase();
-  const aiAnalysis = await getAiStockAnalysis(upper);
 
   return (
     <>
@@ -126,7 +124,7 @@ export default async function StockPage({ params }: Props) {
         }}
       />
 
-      <StockSymbolPageClient symbol={upper} aiAnalysis={aiAnalysis} />
+<StockSymbolPageClient symbol={upper} aiAnalysis={null} />
     </>
   );
 }
