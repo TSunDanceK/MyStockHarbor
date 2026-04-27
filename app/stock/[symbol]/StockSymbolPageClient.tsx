@@ -840,7 +840,7 @@ style={{
                   >
                     <div style={scoreOverviewCardStyle(scoreTone(aiAnalysis.fundamentalsScore))}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-<div style={{ ...miniLabelStyle, position: "relative" }}>
+<div style={{ ...miniLabelStyle, position: "relative", zIndex: 5000 }}>
   Fundamentals score{" "}
   <button
     type="button"
@@ -878,7 +878,7 @@ style={{
 
                     <div style={scoreOverviewCardStyle(scoreTone(aiAnalysis.futurePotentialScore))}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-<div style={{ ...miniLabelStyle, position: "relative" }}>
+<div style={{ ...miniLabelStyle, position: "relative", zIndex: 5000 }}>
   Future potential score{" "}
   <button
     type="button"
@@ -1934,12 +1934,12 @@ const scoreHelpButtonStyle: React.CSSProperties = {
 };
 
 const scoreHelpBoxStyle: React.CSSProperties = {
-  position: "fixed",
-  top: 180,
-  left: 24,
+  position: "absolute",
+  top: 26,
+  left: 0,
   zIndex: 999999,
   width: 320,
-  maxWidth: "calc(100vw - 48px)",
+  maxWidth: "min(320px, calc(100vw - 48px))",
   padding: 14,
   borderRadius: 14,
   border: "1px solid rgba(148,163,184,0.45)",
