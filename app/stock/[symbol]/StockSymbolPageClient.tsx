@@ -741,14 +741,22 @@ style={{
                   >
                     {trendScore.passed}/{trendScore.total}
                   </div>
-                  <div style={{ marginTop: 10, fontSize: 14, lineHeight: 1.65, opacity: 0.84 }}>
-                    Price vs MA50, price vs MA200 and MA50 vs MA200.
-                  </div>
-                  <div style={{ marginTop: 12, display: "grid", gap: 8, fontSize: 13 }}>
-                    <div style={{ opacity: 0.86 }}>• Price above MA50</div>
-                    <div style={{ opacity: 0.86 }}>• Price above MA200</div>
-                    <div style={{ opacity: 0.86 }}>• MA50 above MA200</div>
-                  </div>
+<div style={{ marginTop: 10, fontSize: 14, lineHeight: 1.65, opacity: 0.84 }}>
+  Based on three simple trend checks:
+</div>
+<div style={{ marginTop: 12, display: "grid", gap: 8, fontSize: 13 }}>
+  <div style={{ opacity: 0.9 }}>
+    {lastClose !== null && lastMA50 !== null && lastClose > lastMA50 ? "✓" : "✕"} Price above MA50
+  </div>
+
+  <div style={{ opacity: 0.9 }}>
+    {lastClose !== null && lastMA200 !== null && lastClose > lastMA200 ? "✓" : "✕"} Price above MA200
+  </div>
+
+  <div style={{ opacity: 0.9 }}>
+    {lastMA50 !== null && lastMA200 !== null && lastMA50 > lastMA200 ? "✓" : "✕"} MA50 above MA200
+  </div>
+</div>
                 </div>
 
                 <div className="stockAnalysisMiniGrid">
