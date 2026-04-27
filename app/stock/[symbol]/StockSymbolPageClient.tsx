@@ -1934,23 +1934,23 @@ const scoreHelpButtonStyle: React.CSSProperties = {
 };
 
 const scoreHelpBoxStyle: React.CSSProperties = {
-  position: "absolute",
-  top: 26,
-  left: 0,
-  zIndex: 100,
-  width: 300,
+  position: "fixed",
+  top: 180,
+  left: 24,
+  zIndex: 999999,
+  width: 320,
   maxWidth: "calc(100vw - 48px)",
   padding: 14,
   borderRadius: 14,
-  border: "1px solid rgba(148,163,184,0.38)",
-  background: "#020617",
+  border: "1px solid rgba(148,163,184,0.45)",
+  background: "rgb(2, 6, 23)",
   color: "#f8fafc",
   fontSize: 13,
   lineHeight: 1.65,
   textTransform: "none",
   letterSpacing: 0,
   fontWeight: 700,
-  boxShadow: "0 22px 55px rgba(0,0,0,0.70)",
+  boxShadow: "0 24px 70px rgba(0,0,0,0.85)",
 };
 
 const articleStyle: React.CSSProperties = {
