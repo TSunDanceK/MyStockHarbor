@@ -195,6 +195,52 @@ export default function StockNewsLoading() {
             grid-template-columns: 1fr;
           }
         }
+
+        @media (max-width: 720px) {
+          .newsWrap {
+            padding: 16px 14px 32px;
+          }
+
+          .newsWrap > section:first-of-type {
+            display: block !important;
+            padding: 18px !important;
+            border-radius: 24px !important;
+          }
+
+          .newsWrap > section:first-of-type > div:first-child {
+            width: 100% !important;
+          }
+
+          .newsWrap > section:first-of-type > div:nth-child(2) {
+            display: none !important;
+          }
+
+          .newsWrap section[style] {
+            max-width: 100%;
+          }
+
+          .newsGrid {
+            display: none !important;
+          }
+
+          .newsWrap > section:last-of-type {
+            display: none !important;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .newsWrap {
+            padding: 14px 12px 28px;
+          }
+
+          .newsWrap > div:first-child {
+            display: none !important;
+          }
+
+          .newsWrap > section:first-of-type {
+            min-height: 62vh;
+          }
+        }
       `}</style>
     </main>
   );
