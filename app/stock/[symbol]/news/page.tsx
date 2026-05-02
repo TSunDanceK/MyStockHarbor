@@ -1024,6 +1024,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 async function DetailedNewsAiSection({
+  aiData,
   symbol,
   companyName,
   trend,
@@ -1031,6 +1032,7 @@ async function DetailedNewsAiSection({
   detailedNews,
   compactNews,
 }: {
+  aiData: Awaited<ReturnType<typeof getStockNewsAiData>>;
   symbol: string;
   companyName: string;
   trend: string;
@@ -1038,37 +1040,6 @@ async function DetailedNewsAiSection({
   detailedNews: NewsItem[];
   compactNews: NewsItem[];
 }) {
-  const aiData = await getStockNewsAiData(
-    {
-      symbol,
-      companyName,
-      quote: null,
-      history: [],
-      news: [],
-      trend,
-      lastClose: null,
-      lastMA50: null,
-      lastMA200: null,
-      lastRsi: null,
-      priceVs50: null,
-      priceVs200: null,
-      recentHigh: null,
-      recentLow: null,
-      isInvalidTicker: false,
-      isDataUnavailable: false,
-      newsScore,
-      earningsScore: {
-        score: 50,
-        label: "Neutral earnings tone",
-        tone: "yellow",
-        reason: "",
-      },
-      rankedNews: detailedNews,
-      detailedNews,
-      compactNews,
-    },
-    { includeInsight: false }
-  );
 
   return (
     <section style={editorialCardStyle}>
@@ -1187,6 +1158,7 @@ async function DetailedNewsAiSection({
 }
 
 async function InsightAiCard({
+  aiData,
   symbol,
   companyName,
   trend,
@@ -1200,6 +1172,7 @@ async function InsightAiCard({
   detailedNews,
   fallbackBeyondHeadline,
 }: {
+  aiData: Awaited<ReturnType<typeof getStockNewsAiData>>;
   symbol: string;
   companyName: string;
   trend: string;
@@ -1213,32 +1186,6 @@ async function InsightAiCard({
   detailedNews: NewsItem[];
   fallbackBeyondHeadline: string;
 }) {
-  const aiData = await getStockNewsAiData(
-    {
-      symbol,
-      companyName,
-      quote: null,
-      history: [],
-      news: [],
-      trend,
-      lastClose: null,
-      lastMA50: null,
-      lastMA200: null,
-      lastRsi,
-      priceVs50,
-      priceVs200,
-      recentHigh,
-      recentLow,
-      isInvalidTicker: false,
-      isDataUnavailable: false,
-      newsScore,
-      earningsScore,
-      rankedNews: detailedNews,
-      detailedNews,
-      compactNews: [],
-    },
-    { includeInsight: true }
-  );
 
   const displayBeyondHeadline = aiData.aiInsight?.beyondHeadline?.trim()
     ? aiData.aiInsight.beyondHeadline
@@ -1273,6 +1220,7 @@ async function InsightAiCard({
 }
 
 async function GoingForwardAiCard({
+  aiData,
   symbol,
   companyName,
   trend,
@@ -1286,6 +1234,7 @@ async function GoingForwardAiCard({
   detailedNews,
   fallbackWhatItMeans,
 }: {
+  aiData: Awaited<ReturnType<typeof getStockNewsAiData>>;
   symbol: string;
   companyName: string;
   trend: string;
@@ -1299,32 +1248,6 @@ async function GoingForwardAiCard({
   detailedNews: NewsItem[];
   fallbackWhatItMeans: string[];
 }) {
-  const aiData = await getStockNewsAiData(
-    {
-      symbol,
-      companyName,
-      quote: null,
-      history: [],
-      news: [],
-      trend,
-      lastClose: null,
-      lastMA50: null,
-      lastMA200: null,
-      lastRsi,
-      priceVs50,
-      priceVs200,
-      recentHigh,
-      recentLow,
-      isInvalidTicker: false,
-      isDataUnavailable: false,
-      newsScore,
-      earningsScore,
-      rankedNews: detailedNews,
-      detailedNews,
-      compactNews: [],
-    },
-    { includeInsight: true }
-  );
 
   const displayWhatItMeans =
     aiData.aiInsight?.whatItMeans?.length
@@ -1587,6 +1510,33 @@ export default async function StockNewsPage({ params }: Props) {
     detailedNews.map((item) => [item.title, item.description ?? ""])
   );
 
+  const aiData = await getStockNewsAiData(
+    {
+      symbol: upper,
+      companyName,
+      quote: null,
+      history: [],
+      news: [],
+      trend,
+      lastClose: null,
+      lastMA50: null,
+      lastMA200: null,
+      lastRsi,
+      priceVs50,
+      priceVs200,
+      recentHigh,
+      recentLow,
+      isInvalidTicker,
+      isDataUnavailable,
+      newsScore,
+      earningsScore,
+      rankedNews: detailedNews,
+      detailedNews,
+      compactNews,
+    },
+    { includeInsight: true }
+  );
+
   return (
     
     <main
@@ -1828,6 +1778,7 @@ export default async function StockNewsPage({ params }: Props) {
               }
             >
               <DetailedNewsAiSection
+                aiData={aiData}
                 symbol={upper}
                 companyName={companyName}
                 trend={trend}
@@ -1841,6 +1792,7 @@ export default async function StockNewsPage({ params }: Props) {
               fallback={<InsightFallbackCard />}
             >
               <InsightAiCard
+                aiData={aiData}
                 symbol={upper}
                 companyName={companyName}
                 trend={trend}
@@ -1897,6 +1849,7 @@ export default async function StockNewsPage({ params }: Props) {
               fallback={<GoingForwardFallbackCard />}
             >
               <GoingForwardAiCard
+                aiData={aiData}
                 symbol={upper}
                 companyName={companyName}
                 trend={trend}
