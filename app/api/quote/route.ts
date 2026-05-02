@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
-export const runtime = "edge";
-export const revalidate = 60;
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 type Quote = {
   symbol: string;
@@ -15,47 +15,73 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const symbol = (searchParams.get("symbol") || "AAPL").toUpperCase();
 
-  const stooqSymbol = `${symbol.toLowerCase()}.us`;
-  const url = `https://stooq.com/q/l/?s=${stooqSymbol}&f=sd2t2l&h&e=csv`;
+  const apiKey = process.env.FMP_API_KEY;
+
+  if (!apiKey) {
+    return NextResponse.json(
+      {
+        symbol,
+        price: null,
+        date: null,
+        time: null,
+        source: "financialmodelingprep.com",
+      } satisfies Quote,
+      { status: 500 }
+    );
+  }
 
   try {
+    const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(
+      symbol
+    )}&apikey=${encodeURIComponent(apiKey)}`;
+
     const res = await fetch(url, {
-      next: { revalidate: 60 },
+      cache: "no-store",
+      headers: {
+        accept: "application/json",
+      },
     });
 
-    const text = await res.text();
+    if (!res.ok) {
+      throw new Error(`FMP quote failed: ${res.status}`);
+    }
 
-    const lines = text.trim().split("\n");
-    if (lines.length < 2) throw new Error("No data");
+    const json = await res.json();
+    const row = Array.isArray(json) ? json[0] : json;
 
-    const row = lines[1].split(",");
+    const price =
+      typeof row?.price === "number" && Number.isFinite(row.price)
+        ? row.price
+        : null;
 
-    const sym = row[0] ?? symbol;
-    const date = row[1] ?? null;
-    const time = row[2] ?? null;
-    const lastStr = row[3] ?? "";
-    const price = lastStr && lastStr !== "N/D" ? Number(lastStr) : null;
+    const now = new Date();
 
     const payload: Quote = {
-      symbol: sym,
-      price: Number.isFinite(price) ? price : null,
-      date,
-      time,
-      source: "stooq.com",
+      symbol: row?.symbol || symbol,
+      price,
+      date: now.toISOString().slice(0, 10),
+      time: now.toISOString().slice(11, 19),
+      source: "financialmodelingprep.com",
     };
 
     return NextResponse.json(payload, {
       headers: {
-        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+        "Cache-Control": "no-store",
       },
     });
   } catch {
     return NextResponse.json(
-      { symbol, price: null, date: null, time: null, source: "stooq.com" } satisfies Quote,
+      {
+        symbol,
+        price: null,
+        date: null,
+        time: null,
+        source: "financialmodelingprep.com",
+      } satisfies Quote,
       {
         status: 200,
         headers: {
-          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+          "Cache-Control": "no-store",
         },
       }
     );
