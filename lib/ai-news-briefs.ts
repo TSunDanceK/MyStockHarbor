@@ -191,9 +191,9 @@ const getCachedAiNewsBriefs = unstable_cache(
     const payload = JSON.parse(payloadJson) as BatchInput;
     return generateAiNewsBriefs(payload);
   },
-  ["msh-ai-news-briefs-v2"],
+  ["msh-ai-news-briefs-v3"],
   {
-    revalidate: 60 * 30,
+    revalidate: 60 * 60,
   }
 );
 
@@ -364,9 +364,9 @@ const getCachedAiNewsInsight = unstable_cache(
     const payload = JSON.parse(payloadJson) as InsightInput;
     return generateAiNewsInsight(payload);
   },
-  ["msh-ai-news-insight-v2"],
+  ["msh-ai-news-insight-v3"],
   {
-    revalidate: 60 * 30,
+    revalidate: 60 * 60,
   }
 );
 
