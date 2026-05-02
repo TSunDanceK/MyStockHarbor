@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
+export const revalidate = 3600;
 
 type NewsItem = {
   title: string;
@@ -48,7 +49,9 @@ export async function GET(req: Request) {
 
   for (const f of feeds) {
     try {
-      const res = await fetch(f.url, { cache: "no-store" });
+      const res = await fetch(f.url, {
+  next: { revalidate: 3600 },
+});
       const xml = await res.text();
       const items = parseRss(xml).slice(0, 8);
       out.push({ label: f.label, items });
