@@ -1,9 +1,9 @@
 ---
-title: "ISRG Stock Tests Major Support After Pullback"
+title: "ISRG Stock Tests 200-Week Support"
 date: "2026-05-04"
-excerpt: "Intuitive Surgical is testing a major support zone after a sharp pullback, with buyers previously defending this area before a move toward $600."
+excerpt: "Intuitive Surgical is testing major 200-week moving average support after previously bouncing from this zone toward $600."
 symbol: "ISRG"
-timeframe: "d"
+timeframe: "w"
 chartBars: 250
 chartIndicators: ["MA200"]
 ---
