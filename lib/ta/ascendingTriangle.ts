@@ -228,10 +228,10 @@ export function detectAscendingTriangle(
     options.pivotLeftRight ?? (timeframe === "W" ? 1 : 2);
 
   const maxResistanceZonePct =
-    options.maxResistanceZonePct ?? (timeframe === "W" ? 5 : 4);
+    options.maxResistanceZonePct ?? (timeframe === "W" ? 4.5 : 3.5);
 
   const maxDistanceBelowResistancePct =
-    options.maxDistanceBelowResistancePct ?? 8;
+    options.maxDistanceBelowResistancePct ?? (timeframe === "W" ? 6 : 5);
 
   const minResistanceTouches =
     options.minResistanceTouches ?? 2;
@@ -292,13 +292,15 @@ export function detectAscendingTriangle(
 
   const distanceToResistancePct = pctDiff(latest.close, resistanceCluster.resistance);
 
-  if (distanceToResistancePct < -1.5 || distanceToResistancePct > maxDistanceBelowResistancePct) {
+  if (distanceToResistancePct < -0.75 || distanceToResistancePct > maxDistanceBelowResistancePct) {
     return null;
   }
 
   const lowSlopePct = pctDiff(firstLow.price, lastLow.price);
 
-  if (lowSlopePct <= 0) {
+  const minLowSlopePct = timeframe === "W" ? 3 : 2;
+
+  if (lowSlopePct < minLowSlopePct) {
     return null;
   }
 
