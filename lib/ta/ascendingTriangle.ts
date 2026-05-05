@@ -360,10 +360,29 @@ export function detectAscendingTriangle(
     return null;
   }
 
-  const distanceToResistancePct = pctDiff(latest.close, resistanceCluster.resistance);
+  const resistanceOvershootTolerancePct = timeframe === "W" ? 3.5 : 3;
+  const maxResistanceClosesAbove = timeframe === "W" ? 4 : 6;
+  const maxConsecutiveResistanceClosesAbove = timeframe === "W" ? 2 : 3;
 
-  if (distanceToResistancePct < -1.5 || distanceToResistancePct > maxDistanceBelowResistancePct) {
-    return null;
+  let resistanceClosesAbove = 0;
+  let consecutiveResistanceClosesAbove = 0;
+
+  for (let i = patternStartIdx; i < points.length; i++) {
+    const closeAbovePct = pctDiff(resistanceCluster.resistance, points[i].close);
+
+    if (closeAbovePct > resistanceOvershootTolerancePct) {
+      resistanceClosesAbove++;
+      consecutiveResistanceClosesAbove++;
+    } else {
+      consecutiveResistanceClosesAbove = 0;
+    }
+
+    if (
+      resistanceClosesAbove > maxResistanceClosesAbove ||
+      consecutiveResistanceClosesAbove > maxConsecutiveResistanceClosesAbove
+    ) {
+      return null;
+    }
   }
 
   const lowSlopePct = pctDiff(firstLow.price, lastLow.price);
