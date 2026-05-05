@@ -42,13 +42,6 @@ type PlayChartPoint = {
   low?: number;
 };
 
-type PlayChartPoint = {
-  date: string;
-  close: number;
-  high?: number;
-  low?: number;
-};
-
 type PlayItem = {
   symbol: string;
   play: "ascendingTriangle";
@@ -504,7 +497,6 @@ async function buildPlaysPayload(
             dailyAscendingTriangles.push(
               toPlayItem(symbol, dailyTriangle, dailyPoints)
             );
-          }
           }
         } catch {
           // Skip bad symbols/data without failing the full plays page.
