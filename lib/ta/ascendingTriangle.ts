@@ -386,27 +386,29 @@ export function detectAscendingTriangle(
     return null;
   }
 
-    const visualSupportStartIdx = Math.max(0, Math.floor(points.length * 0.12));
+  const visualSupportStartIdx = Math.max(0, Math.floor(points.length * 0.12));
   const visualSupportEndIdx = points.length - 1;
 
-  const visualSupportStartLow = Math.min(
-    ...points
-      .slice(0, Math.max(4, Math.floor(points.length * 0.35)))
-      .map((point) => point.low)
-      .filter((value) => Number.isFinite(value))
-  );
+  const visualSupportLowValues = points
+    .slice(0, Math.max(4, Math.floor(points.length * 0.35)))
+    .map((point) => point.low)
+    .filter((value) => Number.isFinite(value));
 
+  if (!visualSupportLowValues.length) {
+    return null;
+  }
+
+  const visualSupportStartLow = Math.min(...visualSupportLowValues);
   const visualSupportEndPrice = latest.close;
-  const supportBreakTolerancePct = timeframe === "W" ? 4 : 3;
-  const recentLookbackBars = timeframe === "W" ? 12 : 20;
 
-  let recentSupportBreakCount = 0;
+  const supportBreakTolerancePct = timeframe === "W" ? 2.5 : 2;
+  const maxBrokenBars = timeframe === "W" ? 1 : 3;
+  const maxConsecutiveBrokenBars = timeframe === "W" ? 1 : 2;
 
-  for (
-    let i = Math.max(0, points.length - recentLookbackBars);
-    i < points.length;
-    i++
-  ) {
+  let brokenBars = 0;
+  let consecutiveBrokenBars = 0;
+
+  for (let i = visualSupportStartIdx; i < points.length; i++) {
     const t =
       visualSupportEndIdx === visualSupportStartIdx
         ? 1
@@ -420,12 +422,18 @@ export function detectAscendingTriangle(
     const breakPct = pctDiff(expectedSupport, points[i].close);
 
     if (breakPct < -supportBreakTolerancePct) {
-      recentSupportBreakCount++;
+      brokenBars++;
+      consecutiveBrokenBars++;
+    } else {
+      consecutiveBrokenBars = 0;
     }
-  }
 
-  if (recentSupportBreakCount >= 2) {
-    return null;
+    if (
+      brokenBars > maxBrokenBars ||
+      consecutiveBrokenBars > maxConsecutiveBrokenBars
+    ) {
+      return null;
+    }
   }
 
   const resistanceQualityScore = clamp(
