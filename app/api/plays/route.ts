@@ -35,6 +35,13 @@ type MarketPayload = {
 
 type PlayTone = "green" | "yellow" | "orange" | "red";
 
+type PlayChartPoint = {
+  date: string;
+  close: number;
+  high?: number;
+  low?: number;
+};
+
 type PlayItem = {
   symbol: string;
   play: "ascendingTriangle";
@@ -56,6 +63,8 @@ type PlayItem = {
 
   startDate: string;
   endDate: string;
+
+  chartPoints: PlayChartPoint[];
 
   dashboardHref: string;
 };
