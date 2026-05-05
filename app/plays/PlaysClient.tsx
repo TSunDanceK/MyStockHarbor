@@ -125,9 +125,7 @@ export default function PlaysClient() {
     setErr(null);
 
     try {
-      const url = force
-        ? `/api/plays?force=1&t=${Date.now()}`
-        : `/api/plays?t=${Date.now()}`;
+      const url = `/api/plays?force=1&t=${Date.now()}`;
 
       const res = await fetch(url, { cache: "no-store" });
 
@@ -394,8 +392,8 @@ export default function PlaysClient() {
                   fontWeight: 700,
                 }}
               >
-                Estimated scan calls: {estimatedApiCalls}. Results are cached briefly to keep
-                the page responsive.
+Estimated scan calls: {estimatedApiCalls}. Cache is bypassed while testing
+the plays scanner.
               </p>
             )}
           </aside>
