@@ -6,7 +6,6 @@ import {
   detectAscendingTriangle,
   type AscendingTriangleResult,
 } from "../../../lib/ta/ascendingTriangle";
-import { getDailyHistory } from "../../../lib/server/historyCache";
 
 type Point = {
   date: string;
@@ -336,9 +335,36 @@ async function fetchMarket(origin: string, forceFresh = false) {
 }
 
 async function fetchHistory(symbol: string, days: number): Promise<Point[]> {
-  const pts = await getDailyHistory(symbol);
+  const apiKey = process.env.FMP_API_KEY;
 
-  return pts
+  if (!apiKey) {
+    throw new Error("Missing FMP_API_KEY environment variable");
+  }
+
+  const safeSymbol = symbol.trim().toUpperCase();
+
+  const url =
+    "https://financialmodelingprep.com/stable/historical-price-eod/full" +
+    `?symbol=${encodeURIComponent(safeSymbol)}` +
+    `&apikey=${encodeURIComponent(apiKey)}`;
+
+  const res = await fetch(url, {
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    throw new Error(`FMP history failed for ${safeSymbol}`);
+  }
+
+  const data = await res.json();
+
+  const rows = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.historical)
+      ? data.historical
+      : [];
+
+  return rows
     .map((p) => ({
       date: String(p?.date ?? ""),
       close: Number(p?.close),
@@ -347,6 +373,7 @@ async function fetchHistory(symbol: string, days: number): Promise<Point[]> {
       volume: p?.volume == null ? undefined : Number(p.volume),
     }))
     .filter((p) => p.date && Number.isFinite(p.close))
+    .sort((a, b) => a.date.localeCompare(b.date))
     .slice(-days);
 }
 
@@ -374,14 +401,14 @@ function toPlayItem(
         typeof point.high === "number"
           ? Number(point.high.toFixed(2))
           : undefined,
-low:
-  typeof point.low === "number"
-    ? Number(point.low.toFixed(2))
-    : undefined,
-volume:
-  typeof point.volume === "number" && Number.isFinite(point.volume)
-    ? point.volume
-    : undefined,
+      low:
+        typeof point.low === "number"
+          ? Number(point.low.toFixed(2))
+          : undefined,
+      volume:
+        typeof point.volume === "number" && Number.isFinite(point.volume)
+          ? point.volume
+          : undefined,
     }))
     .filter((point) => point.date && Number.isFinite(point.close));
 
