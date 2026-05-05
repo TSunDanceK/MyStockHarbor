@@ -354,8 +354,27 @@ function buildDashboardHref(symbol: string, timeframe: "D" | "W") {
 
 function toPlayItem(
   symbol: string,
-  result: AscendingTriangleResult
+  result: AscendingTriangleResult,
+  sourcePoints: Point[]
 ): PlayItem {
+  const chartBars = result.timeframe === "W" ? 52 : 90;
+
+  const chartPoints = sourcePoints
+    .slice(-chartBars)
+    .map((point) => ({
+      date: point.date,
+      close: Number(point.close.toFixed(2)),
+      high:
+        typeof point.high === "number"
+          ? Number(point.high.toFixed(2))
+          : undefined,
+      low:
+        typeof point.low === "number"
+          ? Number(point.low.toFixed(2))
+          : undefined,
+    }))
+    .filter((point) => point.date && Number.isFinite(point.close));
+
   return {
     symbol,
     play: "ascendingTriangle",
@@ -377,6 +396,8 @@ function toPlayItem(
 
     startDate: result.startDate,
     endDate: result.endDate,
+
+    chartPoints,
 
     dashboardHref: buildDashboardHref(symbol, result.timeframe),
   };
@@ -463,7 +484,9 @@ async function buildPlaysPayload(
           });
 
           if (weeklyTriangle) {
-            weeklyAscendingTriangles.push(toPlayItem(symbol, weeklyTriangle));
+weeklyAscendingTriangles.push(
+  toPlayItem(symbol, weeklyTriangle, weeklyPoints)
+);
           }
 
           const dailyTriangle = detectAscendingTriangle(dailyPoints, {
@@ -471,7 +494,9 @@ async function buildPlaysPayload(
           });
 
           if (dailyTriangle) {
-            dailyAscendingTriangles.push(toPlayItem(symbol, dailyTriangle));
+dailyAscendingTriangles.push(
+  toPlayItem(symbol, dailyTriangle, dailyPoints)
+);
           }
         } catch {
           // Skip bad symbols/data without failing the full plays page.
