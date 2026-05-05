@@ -42,6 +42,13 @@ type PlayChartPoint = {
   low?: number;
 };
 
+type PlayChartPoint = {
+  date: string;
+  close: number;
+  high?: number;
+  low?: number;
+};
+
 type PlayItem = {
   symbol: string;
   play: "ascendingTriangle";
