@@ -285,30 +285,39 @@ export function detectAscendingTriangle(
     return null;
   }
 
-  const firstLow = risingLows[0];
-  const lastLow = risingLows[risingLows.length - 1];
+  const supportStartLow = risingLows[risingLows.length - 2];
+  const supportEndLow = risingLows[risingLows.length - 1];
+
+  if (!supportStartLow || !supportEndLow) {
+    return null;
+  }
+
+  const minSupportSpacingBars = timeframe === "W" ? 3 : 8;
+
+  if (supportEndLow.idx - supportStartLow.idx < minSupportSpacingBars) {
+    return null;
+  }
+
+  const supportStartMinIdx = Math.floor(points.length * 0.2);
+  const supportEndMinIdx = Math.floor(points.length * 0.55);
+
+  if (supportStartLow.idx < supportStartMinIdx) {
+    return null;
+  }
+
+  if (supportEndLow.idx < supportEndMinIdx) {
+    return null;
+  }
 
   const activeResistanceTouches = resistanceCluster.touches.filter(
-    (pivot) => pivot.idx >= firstLow.idx && pivot.idx <= points.length - 1
+    (pivot) => pivot.idx >= supportStartLow.idx && pivot.idx <= points.length - 1
   );
 
   if (activeResistanceTouches.length < minResistanceTouches) {
     return null;
   }
 
-  const lateResistanceTouches = activeResistanceTouches.filter(
-    (pivot) => pivot.idx >= Math.floor(points.length * 0.55)
-  );
-
-  if (lateResistanceTouches.length < 1) {
-    return null;
-  }
-
-  if (lastLow.idx < Math.floor(points.length * 0.5)) {
-    return null;
-  }
-
-  const patternStartIdx = Math.min(activeResistanceTouches[0].idx, firstLow.idx);
+  const patternStartIdx = Math.min(activeResistanceTouches[0].idx, supportStartLow.idx);
   const patternBars = points.length - 1 - patternStartIdx;
 
   if (patternBars < minPatternBars) {
@@ -321,9 +330,9 @@ export function detectAscendingTriangle(
     return null;
   }
 
-  const lowSlopePct = pctDiff(firstLow.price, lastLow.price);
+  const lowSlopePct = pctDiff(supportStartLow.price, supportEndLow.price);
 
-  const minLowSlopePct = timeframe === "W" ? 8 : 12;
+  const minLowSlopePct = timeframe === "W" ? 4 : 7;
 
   if (lowSlopePct < minLowSlopePct) {
     return null;
@@ -427,10 +436,10 @@ export function detectAscendingTriangle(
     resistanceZonePct: Number(resistanceCluster.zonePct.toFixed(2)),
     lowSlopePct: Number(lowSlopePct.toFixed(2)),
 
-    supportStartDate: firstLow.date,
-    supportStartPrice: Number(firstLow.price.toFixed(2)),
-    supportEndDate: lastLow.date,
-    supportEndPrice: Number(lastLow.price.toFixed(2)),
+    supportStartDate: supportStartLow.date,
+    supportStartPrice: Number(supportStartLow.price.toFixed(2)),
+    supportEndDate: supportEndLow.date,
+    supportEndPrice: Number(supportEndLow.price.toFixed(2)),
 
     startDate: points[patternStartIdx].date,
     endDate: latest.date,
