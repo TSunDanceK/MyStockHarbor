@@ -298,8 +298,15 @@ export function detectAscendingTriangle(
     return null;
   }
 
-  const supportStartMinIdx = Math.floor(points.length * 0.2);
-  const supportEndMinIdx = Math.floor(points.length * 0.55);
+  const supportStartMinIdx =
+    timeframe === "W"
+      ? Math.floor(points.length * 0.05)
+      : Math.floor(points.length * 0.15);
+
+  const supportEndMinIdx =
+    timeframe === "W"
+      ? Math.floor(points.length * 0.35)
+      : Math.floor(points.length * 0.45);
 
   if (supportStartLow.idx < supportStartMinIdx) {
     return null;
@@ -332,7 +339,7 @@ export function detectAscendingTriangle(
 
   const lowSlopePct = pctDiff(supportStartLow.price, supportEndLow.price);
 
-  const minLowSlopePct = timeframe === "W" ? 4 : 7;
+  const minLowSlopePct = timeframe === "W" ? 3 : 6;
 
   if (lowSlopePct < minLowSlopePct) {
     return null;
