@@ -386,6 +386,48 @@ export function detectAscendingTriangle(
     return null;
   }
 
+    const visualSupportStartIdx = Math.max(0, Math.floor(points.length * 0.12));
+  const visualSupportEndIdx = points.length - 1;
+
+  const visualSupportStartLow = Math.min(
+    ...points
+      .slice(0, Math.max(4, Math.floor(points.length * 0.35)))
+      .map((point) => point.low)
+      .filter((value) => Number.isFinite(value))
+  );
+
+  const visualSupportEndPrice = latest.close;
+  const supportBreakTolerancePct = timeframe === "W" ? 4 : 3;
+  const recentLookbackBars = timeframe === "W" ? 12 : 20;
+
+  let recentSupportBreakCount = 0;
+
+  for (
+    let i = Math.max(0, points.length - recentLookbackBars);
+    i < points.length;
+    i++
+  ) {
+    const t =
+      visualSupportEndIdx === visualSupportStartIdx
+        ? 1
+        : (i - visualSupportStartIdx) /
+          (visualSupportEndIdx - visualSupportStartIdx);
+
+    const expectedSupport =
+      visualSupportStartLow +
+      t * (visualSupportEndPrice - visualSupportStartLow);
+
+    const breakPct = pctDiff(expectedSupport, points[i].close);
+
+    if (breakPct < -supportBreakTolerancePct) {
+      recentSupportBreakCount++;
+    }
+  }
+
+  if (recentSupportBreakCount >= 2) {
+    return null;
+  }
+
   const resistanceQualityScore = clamp(
     25 - resistanceCluster.zonePct * 4,
     0,
