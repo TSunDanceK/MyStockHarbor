@@ -13,7 +13,7 @@ type PlayChartPoint = {
 
 type PlayItem = {
   symbol: string;
-  play: "ascendingTriangle";
+  play: "ascendingTriangle"; 
   timeframe: "D" | "W";
   score: number;
   tone: PlayTone;
