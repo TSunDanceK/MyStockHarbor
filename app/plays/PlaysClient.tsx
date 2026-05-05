@@ -802,36 +802,221 @@ function StatRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function MiniPlayChart({ item }: { item: PlayItem }) {
+  const points = Array.isArray(item.chartPoints) ? item.chartPoints : [];
+
+  if (points.length < 4) {
+    return (
+      <div
+        style={{
+          marginTop: 14,
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 18,
+          height: 150,
+          background: "rgba(2,6,23,0.54)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "#64748b",
+          fontSize: 12,
+          fontWeight: 900,
+        }}
+      >
+        Chart preview unavailable
+      </div>
+    );
+  }
+
+  const width = 420;
+  const height = 170;
+  const paddingX = 18;
+  const paddingTop = 18;
+  const paddingBottom = 24;
+
+  const lows = points
+    .map((point) => (typeof point.low === "number" ? point.low : point.close))
+    .filter((value) => Number.isFinite(value));
+
+  const highs = points
+    .map((point) => (typeof point.high === "number" ? point.high : point.close))
+    .filter((value) => Number.isFinite(value));
+
+  const values = [
+    ...lows,
+    ...highs,
+    item.resistance,
+    item.latestClose,
+  ].filter((value) => Number.isFinite(value));
+
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+  const range = maxValue - minValue || 1;
+  const buffer = range * 0.12;
+
+  const yMin = minValue - buffer;
+  const yMax = maxValue + buffer;
+  const yRange = yMax - yMin || 1;
+
+  function xAt(index: number) {
+    if (points.length <= 1) return paddingX;
+    return paddingX + (index / (points.length - 1)) * (width - paddingX * 2);
+  }
+
+  function yAt(value: number) {
+    return paddingTop + ((yMax - value) / yRange) * (height - paddingTop - paddingBottom);
+  }
+
+  const closePath = points
+    .map((point, index) => {
+      const x = xAt(index);
+      const y = yAt(point.close);
+      return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
+    })
+    .join(" ");
+
+  const resistanceY = yAt(item.resistance);
+
+  const supportStartIndex = Math.max(0, Math.floor(points.length * 0.12));
+  const supportEndIndex = points.length - 1;
+
+  const startLow = Math.min(
+    ...points
+      .slice(0, Math.max(4, Math.floor(points.length * 0.35)))
+      .map((point) => (typeof point.low === "number" ? point.low : point.close))
+      .filter((value) => Number.isFinite(value))
+  );
+
+  const endLow = Math.min(
+    ...points
+      .slice(Math.max(0, Math.floor(points.length * 0.58)))
+      .map((point) => (typeof point.low === "number" ? point.low : point.close))
+      .filter((value) => Number.isFinite(value))
+  );
+
+  const supportStartY = yAt(startLow);
+  const supportEndY = yAt(Math.max(startLow, endLow));
+
+  const latestX = xAt(points.length - 1);
+  const latestY = yAt(item.latestClose);
+
   return (
     <div
       style={{
-        border: "1px solid rgba(255,255,255,0.08)",
-        borderRadius: 14,
-        padding: "9px 10px",
-        background: "rgba(255,255,255,0.035)",
+        marginTop: 14,
+        border: "1px solid rgba(96,165,250,0.18)",
+        borderRadius: 18,
+        background:
+          "radial-gradient(circle at top right, rgba(34,197,94,0.10), transparent 34%), rgba(2,6,23,0.58)",
+        overflow: "hidden",
       }}
     >
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={`${item.symbol} ${timeframeLabel(item.timeframe)} ascending triangle preview`}
+        style={{
+          display: "block",
+          width: "100%",
+          height: 170,
+        }}
+      >
+        <defs>
+          <linearGradient id={`fill-${item.symbol}-${item.timeframe}`} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="rgba(96,165,250,0.22)" />
+            <stop offset="100%" stopColor="rgba(96,165,250,0)" />
+          </linearGradient>
+        </defs>
+
+        <line
+          x1={paddingX}
+          x2={width - paddingX}
+          y1={resistanceY}
+          y2={resistanceY}
+          stroke="rgba(34,197,94,0.88)"
+          strokeWidth="2"
+          strokeDasharray="6 5"
+        />
+
+        <text
+          x={width - paddingX}
+          y={Math.max(12, resistanceY - 7)}
+          textAnchor="end"
+          fill="rgba(187,247,208,0.92)"
+          fontSize="10"
+          fontWeight="800"
+        >
+          Resistance ${formatNumber(item.resistance)}
+        </text>
+
+        <line
+          x1={xAt(supportStartIndex)}
+          x2={xAt(supportEndIndex)}
+          y1={supportStartY}
+          y2={supportEndY}
+          stroke="rgba(96,165,250,0.88)"
+          strokeWidth="2.2"
+        />
+
+        <path
+          d={`${closePath} L ${xAt(points.length - 1).toFixed(2)} ${(height - paddingBottom).toFixed(2)} L ${paddingX.toFixed(2)} ${(height - paddingBottom).toFixed(2)} Z`}
+          fill={`url(#fill-${item.symbol}-${item.timeframe})`}
+        />
+
+        <path
+          d={closePath}
+          fill="none"
+          stroke="rgba(226,232,240,0.92)"
+          strokeWidth="2.2"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+
+        <circle
+          cx={latestX}
+          cy={latestY}
+          r="4.5"
+          fill={toneColour(item.tone)}
+          stroke="rgba(2,6,23,0.95)"
+          strokeWidth="2"
+        />
+
+        <text
+          x={paddingX}
+          y={height - 8}
+          fill="rgba(148,163,184,0.88)"
+          fontSize="10"
+          fontWeight="800"
+        >
+          {formatDate(points[0]?.date)}
+        </text>
+
+        <text
+          x={width - paddingX}
+          y={height - 8}
+          textAnchor="end"
+          fill="rgba(148,163,184,0.88)"
+          fontSize="10"
+          fontWeight="800"
+        >
+          {formatDate(points[points.length - 1]?.date)}
+        </text>
+      </svg>
+
       <div
         style={{
-          color: "#64748b",
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 10,
+          borderTop: "1px solid rgba(255,255,255,0.07)",
+          padding: "9px 11px",
+          color: "#94a3b8",
           fontSize: 11,
           fontWeight: 900,
-          textTransform: "uppercase",
-          letterSpacing: "0.06em",
         }}
       >
-        {label}
-      </div>
-      <div
-        style={{
-          marginTop: 4,
-          color: "#f8fafc",
-          fontSize: 14,
-          fontWeight: 950,
-        }}
-      >
-        {value}
+        <span>{item.resistanceTouches} resistance touches</span>
+        <span>{item.risingLowTouches} rising lows</span>
+        <span>{formatNumber(item.distanceToResistancePct)}% to level</span>
       </div>
     </div>
   );
