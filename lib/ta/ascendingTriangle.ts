@@ -288,7 +288,27 @@ export function detectAscendingTriangle(
   const firstLow = risingLows[0];
   const lastLow = risingLows[risingLows.length - 1];
 
-  const patternStartIdx = Math.min(firstResistanceTouch.idx, firstLow.idx);
+  const activeResistanceTouches = resistanceCluster.touches.filter(
+    (pivot) => pivot.idx >= firstLow.idx && pivot.idx <= points.length - 1
+  );
+
+  if (activeResistanceTouches.length < minResistanceTouches) {
+    return null;
+  }
+
+  const lateResistanceTouches = activeResistanceTouches.filter(
+    (pivot) => pivot.idx >= Math.floor(points.length * 0.55)
+  );
+
+  if (lateResistanceTouches.length < 1) {
+    return null;
+  }
+
+  if (lastLow.idx < Math.floor(points.length * 0.5)) {
+    return null;
+  }
+
+  const patternStartIdx = Math.min(activeResistanceTouches[0].idx, firstLow.idx);
   const patternBars = points.length - 1 - patternStartIdx;
 
   if (patternBars < minPatternBars) {
@@ -359,7 +379,7 @@ export function detectAscendingTriangle(
   );
 
   const touchScore = clamp(
-    resistanceCluster.touches.length * 3 + risingLows.length * 2,
+    activeResistanceTouches.length * 3 + risingLows.length * 2,
     0,
     10
   );
@@ -389,8 +409,8 @@ export function detectAscendingTriangle(
 
   const note =
     timeframe === "W"
-      ? `Weekly ascending triangle candidate: ${resistanceCluster.touches.length} resistance touches, ${risingLows.length} rising lows, ${distanceToResistancePct.toFixed(1)}% below resistance.`
-      : `Daily ascending triangle candidate: ${resistanceCluster.touches.length} resistance touches, ${risingLows.length} rising lows, ${distanceToResistancePct.toFixed(1)}% below resistance.`;
+      ? `Weekly ascending triangle candidate: ${activeResistanceTouches.length} resistance touches, ${risingLows.length} rising lows, ${distanceToResistancePct.toFixed(1)}% below resistance.`
+      : `Daily ascending triangle candidate: ${activeResistanceTouches.length} resistance touches, ${risingLows.length} rising lows, ${distanceToResistancePct.toFixed(1)}% below resistance.`;
 
   return {
     pattern: "ascendingTriangle",
@@ -401,7 +421,7 @@ export function detectAscendingTriangle(
     resistance: Number(resistanceCluster.resistance.toFixed(2)),
     latestClose: Number(latest.close.toFixed(2)),
     distanceToResistancePct: Number(distanceToResistancePct.toFixed(2)),
-    resistanceTouches: resistanceCluster.touches.length,
+    resistanceTouches: activeResistanceTouches.length,
     risingLowTouches: risingLows.length,
     patternBars,
     resistanceZonePct: Number(resistanceCluster.zonePct.toFixed(2)),
