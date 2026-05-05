@@ -61,6 +61,11 @@ type PlayItem = {
   resistanceZonePct: number;
   lowSlopePct: number;
 
+  supportStartDate: string;
+  supportStartPrice: number;
+  supportEndDate: string;
+  supportEndPrice: number;
+
   startDate: string;
   endDate: string;
 
@@ -393,6 +398,11 @@ function toPlayItem(
 
     resistanceZonePct: result.resistanceZonePct,
     lowSlopePct: result.lowSlopePct,
+
+    supportStartDate: result.supportStartDate,
+    supportStartPrice: result.supportStartPrice,
+    supportEndDate: result.supportEndDate,
+    supportEndPrice: result.supportEndPrice,
 
     startDate: result.startDate,
     endDate: result.endDate,
