@@ -67,6 +67,71 @@ function pctDiff(from: number, to: number) {
   return ((to - from) / from) * 100;
 }
 
+function visualSupportAngleDeg(args: {
+  points: ReturnType<typeof normalisePoints>;
+  resistance: number;
+  latestClose: number;
+  startIdx: number;
+  endIdx: number;
+  startPrice: number;
+  endPrice: number;
+}) {
+  const width = 420;
+  const height = 170;
+  const paddingX = 18;
+  const paddingTop = 18;
+  const paddingBottom = 24;
+
+  const lows = args.points
+    .map((point) => point.low)
+    .filter((value) => Number.isFinite(value));
+
+  const highs = args.points
+    .map((point) => point.high)
+    .filter((value) => Number.isFinite(value));
+
+  const values = [
+    ...lows,
+    ...highs,
+    args.resistance,
+    args.latestClose,
+    args.startPrice,
+    args.endPrice,
+  ].filter((value) => Number.isFinite(value));
+
+  if (values.length < 2) return 0;
+
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+  const range = maxValue - minValue || 1;
+  const buffer = range * 0.12;
+
+  const yMin = minValue - buffer;
+  const yMax = maxValue + buffer;
+  const yRange = yMax - yMin || 1;
+
+  const chartWidth = width - paddingX * 2;
+  const chartHeight = height - paddingTop - paddingBottom;
+
+  const x1 =
+    paddingX +
+    (args.startIdx / Math.max(1, args.points.length - 1)) * chartWidth;
+
+  const x2 =
+    paddingX +
+    (args.endIdx / Math.max(1, args.points.length - 1)) * chartWidth;
+
+  const y1 = paddingTop + ((yMax - args.startPrice) / yRange) * chartHeight;
+  const y2 = paddingTop + ((yMax - args.endPrice) / yRange) * chartHeight;
+
+  const dx = Math.abs(x2 - x1);
+  const dy = Math.abs(y2 - y1);
+
+  if (dx <= 0) return 0;
+
+  return (Math.atan2(dy, dx) * 180) / Math.PI;
+}
+
 function normalisePoints(points: PatternPoint[]) {
   return points
     .map((point) => ({
@@ -299,6 +364,20 @@ export function detectAscendingTriangle(
   const lowSlopePct = pctDiff(firstLow.price, lastLow.price);
 
   if (lowSlopePct <= 0) {
+    return null;
+  }
+
+  const supportAngleDeg = visualSupportAngleDeg({
+    points,
+    resistance: resistanceCluster.resistance,
+    latestClose: latest.close,
+    startIdx: firstLow.idx,
+    endIdx: lastLow.idx,
+    startPrice: firstLow.price,
+    endPrice: lastLow.price,
+  });
+
+  if (supportAngleDeg < 10) {
     return null;
   }
 
