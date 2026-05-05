@@ -40,6 +40,7 @@ type PlayChartPoint = {
   close: number;
   high?: number;
   low?: number;
+  volume?: number;
 };
 
 type PlayItem = {
@@ -373,10 +374,14 @@ function toPlayItem(
         typeof point.high === "number"
           ? Number(point.high.toFixed(2))
           : undefined,
-      low:
-        typeof point.low === "number"
-          ? Number(point.low.toFixed(2))
-          : undefined,
+low:
+  typeof point.low === "number"
+    ? Number(point.low.toFixed(2))
+    : undefined,
+volume:
+  typeof point.volume === "number" && Number.isFinite(point.volume)
+    ? point.volume
+    : undefined,
     }))
     .filter((point) => point.date && Number.isFinite(point.close));
 
