@@ -9,6 +9,7 @@ type PlayChartPoint = {
   close: number;
   high?: number;
   low?: number;
+  volume?: number;
 };
 
 type PlayItem = {
@@ -720,6 +721,15 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
 
   const resistanceY = yAt(item.resistance);
 
+  const volumeValues = points
+    .map((point) => (typeof point.volume === "number" ? point.volume : 0))
+    .filter((value) => Number.isFinite(value));
+
+  const maxVolume = volumeValues.length ? Math.max(...volumeValues) : 0;
+  const volumeBaseY = height - paddingBottom;
+  const maxVolumeBarHeight = 34;
+  const volumeBarWidth = Math.max(1.5, (width - paddingX * 2) / points.length - 1);
+
   const supportStartIndex = Math.max(0, Math.floor(points.length * 0.12));
   const supportEndIndex = points.length - 1;
 
@@ -765,6 +775,31 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
             <stop offset="100%" stopColor="rgba(96,165,250,0)" />
           </linearGradient>
         </defs>
+
+        {maxVolume > 0
+          ? points.map((point, index) => {
+              const volume =
+                typeof point.volume === "number" && Number.isFinite(point.volume)
+                  ? point.volume
+                  : 0;
+
+              const barHeight = (volume / maxVolume) * maxVolumeBarHeight;
+              const x = xAt(index) - volumeBarWidth / 2;
+              const y = volumeBaseY - barHeight;
+
+              return (
+                <rect
+                  key={`${point.date}-volume`}
+                  x={x}
+                  y={y}
+                  width={volumeBarWidth}
+                  height={barHeight}
+                  rx="1"
+                  fill="rgba(96,165,250,0.22)"
+                />
+              );
+            })
+          : null}
 
         <line
           x1={paddingX}
