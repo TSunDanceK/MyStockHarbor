@@ -722,20 +722,33 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
 
   const resistanceY = yAt(item.resistance);
 
-  const supportStartIndex = Math.max(
-    0,
-    points.findIndex((point) => point.date >= item.supportStartDate)
-  );
+  const visibleLowPoints = points
+    .map((point, index) => ({
+      index,
+      value: typeof point.low === "number" ? point.low : point.close,
+    }))
+    .filter((point) => Number.isFinite(point.value));
 
-  const rawSupportEndIndex = points.findIndex(
-    (point) => point.date >= item.supportEndDate
-  );
+  const firstHalfLow = visibleLowPoints
+    .filter((point) => point.index <= Math.floor(points.length * 0.45))
+    .sort((a, b) => a.value - b.value)[0];
 
-  const supportEndIndex =
-    rawSupportEndIndex >= 0 ? rawSupportEndIndex : points.length - 1;
+  const secondHalfLow = visibleLowPoints
+    .filter((point) => point.index >= Math.floor(points.length * 0.45))
+    .sort((a, b) => a.value - b.value)[0];
 
-  const supportStartY = yAt(item.supportStartPrice);
-  const supportEndY = yAt(item.supportEndPrice);
+  const fallbackStartIndex = Math.max(0, Math.floor(points.length * 0.12));
+  const fallbackEndIndex = points.length - 1;
+
+  const supportStartIndex = firstHalfLow?.index ?? fallbackStartIndex;
+  const supportEndIndex = secondHalfLow?.index ?? fallbackEndIndex;
+
+  const supportStartValue = firstHalfLow?.value ?? item.latestClose;
+  const rawSupportEndValue = secondHalfLow?.value ?? item.latestClose;
+  const supportEndValue = Math.max(supportStartValue, rawSupportEndValue);
+
+  const supportStartY = yAt(supportStartValue);
+  const supportEndY = yAt(supportEndValue);
 
   const latestX = xAt(points.length - 1);
   const latestY = yAt(item.latestClose);
