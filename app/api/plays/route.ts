@@ -484,9 +484,9 @@ async function buildPlaysPayload(
           });
 
           if (weeklyTriangle) {
-weeklyAscendingTriangles.push(
-  toPlayItem(symbol, weeklyTriangle, weeklyPoints)
-);
+            weeklyAscendingTriangles.push(
+              toPlayItem(symbol, weeklyTriangle, weeklyPoints)
+            );
           }
 
           const dailyTriangle = detectAscendingTriangle(dailyPoints, {
@@ -494,9 +494,10 @@ weeklyAscendingTriangles.push(
           });
 
           if (dailyTriangle) {
-dailyAscendingTriangles.push(
-  toPlayItem(symbol, dailyTriangle, dailyPoints)
-);
+            dailyAscendingTriangles.push(
+              toPlayItem(symbol, dailyTriangle, dailyPoints)
+            );
+          }
           }
         } catch {
           // Skip bad symbols/data without failing the full plays page.
