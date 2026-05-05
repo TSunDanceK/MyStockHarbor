@@ -28,6 +28,11 @@ export type AscendingTriangleResult = {
   resistanceZonePct: number;
   lowSlopePct: number;
 
+  supportStartDate: string;
+  supportStartPrice: number;
+  supportEndDate: string;
+  supportEndPrice: number;
+
   startDate: string;
   endDate: string;
 };
@@ -459,6 +464,12 @@ export function detectAscendingTriangle(
     patternBars,
     resistanceZonePct: Number(resistanceCluster.zonePct.toFixed(2)),
     lowSlopePct: Number(lowSlopePct.toFixed(2)),
+
+    supportStartDate: firstLow.date,
+    supportStartPrice: Number(firstLow.price.toFixed(2)),
+    supportEndDate: lastLow.date,
+    supportEndPrice: Number(lastLow.price.toFixed(2)),
+
     startDate: points[patternStartIdx].date,
     endDate: latest.date,
   };
