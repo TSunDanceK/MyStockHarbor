@@ -1,34 +1,46 @@
-function Metric({ label, value }: { label: string; value: string }) {
+"use client";
+
+export default function PlaysClient() {
   return (
-    <div
+    <main
       style={{
-        border: "1px solid rgba(255,255,255,0.08)",
-        borderRadius: 14,
-        padding: "9px 10px",
-        background: "rgba(255,255,255,0.035)",
+        minHeight: "100vh",
+        background: "#020617",
+        color: "#e5e7eb",
+        padding: "40px 20px",
       }}
     >
-      <div
+      <section
         style={{
-          color: "#64748b",
-          fontSize: 11,
-          fontWeight: 900,
-          textTransform: "uppercase",
-          letterSpacing: "0.06em",
+          maxWidth: 1100,
+          margin: "0 auto",
         }}
       >
-        {label}
-      </div>
-      <div
-        style={{
-          marginTop: 4,
-          color: "#f8fafc",
-          fontSize: 14,
-          fontWeight: 950,
-        }}
-      >
-        {value}
-      </div>
-    </div>
+        <h1
+          style={{
+            margin: 0,
+            color: "#f8fafc",
+            fontSize: 48,
+            letterSpacing: "-0.05em",
+          }}
+        >
+          Stock Plays
+        </h1>
+
+        <p
+          style={{
+            marginTop: 14,
+            maxWidth: 760,
+            color: "#cbd5e1",
+            fontSize: 16,
+            lineHeight: 1.7,
+            fontWeight: 650,
+          }}
+        >
+          Find daily and weekly chart-pattern plays using MyStockHarbor’s
+          ascending triangle scanner.
+        </p>
+      </section>
+    </main>
   );
 }
