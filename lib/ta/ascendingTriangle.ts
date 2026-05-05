@@ -298,7 +298,7 @@ export function detectAscendingTriangle(
 
   const lowSlopePct = pctDiff(firstLow.price, lastLow.price);
 
-  const minLowSlopePct = timeframe === "W" ? 8 : 6;
+const minLowSlopePct = timeframe === "W" ? 8 : 8;
 
   if (lowSlopePct < minLowSlopePct) {
     return null;
