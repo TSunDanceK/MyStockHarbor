@@ -394,6 +394,11 @@ function toPlayItem(
     resistanceZonePct: result.resistanceZonePct,
     lowSlopePct: result.lowSlopePct,
 
+    supportStartDate: result.supportStartDate,
+    supportStartPrice: result.supportStartPrice,
+    supportEndDate: result.supportEndDate,
+    supportEndPrice: result.supportEndPrice,
+
     startDate: result.startDate,
     endDate: result.endDate,
 
