@@ -722,24 +722,20 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
 
   const resistanceY = yAt(item.resistance);
 
-  const supportStartIndex = Math.max(0, Math.floor(points.length * 0.12));
-  const supportEndIndex = points.length - 1;
+  const supportStartIndex = Math.max(
+    0,
+    points.findIndex((point) => point.date >= item.supportStartDate)
+  );
 
-  const earlyLowValues = points
-    .slice(0, Math.max(4, Math.floor(points.length * 0.35)))
-    .map((point) => (typeof point.low === "number" ? point.low : point.close))
-    .filter((value) => Number.isFinite(value));
+  const rawSupportEndIndex = points.findIndex(
+    (point) => point.date >= item.supportEndDate
+  );
 
-  const lateLowValues = points
-    .slice(Math.max(0, Math.floor(points.length * 0.58)))
-    .map((point) => (typeof point.low === "number" ? point.low : point.close))
-    .filter((value) => Number.isFinite(value));
+  const supportEndIndex =
+    rawSupportEndIndex >= 0 ? rawSupportEndIndex : points.length - 1;
 
-  const startLow = earlyLowValues.length ? Math.min(...earlyLowValues) : item.latestClose;
-  const endLow = lateLowValues.length ? Math.min(...lateLowValues) : item.latestClose;
-
-  const supportStartY = yAt(startLow);
-  const supportEndY = yAt(Math.max(startLow, endLow));
+  const supportStartY = yAt(item.supportStartPrice);
+  const supportEndY = yAt(item.supportEndPrice);
 
   const latestX = xAt(points.length - 1);
   const latestY = yAt(item.latestClose);
