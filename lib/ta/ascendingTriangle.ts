@@ -360,6 +360,12 @@ export function detectAscendingTriangle(
     return null;
   }
 
+    const distanceToResistancePct = pctDiff(latest.close, resistanceCluster.resistance);
+
+  if (distanceToResistancePct < -1.5 || distanceToResistancePct > maxDistanceBelowResistancePct) {
+    return null;
+  }
+
   const resistanceOvershootTolerancePct = timeframe === "W" ? 3.5 : 3;
   const maxResistanceClosesAbove = timeframe === "W" ? 4 : 6;
   const maxConsecutiveResistanceClosesAbove = timeframe === "W" ? 2 : 3;
