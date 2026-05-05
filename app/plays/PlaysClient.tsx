@@ -4,13 +4,6 @@ import React, { useEffect, useMemo, useState } from "react";
 
 type PlayTone = "green" | "yellow" | "orange" | "red";
 
-type PlayChartPoint = {
-  date: string;
-  close: number;
-  high?: number;
-  low?: number;
-};
-
 type PlayItem = {
   symbol: string;
   play: "ascendingTriangle";
@@ -30,15 +23,8 @@ type PlayItem = {
   resistanceZonePct: number;
   lowSlopePct: number;
 
-  supportStartDate: string;
-  supportStartPrice: number;
-  supportEndDate: string;
-  supportEndPrice: number;
-
   startDate: string;
   endDate: string;
-
-  chartPoints: PlayChartPoint[];
 
   dashboardHref: string;
 };
@@ -55,6 +41,7 @@ type PlaysPayload = {
   updatedAt?: string;
   universeSize?: number;
   dynamicUniverseCount?: number;
+  dynamicUniversePreview?: string[];
   estimatedApiCalls?: number;
   sections?: PlaySection[];
   error?: string;
@@ -83,10 +70,6 @@ function setupLabel(score: number) {
   return "Loose setup";
 }
 
-function timeframeLabel(timeframe: "D" | "W") {
-  return timeframe === "W" ? "Weekly" : "Daily";
-}
-
 function formatDate(value?: string | null) {
   if (!value) return "—";
 
@@ -110,6 +93,10 @@ function toChartHref(href: string) {
   if (!href) return "/#chart";
   if (href.includes("#chart")) return href;
   return `${href}#chart`;
+}
+
+function timeframeLabel(timeframe: "D" | "W") {
+  return timeframe === "W" ? "Weekly" : "Daily";
 }
 
 export default function PlaysClient() {
@@ -140,7 +127,9 @@ export default function PlaysClient() {
 
       const data = (await res.json()) as PlaysPayload;
 
-      if (data?.error) throw new Error(data.error);
+      if (data?.error) {
+        throw new Error(data.error);
+      }
 
       setSections(Array.isArray(data?.sections) ? data.sections : []);
       setUpdatedAt(typeof data?.updatedAt === "string" ? data.updatedAt : null);
@@ -151,7 +140,9 @@ export default function PlaysClient() {
           : null
       );
       setEstimatedApiCalls(
-        typeof data?.estimatedApiCalls === "number" ? data.estimatedApiCalls : null
+        typeof data?.estimatedApiCalls === "number"
+          ? data.estimatedApiCalls
+          : null
       );
     } catch {
       setErr(force ? "Force refresh failed." : "Failed to load chart plays.");
@@ -169,7 +160,61 @@ export default function PlaysClient() {
   }
 
   useEffect(() => {
-    loadPlays(false);
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      setErr(null);
+
+      try {
+        const res = await fetch(`/api/plays?t=${Date.now()}`, {
+          cache: "no-store",
+        });
+
+        if (!res.ok) throw new Error("Plays API failed");
+
+        const data = (await res.json()) as PlaysPayload;
+
+        if (data?.error) {
+          throw new Error(data.error);
+        }
+
+        if (!cancelled) {
+          setSections(Array.isArray(data?.sections) ? data.sections : []);
+          setUpdatedAt(typeof data?.updatedAt === "string" ? data.updatedAt : null);
+          setUniverseSize(typeof data?.universeSize === "number" ? data.universeSize : null);
+          setDynamicUniverseCount(
+            typeof data?.dynamicUniverseCount === "number"
+              ? data.dynamicUniverseCount
+              : null
+          );
+          setEstimatedApiCalls(
+            typeof data?.estimatedApiCalls === "number"
+              ? data.estimatedApiCalls
+              : null
+          );
+        }
+      } catch {
+        if (!cancelled) {
+          setErr("Failed to load chart plays.");
+          setSections([]);
+          setUpdatedAt(null);
+          setUniverseSize(null);
+          setDynamicUniverseCount(null);
+          setEstimatedApiCalls(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    load();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const safeSections = useMemo(() => {
@@ -456,7 +501,12 @@ export default function PlaysClient() {
 
         {!loading
           ? filteredSections.map((section) => (
-              <section key={section.title} style={{ marginTop: 26 }}>
+              <section
+                key={section.title}
+                style={{
+                  marginTop: 26,
+                }}
+              >
                 <div
                   style={{
                     display: "flex",
@@ -510,7 +560,7 @@ export default function PlaysClient() {
                   style={{
                     marginTop: 14,
                     display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(310px, 1fr))",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
                     gap: 14,
                   }}
                 >
@@ -607,8 +657,6 @@ export default function PlaysClient() {
                         </div>
                       </div>
 
-                      <MiniPlayChart item={item} />
-
                       <p
                         style={{
                           margin: "12px 0 0",
@@ -620,6 +668,38 @@ export default function PlaysClient() {
                       >
                         {item.note}
                       </p>
+
+                      <div
+                        style={{
+                          marginTop: 14,
+                          display: "grid",
+                          gridTemplateColumns: "1fr 1fr",
+                          gap: 9,
+                        }}
+                      >
+                        <Metric label="Resistance" value={`$${formatNumber(item.resistance)}`} />
+                        <Metric label="Latest close" value={`$${formatNumber(item.latestClose)}`} />
+                        <Metric label="Distance" value={`${formatNumber(item.distanceToResistancePct)}%`} />
+                        <Metric label="Pattern bars" value={String(item.patternBars)} />
+                        <Metric label="Resistance touches" value={String(item.resistanceTouches)} />
+                        <Metric label="Rising lows" value={String(item.risingLowTouches)} />
+                      </div>
+
+                      <div
+                        style={{
+                          marginTop: 12,
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: 10,
+                          color: "#64748b",
+                          fontSize: 12,
+                          fontWeight: 800,
+                        }}
+                      >
+                        <span>{formatDate(item.startDate)}</span>
+                        <span>to</span>
+                        <span>{formatDate(item.endDate)}</span>
+                      </div>
 
                       <a
                         href={toChartHref(item.dashboardHref)}
@@ -638,7 +718,7 @@ export default function PlaysClient() {
                           fontWeight: 950,
                         }}
                       >
-                        Open full chart
+                        Open chart
                       </a>
                     </article>
                   ))}
@@ -646,235 +726,45 @@ export default function PlaysClient() {
               </section>
             ))
           : null}
+
+        <section
+          style={{
+            marginTop: 34,
+            border: "1px solid rgba(255,255,255,0.08)",
+            borderRadius: 24,
+            padding: 22,
+            background: "rgba(15,23,42,0.58)",
+          }}
+        >
+          <h2
+            style={{
+              margin: 0,
+              color: "#f8fafc",
+              fontSize: 24,
+              letterSpacing: "-0.03em",
+            }}
+          >
+            How these plays are detected
+          </h2>
+
+          <p
+            style={{
+              margin: "10px 0 0",
+              color: "#cbd5e1",
+              fontSize: 14,
+              lineHeight: 1.75,
+              fontWeight: 650,
+              maxWidth: 900,
+            }}
+          >
+            Ascending triangle candidates are ranked by repeated resistance touches,
+            rising lows, distance to the resistance area, structure age and basic volume
+            behaviour. Weekly patterns are treated as higher-quality structures because
+            they represent a longer consolidation period.
+          </p>
+        </section>
       </section>
     </main>
-  );
-}
-
-function MiniPlayChart({ item }: { item: PlayItem }) {
-  const points = Array.isArray(item.chartPoints) ? item.chartPoints : [];
-
-  if (points.length < 4) {
-    return (
-      <div
-        style={{
-          marginTop: 14,
-          border: "1px solid rgba(255,255,255,0.08)",
-          borderRadius: 18,
-          height: 150,
-          background: "rgba(2,6,23,0.54)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "#64748b",
-          fontSize: 12,
-          fontWeight: 900,
-        }}
-      >
-        Chart preview unavailable
-      </div>
-    );
-  }
-
-  const width = 420;
-  const height = 170;
-  const paddingX = 18;
-  const paddingTop = 18;
-  const paddingBottom = 24;
-
-  const lows = points.map((point) =>
-    typeof point.low === "number" ? point.low : point.close
-  );
-
-  const highs = points.map((point) =>
-    typeof point.high === "number" ? point.high : point.close
-  );
-
-  const values = [...lows, ...highs, item.resistance, item.latestClose].filter((value) =>
-    Number.isFinite(value)
-  );
-
-  const minValue = Math.min(...values);
-  const maxValue = Math.max(...values);
-  const range = maxValue - minValue || 1;
-  const buffer = range * 0.12;
-
-  const yMin = minValue - buffer;
-  const yMax = maxValue + buffer;
-  const yRange = yMax - yMin || 1;
-
-  function xAt(index: number) {
-    if (points.length <= 1) return paddingX;
-    return paddingX + (index / (points.length - 1)) * (width - paddingX * 2);
-  }
-
-  function yAt(value: number) {
-    return paddingTop + ((yMax - value) / yRange) * (height - paddingTop - paddingBottom);
-  }
-
-  const closePath = points
-    .map((point, index) => {
-      const x = xAt(index);
-      const y = yAt(point.close);
-      return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
-    })
-    .join(" ");
-
-  const resistanceY = yAt(item.resistance);
-
-  const visibleLowPoints = points
-    .map((point, index) => ({
-      index,
-      value: typeof point.low === "number" ? point.low : point.close,
-    }))
-    .filter((point) => Number.isFinite(point.value));
-
-  const firstHalfLow = visibleLowPoints
-    .filter((point) => point.index <= Math.floor(points.length * 0.45))
-    .sort((a, b) => a.value - b.value)[0];
-
-  const secondHalfLow = visibleLowPoints
-    .filter((point) => point.index >= Math.floor(points.length * 0.45))
-    .sort((a, b) => a.value - b.value)[0];
-
-  const fallbackStartIndex = Math.max(0, Math.floor(points.length * 0.12));
-  const fallbackEndIndex = points.length - 1;
-
-  const supportStartIndex = firstHalfLow?.index ?? fallbackStartIndex;
-  const supportEndIndex = secondHalfLow?.index ?? fallbackEndIndex;
-
-  const supportStartValue = firstHalfLow?.value ?? item.latestClose;
-  const rawSupportEndValue = secondHalfLow?.value ?? item.latestClose;
-  const supportEndValue = Math.max(supportStartValue, rawSupportEndValue);
-
-  const supportStartY = yAt(supportStartValue);
-  const supportEndY = yAt(supportEndValue);
-
-  const latestX = xAt(points.length - 1);
-  const latestY = yAt(item.latestClose);
-
-  const gradientId = `fill-${item.symbol}-${item.timeframe}`.replace(/[^a-zA-Z0-9-_]/g, "");
-
-  return (
-    <div
-      style={{
-        marginTop: 14,
-        border: "1px solid rgba(96,165,250,0.18)",
-        borderRadius: 18,
-        background:
-          "radial-gradient(circle at top right, rgba(34,197,94,0.10), transparent 34%), rgba(2,6,23,0.58)",
-        overflow: "hidden",
-      }}
-    >
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        role="img"
-        aria-label={`${item.symbol} ${timeframeLabel(item.timeframe)} ascending triangle preview`}
-        style={{
-          display: "block",
-          width: "100%",
-          height: 170,
-        }}
-      >
-        <defs>
-          <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="rgba(96,165,250,0.22)" />
-            <stop offset="100%" stopColor="rgba(96,165,250,0)" />
-          </linearGradient>
-        </defs>
-
-        <line
-          x1={paddingX}
-          x2={width - paddingX}
-          y1={resistanceY}
-          y2={resistanceY}
-          stroke="rgba(34,197,94,0.88)"
-          strokeWidth="2"
-          strokeDasharray="6 5"
-        />
-
-        <text
-          x={width - paddingX}
-          y={Math.max(12, resistanceY - 7)}
-          textAnchor="end"
-          fill="rgba(187,247,208,0.92)"
-          fontSize="10"
-          fontWeight="800"
-        >
-          Resistance ${formatNumber(item.resistance)}
-        </text>
-
-        <line
-          x1={xAt(supportStartIndex)}
-          x2={xAt(supportEndIndex)}
-          y1={supportStartY}
-          y2={supportEndY}
-          stroke="rgba(96,165,250,0.88)"
-          strokeWidth="2.2"
-        />
-
-        <path
-          d={`${closePath} L ${xAt(points.length - 1).toFixed(2)} ${(height - paddingBottom).toFixed(2)} L ${paddingX.toFixed(2)} ${(height - paddingBottom).toFixed(2)} Z`}
-          fill={`url(#${gradientId})`}
-        />
-
-        <path
-          d={closePath}
-          fill="none"
-          stroke="rgba(226,232,240,0.92)"
-          strokeWidth="2.2"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-
-        <circle
-          cx={latestX}
-          cy={latestY}
-          r="4.5"
-          fill={toneColour(item.tone)}
-          stroke="rgba(2,6,23,0.95)"
-          strokeWidth="2"
-        />
-
-        <text
-          x={paddingX}
-          y={height - 8}
-          fill="rgba(148,163,184,0.88)"
-          fontSize="10"
-          fontWeight="800"
-        >
-          {formatDate(points[0]?.date)}
-        </text>
-
-        <text
-          x={width - paddingX}
-          y={height - 8}
-          textAnchor="end"
-          fill="rgba(148,163,184,0.88)"
-          fontSize="10"
-          fontWeight="800"
-        >
-          {formatDate(points[points.length - 1]?.date)}
-        </text>
-      </svg>
-
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 10,
-          borderTop: "1px solid rgba(255,255,255,0.07)",
-          padding: "9px 11px",
-          color: "#94a3b8",
-          fontSize: 11,
-          fontWeight: 900,
-        }}
-      >
-        <span>{item.resistanceTouches} resistance touches</span>
-        <span>{item.risingLowTouches} rising lows</span>
-        <span>{formatNumber(item.distanceToResistancePct)}% to level</span>
-      </div>
-    </div>
   );
 }
 
@@ -908,6 +798,41 @@ function StatRow({ label, value }: { label: string; value: string }) {
       >
         {value}
       </span>
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div
+      style={{
+        border: "1px solid rgba(255,255,255,0.08)",
+        borderRadius: 14,
+        padding: "9px 10px",
+        background: "rgba(255,255,255,0.035)",
+      }}
+    >
+      <div
+        style={{
+          color: "#64748b",
+          fontSize: 11,
+          fontWeight: 900,
+          textTransform: "uppercase",
+          letterSpacing: "0.06em",
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          marginTop: 4,
+          color: "#f8fafc",
+          fontSize: 14,
+          fontWeight: 950,
+        }}
+      >
+        {value}
+      </div>
     </div>
   );
 }
