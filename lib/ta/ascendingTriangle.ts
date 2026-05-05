@@ -298,10 +298,29 @@ export function detectAscendingTriangle(
 
   const lowSlopePct = pctDiff(firstLow.price, lastLow.price);
 
-const minLowSlopePct = timeframe === "W" ? 8 : 8;
+  const minLowSlopePct = timeframe === "W" ? 8 : 12;
 
   if (lowSlopePct < minLowSlopePct) {
     return null;
+  }
+
+  if (timeframe === "D") {
+    const patternPoints = points.slice(patternStartIdx);
+    const patternHigh = Math.max(...patternPoints.map((point) => point.high));
+    const patternLow = Math.min(...patternPoints.map((point) => point.low));
+    const patternRangePct = Math.abs(pctDiff(patternLow, patternHigh));
+    const supportStrengthRatio = patternRangePct > 0 ? lowSlopePct / patternRangePct : 0;
+
+    if (supportStrengthRatio < 0.42) {
+      return null;
+    }
+
+    const recentClose = latest.close;
+    const midpoint = patternLow + (patternHigh - patternLow) * 0.5;
+
+    if (recentClose < midpoint) {
+      return null;
+    }
   }
 
   const resistanceQualityScore = clamp(
