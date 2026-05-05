@@ -15,6 +15,14 @@ type Point = {
   volume?: number;
 };
 
+type FmpHistoricalRow = {
+  date?: string;
+  close?: number | string;
+  high?: number | string;
+  low?: number | string;
+  volume?: number | string;
+};
+
 type MarketRow = {
   symbol: string;
   changePct: number | null;
@@ -358,7 +366,7 @@ async function fetchHistory(symbol: string, days: number): Promise<Point[]> {
 
   const data = await res.json();
 
-  const rows = Array.isArray(data)
+  const rows: FmpHistoricalRow[] = Array.isArray(data)
     ? data
     : Array.isArray(data?.historical)
       ? data.historical
