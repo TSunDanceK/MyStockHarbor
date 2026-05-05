@@ -30,6 +30,11 @@ type PlayItem = {
   resistanceZonePct: number;
   lowSlopePct: number;
 
+  supportStartDate: string;
+  supportStartPrice: number;
+  supportEndDate: string;
+  supportEndPrice: number;
+
   startDate: string;
   endDate: string;
 
