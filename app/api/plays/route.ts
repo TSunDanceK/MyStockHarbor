@@ -35,13 +35,6 @@ type MarketPayload = {
 
 type PlayTone = "green" | "yellow" | "orange" | "red";
 
-type PlayChartPoint = {
-  date: string;
-  close: number;
-  high?: number;
-  low?: number;
-};
-
 type PlayItem = {
   symbol: string;
   play: "ascendingTriangle";
@@ -61,15 +54,8 @@ type PlayItem = {
   resistanceZonePct: number;
   lowSlopePct: number;
 
-  supportStartDate: string;
-  supportStartPrice: number;
-  supportEndDate: string;
-  supportEndPrice: number;
-
   startDate: string;
   endDate: string;
-
-  chartPoints: PlayChartPoint[];
 
   dashboardHref: string;
 };
@@ -359,27 +345,8 @@ function buildDashboardHref(symbol: string, timeframe: "D" | "W") {
 
 function toPlayItem(
   symbol: string,
-  result: AscendingTriangleResult,
-  sourcePoints: Point[]
+  result: AscendingTriangleResult
 ): PlayItem {
-  const chartBars = result.timeframe === "W" ? 52 : 90;
-
-  const chartPoints = sourcePoints
-    .slice(-chartBars)
-    .map((point) => ({
-      date: point.date,
-      close: Number(point.close.toFixed(2)),
-      high:
-        typeof point.high === "number"
-          ? Number(point.high.toFixed(2))
-          : undefined,
-      low:
-        typeof point.low === "number"
-          ? Number(point.low.toFixed(2))
-          : undefined,
-    }))
-    .filter((point) => point.date && Number.isFinite(point.close));
-
   return {
     symbol,
     play: "ascendingTriangle",
@@ -399,15 +366,8 @@ function toPlayItem(
     resistanceZonePct: result.resistanceZonePct,
     lowSlopePct: result.lowSlopePct,
 
-    supportStartDate: result.supportStartDate,
-    supportStartPrice: result.supportStartPrice,
-    supportEndDate: result.supportEndDate,
-    supportEndPrice: result.supportEndPrice,
-
     startDate: result.startDate,
     endDate: result.endDate,
-
-    chartPoints,
 
     dashboardHref: buildDashboardHref(symbol, result.timeframe),
   };
@@ -494,9 +454,7 @@ async function buildPlaysPayload(
           });
 
           if (weeklyTriangle) {
-            weeklyAscendingTriangles.push(
-              toPlayItem(symbol, weeklyTriangle, weeklyPoints)
-            );
+            weeklyAscendingTriangles.push(toPlayItem(symbol, weeklyTriangle));
           }
 
           const dailyTriangle = detectAscendingTriangle(dailyPoints, {
@@ -504,9 +462,7 @@ async function buildPlaysPayload(
           });
 
           if (dailyTriangle) {
-            dailyAscendingTriangles.push(
-              toPlayItem(symbol, dailyTriangle, dailyPoints)
-            );
+            dailyAscendingTriangles.push(toPlayItem(symbol, dailyTriangle));
           }
         } catch {
           // Skip bad symbols/data without failing the full plays page.
