@@ -4,6 +4,13 @@ import React, { useEffect, useMemo, useState } from "react";
 
 type PlayTone = "green" | "yellow" | "orange" | "red";
 
+type PlayChartPoint = {
+  date: string;
+  close: number;
+  high?: number;
+  low?: number;
+};
+
 type PlayItem = {
   symbol: string;
   play: "ascendingTriangle";
@@ -26,6 +33,8 @@ type PlayItem = {
   startDate: string;
   endDate: string;
 
+  chartPoints: PlayChartPoint[];
+
   dashboardHref: string;
 };
 
@@ -41,7 +50,6 @@ type PlaysPayload = {
   updatedAt?: string;
   universeSize?: number;
   dynamicUniverseCount?: number;
-  dynamicUniversePreview?: string[];
   estimatedApiCalls?: number;
   sections?: PlaySection[];
   error?: string;
@@ -70,6 +78,10 @@ function setupLabel(score: number) {
   return "Loose setup";
 }
 
+function timeframeLabel(timeframe: "D" | "W") {
+  return timeframe === "W" ? "Weekly" : "Daily";
+}
+
 function formatDate(value?: string | null) {
   if (!value) return "—";
 
@@ -93,10 +105,6 @@ function toChartHref(href: string) {
   if (!href) return "/#chart";
   if (href.includes("#chart")) return href;
   return `${href}#chart`;
-}
-
-function timeframeLabel(timeframe: "D" | "W") {
-  return timeframe === "W" ? "Weekly" : "Daily";
 }
 
 export default function PlaysClient() {
@@ -127,9 +135,7 @@ export default function PlaysClient() {
 
       const data = (await res.json()) as PlaysPayload;
 
-      if (data?.error) {
-        throw new Error(data.error);
-      }
+      if (data?.error) throw new Error(data.error);
 
       setSections(Array.isArray(data?.sections) ? data.sections : []);
       setUpdatedAt(typeof data?.updatedAt === "string" ? data.updatedAt : null);
@@ -140,9 +146,7 @@ export default function PlaysClient() {
           : null
       );
       setEstimatedApiCalls(
-        typeof data?.estimatedApiCalls === "number"
-          ? data.estimatedApiCalls
-          : null
+        typeof data?.estimatedApiCalls === "number" ? data.estimatedApiCalls : null
       );
     } catch {
       setErr(force ? "Force refresh failed." : "Failed to load chart plays.");
@@ -160,61 +164,7 @@ export default function PlaysClient() {
   }
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      setLoading(true);
-      setErr(null);
-
-      try {
-        const res = await fetch(`/api/plays?t=${Date.now()}`, {
-          cache: "no-store",
-        });
-
-        if (!res.ok) throw new Error("Plays API failed");
-
-        const data = (await res.json()) as PlaysPayload;
-
-        if (data?.error) {
-          throw new Error(data.error);
-        }
-
-        if (!cancelled) {
-          setSections(Array.isArray(data?.sections) ? data.sections : []);
-          setUpdatedAt(typeof data?.updatedAt === "string" ? data.updatedAt : null);
-          setUniverseSize(typeof data?.universeSize === "number" ? data.universeSize : null);
-          setDynamicUniverseCount(
-            typeof data?.dynamicUniverseCount === "number"
-              ? data.dynamicUniverseCount
-              : null
-          );
-          setEstimatedApiCalls(
-            typeof data?.estimatedApiCalls === "number"
-              ? data.estimatedApiCalls
-              : null
-          );
-        }
-      } catch {
-        if (!cancelled) {
-          setErr("Failed to load chart plays.");
-          setSections([]);
-          setUpdatedAt(null);
-          setUniverseSize(null);
-          setDynamicUniverseCount(null);
-          setEstimatedApiCalls(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    load();
-
-    return () => {
-      cancelled = true;
-    };
+    loadPlays(false);
   }, []);
 
   const safeSections = useMemo(() => {
@@ -501,12 +451,7 @@ export default function PlaysClient() {
 
         {!loading
           ? filteredSections.map((section) => (
-              <section
-                key={section.title}
-                style={{
-                  marginTop: 26,
-                }}
-              >
+              <section key={section.title} style={{ marginTop: 26 }}>
                 <div
                   style={{
                     display: "flex",
@@ -560,7 +505,7 @@ export default function PlaysClient() {
                   style={{
                     marginTop: 14,
                     display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(310px, 1fr))",
                     gap: 14,
                   }}
                 >
@@ -657,6 +602,8 @@ export default function PlaysClient() {
                         </div>
                       </div>
 
+                      <MiniPlayChart item={item} />
+
                       <p
                         style={{
                           margin: "12px 0 0",
@@ -668,38 +615,6 @@ export default function PlaysClient() {
                       >
                         {item.note}
                       </p>
-
-                      <div
-                        style={{
-                          marginTop: 14,
-                          display: "grid",
-                          gridTemplateColumns: "1fr 1fr",
-                          gap: 9,
-                        }}
-                      >
-                        <Metric label="Resistance" value={`$${formatNumber(item.resistance)}`} />
-                        <Metric label="Latest close" value={`$${formatNumber(item.latestClose)}`} />
-                        <Metric label="Distance" value={`${formatNumber(item.distanceToResistancePct)}%`} />
-                        <Metric label="Pattern bars" value={String(item.patternBars)} />
-                        <Metric label="Resistance touches" value={String(item.resistanceTouches)} />
-                        <Metric label="Rising lows" value={String(item.risingLowTouches)} />
-                      </div>
-
-                      <div
-                        style={{
-                          marginTop: 12,
-                          display: "flex",
-                          justifyContent: "space-between",
-                          gap: 10,
-                          color: "#64748b",
-                          fontSize: 12,
-                          fontWeight: 800,
-                        }}
-                      >
-                        <span>{formatDate(item.startDate)}</span>
-                        <span>to</span>
-                        <span>{formatDate(item.endDate)}</span>
-                      </div>
 
                       <a
                         href={toChartHref(item.dashboardHref)}
@@ -718,7 +633,7 @@ export default function PlaysClient() {
                           fontWeight: 950,
                         }}
                       >
-                        Open chart
+                        Open full chart
                       </a>
                     </article>
                   ))}
@@ -726,79 +641,8 @@ export default function PlaysClient() {
               </section>
             ))
           : null}
-
-        <section
-          style={{
-            marginTop: 34,
-            border: "1px solid rgba(255,255,255,0.08)",
-            borderRadius: 24,
-            padding: 22,
-            background: "rgba(15,23,42,0.58)",
-          }}
-        >
-          <h2
-            style={{
-              margin: 0,
-              color: "#f8fafc",
-              fontSize: 24,
-              letterSpacing: "-0.03em",
-            }}
-          >
-            How these plays are detected
-          </h2>
-
-          <p
-            style={{
-              margin: "10px 0 0",
-              color: "#cbd5e1",
-              fontSize: 14,
-              lineHeight: 1.75,
-              fontWeight: 650,
-              maxWidth: 900,
-            }}
-          >
-            Ascending triangle candidates are ranked by repeated resistance touches,
-            rising lows, distance to the resistance area, structure age and basic volume
-            behaviour. Weekly patterns are treated as higher-quality structures because
-            they represent a longer consolidation period.
-          </p>
-        </section>
       </section>
     </main>
-  );
-}
-
-function StatRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        gap: 12,
-        alignItems: "center",
-        borderBottom: "1px solid rgba(255,255,255,0.07)",
-        paddingBottom: 9,
-      }}
-    >
-      <span
-        style={{
-          color: "#94a3b8",
-          fontSize: 13,
-          fontWeight: 800,
-        }}
-      >
-        {label}
-      </span>
-      <span
-        style={{
-          color: "#f8fafc",
-          fontSize: 13,
-          fontWeight: 950,
-        }}
-      >
-        {value}
-      </span>
-    </div>
   );
 }
 
@@ -833,20 +677,17 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
   const paddingTop = 18;
   const paddingBottom = 24;
 
-  const lows = points
-    .map((point) => (typeof point.low === "number" ? point.low : point.close))
-    .filter((value) => Number.isFinite(value));
+  const lows = points.map((point) =>
+    typeof point.low === "number" ? point.low : point.close
+  );
 
-  const highs = points
-    .map((point) => (typeof point.high === "number" ? point.high : point.close))
-    .filter((value) => Number.isFinite(value));
+  const highs = points.map((point) =>
+    typeof point.high === "number" ? point.high : point.close
+  );
 
-  const values = [
-    ...lows,
-    ...highs,
-    item.resistance,
-    item.latestClose,
-  ].filter((value) => Number.isFinite(value));
+  const values = [...lows, ...highs, item.resistance, item.latestClose].filter((value) =>
+    Number.isFinite(value)
+  );
 
   const minValue = Math.min(...values);
   const maxValue = Math.max(...values);
@@ -879,25 +720,26 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
   const supportStartIndex = Math.max(0, Math.floor(points.length * 0.12));
   const supportEndIndex = points.length - 1;
 
-  const startLow = Math.min(
-    ...points
-      .slice(0, Math.max(4, Math.floor(points.length * 0.35)))
-      .map((point) => (typeof point.low === "number" ? point.low : point.close))
-      .filter((value) => Number.isFinite(value))
-  );
+  const earlyLowValues = points
+    .slice(0, Math.max(4, Math.floor(points.length * 0.35)))
+    .map((point) => (typeof point.low === "number" ? point.low : point.close))
+    .filter((value) => Number.isFinite(value));
 
-  const endLow = Math.min(
-    ...points
-      .slice(Math.max(0, Math.floor(points.length * 0.58)))
-      .map((point) => (typeof point.low === "number" ? point.low : point.close))
-      .filter((value) => Number.isFinite(value))
-  );
+  const lateLowValues = points
+    .slice(Math.max(0, Math.floor(points.length * 0.58)))
+    .map((point) => (typeof point.low === "number" ? point.low : point.close))
+    .filter((value) => Number.isFinite(value));
+
+  const startLow = earlyLowValues.length ? Math.min(...earlyLowValues) : item.latestClose;
+  const endLow = lateLowValues.length ? Math.min(...lateLowValues) : item.latestClose;
 
   const supportStartY = yAt(startLow);
   const supportEndY = yAt(Math.max(startLow, endLow));
 
   const latestX = xAt(points.length - 1);
   const latestY = yAt(item.latestClose);
+
+  const gradientId = `fill-${item.symbol}-${item.timeframe}`.replace(/[^a-zA-Z0-9-_]/g, "");
 
   return (
     <div
@@ -921,7 +763,7 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
         }}
       >
         <defs>
-          <linearGradient id={`fill-${item.symbol}-${item.timeframe}`} x1="0" x2="0" y1="0" y2="1">
+          <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stopColor="rgba(96,165,250,0.22)" />
             <stop offset="100%" stopColor="rgba(96,165,250,0)" />
           </linearGradient>
@@ -959,7 +801,7 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
 
         <path
           d={`${closePath} L ${xAt(points.length - 1).toFixed(2)} ${(height - paddingBottom).toFixed(2)} L ${paddingX.toFixed(2)} ${(height - paddingBottom).toFixed(2)} Z`}
-          fill={`url(#fill-${item.symbol}-${item.timeframe})`}
+          fill={`url(#${gradientId})`}
         />
 
         <path
@@ -1018,6 +860,40 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
         <span>{item.risingLowTouches} rising lows</span>
         <span>{formatNumber(item.distanceToResistancePct)}% to level</span>
       </div>
+    </div>
+  );
+}
+
+function StatRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        gap: 12,
+        alignItems: "center",
+        borderBottom: "1px solid rgba(255,255,255,0.07)",
+        paddingBottom: 9,
+      }}
+    >
+      <span
+        style={{
+          color: "#94a3b8",
+          fontSize: 13,
+          fontWeight: 800,
+        }}
+      >
+        {label}
+      </span>
+      <span
+        style={{
+          color: "#f8fafc",
+          fontSize: 13,
+          fontWeight: 950,
+        }}
+      >
+        {value}
+      </span>
     </div>
   );
 }
