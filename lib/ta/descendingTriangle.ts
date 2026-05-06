@@ -168,6 +168,7 @@ function findPivotHighs(
 
     for (let j = i - leftRight; j <= i + leftRight; j++) {
       if (j === i) continue;
+
       if (points[j].high > current) {
         isPivot = false;
         break;
@@ -198,6 +199,7 @@ function findPivotLows(
 
     for (let j = i - leftRight; j <= i + leftRight; j++) {
       if (j === i) continue;
+
       if (points[j].low < current) {
         isPivot = false;
         break;
@@ -301,7 +303,9 @@ function getFallingHighs(pivotHighs: Pivot[]) {
     }
 
     const currentSpan =
-      falling.length >= 2 ? falling[falling.length - 1].idx - falling[0].idx : 0;
+      falling.length >= 2
+        ? falling[falling.length - 1].idx - falling[0].idx
+        : 0;
 
     const bestSpan =
       best.length >= 2 ? best[best.length - 1].idx - best[0].idx : 0;
@@ -499,10 +503,7 @@ export function detectDescendingTriangle(
   let deepestLowBelowSupportPct = 0;
 
   for (let i = patternStartIdx; i < points.length; i++) {
-    const lowBelowSupportPct = pctDiff(
-      supportCluster.support,
-      points[i].low
-    );
+    const lowBelowSupportPct = pctDiff(supportCluster.support, points[i].low);
 
     deepestLowBelowSupportPct = Math.min(
       deepestLowBelowSupportPct,
@@ -640,7 +641,13 @@ export function detectDescendingTriangle(
   if (score < 45) return null;
 
   const tone =
-    score >= 75 ? "green" : score >= 62 ? "yellow" : score >= 50 ? "orange" : "red";
+    score >= 75
+      ? "green"
+      : score >= 62
+        ? "yellow"
+        : score >= 50
+          ? "orange"
+          : "red";
 
   const note =
     timeframe === "W"
