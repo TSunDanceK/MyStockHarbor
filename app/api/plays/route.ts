@@ -52,7 +52,7 @@ type PlayChartPoint = {
 type PlayItem = {
   symbol: string;
   play: "ascendingTriangle";
-  timeframe: "D" | "W";
+  timeframe: "ST" | "D" | "W";
   score: number;
   tone: PlayTone;
   note: string;
@@ -432,10 +432,10 @@ async function fetchHistory(symbol: string, days: number): Promise<Point[]> {
     .slice(-days);
 }
 
-function buildDashboardHref(symbol: string, timeframe: "D" | "W") {
+function buildDashboardHref(symbol: string, timeframe: "ST" | "D" | "W") {
   const params = new URLSearchParams();
   params.set("symbol", symbol);
-  params.set("tf", timeframe);
+  params.set("tf", timeframe === "ST" ? "D" : timeframe);
 
   return `/?${params.toString()}`;
 }
@@ -523,19 +523,32 @@ function buildSection(args: {
 
 function bestTriangleForWindows(
   points: Point[],
-  timeframe: "D" | "W",
+  timeframe: "ST" | "D" | "W",
   windows: number[]
 ): AscendingTriangleResult | null {
-  const maxDistanceBelowResistancePct = timeframe === "W" ? 3.75 : 3;
+  const detectorTimeframe = timeframe === "W" ? "W" : "D";
+
+  const maxDistanceBelowResistancePct =
+    timeframe === "W" ? 3.75 : timeframe === "ST" ? 2.25 : 3;
+
+  const maxResistanceZonePct =
+    timeframe === "W" ? 4 : timeframe === "ST" ? 2.75 : 3.25;
+
+  const minPatternBars =
+    timeframe === "W" ? 12 : timeframe === "ST" ? 18 : 35;
+
+  const maxPatternBars =
+    timeframe === "W" ? 249 : timeframe === "ST" ? 70 : 180;
 
   const results = windows
     .map((lookbackBars) =>
       detectAscendingTriangle(points, {
-        timeframe,
+        timeframe: detectorTimeframe,
         lookbackBars,
         maxDistanceBelowResistancePct,
-        minResistanceTouches: timeframe === "W" ? 3 : 3,
-        minRisingLowTouches: timeframe === "W" ? 3 : 3,
+        minResistanceTouches: 3,
+        minRisingLowTouches: timeframe === "ST" ? 2 : 3,
+        minPatternBars,
       })
     )
     .filter((result): result is AscendingTriangleResult => result !== null)
@@ -544,11 +557,28 @@ function bestTriangleForWindows(
         return false;
       }
 
-      if (result.resistanceZonePct > (timeframe === "W" ? 4 : 3.25)) {
+      if (result.resistanceZonePct > maxResistanceZonePct) {
+        return false;
+      }
+
+      if (result.patternBars < minPatternBars) {
+        return false;
+      }
+
+      if (result.patternBars > maxPatternBars) {
         return false;
       }
 
       return true;
+    })
+    .map((result) => {
+      if (timeframe !== "ST") return result;
+
+      return {
+        ...result,
+        timeframe: "D" as const,
+        note: `Short-term ascending triangle candidate: ${result.resistanceTouches} resistance touches, ${result.risingLowTouches} rising lows, ${result.distanceToResistancePct.toFixed(1)}% below resistance.`,
+      };
     });
 
   if (!results.length) return null;
@@ -618,6 +648,7 @@ async function buildPlaysPayload(
 
   const weeklyAscendingTriangles: PlayItem[] = [];
   const dailyAscendingTriangles: PlayItem[] = [];
+  const shortTermAscendingTriangles: PlayItem[] = [];
 
   const limit = pLimit(10);
 
@@ -630,32 +661,47 @@ async function buildPlaysPayload(
 
           const weeklyPoints = aggregateWeekly(dailyPoints);
 
-const weeklyTriangle = bestTriangleForWindows(weeklyPoints, "W", [
-  52,
-  80,
-  104,
-  156,
-  208,
-]);
+          const weeklyTriangle = bestTriangleForWindows(weeklyPoints, "W", [
+            80,
+            104,
+            156,
+            208,
+            249,
+          ]);
 
           if (weeklyTriangle) {
             weeklyAscendingTriangles.push(
               toPlayItem(symbol, weeklyTriangle, weeklyPoints)
             );
+            return;
           }
 
-const dailyTriangle = bestTriangleForWindows(dailyPoints, "D", [
-  90,
-  120,
-  160,
-  220,
-  260,
-]);
+          const dailyTriangle = bestTriangleForWindows(dailyPoints, "D", [
+            90,
+            120,
+            160,
+          ]);
 
           if (dailyTriangle) {
             dailyAscendingTriangles.push(
               toPlayItem(symbol, dailyTriangle, dailyPoints)
             );
+            return;
+          }
+
+          const shortTermTriangle = bestTriangleForWindows(dailyPoints, "ST", [
+            35,
+            50,
+            70,
+          ]);
+
+          if (shortTermTriangle) {
+            shortTermAscendingTriangles.push({
+              ...toPlayItem(symbol, shortTermTriangle, dailyPoints),
+              timeframe: "ST",
+              note: shortTermTriangle.note,
+              dashboardHref: buildDashboardHref(symbol, "ST"),
+            });
           }
         } catch {
           // Skip bad symbols/data without failing the full plays page.
@@ -667,6 +713,7 @@ const dailyTriangle = bestTriangleForWindows(dailyPoints, "D", [
   const bestAscendingTriangles = [
     ...weeklyAscendingTriangles,
     ...dailyAscendingTriangles,
+    ...shortTermAscendingTriangles,
   ];
 
 
@@ -688,11 +735,17 @@ const dailyTriangle = bestTriangleForWindows(dailyPoints, "D", [
     buildSection({
       title: "Daily Ascending Triangle Plays",
       description:
-        "Daily ascending triangle candidates where price is pressing toward a defined resistance area.",
+        "Medium-term daily ascending triangle candidates where price is pressing toward a defined resistance area.",
       source: dailyAscendingTriangles,
       take: 24,
     }),
-  ];
+    buildSection({
+      title: "Short-Term Ascending Triangle Plays",
+      description:
+        "Compact ascending triangle formations detected from tighter daily chart structure.",
+      source: shortTermAscendingTriangles,
+      take: 24,
+    }),
 
   return {
     updatedAt: new Date().toISOString(),
