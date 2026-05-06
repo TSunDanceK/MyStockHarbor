@@ -7,7 +7,10 @@ import {
   detectAscendingTriangle,
   type AscendingTriangleResult,
 } from "../../../lib/ta/ascendingTriangle";
-import { getDailyHistory } from "../../../lib/server/historyCache";
+import {
+  getCachedDailyHistory,
+  getDailyHistory,
+} from "../../../lib/server/historyCache";
 
 import {
   addToDynamicUniverse,
@@ -214,7 +217,8 @@ const PRESET_UNIVERSE: string[] = [
   "MAR",
 ];
 
-const UNIVERSE_CAP = 200;
+const UNIVERSE_CAP = 700;
+const MAX_FRESH_HISTORY_FETCHES = 275;
 const HISTORY_DAYS = 1300;
 
 let memo:
@@ -233,9 +237,9 @@ const MEMORY_CACHE_MS = 60_000;
 const CACHE_SECONDS = 60 * 6;
 const STALE_SECONDS = 60 * 6;
 
-const PLAYS_REDIS_KEY = "msh:plays:v3:main";
+const PLAYS_REDIS_KEY = "msh:plays:v4:main";
 const PLAYS_REDIS_TTL_SECONDS = 6 * 60;
-const PLAYS_LOCK_KEY = "msh:plays:v3:main:lock";
+const PLAYS_LOCK_KEY = "msh:plays:v4:main:lock";
 const PLAYS_LOCK_TTL_SECONDS = 120;
 
 function originFromReq(req: NextRequest) {
@@ -342,6 +346,29 @@ function pLimit(limit: number) {
   };
 }
 
+function cleanSymbols(values: string[]) {
+  return Array.from(
+    new Set(
+      values
+        .map((x) => String(x).trim().toUpperCase())
+        .filter(Boolean)
+    )
+  );
+}
+
+function normalizeCachedPoints(points: Point[]) {
+  return points
+    .map((p) => ({
+      date: String(p?.date ?? ""),
+      close: Number(p?.close),
+      high: p?.high == null ? undefined : Number(p.high),
+      low: p?.low == null ? undefined : Number(p.low),
+      volume: p?.volume == null ? undefined : Number(p.volume),
+    }))
+    .filter((p) => p.date && Number.isFinite(p.close))
+    .slice(-HISTORY_DAYS);
+}
+
 async function readPlaysCache() {
   if (!redis) return null;
 
@@ -445,10 +472,10 @@ function toPlayItem(
   result: AscendingTriangleResult,
   sourcePoints: Point[]
 ): PlayItem {
-const chartBars =
-  result.timeframe === "W"
-    ? Math.min(220, Math.max(52, result.patternBars + 8))
-    : Math.min(280, Math.max(90, result.patternBars + 15));
+  const chartBars =
+    result.timeframe === "W"
+      ? Math.min(220, Math.max(52, result.patternBars + 8))
+      : Math.min(280, Math.max(90, result.patternBars + 15));
 
   const chartPoints = sourcePoints
     .slice(-chartBars)
@@ -553,8 +580,6 @@ function bestTriangleForWindows(
     )
     .filter((result): result is AscendingTriangleResult => result !== null)
     .filter((result) => {
-
-
       if (result.resistanceZonePct > maxResistanceZonePct) {
         return false;
       }
@@ -608,9 +633,11 @@ async function buildPlaysPayload(
         .filter(Boolean)
     : [];
 
-  const rankedDynamicUniverse = Array.from(
-    new Set([...topTraded, ...topMovers, ...topRanges])
-  );
+  const rankedDynamicUniverse = cleanSymbols([
+    ...topTraded,
+    ...topMovers,
+    ...topRanges,
+  ]);
 
   const sharedUniverseEntries = await readDynamicUniverse();
 
@@ -618,36 +645,24 @@ async function buildPlaysPayload(
     (entry) => entry.symbol
   );
 
-  const dynamicUniverse = Array.from(
-    new Set(
-      [
-        ...sharedUniverseSymbols,
-        ...accumulatedDynamicUniverse,
-        ...rankedDynamicUniverse,
-      ]
-        .map((x) => String(x).trim().toUpperCase())
-        .filter(Boolean)
-    )
-  );
+  const dynamicUniverse = cleanSymbols([
+    ...sharedUniverseSymbols,
+    ...accumulatedDynamicUniverse,
+    ...rankedDynamicUniverse,
+  ]);
 
-    await addToDynamicUniverse(
+  await addToDynamicUniverse(
     [...accumulatedDynamicUniverse, ...rankedDynamicUniverse],
     "market",
     1
   );
 
-  const priorityUniverse = Array.from(
-    new Set(
-      [
-        ...rankedDynamicUniverse,
-        ...PRESET_UNIVERSE,
-        ...sharedUniverseSymbols,
-        ...accumulatedDynamicUniverse,
-      ]
-        .map((x) => String(x).trim().toUpperCase())
-        .filter(Boolean)
-    )
-  );
+  const priorityUniverse = cleanSymbols([
+    ...rankedDynamicUniverse,
+    ...PRESET_UNIVERSE,
+    ...sharedUniverseSymbols,
+    ...accumulatedDynamicUniverse,
+  ]);
 
   const universe = priorityUniverse.slice(0, UNIVERSE_CAP);
 
@@ -655,13 +670,29 @@ async function buildPlaysPayload(
   const dailyAscendingTriangles: PlayItem[] = [];
   const shortTermAscendingTriangles: PlayItem[] = [];
 
+  let freshHistoryFetchesUsed = 0;
   const limit = pLimit(10);
+
+  async function getHistoryForScan(symbol: string) {
+    const cachedPoints = await getCachedDailyHistory(symbol);
+
+    if (cachedPoints.length) {
+      return normalizeCachedPoints(cachedPoints);
+    }
+
+    if (freshHistoryFetchesUsed >= MAX_FRESH_HISTORY_FETCHES) {
+      return [] as Point[];
+    }
+
+    freshHistoryFetchesUsed++;
+    return fetchHistory(symbol, HISTORY_DAYS);
+  }
 
   await Promise.all(
     universe.map((symbol) =>
       limit(async () => {
         try {
-          const dailyPoints = await fetchHistory(symbol, HISTORY_DAYS);
+          const dailyPoints = await getHistoryForScan(symbol);
           if (dailyPoints.length < 80) return;
 
           const weeklyPoints = aggregateWeekly(dailyPoints);
@@ -721,7 +752,6 @@ async function buildPlaysPayload(
     ...shortTermAscendingTriangles,
   ];
 
-
   const sections = [
     buildSection({
       title: "Best Ascending Triangle Plays",
@@ -740,7 +770,7 @@ async function buildPlaysPayload(
     buildSection({
       title: "Daily Ascending Triangle Plays",
       description:
-        "Medium-term daily ascending triangle candidates where price is pressing toward a defined resistance area.",
+        "Medium-term daily ascending triangle candidates where price is inside a defined ascending triangle structure.",
       source: dailyAscendingTriangles,
       take: 24,
     }),
@@ -761,7 +791,7 @@ async function buildPlaysPayload(
         ? market.dynamicUniverseSize
         : dynamicUniverse.length,
     dynamicUniversePreview: dynamicUniverse.slice(0, 20),
-    estimatedApiCalls: universe.length + 1,
+    estimatedApiCalls: freshHistoryFetchesUsed + 1,
     sections,
   };
 }
