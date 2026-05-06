@@ -55,7 +55,7 @@ type PlayChartPoint = {
 type PlayItem = {
   symbol: string;
   play: "ascendingTriangle";
-  timeframe: "ST" | "D" | "W";
+  timeframe: "M" | "ST" | "D" | "W";
   score: number;
   tone: PlayTone;
   note: string;
@@ -99,6 +99,7 @@ type PlaysPayload = {
   dynamicUniversePreview: string[];
   estimatedApiCalls: number;
   sections: PlaySection[];
+  debug?: unknown;
 };
 
 type CachedPlaysPayload = {
@@ -459,10 +460,10 @@ async function fetchHistory(symbol: string, days: number): Promise<Point[]> {
     .slice(-days);
 }
 
-function buildDashboardHref(symbol: string, timeframe: "ST" | "D" | "W") {
+function buildDashboardHref(symbol: string, timeframe: "M" | "ST" | "D" | "W") {
   const params = new URLSearchParams();
   params.set("symbol", symbol);
-  params.set("tf", timeframe === "ST" ? "D" : timeframe);
+  params.set("tf", timeframe === "ST" ? "D" : timeframe === "M" ? "W" : timeframe);
 
   return `/?${params.toString()}`;
 }
@@ -470,12 +471,17 @@ function buildDashboardHref(symbol: string, timeframe: "ST" | "D" | "W") {
 function toPlayItem(
   symbol: string,
   result: AscendingTriangleResult,
-  sourcePoints: Point[]
+  sourcePoints: Point[],
+  itemTimeframe?: "M" | "ST" | "D" | "W"
 ): PlayItem {
+  const displayTimeframe = itemTimeframe ?? result.timeframe;
+
   const chartBars =
-    result.timeframe === "W"
-      ? Math.min(220, Math.max(52, result.patternBars + 8))
-      : Math.min(280, Math.max(90, result.patternBars + 15));
+    displayTimeframe === "M"
+      ? Math.min(260, Math.max(90, result.patternBars + 12))
+      : displayTimeframe === "W"
+        ? Math.min(220, Math.max(52, result.patternBars + 8))
+        : Math.min(280, Math.max(90, result.patternBars + 15));
 
   const chartPoints = sourcePoints
     .slice(-chartBars)
@@ -500,7 +506,7 @@ function toPlayItem(
   return {
     symbol,
     play: "ascendingTriangle",
-    timeframe: result.timeframe,
+    timeframe: displayTimeframe,
     score: result.score,
     tone: result.tone,
     note: result.note,
@@ -526,7 +532,7 @@ function toPlayItem(
 
     chartPoints,
 
-    dashboardHref: buildDashboardHref(symbol, result.timeframe),
+    dashboardHref: buildDashboardHref(symbol, displayTimeframe),
   };
 }
 
@@ -550,22 +556,25 @@ function buildSection(args: {
 
 function bestTriangleForWindows(
   points: Point[],
-  timeframe: "ST" | "D" | "W",
+  timeframe: "M" | "ST" | "D" | "W",
   windows: number[]
 ): AscendingTriangleResult | null {
-  const detectorTimeframe = timeframe === "W" ? "W" : "D";
+  const detectorTimeframe = timeframe === "M" || timeframe === "W" ? "W" : "D";
 
   const maxDistanceBelowResistancePct =
-    timeframe === "W" ? 3.75 : timeframe === "ST" ? 2.25 : 3;
+    timeframe === "M" ? 16 : timeframe === "W" ? 7 : timeframe === "ST" ? 6 : 7;
 
   const maxResistanceZonePct =
-    timeframe === "W" ? 4 : timeframe === "ST" ? 2.75 : 3.25;
+    timeframe === "M" ? 6.5 : timeframe === "W" ? 4.5 : timeframe === "ST" ? 3.5 : 4;
 
   const minPatternBars =
-    timeframe === "W" ? 12 : timeframe === "ST" ? 18 : 35;
+    timeframe === "M" ? 24 : timeframe === "W" ? 12 : timeframe === "ST" ? 18 : 35;
 
   const maxPatternBars =
-    timeframe === "W" ? 249 : timeframe === "ST" ? 70 : 180;
+    timeframe === "M" ? 249 : timeframe === "W" ? 140 : timeframe === "ST" ? 70 : 180;
+
+  const minTouchSeparationBars =
+    timeframe === "M" ? 2 : timeframe === "W" ? 2 : timeframe === "ST" ? 4 : 5;
 
   const results = windows
     .map((lookbackBars) =>
@@ -573,9 +582,11 @@ function bestTriangleForWindows(
         timeframe: detectorTimeframe,
         lookbackBars,
         maxDistanceBelowResistancePct,
-        minResistanceTouches: 3,
-        minRisingLowTouches: timeframe === "ST" ? 2 : 3,
+        maxResistanceZonePct,
+        minResistanceTouches: 2,
+        minRisingLowTouches: 2,
         minPatternBars,
+        minTouchSeparationBars,
       })
     )
     .filter((result): result is AscendingTriangleResult => result !== null)
@@ -595,13 +606,23 @@ function bestTriangleForWindows(
       return true;
     })
     .map((result) => {
-      if (timeframe !== "ST") return result;
+      if (timeframe === "M") {
+        return {
+          ...result,
+          timeframe: "W" as const,
+          note: `Macro ascending triangle candidate: ${result.resistanceTouches} resistance touches, ${result.risingLowTouches} rising lows, ${result.distanceToResistancePct.toFixed(1)}% below resistance.`,
+        };
+      }
 
-      return {
-        ...result,
-        timeframe: "D" as const,
-        note: `Short-term ascending triangle candidate: ${result.resistanceTouches} resistance touches, ${result.risingLowTouches} rising lows, ${result.distanceToResistancePct.toFixed(1)}% below resistance.`,
-      };
+      if (timeframe === "ST") {
+        return {
+          ...result,
+          timeframe: "D" as const,
+          note: `Short-term ascending triangle candidate: ${result.resistanceTouches} resistance touches, ${result.risingLowTouches} rising lows, ${result.distanceToResistancePct.toFixed(1)}% below resistance.`,
+        };
+      }
+
+      return result;
     });
 
   if (!results.length) return null;
@@ -609,9 +630,95 @@ function bestTriangleForWindows(
   return [...results].sort((a, b) => b.score - a.score)[0];
 }
 
+function debugTriangleWindows(
+  points: Point[],
+  timeframe: "M" | "ST" | "D" | "W",
+  windows: number[]
+) {
+  const detectorTimeframe = timeframe === "M" || timeframe === "W" ? "W" : "D";
+
+  const maxDistanceBelowResistancePct =
+    timeframe === "M" ? 16 : timeframe === "W" ? 7 : timeframe === "ST" ? 6 : 7;
+
+  const maxResistanceZonePct =
+    timeframe === "M" ? 6.5 : timeframe === "W" ? 4.5 : timeframe === "ST" ? 3.5 : 4;
+
+  const minPatternBars =
+    timeframe === "M" ? 24 : timeframe === "W" ? 12 : timeframe === "ST" ? 18 : 35;
+
+  const maxPatternBars =
+    timeframe === "M" ? 249 : timeframe === "W" ? 140 : timeframe === "ST" ? 70 : 180;
+
+  const minTouchSeparationBars =
+    timeframe === "M" ? 2 : timeframe === "W" ? 2 : timeframe === "ST" ? 4 : 5;
+
+  return windows.map((lookbackBars) => {
+    const result = detectAscendingTriangle(points, {
+      timeframe: detectorTimeframe,
+      lookbackBars,
+      maxDistanceBelowResistancePct,
+      maxResistanceZonePct,
+      minResistanceTouches: 2,
+      minRisingLowTouches: 2,
+      minPatternBars,
+      minTouchSeparationBars,
+    });
+
+    if (!result) {
+      return {
+        timeframe,
+        lookbackBars,
+        passed: false,
+        reason: "detector_returned_null",
+      };
+    }
+
+    const failedReasons: string[] = [];
+
+    if (result.resistanceZonePct > maxResistanceZonePct) {
+      failedReasons.push(
+        `resistance_zone_too_wide: ${result.resistanceZonePct}% > ${maxResistanceZonePct}%`
+      );
+    }
+
+    if (result.patternBars < minPatternBars) {
+      failedReasons.push(
+        `pattern_too_short: ${result.patternBars} < ${minPatternBars}`
+      );
+    }
+
+    if (result.patternBars > maxPatternBars) {
+      failedReasons.push(
+        `pattern_too_wide: ${result.patternBars} > ${maxPatternBars}`
+      );
+    }
+
+    return {
+      timeframe,
+      lookbackBars,
+      passed: failedReasons.length === 0,
+      reason: failedReasons.length ? failedReasons.join("; ") : "passed",
+      result: {
+        score: result.score,
+        resistance: result.resistance,
+        latestClose: result.latestClose,
+        distanceToResistancePct: result.distanceToResistancePct,
+        resistanceTouches: result.resistanceTouches,
+        risingLowTouches: result.risingLowTouches,
+        resistanceZonePct: result.resistanceZonePct,
+        lowSlopePct: result.lowSlopePct,
+        patternBars: result.patternBars,
+        startDate: result.startDate,
+        endDate: result.endDate,
+      },
+    };
+  });
+}
+
 async function buildPlaysPayload(
   origin: string,
-  forceFreshMarket = false
+  forceFreshMarket = false,
+  debugSymbolInput: string | null = null
 ): Promise<PlaysPayload> {
   const market = await fetchMarket(origin, forceFreshMarket);
 
@@ -664,8 +771,39 @@ async function buildPlaysPayload(
     ...accumulatedDynamicUniverse,
   ]);
 
-  const universe = priorityUniverse.slice(0, UNIVERSE_CAP);
+  const normalizedDebugSymbol = debugSymbolInput
+    ? String(debugSymbolInput).trim().toUpperCase()
+    : "";
 
+  let universe = priorityUniverse.slice(0, UNIVERSE_CAP);
+
+  if (normalizedDebugSymbol && !universe.includes(normalizedDebugSymbol)) {
+    universe = cleanSymbols([normalizedDebugSymbol, ...universe]).slice(
+      0,
+      UNIVERSE_CAP
+    );
+  }
+
+  const debugSymbolScan: any = normalizedDebugSymbol
+    ? {
+        symbol: normalizedDebugSymbol,
+        priorityIndex: priorityUniverse.indexOf(normalizedDebugSymbol),
+        scanIndex: universe.indexOf(normalizedDebugSymbol),
+        inPriorityUniverse: priorityUniverse.includes(normalizedDebugSymbol),
+        inScanUniverse: universe.includes(normalizedDebugSymbol),
+        scanned: false,
+        cacheHadHistory: false,
+        cachedBars: 0,
+        freshFetchUsed: false,
+        freshFetchSkippedBecauseBudgetUsed: false,
+        dailyBars: 0,
+        weeklyBars: 0,
+        matched: null,
+        diagnostics: null,
+      }
+    : null;
+
+  const macroAscendingTriangles: PlayItem[] = [];
   const weeklyAscendingTriangles: PlayItem[] = [];
   const dailyAscendingTriangles: PlayItem[] = [];
   const shortTermAscendingTriangles: PlayItem[] = [];
@@ -676,15 +814,29 @@ async function buildPlaysPayload(
   async function getHistoryForScan(symbol: string) {
     const cachedPoints = await getCachedDailyHistory(symbol);
 
+    if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+      debugSymbolScan.cacheHadHistory = cachedPoints.length > 0;
+      debugSymbolScan.cachedBars = cachedPoints.length;
+    }
+
     if (cachedPoints.length) {
       return normalizeCachedPoints(cachedPoints);
     }
 
     if (freshHistoryFetchesUsed >= MAX_FRESH_HISTORY_FETCHES) {
+      if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+        debugSymbolScan.freshFetchSkippedBecauseBudgetUsed = true;
+      }
+
       return [] as Point[];
     }
 
     freshHistoryFetchesUsed++;
+
+    if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+      debugSymbolScan.freshFetchUsed = true;
+    }
+
     return fetchHistory(symbol, HISTORY_DAYS);
   }
 
@@ -693,19 +845,74 @@ async function buildPlaysPayload(
       limit(async () => {
         try {
           const dailyPoints = await getHistoryForScan(symbol);
+
+          if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+            debugSymbolScan.scanned = true;
+            debugSymbolScan.dailyBars = dailyPoints.length;
+          }
+
           if (dailyPoints.length < 80) return;
 
           const weeklyPoints = aggregateWeekly(dailyPoints);
 
-          const weeklyTriangle = bestTriangleForWindows(weeklyPoints, "W", [
-            80,
+          if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+            debugSymbolScan.weeklyBars = weeklyPoints.length;
+            debugSymbolScan.diagnostics = {
+              macro: debugTriangleWindows(weeklyPoints, "M", [
+                104,
+                120,
+                140,
+                156,
+                180,
+                208,
+                249,
+              ]),
+              weekly: debugTriangleWindows(weeklyPoints, "W", [
+                39,
+                52,
+                80,
+                104,
+                156,
+              ]),
+              daily: debugTriangleWindows(dailyPoints, "D", [90, 120, 160]),
+              shortTerm: debugTriangleWindows(dailyPoints, "ST", [35, 50, 70]),
+            };
+          }
+
+          const macroTriangle = bestTriangleForWindows(weeklyPoints, "M", [
             104,
+            120,
+            140,
             156,
+            180,
             208,
             249,
           ]);
 
+          if (macroTriangle) {
+            if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+              debugSymbolScan.matched = "macro";
+            }
+
+            macroAscendingTriangles.push(
+              toPlayItem(symbol, macroTriangle, weeklyPoints, "M")
+            );
+            return;
+          }
+
+          const weeklyTriangle = bestTriangleForWindows(weeklyPoints, "W", [
+            39,
+            52,
+            80,
+            104,
+            156,
+          ]);
+
           if (weeklyTriangle) {
+            if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+              debugSymbolScan.matched = "weekly";
+            }
+
             weeklyAscendingTriangles.push(
               toPlayItem(symbol, weeklyTriangle, weeklyPoints)
             );
@@ -719,6 +926,10 @@ async function buildPlaysPayload(
           ]);
 
           if (dailyTriangle) {
+            if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+              debugSymbolScan.matched = "daily";
+            }
+
             dailyAscendingTriangles.push(
               toPlayItem(symbol, dailyTriangle, dailyPoints)
             );
@@ -732,6 +943,10 @@ async function buildPlaysPayload(
           ]);
 
           if (shortTermTriangle) {
+            if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+              debugSymbolScan.matched = "shortTerm";
+            }
+
             shortTermAscendingTriangles.push({
               ...toPlayItem(symbol, shortTermTriangle, dailyPoints),
               timeframe: "ST",
@@ -747,6 +962,7 @@ async function buildPlaysPayload(
   );
 
   const bestAscendingTriangles = [
+    ...macroAscendingTriangles,
     ...weeklyAscendingTriangles,
     ...dailyAscendingTriangles,
     ...shortTermAscendingTriangles,
@@ -756,8 +972,15 @@ async function buildPlaysPayload(
     buildSection({
       title: "Best Ascending Triangle Plays",
       description:
-        "The strongest weekly, daily, and short-term ascending triangle candidates, ranked by resistance quality, rising lows, breakout proximity and structure age.",
+        "The strongest macro, weekly, daily, and short-term ascending triangle candidates, ranked by resistance quality, rising lows, breakout proximity and structure age.",
       source: bestAscendingTriangles,
+      take: 24,
+    }),
+    buildSection({
+      title: "Macro Ascending Triangle Plays",
+      description:
+        "Large ascending triangle structures built from wider weekly chart history. These are slower-forming macro setups that may span many months.",
+      source: macroAscendingTriangles,
       take: 24,
     }),
     buildSection({
@@ -793,14 +1016,20 @@ async function buildPlaysPayload(
     dynamicUniversePreview: dynamicUniverse.slice(0, 20),
     estimatedApiCalls: freshHistoryFetchesUsed + 1,
     sections,
+    debug: debugSymbolScan
+      ? {
+          symbolScan: debugSymbolScan,
+        }
+      : undefined,
   };
 }
 
 export async function GET(req: NextRequest) {
   const now = Date.now();
   const forceRefresh = req.nextUrl.searchParams.get("force") === "1";
+  const debugSymbol = req.nextUrl.searchParams.get("debugSymbol");
 
-  if (!forceRefresh && memo && now - memo.ts < MEMORY_CACHE_MS) {
+  if (!forceRefresh && !debugSymbol && memo && now - memo.ts < MEMORY_CACHE_MS) {
     return NextResponse.json(memo.data, {
       headers: {
         "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
@@ -808,9 +1037,9 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const cached = forceRefresh ? null : await readPlaysCache();
+  const cached = forceRefresh || debugSymbol ? null : await readPlaysCache();
 
-  if (!forceRefresh && cached?.data) {
+  if (!forceRefresh && !debugSymbol && cached?.data) {
     memo = { ts: now, data: cached.data };
 
     return NextResponse.json(cached.data, {
@@ -825,7 +1054,7 @@ export async function GET(req: NextRequest) {
   if (!lockToken) {
     const fallbackCached = cached ?? (await readPlaysCache());
 
-    if (fallbackCached?.data) {
+    if (fallbackCached?.data && !debugSymbol) {
       memo = { ts: now, data: fallbackCached.data };
 
       return NextResponse.json(fallbackCached.data, {
@@ -839,26 +1068,29 @@ export async function GET(req: NextRequest) {
 
   try {
     const origin = originFromReq(req);
-    const data = await buildPlaysPayload(origin, forceRefresh);
+    const data = await buildPlaysPayload(origin, forceRefresh, debugSymbol);
 
-    memo = {
-      ts: now,
-      data,
-    };
+    if (!debugSymbol) {
+      memo = {
+        ts: now,
+        data,
+      };
 
-    await writePlaysCache(data);
+      await writePlaysCache(data);
+    }
 
     return NextResponse.json(data, {
       headers: {
-        "Cache-Control": forceRefresh
-          ? "no-store"
-          : `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+        "Cache-Control":
+          forceRefresh || debugSymbol
+            ? "no-store"
+            : `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
       },
     });
   } catch (error) {
     const fallbackCached = cached ?? (await readPlaysCache());
 
-    if (fallbackCached?.data) {
+    if (fallbackCached?.data && !debugSymbol) {
       memo = { ts: now, data: fallbackCached.data };
 
       return NextResponse.json(fallbackCached.data, {
