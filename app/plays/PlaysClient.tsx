@@ -122,6 +122,7 @@ export default function PlaysClient() {
   const [universeSize, setUniverseSize] = useState<number | null>(null);
   const [dynamicUniverseCount, setDynamicUniverseCount] = useState<number | null>(null);
   const [estimatedApiCalls, setEstimatedApiCalls] = useState<number | null>(null);
+  const [dynamicUniversePreview, setDynamicUniversePreview] = useState<string[]>([]);
   const [selectedTimeframe, setSelectedTimeframe] = useState<"ALL" | "W" | "D">("ALL");
 
   async function loadPlays(force = false) {
@@ -154,6 +155,11 @@ const url = force
       setEstimatedApiCalls(
         typeof data?.estimatedApiCalls === "number" ? data.estimatedApiCalls : null
       );
+      setDynamicUniversePreview(
+  Array.isArray(data?.dynamicUniversePreview)
+    ? data.dynamicUniversePreview
+    : []
+);
     } catch {
       setErr(force ? "Force refresh failed." : "Failed to load chart plays.");
 
@@ -163,6 +169,7 @@ const url = force
         setUniverseSize(null);
         setDynamicUniverseCount(null);
         setEstimatedApiCalls(null);
+        setDynamicUniversePreview([]);
       }
     } finally {
       setBusy(false);
@@ -389,7 +396,55 @@ const url = force
               <StatRow label="Top score" value={topScore == null ? "—" : String(topScore)} />
               <StatRow label="Updated" value={formatDate(updatedAt)} />
             </div>
+{dynamicUniversePreview.length ? (
+  <div
+    style={{
+      marginTop: 14,
+      border: "1px solid rgba(255,255,255,0.08)",
+      borderRadius: 16,
+      padding: 12,
+      background: "rgba(255,255,255,0.035)",
+    }}
+  >
+    <div
+      style={{
+        color: "#94a3b8",
+        fontSize: 11,
+        fontWeight: 900,
+        textTransform: "uppercase",
+        letterSpacing: "0.08em",
+      }}
+    >
+      Universe Debug
+    </div>
 
+    <div
+      style={{
+        marginTop: 8,
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 6,
+      }}
+    >
+      {dynamicUniversePreview.slice(0, 20).map((symbol) => (
+        <span
+          key={symbol}
+          style={{
+            border: "1px solid rgba(96,165,250,0.24)",
+            borderRadius: 999,
+            padding: "4px 7px",
+            background: "rgba(37,99,235,0.12)",
+            color: "#bfdbfe",
+            fontSize: 11,
+            fontWeight: 900,
+          }}
+        >
+          {symbol}
+        </span>
+      ))}
+    </div>
+  </div>
+) : null}
             {estimatedApiCalls == null ? null : (
               <p
                 style={{
