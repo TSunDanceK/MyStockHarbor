@@ -366,6 +366,34 @@ export function detectAscendingTriangle(
     return null;
   }
 
+  const resistanceBreakTolerancePct = timeframe === "W" ? 2.5 : 2;
+const maxResistanceBreakBars = timeframe === "W" ? 3 : 5;
+const maxConsecutiveResistanceBreakBars = timeframe === "W" ? 1 : 2;
+
+let resistanceBreakBars = 0;
+let consecutiveResistanceBreakBars = 0;
+
+for (let i = patternStartIdx; i < points.length; i++) {
+  const closeAboveResistancePct = pctDiff(
+    resistanceCluster.resistance,
+    points[i].close
+  );
+
+  if (closeAboveResistancePct > resistanceBreakTolerancePct) {
+    resistanceBreakBars++;
+    consecutiveResistanceBreakBars++;
+  } else {
+    consecutiveResistanceBreakBars = 0;
+  }
+
+  if (
+    resistanceBreakBars > maxResistanceBreakBars ||
+    consecutiveResistanceBreakBars > maxConsecutiveResistanceBreakBars
+  ) {
+    return null;
+  }
+}
+
   const resistanceOvershootTolerancePct = timeframe === "W" ? 3.5 : 3;
   const maxResistanceClosesAbove = timeframe === "W" ? 4 : 6;
   const maxConsecutiveResistanceClosesAbove = timeframe === "W" ? 2 : 3;
