@@ -84,9 +84,27 @@ export async function GET(req: Request) {
     );
   }
 
-  const results = all
-    .filter((r) => r.symbol.startsWith(q) || r.name.toUpperCase().includes(q))
-    .slice(0, 25);
+const exactSymbolMatches = all.filter(
+  (r) => r.symbol.toUpperCase() === q
+);
+
+const startingSymbolMatches = all.filter(
+  (r) =>
+    r.symbol.toUpperCase().startsWith(q) &&
+    r.symbol.toUpperCase() !== q
+);
+
+const nameMatches = all.filter(
+  (r) =>
+    !r.symbol.toUpperCase().startsWith(q) &&
+    r.name.toUpperCase().includes(q)
+);
+
+const results = [
+  ...exactSymbolMatches,
+  ...startingSymbolMatches,
+  ...nameMatches,
+].slice(0, 25);
 
   return NextResponse.json(
     { results },
