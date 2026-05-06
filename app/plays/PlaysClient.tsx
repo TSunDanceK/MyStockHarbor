@@ -15,8 +15,8 @@ type PlayChartPoint = {
 
 type PlayItem = {
   symbol: string;
-  play: "ascendingTriangle"; 
-  timeframe: "ST" | "D" | "W";
+  play: "ascendingTriangle";
+  timeframe: "M" | "ST" | "D" | "W";
   score: number;
   tone: PlayTone;
   note: string;
@@ -86,7 +86,8 @@ function setupLabel(score: number) {
   return "Loose setup";
 }
 
-function timeframeLabel(timeframe: "ST" | "D" | "W") {
+function timeframeLabel(timeframe: "M" | "ST" | "D" | "W") {
+  if (timeframe === "M") return "Macro";
   if (timeframe === "W") return "Weekly";
   if (timeframe === "ST") return "Short-term";
   return "Daily";
@@ -120,7 +121,7 @@ const topNavIconWrapStyle: React.CSSProperties = {
 };
 
 function topNavBtnStyle(
-  type: "dashboard" | "platforms" | "pickers" | "calculators"
+  type: "dashboard" | "platforms" | "pickers" | "plays" | "calculators"
 ): React.CSSProperties {
   if (type === "dashboard") {
     return {
@@ -185,6 +186,27 @@ function topNavBtnStyle(
     };
   }
 
+  if (type === "plays") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      minHeight: 42,
+      padding: "9px 13px",
+      borderRadius: 14,
+      border: "1px solid rgba(96,165,250,0.45)",
+      background:
+        "linear-gradient(135deg, rgba(96,165,250,0.20), rgba(37,99,235,0.10))",
+      color: "#eff6ff",
+      textDecoration: "none",
+      fontWeight: 900,
+      fontSize: 14,
+      whiteSpace: "nowrap",
+      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+    };
+  }
+
   return {
     display: "inline-flex",
     alignItems: "center",
@@ -205,10 +227,13 @@ function topNavBtnStyle(
   };
 }
 
-function topNavIcon(type: "dashboard" | "platforms" | "pickers" | "calculators") {
+function topNavIcon(
+  type: "dashboard" | "platforms" | "pickers" | "plays" | "calculators"
+) {
   if (type === "dashboard") return "📈";
   if (type === "platforms") return "🏦";
   if (type === "pickers") return "📊";
+  if (type === "plays") return "🔺";
   return "🧮";
 }
 
@@ -225,9 +250,13 @@ export default function PlaysClient() {
   const [err, setErr] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [universeSize, setUniverseSize] = useState<number | null>(null);
-  const [dynamicUniverseCount, setDynamicUniverseCount] = useState<number | null>(null);
+  const [dynamicUniverseCount, setDynamicUniverseCount] = useState<number | null>(
+    null
+  );
   const [estimatedApiCalls, setEstimatedApiCalls] = useState<number | null>(null);
-  const [selectedTimeframe, setSelectedTimeframe] = useState<"ALL" | "W" | "D" | "ST">("ALL");
+  const [selectedTimeframe, setSelectedTimeframe] = useState<
+    "ALL" | "M" | "W" | "D" | "ST"
+  >("ALL");
 
   async function loadPlays(force = false) {
     const setBusy = force ? setForceRefreshing : setLoading;
@@ -236,9 +265,9 @@ export default function PlaysClient() {
     setErr(null);
 
     try {
-const url = force
-  ? `/api/plays?force=1&t=${Date.now()}`
-  : `/api/plays?t=${Date.now()}`;
+      const url = force
+        ? `/api/plays?force=1&t=${Date.now()}`
+        : `/api/plays?t=${Date.now()}`;
 
       const res = await fetch(url, { cache: "no-store" });
 
@@ -250,14 +279,18 @@ const url = force
 
       setSections(Array.isArray(data?.sections) ? data.sections : []);
       setUpdatedAt(typeof data?.updatedAt === "string" ? data.updatedAt : null);
-      setUniverseSize(typeof data?.universeSize === "number" ? data.universeSize : null);
+      setUniverseSize(
+        typeof data?.universeSize === "number" ? data.universeSize : null
+      );
       setDynamicUniverseCount(
         typeof data?.dynamicUniverseCount === "number"
           ? data.dynamicUniverseCount
           : null
       );
       setEstimatedApiCalls(
-        typeof data?.estimatedApiCalls === "number" ? data.estimatedApiCalls : null
+        typeof data?.estimatedApiCalls === "number"
+          ? data.estimatedApiCalls
+          : null
       );
     } catch {
       setErr(force ? "Force refresh failed." : "Failed to load chart plays.");
@@ -275,7 +308,10 @@ const url = force
   }
 
   useEffect(() => {
-    loadPlays(false);
+    const params = new URLSearchParams(window.location.search);
+    const forceInitialLoad = params.get("force") === "1";
+
+    loadPlays(forceInitialLoad);
   }, []);
 
   const safeSections = useMemo(() => {
@@ -287,7 +323,9 @@ const url = force
 
     return safeSections
       .map((section) => {
-        const items = section.items.filter((item) => item.timeframe === selectedTimeframe);
+        const items = section.items.filter(
+          (item) => item.timeframe === selectedTimeframe
+        );
 
         return {
           ...section,
@@ -315,10 +353,15 @@ const url = force
     return out;
   }, [safeSections]);
 
+  const macroCount = allItems.filter((item) => item.timeframe === "M").length;
   const weeklyCount = allItems.filter((item) => item.timeframe === "W").length;
   const dailyCount = allItems.filter((item) => item.timeframe === "D").length;
-  const shortTermCount = allItems.filter((item) => item.timeframe === "ST").length;
-  const topScore = allItems.length ? Math.max(...allItems.map((item) => item.score)) : null;
+  const shortTermCount = allItems.filter(
+    (item) => item.timeframe === "ST"
+  ).length;
+  const topScore = allItems.length
+    ? Math.max(...allItems.map((item) => item.score))
+    : null;
 
   return (
     <main
@@ -381,11 +424,11 @@ const url = force
               <span>Dashboard</span>
             </Link>
 
-            <Link href="/platforms" style={topNavBtnStyle("platforms")}>
+            <Link href="/plays/descending-triangles" style={topNavBtnStyle("plays")}>
               <span aria-hidden="true" style={topNavIconWrapStyle}>
-                {topNavIcon("platforms")}
+                {topNavIcon("plays")}
               </span>
-              <span>Platforms</span>
+              <span>Descending</span>
             </Link>
 
             <Link href="/pickers" style={topNavBtnStyle("pickers")}>
@@ -393,6 +436,13 @@ const url = force
                 {topNavIcon("pickers")}
               </span>
               <span>Pickers</span>
+            </Link>
+
+            <Link href="/platforms" style={topNavBtnStyle("platforms")}>
+              <span aria-hidden="true" style={topNavIconWrapStyle}>
+                {topNavIcon("platforms")}
+              </span>
+              <span>Platforms</span>
             </Link>
 
             <Link href="/utilities" style={topNavBtnStyle("calculators")}>
@@ -446,9 +496,9 @@ const url = force
                 fontWeight: 650,
               }}
             >
-              MyStockHarbor scans the current market universe for ascending triangle
-              candidates using daily and weekly price structure. These are chart-pattern
-              candidates to review, not trade recommendations.
+              MyStockHarbor scans the current market universe for ascending
+              triangle candidates using daily and weekly price structure. These
+              are chart-pattern candidates to review, not trade recommendations.
             </p>
 
             <div
@@ -459,7 +509,7 @@ const url = force
                 gap: 10,
               }}
             >
-              {(["ALL", "W", "D", "ST"] as const).map((key) => {
+              {(["ALL", "M", "W", "D", "ST"] as const).map((key) => {
                 const active = selectedTimeframe === key;
 
                 return (
@@ -484,11 +534,13 @@ const url = force
                   >
                     {key === "ALL"
                       ? "All plays"
-                      : key === "W"
-                        ? "Weekly only"
-                        : key === "ST"
-                          ? "Short-term only"
-                          : "Daily only"}
+                      : key === "M"
+                        ? "Macro only"
+                        : key === "W"
+                          ? "Weekly only"
+                          : key === "ST"
+                            ? "Short-term only"
+                            : "Daily only"}
                   </button>
                 );
               })}
@@ -563,29 +615,32 @@ const url = force
                 gap: 10,
               }}
             >
-              <StatRow label="Universe" value={universeSize == null ? "—" : String(universeSize)} />
-              <StatRow label="Dynamic names" value={dynamicUniverseCount == null ? "—" : String(dynamicUniverseCount)} />
+              <StatRow
+                label="Universe"
+                value={universeSize == null ? "—" : String(universeSize)}
+              />
+              <StatRow
+                label="Dynamic names"
+                value={
+                  dynamicUniverseCount == null
+                    ? "—"
+                    : String(dynamicUniverseCount)
+                }
+              />
+              <StatRow label="Macro shown" value={String(macroCount)} />
               <StatRow label="Weekly shown" value={String(weeklyCount)} />
               <StatRow label="Daily shown" value={String(dailyCount)} />
-              <StatRow label="Short-term shown" value={String(shortTermCount)} />
-              <StatRow label="Top score" value={topScore == null ? "—" : String(topScore)} />
+              <StatRow
+                label="Short-term shown"
+                value={String(shortTermCount)}
+              />
+              <StatRow
+                label="Top score"
+                value={topScore == null ? "—" : String(topScore)}
+              />
               <StatRow label="Updated" value={formatDate(updatedAt)} />
             </div>
-<div
-  style={{
-    marginTop: 14,
-    color: "#64748b",
-    fontSize: 12,
-    lineHeight: 1.45,
-    fontWeight: 700,
-    textAlign: "right",
-  }}
->
-  <div>{updatedAt ? formatDate(updatedAt) : "—"}</div>
-  <div>Universe: {universeSize == null ? "—" : universeSize}</div>
-  <div>Dynamic: {dynamicUniverseCount == null ? "—" : dynamicUniverseCount}</div>
-  <div>Estimated: {estimatedApiCalls == null ? "—" : estimatedApiCalls}</div>
-</div>
+
             {estimatedApiCalls == null ? null : (
               <p
                 style={{
@@ -596,7 +651,8 @@ const url = force
                   fontWeight: 700,
                 }}
               >
-Estimated fresh API calls: {estimatedApiCalls}. Cached histories are scanned without new market-data calls.
+                Estimated fresh API calls: {estimatedApiCalls}. Cached histories
+                are scanned without new market-data calls.
               </p>
             )}
           </aside>
@@ -886,8 +942,8 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
     typeof point.high === "number" ? point.high : point.close
   );
 
-  const values = [...lows, ...highs, item.resistance, item.latestClose].filter((value) =>
-    Number.isFinite(value)
+  const values = [...lows, ...highs, item.resistance, item.latestClose].filter(
+    (value) => Number.isFinite(value)
   );
 
   const minValue = Math.min(...values);
@@ -905,7 +961,14 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
   }
 
   function yAt(value: number) {
-    return paddingTop + ((yMax - value) / yRange) * (height - paddingTop - paddingBottom);
+    return (
+      paddingTop + ((yMax - value) / yRange) * (height - paddingTop - paddingBottom)
+    );
+  }
+
+  function lowAt(index: number) {
+    const point = points[index];
+    return typeof point.low === "number" ? point.low : point.close;
   }
 
   const closePath = points
@@ -925,7 +988,10 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
   const maxVolume = volumeValues.length ? Math.max(...volumeValues) : 0;
   const volumeBaseY = height - paddingBottom;
   const maxVolumeBarHeight = 34;
-  const volumeBarWidth = Math.max(1.5, (width - paddingX * 2) / points.length - 1);
+  const volumeBarWidth = Math.max(
+    1.5,
+    (width - paddingX * 2) / points.length - 1
+  );
 
   const detectedSupportStartIndex = points.findIndex(
     (point) => point.date === item.supportStartDate
@@ -938,7 +1004,7 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
   const supportStartIndex =
     detectedSupportStartIndex >= 0
       ? detectedSupportStartIndex
-      : Math.max(0, Math.floor(points.length * 0.12));
+      : Math.max(0, Math.floor(points.length * 0.18));
 
   const supportPivotEndIndex =
     detectedSupportEndIndex > supportStartIndex
@@ -950,28 +1016,41 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
   const supportStartPrice =
     Number.isFinite(item.supportStartPrice)
       ? item.supportStartPrice
-      : item.latestClose;
+      : lowAt(supportStartIndex);
 
   const supportPivotEndPrice =
     Number.isFinite(item.supportEndPrice)
       ? item.supportEndPrice
-      : supportStartPrice;
+      : lowAt(supportPivotEndIndex);
 
-  const supportSlopePerBar =
+  const rawSupportSlopePerBar =
     (supportPivotEndPrice - supportStartPrice) /
     Math.max(1, supportPivotEndIndex - supportStartIndex);
 
-  const projectedSupportEndPrice =
+  const supportSlopePerBar =
+    rawSupportSlopePerBar > 0
+      ? rawSupportSlopePerBar
+      : Math.abs(supportStartPrice * 0.0015);
+
+  const rawProjectedSupportEndPrice =
     supportStartPrice +
     supportSlopePerBar * (supportDrawEndIndex - supportStartIndex);
 
-const supportStartY = yAt(supportStartPrice);
-const supportEndY = yAt(projectedSupportEndPrice);
+  const projectedSupportEndPrice = Math.min(
+    rawProjectedSupportEndPrice,
+    item.resistance * 0.994
+  );
 
-const latestX = xAt(points.length - 1);
-const latestY = yAt(item.latestClose);
+  const supportStartY = yAt(supportStartPrice);
+  const supportEndY = yAt(projectedSupportEndPrice);
 
-const gradientId = `fill-${item.symbol}-${item.timeframe}`.replace(/[^a-zA-Z0-9-_]/g, "");
+  const latestX = xAt(points.length - 1);
+  const latestY = yAt(item.latestClose);
+
+  const gradientId = `fill-asc-${item.symbol}-${item.timeframe}`.replace(
+    /[^a-zA-Z0-9-_]/g,
+    ""
+  );
 
   return (
     <div
@@ -987,7 +1066,9 @@ const gradientId = `fill-${item.symbol}-${item.timeframe}`.replace(/[^a-zA-Z0-9-
       <svg
         viewBox={`0 0 ${width} ${height}`}
         role="img"
-        aria-label={`${item.symbol} ${timeframeLabel(item.timeframe)} ascending triangle preview`}
+        aria-label={`${item.symbol} ${timeframeLabel(
+          item.timeframe
+        )} ascending triangle preview`}
         style={{
           display: "block",
           width: "100%",
@@ -1057,7 +1138,11 @@ const gradientId = `fill-${item.symbol}-${item.timeframe}`.replace(/[^a-zA-Z0-9-
         />
 
         <path
-          d={`${closePath} L ${xAt(points.length - 1).toFixed(2)} ${(height - paddingBottom).toFixed(2)} L ${paddingX.toFixed(2)} ${(height - paddingBottom).toFixed(2)} Z`}
+          d={`${closePath} L ${xAt(points.length - 1).toFixed(2)} ${(
+            height - paddingBottom
+          ).toFixed(2)} L ${paddingX.toFixed(2)} ${(
+            height - paddingBottom
+          ).toFixed(2)} Z`}
           fill={`url(#${gradientId})`}
         />
 
