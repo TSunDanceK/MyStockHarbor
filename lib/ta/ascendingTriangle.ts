@@ -408,10 +408,7 @@ export function detectAscendingTriangle(
     resistanceCluster.resistance
   );
 
-  if (
-    distanceToResistancePct < -1.5 ||
-    distanceToResistancePct > maxDistanceBelowResistancePct
-  ) {
+  if (distanceToResistancePct < -1.5) {
     return null;
   }
 
@@ -512,6 +509,17 @@ export function detectAscendingTriangle(
     projectedSupportAtLatest,
     resistanceCluster.resistance
   );
+
+    const latestBelowProjectedSupportPct = pctDiff(
+    projectedSupportAtLatest,
+    latest.close
+  );
+
+  const maxLatestBelowSupportPct = timeframe === "W" ? 2 : 1.5;
+
+  if (latestBelowProjectedSupportPct < -maxLatestBelowSupportPct) {
+    return null;
+  }
 
   const maxSupportAboveResistancePct = timeframe === "W" ? 1.25 : 1;
 
