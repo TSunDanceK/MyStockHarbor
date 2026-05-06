@@ -767,10 +767,13 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
       ? item.latestClose
       : Math.max(item.latestClose, item.supportEndPrice, supportStartPrice);
 
-  const supportStartY = yAt(supportStartPrice);
-  const supportEndY = yAt(supportEndPrice);
+const supportStartY = yAt(supportStartPrice);
+const supportEndY = yAt(supportEndPrice);
 
-  const gradientId = `fill-${item.symbol}-${item.timeframe}`.replace(/[^a-zA-Z0-9-_]/g, "");
+const latestX = xAt(points.length - 1);
+const latestY = yAt(item.latestClose);
+
+const gradientId = `fill-${item.symbol}-${item.timeframe}`.replace(/[^a-zA-Z0-9-_]/g, "");
 
   return (
     <div
