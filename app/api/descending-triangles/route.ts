@@ -7,7 +7,10 @@ import {
   detectDescendingTriangle,
   type DescendingTriangleResult,
 } from "../../../lib/ta/descendingTriangle";
-import { getDailyHistory } from "../../../lib/server/historyCache";
+import {
+  getCachedDailyHistory,
+  getDailyHistory,
+} from "../../../lib/server/historyCache";
 
 import {
   addToDynamicUniverse,
@@ -214,7 +217,8 @@ const PRESET_UNIVERSE: string[] = [
   "MAR",
 ];
 
-const UNIVERSE_CAP = 200;
+const UNIVERSE_CAP = 700;
+const MAX_FRESH_HISTORY_FETCHES = 275;
 const HISTORY_DAYS = 1300;
 
 let memo:
@@ -233,9 +237,9 @@ const MEMORY_CACHE_MS = 60_000;
 const CACHE_SECONDS = 60 * 6;
 const STALE_SECONDS = 60 * 6;
 
-const DESCENDING_REDIS_KEY = "msh:descending-triangles:v1:main";
+const DESCENDING_REDIS_KEY = "msh:descending-triangles:v2:main";
 const DESCENDING_REDIS_TTL_SECONDS = 6 * 60;
-const DESCENDING_LOCK_KEY = "msh:descending-triangles:v1:main:lock";
+const DESCENDING_LOCK_KEY = "msh:descending-triangles:v2:main:lock";
 const DESCENDING_LOCK_TTL_SECONDS = 120;
 
 function originFromReq(req: NextRequest) {
@@ -340,6 +344,29 @@ function pLimit(limit: number) {
       next();
     }
   };
+}
+
+function cleanSymbols(values: string[]) {
+  return Array.from(
+    new Set(
+      values
+        .map((x) => String(x).trim().toUpperCase())
+        .filter(Boolean)
+    )
+  );
+}
+
+function normalizeCachedPoints(points: Point[]) {
+  return points
+    .map((p) => ({
+      date: String(p?.date ?? ""),
+      close: Number(p?.close),
+      high: p?.high == null ? undefined : Number(p.high),
+      low: p?.low == null ? undefined : Number(p.low),
+      volume: p?.volume == null ? undefined : Number(p.volume),
+    }))
+    .filter((p) => p.date && Number.isFinite(p.close))
+    .slice(-HISTORY_DAYS);
 }
 
 async function readDescendingCache() {
@@ -546,14 +573,13 @@ function bestTriangleForWindows(
         timeframe: detectorTimeframe,
         lookbackBars,
         maxDistanceAboveSupportPct,
-        minSupportTouches: 3,
-        minFallingHighTouches: timeframe === "ST" ? 2 : 3,
+        minSupportTouches: 2,
+        minFallingHighTouches: 2,
         minPatternBars,
       })
     )
     .filter((result): result is DescendingTriangleResult => result !== null)
     .filter((result) => {
-
       if (result.supportZonePct > maxSupportZonePct) {
         return false;
       }
@@ -607,9 +633,11 @@ async function buildDescendingPayload(
         .filter(Boolean)
     : [];
 
-  const rankedDynamicUniverse = Array.from(
-    new Set([...topTraded, ...topMovers, ...topRanges])
-  );
+  const rankedDynamicUniverse = cleanSymbols([
+    ...topTraded,
+    ...topMovers,
+    ...topRanges,
+  ]);
 
   const sharedUniverseEntries = await readDynamicUniverse();
 
@@ -617,17 +645,11 @@ async function buildDescendingPayload(
     (entry) => entry.symbol
   );
 
-  const dynamicUniverse = Array.from(
-    new Set(
-      [
-        ...sharedUniverseSymbols,
-        ...accumulatedDynamicUniverse,
-        ...rankedDynamicUniverse,
-      ]
-        .map((x) => String(x).trim().toUpperCase())
-        .filter(Boolean)
-    )
-  );
+  const dynamicUniverse = cleanSymbols([
+    ...sharedUniverseSymbols,
+    ...accumulatedDynamicUniverse,
+    ...rankedDynamicUniverse,
+  ]);
 
   await addToDynamicUniverse(
     [...accumulatedDynamicUniverse, ...rankedDynamicUniverse],
@@ -635,18 +657,12 @@ async function buildDescendingPayload(
     1
   );
 
-  const priorityUniverse = Array.from(
-    new Set(
-      [
-        ...rankedDynamicUniverse,
-        ...PRESET_UNIVERSE,
-        ...sharedUniverseSymbols,
-        ...accumulatedDynamicUniverse,
-      ]
-        .map((x) => String(x).trim().toUpperCase())
-        .filter(Boolean)
-    )
-  );
+  const priorityUniverse = cleanSymbols([
+    ...rankedDynamicUniverse,
+    ...PRESET_UNIVERSE,
+    ...sharedUniverseSymbols,
+    ...accumulatedDynamicUniverse,
+  ]);
 
   const universe = priorityUniverse.slice(0, UNIVERSE_CAP);
 
@@ -654,18 +670,36 @@ async function buildDescendingPayload(
   const dailyDescendingTriangles: PlayItem[] = [];
   const shortTermDescendingTriangles: PlayItem[] = [];
 
+  let freshHistoryFetchesUsed = 0;
   const limit = pLimit(10);
+
+  async function getHistoryForScan(symbol: string) {
+    const cachedPoints = await getCachedDailyHistory(symbol);
+
+    if (cachedPoints.length) {
+      return normalizeCachedPoints(cachedPoints);
+    }
+
+    if (freshHistoryFetchesUsed >= MAX_FRESH_HISTORY_FETCHES) {
+      return [] as Point[];
+    }
+
+    freshHistoryFetchesUsed++;
+    return fetchHistory(symbol, HISTORY_DAYS);
+  }
 
   await Promise.all(
     universe.map((symbol) =>
       limit(async () => {
         try {
-          const dailyPoints = await fetchHistory(symbol, HISTORY_DAYS);
+          const dailyPoints = await getHistoryForScan(symbol);
           if (dailyPoints.length < 80) return;
 
           const weeklyPoints = aggregateWeekly(dailyPoints);
 
           const weeklyTriangle = bestTriangleForWindows(weeklyPoints, "W", [
+            39,
+            52,
             80,
             104,
             156,
@@ -738,7 +772,7 @@ async function buildDescendingPayload(
     buildSection({
       title: "Daily Descending Triangle Plays",
       description:
-        "Medium-term daily descending triangle candidates where price is pressing toward a defined support area.",
+        "Medium-term daily descending triangle candidates where price is inside a defined descending triangle structure.",
       source: dailyDescendingTriangles,
       take: 24,
     }),
@@ -759,7 +793,7 @@ async function buildDescendingPayload(
         ? market.dynamicUniverseSize
         : dynamicUniverse.length,
     dynamicUniversePreview: dynamicUniverse.slice(0, 20),
-    estimatedApiCalls: universe.length + 1,
+    estimatedApiCalls: freshHistoryFetchesUsed + 1,
     sections,
   };
 }
