@@ -131,7 +131,9 @@ export default function PlaysClient() {
     setErr(null);
 
     try {
-      const url = `/api/plays?force=1&t=${Date.now()}`;
+const url = force
+  ? `/api/plays?force=1&t=${Date.now()}`
+  : `/api/plays?t=${Date.now()}`;
 
       const res = await fetch(url, { cache: "no-store" });
 
