@@ -238,9 +238,9 @@ const MEMORY_CACHE_MS = 60_000;
 const CACHE_SECONDS = 60 * 6;
 const STALE_SECONDS = 60 * 6;
 
-const DESCENDING_REDIS_KEY = "msh:descending-triangles:v2:main";
+const DESCENDING_REDIS_KEY = "msh:descending-triangles:v3:main";
 const DESCENDING_REDIS_TTL_SECONDS = 6 * 60;
-const DESCENDING_LOCK_KEY = "msh:descending-triangles:v2:main:lock";
+const DESCENDING_LOCK_KEY = "msh:descending-triangles:v3:main:lock";
 const DESCENDING_LOCK_TTL_SECONDS = 120;
 
 function originFromReq(req: NextRequest) {
@@ -695,6 +695,7 @@ async function buildDescendingPayload(
   forceFreshMarket = false,
   debugSymbolInput: string | null = null
 ): Promise<PlaysPayload> {
+  const market = await fetchMarket(origin, forceFreshMarket);
 
   const topTraded = (market?.topTraded ?? [])
     .map((x) => x.symbol)
@@ -787,15 +788,29 @@ async function buildDescendingPayload(
   async function getHistoryForScan(symbol: string) {
     const cachedPoints = await getCachedDailyHistory(symbol);
 
+    if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+      debugSymbolScan.cacheHadHistory = cachedPoints.length > 0;
+      debugSymbolScan.cachedBars = cachedPoints.length;
+    }
+
     if (cachedPoints.length) {
       return normalizeCachedPoints(cachedPoints);
     }
 
     if (freshHistoryFetchesUsed >= MAX_FRESH_HISTORY_FETCHES) {
+      if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+        debugSymbolScan.freshFetchSkippedBecauseBudgetUsed = true;
+      }
+
       return [] as Point[];
     }
 
     freshHistoryFetchesUsed++;
+
+    if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+      debugSymbolScan.freshFetchUsed = true;
+    }
+
     return fetchHistory(symbol, HISTORY_DAYS);
   }
 
@@ -804,9 +819,32 @@ async function buildDescendingPayload(
       limit(async () => {
         try {
           const dailyPoints = await getHistoryForScan(symbol);
+
+          if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+            debugSymbolScan.scanned = true;
+            debugSymbolScan.dailyBars = dailyPoints.length;
+          }
+
           if (dailyPoints.length < 80) return;
 
           const weeklyPoints = aggregateWeekly(dailyPoints);
+
+          if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+            debugSymbolScan.weeklyBars = weeklyPoints.length;
+            debugSymbolScan.diagnostics = {
+              weekly: debugTriangleWindows(weeklyPoints, "W", [
+                39,
+                52,
+                80,
+                104,
+                156,
+                208,
+                249,
+              ]),
+              daily: debugTriangleWindows(dailyPoints, "D", [90, 120, 160]),
+              shortTerm: debugTriangleWindows(dailyPoints, "ST", [35, 50, 70]),
+            };
+          }
 
           const weeklyTriangle = bestTriangleForWindows(weeklyPoints, "W", [
             39,
@@ -819,6 +857,10 @@ async function buildDescendingPayload(
           ]);
 
           if (weeklyTriangle) {
+            if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+              debugSymbolScan.matched = "weekly";
+            }
+
             weeklyDescendingTriangles.push(
               toPlayItem(symbol, weeklyTriangle, weeklyPoints)
             );
@@ -832,6 +874,10 @@ async function buildDescendingPayload(
           ]);
 
           if (dailyTriangle) {
+            if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+              debugSymbolScan.matched = "daily";
+            }
+
             dailyDescendingTriangles.push(
               toPlayItem(symbol, dailyTriangle, dailyPoints)
             );
@@ -845,6 +891,10 @@ async function buildDescendingPayload(
           ]);
 
           if (shortTermTriangle) {
+            if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+              debugSymbolScan.matched = "shortTerm";
+            }
+
             shortTermDescendingTriangles.push({
               ...toPlayItem(symbol, shortTermTriangle, dailyPoints),
               timeframe: "ST",
@@ -906,14 +956,20 @@ async function buildDescendingPayload(
     dynamicUniversePreview: dynamicUniverse.slice(0, 20),
     estimatedApiCalls: freshHistoryFetchesUsed + 1,
     sections,
+    debug: debugSymbolScan
+      ? {
+          symbolScan: debugSymbolScan,
+        }
+      : undefined,
   };
 }
 
 export async function GET(req: NextRequest) {
   const now = Date.now();
   const forceRefresh = req.nextUrl.searchParams.get("force") === "1";
+  const debugSymbol = req.nextUrl.searchParams.get("debugSymbol");
 
-  if (!forceRefresh && memo && now - memo.ts < MEMORY_CACHE_MS) {
+  if (!forceRefresh && !debugSymbol && memo && now - memo.ts < MEMORY_CACHE_MS) {
     return NextResponse.json(memo.data, {
       headers: {
         "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
@@ -921,9 +977,9 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const cached = forceRefresh ? null : await readDescendingCache();
+  const cached = forceRefresh || debugSymbol ? null : await readDescendingCache();
 
-  if (!forceRefresh && cached?.data) {
+  if (!forceRefresh && !debugSymbol && cached?.data) {
     memo = { ts: now, data: cached.data };
 
     return NextResponse.json(cached.data, {
@@ -938,7 +994,7 @@ export async function GET(req: NextRequest) {
   if (!lockToken) {
     const fallbackCached = cached ?? (await readDescendingCache());
 
-    if (fallbackCached?.data) {
+    if (fallbackCached?.data && !debugSymbol) {
       memo = { ts: now, data: fallbackCached.data };
 
       return NextResponse.json(fallbackCached.data, {
@@ -952,18 +1008,24 @@ export async function GET(req: NextRequest) {
 
   try {
     const origin = originFromReq(req);
-    const data = await buildDescendingPayload(origin, forceRefresh);
+    const data = await buildDescendingPayload(
+      origin,
+      forceRefresh,
+      debugSymbol
+    );
 
-    memo = {
-      ts: now,
-      data,
-    };
+    if (!debugSymbol) {
+      memo = {
+        ts: now,
+        data,
+      };
 
-    await writeDescendingCache(data);
+      await writeDescendingCache(data);
+    }
 
     return NextResponse.json(data, {
       headers: {
-        "Cache-Control": forceRefresh
+        "Cache-Control": forceRefresh || debugSymbol
           ? "no-store"
           : `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
       },
@@ -971,7 +1033,7 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     const fallbackCached = cached ?? (await readDescendingCache());
 
-    if (fallbackCached?.data) {
+    if (fallbackCached?.data && !debugSymbol) {
       memo = { ts: now, data: fallbackCached.data };
 
       return NextResponse.json(fallbackCached.data, {
