@@ -1,6 +1,7 @@
 // app/api/plays/route.ts
 export const dynamic = "force-dynamic";
 
+import { Redis } from "@upstash/redis";
 import { NextRequest, NextResponse } from "next/server";
 import {
   detectAscendingTriangle,
@@ -95,6 +96,11 @@ type PlaysPayload = {
   dynamicUniversePreview: string[];
   estimatedApiCalls: number;
   sections: PlaySection[];
+};
+
+type CachedPlaysPayload = {
+  cachedAt: number;
+  data: PlaysPayload;
 };
 
 type AggregatedPoint = {
@@ -218,9 +224,19 @@ let memo:
     }
   | null = null;
 
+const redis =
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+    ? Redis.fromEnv()
+    : null;
+
 const MEMORY_CACHE_MS = 60_000;
 const CACHE_SECONDS = 60 * 6;
 const STALE_SECONDS = 60 * 6;
+
+const PLAYS_REDIS_KEY = "msh:plays:v1:main";
+const PLAYS_REDIS_TTL_SECONDS = 6 * 60;
+const PLAYS_LOCK_KEY = "msh:plays:v1:main:lock";
+const PLAYS_LOCK_TTL_SECONDS = 120;
 
 function originFromReq(req: NextRequest) {
   const h = req.headers;
