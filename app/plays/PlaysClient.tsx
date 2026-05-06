@@ -746,21 +746,29 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
   const maxVolumeBarHeight = 34;
   const volumeBarWidth = Math.max(1.5, (width - paddingX * 2) / points.length - 1);
 
-  const supportStartIndex = Math.max(0, Math.floor(points.length * 0.12));
+  const detectedSupportStartIndex = points.findIndex(
+    (point) => point.date === item.supportStartDate
+  );
+
+  const supportStartIndex =
+    detectedSupportStartIndex >= 0
+      ? detectedSupportStartIndex
+      : Math.max(0, Math.floor(points.length * 0.12));
+
   const supportEndIndex = points.length - 1;
 
-  const earlyLowValues = points
-    .slice(0, Math.max(4, Math.floor(points.length * 0.35)))
-    .map((point) => (typeof point.low === "number" ? point.low : point.close))
-    .filter((value) => Number.isFinite(value));
+  const supportStartPrice =
+    Number.isFinite(item.supportStartPrice)
+      ? item.supportStartPrice
+      : item.latestClose;
 
-  const startLow = earlyLowValues.length ? Math.min(...earlyLowValues) : item.latestClose;
+  const supportEndPrice =
+    item.latestClose > supportStartPrice
+      ? item.latestClose
+      : Math.max(item.latestClose, item.supportEndPrice, supportStartPrice);
 
-  const supportStartY = yAt(startLow);
-  const supportEndY = yAt(item.latestClose);
-
-  const latestX = xAt(points.length - 1);
-  const latestY = yAt(item.latestClose);
+  const supportStartY = yAt(supportStartPrice);
+  const supportEndY = yAt(supportEndPrice);
 
   const gradientId = `fill-${item.symbol}-${item.timeframe}`.replace(/[^a-zA-Z0-9-_]/g, "");
 
