@@ -419,6 +419,21 @@ export async function getDailyHistory(symbol: string) {
   }
 }
 
+export async function getCachedDailyHistory(symbol: string) {
+  const normalized = normalizeSymbol(symbol);
+  const cached = await readHistoryEntry(normalized);
+
+  if (
+    cached &&
+    cached.status === "qualified" &&
+    Array.isArray(cached.daily)
+  ) {
+    return cached.daily;
+  }
+
+  return [] as Point[];
+}
+
 export async function ensureQualifiedHistory(symbol: string) {
   const normalized = normalizeSymbol(symbol);
   const cached = await readHistoryEntry(normalized);
