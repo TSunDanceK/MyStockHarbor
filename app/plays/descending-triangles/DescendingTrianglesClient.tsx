@@ -647,8 +647,8 @@ export default function DescendingTrianglesClient() {
                   fontWeight: 700,
                 }}
               >
-                Estimated scan calls: {estimatedApiCalls}. Normal loads use
-                cache; Refresh plays forces a fresh scan.
+                Estimated fresh API calls: {estimatedApiCalls}. Cached histories
+                are scanned without new market-data calls.
               </p>
             )}
           </aside>
@@ -1179,7 +1179,7 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
       >
         <span>{item.supportTouches} support touches</span>
         <span>{item.fallingHighTouches} falling highs</span>
-        <span>{formatNumber(item.distanceToSupportPct)}% to level</span>
+        <span>{formatNumber(item.distanceToSupportPct)}% above support</span>
       </div>
     </div>
   );
