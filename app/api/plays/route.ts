@@ -611,9 +611,13 @@ async function buildPlaysPayload(
 
           const weeklyPoints = aggregateWeekly(dailyPoints);
 
-          const weeklyTriangle = detectAscendingTriangle(weeklyPoints, {
-            timeframe: "W",
-          });
+const weeklyTriangle = bestTriangleForWindows(weeklyPoints, "W", [
+  52,
+  80,
+  104,
+  156,
+  208,
+]);
 
           if (weeklyTriangle) {
             weeklyAscendingTriangles.push(
@@ -621,9 +625,13 @@ async function buildPlaysPayload(
             );
           }
 
-          const dailyTriangle = detectAscendingTriangle(dailyPoints, {
-            timeframe: "D",
-          });
+const dailyTriangle = bestTriangleForWindows(dailyPoints, "D", [
+  90,
+  120,
+  160,
+  220,
+  260,
+]);
 
           if (dailyTriangle) {
             dailyAscendingTriangles.push(
