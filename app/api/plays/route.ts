@@ -233,7 +233,7 @@ const MEMORY_CACHE_MS = 60_000;
 const CACHE_SECONDS = 60 * 6;
 const STALE_SECONDS = 60 * 6;
 
-const PLAYS_REDIS_KEY = "msh:plays:v1:main";
+const PLAYS_REDIS_KEY = "msh:plays:v2:main";
 const PLAYS_REDIS_TTL_SECONDS = 6 * 60;
 const PLAYS_LOCK_KEY = "msh:plays:v1:main:lock";
 const PLAYS_LOCK_TTL_SECONDS = 120;
@@ -526,14 +526,30 @@ function bestTriangleForWindows(
   timeframe: "D" | "W",
   windows: number[]
 ): AscendingTriangleResult | null {
+  const maxDistanceBelowResistancePct = timeframe === "W" ? 3.75 : 3;
+
   const results = windows
     .map((lookbackBars) =>
       detectAscendingTriangle(points, {
         timeframe,
         lookbackBars,
+        maxDistanceBelowResistancePct,
+        minResistanceTouches: timeframe === "W" ? 3 : 3,
+        minRisingLowTouches: timeframe === "W" ? 3 : 3,
       })
     )
-    .filter((result): result is AscendingTriangleResult => result !== null);
+    .filter((result): result is AscendingTriangleResult => result !== null)
+    .filter((result) => {
+      if (result.distanceToResistancePct > maxDistanceBelowResistancePct) {
+        return false;
+      }
+
+      if (result.resistanceZonePct > (timeframe === "W" ? 4 : 3.25)) {
+        return false;
+      }
+
+      return true;
+    });
 
   if (!results.length) return null;
 
