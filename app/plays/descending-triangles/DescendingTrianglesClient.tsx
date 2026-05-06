@@ -16,7 +16,7 @@ type PlayChartPoint = {
 type PlayItem = {
   symbol: string;
   play: "descendingTriangle";
-  timeframe: "ST" | "D" | "W";
+  timeframe: "M" | "ST" | "D" | "W";
   score: number;
   tone: PlayTone;
   note: string;
@@ -86,7 +86,8 @@ function setupLabel(score: number) {
   return "Loose setup";
 }
 
-function timeframeLabel(timeframe: "ST" | "D" | "W") {
+function timeframeLabel(timeframe: "M" | "ST" | "D" | "W") {
+  if (timeframe === "M") return "Macro";
   if (timeframe === "W") return "Weekly";
   if (timeframe === "ST") return "Short-term";
   return "Daily";
@@ -259,7 +260,7 @@ export default function DescendingTrianglesClient() {
   );
   const [estimatedApiCalls, setEstimatedApiCalls] = useState<number | null>(null);
   const [selectedTimeframe, setSelectedTimeframe] = useState<
-    "ALL" | "W" | "D" | "ST"
+    "ALL" | "M" | "W" | "D" | "ST"
   >("ALL");
 
   async function loadPlays(force = false) {
@@ -358,6 +359,7 @@ export default function DescendingTrianglesClient() {
     return out;
   }, [safeSections]);
 
+  const macroCount = allItems.filter((item) => item.timeframe === "M").length;
   const weeklyCount = allItems.filter((item) => item.timeframe === "W").length;
   const dailyCount = allItems.filter((item) => item.timeframe === "D").length;
   const shortTermCount = allItems.filter(
@@ -513,7 +515,7 @@ export default function DescendingTrianglesClient() {
                 gap: 10,
               }}
             >
-              {(["ALL", "W", "D", "ST"] as const).map((key) => {
+              {(["ALL", "M", "W", "D", "ST"] as const).map((key) => {
                 const active = selectedTimeframe === key;
 
                 return (
@@ -538,11 +540,13 @@ export default function DescendingTrianglesClient() {
                   >
                     {key === "ALL"
                       ? "All plays"
-                      : key === "W"
-                        ? "Weekly only"
-                        : key === "ST"
-                          ? "Short-term only"
-                          : "Daily only"}
+                      : key === "M"
+                        ? "Macro only"
+                        : key === "W"
+                          ? "Weekly only"
+                          : key === "ST"
+                            ? "Short-term only"
+                            : "Daily only"}
                   </button>
                 );
               })}
@@ -629,6 +633,7 @@ export default function DescendingTrianglesClient() {
                     : String(dynamicUniverseCount)
                 }
               />
+              <StatRow label="Macro shown" value={String(macroCount)} />
               <StatRow label="Weekly shown" value={String(weeklyCount)} />
               <StatRow label="Daily shown" value={String(dailyCount)} />
               <StatRow
