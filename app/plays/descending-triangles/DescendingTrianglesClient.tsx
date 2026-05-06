@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import React, { useEffect, useMemo, useState } from "react";
 
 type PlayTone = "green" | "yellow" | "orange" | "red";
@@ -249,6 +250,9 @@ function toChartHref(href: string) {
 }
 
 export default function DescendingTrianglesClient() {
+  const searchParams = useSearchParams();
+  const forceInitialLoad = searchParams.get("force") === "1";
+
   const [sections, setSections] = useState<PlaySection[]>([]);
   const [loading, setLoading] = useState(true);
   const [forceRefreshing, setForceRefreshing] = useState(false);
@@ -317,8 +321,8 @@ export default function DescendingTrianglesClient() {
   }
 
   useEffect(() => {
-    loadPlays(false);
-  }, []);
+    loadPlays(forceInitialLoad);
+  }, [forceInitialLoad]);
 
   const safeSections = useMemo(() => {
     return Array.isArray(sections) ? sections : [];
