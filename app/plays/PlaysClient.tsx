@@ -596,7 +596,7 @@ const url = force
                   fontWeight: 700,
                 }}
               >
-Estimated scan calls: {estimatedApiCalls}. Normal loads use cache; Refresh plays forces a fresh scan.
+Estimated fresh API calls: {estimatedApiCalls}. Cached histories are scanned without new market-data calls.
               </p>
             )}
           </aside>
@@ -1115,7 +1115,7 @@ const gradientId = `fill-${item.symbol}-${item.timeframe}`.replace(/[^a-zA-Z0-9-
       >
         <span>{item.resistanceTouches} resistance touches</span>
         <span>{item.risingLowTouches} rising lows</span>
-        <span>{formatNumber(item.distanceToResistancePct)}% to level</span>
+        <span>{formatNumber(item.distanceToResistancePct)}% below resistance</span>
       </div>
     </div>
   );
