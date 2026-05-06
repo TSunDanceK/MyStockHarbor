@@ -476,32 +476,45 @@ function toPlayItem(
 ): PlayItem {
   const displayTimeframe = itemTimeframe ?? result.timeframe;
 
-  const chartBars =
-    displayTimeframe === "M"
-      ? Math.min(260, Math.max(90, result.patternBars + 12))
-      : displayTimeframe === "W"
-        ? Math.min(220, Math.max(52, result.patternBars + 8))
-        : Math.min(280, Math.max(90, result.patternBars + 15));
+const lineStartIndex = sourcePoints.findIndex(
+  (point) => point.date === result.resistanceStartDate
+);
 
-  const chartPoints = sourcePoints
-    .slice(-chartBars)
-    .map((point) => ({
-      date: point.date,
-      close: Number(point.close.toFixed(2)),
-      high:
-        typeof point.high === "number"
-          ? Number(point.high.toFixed(2))
-          : undefined,
-      low:
-        typeof point.low === "number"
-          ? Number(point.low.toFixed(2))
-          : undefined,
-      volume:
-        typeof point.volume === "number" && Number.isFinite(point.volume)
-          ? point.volume
-          : undefined,
-    }))
-    .filter((point) => point.date && Number.isFinite(point.close));
+const lineEndIndex = sourcePoints.findIndex(
+  (point) => point.date === result.endDate
+);
+
+const safeLineStartIndex =
+  lineStartIndex >= 0 ? lineStartIndex : Math.max(0, sourcePoints.length - result.patternBars);
+
+const safeLineEndIndex =
+  lineEndIndex >= 0 ? lineEndIndex : sourcePoints.length - 1;
+
+const lineBars = Math.max(1, safeLineEndIndex - safeLineStartIndex + 1);
+
+const contextBars = Math.ceil(lineBars * 0.25);
+
+const chartStartIndex = Math.max(0, safeLineStartIndex - contextBars);
+
+const chartPoints = sourcePoints
+  .slice(chartStartIndex)
+  .map((point) => ({
+    date: point.date,
+    close: Number(point.close.toFixed(2)),
+    high:
+      typeof point.high === "number"
+        ? Number(point.high.toFixed(2))
+        : undefined,
+    low:
+      typeof point.low === "number"
+        ? Number(point.low.toFixed(2))
+        : undefined,
+    volume:
+      typeof point.volume === "number" && Number.isFinite(point.volume)
+        ? point.volume
+        : undefined,
+  }))
+  .filter((point) => point.date && Number.isFinite(point.close));
 
   return {
     symbol,
