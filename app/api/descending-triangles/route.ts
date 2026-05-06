@@ -553,9 +553,6 @@ function bestTriangleForWindows(
     )
     .filter((result): result is DescendingTriangleResult => result !== null)
     .filter((result) => {
-      if (result.distanceToSupportPct > maxDistanceAboveSupportPct) {
-        return false;
-      }
 
       if (result.supportZonePct > maxSupportZonePct) {
         return false;
