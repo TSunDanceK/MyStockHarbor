@@ -342,6 +342,67 @@ function pLimit(limit: number) {
   };
 }
 
+async function readPlaysCache() {
+  if (!redis) return null;
+
+  try {
+    const entry = await redis.get<CachedPlaysPayload>(PLAYS_REDIS_KEY);
+    if (!entry || typeof entry !== "object") return null;
+    if (!entry.data || typeof entry.data !== "object") return null;
+    return entry;
+  } catch {
+    return null;
+  }
+}
+
+async function writePlaysCache(data: PlaysPayload) {
+  if (!redis) return;
+
+  try {
+    const entry: CachedPlaysPayload = {
+      cachedAt: Date.now(),
+      data,
+    };
+
+    await redis.set(PLAYS_REDIS_KEY, entry, {
+      ex: PLAYS_REDIS_TTL_SECONDS,
+    });
+  } catch {
+    // fail open
+  }
+}
+
+async function acquirePlaysLock() {
+  if (!redis) return "no-redis";
+
+  const token = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  try {
+    const result = await redis.set(PLAYS_LOCK_KEY, token, {
+      nx: true,
+      ex: PLAYS_LOCK_TTL_SECONDS,
+    });
+
+    if (result === "OK") return token;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function releasePlaysLock(token: string | null) {
+  if (!redis || !token || token === "no-redis") return;
+
+  try {
+    const current = await redis.get<string>(PLAYS_LOCK_KEY);
+    if (current === token) {
+      await redis.del(PLAYS_LOCK_KEY);
+    }
+  } catch {
+    // fail open
+  }
+}
+
 async function fetchJSON<T>(url: string, forceFresh = false) {
   const res = await fetch(
     forceFresh ? `${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}` : url,
