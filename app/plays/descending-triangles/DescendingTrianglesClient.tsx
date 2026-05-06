@@ -1082,7 +1082,7 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
 
         <text
           x={width - paddingX}
-          y={Math.max(12, supportY - 7)}
+          y={Math.min(height - paddingBottom - 8, supportY + 15)}
           textAnchor="end"
           fill="rgba(254,202,202,0.92)"
           fontSize="10"
