@@ -52,6 +52,7 @@ type DetectOptions = {
   minResistanceTouches?: number;
   minRisingLowTouches?: number;
   minPatternBars?: number;
+  minTouchSeparationBars?: number;
 };
 
 function isFiniteNumber(value: unknown): value is number {
@@ -70,6 +71,24 @@ function avg(values: number[]) {
 function pctDiff(from: number, to: number) {
   if (!Number.isFinite(from) || !Number.isFinite(to) || from === 0) return 0;
   return ((to - from) / from) * 100;
+}
+
+function normalisePoints(points: PatternPoint[]) {
+  return points
+    .map((point) => ({
+      date: String(point.date ?? ""),
+      close: Number(point.close),
+      high: isFiniteNumber(point.high) ? point.high : Number(point.close),
+      low: isFiniteNumber(point.low) ? point.low : Number(point.close),
+      volume: isFiniteNumber(point.volume) ? point.volume : undefined,
+    }))
+    .filter(
+      (point) =>
+        point.date &&
+        Number.isFinite(point.close) &&
+        Number.isFinite(point.high) &&
+        Number.isFinite(point.low)
+    );
 }
 
 function visualSupportAngleDeg(args: {
@@ -137,25 +156,10 @@ function visualSupportAngleDeg(args: {
   return (Math.atan2(dy, dx) * 180) / Math.PI;
 }
 
-function normalisePoints(points: PatternPoint[]) {
-  return points
-    .map((point) => ({
-      date: String(point.date ?? ""),
-      close: Number(point.close),
-      high: isFiniteNumber(point.high) ? point.high : Number(point.close),
-      low: isFiniteNumber(point.low) ? point.low : Number(point.close),
-      volume: isFiniteNumber(point.volume) ? point.volume : undefined,
-    }))
-    .filter(
-      (point) =>
-        point.date &&
-        Number.isFinite(point.close) &&
-        Number.isFinite(point.high) &&
-        Number.isFinite(point.low)
-    );
-}
-
-function findPivotHighs(points: ReturnType<typeof normalisePoints>, leftRight: number) {
+function findPivotHighs(
+  points: ReturnType<typeof normalisePoints>,
+  leftRight: number
+) {
   const pivots: Pivot[] = [];
 
   for (let i = leftRight; i < points.length - leftRight; i++) {
@@ -182,7 +186,10 @@ function findPivotHighs(points: ReturnType<typeof normalisePoints>, leftRight: n
   return pivots;
 }
 
-function findPivotLows(points: ReturnType<typeof normalisePoints>, leftRight: number) {
+function findPivotLows(
+  points: ReturnType<typeof normalisePoints>,
+  leftRight: number
+) {
   const pivots: Pivot[] = [];
 
   for (let i = leftRight; i < points.length - leftRight; i++) {
@@ -209,10 +216,34 @@ function findPivotLows(points: ReturnType<typeof normalisePoints>, leftRight: nu
   return pivots;
 }
 
+function filterSpacedResistancePivots(
+  pivots: Pivot[],
+  minSeparationBars: number
+) {
+  const sorted = [...pivots].sort((a, b) => a.idx - b.idx);
+  const spaced: Pivot[] = [];
+
+  for (const pivot of sorted) {
+    const previous = spaced[spaced.length - 1];
+
+    if (!previous || pivot.idx - previous.idx >= minSeparationBars) {
+      spaced.push(pivot);
+      continue;
+    }
+
+    if (pivot.price > previous.price) {
+      spaced[spaced.length - 1] = pivot;
+    }
+  }
+
+  return spaced;
+}
+
 function findBestResistanceCluster(
   pivotHighs: Pivot[],
   maxResistanceZonePct: number,
-  minTouches: number
+  minTouches: number,
+  minTouchSeparationBars: number
 ) {
   let best: Pivot[] = [];
 
@@ -224,8 +255,24 @@ function findBestResistanceCluster(
       return distancePct <= maxResistanceZonePct;
     });
 
-    if (cluster.length > best.length) {
-      best = cluster;
+    const spacedCluster = filterSpacedResistancePivots(
+      cluster,
+      minTouchSeparationBars
+    );
+
+    const currentSpan =
+      spacedCluster.length >= 2
+        ? spacedCluster[spacedCluster.length - 1].idx - spacedCluster[0].idx
+        : 0;
+
+    const bestSpan =
+      best.length >= 2 ? best[best.length - 1].idx - best[0].idx : 0;
+
+    if (
+      spacedCluster.length > best.length ||
+      (spacedCluster.length === best.length && currentSpan > bestSpan)
+    ) {
+      best = spacedCluster;
     }
   }
 
@@ -246,17 +293,34 @@ function findBestResistanceCluster(
 function getRisingLows(pivotLows: Pivot[]) {
   if (pivotLows.length < 2) return [];
 
-  const rising: Pivot[] = [pivotLows[0]];
+  let best: Pivot[] = [];
 
-  for (let i = 1; i < pivotLows.length; i++) {
-    const previous = rising[rising.length - 1];
+  for (let start = 0; start < pivotLows.length; start++) {
+    const rising: Pivot[] = [pivotLows[start]];
 
-    if (pivotLows[i].price > previous.price) {
-      rising.push(pivotLows[i]);
+    for (let i = start + 1; i < pivotLows.length; i++) {
+      const previous = rising[rising.length - 1];
+
+      if (pivotLows[i].price > previous.price) {
+        rising.push(pivotLows[i]);
+      }
+    }
+
+    const currentSpan =
+      rising.length >= 2 ? rising[rising.length - 1].idx - rising[0].idx : 0;
+
+    const bestSpan =
+      best.length >= 2 ? best[best.length - 1].idx - best[0].idx : 0;
+
+    if (
+      rising.length > best.length ||
+      (rising.length === best.length && currentSpan > bestSpan)
+    ) {
+      best = rising;
     }
   }
 
-  return rising;
+  return best;
 }
 
 function volumeCompressionScore(points: ReturnType<typeof normalisePoints>) {
@@ -291,11 +355,9 @@ export function detectAscendingTriangle(
 ): AscendingTriangleResult | null {
   const timeframe = options.timeframe ?? "D";
 
-  const lookbackBars =
-    options.lookbackBars ?? (timeframe === "W" ? 80 : 120);
+  const lookbackBars = options.lookbackBars ?? (timeframe === "W" ? 80 : 120);
 
-  const pivotLeftRight =
-    options.pivotLeftRight ?? (timeframe === "W" ? 1 : 2);
+  const pivotLeftRight = options.pivotLeftRight ?? (timeframe === "W" ? 1 : 2);
 
   const maxResistanceZonePct =
     options.maxResistanceZonePct ?? (timeframe === "W" ? 5 : 4);
@@ -303,14 +365,14 @@ export function detectAscendingTriangle(
   const maxDistanceBelowResistancePct =
     options.maxDistanceBelowResistancePct ?? 8;
 
-  const minResistanceTouches =
-    options.minResistanceTouches ?? 2;
+  const minResistanceTouches = options.minResistanceTouches ?? 2;
 
-  const minRisingLowTouches =
-    options.minRisingLowTouches ?? 2;
+  const minRisingLowTouches = options.minRisingLowTouches ?? 2;
 
-  const minPatternBars =
-    options.minPatternBars ?? (timeframe === "W" ? 8 : 20);
+  const minPatternBars = options.minPatternBars ?? (timeframe === "W" ? 8 : 20);
+
+  const minTouchSeparationBars =
+    options.minTouchSeparationBars ?? (timeframe === "W" ? 2 : 5);
 
   const points = normalisePoints(rawPoints).slice(-lookbackBars);
 
@@ -322,14 +384,18 @@ export function detectAscendingTriangle(
   const pivotHighs = findPivotHighs(points, pivotLeftRight);
   const pivotLows = findPivotLows(points, pivotLeftRight);
 
-  if (pivotHighs.length < minResistanceTouches || pivotLows.length < minRisingLowTouches) {
+  if (
+    pivotHighs.length < minResistanceTouches ||
+    pivotLows.length < minRisingLowTouches
+  ) {
     return null;
   }
 
   const resistanceCluster = findBestResistanceCluster(
     pivotHighs,
     maxResistanceZonePct,
-    minResistanceTouches
+    minResistanceTouches,
+    minTouchSeparationBars
   );
 
   if (!resistanceCluster) return null;
@@ -350,7 +416,7 @@ export function detectAscendingTriangle(
     lastResistanceTouch.price
   );
 
-  const maxDescendingResistanceSlopePct = timeframe === "W" ? -2.5 : -2;
+  const maxDescendingResistanceSlopePct = timeframe === "W" ? -3.5 : -2.75;
 
   if (resistanceSlopePct < maxDescendingResistanceSlopePct) {
     return null;
@@ -374,7 +440,7 @@ export function detectAscendingTriangle(
 
   const resistanceDriftPct = pctDiff(earlyResistanceAvg, lateResistanceAvg);
 
-  const maxDescendingResistanceDriftPct = timeframe === "W" ? -2 : -1.5;
+  const maxDescendingResistanceDriftPct = timeframe === "W" ? -3 : -2.25;
 
   if (resistanceDriftPct < maxDescendingResistanceDriftPct) {
     return null;
@@ -382,7 +448,7 @@ export function detectAscendingTriangle(
 
   const relevantLows = pivotLows.filter(
     (pivot) =>
-      pivot.idx >= Math.max(0, firstResistanceTouch.idx - 8) &&
+      pivot.idx >= Math.max(0, firstResistanceTouch.idx - 12) &&
       pivot.idx <= points.length - 1 &&
       pivot.price < resistanceCluster.resistance
   );
@@ -412,8 +478,12 @@ export function detectAscendingTriangle(
     return null;
   }
 
-  const closeBreakTolerancePct = timeframe === "W" ? 1.25 : 0.9;
-  const maxCloseBreakBars = timeframe === "W" ? 1 : 1;
+  if (distanceToResistancePct > maxDistanceBelowResistancePct * 4) {
+    return null;
+  }
+
+  const closeBreakTolerancePct = timeframe === "W" ? 1.5 : 1;
+  const maxCloseBreakBars = timeframe === "W" ? 2 : 2;
 
   let closeBreakBars = 0;
 
@@ -432,9 +502,9 @@ export function detectAscendingTriangle(
     }
   }
 
-  const wickBreakTolerancePct = timeframe === "W" ? 3 : 2.25;
-  const hardWickBreakPct = timeframe === "W" ? 4.5 : 3.5;
-  const maxWickBreakBars = timeframe === "W" ? 1 : 1;
+  const wickBreakTolerancePct = timeframe === "W" ? 3.5 : 2.75;
+  const hardWickBreakPct = timeframe === "W" ? 5.5 : 4.25;
+  const maxWickBreakBars = timeframe === "W" ? 2 : 2;
 
   let wickBreakBars = 0;
   let highestHighAboveResistancePct = 0;
@@ -463,8 +533,8 @@ export function detectAscendingTriangle(
     }
   }
 
-  const failedBreakoutHighPct = timeframe === "W" ? 2.75 : 2;
-  const failedBreakoutPullbackPct = timeframe === "W" ? 3 : 2.5;
+  const failedBreakoutHighPct = timeframe === "W" ? 3.25 : 2.5;
+  const failedBreakoutPullbackPct = timeframe === "W" ? 4 : 3.25;
 
   if (
     highestHighAboveResistancePct > failedBreakoutHighPct &&
@@ -489,7 +559,7 @@ export function detectAscendingTriangle(
     endPrice: lastLow.price,
   });
 
-  if (supportAngleDeg < 10) {
+  if (supportAngleDeg < 7) {
     return null;
   }
 
@@ -510,71 +580,21 @@ export function detectAscendingTriangle(
     resistanceCluster.resistance
   );
 
-    const latestBelowProjectedSupportPct = pctDiff(
-    projectedSupportAtLatest,
-    latest.close
-  );
-
-  const maxLatestBelowSupportPct = timeframe === "W" ? 2 : 1.5;
-
-  if (latestBelowProjectedSupportPct < -maxLatestBelowSupportPct) {
-    return null;
-  }
-
-  const maxSupportAboveResistancePct = timeframe === "W" ? 1.25 : 1;
+  const maxSupportAboveResistancePct = timeframe === "W" ? 1.75 : 1.25;
 
   if (supportToResistanceGapPct < -maxSupportAboveResistancePct) {
     return null;
   }
 
-  const visualSupportStartIdx = Math.max(0, Math.floor(points.length * 0.12));
-  const visualSupportEndIdx = points.length - 1;
+  const latestBelowProjectedSupportPct = pctDiff(
+    projectedSupportAtLatest,
+    latest.close
+  );
 
-  const visualSupportLowValues = points
-    .slice(0, Math.max(4, Math.floor(points.length * 0.35)))
-    .map((point) => point.low)
-    .filter((value) => Number.isFinite(value));
+  const maxLatestBelowSupportPct = timeframe === "W" ? 3 : 2.25;
 
-  if (!visualSupportLowValues.length) {
+  if (latestBelowProjectedSupportPct < -maxLatestBelowSupportPct) {
     return null;
-  }
-
-  const visualSupportStartLow = Math.min(...visualSupportLowValues);
-  const visualSupportEndPrice = latest.close;
-
-  const supportBreakTolerancePct = timeframe === "W" ? 2.5 : 2;
-  const maxBrokenBars = timeframe === "W" ? 1 : 3;
-  const maxConsecutiveBrokenBars = timeframe === "W" ? 1 : 2;
-
-  let brokenBars = 0;
-  let consecutiveBrokenBars = 0;
-
-  for (let i = visualSupportStartIdx; i < points.length; i++) {
-    const t =
-      visualSupportEndIdx === visualSupportStartIdx
-        ? 1
-        : (i - visualSupportStartIdx) /
-          (visualSupportEndIdx - visualSupportStartIdx);
-
-    const expectedSupport =
-      visualSupportStartLow +
-      t * (visualSupportEndPrice - visualSupportStartLow);
-
-    const breakPct = pctDiff(expectedSupport, points[i].close);
-
-    if (breakPct < -supportBreakTolerancePct) {
-      brokenBars++;
-      consecutiveBrokenBars++;
-    } else {
-      consecutiveBrokenBars = 0;
-    }
-
-    if (
-      brokenBars > maxBrokenBars ||
-      consecutiveBrokenBars > maxConsecutiveBrokenBars
-    ) {
-      return null;
-    }
   }
 
   const resistanceQualityScore = clamp(
@@ -590,7 +610,7 @@ export function detectAscendingTriangle(
   );
 
   const priceLocationScore = clamp(
-    15 - distanceToResistancePct * 1.5,
+    15 - Math.max(0, distanceToResistancePct) * 0.5,
     0,
     15
   );
