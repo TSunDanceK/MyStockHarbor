@@ -553,9 +553,7 @@ function bestTriangleForWindows(
     )
     .filter((result): result is AscendingTriangleResult => result !== null)
     .filter((result) => {
-      if (result.distanceToResistancePct > maxDistanceBelowResistancePct) {
-        return false;
-      }
+
 
       if (result.resistanceZonePct > maxResistanceZonePct) {
         return false;
