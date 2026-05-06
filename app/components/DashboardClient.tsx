@@ -2449,7 +2449,7 @@ return (
               </div>
 
               <div style={{ marginTop: 4, color: COLORS.mutedFg, fontWeight: 700 }}>
-                {symbolName || `${symbol} stock`}
+               {symbolName || "Name unavailable"}
               </div>
 
 
