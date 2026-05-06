@@ -3501,12 +3501,16 @@ return (
                 setOpen(true);
               }}
               onFocus={() => setOpen(true)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  chooseSymbol(query || symbol);
-                }
-              }}
+onKeyDown={(e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+
+    const first = results[0];
+    if (!first?.symbol) return;
+
+    chooseSymbol(first.symbol, first.name);
+  }
+}}
               placeholder="🔎 Search ticker or company"
               style={{
                 width: "100%",
@@ -3967,12 +3971,16 @@ return (
                 setOpen(true);
               }}
               onFocus={() => setOpen(true)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  chooseSymbol(query || symbol);
-                }
-              }}
+onKeyDown={(e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+
+    const first = results[0];
+    if (!first?.symbol) return;
+
+    chooseSymbol(first.symbol, first.name);
+  }
+}}
               placeholder="🔎 Search ANY ticker or company"
               style={{
                 width: "100%",
