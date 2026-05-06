@@ -40,10 +40,10 @@ const PAYLOAD_CACHE_MS = 6 * 60 * 1000;
 
 const DISCOVERY_INTERVAL_MS = 6 * 60 * 1000; // 5 minutes
 const DYNAMIC_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
-const DYNAMIC_MAX_SIZE = 500;
-const DISCOVERY_BATCH_SIZE = 25;
-const DISCOVERY_ESTIMATED_MAX_CALLS = 50; // up to 25 quote calls + up to 25 history fills
-const DISCOVERY_MIN_HEADROOM_CALLS = 100;
+const DYNAMIC_MAX_SIZE = 700;
+const DISCOVERY_BATCH_SIZE = 50;
+const DISCOVERY_ESTIMATED_MAX_CALLS = 100; // up to 50 quote calls + up to 50 history fills
+const DISCOVERY_MIN_HEADROOM_CALLS = 150;
 
 let payloadCache: { at: number; payload: any } | null = null;
 
