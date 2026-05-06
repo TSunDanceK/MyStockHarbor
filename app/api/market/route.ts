@@ -38,12 +38,13 @@ type DynamicQuoteRecord = {
 
 const PAYLOAD_CACHE_MS = 6 * 60 * 1000;
 
-const DISCOVERY_INTERVAL_MS = 6 * 60 * 1000; // 5 minutes
+const DISCOVERY_INTERVAL_MS = 6 * 60 * 1000; // 6 minutes
 const DYNAMIC_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 const DYNAMIC_MAX_SIZE = 700;
 const DISCOVERY_BATCH_SIZE = 50;
 const DISCOVERY_ESTIMATED_MAX_CALLS = 100; // up to 50 quote calls + up to 50 history fills
 const DISCOVERY_MIN_HEADROOM_CALLS = 150;
+const MIN_DYNAMIC_MASTER_SIZE = 500;
 
 let payloadCache: { at: number; payload: any } | null = null;
 
@@ -84,7 +85,9 @@ async function loadDiscoveryState(): Promise<RedisDiscoveryState> {
     lastDiscoveryAt: state.lastDiscoveryAt,
     dynamic: state.dynamic,
     shuffledMasterList: Array.isArray(state.shuffledMasterList)
-      ? state.shuffledMasterList.map((x) => String(x).trim().toUpperCase()).filter(Boolean)
+      ? state.shuffledMasterList
+          .map((x) => String(x).trim().toUpperCase())
+          .filter(Boolean)
       : [],
     shuffleDayKey:
       typeof state.shuffleDayKey === "string" ? state.shuffleDayKey : null,
@@ -96,32 +99,419 @@ async function saveDiscoveryState(state: RedisDiscoveryState) {
 }
 
 const CURATED_UNIVERSE: string[] = [
-  "AAPL","ABBV","ABT","ADBE","AMZN","AVGO","BAC","BRK.B","COST","CRM","CSCO","CVX","DIS","GOOGL","HD",
-  "INTC","JNJ","JPM","KO","LLY","MA","MCD","META","MRK","MSFT","NFLX","NVDA","ORCL","PEP","PG","PYPL",
-  "QCOM","SBUX","T","TGT","TSLA","TXN","UNH","V","VZ","WFC","WMT","XOM",
-  "AMD","GE","AMAT","CAT","LOW","IBM","NOW","PM","NKE","DHR","LIN",
+  "AAPL",
+  "ABBV",
+  "ABT",
+  "ADBE",
+  "AMZN",
+  "AVGO",
+  "BAC",
+  "BRK.B",
+  "COST",
+  "CRM",
+  "CSCO",
+  "CVX",
+  "DIS",
+  "GOOGL",
+  "HD",
+  "INTC",
+  "JNJ",
+  "JPM",
+  "KO",
+  "LLY",
+  "MA",
+  "MCD",
+  "META",
+  "MRK",
+  "MSFT",
+  "NFLX",
+  "NVDA",
+  "ORCL",
+  "PEP",
+  "PG",
+  "PYPL",
+  "QCOM",
+  "SBUX",
+  "T",
+  "TGT",
+  "TSLA",
+  "TXN",
+  "UNH",
+  "V",
+  "VZ",
+  "WFC",
+  "WMT",
+  "XOM",
+  "AMD",
+  "GE",
+  "AMAT",
+  "CAT",
+  "LOW",
+  "IBM",
+  "NOW",
+  "PM",
+  "NKE",
+  "DHR",
+  "LIN",
 ].filter(Boolean);
 
 const DISCOVERY_MASTER_LIST: string[] = [
-  "A","AAL","AAP","ABC","ABNB","ADI","ADM","AEE","AEP","AES","AFL","AIG","AKAM","ALB","ALLE","AMCR",
-  "AME","ANET","AON","APA","APD","APH","APTV","ARE","ATO","AXP","AZO","BALL","BAX","BBY","BDX","BEN",
-  "BIIB","BK","BKNG","BKR","BLK","BMY","BSX","BWA","C","CAG","CAH","CCI","CDNS","CE","CHD","CHRW",
-  "CI","CL","CLX","CMCSA","CME","CMG","CMI","CMS","CNC","CNP","COF","COO","COP","CPB","CPRT","CRL",
-  "CSGP","CTAS","CTRA","CTSH","CVS","DAL","DAY","DD","DE","DG","DGX","DLR","DLTR","DOC","DOV","DOW",
-  "DPZ","DRI","DUK","DVN","DXCM","EA","EBAY","ECL","ED","EFX","EIX","EL","EMN","EMR","EOG","EPAM",
-  "EQIX","EQR","EQT","ES","ESS","ETN","ETR","EVRG","EXC","EXPD","F","FANG","FAST","FCX","FDX","FI",
-  "FITB","FMC","FOX","FOXA","FRT","GD","GILD","GIS","GL","GLW","GM","GNRC","GPC","GPN","GRMN","GS",
-  "GWW","HAL","HAS","HCA","HES","HIG","HPE","HPQ","HRL","HSIC","HST","HSY","HUM","HWM","IDXX","IEX",
-  "IFF","ILMN","INCY","IP","IPG","IRM","ISRG","IT","ITW","IVZ","J","JBHT","JBL","JKHY","K","KDP",
-  "KEY","KHC","KIM","KKR","KLAC","KMB","KMI","KR","L","LDOS","LEN","LH","LHX","LKQ","LMT","LNT",
-  "LRCX","LULU","LVS","LYB","MCHP","MCK","MDLZ","MDT","MET","MGM","MKC","MKTX","MLM","MMC","MMM","MO",
-  "MOS","MPC","MPWR","MRNA","MS","MSI","MTB","MU","NDAQ","NEE","NEM","NI","NOC","NRG","NSC","NTAP",
-  "NTRS","ODFL","OKE","OMC","ON","OTIS","OXY","PANW","PAYX","PCAR","PEG","PFE","PH","PHM","PKG","PLD",
-  "PNC","PNR","PPG","PPL","PRU","PSA","PSX","PTC","PXD","RCL","REG","REGN","RF","RHI","RJF","RL","RMD",
-  "ROK","ROL","ROP","ROST","RSG","RTX","SBAC","SCHW","SHW","SJM","SLB","SNA","SNPS","SO","SPG","SPGI",
-  "STE","STT","STX","STZ","SWK","SWKS","SYF","SYK","SYY","TEL","TER","TFC","TFX","TJX","TMO","TMUS",
-  "TPR","TRMB","TROW","TRV","TT","TTWO","TXT","TYL","UAL","UDR","UHS","ULTA","UPS","URI","USB","VFC",
-  "VICI","VLO","VMC","VRSK","VRSN","VRTX","WAB","WBA","WDAY","WEC","WELL","WY","YUM","ZBH","ZBRA","ZS",
+  "A",
+  "AAL",
+  "AAP",
+  "ABC",
+  "ABNB",
+  "ADI",
+  "ADM",
+  "AEE",
+  "AEP",
+  "AES",
+  "AFL",
+  "AIG",
+  "AKAM",
+  "ALB",
+  "ALLE",
+  "AMCR",
+  "AME",
+  "ANET",
+  "AON",
+  "APA",
+  "APD",
+  "APH",
+  "APTV",
+  "ARE",
+  "ATO",
+  "AXP",
+  "AZO",
+  "BALL",
+  "BAX",
+  "BBY",
+  "BDX",
+  "BEN",
+  "BIIB",
+  "BK",
+  "BKNG",
+  "BKR",
+  "BLK",
+  "BMY",
+  "BSX",
+  "BWA",
+  "C",
+  "CAG",
+  "CAH",
+  "CCI",
+  "CDNS",
+  "CE",
+  "CHD",
+  "CHRW",
+  "CI",
+  "CL",
+  "CLX",
+  "CMCSA",
+  "CME",
+  "CMG",
+  "CMI",
+  "CMS",
+  "CNC",
+  "CNP",
+  "COF",
+  "COO",
+  "COP",
+  "CPB",
+  "CPRT",
+  "CRL",
+  "CSGP",
+  "CTAS",
+  "CTRA",
+  "CTSH",
+  "CVS",
+  "DAL",
+  "DAY",
+  "DD",
+  "DE",
+  "DG",
+  "DGX",
+  "DLR",
+  "DLTR",
+  "DOC",
+  "DOV",
+  "DOW",
+  "DPZ",
+  "DRI",
+  "DUK",
+  "DVN",
+  "DXCM",
+  "EA",
+  "EBAY",
+  "ECL",
+  "ED",
+  "EFX",
+  "EIX",
+  "EL",
+  "EMN",
+  "EMR",
+  "EOG",
+  "EPAM",
+  "EQIX",
+  "EQR",
+  "EQT",
+  "ES",
+  "ESS",
+  "ETN",
+  "ETR",
+  "EVRG",
+  "EXC",
+  "EXPD",
+  "F",
+  "FANG",
+  "FAST",
+  "FCX",
+  "FDX",
+  "FI",
+  "FITB",
+  "FMC",
+  "FOX",
+  "FOXA",
+  "FRT",
+  "GD",
+  "GILD",
+  "GIS",
+  "GL",
+  "GLW",
+  "GM",
+  "GNRC",
+  "GPC",
+  "GPN",
+  "GRMN",
+  "GS",
+  "GWW",
+  "HAL",
+  "HAS",
+  "HCA",
+  "HES",
+  "HIG",
+  "HPE",
+  "HPQ",
+  "HRL",
+  "HSIC",
+  "HST",
+  "HSY",
+  "HUM",
+  "HWM",
+  "IDXX",
+  "IEX",
+  "IFF",
+  "ILMN",
+  "INCY",
+  "IP",
+  "IPG",
+  "IRM",
+  "ISRG",
+  "IT",
+  "ITW",
+  "IVZ",
+  "J",
+  "JBHT",
+  "JBL",
+  "JKHY",
+  "K",
+  "KDP",
+  "KEY",
+  "KHC",
+  "KIM",
+  "KKR",
+  "KLAC",
+  "KMB",
+  "KMI",
+  "KR",
+  "L",
+  "LDOS",
+  "LEN",
+  "LH",
+  "LHX",
+  "LKQ",
+  "LMT",
+  "LNT",
+  "LRCX",
+  "LULU",
+  "LVS",
+  "LYB",
+  "MCHP",
+  "MCK",
+  "MDLZ",
+  "MDT",
+  "MET",
+  "MGM",
+  "MKC",
+  "MKTX",
+  "MLM",
+  "MMC",
+  "MMM",
+  "MO",
+  "MOS",
+  "MPC",
+  "MPWR",
+  "MRNA",
+  "MS",
+  "MSI",
+  "MTB",
+  "MU",
+  "NDAQ",
+  "NEE",
+  "NEM",
+  "NI",
+  "NOC",
+  "NRG",
+  "NSC",
+  "NTAP",
+  "NTRS",
+  "ODFL",
+  "OKE",
+  "OMC",
+  "ON",
+  "OTIS",
+  "OXY",
+  "PANW",
+  "PAYX",
+  "PCAR",
+  "PEG",
+  "PFE",
+  "PH",
+  "PHM",
+  "PKG",
+  "PLD",
+  "PNC",
+  "PNR",
+  "PPG",
+  "PPL",
+  "PRU",
+  "PSA",
+  "PSX",
+  "PTC",
+  "PXD",
+  "RCL",
+  "REG",
+  "REGN",
+  "RF",
+  "RHI",
+  "RJF",
+  "RL",
+  "RMD",
+  "ROK",
+  "ROL",
+  "ROP",
+  "ROST",
+  "RSG",
+  "RTX",
+  "SBAC",
+  "SCHW",
+  "SHW",
+  "SJM",
+  "SLB",
+  "SNA",
+  "SNPS",
+  "SO",
+  "SPG",
+  "SPGI",
+  "STE",
+  "STT",
+  "STX",
+  "STZ",
+  "SWK",
+  "SWKS",
+  "SYF",
+  "SYK",
+  "SYY",
+  "TEL",
+  "TER",
+  "TFC",
+  "TFX",
+  "TJX",
+  "TMO",
+  "TMUS",
+  "TPR",
+  "TRMB",
+  "TROW",
+  "TRV",
+  "TT",
+  "TTWO",
+  "TXT",
+  "TYL",
+  "UAL",
+  "UDR",
+  "UHS",
+  "ULTA",
+  "UPS",
+  "URI",
+  "USB",
+  "VFC",
+  "VICI",
+  "VLO",
+  "VMC",
+  "VRSK",
+  "VRSN",
+  "VRTX",
+  "WAB",
+  "WBA",
+  "WDAY",
+  "WEC",
+  "WELL",
+  "WY",
+  "YUM",
+  "ZBH",
+  "ZBRA",
+  "ZS",
+].filter(Boolean);
+
+const EXTRA_LIQUID_GROWTH_LIST: string[] = [
+  "ARM",
+  "ASML",
+  "TSM",
+  "SHOP",
+  "COIN",
+  "HOOD",
+  "RBLX",
+  "MSTR",
+  "BABA",
+  "NIO",
+  "LI",
+  "XPEV",
+  "RIVN",
+  "LCID",
+  "SOFI",
+  "AFRM",
+  "UPST",
+  "ROKU",
+  "U",
+  "PATH",
+  "AI",
+  "IONQ",
+  "RKLB",
+  "ASTS",
+  "SOUN",
+  "IREN",
+  "MARA",
+  "RIOT",
+  "CLSK",
+  "HIMS",
+  "CELH",
+  "ELF",
+  "CAVA",
+  "APP",
+  "TOST",
+  "GTLB",
+  "BILL",
+  "ESTC",
+  "DOCN",
+  "FSLY",
+  "WOLF",
+  "QS",
+  "CHPT",
+  "PLUG",
+  "RUN",
+  "ENPH",
+  "SEDG",
+  "FSLR",
 ].filter(Boolean);
 
 /* ------------------------- small helpers ------------------------- */
@@ -144,6 +534,19 @@ function uniqUpper(arr: string[]) {
   }
 
   return out;
+}
+
+function isCleanStockSymbol(symbol: string) {
+  const value = String(symbol ?? "").trim().toUpperCase();
+
+  if (!value) return false;
+  if (value.length > 10) return false;
+  if (value.includes("^")) return false;
+  if (value.includes("/")) return false;
+  if (value.includes("=")) return false;
+  if (value.includes("#")) return false;
+
+  return true;
 }
 
 function getEasternDayKey(date = new Date()) {
@@ -172,21 +575,91 @@ function shuffleArray<T>(arr: T[]) {
   return out;
 }
 
-function ensureDailyShuffledMasterList(state: RedisDiscoveryState) {
+async function fetchFmpConstituentSymbols(
+  endpoint: "sp500_constituent" | "nasdaq_constituent",
+  apiKey: string
+) {
+  await reserveFmpCallSlot();
+
+  const url = `https://financialmodelingprep.com/api/v3/${endpoint}?apikey=${encodeURIComponent(
+    apiKey
+  )}`;
+
+  const res = await fetch(url, {
+    cache: "no-store",
+    headers: {
+      accept: "application/json,text/plain;q=0.9,*/*;q=0.8",
+    },
+  });
+
+  const text = await res.text();
+
+  let json: any = null;
+
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = null;
+  }
+
+  if (!res.ok || !Array.isArray(json)) {
+    return [];
+  }
+
+  return json
+    .map((item) => String(item?.symbol ?? "").trim().toUpperCase())
+    .filter(isCleanStockSymbol);
+}
+
+async function buildExpandedDiscoveryMasterList(apiKey: string) {
+  const sp500Symbols = await fetchFmpConstituentSymbols(
+    "sp500_constituent",
+    apiKey
+  );
+
+  const nasdaqSymbols = await fetchFmpConstituentSymbols(
+    "nasdaq_constituent",
+    apiKey
+  );
+
+  return uniqUpper([
+    ...sp500Symbols,
+    ...nasdaqSymbols,
+    ...EXTRA_LIQUID_GROWTH_LIST,
+    ...CURATED_UNIVERSE,
+    ...DISCOVERY_MASTER_LIST,
+  ]);
+}
+
+async function ensureDailyShuffledMasterList(
+  state: RedisDiscoveryState,
+  apiKey: string
+) {
   const todayKey = getEasternDayKey();
-  const cleanMaster = uniqUpper(DISCOVERY_MASTER_LIST);
 
   if (
     state.shuffleDayKey === todayKey &&
     Array.isArray(state.shuffledMasterList) &&
-    state.shuffledMasterList.length > 0
+    state.shuffledMasterList.length >= MIN_DYNAMIC_MASTER_SIZE
   ) {
-    return;
+    return false;
   }
+
+  const expandedMaster = await buildExpandedDiscoveryMasterList(apiKey);
+
+  const cleanMaster = expandedMaster.length
+    ? expandedMaster
+    : uniqUpper([
+        ...EXTRA_LIQUID_GROWTH_LIST,
+        ...CURATED_UNIVERSE,
+        ...DISCOVERY_MASTER_LIST,
+      ]);
 
   state.shuffledMasterList = shuffleArray(cleanMaster);
   state.shuffleDayKey = todayKey;
   state.pointer = 0;
+
+  return true;
 }
 
 function extractSingleQuote(json: any, fallbackSymbol: string): Quote | null {
@@ -251,7 +724,10 @@ function pruneDynamicCache(state: RedisDiscoveryState, now: number) {
   if (entries.length <= DYNAMIC_MAX_SIZE) return;
 
   const sorted = entries.sort((a, b) => a[1].discoveredAt - b[1].discoveredAt);
-  const toRemove = sorted.slice(0, Math.max(0, sorted.length - DYNAMIC_MAX_SIZE));
+  const toRemove = sorted.slice(
+    0,
+    Math.max(0, sorted.length - DYNAMIC_MAX_SIZE)
+  );
 
   for (const [symbol] of toRemove) {
     delete state.dynamic[symbol];
@@ -260,7 +736,9 @@ function pruneDynamicCache(state: RedisDiscoveryState, now: number) {
 
 function getNextDiscoveryBatch(state: RedisDiscoveryState) {
   const curatedSet = new Set(uniqUpper(CURATED_UNIVERSE));
-  const master = Array.isArray(state.shuffledMasterList) ? state.shuffledMasterList : [];
+  const master = Array.isArray(state.shuffledMasterList)
+    ? state.shuffledMasterList
+    : [];
 
   if (!master.length) return [];
 
@@ -275,6 +753,7 @@ function getNextDiscoveryBatch(state: RedisDiscoveryState) {
     checked++;
 
     if (!symbol) continue;
+    if (!isCleanStockSymbol(symbol)) continue;
     if (curatedSet.has(symbol)) continue;
     if (state.dynamic[symbol]) continue;
 
@@ -302,7 +781,10 @@ function buildRowsFromQuotes(quotes: Quote[]): Row[] {
     .filter(
       (r) =>
         r.symbol &&
-        (r.last != null || r.changePct != null || r.rangePct != null || r.volume != null)
+        (r.last != null ||
+          r.changePct != null ||
+          r.rangePct != null ||
+          r.volume != null)
     );
 }
 
@@ -311,15 +793,24 @@ function buildRowsFromQuotes(quotes: Quote[]): Row[] {
 export async function GET() {
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) {
-    return NextResponse.json({ error: "Missing FMP_API_KEY env var." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Missing FMP_API_KEY env var." },
+      { status: 500 }
+    );
   }
 
   const now = Date.now();
 
   let state = await loadDiscoveryState();
-  ensureDailyShuffledMasterList(state);
+
+  const masterListChanged = await ensureDailyShuffledMasterList(state, apiKey);
 
   pruneDynamicCache(state, now);
+
+  if (masterListChanged) {
+    await saveDiscoveryState(state);
+    payloadCache = null;
+  }
 
   const intervalElapsed = now - state.lastDiscoveryAt >= DISCOVERY_INTERVAL_MS;
   const hasCapacity = await hasFmpCapacity(
@@ -372,7 +863,9 @@ export async function GET() {
               httpStatus: r.status,
               message: msg,
               sampleKeys:
-                rawJson && typeof rawJson === "object" ? Object.keys(rawJson).slice(0, 8) : null,
+                rawJson && typeof rawJson === "object"
+                  ? Object.keys(rawJson).slice(0, 8)
+                  : null,
               attemptedSymbols: [attemptedSymbol],
             });
             continue;
@@ -450,12 +943,19 @@ export async function GET() {
 
   const dynamicSymbols = Object.keys(state.dynamic).sort();
 
+  const nextDiscoveryAt =
+    state.lastDiscoveryAt > 0
+      ? state.lastDiscoveryAt + DISCOVERY_INTERVAL_MS
+      : now;
+
   const payload = {
     updatedAt: new Date().toISOString(),
     scope: "Rolling Dynamic Discovery Universe",
     provider: "fmp",
     curatedUniverseSize: uniqUpper(CURATED_UNIVERSE).length,
-    masterListSize: uniqUpper(DISCOVERY_MASTER_LIST).length,
+    masterListSize: Array.isArray(state.shuffledMasterList)
+      ? state.shuffledMasterList.length
+      : uniqUpper(DISCOVERY_MASTER_LIST).length,
     dynamicUniverseSize: dynamicSymbols.length,
     dynamicSymbols,
     quotesReturned: quotes.length,
@@ -481,10 +981,17 @@ export async function GET() {
       requiredHeadroomCalls: DISCOVERY_MIN_HEADROOM_CALLS,
       fmpCapacityAvailable: hasCapacity,
       pointer: state.pointer,
+      shuffleDayKey: state.shuffleDayKey,
       lastDiscoveryAt:
         state.lastDiscoveryAt > 0
           ? new Date(state.lastDiscoveryAt).toISOString()
           : null,
+      nextDiscoveryAt: new Date(nextDiscoveryAt).toISOString(),
+      secondsUntilNextDiscovery: Math.max(
+        0,
+        Math.ceil((nextDiscoveryAt - now) / 1000)
+      ),
+      masterListChanged,
       errors: debugErrors,
     },
   };
