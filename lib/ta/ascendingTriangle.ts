@@ -168,6 +168,7 @@ function findPivotHighs(
 
     for (let j = i - leftRight; j <= i + leftRight; j++) {
       if (j === i) continue;
+
       if (points[j].high > current) {
         isPivot = false;
         break;
@@ -198,6 +199,7 @@ function findPivotLows(
 
     for (let j = i - leftRight; j <= i + leftRight; j++) {
       if (j === i) continue;
+
       if (points[j].low < current) {
         isPivot = false;
         break;
@@ -216,10 +218,7 @@ function findPivotLows(
   return pivots;
 }
 
-function filterSpacedResistancePivots(
-  pivots: Pivot[],
-  minSeparationBars: number
-) {
+function filterSpacedPivots(pivots: Pivot[], minSeparationBars: number) {
   const sorted = [...pivots].sort((a, b) => a.idx - b.idx);
   const spaced: Pivot[] = [];
 
@@ -255,10 +254,7 @@ function findBestResistanceCluster(
       return distancePct <= maxResistanceZonePct;
     });
 
-    const spacedCluster = filterSpacedResistancePivots(
-      cluster,
-      minTouchSeparationBars
-    );
+    const spacedCluster = filterSpacedPivots(cluster, minTouchSeparationBars);
 
     const currentSpan =
       spacedCluster.length >= 2
