@@ -1002,159 +1002,36 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
     (point) => point.date === item.resistanceEndDate
   );
 
-  const pivotWindow = points.length >= 90 ? 2 : 1;
-  const visualHighPivots: Array<{ index: number; price: number }> = [];
-
-  for (let i = pivotWindow; i < points.length - pivotWindow; i++) {
-    const current = highAt(i);
-    let isPivot = true;
-
-    for (let j = i - pivotWindow; j <= i + pivotWindow; j++) {
-      if (j === i) continue;
-
-      if (highAt(j) > current) {
-        isPivot = false;
-        break;
-      }
-    }
-
-    if (isPivot) {
-      visualHighPivots.push({
-        index: i,
-        price: current,
-      });
-    }
-  }
-
-  if (detectedResistanceStartIndex >= 0) {
-    visualHighPivots.push({
-      index: detectedResistanceStartIndex,
-      price: highAt(detectedResistanceStartIndex),
-    });
-  }
-
-  if (detectedResistanceEndIndex >= 0) {
-    visualHighPivots.push({
-      index: detectedResistanceEndIndex,
-      price: highAt(detectedResistanceEndIndex),
-    });
-  }
-
-  const uniqueVisualHighPivots = Array.from(
-    new Map(
-      visualHighPivots
-        .filter((pivot) => Number.isFinite(pivot.price))
-        .map((pivot) => [pivot.index, pivot])
-    ).values()
-  ).sort((a, b) => a.index - b.index);
-
-  const minResistanceSpanBars = Math.max(6, Math.floor(points.length * 0.18));
-  const maxResistancePiercePct = item.timeframe === "W" ? 3 : 2.4;
-
-  let bestVisualResistanceLine:
-    | {
-        startIndex: number;
-        startPrice: number;
-        endIndex: number;
-        endPrice: number;
-        score: number;
-      }
-    | null = null;
-
-  for (let start = 0; start < uniqueVisualHighPivots.length; start++) {
-    const startPivot = uniqueVisualHighPivots[start];
-
-    for (let end = start + 1; end < uniqueVisualHighPivots.length; end++) {
-      const endPivot = uniqueVisualHighPivots[end];
-      const spanBars = endPivot.index - startPivot.index;
-
-      if (spanBars < minResistanceSpanBars) continue;
-      if (endPivot.price >= startPivot.price) continue;
-
-      const slopePerBar = (endPivot.price - startPivot.price) / spanBars;
-
-      let pierceCount = 0;
-      let touchCount = 0;
-      let distanceScore = 0;
-
-      for (const pivot of uniqueVisualHighPivots) {
-        if (pivot.index < startPivot.index || pivot.index > points.length - 1) {
-          continue;
-        }
-
-        const expected =
-          startPivot.price + slopePerBar * (pivot.index - startPivot.index);
-
-        const diffPct = pctDiff(expected, pivot.price);
-
-        if (diffPct > maxResistancePiercePct) {
-          pierceCount++;
-        }
-
-        if (Math.abs(diffPct) <= maxResistancePiercePct) {
-          touchCount++;
-          distanceScore += Math.abs(diffPct);
-        }
-      }
-
-      if (pierceCount > 2) continue;
-      if (touchCount < 2) continue;
-
-      const score =
-        touchCount * 100 -
-        distanceScore * 8 +
-        spanBars * 0.6 -
-        pierceCount * 45;
-
-      if (!bestVisualResistanceLine || score > bestVisualResistanceLine.score) {
-        bestVisualResistanceLine = {
-          startIndex: startPivot.index,
-          startPrice: startPivot.price,
-          endIndex: endPivot.index,
-          endPrice: endPivot.price,
-          score,
-        };
-      }
-    }
-  }
-
-  const fallbackResistanceStartIndex =
+  const resistanceStartIndex =
     detectedResistanceStartIndex >= 0
       ? detectedResistanceStartIndex
-      : Math.max(0, Math.floor(points.length * 0.12));
-
-  const fallbackResistanceEndIndex =
-    detectedResistanceEndIndex > fallbackResistanceStartIndex
-      ? detectedResistanceEndIndex
-      : Math.max(fallbackResistanceStartIndex + 1, points.length - 1);
-
-  const fallbackResistanceStartPrice =
-    Number.isFinite(item.resistanceStartPrice)
-      ? item.resistanceStartPrice
-      : highAt(fallbackResistanceStartIndex);
-
-  const fallbackResistanceEndPrice =
-    Number.isFinite(item.resistanceEndPrice)
-      ? item.resistanceEndPrice
-      : highAt(fallbackResistanceEndIndex);
-
-  const resistanceStartIndex =
-    bestVisualResistanceLine?.startIndex ?? fallbackResistanceStartIndex;
+      : Math.max(0, Math.floor(points.length * 0.18));
 
   const resistancePivotEndIndex =
-    bestVisualResistanceLine?.endIndex ?? fallbackResistanceEndIndex;
+    detectedResistanceEndIndex > resistanceStartIndex
+      ? detectedResistanceEndIndex
+      : Math.max(resistanceStartIndex + 1, points.length - 1);
 
   const resistanceDrawEndIndex = points.length - 1;
 
   const resistanceStartPrice =
-    bestVisualResistanceLine?.startPrice ?? fallbackResistanceStartPrice;
+    Number.isFinite(item.resistanceStartPrice)
+      ? item.resistanceStartPrice
+      : highAt(resistanceStartIndex);
 
   const resistancePivotEndPrice =
-    bestVisualResistanceLine?.endPrice ?? fallbackResistanceEndPrice;
+    Number.isFinite(item.resistanceEndPrice)
+      ? item.resistanceEndPrice
+      : highAt(resistancePivotEndIndex);
 
-  const resistanceSlopePerBar =
+  const rawResistanceSlopePerBar =
     (resistancePivotEndPrice - resistanceStartPrice) /
     Math.max(1, resistancePivotEndIndex - resistanceStartIndex);
+
+  const resistanceSlopePerBar =
+    rawResistanceSlopePerBar < 0
+      ? rawResistanceSlopePerBar
+      : -Math.abs(resistanceStartPrice * 0.0015);
 
   const rawProjectedResistanceEndPrice =
     resistanceStartPrice +
@@ -1162,7 +1039,7 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
 
   const projectedResistanceEndPrice = Math.max(
     rawProjectedResistanceEndPrice,
-    item.support * 1.005
+    item.support * 1.006
   );
 
   const resistanceStartY = yAt(resistanceStartPrice);
