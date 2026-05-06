@@ -896,35 +896,39 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    const preset = PRESET_TICKERS.find((t) => t.symbol === symbol);
-    if (preset) {
-      setSymbolName(preset.name);
-      return;
-    }
+useEffect(() => {
+  const preset = PRESET_TICKERS.find((t) => t.symbol === symbol);
+  if (preset) {
+    setSymbolName(preset.name);
+    return;
+  }
 
-    let cancelled = false;
+  let cancelled = false;
 
-    async function resolve() {
-      try {
-        const res = await fetch(`/api/symbols?q=${encodeURIComponent(symbol)}`);
-        if (!res.ok) throw new Error("symbols lookup failed");
+  async function resolve() {
+    try {
+      const res = await fetch(`/api/symbols?q=${encodeURIComponent(symbol)}`);
+      if (!res.ok) throw new Error("symbols lookup failed");
 
-        const data = (await res.json()) as { results?: SymbolResult[] };
-        const rows = Array.isArray(data.results) ? data.results : [];
-        const exact = rows.find((r) => (r.symbol ?? "").toUpperCase() === symbol.toUpperCase());
+      const data = (await res.json()) as { results?: SymbolResult[] };
+      const rows = Array.isArray(data.results) ? data.results : [];
+      const exact = rows.find(
+        (r) => (r.symbol ?? "").toUpperCase() === symbol.toUpperCase()
+      );
 
-        if (!cancelled) setSymbolName(exact?.name ?? "");
-      } catch {
-        if (!cancelled) setSymbolName("");
+      if (!cancelled && exact?.name) {
+        setSymbolName(exact.name);
       }
+    } catch {
+      // Keep any name already supplied by the search dropdown.
     }
+  }
 
-    resolve();
-    return () => {
-      cancelled = true;
-    };
-  }, [symbol]);
+  resolve();
+  return () => {
+    cancelled = true;
+  };
+}, [symbol]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2445,7 +2449,7 @@ return (
               </div>
 
               <div style={{ marginTop: 4, color: COLORS.mutedFg, fontWeight: 700 }}>
-                {symbolName || "—"}
+                {symbolName || `${symbol} stock`}
               </div>
 
 
