@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
 
 type PlayTone = "green" | "yellow" | "orange" | "red";
@@ -106,6 +107,107 @@ function formatDate(value?: string | null) {
 function formatNumber(value: number, digits = 2) {
   if (!Number.isFinite(value)) return "—";
   return value.toFixed(digits);
+}
+
+const topNavIconWrapStyle: React.CSSProperties = {
+  fontSize: 15,
+  lineHeight: 1,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+function topNavBtnStyle(
+  type: "dashboard" | "platforms" | "pickers" | "calculators"
+): React.CSSProperties {
+  if (type === "dashboard") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      minHeight: 42,
+      padding: "9px 13px",
+      borderRadius: 14,
+      border: "1px solid rgba(250,204,21,0.45)",
+      background:
+        "linear-gradient(135deg, rgba(250,204,21,0.20), rgba(202,138,4,0.10))",
+      color: "#fefce8",
+      textDecoration: "none",
+      fontWeight: 900,
+      fontSize: 14,
+      whiteSpace: "nowrap",
+      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+    };
+  }
+
+  if (type === "platforms") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      minHeight: 42,
+      padding: "9px 13px",
+      borderRadius: 14,
+      border: "1px solid rgba(34,197,94,0.45)",
+      background:
+        "linear-gradient(135deg, rgba(34,197,94,0.20), rgba(16,185,129,0.10))",
+      color: "#f0fdf4",
+      textDecoration: "none",
+      fontWeight: 900,
+      fontSize: 14,
+      whiteSpace: "nowrap",
+      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+    };
+  }
+
+  if (type === "pickers") {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      minHeight: 42,
+      padding: "9px 13px",
+      borderRadius: 14,
+      border: "1px solid rgba(248,113,113,0.45)",
+      background:
+        "linear-gradient(135deg, rgba(248,113,113,0.20), rgba(185,28,28,0.10))",
+      color: "#fef2f2",
+      textDecoration: "none",
+      fontWeight: 900,
+      fontSize: 14,
+      whiteSpace: "nowrap",
+      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+    };
+  }
+
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    minHeight: 42,
+    padding: "9px 13px",
+    borderRadius: 14,
+    border: "1px solid rgba(168,85,247,0.45)",
+    background:
+      "linear-gradient(135deg, rgba(168,85,247,0.20), rgba(139,92,246,0.10))",
+    color: "#faf5ff",
+    textDecoration: "none",
+    fontWeight: 900,
+    fontSize: 14,
+    whiteSpace: "nowrap",
+    boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+  };
+}
+
+function topNavIcon(type: "dashboard" | "platforms" | "pickers" | "calculators") {
+  if (type === "dashboard") return "📈";
+  if (type === "platforms") return "🏦";
+  if (type === "pickers") return "📊";
+  return "🧮";
 }
 
 function toChartHref(href: string) {
@@ -233,21 +335,70 @@ const url = force
       >
         <div
           style={{
-            display: "inline-flex",
+            display: "flex",
+            justifyContent: "space-between",
             alignItems: "center",
-            gap: 8,
-            padding: "7px 11px",
-            borderRadius: 999,
-            border: "1px solid rgba(96,165,250,0.35)",
-            background: "rgba(15,23,42,0.76)",
-            color: "#bfdbfe",
-            fontSize: 12,
-            fontWeight: 900,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
+            gap: 14,
+            flexWrap: "wrap",
           }}
         >
-          Chart Pattern Plays
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "7px 11px",
+              borderRadius: 999,
+              border: "1px solid rgba(96,165,250,0.35)",
+              background: "rgba(15,23,42,0.76)",
+              color: "#bfdbfe",
+              fontSize: 12,
+              fontWeight: 900,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+            }}
+          >
+            Chart Pattern Plays
+          </div>
+
+          <nav
+            aria-label="Primary navigation"
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              alignItems: "center",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
+            <Link href="/" style={topNavBtnStyle("dashboard")}>
+              <span aria-hidden="true" style={topNavIconWrapStyle}>
+                {topNavIcon("dashboard")}
+              </span>
+              <span>Dashboard</span>
+            </Link>
+
+            <Link href="/platforms" style={topNavBtnStyle("platforms")}>
+              <span aria-hidden="true" style={topNavIconWrapStyle}>
+                {topNavIcon("platforms")}
+              </span>
+              <span>Platforms</span>
+            </Link>
+
+            <Link href="/pickers" style={topNavBtnStyle("pickers")}>
+              <span aria-hidden="true" style={topNavIconWrapStyle}>
+                {topNavIcon("pickers")}
+              </span>
+              <span>Pickers</span>
+            </Link>
+
+            <Link href="/utilities" style={topNavBtnStyle("calculators")}>
+              <span aria-hidden="true" style={topNavIconWrapStyle}>
+                {topNavIcon("calculators")}
+              </span>
+              <span>Calculators</span>
+            </Link>
+          </nav>
         </div>
 
         <div
@@ -272,14 +423,14 @@ const url = force
             <h1
               style={{
                 margin: 0,
-                maxWidth: 820,
+                maxWidth: 860,
                 color: "#f8fafc",
                 fontSize: "clamp(34px, 6vw, 64px)",
                 lineHeight: 0.98,
                 letterSpacing: "-0.06em",
               }}
             >
-              Find stock plays from chart structure.
+              Find active ascending triangle stock setups.
             </h1>
 
             <p
