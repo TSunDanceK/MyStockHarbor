@@ -56,6 +56,7 @@ type PlaysPayload = {
   updatedAt?: string;
   universeSize?: number;
   dynamicUniverseCount?: number;
+  dynamicUniversePreview?: string[];
   estimatedApiCalls?: number;
   sections?: PlaySection[];
   error?: string;
@@ -455,8 +456,7 @@ const url = force
                   fontWeight: 700,
                 }}
               >
-Estimated scan calls: {estimatedApiCalls}. Cache is bypassed while testing
-the plays scanner.
+Estimated scan calls: {estimatedApiCalls}. Normal loads use cache; Refresh plays forces a fresh scan.
               </p>
             )}
           </aside>
