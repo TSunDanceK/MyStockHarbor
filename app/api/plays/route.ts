@@ -8,6 +8,11 @@ import {
 } from "../../../lib/ta/ascendingTriangle";
 import { getDailyHistory } from "../../../lib/server/historyCache";
 
+import {
+  addToDynamicUniverse,
+  readDynamicUniverse,
+} from "../../../lib/server/dynamicUniverseCache";
+
 type Point = {
   date: string;
   close: number;
