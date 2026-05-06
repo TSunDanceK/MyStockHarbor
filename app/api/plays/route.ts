@@ -721,14 +721,14 @@ async function buildPlaysPayload(
     buildSection({
       title: "Best Ascending Triangle Plays",
       description:
-        "The strongest daily and weekly ascending triangle candidates, ranked by resistance quality, rising lows, breakout proximity and structure age.",
+        "The strongest weekly, daily, and short-term ascending triangle candidates, ranked by resistance quality, rising lows, breakout proximity and structure age.",
       source: bestAscendingTriangles,
       take: 24,
     }),
     buildSection({
       title: "Weekly Ascending Triangle Plays",
       description:
-        "Longer-term ascending triangle candidates built from weekly chart structure.",
+        "Longer-term ascending triangle candidates built from wider weekly chart structure.",
       source: weeklyAscendingTriangles,
       take: 24,
     }),
@@ -746,6 +746,7 @@ async function buildPlaysPayload(
       source: shortTermAscendingTriangles,
       take: 24,
     }),
+  ];
 
   return {
     updatedAt: new Date().toISOString(),
