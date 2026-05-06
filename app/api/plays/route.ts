@@ -518,6 +518,25 @@ function buildSection(args: {
   };
 }
 
+function bestTriangleForWindows(
+  points: Point[],
+  timeframe: "D" | "W",
+  windows: number[]
+): AscendingTriangleResult | null {
+  const results = windows
+    .map((lookbackBars) =>
+      detectAscendingTriangle(points, {
+        timeframe,
+        lookbackBars,
+      })
+    )
+    .filter((result): result is AscendingTriangleResult => result !== null);
+
+  if (!results.length) return null;
+
+  return [...results].sort((a, b) => b.score - a.score)[0];
+}
+
 async function buildPlaysPayload(
   origin: string,
   forceFreshMarket = false
