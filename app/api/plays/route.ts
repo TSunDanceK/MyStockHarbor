@@ -445,7 +445,10 @@ function toPlayItem(
   result: AscendingTriangleResult,
   sourcePoints: Point[]
 ): PlayItem {
-  const chartBars = result.timeframe === "W" ? 52 : 90;
+const chartBars =
+  result.timeframe === "W"
+    ? Math.min(220, Math.max(52, result.patternBars + 8))
+    : Math.min(280, Math.max(90, result.patternBars + 15));
 
   const chartPoints = sourcePoints
     .slice(-chartBars)
