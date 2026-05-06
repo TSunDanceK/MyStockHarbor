@@ -469,9 +469,19 @@ async function buildPlaysPayload(
     new Set([...topTraded, ...topMovers, ...topRanges])
   );
 
+  const sharedUniverseEntries = await readDynamicUniverse();
+
+  const sharedUniverseSymbols = sharedUniverseEntries.map(
+    (entry) => entry.symbol
+  );
+
   const dynamicUniverse = Array.from(
     new Set(
-      [...accumulatedDynamicUniverse, ...rankedDynamicUniverse]
+      [
+        ...sharedUniverseSymbols,
+        ...accumulatedDynamicUniverse,
+        ...rankedDynamicUniverse,
+      ]
         .map((x) => String(x).trim().toUpperCase())
         .filter(Boolean)
     )
