@@ -335,7 +335,50 @@ export function detectAscendingTriangle(
   if (!resistanceCluster) return null;
 
   const firstResistanceTouch = resistanceCluster.touches[0];
-  const lastResistanceTouch = resistanceCluster.touches[resistanceCluster.touches.length - 1];
+  const lastResistanceTouch =
+    resistanceCluster.touches[resistanceCluster.touches.length - 1];
+
+  const resistanceSpanBars =
+    lastResistanceTouch.idx - firstResistanceTouch.idx;
+
+  if (resistanceSpanBars <= 0) {
+    return null;
+  }
+
+  const resistanceSlopePct = pctDiff(
+    firstResistanceTouch.price,
+    lastResistanceTouch.price
+  );
+
+  const maxDescendingResistanceSlopePct = timeframe === "W" ? -2.5 : -2;
+
+  if (resistanceSlopePct < maxDescendingResistanceSlopePct) {
+    return null;
+  }
+
+  const resistanceTouchPrices = resistanceCluster.touches.map(
+    (touch) => touch.price
+  );
+
+  const earlyResistanceTouches = resistanceTouchPrices.slice(
+    0,
+    Math.max(1, Math.floor(resistanceTouchPrices.length / 2))
+  );
+
+  const lateResistanceTouches = resistanceTouchPrices.slice(
+    Math.max(1, Math.floor(resistanceTouchPrices.length / 2))
+  );
+
+  const earlyResistanceAvg = avg(earlyResistanceTouches);
+  const lateResistanceAvg = avg(lateResistanceTouches);
+
+  const resistanceDriftPct = pctDiff(earlyResistanceAvg, lateResistanceAvg);
+
+  const maxDescendingResistanceDriftPct = timeframe === "W" ? -2 : -1.5;
+
+  if (resistanceDriftPct < maxDescendingResistanceDriftPct) {
+    return null;
+  }
 
   const relevantLows = pivotLows.filter(
     (pivot) =>
