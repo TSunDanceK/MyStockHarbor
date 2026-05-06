@@ -456,9 +456,9 @@ for (let i = patternStartIdx; i < points.length; i++) {
     resistanceCluster.resistance
   );
 
-  const minSupportResistanceGapPct = timeframe === "W" ? 1.5 : 1;
+  const maxSupportAboveResistancePct = timeframe === "W" ? 1.25 : 1;
 
-  if (supportToResistanceGapPct <= minSupportResistanceGapPct) {
+  if (supportToResistanceGapPct < -maxSupportAboveResistancePct) {
     return null;
   }
 
