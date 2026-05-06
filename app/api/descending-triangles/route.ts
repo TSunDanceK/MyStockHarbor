@@ -99,6 +99,7 @@ type PlaysPayload = {
   dynamicUniversePreview: string[];
   estimatedApiCalls: number;
   sections: PlaySection[];
+  debug?: unknown;
 };
 
 type CachedPlaysPayload = {
@@ -609,11 +610,91 @@ function bestTriangleForWindows(
   return [...results].sort((a, b) => b.score - a.score)[0];
 }
 
+function debugTriangleWindows(
+  points: Point[],
+  timeframe: "ST" | "D" | "W",
+  windows: number[]
+) {
+  const detectorTimeframe = timeframe === "W" ? "W" : "D";
+
+  const maxDistanceAboveSupportPct =
+    timeframe === "W" ? 3.75 : timeframe === "ST" ? 2.25 : 3;
+
+  const maxSupportZonePct =
+    timeframe === "W" ? 4 : timeframe === "ST" ? 2.75 : 3.25;
+
+  const minPatternBars =
+    timeframe === "W" ? 12 : timeframe === "ST" ? 18 : 35;
+
+  const maxPatternBars =
+    timeframe === "W" ? 249 : timeframe === "ST" ? 70 : 180;
+
+  return windows.map((lookbackBars) => {
+    const result = detectDescendingTriangle(points, {
+      timeframe: detectorTimeframe,
+      lookbackBars,
+      maxDistanceAboveSupportPct,
+      minSupportTouches: 2,
+      minFallingHighTouches: 2,
+      minPatternBars,
+    });
+
+    if (!result) {
+      return {
+        timeframe,
+        lookbackBars,
+        passed: false,
+        reason: "detector_returned_null",
+      };
+    }
+
+    const failedReasons: string[] = [];
+
+    if (result.supportZonePct > maxSupportZonePct) {
+      failedReasons.push(
+        `support_zone_too_wide: ${result.supportZonePct}% > ${maxSupportZonePct}%`
+      );
+    }
+
+    if (result.patternBars < minPatternBars) {
+      failedReasons.push(
+        `pattern_too_short: ${result.patternBars} < ${minPatternBars}`
+      );
+    }
+
+    if (result.patternBars > maxPatternBars) {
+      failedReasons.push(
+        `pattern_too_wide: ${result.patternBars} > ${maxPatternBars}`
+      );
+    }
+
+    return {
+      timeframe,
+      lookbackBars,
+      passed: failedReasons.length === 0,
+      reason: failedReasons.length ? failedReasons.join("; ") : "passed",
+      result: {
+        score: result.score,
+        support: result.support,
+        latestClose: result.latestClose,
+        distanceToSupportPct: result.distanceToSupportPct,
+        supportTouches: result.supportTouches,
+        fallingHighTouches: result.fallingHighTouches,
+        supportZonePct: result.supportZonePct,
+        highSlopePct: result.highSlopePct,
+        patternBars: result.patternBars,
+        startDate: result.startDate,
+        endDate: result.endDate,
+      },
+    };
+  });
+}
+
 async function buildDescendingPayload(
   origin: string,
-  forceFreshMarket = false
+  forceFreshMarket = false,
+  debugSymbolInput: string | null = null
 ): Promise<PlaysPayload> {
-  const market = await fetchMarket(origin, forceFreshMarket);
 
   const topTraded = (market?.topTraded ?? [])
     .map((x) => x.symbol)
@@ -664,7 +745,37 @@ async function buildDescendingPayload(
     ...accumulatedDynamicUniverse,
   ]);
 
-  const universe = priorityUniverse.slice(0, UNIVERSE_CAP);
+  const normalizedDebugSymbol = debugSymbolInput
+    ? String(debugSymbolInput).trim().toUpperCase()
+    : "";
+
+  let universe = priorityUniverse.slice(0, UNIVERSE_CAP);
+
+  if (normalizedDebugSymbol && !universe.includes(normalizedDebugSymbol)) {
+    universe = cleanSymbols([normalizedDebugSymbol, ...universe]).slice(
+      0,
+      UNIVERSE_CAP
+    );
+  }
+
+  const debugSymbolScan: any = normalizedDebugSymbol
+    ? {
+        symbol: normalizedDebugSymbol,
+        priorityIndex: priorityUniverse.indexOf(normalizedDebugSymbol),
+        scanIndex: universe.indexOf(normalizedDebugSymbol),
+        inPriorityUniverse: priorityUniverse.includes(normalizedDebugSymbol),
+        inScanUniverse: universe.includes(normalizedDebugSymbol),
+        scanned: false,
+        cacheHadHistory: false,
+        cachedBars: 0,
+        freshFetchUsed: false,
+        freshFetchSkippedBecauseBudgetUsed: false,
+        dailyBars: 0,
+        weeklyBars: 0,
+        matched: null,
+        diagnostics: null,
+      }
+    : null;
 
   const weeklyDescendingTriangles: PlayItem[] = [];
   const dailyDescendingTriangles: PlayItem[] = [];
