@@ -439,6 +439,29 @@ for (let i = patternStartIdx; i < points.length; i++) {
     return null;
   }
 
+  const supportProjectionBars = lastLow.idx - firstLow.idx;
+
+  if (supportProjectionBars <= 0) {
+    return null;
+  }
+
+  const supportSlopePerBar =
+    (lastLow.price - firstLow.price) / supportProjectionBars;
+
+  const projectedSupportAtLatest =
+    firstLow.price + supportSlopePerBar * (points.length - 1 - firstLow.idx);
+
+  const supportToResistanceGapPct = pctDiff(
+    projectedSupportAtLatest,
+    resistanceCluster.resistance
+  );
+
+  const minSupportResistanceGapPct = timeframe === "W" ? 1.5 : 1;
+
+  if (supportToResistanceGapPct <= minSupportResistanceGapPct) {
+    return null;
+  }
+
   const visualSupportStartIdx = Math.max(0, Math.floor(points.length * 0.12));
   const visualSupportEndIdx = points.length - 1;
 
