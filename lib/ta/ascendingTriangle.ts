@@ -415,12 +415,10 @@ export function detectAscendingTriangle(
     return null;
   }
 
-  const resistanceBreakTolerancePct = timeframe === "W" ? 2.25 : 1.75;
-  const maxResistanceBreakBars = timeframe === "W" ? 2 : 4;
-  const maxConsecutiveResistanceBreakBars = timeframe === "W" ? 1 : 2;
+  const closeBreakTolerancePct = timeframe === "W" ? 1.25 : 0.9;
+  const maxCloseBreakBars = timeframe === "W" ? 1 : 1;
 
-  let resistanceBreakBars = 0;
-  let consecutiveResistanceBreakBars = 0;
+  let closeBreakBars = 0;
 
   for (let i = patternStartIdx; i < points.length; i++) {
     const closeAboveResistancePct = pctDiff(
@@ -428,26 +426,21 @@ export function detectAscendingTriangle(
       points[i].close
     );
 
-    if (closeAboveResistancePct > resistanceBreakTolerancePct) {
-      resistanceBreakBars++;
-      consecutiveResistanceBreakBars++;
-    } else {
-      consecutiveResistanceBreakBars = 0;
+    if (closeAboveResistancePct > closeBreakTolerancePct) {
+      closeBreakBars++;
     }
 
-    if (
-      resistanceBreakBars > maxResistanceBreakBars ||
-      consecutiveResistanceBreakBars > maxConsecutiveResistanceBreakBars
-    ) {
+    if (closeBreakBars > maxCloseBreakBars) {
       return null;
     }
   }
 
-  const maxHighOvershootPct = timeframe === "W" ? 5 : 4;
-  const maxHighOvershootBars = timeframe === "W" ? 1 : 2;
-  const hardHighOvershootPct = timeframe === "W" ? 7 : 6;
+  const wickBreakTolerancePct = timeframe === "W" ? 3 : 2.25;
+  const hardWickBreakPct = timeframe === "W" ? 4.5 : 3.5;
+  const maxWickBreakBars = timeframe === "W" ? 1 : 1;
 
-  let highOvershootBars = 0;
+  let wickBreakBars = 0;
+  let highestHighAboveResistancePct = 0;
 
   for (let i = patternStartIdx; i < points.length; i++) {
     const highAboveResistancePct = pctDiff(
@@ -455,45 +448,32 @@ export function detectAscendingTriangle(
       points[i].high
     );
 
-    if (highAboveResistancePct > hardHighOvershootPct) {
+    highestHighAboveResistancePct = Math.max(
+      highestHighAboveResistancePct,
+      highAboveResistancePct
+    );
+
+    if (highAboveResistancePct > hardWickBreakPct) {
       return null;
     }
 
-    if (highAboveResistancePct > maxHighOvershootPct) {
-      highOvershootBars++;
+    if (highAboveResistancePct > wickBreakTolerancePct) {
+      wickBreakBars++;
     }
 
-    if (highOvershootBars > maxHighOvershootBars) {
+    if (wickBreakBars > maxWickBreakBars) {
       return null;
     }
   }
 
-  const resistanceOvershootTolerancePct = timeframe === "W" ? 3.25 : 2.75;
-  const maxResistanceClosesAbove = timeframe === "W" ? 3 : 5;
-  const maxConsecutiveResistanceClosesAbove = timeframe === "W" ? 1 : 2;
+  const failedBreakoutHighPct = timeframe === "W" ? 2.75 : 2;
+  const failedBreakoutPullbackPct = timeframe === "W" ? 3 : 2.5;
 
-  let resistanceClosesAbove = 0;
-  let consecutiveResistanceClosesAbove = 0;
-
-  for (let i = patternStartIdx; i < points.length; i++) {
-    const closeAbovePct = pctDiff(
-      resistanceCluster.resistance,
-      points[i].close
-    );
-
-    if (closeAbovePct > resistanceOvershootTolerancePct) {
-      resistanceClosesAbove++;
-      consecutiveResistanceClosesAbove++;
-    } else {
-      consecutiveResistanceClosesAbove = 0;
-    }
-
-    if (
-      resistanceClosesAbove > maxResistanceClosesAbove ||
-      consecutiveResistanceClosesAbove > maxConsecutiveResistanceClosesAbove
-    ) {
-      return null;
-    }
+  if (
+    highestHighAboveResistancePct > failedBreakoutHighPct &&
+    distanceToResistancePct > failedBreakoutPullbackPct
+  ) {
+    return null;
   }
 
   const lowSlopePct = pctDiff(firstLow.price, lastLow.price);
