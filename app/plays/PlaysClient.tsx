@@ -123,7 +123,6 @@ export default function PlaysClient() {
   const [universeSize, setUniverseSize] = useState<number | null>(null);
   const [dynamicUniverseCount, setDynamicUniverseCount] = useState<number | null>(null);
   const [estimatedApiCalls, setEstimatedApiCalls] = useState<number | null>(null);
-  const [dynamicUniversePreview, setDynamicUniversePreview] = useState<string[]>([]);
   const [selectedTimeframe, setSelectedTimeframe] = useState<"ALL" | "W" | "D">("ALL");
 
   async function loadPlays(force = false) {
@@ -156,11 +155,6 @@ const url = force
       setEstimatedApiCalls(
         typeof data?.estimatedApiCalls === "number" ? data.estimatedApiCalls : null
       );
-      setDynamicUniversePreview(
-  Array.isArray(data?.dynamicUniversePreview)
-    ? data.dynamicUniversePreview
-    : []
-);
     } catch {
       setErr(force ? "Force refresh failed." : "Failed to load chart plays.");
 
@@ -170,7 +164,6 @@ const url = force
         setUniverseSize(null);
         setDynamicUniverseCount(null);
         setEstimatedApiCalls(null);
-        setDynamicUniversePreview([]);
       }
     } finally {
       setBusy(false);
