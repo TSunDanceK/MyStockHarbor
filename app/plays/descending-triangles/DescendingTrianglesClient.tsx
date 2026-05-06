@@ -988,24 +988,40 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
     (point) => point.date === item.resistanceStartDate
   );
 
+  const detectedResistanceEndIndex = points.findIndex(
+    (point) => point.date === item.resistanceEndDate
+  );
+
   const resistanceStartIndex =
     detectedResistanceStartIndex >= 0
       ? detectedResistanceStartIndex
       : Math.max(0, Math.floor(points.length * 0.12));
 
-  const resistanceEndIndex = points.length - 1;
+  const resistancePivotEndIndex =
+    detectedResistanceEndIndex > resistanceStartIndex
+      ? detectedResistanceEndIndex
+      : Math.max(resistanceStartIndex + 1, points.length - 1);
+
+  const resistanceDrawEndIndex = points.length - 1;
 
   const resistanceStartPrice = Number.isFinite(item.resistanceStartPrice)
     ? item.resistanceStartPrice
     : item.latestClose;
 
-  const resistanceEndPrice =
-    item.latestClose < resistanceStartPrice
-      ? item.latestClose
-      : Math.min(item.latestClose, item.resistanceEndPrice, resistanceStartPrice);
+  const resistancePivotEndPrice = Number.isFinite(item.resistanceEndPrice)
+    ? item.resistanceEndPrice
+    : resistanceStartPrice;
+
+  const resistanceSlopePerBar =
+    (resistancePivotEndPrice - resistanceStartPrice) /
+    Math.max(1, resistancePivotEndIndex - resistanceStartIndex);
+
+  const projectedResistanceEndPrice =
+    resistanceStartPrice +
+    resistanceSlopePerBar * (resistanceDrawEndIndex - resistanceStartIndex);
 
   const resistanceStartY = yAt(resistanceStartPrice);
-  const resistanceEndY = yAt(resistanceEndPrice);
+  const resistanceEndY = yAt(projectedResistanceEndPrice);
 
   const latestX = xAt(points.length - 1);
   const latestY = yAt(item.latestClose);
@@ -1093,7 +1109,7 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
 
         <line
           x1={xAt(resistanceStartIndex)}
-          x2={xAt(resistanceEndIndex)}
+          x2={xAt(resistanceDrawEndIndex)}
           y1={resistanceStartY}
           y2={resistanceEndY}
           stroke="rgba(96,165,250,0.88)"
