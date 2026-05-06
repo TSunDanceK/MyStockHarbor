@@ -52,6 +52,7 @@ type DetectOptions = {
   minSupportTouches?: number;
   minFallingHighTouches?: number;
   minPatternBars?: number;
+  minTouchSeparationBars?: number;
 };
 
 function isFiniteNumber(value: unknown): value is number {
@@ -215,10 +216,31 @@ function findPivotLows(
   return pivots;
 }
 
+function filterSpacedPivots(pivots: Pivot[], minSeparationBars: number) {
+  const sorted = [...pivots].sort((a, b) => a.idx - b.idx);
+  const spaced: Pivot[] = [];
+
+  for (const pivot of sorted) {
+    const previous = spaced[spaced.length - 1];
+
+    if (!previous || pivot.idx - previous.idx >= minSeparationBars) {
+      spaced.push(pivot);
+      continue;
+    }
+
+    if (pivot.price < previous.price) {
+      spaced[spaced.length - 1] = pivot;
+    }
+  }
+
+  return spaced;
+}
+
 function findBestSupportCluster(
   pivotLows: Pivot[],
   maxSupportZonePct: number,
-  minTouches: number
+  minTouches: number,
+  minTouchSeparationBars: number
 ) {
   let best: Pivot[] = [];
 
@@ -230,8 +252,21 @@ function findBestSupportCluster(
       return distancePct <= maxSupportZonePct;
     });
 
-    if (cluster.length > best.length) {
-      best = cluster;
+    const spacedCluster = filterSpacedPivots(cluster, minTouchSeparationBars);
+
+    const currentSpan =
+      spacedCluster.length >= 2
+        ? spacedCluster[spacedCluster.length - 1].idx - spacedCluster[0].idx
+        : 0;
+
+    const bestSpan =
+      best.length >= 2 ? best[best.length - 1].idx - best[0].idx : 0;
+
+    if (
+      spacedCluster.length > best.length ||
+      (spacedCluster.length === best.length && currentSpan > bestSpan)
+    ) {
+      best = spacedCluster;
     }
   }
 
@@ -252,17 +287,34 @@ function findBestSupportCluster(
 function getFallingHighs(pivotHighs: Pivot[]) {
   if (pivotHighs.length < 2) return [];
 
-  const falling: Pivot[] = [pivotHighs[0]];
+  let best: Pivot[] = [];
 
-  for (let i = 1; i < pivotHighs.length; i++) {
-    const previous = falling[falling.length - 1];
+  for (let start = 0; start < pivotHighs.length; start++) {
+    const falling: Pivot[] = [pivotHighs[start]];
 
-    if (pivotHighs[i].price < previous.price) {
-      falling.push(pivotHighs[i]);
+    for (let i = start + 1; i < pivotHighs.length; i++) {
+      const previous = falling[falling.length - 1];
+
+      if (pivotHighs[i].price < previous.price) {
+        falling.push(pivotHighs[i]);
+      }
+    }
+
+    const currentSpan =
+      falling.length >= 2 ? falling[falling.length - 1].idx - falling[0].idx : 0;
+
+    const bestSpan =
+      best.length >= 2 ? best[best.length - 1].idx - best[0].idx : 0;
+
+    if (
+      falling.length > best.length ||
+      (falling.length === best.length && currentSpan > bestSpan)
+    ) {
+      best = falling;
     }
   }
 
-  return falling;
+  return best;
 }
 
 function volumeCompressionScore(points: ReturnType<typeof normalisePoints>) {
@@ -312,6 +364,9 @@ export function detectDescendingTriangle(
 
   const minPatternBars = options.minPatternBars ?? (timeframe === "W" ? 8 : 20);
 
+  const minTouchSeparationBars =
+    options.minTouchSeparationBars ?? (timeframe === "W" ? 2 : 5);
+
   const points = normalisePoints(rawPoints).slice(-lookbackBars);
 
   if (points.length < minPatternBars + pivotLeftRight * 2 + 5) {
@@ -332,7 +387,8 @@ export function detectDescendingTriangle(
   const supportCluster = findBestSupportCluster(
     pivotLows,
     maxSupportZonePct,
-    minSupportTouches
+    minSupportTouches,
+    minTouchSeparationBars
   );
 
   if (!supportCluster) return null;
@@ -352,7 +408,7 @@ export function detectDescendingTriangle(
     lastSupportTouch.price
   );
 
-  const maxRisingSupportSlopePct = timeframe === "W" ? 2.5 : 2;
+  const maxRisingSupportSlopePct = timeframe === "W" ? 3.5 : 2.75;
 
   if (supportSlopePct > maxRisingSupportSlopePct) {
     return null;
@@ -376,7 +432,7 @@ export function detectDescendingTriangle(
 
   const supportDriftPct = pctDiff(earlySupportAvg, lateSupportAvg);
 
-  const maxRisingSupportDriftPct = timeframe === "W" ? 2 : 1.5;
+  const maxRisingSupportDriftPct = timeframe === "W" ? 3 : 2.25;
 
   if (supportDriftPct > maxRisingSupportDriftPct) {
     return null;
@@ -384,7 +440,7 @@ export function detectDescendingTriangle(
 
   const relevantHighs = pivotHighs.filter(
     (pivot) =>
-      pivot.idx >= Math.max(0, firstSupportTouch.idx - 8) &&
+      pivot.idx >= Math.max(0, firstSupportTouch.idx - 12) &&
       pivot.idx <= points.length - 1 &&
       pivot.price > supportCluster.support
   );
@@ -411,8 +467,12 @@ export function detectDescendingTriangle(
     return null;
   }
 
-  const closeBreakTolerancePct = timeframe === "W" ? 1.25 : 0.9;
-  const maxCloseBreakBars = timeframe === "W" ? 1 : 1;
+  if (distanceToSupportPct > maxDistanceAboveSupportPct * 4) {
+    return null;
+  }
+
+  const closeBreakTolerancePct = timeframe === "W" ? 1.5 : 1;
+  const maxCloseBreakBars = timeframe === "W" ? 2 : 2;
 
   let closeBreakBars = 0;
 
@@ -431,9 +491,9 @@ export function detectDescendingTriangle(
     }
   }
 
-  const wickBreakTolerancePct = timeframe === "W" ? 3 : 2.25;
-  const hardWickBreakPct = timeframe === "W" ? 4.5 : 3.5;
-  const maxWickBreakBars = timeframe === "W" ? 1 : 1;
+  const wickBreakTolerancePct = timeframe === "W" ? 3.5 : 2.75;
+  const hardWickBreakPct = timeframe === "W" ? 5.5 : 4.25;
+  const maxWickBreakBars = timeframe === "W" ? 2 : 2;
 
   let wickBreakBars = 0;
   let deepestLowBelowSupportPct = 0;
@@ -462,8 +522,8 @@ export function detectDescendingTriangle(
     }
   }
 
-  const failedBreakdownLowPct = timeframe === "W" ? -2.75 : -2;
-  const failedBreakdownBouncePct = timeframe === "W" ? 3 : 2.5;
+  const failedBreakdownLowPct = timeframe === "W" ? -3.25 : -2.5;
+  const failedBreakdownBouncePct = timeframe === "W" ? 4 : 3.25;
 
   if (
     deepestLowBelowSupportPct < failedBreakdownLowPct &&
@@ -488,7 +548,7 @@ export function detectDescendingTriangle(
     endPrice: lastHigh.price,
   });
 
-  if (resistanceAngleDeg < 10) {
+  if (resistanceAngleDeg < 7) {
     return null;
   }
 
@@ -510,74 +570,21 @@ export function detectDescendingTriangle(
     projectedResistanceAtLatest
   );
 
-  const maxResistanceBelowSupportPct = timeframe === "W" ? 1.25 : 1;
+  const maxResistanceBelowSupportPct = timeframe === "W" ? 1.75 : 1.25;
 
   if (resistanceToSupportGapPct < -maxResistanceBelowSupportPct) {
     return null;
   }
 
-    const latestAboveProjectedResistancePct = pctDiff(
+  const latestAboveProjectedResistancePct = pctDiff(
     projectedResistanceAtLatest,
     latest.close
   );
 
-  const maxLatestAboveResistancePct = timeframe === "W" ? 2 : 1.5;
+  const maxLatestAboveResistancePct = timeframe === "W" ? 3 : 2.25;
 
   if (latestAboveProjectedResistancePct > maxLatestAboveResistancePct) {
     return null;
-  }
-
-  const visualResistanceStartIdx = Math.max(
-    0,
-    Math.floor(points.length * 0.12)
-  );
-  const visualResistanceEndIdx = points.length - 1;
-
-  const visualResistanceHighValues = points
-    .slice(0, Math.max(4, Math.floor(points.length * 0.35)))
-    .map((point) => point.high)
-    .filter((value) => Number.isFinite(value));
-
-  if (!visualResistanceHighValues.length) {
-    return null;
-  }
-
-  const visualResistanceStartHigh = Math.max(...visualResistanceHighValues);
-  const visualResistanceEndPrice = latest.close;
-
-  const resistanceBreakTolerancePct = timeframe === "W" ? 2.5 : 2;
-  const maxBrokenBars = timeframe === "W" ? 1 : 3;
-  const maxConsecutiveBrokenBars = timeframe === "W" ? 1 : 2;
-
-  let brokenBars = 0;
-  let consecutiveBrokenBars = 0;
-
-  for (let i = visualResistanceStartIdx; i < points.length; i++) {
-    const t =
-      visualResistanceEndIdx === visualResistanceStartIdx
-        ? 1
-        : (i - visualResistanceStartIdx) /
-          (visualResistanceEndIdx - visualResistanceStartIdx);
-
-    const expectedResistance =
-      visualResistanceStartHigh +
-      t * (visualResistanceEndPrice - visualResistanceStartHigh);
-
-    const breakPct = pctDiff(expectedResistance, points[i].close);
-
-    if (breakPct > resistanceBreakTolerancePct) {
-      brokenBars++;
-      consecutiveBrokenBars++;
-    } else {
-      consecutiveBrokenBars = 0;
-    }
-
-    if (
-      brokenBars > maxBrokenBars ||
-      consecutiveBrokenBars > maxConsecutiveBrokenBars
-    ) {
-      return null;
-    }
   }
 
   const supportQualityScore = clamp(25 - supportCluster.zonePct * 4, 0, 25);
@@ -589,7 +596,7 @@ export function detectDescendingTriangle(
   );
 
   const priceLocationScore = clamp(
-    15 - distanceToSupportPct * 1.5,
+    15 - Math.max(0, distanceToSupportPct) * 0.5,
     0,
     15
   );
