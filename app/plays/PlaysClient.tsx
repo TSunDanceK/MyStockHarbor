@@ -512,6 +512,26 @@ const url = force
                 {forceRefreshing ? "Refreshing..." : "Refresh plays"}
               </button>
             </div>
+
+            <div
+              style={{
+                marginTop: 18,
+                maxWidth: 760,
+                border: "1px solid rgba(251,191,36,0.22)",
+                borderRadius: 16,
+                padding: "12px 14px",
+                background: "rgba(251,191,36,0.07)",
+                color: "#fde68a",
+                fontSize: 13,
+                lineHeight: 1.55,
+                fontWeight: 750,
+              }}
+            >
+              Review each chart manually before trading. These computer-detected
+              setups can be wrong, delayed, or invalidated by price action.
+              MyStockHarbor is a discovery tool to help you find setups to
+              review, not financial advice.
+            </div>
           </div>
 
           <aside
