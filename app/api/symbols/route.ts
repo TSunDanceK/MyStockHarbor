@@ -138,10 +138,13 @@ const nameMatches = all.filter(
     r.name.toUpperCase().includes(q)
 );
 
+const fmpExact = await fetchFmpExactSymbol(q);
+
 const results = [
-  ...exactSymbolMatches,
-  ...startingSymbolMatches,
-  ...nameMatches,
+  ...(fmpExact ? [fmpExact] : []),
+  ...exactSymbolMatches.filter((r) => r.symbol !== fmpExact?.symbol),
+  ...startingSymbolMatches.filter((r) => r.symbol !== fmpExact?.symbol),
+  ...nameMatches.filter((r) => r.symbol !== fmpExact?.symbol),
 ].slice(0, 25);
 
   return NextResponse.json(
