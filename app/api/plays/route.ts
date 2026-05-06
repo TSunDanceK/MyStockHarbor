@@ -673,6 +673,35 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  const cached = forceRefresh ? null : await readPlaysCache();
+
+  if (!forceRefresh && cached?.data) {
+    memo = { ts: now, data: cached.data };
+
+    return NextResponse.json(cached.data, {
+      headers: {
+        "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+      },
+    });
+  }
+
+  const lockToken = await acquirePlaysLock();
+
+  if (!lockToken) {
+    const fallbackCached = cached ?? (await readPlaysCache());
+
+    if (fallbackCached?.data) {
+      memo = { ts: now, data: fallbackCached.data };
+
+      return NextResponse.json(fallbackCached.data, {
+        headers: {
+          "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+          "X-Plays-Cache": "lock-fallback",
+        },
+      });
+    }
+  }
+
   try {
     const origin = originFromReq(req);
     const data = await buildPlaysPayload(origin, forceRefresh);
@@ -682,6 +711,8 @@ export async function GET(req: NextRequest) {
       data,
     };
 
+    await writePlaysCache(data);
+
     return NextResponse.json(data, {
       headers: {
         "Cache-Control": forceRefresh
@@ -690,6 +721,19 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error) {
+    const fallbackCached = cached ?? (await readPlaysCache());
+
+    if (fallbackCached?.data) {
+      memo = { ts: now, data: fallbackCached.data };
+
+      return NextResponse.json(fallbackCached.data, {
+        headers: {
+          "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+          "X-Plays-Cache": "error-fallback",
+        },
+      });
+    }
+
     const message =
       error instanceof Error ? error.message : "Unknown plays error";
 
@@ -710,5 +754,7 @@ export async function GET(req: NextRequest) {
         },
       }
     );
+  } finally {
+    await releasePlaysLock(lockToken);
   }
 }
