@@ -6,6 +6,7 @@ import {
   detectAscendingTriangle,
   type AscendingTriangleResult,
 } from "../../../lib/ta/ascendingTriangle";
+import { getDailyHistory } from "../../../lib/server/historyCache";
 
 type Point = {
   date: string;
@@ -13,14 +14,6 @@ type Point = {
   high?: number;
   low?: number;
   volume?: number;
-};
-
-type FmpHistoricalRow = {
-  date?: string;
-  close?: number | string;
-  high?: number | string;
-  low?: number | string;
-  volume?: number | string;
 };
 
 type MarketRow = {
