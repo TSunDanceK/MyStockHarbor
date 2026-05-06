@@ -931,25 +931,42 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
     (point) => point.date === item.supportStartDate
   );
 
+  const detectedSupportEndIndex = points.findIndex(
+    (point) => point.date === item.supportEndDate
+  );
+
   const supportStartIndex =
     detectedSupportStartIndex >= 0
       ? detectedSupportStartIndex
       : Math.max(0, Math.floor(points.length * 0.12));
 
-  const supportEndIndex = points.length - 1;
+  const supportPivotEndIndex =
+    detectedSupportEndIndex > supportStartIndex
+      ? detectedSupportEndIndex
+      : Math.max(supportStartIndex + 1, points.length - 1);
+
+  const supportDrawEndIndex = points.length - 1;
 
   const supportStartPrice =
     Number.isFinite(item.supportStartPrice)
       ? item.supportStartPrice
       : item.latestClose;
 
-  const supportEndPrice =
-    item.latestClose > supportStartPrice
-      ? item.latestClose
-      : Math.max(item.latestClose, item.supportEndPrice, supportStartPrice);
+  const supportPivotEndPrice =
+    Number.isFinite(item.supportEndPrice)
+      ? item.supportEndPrice
+      : supportStartPrice;
+
+  const supportSlopePerBar =
+    (supportPivotEndPrice - supportStartPrice) /
+    Math.max(1, supportPivotEndIndex - supportStartIndex);
+
+  const projectedSupportEndPrice =
+    supportStartPrice +
+    supportSlopePerBar * (supportDrawEndIndex - supportStartIndex);
 
 const supportStartY = yAt(supportStartPrice);
-const supportEndY = yAt(supportEndPrice);
+const supportEndY = yAt(projectedSupportEndPrice);
 
 const latestX = xAt(points.length - 1);
 const latestY = yAt(item.latestClose);
@@ -1032,7 +1049,7 @@ const gradientId = `fill-${item.symbol}-${item.timeframe}`.replace(/[^a-zA-Z0-9-
 
         <line
           x1={xAt(supportStartIndex)}
-          x2={xAt(supportEndIndex)}
+          x2={xAt(supportDrawEndIndex)}
           y1={supportStartY}
           y2={supportEndY}
           stroke="rgba(96,165,250,0.88)"
