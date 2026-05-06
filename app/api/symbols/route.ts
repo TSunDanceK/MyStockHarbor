@@ -62,6 +62,44 @@ async function fetchSymbolDirectory(url: string) {
   return res.text();
 }
 
+async function fetchFmpExactSymbol(symbol: string): Promise<SymbolRow | null> {
+  const apiKey =
+    process.env.FMP_API_KEY ||
+    process.env.FINANCIAL_MODELING_PREP_API_KEY ||
+    process.env.NEXT_PUBLIC_FMP_API_KEY;
+
+  if (!apiKey) return null;
+
+  try {
+    const res = await fetch(
+      `https://financialmodelingprep.com/api/v3/profile/${encodeURIComponent(
+        symbol
+      )}?apikey=${apiKey}`,
+      { next: { revalidate: 86400 } }
+    );
+
+    if (!res.ok) return null;
+
+    const data = (await res.json()) as Array<{
+      symbol?: string;
+      companyName?: string;
+      exchangeShortName?: string;
+    }>;
+
+    const row = Array.isArray(data) ? data[0] : null;
+
+    if (!row?.symbol || !row?.companyName) return null;
+
+    return {
+      symbol: row.symbol.toUpperCase(),
+      name: row.companyName,
+      exchange: row.exchangeShortName || "FMP",
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const q = (searchParams.get("q") || "").trim().toUpperCase();
