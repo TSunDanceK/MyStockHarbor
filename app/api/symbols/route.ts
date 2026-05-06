@@ -131,6 +131,45 @@ async function fetchFmpExactSymbol(symbol: string): Promise<SymbolRow | null> {
   }
 }
 
+async function fetchFmpSearchSymbols(query: string): Promise<SymbolRow[]> {
+  const apiKey =
+    process.env.FMP_API_KEY ||
+    process.env.FINANCIAL_MODELING_PREP_API_KEY ||
+    process.env.NEXT_PUBLIC_FMP_API_KEY;
+
+  if (!apiKey || query.length < 2) return [];
+
+  try {
+    const res = await fetch(
+      `https://financialmodelingprep.com/api/v3/search?query=${encodeURIComponent(
+        query
+      )}&limit=25&apikey=${apiKey}`,
+      { next: { revalidate: 86400 } }
+    );
+
+    if (!res.ok) return [];
+
+    const data = (await res.json()) as Array<{
+      symbol?: string;
+      name?: string;
+      exchangeShortName?: string;
+      stockExchange?: string;
+    }>;
+
+    return Array.isArray(data)
+      ? data
+          .map((row) => ({
+            symbol: String(row.symbol ?? "").toUpperCase(),
+            name: String(row.name ?? ""),
+            exchange: String(row.exchangeShortName ?? row.stockExchange ?? "FMP"),
+          }))
+          .filter((row) => row.symbol && row.name)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const q = (searchParams.get("q") || "").trim().toUpperCase();
@@ -153,6 +192,11 @@ export async function GET(req: Request) {
     );
   }
 
+const [fmpExact, fmpSearch] = await Promise.all([
+  fetchFmpExactSymbol(q),
+  fetchFmpSearchSymbols(q),
+]);
+
 const exactSymbolMatches = all.filter(
   (r) => r.symbol.toUpperCase() === q
 );
@@ -163,20 +207,53 @@ const startingSymbolMatches = all.filter(
     r.symbol.toUpperCase() !== q
 );
 
-const nameMatches = all.filter(
+const startingNameMatches = all.filter(
   (r) =>
     !r.symbol.toUpperCase().startsWith(q) &&
-    r.name.toUpperCase().includes(q)
+    r.name.toUpperCase().startsWith(q)
 );
 
-const fmpExact = await fetchFmpExactSymbol(q);
+const wordStartingNameMatches = all.filter((r) => {
+  const symbol = r.symbol.toUpperCase();
+  const name = r.name.toUpperCase();
+
+  if (symbol.startsWith(q)) return false;
+  if (name.startsWith(q)) return false;
+
+  return name
+    .split(/[\s,.-]+/)
+    .some((word) => word.startsWith(q));
+});
+
+const looseNameMatches = all.filter((r) => {
+  const symbol = r.symbol.toUpperCase();
+  const name = r.name.toUpperCase();
+
+  if (symbol.startsWith(q)) return false;
+  if (name.startsWith(q)) return false;
+  if (name.split(/[\s,.-]+/).some((word) => word.startsWith(q))) return false;
+
+  return name.includes(q);
+});
+
+const seen = new Set<string>();
 
 const results = [
   ...(fmpExact ? [fmpExact] : []),
-  ...exactSymbolMatches.filter((r) => r.symbol !== fmpExact?.symbol),
-  ...startingSymbolMatches.filter((r) => r.symbol !== fmpExact?.symbol),
-  ...nameMatches.filter((r) => r.symbol !== fmpExact?.symbol),
-].slice(0, 25);
+  ...fmpSearch,
+  ...exactSymbolMatches,
+  ...startingSymbolMatches,
+  ...startingNameMatches,
+  ...wordStartingNameMatches,
+  ...looseNameMatches,
+]
+  .filter((r) => {
+    const key = r.symbol.toUpperCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  })
+  .slice(0, 50);
 
   return NextResponse.json(
     { results },
