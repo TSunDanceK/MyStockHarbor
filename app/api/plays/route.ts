@@ -638,13 +638,20 @@ async function buildPlaysPayload(
     1
   );
 
-  const universe = Array.from(
+  const priorityUniverse = Array.from(
     new Set(
-      [...dynamicUniverse, ...PRESET_UNIVERSE]
+      [
+        ...rankedDynamicUniverse,
+        ...PRESET_UNIVERSE,
+        ...sharedUniverseSymbols,
+        ...accumulatedDynamicUniverse,
+      ]
         .map((x) => String(x).trim().toUpperCase())
         .filter(Boolean)
     )
-  ).slice(0, UNIVERSE_CAP);
+  );
+
+  const universe = priorityUniverse.slice(0, UNIVERSE_CAP);
 
   const weeklyAscendingTriangles: PlayItem[] = [];
   const dailyAscendingTriangles: PlayItem[] = [];
