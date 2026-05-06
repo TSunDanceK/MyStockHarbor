@@ -238,9 +238,9 @@ const MEMORY_CACHE_MS = 60_000;
 const CACHE_SECONDS = 60 * 6;
 const STALE_SECONDS = 60 * 6;
 
-const DESCENDING_REDIS_KEY = "msh:descending-triangles:v3:main";
+const DESCENDING_REDIS_KEY = "msh:descending-triangles:v4:main";
 const DESCENDING_REDIS_TTL_SECONDS = 6 * 60;
-const DESCENDING_LOCK_KEY = "msh:descending-triangles:v3:main:lock";
+const DESCENDING_LOCK_KEY = "msh:descending-triangles:v4:main:lock";
 const DESCENDING_LOCK_TTL_SECONDS = 120;
 
 function originFromReq(req: NextRequest) {
@@ -471,12 +471,17 @@ function buildDashboardHref(symbol: string, timeframe: "M" | "ST" | "D" | "W") {
 function toPlayItem(
   symbol: string,
   result: DescendingTriangleResult,
-  sourcePoints: Point[]
+  sourcePoints: Point[],
+  itemTimeframe?: "M" | "ST" | "D" | "W"
 ): PlayItem {
+  const displayTimeframe = itemTimeframe ?? result.timeframe;
+
   const chartBars =
-    result.timeframe === "W"
-      ? Math.min(220, Math.max(52, result.patternBars + 8))
-      : Math.min(280, Math.max(90, result.patternBars + 15));
+    displayTimeframe === "M"
+      ? Math.min(260, Math.max(90, result.patternBars + 12))
+      : displayTimeframe === "W"
+        ? Math.min(220, Math.max(52, result.patternBars + 8))
+        : Math.min(280, Math.max(90, result.patternBars + 15));
 
   const chartPoints = sourcePoints
     .slice(-chartBars)
@@ -501,7 +506,7 @@ function toPlayItem(
   return {
     symbol,
     play: "descendingTriangle",
-    timeframe: result.timeframe,
+    timeframe: displayTimeframe,
     score: result.score,
     tone: result.tone,
     note: result.note,
@@ -527,7 +532,7 @@ function toPlayItem(
 
     chartPoints,
 
-    dashboardHref: buildDashboardHref(symbol, result.timeframe),
+    dashboardHref: buildDashboardHref(symbol, displayTimeframe),
   };
 }
 
@@ -557,19 +562,19 @@ function bestTriangleForWindows(
   const detectorTimeframe = timeframe === "M" || timeframe === "W" ? "W" : "D";
 
   const maxDistanceAboveSupportPct =
-    timeframe === "M" ? 10 : timeframe === "W" ? 7 : timeframe === "ST" ? 6 : 7;
+    timeframe === "M" ? 16 : timeframe === "W" ? 7 : timeframe === "ST" ? 6 : 7;
 
   const maxSupportZonePct =
-    timeframe === "M" ? 5.5 : timeframe === "W" ? 4.5 : timeframe === "ST" ? 3.5 : 4;
+    timeframe === "M" ? 6.5 : timeframe === "W" ? 4.5 : timeframe === "ST" ? 3.5 : 4;
 
   const minPatternBars =
-    timeframe === "M" ? 32 : timeframe === "W" ? 12 : timeframe === "ST" ? 18 : 35;
+    timeframe === "M" ? 24 : timeframe === "W" ? 12 : timeframe === "ST" ? 18 : 35;
 
   const maxPatternBars =
     timeframe === "M" ? 249 : timeframe === "W" ? 140 : timeframe === "ST" ? 70 : 180;
 
   const minTouchSeparationBars =
-    timeframe === "M" ? 4 : timeframe === "W" ? 2 : timeframe === "ST" ? 4 : 5;
+    timeframe === "M" ? 2 : timeframe === "W" ? 2 : timeframe === "ST" ? 4 : 5;
 
   const results = windows
     .map((lookbackBars) =>
@@ -849,6 +854,9 @@ async function buildDescendingPayload(
             debugSymbolScan.weeklyBars = weeklyPoints.length;
             debugSymbolScan.diagnostics = {
               macro: debugTriangleWindows(weeklyPoints, "M", [
+                104,
+                120,
+                140,
                 156,
                 180,
                 208,
@@ -867,6 +875,9 @@ async function buildDescendingPayload(
           }
 
           const macroTriangle = bestTriangleForWindows(weeklyPoints, "M", [
+            104,
+            120,
+            140,
             156,
             180,
             208,
@@ -878,12 +889,9 @@ async function buildDescendingPayload(
               debugSymbolScan.matched = "macro";
             }
 
-            macroDescendingTriangles.push({
-              ...toPlayItem(symbol, macroTriangle, weeklyPoints),
-              timeframe: "M",
-              note: macroTriangle.note,
-              dashboardHref: buildDashboardHref(symbol, "M"),
-            });
+            macroDescendingTriangles.push(
+              toPlayItem(symbol, macroTriangle, weeklyPoints, "M")
+            );
             return;
           }
 
