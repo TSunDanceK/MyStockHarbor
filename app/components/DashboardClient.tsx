@@ -1343,19 +1343,20 @@ useEffect(() => {
     return values.join(", ");
   }
 
-  function chooseSymbol(s: string) {
-    const cleaned = s.trim().toUpperCase();
-    if (!cleaned) return;
+function chooseSymbol(s: string, name?: string) {
+  const cleaned = s.trim().toUpperCase();
+  if (!cleaned) return;
 
-    setSymbol(cleaned);
-    setQuery(cleaned);
-    setResults([]);
-    setOpen(false);
-    setActiveTimeframe("D");
-    setSelectedIndicators([]);
-    setIndicator("None");
-    setWindowOffset(0);
-  }
+  setSymbol(cleaned);
+  setSymbolName(name?.trim() ? name.trim() : "");
+  setQuery(cleaned);
+  setResults([]);
+  setOpen(false);
+  setActiveTimeframe("D");
+  setSelectedIndicators([]);
+  setIndicator("None");
+  setWindowOffset(0);
+}
 
   function clearIndicatorSelection() {
     setSelectedIndicators([]);
@@ -3535,7 +3536,7 @@ return (
                   <button
                     key={`${r.symbol}-${r.exchange}`}
                     type="button"
-                    onClick={() => chooseSymbol(r.symbol)}
+                    onClick={() => chooseSymbol(r.symbol, r.name)}
                     style={{
                       width: "100%",
                       textAlign: "left",
@@ -4003,7 +4004,7 @@ return (
                   <button
                     key={`${r.symbol}-${r.exchange}`}
                     type="button"
-                    onClick={() => chooseSymbol(r.symbol)}
+                    onClick={() => chooseSymbol(r.symbol, r.name)}
                     style={{
                       width: "100%",
                       textAlign: "left",
