@@ -5,6 +5,10 @@ import { Redis } from "@upstash/redis";
 import { NextRequest, NextResponse } from "next/server";
 import { detectDivergenceFromHistory } from "../../../lib/ta/divergence";
 import { getDailyHistory } from "../../../lib/server/historyCache";
+import {
+  addToDynamicUniverse,
+  readDynamicUniverse,
+} from "../../../lib/server/dynamicUniverseCache";
 
 type Point = {
   date: string;
@@ -1406,12 +1410,28 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
     new Set([...topTraded, ...topMovers, ...topRanges])
   );
 
+  const sharedUniverseEntries = await readDynamicUniverse();
+
+  const sharedUniverseSymbols = sharedUniverseEntries.map(
+    (entry) => entry.symbol
+  );
+
   const dynamicUniverse = Array.from(
     new Set(
-      [...accumulatedDynamicUniverse, ...rankedDynamicUniverse]
+      [
+        ...sharedUniverseSymbols,
+        ...accumulatedDynamicUniverse,
+        ...rankedDynamicUniverse,
+      ]
         .map((x) => String(x).trim().toUpperCase())
         .filter(Boolean)
     )
+  );
+
+  await addToDynamicUniverse(
+    [...accumulatedDynamicUniverse, ...rankedDynamicUniverse],
+    "market",
+    1
   );
 
   const dynamicUniverseSet = new Set(dynamicUniverse);
