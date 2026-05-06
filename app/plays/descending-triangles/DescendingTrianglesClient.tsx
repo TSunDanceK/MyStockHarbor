@@ -110,6 +110,23 @@ function formatNumber(value: number, digits = 2) {
   if (!Number.isFinite(value)) return "—";
   return value.toFixed(digits);
 }
+function formatNumber(value: number, digits = 2) {
+  if (!Number.isFinite(value)) return "—";
+  return value.toFixed(digits);
+}
+
+function pctDiff(from: number, to: number) {
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from === 0) return 0;
+  return ((to - from) / from) * 100;
+}
+
+const topNavIconWrapStyle: React.CSSProperties = {
+  fontSize: 15,
+  lineHeight: 1,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
 
 const topNavIconWrapStyle: React.CSSProperties = {
   fontSize: 15,
