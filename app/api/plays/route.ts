@@ -540,6 +540,12 @@ async function buildPlaysPayload(
     ...dailyAscendingTriangles,
   ];
 
+    const discoveredPlaySymbols = bestAscendingTriangles
+    .filter((item) => item.score >= 65)
+    .map((item) => item.symbol);
+
+  await addToDynamicUniverse(discoveredPlaySymbols, "plays", 2);
+
   const sections = [
     buildSection({
       title: "Best Ascending Triangle Plays",
