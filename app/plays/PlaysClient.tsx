@@ -16,7 +16,7 @@ type PlayChartPoint = {
 type PlayItem = {
   symbol: string;
   play: "ascendingTriangle"; 
-  timeframe: "D" | "W";
+  timeframe: "ST" | "D" | "W";
   score: number;
   tone: PlayTone;
   note: string;
@@ -86,8 +86,10 @@ function setupLabel(score: number) {
   return "Loose setup";
 }
 
-function timeframeLabel(timeframe: "D" | "W") {
-  return timeframe === "W" ? "Weekly" : "Daily";
+function timeframeLabel(timeframe: "ST" | "D" | "W") {
+  if (timeframe === "W") return "Weekly";
+  if (timeframe === "ST") return "Short-term";
+  return "Daily";
 }
 
 function formatDate(value?: string | null) {
@@ -225,7 +227,7 @@ export default function PlaysClient() {
   const [universeSize, setUniverseSize] = useState<number | null>(null);
   const [dynamicUniverseCount, setDynamicUniverseCount] = useState<number | null>(null);
   const [estimatedApiCalls, setEstimatedApiCalls] = useState<number | null>(null);
-  const [selectedTimeframe, setSelectedTimeframe] = useState<"ALL" | "W" | "D">("ALL");
+  const [selectedTimeframe, setSelectedTimeframe] = useState<"ALL" | "W" | "D" | "ST">("ALL");
 
   async function loadPlays(force = false) {
     const setBusy = force ? setForceRefreshing : setLoading;
@@ -315,6 +317,7 @@ const url = force
 
   const weeklyCount = allItems.filter((item) => item.timeframe === "W").length;
   const dailyCount = allItems.filter((item) => item.timeframe === "D").length;
+  const shortTermCount = allItems.filter((item) => item.timeframe === "ST").length;
   const topScore = allItems.length ? Math.max(...allItems.map((item) => item.score)) : null;
 
   return (
@@ -456,7 +459,7 @@ const url = force
                 gap: 10,
               }}
             >
-              {(["ALL", "W", "D"] as const).map((key) => {
+              {(["ALL", "W", "D", "ST"] as const).map((key) => {
                 const active = selectedTimeframe === key;
 
                 return (
@@ -479,7 +482,13 @@ const url = force
                       cursor: "pointer",
                     }}
                   >
-                    {key === "ALL" ? "All plays" : key === "W" ? "Weekly only" : "Daily only"}
+                    {key === "ALL"
+                      ? "All plays"
+                      : key === "W"
+                        ? "Weekly only"
+                        : key === "ST"
+                          ? "Short-term only"
+                          : "Daily only"}
                   </button>
                 );
               })}
@@ -538,6 +547,7 @@ const url = force
               <StatRow label="Dynamic names" value={dynamicUniverseCount == null ? "—" : String(dynamicUniverseCount)} />
               <StatRow label="Weekly shown" value={String(weeklyCount)} />
               <StatRow label="Daily shown" value={String(dailyCount)} />
+              <StatRow label="Short-term shown" value={String(shortTermCount)} />
               <StatRow label="Top score" value={topScore == null ? "—" : String(topScore)} />
               <StatRow label="Updated" value={formatDate(updatedAt)} />
             </div>
