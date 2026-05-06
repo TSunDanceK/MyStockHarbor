@@ -343,36 +343,9 @@ async function fetchMarket(origin: string, forceFresh = false) {
 }
 
 async function fetchHistory(symbol: string, days: number): Promise<Point[]> {
-  const apiKey = process.env.FMP_API_KEY;
+  const pts = await getDailyHistory(symbol);
 
-  if (!apiKey) {
-    throw new Error("Missing FMP_API_KEY environment variable");
-  }
-
-  const safeSymbol = symbol.trim().toUpperCase();
-
-  const url =
-    "https://financialmodelingprep.com/stable/historical-price-eod/full" +
-    `?symbol=${encodeURIComponent(safeSymbol)}` +
-    `&apikey=${encodeURIComponent(apiKey)}`;
-
-  const res = await fetch(url, {
-    cache: "no-store",
-  });
-
-  if (!res.ok) {
-    throw new Error(`FMP history failed for ${safeSymbol}`);
-  }
-
-  const data = await res.json();
-
-  const rows: FmpHistoricalRow[] = Array.isArray(data)
-    ? data
-    : Array.isArray(data?.historical)
-      ? data.historical
-      : [];
-
-  return rows
+  return pts
     .map((p) => ({
       date: String(p?.date ?? ""),
       close: Number(p?.close),
@@ -381,7 +354,6 @@ async function fetchHistory(symbol: string, days: number): Promise<Point[]> {
       volume: p?.volume == null ? undefined : Number(p.volume),
     }))
     .filter((p) => p.date && Number.isFinite(p.close))
-    .sort((a, b) => a.date.localeCompare(b.date))
     .slice(-days);
 }
 
