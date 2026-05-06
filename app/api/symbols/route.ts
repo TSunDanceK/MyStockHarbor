@@ -25,8 +25,9 @@ function parseNasdaqSymbolFile(text: string) {
     const cols = trimmed.split("|");
     if (cols.length < 2) continue;
 
-    const symbol = (cols[0] || "").trim();
-    const name = (cols[1] || "").trim();
+const rawSymbol = (cols[0] || "").trim();
+const symbol = rawSymbol.replace(/\$/g, ".");
+const name = (cols[1] || "").trim();
 
     // Exchange handling: in otherlisted.txt, exchange is cols[2] (N/A/P/Z etc.)
     // in nasdaqlisted.txt, exchange isn’t directly a letter; we’ll label it NASDAQ.
@@ -35,8 +36,38 @@ function parseNasdaqSymbolFile(text: string) {
       exchange = (cols[2] || "").trim();
     }
 
-    // Keep only simple root symbols
-    if (!/^[A-Z.\-]+$/.test(symbol)) continue;
+// Keep only normal equity-style symbols.
+if (!/^[A-Z][A-Z.\-]*$/.test(symbol)) continue;
+
+// Remove test issues, warrants, units, rights, notes, preferreds, ETFs/funds,
+// and other non-common-stock style entries from dashboard search.
+const upperName = name.toUpperCase();
+
+const nonStockNameParts = [
+  "ETF",
+  "FUND",
+  "TRUST",
+  "ETN",
+  "NOTE",
+  "NOTES",
+  "WARRANT",
+  "RIGHT",
+  "UNIT",
+  "PREFERRED",
+  "PREFERENCE",
+  "DEPOSITARY",
+  "ADR",
+  "ADS",
+];
+
+if (symbol.includes("#")) continue;
+if (symbol.includes("+")) continue;
+if (symbol.includes("^")) continue;
+if (symbol.includes("=")) continue;
+
+if (nonStockNameParts.some((part) => upperName.includes(part))) {
+  continue;
+}
 
     out.push({ symbol, name, exchange });
   }
