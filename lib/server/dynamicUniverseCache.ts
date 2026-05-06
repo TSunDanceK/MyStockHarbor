@@ -15,7 +15,7 @@ const redis =
     : null;
 
 const REDIS_DYNAMIC_UNIVERSE_KEY = "msh:dynamic-universe:v1";
-const MAX_DYNAMIC_UNIVERSE_SIZE = 400;
+const MAX_DYNAMIC_UNIVERSE_SIZE = 700;
 const ENTRY_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 
 function normaliseSymbol(symbol: string) {
