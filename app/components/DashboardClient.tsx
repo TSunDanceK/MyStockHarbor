@@ -755,6 +755,15 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   });
 
   const [symbolName, setSymbolName] = useState("");
+  if (!symbolName || !symbolName.trim()) {
+  const fallback = POPULAR_SYMBOLS.find(
+    (x) => x.symbol.toUpperCase() === symbol.toUpperCase()
+  );
+
+  if (fallback?.name) {
+    setSymbolName(fallback.name);
+  }
+}
   const [activeTimeframe, setActiveTimeframe] = useState("D");
   const [visibleBars, setVisibleBars] = useState(75);
   const [windowOffset, setWindowOffset] = useState(0);
