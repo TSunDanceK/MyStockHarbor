@@ -55,7 +55,7 @@ type PlayChartPoint = {
 type PlayItem = {
   symbol: string;
   play: "descendingTriangle";
-  timeframe: "ST" | "D" | "W";
+  timeframe: "M" | "ST" | "D" | "W";
   score: number;
   tone: PlayTone;
   note: string;
@@ -460,10 +460,10 @@ async function fetchHistory(symbol: string, days: number): Promise<Point[]> {
     .slice(-days);
 }
 
-function buildDashboardHref(symbol: string, timeframe: "ST" | "D" | "W") {
+function buildDashboardHref(symbol: string, timeframe: "M" | "ST" | "D" | "W") {
   const params = new URLSearchParams();
   params.set("symbol", symbol);
-  params.set("tf", timeframe === "ST" ? "D" : timeframe);
+  params.set("tf", timeframe === "ST" ? "D" : timeframe === "M" ? "W" : timeframe);
 
   return `/?${params.toString()}`;
 }
@@ -551,22 +551,25 @@ function buildSection(args: {
 
 function bestTriangleForWindows(
   points: Point[],
-  timeframe: "ST" | "D" | "W",
+  timeframe: "M" | "ST" | "D" | "W",
   windows: number[]
 ): DescendingTriangleResult | null {
-  const detectorTimeframe = timeframe === "W" ? "W" : "D";
+  const detectorTimeframe = timeframe === "M" || timeframe === "W" ? "W" : "D";
 
   const maxDistanceAboveSupportPct =
-    timeframe === "W" ? 3.75 : timeframe === "ST" ? 2.25 : 3;
+    timeframe === "M" ? 10 : timeframe === "W" ? 7 : timeframe === "ST" ? 6 : 7;
 
   const maxSupportZonePct =
-    timeframe === "W" ? 4 : timeframe === "ST" ? 2.75 : 3.25;
+    timeframe === "M" ? 5.5 : timeframe === "W" ? 4.5 : timeframe === "ST" ? 3.5 : 4;
 
   const minPatternBars =
-    timeframe === "W" ? 12 : timeframe === "ST" ? 18 : 35;
+    timeframe === "M" ? 32 : timeframe === "W" ? 12 : timeframe === "ST" ? 18 : 35;
 
   const maxPatternBars =
-    timeframe === "W" ? 249 : timeframe === "ST" ? 70 : 180;
+    timeframe === "M" ? 249 : timeframe === "W" ? 140 : timeframe === "ST" ? 70 : 180;
+
+  const minTouchSeparationBars =
+    timeframe === "M" ? 4 : timeframe === "W" ? 2 : timeframe === "ST" ? 4 : 5;
 
   const results = windows
     .map((lookbackBars) =>
@@ -574,9 +577,11 @@ function bestTriangleForWindows(
         timeframe: detectorTimeframe,
         lookbackBars,
         maxDistanceAboveSupportPct,
-        minSupportTouches: 2,
-        minFallingHighTouches: 2,
+        maxSupportZonePct,
+        minSupportTouches: timeframe === "M" ? 2 : 2,
+        minFallingHighTouches: timeframe === "M" ? 2 : 2,
         minPatternBars,
+        minTouchSeparationBars,
       })
     )
     .filter((result): result is DescendingTriangleResult => result !== null)
@@ -596,13 +601,23 @@ function bestTriangleForWindows(
       return true;
     })
     .map((result) => {
-      if (timeframe !== "ST") return result;
+      if (timeframe === "M") {
+        return {
+          ...result,
+          timeframe: "W" as const,
+          note: `Macro descending triangle candidate: ${result.supportTouches} support touches, ${result.fallingHighTouches} falling highs, ${result.distanceToSupportPct.toFixed(1)}% above support.`,
+        };
+      }
 
-      return {
-        ...result,
-        timeframe: "D" as const,
-        note: `Short-term descending triangle candidate: ${result.supportTouches} support touches, ${result.fallingHighTouches} falling highs, ${result.distanceToSupportPct.toFixed(1)}% above support.`,
-      };
+      if (timeframe === "ST") {
+        return {
+          ...result,
+          timeframe: "D" as const,
+          note: `Short-term descending triangle candidate: ${result.supportTouches} support touches, ${result.fallingHighTouches} falling highs, ${result.distanceToSupportPct.toFixed(1)}% above support.`,
+        };
+      }
+
+      return result;
     });
 
   if (!results.length) return null;
@@ -612,10 +627,10 @@ function bestTriangleForWindows(
 
 function debugTriangleWindows(
   points: Point[],
-  timeframe: "ST" | "D" | "W",
+  timeframe: "M" | "ST" | "D" | "W",
   windows: number[]
 ) {
-  const detectorTimeframe = timeframe === "W" ? "W" : "D";
+  const detectorTimeframe = timeframe === "M" || timeframe === "W" ? "W" : "D";
 
   const maxDistanceAboveSupportPct =
     timeframe === "W" ? 3.75 : timeframe === "ST" ? 2.25 : 3;
@@ -778,6 +793,7 @@ async function buildDescendingPayload(
       }
     : null;
 
+  const macroDescendingTriangles: PlayItem[] = [];
   const weeklyDescendingTriangles: PlayItem[] = [];
   const dailyDescendingTriangles: PlayItem[] = [];
   const shortTermDescendingTriangles: PlayItem[] = [];
@@ -832,18 +848,43 @@ async function buildDescendingPayload(
           if (symbol === normalizedDebugSymbol && debugSymbolScan) {
             debugSymbolScan.weeklyBars = weeklyPoints.length;
             debugSymbolScan.diagnostics = {
+              macro: debugTriangleWindows(weeklyPoints, "M", [
+                156,
+                180,
+                208,
+                249,
+              ]),
               weekly: debugTriangleWindows(weeklyPoints, "W", [
                 39,
                 52,
                 80,
                 104,
                 156,
-                208,
-                249,
               ]),
               daily: debugTriangleWindows(dailyPoints, "D", [90, 120, 160]),
               shortTerm: debugTriangleWindows(dailyPoints, "ST", [35, 50, 70]),
             };
+          }
+
+          const macroTriangle = bestTriangleForWindows(weeklyPoints, "M", [
+            156,
+            180,
+            208,
+            249,
+          ]);
+
+          if (macroTriangle) {
+            if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+              debugSymbolScan.matched = "macro";
+            }
+
+            macroDescendingTriangles.push({
+              ...toPlayItem(symbol, macroTriangle, weeklyPoints),
+              timeframe: "M",
+              note: macroTriangle.note,
+              dashboardHref: buildDashboardHref(symbol, "M"),
+            });
+            return;
           }
 
           const weeklyTriangle = bestTriangleForWindows(weeklyPoints, "W", [
@@ -852,8 +893,6 @@ async function buildDescendingPayload(
             80,
             104,
             156,
-            208,
-            249,
           ]);
 
           if (weeklyTriangle) {
@@ -910,6 +949,7 @@ async function buildDescendingPayload(
   );
 
   const bestDescendingTriangles = [
+    ...macroDescendingTriangles,
     ...weeklyDescendingTriangles,
     ...dailyDescendingTriangles,
     ...shortTermDescendingTriangles,
@@ -919,8 +959,15 @@ async function buildDescendingPayload(
     buildSection({
       title: "Best Descending Triangle Plays",
       description:
-        "The strongest weekly, daily, and short-term descending triangle candidates, ranked by support quality, falling highs, breakdown proximity and structure age.",
+        "The strongest macro, weekly, daily, and short-term descending triangle candidates, ranked by support quality, falling highs, breakdown proximity and structure age.",
       source: bestDescendingTriangles,
+      take: 24,
+    }),
+    buildSection({
+      title: "Macro Descending Triangle Plays",
+      description:
+        "Large descending triangle structures built from wider weekly chart history. These are slower-forming macro setups that may span many months.",
+      source: macroDescendingTriangles,
       take: 24,
     }),
     buildSection({
