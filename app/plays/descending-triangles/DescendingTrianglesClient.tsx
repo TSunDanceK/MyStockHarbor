@@ -316,12 +316,57 @@ export default function DescendingTrianglesClient() {
     }
   }
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const forceInitialLoad = params.get("force") === "1";
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  const forceInitialLoad = params.get("force") === "1";
 
-    loadPlays(forceInitialLoad);
-  }, []);
+  async function runInitialLoad() {
+    setLoading(true);
+    setForceRefreshing(false);
+    setErr(null);
+
+    try {
+      const url = forceInitialLoad
+        ? `/api/descending-triangles?force=1&t=${Date.now()}`
+        : `/api/descending-triangles?t=${Date.now()}`;
+
+      const res = await fetch(url, { cache: "no-store" });
+
+      if (!res.ok) throw new Error("Descending triangles API failed");
+
+      const data = (await res.json()) as PlaysPayload;
+
+      if (data?.error) throw new Error(data.error);
+
+      setSections(Array.isArray(data?.sections) ? data.sections : []);
+      setUpdatedAt(typeof data?.updatedAt === "string" ? data.updatedAt : null);
+      setUniverseSize(
+        typeof data?.universeSize === "number" ? data.universeSize : null
+      );
+      setDynamicUniverseCount(
+        typeof data?.dynamicUniverseCount === "number"
+          ? data.dynamicUniverseCount
+          : null
+      );
+      setEstimatedApiCalls(
+        typeof data?.estimatedApiCalls === "number"
+          ? data.estimatedApiCalls
+          : null
+      );
+    } catch {
+      setErr("Failed to load descending triangle plays.");
+      setSections([]);
+      setUpdatedAt(null);
+      setUniverseSize(null);
+      setDynamicUniverseCount(null);
+      setEstimatedApiCalls(null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  runInitialLoad();
+}, []);
 
   const safeSections = useMemo(() => {
     return Array.isArray(sections) ? sections : [];
