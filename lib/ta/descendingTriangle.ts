@@ -407,10 +407,7 @@ export function detectDescendingTriangle(
 
   const distanceToSupportPct = pctDiff(supportCluster.support, latest.close);
 
-  if (
-    distanceToSupportPct < -1.5 ||
-    distanceToSupportPct > maxDistanceAboveSupportPct
-  ) {
+  if (distanceToSupportPct < -1.5) {
     return null;
   }
 
@@ -516,6 +513,17 @@ export function detectDescendingTriangle(
   const maxResistanceBelowSupportPct = timeframe === "W" ? 1.25 : 1;
 
   if (resistanceToSupportGapPct < -maxResistanceBelowSupportPct) {
+    return null;
+  }
+
+    const latestAboveProjectedResistancePct = pctDiff(
+    projectedResistanceAtLatest,
+    latest.close
+  );
+
+  const maxLatestAboveResistancePct = timeframe === "W" ? 2 : 1.5;
+
+  if (latestAboveProjectedResistancePct > maxLatestAboveResistancePct) {
     return null;
   }
 
