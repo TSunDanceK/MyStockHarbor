@@ -9,7 +9,7 @@ export type PatternPoint = {
 };
 
 export type AscendingTriangleTimeframe = "D" | "W";
-
+ 
 export type AscendingTriangleResult = {
   pattern: "ascendingTriangle";
   timeframe: AscendingTriangleTimeframe;
