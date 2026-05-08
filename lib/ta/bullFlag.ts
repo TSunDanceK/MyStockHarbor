@@ -304,21 +304,77 @@ export function detectBullFlag(
       endPrice: lateLowAvg,
     });
 
-    const minFlagAngleDeg = 10;
-    const maxFlagAngleDeg = 30;
+const minFlagAngleDeg = timeframe === "W" ? 11 : 12;
+const maxFlagAngleDeg = timeframe === "W" ? 26 : 28;
 
-    if (upperFlagAngleDeg < minFlagAngleDeg) continue;
-    if (upperFlagAngleDeg > maxFlagAngleDeg) continue;
-    if (lowerFlagAngleDeg < minFlagAngleDeg) continue;
-    if (lowerFlagAngleDeg > maxFlagAngleDeg) continue;
+if (upperFlagAngleDeg < minFlagAngleDeg) continue;
+if (upperFlagAngleDeg > maxFlagAngleDeg) continue;
+if (lowerFlagAngleDeg < minFlagAngleDeg) continue;
+if (lowerFlagAngleDeg > maxFlagAngleDeg) continue;
 
-    const flagAngleDeg = (upperFlagAngleDeg + lowerFlagAngleDeg) / 2;
+const maxChannelAngleDifferenceDeg = timeframe === "W" ? 8 : 6;
 
-    const breakoutPrice = lateHighAvg;
-    const distanceToBreakoutPct = pctDiff(latest.close, breakoutPrice);
+if (
+  Math.abs(upperFlagAngleDeg - lowerFlagAngleDeg) >
+  maxChannelAngleDifferenceDeg
+) {
+  continue;
+}
 
-    if (distanceToBreakoutPct > maxDistanceToBreakoutPct) continue;
-    if (distanceToBreakoutPct < -maxBreakoutExtensionPct) continue;
+const maxCloseOutsideChannelPct = timeframe === "W" ? 2.2 : 1.35;
+const maxWickOutsideChannelPct = timeframe === "W" ? 3.4 : 2.25;
+const maxCloseOutsideBars = timeframe === "W" ? 2 : 1;
+const maxWickOutsideBars = timeframe === "W" ? 2 : 1;
+
+let closeOutsideChannelBars = 0;
+let wickOutsideChannelBars = 0;
+
+for (let i = 0; i < flagPoints.length; i++) {
+  const point = flagPoints[i];
+  const progress = i / Math.max(1, flagPoints.length - 1);
+
+  const upperAtPoint =
+    earlyHighAvg + (lateHighAvg - earlyHighAvg) * progress;
+
+  const lowerAtPoint =
+    earlyLowAvg + (lateLowAvg - earlyLowAvg) * progress;
+
+  const closeAboveUpperPct = pctDiff(upperAtPoint, point.close);
+  const closeBelowLowerPct = pctDiff(lowerAtPoint, point.close);
+
+  const highAboveUpperPct = pctDiff(upperAtPoint, point.high);
+  const lowBelowLowerPct = pctDiff(lowerAtPoint, point.low);
+
+  if (
+    closeAboveUpperPct > maxCloseOutsideChannelPct ||
+    closeBelowLowerPct < -maxCloseOutsideChannelPct
+  ) {
+    closeOutsideChannelBars++;
+  }
+
+  if (
+    highAboveUpperPct > maxWickOutsideChannelPct ||
+    lowBelowLowerPct < -maxWickOutsideChannelPct
+  ) {
+    wickOutsideChannelBars++;
+  }
+}
+
+if (closeOutsideChannelBars > maxCloseOutsideBars) continue;
+if (wickOutsideChannelBars > maxWickOutsideBars) continue;
+
+const flagAngleDeg = (upperFlagAngleDeg + lowerFlagAngleDeg) / 2;
+
+const breakoutPrice = lateHighAvg;
+const distanceToBreakoutPct = pctDiff(latest.close, breakoutPrice);
+
+const tightenedMaxDistanceToBreakoutPct =
+  timeframe === "W"
+    ? Math.min(maxDistanceToBreakoutPct, 5)
+    : Math.min(maxDistanceToBreakoutPct, 3.5);
+
+if (distanceToBreakoutPct > tightenedMaxDistanceToBreakoutPct) continue;
+if (distanceToBreakoutPct < -maxBreakoutExtensionPct) continue;
 
     const poleScore = clamp((poleGainPct - minPoleGainPct) * 1.15 + 18, 0, 28);
     const retracementScore = clamp(28 - Math.abs(flagRetracementPct - 32) * 0.62, 0, 26);
