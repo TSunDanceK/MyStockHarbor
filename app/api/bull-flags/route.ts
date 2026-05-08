@@ -615,7 +615,7 @@ function toMacroBullFlagResult(result: BullFlagResult) {
   };
 }
 
-function bestFlagForWindows(
+
 function bestFlagForWindows(
   points: Point[],
   timeframe: "M" | "ST" | "D" | "W",
