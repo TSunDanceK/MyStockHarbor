@@ -878,13 +878,15 @@ export default function PriceChart(props: Props) {
           </>
         ) : null}
 
-        <circle
-          cx={x(series.length - 1)}
-          cy={yMain(last.close)}
-          r="3.5"
-          fill={CHART_COLORS.price}
-          opacity="1"
-        />
+        {chartType === "line" ? (
+          <circle
+            cx={x(series.length - 1)}
+            cy={yMain(last.close)}
+            r="3.5"
+            fill={CHART_COLORS.price}
+            opacity="1"
+          />
+        ) : null}
       </svg>
 
       <div
