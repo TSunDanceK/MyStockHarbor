@@ -412,7 +412,7 @@ export function detectAscendingTriangle(
     lastResistanceTouch.price
   );
 
-  const maxDescendingResistanceSlopePct = timeframe === "W" ? -3.5 : -2.75;
+const maxDescendingResistanceSlopePct = timeframe === "W" ? -5.5 : -2.75;
 
   if (resistanceSlopePct < maxDescendingResistanceSlopePct) {
     return null;
@@ -436,7 +436,7 @@ export function detectAscendingTriangle(
 
   const resistanceDriftPct = pctDiff(earlyResistanceAvg, lateResistanceAvg);
 
-  const maxDescendingResistanceDriftPct = timeframe === "W" ? -3 : -2.25;
+const maxDescendingResistanceDriftPct = timeframe === "W" ? -5 : -2.25;
 
   if (resistanceDriftPct < maxDescendingResistanceDriftPct) {
     return null;
@@ -555,9 +555,11 @@ export function detectAscendingTriangle(
     endPrice: lastLow.price,
   });
 
-  if (supportAngleDeg < 7) {
-    return null;
-  }
+const minSupportAngleDeg = timeframe === "W" ? 4.5 : 7;
+
+if (supportAngleDeg < minSupportAngleDeg) {
+  return null;
+}
 
   const supportProjectionBars = lastLow.idx - firstLow.idx;
 
@@ -576,7 +578,7 @@ export function detectAscendingTriangle(
     resistanceCluster.resistance
   );
 
-  const maxSupportAboveResistancePct = timeframe === "W" ? 1.75 : 1.25;
+const maxSupportAboveResistancePct = timeframe === "W" ? 3.5 : 1.25;
 
   if (supportToResistanceGapPct < -maxSupportAboveResistancePct) {
     return null;
@@ -587,7 +589,7 @@ export function detectAscendingTriangle(
     latest.close
   );
 
-  const maxLatestBelowSupportPct = timeframe === "W" ? 3 : 2.25;
+const maxLatestBelowSupportPct = timeframe === "W" ? 5 : 2.25;
 
   if (latestBelowProjectedSupportPct < -maxLatestBelowSupportPct) {
     return null;
