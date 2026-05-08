@@ -978,7 +978,23 @@ The human eye is still the best way to confirm a chart pattern. MyStockHarbor he
 
 function MiniPlayChart({ item }: { item: PlayItem }) {
   const isNarrow = useIsNarrowScreen();
-  const points = Array.isArray(item.chartPoints) ? item.chartPoints : [];
+const rawPoints = Array.isArray(item.chartPoints) ? item.chartPoints : [];
+
+const fullPoleHighIndex = rawPoints.findIndex(
+  (point) => point.date === item.flagStartDate
+);
+
+const fallbackPoleHighIndex = Math.max(
+  0,
+  rawPoints.length - Math.max(18, item.flagBars + 6)
+);
+
+const zoomStartIndex = Math.max(
+  0,
+  (fullPoleHighIndex >= 0 ? fullPoleHighIndex : fallbackPoleHighIndex) - 4
+);
+
+const points = rawPoints.slice(zoomStartIndex);
 
   if (points.length < 4) {
     return (
@@ -1058,16 +1074,17 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
     })
     .join(" ");
 
-  const poleStartIndex = points.findIndex((point) => point.date === item.poleStartDate);
-  const poleHighIndex = points.findIndex((point) => point.date === item.poleHighDate);
-  const safePoleStartIndex = poleStartIndex >= 0 ? poleStartIndex : 0;
-  const safePoleHighIndex = poleHighIndex >= 0 ? poleHighIndex : Math.max(1, points.length - item.flagBars);
+const poleHighIndex = points.findIndex((point) => point.date === item.poleHighDate);
 
-  const flagStartIndex = points.findIndex((point) => point.date === item.flagStartDate);
-  const safeFlagStartIndex =
-    flagStartIndex >= 0 ? flagStartIndex : safePoleHighIndex;
+const safePoleHighIndex =
+  poleHighIndex >= 0 ? poleHighIndex : Math.max(1, points.length - item.flagBars);
 
-  const flagEndIndex = points.length - 1;
+const flagStartIndex = points.findIndex((point) => point.date === item.flagStartDate);
+
+const safeFlagStartIndex =
+  flagStartIndex >= 0 ? flagStartIndex : safePoleHighIndex;
+
+const flagEndIndex = points.length - 1;
 
   const upperStartY = yAt(item.flagUpperStartPrice);
   const upperEndY = yAt(item.flagUpperEndPrice);
@@ -1179,16 +1196,6 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
           stroke="rgba(96,165,250,0.72)"
           strokeWidth="1.8"
           strokeDasharray="4 5"
-        />
-
-        <line
-          x1={xAt(safePoleStartIndex)}
-          x2={xAt(safePoleHighIndex)}
-          y1={yAt(item.poleStartPrice)}
-          y2={yAt(item.poleHighPrice)}
-          stroke="rgba(34,197,94,0.92)"
-          strokeWidth="3"
-          strokeLinecap="round"
         />
 
         <path
