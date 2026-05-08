@@ -369,11 +369,24 @@ function cleanSymbols(values: string[]) {
   );
 }
 
+function optionalNumberFrom(source: unknown, key: string) {
+  const value =
+    source && typeof source === "object"
+      ? (source as Record<string, unknown>)[key]
+      : undefined;
+
+  if (value == null) return undefined;
+
+  const numberValue = Number(value);
+
+  return Number.isFinite(numberValue) ? numberValue : undefined;
+}
+
 function normalizeCachedPoints(points: Point[]) {
   return points
     .map((p) => ({
       date: String(p?.date ?? ""),
-      open: p?.open == null ? undefined : Number(p.open),
+      open: optionalNumberFrom(p, "open"),
       close: Number(p?.close),
       high: p?.high == null ? undefined : Number(p.high),
       low: p?.low == null ? undefined : Number(p.low),
@@ -464,7 +477,7 @@ async function fetchHistory(symbol: string, days: number): Promise<Point[]> {
   return pts
     .map((p) => ({
       date: String(p?.date ?? ""),
-      open: p?.open == null ? undefined : Number(p.open),
+      open: optionalNumberFrom(p, "open"),
       close: Number(p?.close),
       high: p?.high == null ? undefined : Number(p.high),
       low: p?.low == null ? undefined : Number(p.low),
