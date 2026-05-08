@@ -1016,10 +1016,10 @@ const points = rawPoints.slice(
   }
 
 const width = 420;
-const height = 260;
+const height = 310;
 const paddingX = 18;
-const paddingTop = 22;
-const paddingBottom = 32;
+const paddingTop = 24;
+const paddingBottom = 34;
 
   const lows = points.map((point) =>
     typeof point.low === "number" ? point.low : point.close
@@ -1046,7 +1046,7 @@ const paddingBottom = 32;
   const minValue = Math.min(...values);
   const maxValue = Math.max(...values);
   const range = maxValue - minValue || 1;
-  const buffer = range * 0.12;
+  const buffer = range * 0.06;
 
   const yMin = minValue - buffer;
   const yMax = maxValue + buffer;
@@ -1122,7 +1122,7 @@ const flagEndIndex = points.length - 1;
         style={{
           display: "block",
           width: "100%",
-         height: isNarrow ? 220 : 260,
+         height: isNarrow ? 260 : 310,
         }}
       >
         <defs>
