@@ -31,6 +31,12 @@ export type BullFlagResult = {
   poleBars: number;
   flagDriftPct: number;
 
+  flagUpperStartPrice: number;
+  flagUpperEndPrice: number;
+  flagLowerStartPrice: number;
+  flagLowerEndPrice: number;
+  flagAngleDeg: number;
+
   poleStartDate: string;
   poleHighDate: string;
   flagStartDate: string;
@@ -87,6 +93,57 @@ function normalisePoints(points: PatternPoint[]) {
         Number.isFinite(point.high) &&
         Number.isFinite(point.low)
     );
+}
+
+function visualDownAngleDeg(args: {
+  points: ReturnType<typeof normalisePoints>;
+  startIdx: number;
+  endIdx: number;
+  startPrice: number;
+  endPrice: number;
+}) {
+  const width = 420;
+  const height = 170;
+  const paddingX = 18;
+  const paddingTop = 18;
+  const paddingBottom = 24;
+
+  const values = args.points
+    .flatMap((point) => [point.high, point.low, point.close])
+    .concat([args.startPrice, args.endPrice])
+    .filter((value) => Number.isFinite(value));
+
+  if (values.length < 2) return 0;
+
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+  const range = maxValue - minValue || 1;
+  const buffer = range * 0.12;
+
+  const yMin = minValue - buffer;
+  const yMax = maxValue + buffer;
+  const yRange = yMax - yMin || 1;
+
+  const chartWidth = width - paddingX * 2;
+  const chartHeight = height - paddingTop - paddingBottom;
+
+  const x1 =
+    paddingX +
+    (args.startIdx / Math.max(1, args.points.length - 1)) * chartWidth;
+
+  const x2 =
+    paddingX +
+    (args.endIdx / Math.max(1, args.points.length - 1)) * chartWidth;
+
+  const y1 = paddingTop + ((yMax - args.startPrice) / yRange) * chartHeight;
+  const y2 = paddingTop + ((yMax - args.endPrice) / yRange) * chartHeight;
+
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+
+  if (dx <= 0) return 0;
+
+  return (Math.atan2(dy, dx) * 180) / Math.PI;
 }
 
 function volumeCompressionScore(points: ReturnType<typeof normalisePoints>) {
@@ -198,12 +255,11 @@ export function detectBullFlag(
     const flagPoints = points.slice(poleHighIdx, points.length);
     if (flagPoints.length < minFlagBars) continue;
 
-    const flagHighBeforeLatest = Math.max(
-      ...flagPoints.slice(0, Math.max(1, flagPoints.length - 1)).map((point) => point.high)
-    );
+    const flagHighs = flagPoints.map((point) => point.high);
+    const flagLows = flagPoints.map((point) => point.low);
 
-    const flagHigh = Math.max(flagHighBeforeLatest, poleHighPrice);
-    const flagLow = Math.min(...flagPoints.map((point) => point.low));
+    const flagHigh = Math.max(...flagHighs);
+    const flagLow = Math.min(...flagLows);
     const poleRange = poleHighPrice - poleStartPrice;
 
     if (poleRange <= 0) continue;
@@ -213,18 +269,56 @@ export function detectBullFlag(
     if (flagRetracementPct < minFlagRetracementPct) continue;
     if (flagRetracementPct > maxFlagRetracementPct) continue;
 
-    const distanceToBreakoutPct = pctDiff(latest.close, flagHighBeforeLatest);
+    const channelWindow = Math.max(2, Math.floor(flagPoints.length * 0.35));
+
+    const earlyHighAvg = avg(flagHighs.slice(0, channelWindow));
+    const lateHighAvg = avg(flagHighs.slice(-channelWindow));
+
+    const earlyLowAvg = avg(flagLows.slice(0, channelWindow));
+    const lateLowAvg = avg(flagLows.slice(-channelWindow));
+
+    const flagDriftPct = pctDiff(earlyHighAvg, lateHighAvg);
+    const lowerFlagDriftPct = pctDiff(earlyLowAvg, lateLowAvg);
+
+    if (flagDriftPct > maxFlagUpDriftPct) continue;
+
+    if (flagDriftPct >= 0) continue;
+    if (lowerFlagDriftPct >= 0) continue;
+
+    const flagStartIdxForAngle = poleHighIdx;
+    const flagEndIdxForAngle = points.length - 1;
+
+    const upperFlagAngleDeg = visualDownAngleDeg({
+      points,
+      startIdx: flagStartIdxForAngle,
+      endIdx: flagEndIdxForAngle,
+      startPrice: earlyHighAvg,
+      endPrice: lateHighAvg,
+    });
+
+    const lowerFlagAngleDeg = visualDownAngleDeg({
+      points,
+      startIdx: flagStartIdxForAngle,
+      endIdx: flagEndIdxForAngle,
+      startPrice: earlyLowAvg,
+      endPrice: lateLowAvg,
+    });
+
+    const minFlagAngleDeg = 10;
+    const maxFlagAngleDeg = 30;
+
+    if (upperFlagAngleDeg < minFlagAngleDeg) continue;
+    if (upperFlagAngleDeg > maxFlagAngleDeg) continue;
+    if (lowerFlagAngleDeg < minFlagAngleDeg) continue;
+    if (lowerFlagAngleDeg > maxFlagAngleDeg) continue;
+
+    const flagAngleDeg = (upperFlagAngleDeg + lowerFlagAngleDeg) / 2;
+
+    const breakoutPrice = lateHighAvg;
+    const distanceToBreakoutPct = pctDiff(latest.close, breakoutPrice);
 
     if (distanceToBreakoutPct > maxDistanceToBreakoutPct) continue;
     if (distanceToBreakoutPct < -maxBreakoutExtensionPct) continue;
-
-    const flagHighs = flagPoints.map((point) => point.high);
-    const split = Math.max(1, Math.floor(flagHighs.length / 2));
-    const earlyHighAvg = avg(flagHighs.slice(0, split));
-    const lateHighAvg = avg(flagHighs.slice(split));
-    const flagDriftPct = pctDiff(earlyHighAvg, lateHighAvg);
-
-    if (flagDriftPct > maxFlagUpDriftPct) continue;
 
     const poleScore = clamp((poleGainPct - minPoleGainPct) * 1.15 + 18, 0, 28);
     const retracementScore = clamp(28 - Math.abs(flagRetracementPct - 32) * 0.62, 0, 26);
@@ -284,11 +378,17 @@ export function detectBullFlag(
       flagRetracementPct: Number(flagRetracementPct.toFixed(2)),
       distanceToBreakoutPct: Number(distanceToBreakoutPct.toFixed(2)),
 
-      flagHigh: Number(flagHighBeforeLatest.toFixed(2)),
+      flagHigh: Number(breakoutPrice.toFixed(2)),
       flagLow: Number(flagLow.toFixed(2)),
       flagBars: points.length - poleHighIdx,
       poleBars,
       flagDriftPct: Number(flagDriftPct.toFixed(2)),
+
+      flagUpperStartPrice: Number(earlyHighAvg.toFixed(2)),
+      flagUpperEndPrice: Number(lateHighAvg.toFixed(2)),
+      flagLowerStartPrice: Number(earlyLowAvg.toFixed(2)),
+      flagLowerEndPrice: Number(lateLowAvg.toFixed(2)),
+      flagAngleDeg: Number(flagAngleDeg.toFixed(2)),
 
       poleStartDate: points[poleStartIdx].date,
       poleHighDate: points[poleHighIdx].date,
