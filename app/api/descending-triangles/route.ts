@@ -111,6 +111,7 @@ type CachedPlaysPayload = {
 
 type AggregatedPoint = {
   date: string;
+  open?: number;
   close: number;
   high?: number;
   low?: number;
@@ -359,6 +360,19 @@ function cleanSymbols(values: string[]) {
   );
 }
 
+function optionalNumberFrom(source: unknown, key: string) {
+  const value =
+    source && typeof source === "object"
+      ? (source as Record<string, unknown>)[key]
+      : undefined;
+
+  if (value == null) return undefined;
+
+  const numberValue = Number(value);
+
+  return Number.isFinite(numberValue) ? numberValue : undefined;
+}
+
 function normalizeCachedPoints(points: Point[]) {
   return points
     .map((p) => ({
@@ -453,6 +467,7 @@ async function fetchHistory(symbol: string, days: number): Promise<Point[]> {
   return pts
     .map((p) => ({
       date: String(p?.date ?? ""),
+      open: optionalNumberFrom(p, "open"),
       close: Number(p?.close),
       high: p?.high == null ? undefined : Number(p.high),
       low: p?.low == null ? undefined : Number(p.low),
@@ -502,6 +517,10 @@ const chartPoints = sourcePoints
   .slice(chartStartIndex)
   .map((point) => ({
     date: point.date,
+    open:
+      typeof point.open === "number"
+        ? Number(point.open.toFixed(2))
+        : undefined,
     close: Number(point.close.toFixed(2)),
     high:
       typeof point.high === "number"
