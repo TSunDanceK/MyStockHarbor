@@ -19,6 +19,7 @@ import {
 
 type Point = {
   date: string;
+  open?: number;
   close: number;
   high?: number;
   low?: number;
@@ -46,6 +47,7 @@ type PlayTone = "green" | "yellow" | "orange" | "red";
 
 type PlayChartPoint = {
   date: string;
+  open?: number;
   close: number;
   high?: number;
   low?: number;
