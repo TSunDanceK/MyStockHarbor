@@ -594,12 +594,15 @@ function buildSection(args: {
 }
 
 function isMacroBullFlagCandidate(result: BullFlagResult) {
+  const structureBars = result.flagBars + result.poleBars;
+
   const hasLargePole = result.poleGainPct >= 18;
-  const hasEnoughDuration = result.flagBars + result.poleBars >= 52;
+  const hasEnoughDuration = structureBars >= 44;
   const hasHealthyFlag =
     result.flagRetracementPct >= 10 && result.flagRetracementPct <= 62;
+  const hasMeaningfulFlag = result.flagBars >= 8;
 
-  return hasLargePole && hasEnoughDuration && hasHealthyFlag;
+  return hasLargePole && hasEnoughDuration && hasHealthyFlag && hasMeaningfulFlag;
 }
 
 function toMacroBullFlagResult(result: BullFlagResult) {
@@ -639,7 +642,7 @@ function bestFlagForWindows(
     timeframe === "M" ? 18 : timeframe === "W" ? 18 : timeframe === "ST" ? 9 : 14;
 
   const minStructureBars =
-    timeframe === "M" ? 52 : timeframe === "W" ? 26 : timeframe === "D" ? 42 : 0;
+    timeframe === "M" ? 44 : timeframe === "W" ? 26 : timeframe === "D" ? 42 : 0;
 
   const results = windows
     .map((lookbackBars) =>
@@ -679,7 +682,20 @@ function bestFlagForWindows(
 
   if (!results.length) return null;
 
-  return [...results].sort((a, b) => b.score - a.score)[0];
+  return [...results].sort((a, b) => {
+    const aStructureBars = a.flagBars + a.poleBars;
+    const bStructureBars = b.flagBars + b.poleBars;
+
+    const aAdjustedScore =
+      a.score +
+      (timeframe === "M" ? Math.min(8, Math.max(0, aStructureBars - 44) * 0.5) : 0);
+
+    const bAdjustedScore =
+      b.score +
+      (timeframe === "M" ? Math.min(8, Math.max(0, bStructureBars - 44) * 0.5) : 0);
+
+    return bAdjustedScore - aAdjustedScore;
+  })[0];
 }
 
 function debugFlagWindows(
