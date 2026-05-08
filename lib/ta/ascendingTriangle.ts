@@ -442,12 +442,15 @@ const maxDescendingResistanceDriftPct = timeframe === "W" ? -5 : -2.25;
     return null;
   }
 
-  const relevantLows = pivotLows.filter(
-    (pivot) =>
-      pivot.idx >= Math.max(0, firstResistanceTouch.idx - 12) &&
-      pivot.idx <= points.length - 1 &&
-      pivot.price < resistanceCluster.resistance
-  );
+const lowLookbackBeforeFirstResistance = timeframe === "W" ? 40 : 12;
+
+const relevantLows = pivotLows.filter(
+  (pivot) =>
+    pivot.idx >=
+      Math.max(0, firstResistanceTouch.idx - lowLookbackBeforeFirstResistance) &&
+    pivot.idx <= points.length - 1 &&
+    pivot.price < resistanceCluster.resistance
+);
 
   const risingLows = getRisingLows(relevantLows);
 
@@ -649,7 +652,9 @@ const maxLatestBelowSupportPct = timeframe === "W" ? 5 : 2.25;
     )
   );
 
-  if (score < 45) return null;
+const minScore = timeframe === "W" ? 38 : 45;
+
+if (score < minScore) return null;
 
   const tone =
     score >= 75 ? "green" : score >= 62 ? "yellow" : score >= 50 ? "orange" : "red";
