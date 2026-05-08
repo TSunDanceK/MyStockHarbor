@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import PriceChart, { type Overlay } from "./PriceChart";
+import PriceChart, { type Overlay, type ChartType } from "./PriceChart";
 import { detectDivergenceFromHistory } from "../../lib/ta/divergence";
 
 type Quote = {
@@ -16,6 +16,7 @@ type Quote = {
 
 type Point = {
   date: string;
+  open?: number;
   close: number;
   high?: number;
   low?: number;
@@ -773,6 +774,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
 
   const [indicator, setIndicator] = useState<Overlay>("None");
   const [selectedIndicators, setSelectedIndicators] = useState<Overlay[]>([]);
+  const [chartType, setChartType] = useState<ChartType>("line");
   const [indicatorMenuOpen, setIndicatorMenuOpen] = useState(false);
   const indicatorMenuRef = useRef<HTMLDivElement | null>(null);
   const chartSectionRef = useRef<HTMLDivElement | null>(null);
@@ -969,6 +971,7 @@ const [qRes, hRes] = await Promise.all([
         const pts: Point[] = ptsRaw
           .map((p: any) => ({
             date: String(p?.date ?? ""),
+            open: p?.open == null ? undefined : Number(p.open),
             close: Number(p?.close),
             high: p?.high == null ? undefined : Number(p.high),
             low: p?.low == null ? undefined : Number(p.low),
@@ -2899,6 +2902,62 @@ return (
                 ) : null}
               </div>
 
+              <div style={{ minWidth: isMobile ? "100%" : 180 }}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: COLORS.mutedFg,
+                    fontWeight: 900,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  Chart style
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 6,
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    border: `1px solid ${COLORS.controlBorder}`,
+                    background: COLORS.controlBgSolid,
+                    borderRadius: 14,
+                    padding: 4,
+                    gap: 4,
+                  }}
+                >
+                  {(["line", "candles"] as const).map((type) => {
+                    const active = chartType === type;
+
+                    return (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => setChartType(type)}
+                        aria-pressed={active}
+                        style={{
+                          border: "none",
+                          borderRadius: 10,
+                          padding: "9px 10px",
+                          background: active
+                            ? "rgba(59,130,246,0.28)"
+                            : "transparent",
+                          color: active ? "#dbeafe" : COLORS.controlFg,
+                          fontWeight: 950,
+                          cursor: "pointer",
+                          boxShadow: active
+                            ? "inset 0 0 0 1px rgba(96,165,250,0.36)"
+                            : "none",
+                        }}
+                      >
+                        {type === "line" ? "Line" : "Candles"}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <ChartToolbar />
             </div>
           </div>
@@ -2911,6 +2970,7 @@ return (
               ma200={ma200}
               overlay={indicator}
               selectedIndicators={selectedIndicators}
+              chartType={chartType}
               bollUpper={bollUpper}
               bollMid={bollMid}
               bollLower={bollLower}
@@ -4198,6 +4258,7 @@ onKeyDown={(e) => {
                   ma200={ma200}
                   overlay={indicator}
                   selectedIndicators={selectedIndicators}
+                  chartType={chartType}
                   bollUpper={bollUpper}
                   bollMid={bollMid}
                   bollLower={bollLower}
