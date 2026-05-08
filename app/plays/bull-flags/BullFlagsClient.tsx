@@ -35,6 +35,12 @@ type PlayItem = {
   poleBars: number;
   flagDriftPct: number;
 
+  flagUpperStartPrice: number;
+  flagUpperEndPrice: number;
+  flagLowerStartPrice: number;
+  flagLowerEndPrice: number;
+  flagAngleDeg: number;
+
   poleStartDate: string;
   poleHighDate: string;
   flagStartDate: string;
@@ -1015,6 +1021,10 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
     ...highs,
     item.flagHigh,
     item.flagLow,
+    item.flagUpperStartPrice,
+    item.flagUpperEndPrice,
+    item.flagLowerStartPrice,
+    item.flagLowerEndPrice,
     item.poleStartPrice,
     item.poleHighPrice,
     item.latestClose,
@@ -1053,8 +1063,16 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
   const safePoleStartIndex = poleStartIndex >= 0 ? poleStartIndex : 0;
   const safePoleHighIndex = poleHighIndex >= 0 ? poleHighIndex : Math.max(1, points.length - item.flagBars);
 
-  const breakoutY = yAt(item.flagHigh);
-  const flagLowY = yAt(item.flagLow);
+  const flagStartIndex = points.findIndex((point) => point.date === item.flagStartDate);
+  const safeFlagStartIndex =
+    flagStartIndex >= 0 ? flagStartIndex : safePoleHighIndex;
+
+  const flagEndIndex = points.length - 1;
+
+  const upperStartY = yAt(item.flagUpperStartPrice);
+  const upperEndY = yAt(item.flagUpperEndPrice);
+  const lowerStartY = yAt(item.flagLowerStartPrice);
+  const lowerEndY = yAt(item.flagLowerEndPrice);
 
   const volumeValues = points
     .map((point) => (typeof point.volume === "number" ? point.volume : 0))
@@ -1131,33 +1149,34 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
             })
           : null}
 
+    
         <line
-          x1={paddingX}
-          x2={width - paddingX}
-          y1={breakoutY}
-          y2={breakoutY}
+          x1={xAt(safeFlagStartIndex)}
+          x2={xAt(flagEndIndex)}
+          y1={upperStartY}
+          y2={upperEndY}
           stroke="rgba(34,197,94,0.88)"
           strokeWidth="2"
           strokeDasharray="6 5"
         />
 
         <text
-          x={width - paddingX}
-          y={Math.max(paddingTop + 12, breakoutY - 8)}
+          x={xAt(flagEndIndex)}
+          y={Math.max(paddingTop + 12, upperEndY - 8)}
           textAnchor="end"
           fill="rgba(187,247,208,0.94)"
           fontSize="10"
           fontWeight="800"
         >
-          Breakout ${formatNumber(item.flagHigh)}
+          Breakout ${formatNumber(item.flagUpperEndPrice)}
         </text>
 
         <line
-          x1={paddingX}
-          x2={width - paddingX}
-          y1={flagLowY}
-          y2={flagLowY}
-          stroke="rgba(96,165,250,0.65)"
+          x1={xAt(safeFlagStartIndex)}
+          x2={xAt(flagEndIndex)}
+          y1={lowerStartY}
+          y2={lowerEndY}
+          stroke="rgba(96,165,250,0.72)"
           strokeWidth="1.8"
           strokeDasharray="4 5"
         />
@@ -1236,7 +1255,7 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
       >
         <span>{formatNumber(item.poleGainPct)}% pole</span>
         <span>{formatNumber(item.flagRetracementPct)}% retracement</span>
-        <span>{formatNumber(item.distanceToBreakoutPct)}% below breakout</span>
+        <span>{formatNumber(item.flagAngleDeg, 1)}° flag angle</span>
       </div>
     </div>
   );
