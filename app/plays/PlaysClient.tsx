@@ -597,10 +597,7 @@ color: "#fecaca",
                 fontWeight: 750,
               }}
             >
-              Review each chart manually before trading. These computer-detected
-              setups can be wrong, delayed, or invalidated by price action.
-              MyStockHarbor is a discovery tool to help you find setups to
-              review, not financial advice.
+The human eye is still the best way to confirm a chart pattern. MyStockHarbor helps you find possible setups faster, but computer detection is not perfect and price action can change quickly. Always review each chart yourself before making a trading decision. This is a discovery tool, not financial advice.
             </div>
           </div>
 
