@@ -188,12 +188,12 @@ export function detectBullFlag(
   const lookbackBars = options.lookbackBars ?? (timeframe === "W" ? 104 : 160);
   const minPoleGainPct = options.minPoleGainPct ?? (timeframe === "W" ? 12 : 9);
 const minFlagBars =
-  options.minFlagBars ??
-  (timeframe === "M" ? 8 : timeframe === "W" ? 8 : timeframe === "ST" ? 5 : 7);
-  const maxFlagBars = options.maxFlagBars ?? (timeframe === "W" ? 24 : 38);
+  options.minFlagBars ?? (timeframe === "W" ? 8 : timeframe === "ST" ? 5 : 7);
+
+const maxFlagBars = options.maxFlagBars ?? (timeframe === "W" ? 24 : 38);
+
 const minPoleBars =
-  options.minPoleBars ??
-  (timeframe === "M" ? 14 : timeframe === "W" ? 12 : timeframe === "ST" ? 8 : 12);
+  options.minPoleBars ?? (timeframe === "W" ? 12 : timeframe === "ST" ? 8 : 12);
   const maxPoleBars = options.maxPoleBars ?? (timeframe === "W" ? 34 : 55);
   const minFlagRetracementPct = options.minFlagRetracementPct ?? 2;
   const maxFlagRetracementPct =
@@ -214,8 +214,7 @@ const minPoleBars =
   const latestDateMs = new Date(latest.date).getTime();
 const nowMs = Date.now();
 
-const maxStaleDays =
-  timeframe === "M" ? 21 : timeframe === "W" ? 21 : 7;
+const maxStaleDays = timeframe === "W" ? 21 : 7;
 
 const maxStaleMs = maxStaleDays * 24 * 60 * 60 * 1000;
 
