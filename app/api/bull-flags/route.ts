@@ -595,9 +595,9 @@ function buildSection(args: {
 
 function isMacroBullFlagCandidate(result: BullFlagResult) {
   const hasLargePole = result.poleGainPct >= 18;
-  const hasEnoughDuration = result.flagBars >= 6 || result.poleBars >= 8;
+  const hasEnoughDuration = result.flagBars + result.poleBars >= 52;
   const hasHealthyFlag =
-    result.flagRetracementPct >= 10 && result.flagRetracementPct <= 58;
+    result.flagRetracementPct >= 10 && result.flagRetracementPct <= 62;
 
   return hasLargePole && hasEnoughDuration && hasHealthyFlag;
 }
@@ -615,30 +615,7 @@ function toMacroBullFlagResult(result: BullFlagResult) {
   };
 }
 
-function hasEnoughFlagStructure(
-  result: BullFlagResult,
-  timeframe: "M" | "ST" | "D" | "W"
-) {
-  const flagHeight = Math.abs(result.flagUpperEndPrice - result.flagLowerEndPrice);
-  const poleRange = Math.abs(result.poleHighPrice - result.poleStartPrice);
-
-  if (!Number.isFinite(flagHeight) || !Number.isFinite(poleRange)) return false;
-  if (flagHeight <= 0 || poleRange <= 0) return false;
-
-  const flagHeightOfPolePct = (flagHeight / poleRange) * 100;
-
-  const minFlagHeightOfPolePct =
-    timeframe === "M" ? 12 : timeframe === "W" ? 10 : timeframe === "ST" ? 8 : 10;
-
-  const minFlagBarsForStructure =
-    timeframe === "M" ? 12 : timeframe === "W" ? 8 : timeframe === "ST" ? 5 : 18;
-
-  if (result.flagBars < minFlagBarsForStructure) return false;
-  if (flagHeightOfPolePct < minFlagHeightOfPolePct) return false;
-
-  return true;
-}
-
+function bestFlagForWindows(
 function bestFlagForWindows(
   points: Point[],
   timeframe: "M" | "ST" | "D" | "W",
@@ -650,16 +627,16 @@ function bestFlagForWindows(
     timeframe === "M" ? 18 : timeframe === "W" ? 12 : timeframe === "ST" ? 7 : 10;
 
   const minFlagBars =
-    timeframe === "M" ? 12 : timeframe === "W" ? 8 : timeframe === "ST" ? 5 : 18;
+    timeframe === "M" ? 8 : timeframe === "W" ? 6 : timeframe === "ST" ? 4 : 18;
 
   const maxFlagBars =
     timeframe === "M" ? 52 : timeframe === "W" ? 40 : timeframe === "ST" ? 20 : 70;
 
   const maxFlagRetracementPct =
-    timeframe === "M" ? 62 : timeframe === "W" ? 60 : timeframe === "ST" ? 52 : 58;
+    timeframe === "M" ? 62 : timeframe === "W" ? 62 : timeframe === "ST" ? 52 : 62;
 
   const maxDistanceToBreakoutPct =
-    timeframe === "M" ? 18 : timeframe === "W" ? 16 : timeframe === "ST" ? 9 : 12;
+    timeframe === "M" ? 18 : timeframe === "W" ? 18 : timeframe === "ST" ? 9 : 14;
 
   const minStructureBars =
     timeframe === "M" ? 52 : timeframe === "W" ? 26 : timeframe === "D" ? 42 : 0;
@@ -678,7 +655,6 @@ function bestFlagForWindows(
     )
     .filter((result): result is BullFlagResult => result !== null)
     .filter((result) => result.flagBars + result.poleBars >= minStructureBars)
-    .filter((result) => hasEnoughFlagStructure(result, timeframe))
     .map((result) => {
       if (timeframe === "M") {
         return toMacroBullFlagResult(result);
@@ -905,6 +881,7 @@ async function buildPlaysPayload(
                 249,
               ]),
               weekly: debugFlagWindows(weeklyPoints, "W", [
+                39,
                 52,
                 80,
                 104,
@@ -938,6 +915,7 @@ async function buildPlaysPayload(
           }
 
 const weeklyFlag = bestFlagForWindows(weeklyPoints, "W", [
+  39,
   52,
   80,
   104,
