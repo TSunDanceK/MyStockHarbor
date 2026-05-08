@@ -5,7 +5,10 @@ import type { DivResult } from "../../lib/ta/divergence";
 
 type Point = {
   date: string;
+  open?: number;
   close: number;
+  high?: number;
+  low?: number;
 };
 
 const CHART_COLORS = {
@@ -82,6 +85,8 @@ function minMax(arr: Array<number | null>) {
   return { min, max };
 }
 
+export type ChartType = "line" | "candles";
+
 type Props = {
   symbol: string;
   data: Point[];
@@ -90,6 +95,7 @@ type Props = {
   weeklyMa200?: (number | null)[];
   overlay?: Overlay;
   selectedIndicators?: Overlay[];
+  chartType?: ChartType;
 
   divergence?: DivResult | null;
 
@@ -121,6 +127,7 @@ export default function PriceChart(props: Props) {
     weeklyMa200,
     overlay = "None",
     selectedIndicators = [],
+    chartType = "line",
     divergence = null,
 
     bollUpper,
@@ -271,6 +278,12 @@ export default function PriceChart(props: Props) {
     for (const p of series) {
       vals.push(p.close);
 
+      if (chartType === "candles") {
+        if (typeof p.open === "number" && Number.isFinite(p.open)) vals.push(p.open);
+        if (typeof p.high === "number" && Number.isFinite(p.high)) vals.push(p.high);
+        if (typeof p.low === "number" && Number.isFinite(p.low)) vals.push(p.low);
+      }
+
       if (showMA50 && typeof p.ma50 === "number") vals.push(p.ma50);
       if (showMA200 && typeof p.ma200 === "number") vals.push(p.ma200);
       if (showWeeklyMA200 && typeof p.weeklyMa200 === "number") vals.push(p.weeklyMa200);
@@ -299,6 +312,7 @@ export default function PriceChart(props: Props) {
     showBollinger,
     showEMA20,
     showVWMA20,
+    chartType,
   ]);
 
   const yMain = useMemo(() => {
@@ -384,6 +398,9 @@ export default function PriceChart(props: Props) {
       .map((p, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(2)} ${yMain(p.close).toFixed(2)}`)
       .join(" ");
   }, [hasData, series, x, yMain]);
+
+  const candleSlotWidth = (width - padL - padR) / Math.max(1, series.length);
+  const candleBodyWidth = Math.max(2.5, Math.min(9, candleSlotWidth * 0.58));
 
   const ma50Path = useMemo(() => pathFrom(series.map((p) => p.ma50), yMain), [series, yMain]);
   const ma200Path = useMemo(() => pathFrom(series.map((p) => p.ma200), yMain), [series, yMain]);
@@ -518,13 +535,72 @@ export default function PriceChart(props: Props) {
           </g>
         ))}
 
-        <path
-          d={closePath}
-          fill="none"
-          stroke={CHART_COLORS.price}
-          strokeWidth="2.25"
-          opacity="1"
-        />
+        {chartType === "candles" ? (
+          <>
+            {series.map((p, i) => {
+              const previousClose = i > 0 ? series[i - 1].close : p.close;
+
+              const open =
+                typeof p.open === "number" && Number.isFinite(p.open)
+                  ? p.open
+                  : previousClose;
+
+              const close = p.close;
+
+              const high =
+                typeof p.high === "number" && Number.isFinite(p.high)
+                  ? Math.max(p.high, open, close)
+                  : Math.max(open, close);
+
+              const low =
+                typeof p.low === "number" && Number.isFinite(p.low)
+                  ? Math.min(p.low, open, close)
+                  : Math.min(open, close);
+
+              const cx = x(i);
+              const openY = yMain(open);
+              const closeY = yMain(close);
+              const highY = yMain(high);
+              const lowY = yMain(low);
+              const bodyTop = Math.min(openY, closeY);
+              const bodyHeight = Math.max(2, Math.abs(closeY - openY));
+              const isUp = close >= open;
+
+              return (
+                <g key={`${p.date}-${i}-candle`}>
+                  <line
+                    x1={cx}
+                    x2={cx}
+                    y1={highY}
+                    y2={lowY}
+                    stroke={isUp ? "rgba(226,232,240,0.92)" : "rgba(37,99,235,0.95)"}
+                    strokeWidth="1.1"
+                    strokeLinecap="round"
+                  />
+
+                  <rect
+                    x={cx - candleBodyWidth / 2}
+                    y={bodyTop}
+                    width={candleBodyWidth}
+                    height={bodyHeight}
+                    rx="1.5"
+                    fill={isUp ? "rgba(226,232,240,0.88)" : "rgba(37,99,235,0.92)"}
+                    stroke={isUp ? "rgba(248,250,252,0.95)" : "rgba(96,165,250,0.95)"}
+                    strokeWidth="0.8"
+                  />
+                </g>
+              );
+            })}
+          </>
+        ) : (
+          <path
+            d={closePath}
+            fill="none"
+            stroke={CHART_COLORS.price}
+            strokeWidth="2.25"
+            opacity="1"
+          />
+        )}
 
         {showMA50 && ma50Path ? (
           <path
