@@ -758,6 +758,13 @@ The human eye is still the best way to confirm a chart pattern. MyStockHarbor he
       </span>
       <span>Descending</span>
     </Link>
+
+    <Link href="/plays/bull-flags" style={topNavBtnStyle("plays")}>
+      <span aria-hidden="true" style={topNavIconWrapStyle}>
+        🐂
+      </span>
+      <span>Bull Flag</span>
+    </Link>
   </div>
 ) : null}
 
