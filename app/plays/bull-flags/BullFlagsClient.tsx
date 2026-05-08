@@ -285,7 +285,7 @@ export default function BullFlagsClient() {
   );
   const [estimatedApiCalls, setEstimatedApiCalls] = useState<number | null>(null);
   const [selectedTimeframe, setSelectedTimeframe] = useState<
-    "ALL" | "M" | "W" | "D" | "ST"
+    "ALL" | "M" | "W" | "D"
   >("ALL");
   const isNarrow = useIsNarrowScreen();
 
@@ -387,9 +387,6 @@ export default function BullFlagsClient() {
   const macroCount = allItems.filter((item) => item.timeframe === "M").length;
   const weeklyCount = allItems.filter((item) => item.timeframe === "W").length;
   const dailyCount = allItems.filter((item) => item.timeframe === "D").length;
-  const shortTermCount = allItems.filter(
-    (item) => item.timeframe === "ST"
-  ).length;
   const topScore = allItems.length
     ? Math.max(...allItems.map((item) => item.score))
     : null;
@@ -536,7 +533,7 @@ export default function BullFlagsClient() {
                 gap: 10,
               }}
             >
-              {(["ALL", "M", "W", "D", "ST"] as const).map((key) => {
+              {(["ALL", "M", "W", "D"] as const).map((key) => {
                 const active = selectedTimeframe === key;
 
                 return (
@@ -565,9 +562,7 @@ export default function BullFlagsClient() {
                         ? "Macro only"
                         : key === "W"
                           ? "Weekly only"
-                          : key === "ST"
-                            ? "Short-term only"
-                            : "Daily only"}
+                          : "Daily only"}
                   </button>
                 );
               })}
@@ -655,10 +650,6 @@ The human eye is still the best way to confirm a chart pattern. MyStockHarbor he
       <StatRow label="Macro shown" value={String(macroCount)} />
       <StatRow label="Weekly shown" value={String(weeklyCount)} />
       <StatRow label="Daily shown" value={String(dailyCount)} />
-      <StatRow
-        label="Short-term shown"
-        value={String(shortTermCount)}
-      />
       <StatRow
         label="Top score"
         value={topScore == null ? "—" : String(topScore)}
@@ -981,23 +972,26 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
   const isNarrow = useIsNarrowScreen();
 const rawPoints = Array.isArray(item.chartPoints) ? item.chartPoints : [];
 
-const minimumDisplayBars =
-  item.timeframe === "M"
-    ? 52
-    : item.timeframe === "W"
-      ? 26
-      : item.timeframe === "D"
-        ? 63
-        : Math.max(18, item.flagBars + 6);
+const flagStartIndex = rawPoints.findIndex(
+  (point) => point.date === item.flagStartDate
+);
 
-const structureDisplayBars =
-  item.timeframe === "ST"
-    ? Math.max(18, item.flagBars + 6)
-    : Math.max(minimumDisplayBars, item.flagBars + item.poleBars + 8);
+const fallbackFlagStartIndex = Math.max(
+  0,
+  rawPoints.length - Math.max(item.flagBars + 10, 24)
+);
 
-const zoomStartIndex = Math.max(0, rawPoints.length - structureDisplayBars);
+const zoomStartIndex = Math.max(
+  0,
+  (flagStartIndex >= 0 ? flagStartIndex : fallbackFlagStartIndex) - 6
+);
 
-const points = rawPoints.slice(zoomStartIndex);
+const zoomEndPadding = 2;
+
+const points = rawPoints.slice(
+  zoomStartIndex,
+  Math.min(rawPoints.length, rawPoints.length + zoomEndPadding)
+);
 
   if (points.length < 4) {
     return (
@@ -1077,10 +1071,12 @@ const poleHighIndex = points.findIndex((point) => point.date === item.poleHighDa
 const safePoleHighIndex =
   poleHighIndex >= 0 ? poleHighIndex : Math.max(1, points.length - item.flagBars);
 
-const flagStartIndex = points.findIndex((point) => point.date === item.flagStartDate);
+const localFlagStartIndex = points.findIndex(
+  (point) => point.date === item.flagStartDate
+);
 
 const safeFlagStartIndex =
-  flagStartIndex >= 0 ? flagStartIndex : safePoleHighIndex;
+  localFlagStartIndex >= 0 ? localFlagStartIndex : safePoleHighIndex;
 
 const flagEndIndex = points.length - 1;
 
