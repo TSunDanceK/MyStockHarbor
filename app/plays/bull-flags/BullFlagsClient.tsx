@@ -1067,13 +1067,8 @@ const paddingBottom = 32;
     );
   }
 
-  const closePath = points
-    .map((point, index) => {
-      const x = xAt(index);
-      const y = yAt(point.close);
-      return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
-    })
-    .join(" ");
+  const candleSlotWidth = (width - paddingX * 2) / Math.max(1, points.length);
+  const candleBodyWidth = Math.max(3, Math.min(9, candleSlotWidth * 0.58));
 
 const poleHighIndex = points.findIndex((point) => point.date === item.poleHighDate);
 
