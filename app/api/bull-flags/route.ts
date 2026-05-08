@@ -626,19 +626,19 @@ function bestFlagForWindows(
     timeframe === "M" ? 18 : timeframe === "W" ? 12 : timeframe === "ST" ? 7 : 10;
 
   const minFlagBars =
-    timeframe === "M" ? 8 : timeframe === "W" ? 6 : timeframe === "ST" ? 4 : 8;
+    timeframe === "M" ? 8 : timeframe === "W" ? 6 : timeframe === "ST" ? 4 : 18;
 
   const maxFlagBars =
-    timeframe === "M" ? 34 : timeframe === "W" ? 26 : timeframe === "ST" ? 18 : 42;
+    timeframe === "M" ? 34 : timeframe === "W" ? 26 : timeframe === "ST" ? 18 : 70;
 
   const maxFlagRetracementPct =
-    timeframe === "M" ? 62 : timeframe === "W" ? 58 : timeframe === "ST" ? 52 : 54;
+    timeframe === "M" ? 62 : timeframe === "W" ? 58 : timeframe === "ST" ? 52 : 58;
 
   const maxDistanceToBreakoutPct =
-    timeframe === "M" ? 18 : timeframe === "W" ? 14 : timeframe === "ST" ? 9 : 11;
+    timeframe === "M" ? 18 : timeframe === "W" ? 14 : timeframe === "ST" ? 9 : 12;
 
   const minStructureBars =
-    timeframe === "M" ? 52 : timeframe === "W" ? 26 : timeframe === "D" ? 63 : 0;
+    timeframe === "M" ? 52 : timeframe === "W" ? 26 : timeframe === "D" ? 42 : 0;
 
   const results = windows
     .map((lookbackBars) =>
@@ -886,7 +886,7 @@ async function buildPlaysPayload(
                 104,
                 156,
               ]),
-              daily: debugFlagWindows(dailyPoints, "D", [90, 120, 160]),
+             daily: debugFlagWindows(dailyPoints, "D", [90, 120, 160, 220, 260]),
               shortTerm: debugFlagWindows(dailyPoints, "ST", [35, 50, 70]),
             };
           }
@@ -951,6 +951,8 @@ if (weeklyFlag) {
             90,
             120,
             160,
+            220,
+            260,
           ]);
 
           if (dailyFlag) {
