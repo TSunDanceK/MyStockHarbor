@@ -554,6 +554,31 @@ function buildSection(args: {
   };
 }
 
+function isMacroAscendingCandidate(result: AscendingTriangleResult) {
+  const hasEnoughStructure =
+    result.patternBars >= 28 ||
+    result.risingLowTouches >= 4 ||
+    result.resistanceTouches >= 4;
+
+  const isWideEnough =
+    Math.abs(result.lowSlopePct) >= 8 ||
+    result.distanceToResistancePct >= 8 ||
+    result.resistanceZonePct >= 3;
+
+  const notTinyWeeklyPattern = result.patternBars >= 22;
+
+  return notTinyWeeklyPattern && hasEnoughStructure && isWideEnough;
+}
+
+function toMacroAscendingResult(result: AscendingTriangleResult) {
+  return {
+    ...result,
+    note: `Macro ascending triangle candidate: ${result.resistanceTouches} resistance touches, ${result.risingLowTouches} rising lows, ${result.distanceToResistancePct.toFixed(
+      1
+    )}% below resistance.`,
+  };
+}
+
 function bestTriangleForWindows(
   points: Point[],
   timeframe: "M" | "ST" | "D" | "W",
@@ -900,24 +925,40 @@ async function buildPlaysPayload(
             return;
           }
 
-          const weeklyTriangle = bestTriangleForWindows(weeklyPoints, "W", [
-            39,
-            52,
-            80,
-            104,
-            156,
-          ]);
+const weeklyTriangle = bestTriangleForWindows(weeklyPoints, "W", [
+  39,
+  52,
+  80,
+  104,
+  156,
+]);
 
-          if (weeklyTriangle) {
-            if (symbol === normalizedDebugSymbol && debugSymbolScan) {
-              debugSymbolScan.matched = "weekly";
-            }
+if (weeklyTriangle) {
+  if (isMacroAscendingCandidate(weeklyTriangle)) {
+    if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+      debugSymbolScan.matched = "macro_from_weekly";
+    }
 
-            weeklyAscendingTriangles.push(
-              toPlayItem(symbol, weeklyTriangle, weeklyPoints)
-            );
-            return;
-          }
+    macroAscendingTriangles.push(
+      toPlayItem(
+        symbol,
+        toMacroAscendingResult(weeklyTriangle),
+        weeklyPoints,
+        "M"
+      )
+    );
+    return;
+  }
+
+  if (symbol === normalizedDebugSymbol && debugSymbolScan) {
+    debugSymbolScan.matched = "weekly";
+  }
+
+  weeklyAscendingTriangles.push(
+    toPlayItem(symbol, weeklyTriangle, weeklyPoints)
+  );
+  return;
+}
 
           const dailyTriangle = bestTriangleForWindows(dailyPoints, "D", [
             90,
