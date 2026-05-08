@@ -283,40 +283,71 @@ if (Number.isFinite(latestDateMs) && nowMs - latestDateMs > maxStaleMs) {
     if (flagRetracementPct < minFlagRetracementPct) continue;
     if (flagRetracementPct > maxFlagRetracementPct) continue;
 
-    const channelWindow = Math.max(2, Math.floor(flagPoints.length * 0.35));
+const channelWindow = Math.max(2, Math.floor(flagPoints.length * 0.35));
 
-    const earlyHighAvg = avg(flagHighs.slice(0, channelWindow));
-    const lateHighAvg = avg(flagHighs.slice(-channelWindow));
+const earlyHighAvg = avg(flagHighs.slice(0, channelWindow));
+const lateHighAvg = avg(flagHighs.slice(-channelWindow));
 
-    const earlyLowAvg = avg(flagLows.slice(0, channelWindow));
-    const lateLowAvg = avg(flagLows.slice(-channelWindow));
+const earlyLowAvg = avg(flagLows.slice(0, channelWindow));
+const lateLowAvg = avg(flagLows.slice(-channelWindow));
 
-    const flagDriftPct = pctDiff(earlyHighAvg, lateHighAvg);
-    const lowerFlagDriftPct = pctDiff(earlyLowAvg, lateLowAvg);
+const flagDriftPct = pctDiff(earlyHighAvg, lateHighAvg);
+const lowerFlagDriftPct = pctDiff(earlyLowAvg, lateLowAvg);
 
-    if (flagDriftPct > maxFlagUpDriftPct) continue;
+if (flagDriftPct > maxFlagUpDriftPct) continue;
 
-    if (flagDriftPct >= 0) continue;
-    if (lowerFlagDriftPct >= 0) continue;
+if (flagDriftPct >= 0) continue;
+if (lowerFlagDriftPct >= 0) continue;
 
-    const flagStartIdxForAngle = poleHighIdx;
-    const flagEndIdxForAngle = points.length - 1;
+const rawChannelWidthStart = earlyHighAvg - earlyLowAvg;
+const rawChannelWidthEnd = lateHighAvg - lateLowAvg;
+const rawAverageChannelWidth = (rawChannelWidthStart + rawChannelWidthEnd) / 2;
 
-    const upperFlagAngleDeg = visualDownAngleDeg({
-      points,
-      startIdx: flagStartIdxForAngle,
-      endIdx: flagEndIdxForAngle,
-      startPrice: earlyHighAvg,
-      endPrice: lateHighAvg,
-    });
+if (!Number.isFinite(rawAverageChannelWidth) || rawAverageChannelWidth <= 0) {
+  continue;
+}
 
-    const lowerFlagAngleDeg = visualDownAngleDeg({
-      points,
-      startIdx: flagStartIdxForAngle,
-      endIdx: flagEndIdxForAngle,
-      startPrice: earlyLowAvg,
-      endPrice: lateLowAvg,
-    });
+const channelWidthOfPolePct = (rawAverageChannelWidth / poleRange) * 100;
+const channelWidthOfPricePct = (rawAverageChannelWidth / latest.close) * 100;
+
+const minChannelWidthOfPolePct =
+  timeframe === "W" ? 12 : timeframe === "ST" ? 9 : 10;
+
+const maxChannelWidthOfPolePct =
+  timeframe === "W" ? 48 : timeframe === "ST" ? 42 : 45;
+
+const minChannelWidthOfPricePct =
+  timeframe === "W" ? 2.25 : timeframe === "ST" ? 1.4 : 1.6;
+
+if (channelWidthOfPolePct < minChannelWidthOfPolePct) continue;
+if (channelWidthOfPolePct > maxChannelWidthOfPolePct) continue;
+if (channelWidthOfPricePct < minChannelWidthOfPricePct) continue;
+
+const channelVisualPad = rawAverageChannelWidth * 0.18;
+
+const channelUpperStartPrice = earlyHighAvg + channelVisualPad;
+const channelUpperEndPrice = lateHighAvg + channelVisualPad;
+const channelLowerStartPrice = earlyLowAvg - channelVisualPad;
+const channelLowerEndPrice = lateLowAvg - channelVisualPad;
+
+const flagStartIdxForAngle = poleHighIdx;
+const flagEndIdxForAngle = points.length - 1;
+
+const upperFlagAngleDeg = visualDownAngleDeg({
+  points,
+  startIdx: flagStartIdxForAngle,
+  endIdx: flagEndIdxForAngle,
+  startPrice: channelUpperStartPrice,
+  endPrice: channelUpperEndPrice,
+});
+
+const lowerFlagAngleDeg = visualDownAngleDeg({
+  points,
+  startIdx: flagStartIdxForAngle,
+  endIdx: flagEndIdxForAngle,
+  startPrice: channelLowerStartPrice,
+  endPrice: channelLowerEndPrice,
+});
 
 const minFlagAngleDeg = timeframe === "W" ? 11 : 12;
 const maxFlagAngleDeg = timeframe === "W" ? 26 : 28;
@@ -348,10 +379,12 @@ for (let i = 0; i < flagPoints.length; i++) {
   const progress = i / Math.max(1, flagPoints.length - 1);
 
   const upperAtPoint =
-    earlyHighAvg + (lateHighAvg - earlyHighAvg) * progress;
+    channelUpperStartPrice +
+    (channelUpperEndPrice - channelUpperStartPrice) * progress;
 
   const lowerAtPoint =
-    earlyLowAvg + (lateLowAvg - earlyLowAvg) * progress;
+    channelLowerStartPrice +
+    (channelLowerEndPrice - channelLowerStartPrice) * progress;
 
   const closeAboveUpperPct = pctDiff(upperAtPoint, point.close);
   const closeBelowLowerPct = pctDiff(lowerAtPoint, point.close);
@@ -379,7 +412,7 @@ if (wickOutsideChannelBars > maxWickOutsideBars) continue;
 
 const flagAngleDeg = (upperFlagAngleDeg + lowerFlagAngleDeg) / 2;
 
-const breakoutPrice = lateHighAvg;
+const breakoutPrice = channelUpperEndPrice;
 const distanceToBreakoutPct = pctDiff(latest.close, breakoutPrice);
 
 const tightenedMaxDistanceToBreakoutPct =
@@ -454,10 +487,10 @@ if (distanceToBreakoutPct < -maxBreakoutExtensionPct) continue;
       poleBars,
       flagDriftPct: Number(flagDriftPct.toFixed(2)),
 
-      flagUpperStartPrice: Number(earlyHighAvg.toFixed(2)),
-      flagUpperEndPrice: Number(lateHighAvg.toFixed(2)),
-      flagLowerStartPrice: Number(earlyLowAvg.toFixed(2)),
-      flagLowerEndPrice: Number(lateLowAvg.toFixed(2)),
+      flagUpperStartPrice: Number(channelUpperStartPrice.toFixed(2)),
+      flagUpperEndPrice: Number(channelUpperEndPrice.toFixed(2)),
+      flagLowerStartPrice: Number(channelLowerStartPrice.toFixed(2)),
+      flagLowerEndPrice: Number(channelLowerEndPrice.toFixed(2)),
       flagAngleDeg: Number(flagAngleDeg.toFixed(2)),
 
       poleStartDate: points[poleStartIdx].date,
