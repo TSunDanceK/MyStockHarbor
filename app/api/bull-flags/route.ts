@@ -74,6 +74,12 @@ type PlayItem = {
   poleBars: number;
   flagDriftPct: number;
 
+  flagUpperStartPrice: number;
+  flagUpperEndPrice: number;
+  flagLowerStartPrice: number;
+  flagLowerEndPrice: number;
+  flagAngleDeg: number;
+
   poleStartDate: string;
   poleHighDate: string;
   flagStartDate: string;
@@ -527,6 +533,12 @@ function toPlayItem(
     poleBars: result.poleBars,
     flagDriftPct: result.flagDriftPct,
 
+    flagUpperStartPrice: result.flagUpperStartPrice,
+    flagUpperEndPrice: result.flagUpperEndPrice,
+    flagLowerStartPrice: result.flagLowerStartPrice,
+    flagLowerEndPrice: result.flagLowerEndPrice,
+    flagAngleDeg: result.flagAngleDeg,
+
     poleStartDate: result.poleStartDate,
     poleHighDate: result.poleHighDate,
     flagStartDate: result.flagStartDate,
@@ -676,6 +688,11 @@ function debugFlagWindows(
         poleBars: result.poleBars,
         flagHigh: result.flagHigh,
         flagLow: result.flagLow,
+        flagAngleDeg: result.flagAngleDeg,
+        flagUpperStartPrice: result.flagUpperStartPrice,
+        flagUpperEndPrice: result.flagUpperEndPrice,
+        flagLowerStartPrice: result.flagLowerStartPrice,
+        flagLowerEndPrice: result.flagLowerEndPrice,
         startDate: result.startDate,
         endDate: result.endDate,
       },
