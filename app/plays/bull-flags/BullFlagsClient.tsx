@@ -7,6 +7,7 @@ type PlayTone = "green" | "yellow" | "orange" | "red";
 
 type PlayChartPoint = {
   date: string;
+  open?: number;
   close: number;
   high?: number;
   low?: number;
@@ -1103,9 +1104,6 @@ const flagEndIndex = points.length - 1;
     (width - paddingX * 2) / points.length - 1
   );
 
-  const latestX = xAt(points.length - 1);
-  const latestY = yAt(item.latestClose);
-
   const gradientId = `fill-bull-flag-${item.symbol}-${item.timeframe}`.replace(
     /[^a-zA-Z0-9-_]/g,
     ""
@@ -1198,32 +1196,71 @@ const flagEndIndex = points.length - 1;
           strokeDasharray="4 5"
         />
 
-        <path
-          d={`${closePath} L ${xAt(points.length - 1).toFixed(2)} ${(
-            height - paddingBottom
-          ).toFixed(2)} L ${paddingX.toFixed(2)} ${(
-            height - paddingBottom
-          ).toFixed(2)} Z`}
-          fill={`url(#${gradientId})`}
-        />
+        {points.map((point, index) => {
+          const open =
+            typeof point.open === "number" && Number.isFinite(point.open)
+              ? point.open
+              : point.close;
 
-        <path
-          d={closePath}
-          fill="none"
-          stroke="rgba(226,232,240,0.92)"
-          strokeWidth="2.2"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
+          const close = point.close;
 
-        <circle
-          cx={latestX}
-          cy={latestY}
-          r="4.5"
-          fill={toneColour(item.tone)}
-          stroke="rgba(2,6,23,0.95)"
-          strokeWidth="2"
-        />
+          const high =
+            typeof point.high === "number" && Number.isFinite(point.high)
+              ? point.high
+              : Math.max(open, close);
+
+          const low =
+            typeof point.low === "number" && Number.isFinite(point.low)
+              ? point.low
+              : Math.min(open, close);
+
+          const x = xAt(index);
+          const openY = yAt(open);
+          const closeY = yAt(close);
+          const highY = yAt(high);
+          const lowY = yAt(low);
+
+          const bodyTop = Math.min(openY, closeY);
+          const bodyHeight = Math.max(2, Math.abs(closeY - openY));
+          const isUp = close >= open;
+
+          return (
+            <g key={`${point.date}-candle`}>
+              <line
+                x1={x}
+                x2={x}
+                y1={highY}
+                y2={lowY}
+                stroke={
+                  isUp
+                    ? "rgba(226,232,240,0.92)"
+                    : "rgba(37,99,235,0.95)"
+                }
+                strokeWidth="1.1"
+                strokeLinecap="round"
+              />
+
+              <rect
+                x={x - candleBodyWidth / 2}
+                y={bodyTop}
+                width={candleBodyWidth}
+                height={bodyHeight}
+                rx="1.5"
+                fill={
+                  isUp
+                    ? "rgba(226,232,240,0.88)"
+                    : "rgba(37,99,235,0.92)"
+                }
+                stroke={
+                  isUp
+                    ? "rgba(248,250,252,0.95)"
+                    : "rgba(96,165,250,0.95)"
+                }
+                strokeWidth="0.8"
+              />
+            </g>
+          );
+        })}
 
         <text
           x={paddingX}
