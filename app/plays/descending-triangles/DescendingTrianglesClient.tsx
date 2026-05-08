@@ -501,13 +501,6 @@ useEffect(() => {
               <span>Dashboard</span>
             </Link>
 
-            <Link href="/plays" style={topNavBtnStyle("plays")}>
-              <span aria-hidden="true" style={topNavIconWrapStyle}>
-                {topNavIcon("plays")}
-              </span>
-              <span>Ascending</span>
-            </Link>
-
             <Link href="/pickers" style={topNavBtnStyle("pickers")}>
               <span aria-hidden="true" style={topNavIconWrapStyle}>
                 {topNavIcon("pickers")}
@@ -785,9 +778,29 @@ color: "#fecaca",
           </div>
         ) : null}
 
+        {!loading && filteredSections.length ? (
+  <div
+    style={{
+      marginTop: 26,
+      display: "flex",
+      justifyContent: isNarrow ? "center" : "flex-start",
+      alignItems: "center",
+      gap: 10,
+      flexWrap: "wrap",
+    }}
+  >
+    <Link href="/plays" style={topNavBtnStyle("plays")}>
+      <span aria-hidden="true" style={topNavIconWrapStyle}>
+        {topNavIcon("plays")}
+      </span>
+      <span>Ascending</span>
+    </Link>
+  </div>
+) : null}
+        
         {!loading
           ? filteredSections.map((section) => (
-              <section key={section.title} style={{ marginTop: 26 }}>
+              <section key={section.title} style={{ marginTop: 14 }}>
                 <div
                   style={{
                     display: "flex",
