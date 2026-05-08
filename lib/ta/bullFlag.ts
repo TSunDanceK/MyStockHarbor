@@ -187,13 +187,11 @@ export function detectBullFlag(
 
   const lookbackBars = options.lookbackBars ?? (timeframe === "W" ? 104 : 160);
   const minPoleGainPct = options.minPoleGainPct ?? (timeframe === "W" ? 12 : 9);
-const minFlagBars =
-  options.minFlagBars ?? (timeframe === "W" ? 8 : timeframe === "ST" ? 5 : 7);
+const minFlagBars = options.minFlagBars ?? (timeframe === "W" ? 8 : 7);
 
 const maxFlagBars = options.maxFlagBars ?? (timeframe === "W" ? 24 : 38);
 
-const minPoleBars =
-  options.minPoleBars ?? (timeframe === "W" ? 12 : timeframe === "ST" ? 8 : 12);
+const minPoleBars = options.minPoleBars ?? (timeframe === "W" ? 12 : 12);
   const maxPoleBars = options.maxPoleBars ?? (timeframe === "W" ? 34 : 55);
   const minFlagRetracementPct = options.minFlagRetracementPct ?? 2;
   const maxFlagRetracementPct =
@@ -310,14 +308,11 @@ if (!Number.isFinite(rawAverageChannelWidth) || rawAverageChannelWidth <= 0) {
 const channelWidthOfPolePct = (rawAverageChannelWidth / poleRange) * 100;
 const channelWidthOfPricePct = (rawAverageChannelWidth / latest.close) * 100;
 
-const minChannelWidthOfPolePct =
-  timeframe === "W" ? 12 : timeframe === "ST" ? 9 : 10;
+const minChannelWidthOfPolePct = timeframe === "W" ? 12 : 10;
 
-const maxChannelWidthOfPolePct =
-  timeframe === "W" ? 48 : timeframe === "ST" ? 42 : 45;
+const maxChannelWidthOfPolePct = timeframe === "W" ? 48 : 45;
 
-const minChannelWidthOfPricePct =
-  timeframe === "W" ? 2.25 : timeframe === "ST" ? 1.4 : 1.6;
+const minChannelWidthOfPricePct = timeframe === "W" ? 2.25 : 1.6;
 
 if (channelWidthOfPolePct < minChannelWidthOfPolePct) continue;
 if (channelWidthOfPolePct > maxChannelWidthOfPolePct) continue;
