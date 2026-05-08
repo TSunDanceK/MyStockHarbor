@@ -1019,10 +1019,10 @@ const points = rawPoints.slice(zoomStartIndex);
   }
 
 const width = 420;
-const height = 220;
+const height = 260;
 const paddingX = 18;
-const paddingTop = 20;
-const paddingBottom = 28;
+const paddingTop = 22;
+const paddingBottom = 32;
 
   const lows = points.map((point) =>
     typeof point.low === "number" ? point.low : point.close
@@ -1131,7 +1131,7 @@ const flagEndIndex = points.length - 1;
         style={{
           display: "block",
           width: "100%",
-          height: isNarrow ? 190 : 220,
+         height: isNarrow ? 220 : 260,
         }}
       >
         <defs>
