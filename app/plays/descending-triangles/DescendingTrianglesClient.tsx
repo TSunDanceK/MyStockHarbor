@@ -7,6 +7,7 @@ type PlayTone = "green" | "yellow" | "orange" | "red";
 
 type PlayChartPoint = {
   date: string;
+  open?: number;
   close: number;
   high?: number;
   low?: number;
@@ -1094,6 +1095,9 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
     })
     .join(" ");
 
+  const candleSlotWidth = (width - paddingX * 2) / Math.max(1, points.length);
+  const candleBodyWidth = Math.max(2.5, Math.min(8, candleSlotWidth * 0.58));
+
   const supportY = yAt(item.support);
 
   const volumeValues = points
@@ -1163,9 +1167,6 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
 
   const resistanceStartY = yAt(resistanceStartPrice);
   const resistanceEndY = yAt(projectedResistanceEndPrice);
-
-  const latestX = xAt(points.length - 1);
-  const latestY = yAt(item.latestClose);
 
   const gradientId = `fill-desc-${item.symbol}-${item.timeframe}`.replace(
     /[^a-zA-Z0-9-_]/g,
@@ -1266,23 +1267,73 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
           fill={`url(#${gradientId})`}
         />
 
-        <path
-          d={closePath}
-          fill="none"
-          stroke="rgba(226,232,240,0.92)"
-          strokeWidth="2.2"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
+        {points.map((point, index) => {
+          const previousClose = index > 0 ? points[index - 1].close : point.close;
 
-        <circle
-          cx={latestX}
-          cy={latestY}
-          r="4.5"
-          fill={toneColour(item.tone)}
-          stroke="rgba(2,6,23,0.95)"
-          strokeWidth="2"
-        />
+          const open =
+            typeof point.open === "number" && Number.isFinite(point.open)
+              ? point.open
+              : previousClose;
+
+          const close = point.close;
+
+          const high =
+            typeof point.high === "number" && Number.isFinite(point.high)
+              ? Math.max(point.high, open, close)
+              : Math.max(open, close);
+
+          const low =
+            typeof point.low === "number" && Number.isFinite(point.low)
+              ? Math.min(point.low, open, close)
+              : Math.min(open, close);
+
+          const x = xAt(index);
+          const openY = yAt(open);
+          const closeY = yAt(close);
+          const highY = yAt(high);
+          const lowY = yAt(low);
+
+          const bodyTop = Math.min(openY, closeY);
+          const bodyHeight = Math.max(2, Math.abs(closeY - openY));
+          const isUp = close >= open;
+
+          return (
+            <g key={`${point.date}-candle`}>
+              <line
+                x1={x}
+                x2={x}
+                y1={highY}
+                y2={lowY}
+                stroke={
+                  isUp
+                    ? "rgba(226,232,240,0.92)"
+                    : "rgba(37,99,235,0.95)"
+                }
+                strokeWidth="1.1"
+                strokeLinecap="round"
+              />
+
+              <rect
+                x={x - candleBodyWidth / 2}
+                y={bodyTop}
+                width={candleBodyWidth}
+                height={bodyHeight}
+                rx="1.5"
+                fill={
+                  isUp
+                    ? "rgba(226,232,240,0.88)"
+                    : "rgba(37,99,235,0.92)"
+                }
+                stroke={
+                  isUp
+                    ? "rgba(248,250,252,0.95)"
+                    : "rgba(96,165,250,0.95)"
+                }
+                strokeWidth="0.8"
+              />
+            </g>
+          );
+        })}
 
         <text
           x={paddingX}
