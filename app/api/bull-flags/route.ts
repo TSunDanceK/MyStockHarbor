@@ -856,7 +856,7 @@ async function buildPlaysPayload(
   const macroBullFlags: PlayItem[] = [];
   const weeklyBullFlags: PlayItem[] = [];
   const dailyBullFlags: PlayItem[] = [];
-  const shortTermBullFlags: PlayItem[] = [];
+
 
   let freshHistoryFetchesUsed = 0;
   const limit = pLimit(10);
@@ -933,7 +933,7 @@ async function buildPlaysPayload(
                 260,
                 320,
               ]),
-              shortTerm: debugFlagWindows(dailyPoints, "ST", [35, 50, 70]),
+              
             };
           }
 
@@ -998,22 +998,7 @@ async function buildPlaysPayload(
             dailyBullFlags.push(toPlayItem(symbol, dailyFlag, dailyPoints));
           }
 
-          const shortTermFlag = bestFlagForWindows(dailyPoints, "ST", [
-            35,
-            50,
-            70,
-          ]);
 
-          if (shortTermFlag) {
-            addDebugMatch(debugSymbolScan, "shortTerm");
-
-            shortTermBullFlags.push({
-              ...toPlayItem(symbol, shortTermFlag, dailyPoints, "ST"),
-              timeframe: "ST",
-              note: shortTermFlag.note,
-              dashboardHref: buildDashboardHref(symbol, "ST"),
-            });
-          }
         } catch {
           // Skip bad symbols/data without failing the full plays page.
         }
@@ -1025,7 +1010,6 @@ async function buildPlaysPayload(
     ...macroBullFlags,
     ...weeklyBullFlags,
     ...dailyBullFlags,
-    ...shortTermBullFlags,
   ];
 
   const sections = [
@@ -1055,13 +1039,6 @@ async function buildPlaysPayload(
       description:
         "Medium-term daily bull flag candidates where price is consolidating after a prior upward pole move.",
       source: dailyBullFlags,
-      take: 24,
-    }),
-    buildSection({
-      title: "Short-Term Bull Flag Plays",
-      description:
-        "Compact bull flag continuation setups detected from tighter daily chart structure.",
-      source: shortTermBullFlags,
       take: 24,
     }),
   ];
