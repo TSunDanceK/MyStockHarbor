@@ -615,6 +615,30 @@ function toMacroBullFlagResult(result: BullFlagResult) {
   };
 }
 
+function hasEnoughFlagStructure(
+  result: BullFlagResult,
+  timeframe: "M" | "ST" | "D" | "W"
+) {
+  const flagHeight = Math.abs(result.flagUpperEndPrice - result.flagLowerEndPrice);
+  const poleRange = Math.abs(result.poleHighPrice - result.poleStartPrice);
+
+  if (!Number.isFinite(flagHeight) || !Number.isFinite(poleRange)) return false;
+  if (flagHeight <= 0 || poleRange <= 0) return false;
+
+  const flagHeightOfPolePct = (flagHeight / poleRange) * 100;
+
+  const minFlagHeightOfPolePct =
+    timeframe === "M" ? 12 : timeframe === "W" ? 10 : timeframe === "ST" ? 8 : 10;
+
+  const minFlagBarsForStructure =
+    timeframe === "M" ? 12 : timeframe === "W" ? 8 : timeframe === "ST" ? 5 : 18;
+
+  if (result.flagBars < minFlagBarsForStructure) return false;
+  if (flagHeightOfPolePct < minFlagHeightOfPolePct) return false;
+
+  return true;
+}
+
 function bestFlagForWindows(
   points: Point[],
   timeframe: "M" | "ST" | "D" | "W",
@@ -654,6 +678,7 @@ function bestFlagForWindows(
     )
     .filter((result): result is BullFlagResult => result !== null)
     .filter((result) => result.flagBars + result.poleBars >= minStructureBars)
+    .filter((result) => hasEnoughFlagStructure(result, timeframe))
     .map((result) => {
       if (timeframe === "M") {
         return toMacroBullFlagResult(result);
