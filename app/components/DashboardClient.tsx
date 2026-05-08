@@ -774,7 +774,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
 
   const [indicator, setIndicator] = useState<Overlay>("None");
   const [selectedIndicators, setSelectedIndicators] = useState<Overlay[]>([]);
-  const [chartType, setChartType] = useState<ChartType>("line");
+  const [chartType, setChartType] = useState<ChartType>("candles");
   const [indicatorMenuOpen, setIndicatorMenuOpen] = useState(false);
   const indicatorMenuRef = useRef<HTMLDivElement | null>(null);
   const chartSectionRef = useRef<HTMLDivElement | null>(null);
