@@ -981,19 +981,21 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
   const isNarrow = useIsNarrowScreen();
 const rawPoints = Array.isArray(item.chartPoints) ? item.chartPoints : [];
 
-const fullPoleHighIndex = rawPoints.findIndex(
-  (point) => point.date === item.flagStartDate
-);
+const minimumDisplayBars =
+  item.timeframe === "M"
+    ? 52
+    : item.timeframe === "W"
+      ? 26
+      : item.timeframe === "D"
+        ? 63
+        : Math.max(18, item.flagBars + 6);
 
-const fallbackPoleHighIndex = Math.max(
-  0,
-  rawPoints.length - Math.max(18, item.flagBars + 6)
-);
+const structureDisplayBars =
+  item.timeframe === "ST"
+    ? Math.max(18, item.flagBars + 6)
+    : Math.max(minimumDisplayBars, item.flagBars + item.poleBars + 8);
 
-const zoomStartIndex = Math.max(
-  0,
-  (fullPoleHighIndex >= 0 ? fullPoleHighIndex : fallbackPoleHighIndex) - 4
-);
+const zoomStartIndex = Math.max(0, rawPoints.length - structureDisplayBars);
 
 const points = rawPoints.slice(zoomStartIndex);
 
