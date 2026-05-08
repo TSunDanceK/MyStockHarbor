@@ -1049,9 +1049,6 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
   const candleSlotWidth = (width - paddingX * 2) / Math.max(1, points.length);
   const candleBodyWidth = Math.max(2.5, Math.min(8, candleSlotWidth * 0.58));
 
-  const candleSlotWidth = (width - paddingX * 2) / Math.max(1, points.length);
-  const candleBodyWidth = Math.max(2.5, Math.min(8, candleSlotWidth * 0.58));
-
   const resistanceY = yAt(item.resistance);
 
   const volumeValues = points
