@@ -626,16 +626,16 @@ function bestFlagForWindows(
     timeframe === "M" ? 18 : timeframe === "W" ? 12 : timeframe === "ST" ? 7 : 10;
 
   const minFlagBars =
-    timeframe === "M" ? 8 : timeframe === "W" ? 8 : timeframe === "ST" ? 4 : 18;
+    timeframe === "M" ? 12 : timeframe === "W" ? 8 : timeframe === "ST" ? 5 : 18;
 
   const maxFlagBars =
-    timeframe === "M" ? 52 : timeframe === "W" ? 40 : timeframe === "ST" ? 18 : 70;
+    timeframe === "M" ? 52 : timeframe === "W" ? 40 : timeframe === "ST" ? 20 : 70;
 
   const maxFlagRetracementPct =
     timeframe === "M" ? 62 : timeframe === "W" ? 60 : timeframe === "ST" ? 52 : 58;
 
   const maxDistanceToBreakoutPct =
-    timeframe === "M" ? 18 : timeframe === "W" ? 15 : timeframe === "ST" ? 9 : 12;
+    timeframe === "M" ? 18 : timeframe === "W" ? 16 : timeframe === "ST" ? 9 : 12;
 
   const minStructureBars =
     timeframe === "M" ? 52 : timeframe === "W" ? 26 : timeframe === "D" ? 42 : 0;
