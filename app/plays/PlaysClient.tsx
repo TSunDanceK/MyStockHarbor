@@ -243,6 +243,27 @@ function toChartHref(href: string) {
   return `${href}#chart`;
 }
 
+function useIsNarrowScreen() {
+  const [isNarrow, setIsNarrow] = useState(false);
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 760px)");
+
+    const update = () => {
+      setIsNarrow(query.matches);
+    };
+
+    update();
+    query.addEventListener("change", update);
+
+    return () => {
+      query.removeEventListener("change", update);
+    };
+  }, []);
+
+  return isNarrow;
+}
+
 export default function PlaysClient() {
   const [sections, setSections] = useState<PlaySection[]>([]);
   const [loading, setLoading] = useState(true);
@@ -257,6 +278,7 @@ export default function PlaysClient() {
   const [selectedTimeframe, setSelectedTimeframe] = useState<
     "ALL" | "M" | "W" | "D" | "ST"
   >("ALL");
+  const isNarrow = useIsNarrowScreen();
 
   async function loadPlays(force = false) {
     const setBusy = force ? setForceRefreshing : setLoading;
@@ -370,7 +392,7 @@ export default function PlaysClient() {
         background:
           "radial-gradient(circle at top left, rgba(59,130,246,0.16), transparent 34%), radial-gradient(circle at top right, rgba(34,197,94,0.12), transparent 32%), #020617",
         color: "#e5e7eb",
-        padding: "34px 18px 56px",
+        padding: isNarrow ? "20px 12px 42px" : "34px 18px 56px",
       }}
     >
       <section
@@ -382,9 +404,9 @@ export default function PlaysClient() {
         <div
           style={{
             display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 14,
+            justifyContent: isNarrow ? "center" : "space-between",
+            alignItems: isNarrow ? "stretch" : "center",
+            gap: isNarrow ? 12 : 14,
             flexWrap: "wrap",
           }}
         >
@@ -411,10 +433,11 @@ export default function PlaysClient() {
             aria-label="Primary navigation"
             style={{
               display: "flex",
-              justifyContent: "flex-end",
+              justifyContent: isNarrow ? "center" : "flex-end",
               alignItems: "center",
-              gap: 10,
+              gap: isNarrow ? 8 : 10,
               flexWrap: "wrap",
+              width: isNarrow ? "100%" : undefined,
             }}
           >
             <Link href="/" style={topNavBtnStyle("dashboard")}>
@@ -458,16 +481,18 @@ export default function PlaysClient() {
           style={{
             marginTop: 18,
             display: "grid",
-            gridTemplateColumns: "minmax(0, 1.35fr) minmax(260px, 0.65fr)",
-            gap: 18,
+            gridTemplateColumns: isNarrow
+              ? "1fr"
+              : "minmax(0, 1.35fr) minmax(260px, 0.65fr)",
+            gap: isNarrow ? 12 : 18,
             alignItems: "stretch",
           }}
         >
           <div
             style={{
               border: "1px solid rgba(255,255,255,0.09)",
-              borderRadius: 26,
-              padding: 24,
+              borderRadius: isNarrow ? 20 : 26,
+              padding: isNarrow ? 16 : 24,
               background:
                 "linear-gradient(180deg, rgba(15,23,42,0.88), rgba(2,6,23,0.94))",
               boxShadow: "0 20px 55px rgba(0,0,0,0.32)",
@@ -478,7 +503,7 @@ export default function PlaysClient() {
                 margin: 0,
                 maxWidth: 860,
                 color: "#f8fafc",
-                fontSize: "clamp(34px, 6vw, 64px)",
+                fontSize: isNarrow ? "clamp(32px, 11vw, 46px)" : "clamp(34px, 6vw, 64px)",
                 lineHeight: 0.98,
                 letterSpacing: "-0.06em",
               }}
@@ -589,8 +614,8 @@ export default function PlaysClient() {
           <aside
             style={{
               border: "1px solid rgba(255,255,255,0.09)",
-              borderRadius: 26,
-              padding: 20,
+              borderRadius: isNarrow ? 20 : 26,
+              padding: isNarrow ? 16 : 20,
               background:
                 "linear-gradient(180deg, rgba(8,13,24,0.92), rgba(2,6,23,0.96))",
               boxShadow: "0 20px 55px rgba(0,0,0,0.25)",
@@ -723,7 +748,7 @@ export default function PlaysClient() {
                       style={{
                         margin: 0,
                         color: "#f8fafc",
-                        fontSize: 28,
+                        fontSize: isNarrow ? 23 : 28,
                         letterSpacing: "-0.04em",
                       }}
                     >
@@ -762,8 +787,10 @@ export default function PlaysClient() {
                   style={{
                     marginTop: 14,
                     display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(310px, 1fr))",
-                    gap: 14,
+                    gridTemplateColumns: isNarrow
+                      ? "1fr"
+                      : "repeat(auto-fit, minmax(310px, 1fr))",
+                    gap: isNarrow ? 12 : 14,
                   }}
                 >
                   {section.items.map((item) => (
@@ -771,8 +798,8 @@ export default function PlaysClient() {
                       key={`${section.title}-${item.symbol}-${item.timeframe}`}
                       style={{
                         border: "1px solid rgba(255,255,255,0.09)",
-                        borderRadius: 22,
-                        padding: 16,
+                        borderRadius: isNarrow ? 18 : 22,
+                        padding: isNarrow ? 13 : 16,
                         background:
                           "linear-gradient(180deg, rgba(15,23,42,0.86), rgba(2,6,23,0.94))",
                         boxShadow: "0 16px 36px rgba(0,0,0,0.22)",
@@ -784,6 +811,7 @@ export default function PlaysClient() {
                           justifyContent: "space-between",
                           gap: 12,
                           alignItems: "start",
+                          flexWrap: "wrap",
                         }}
                       >
                         <div>
@@ -904,6 +932,7 @@ export default function PlaysClient() {
 }
 
 function MiniPlayChart({ item }: { item: PlayItem }) {
+  const isNarrow = useIsNarrowScreen();
   const points = Array.isArray(item.chartPoints) ? item.chartPoints : [];
 
   if (points.length < 4) {
@@ -913,7 +942,7 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
           marginTop: 14,
           border: "1px solid rgba(255,255,255,0.08)",
           borderRadius: 18,
-          height: 150,
+          height: isNarrow ? 132 : 150,
           background: "rgba(2,6,23,0.54)",
           display: "flex",
           alignItems: "center",
@@ -1072,7 +1101,7 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
         style={{
           display: "block",
           width: "100%",
-          height: 170,
+          height: isNarrow ? 148 : 170,
         }}
       >
         <defs>
@@ -1189,8 +1218,9 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
       <div
         style={{
           display: "flex",
+          flexDirection: isNarrow ? "column" : "row",
           justifyContent: "space-between",
-          gap: 10,
+          gap: isNarrow ? 6 : 10,
           borderTop: "1px solid rgba(255,255,255,0.07)",
           padding: "9px 11px",
           color: "#94a3b8",
@@ -1207,6 +1237,8 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
 }
 
 function StatRow({ label, value }: { label: string; value: string }) {
+  const isNarrow = useIsNarrowScreen();
+
   return (
     <div
       style={{
@@ -1214,6 +1246,7 @@ function StatRow({ label, value }: { label: string; value: string }) {
         justifyContent: "space-between",
         gap: 12,
         alignItems: "center",
+        minWidth: 0,
         borderBottom: "1px solid rgba(255,255,255,0.07)",
         paddingBottom: 9,
       }}
@@ -1232,6 +1265,8 @@ function StatRow({ label, value }: { label: string; value: string }) {
           color: "#f8fafc",
           fontSize: 13,
           fontWeight: 950,
+          textAlign: "right",
+          overflowWrap: isNarrow ? "anywhere" : undefined,
         }}
       >
         {value}
