@@ -657,77 +657,79 @@ color: "#fecaca",
               review, not financial advice.
             </div>
           </div>
+{!isNarrow ? (
+  <aside
+    style={{
+      border: "1px solid rgba(255,255,255,0.09)",
+      borderRadius: 26,
+      padding: 20,
+      background:
+        "linear-gradient(180deg, rgba(8,13,24,0.92), rgba(2,6,23,0.96))",
+      boxShadow: "0 20px 55px rgba(0,0,0,0.25)",
+    }}
+  >
+    <div
+      style={{
+        color: "#94a3b8",
+        fontSize: 12,
+        fontWeight: 900,
+        textTransform: "uppercase",
+        letterSpacing: "0.1em",
+      }}
+    >
+      Current scan
+    </div>
 
-          <aside
-            style={{
-              border: "1px solid rgba(255,255,255,0.09)",
-              borderRadius: isNarrow ? 20 : 26,
-              padding: isNarrow ? 16 : 20,
-              background:
-                "linear-gradient(180deg, rgba(8,13,24,0.92), rgba(2,6,23,0.96))",
-              boxShadow: "0 20px 55px rgba(0,0,0,0.25)",
-            }}
-          >
-            <div
-              style={{
-                color: "#94a3b8",
-                fontSize: 12,
-                fontWeight: 900,
-                textTransform: "uppercase",
-                letterSpacing: "0.1em",
-              }}
-            >
-              Current scan
-            </div>
+    <div
+      style={{
+        marginTop: 14,
+        display: "grid",
+        gap: 10,
+      }}
+    >
+      <StatRow
+        label="Universe"
+        value={universeSize == null ? "—" : String(universeSize)}
+      />
+      <StatRow
+        label="Dynamic names"
+        value={
+          dynamicUniverseCount == null
+            ? "—"
+            : String(dynamicUniverseCount)
+        }
+      />
+      <StatRow label="Macro shown" value={String(macroCount)} />
+      <StatRow label="Weekly shown" value={String(weeklyCount)} />
+      <StatRow label="Daily shown" value={String(dailyCount)} />
+      <StatRow
+        label="Short-term shown"
+        value={String(shortTermCount)}
+      />
+      <StatRow
+        label="Top score"
+        value={topScore == null ? "—" : String(topScore)}
+      />
+      <StatRow label="Updated" value={formatDate(updatedAt)} />
+    </div>
 
-            <div
-              style={{
-                marginTop: 14,
-                display: "grid",
-                gap: 10,
-              }}
-            >
-              <StatRow
-                label="Universe"
-                value={universeSize == null ? "—" : String(universeSize)}
-              />
-              <StatRow
-                label="Dynamic names"
-                value={
-                  dynamicUniverseCount == null
-                    ? "—"
-                    : String(dynamicUniverseCount)
-                }
-              />
-              <StatRow label="Macro shown" value={String(macroCount)} />
-              <StatRow label="Weekly shown" value={String(weeklyCount)} />
-              <StatRow label="Daily shown" value={String(dailyCount)} />
-              <StatRow
-                label="Short-term shown"
-                value={String(shortTermCount)}
-              />
-              <StatRow
-                label="Top score"
-                value={topScore == null ? "—" : String(topScore)}
-              />
-              <StatRow label="Updated" value={formatDate(updatedAt)} />
-            </div>
+    {estimatedApiCalls == null ? null : (
+      <p
+        style={{
+          margin: "14px 0 0",
+          color: "#64748b",
+          fontSize: 12,
+          lineHeight: 1.5,
+          fontWeight: 700,
+        }}
+      >
+        Estimated fresh API calls: {estimatedApiCalls}. Cached histories
+        are scanned without new market-data calls.
+      </p>
+    )}
+  </aside>
+) : null}
 
-            {estimatedApiCalls == null ? null : (
-              <p
-                style={{
-                  margin: "14px 0 0",
-                  color: "#64748b",
-                  fontSize: 12,
-                  lineHeight: 1.5,
-                  fontWeight: 700,
-                }}
-              >
-                Estimated fresh API calls: {estimatedApiCalls}. Cached histories
-                are scanned without new market-data calls.
-              </p>
-            )}
-          </aside>
         </div>
 
         {err ? (
