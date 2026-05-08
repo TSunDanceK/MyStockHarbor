@@ -2,6 +2,7 @@ import { Redis } from "@upstash/redis";
 
 export type Point = {
   date: string;
+  open?: number;
   close: number;
   high?: number;
   low?: number;
@@ -21,7 +22,7 @@ const redis =
     ? Redis.fromEnv()
     : null;
 
-const REDIS_HISTORY_PREFIX = "msh:history:v6";
+const REDIS_HISTORY_PREFIX = "msh:history:v7";
 const REDIS_HISTORY_TTL_SECONDS = 6 * 60 * 60;
 const MIN_QUALIFIED_POINTS = 30;
 
@@ -149,6 +150,7 @@ function parseFmpHistoricalRows(rows: FmpHistoricalRow[] | undefined) {
 
   for (const row of rows) {
     const date = typeof row.date === "string" ? row.date.trim() : "";
+    const open = toFiniteNumber(row.open);
     const close = toFiniteNumber(row.close);
     const high = toFiniteNumber(row.high);
     const low = toFiniteNumber(row.low);
@@ -158,6 +160,7 @@ function parseFmpHistoricalRows(rows: FmpHistoricalRow[] | undefined) {
 
     daily.push({
       date,
+      open: open ?? undefined,
       close,
       high: high ?? undefined,
       low: low ?? undefined,
