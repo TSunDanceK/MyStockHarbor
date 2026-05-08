@@ -626,16 +626,19 @@ function bestFlagForWindows(
     timeframe === "M" ? 18 : timeframe === "W" ? 12 : timeframe === "ST" ? 7 : 10;
 
   const minFlagBars =
-    timeframe === "M" ? 4 : timeframe === "W" ? 3 : timeframe === "ST" ? 4 : 6;
+    timeframe === "M" ? 8 : timeframe === "W" ? 6 : timeframe === "ST" ? 4 : 8;
 
   const maxFlagBars =
-    timeframe === "M" ? 30 : timeframe === "W" ? 22 : timeframe === "ST" ? 18 : 38;
+    timeframe === "M" ? 34 : timeframe === "W" ? 26 : timeframe === "ST" ? 18 : 42;
 
   const maxFlagRetracementPct =
     timeframe === "M" ? 62 : timeframe === "W" ? 58 : timeframe === "ST" ? 52 : 54;
 
   const maxDistanceToBreakoutPct =
     timeframe === "M" ? 18 : timeframe === "W" ? 14 : timeframe === "ST" ? 9 : 11;
+
+  const minStructureBars =
+    timeframe === "M" ? 52 : timeframe === "W" ? 26 : timeframe === "D" ? 63 : 0;
 
   const results = windows
     .map((lookbackBars) =>
@@ -650,6 +653,7 @@ function bestFlagForWindows(
       })
     )
     .filter((result): result is BullFlagResult => result !== null)
+    .filter((result) => result.flagBars + result.poleBars >= minStructureBars)
     .map((result) => {
       if (timeframe === "M") {
         return toMacroBullFlagResult(result);
