@@ -780,7 +780,7 @@ color: "#fecaca",
           </div>
         ) : null}
 
-        {!loading && filteredSections.length ? (
+{!loading && filteredSections.length ? (
   <div
     style={{
       marginTop: 26,
@@ -796,6 +796,24 @@ color: "#fecaca",
         {topNavIcon("plays")}
       </span>
       <span>Ascending</span>
+    </Link>
+
+    <Link
+      href="/plays/descending-triangles"
+      aria-current="page"
+      style={{
+        ...topNavBtnStyle("plays"),
+        border: "1px solid rgba(96,165,250,0.82)",
+        background:
+          "linear-gradient(135deg, rgba(96,165,250,0.34), rgba(37,99,235,0.20))",
+        boxShadow:
+          "0 0 0 1px rgba(96,165,250,0.18), 0 12px 28px rgba(37,99,235,0.24)",
+      }}
+    >
+      <span aria-hidden="true" style={topNavIconWrapStyle}>
+        {topNavIcon("plays")}
+      </span>
+      <span>Descending</span>
     </Link>
   </div>
 ) : null}
