@@ -19,6 +19,7 @@ import {
 
 type Point = {
   date: string;
+  open?: number;
   close: number;
   high?: number;
   low?: number;
@@ -46,6 +47,7 @@ type PlayTone = "green" | "yellow" | "orange" | "red";
 
 type PlayChartPoint = {
   date: string;
+  open?: number;
   close: number;
   high?: number;
   low?: number;
@@ -117,6 +119,7 @@ type CachedPlaysPayload = {
 
 type AggregatedPoint = {
   date: string;
+  open?: number;
   close: number;
   high?: number;
   low?: number;
@@ -291,6 +294,7 @@ function aggregateWeekly(points: Point[]): AggregatedPoint[] {
       currentKey = key;
       current = {
         date: point.date,
+        open: typeof point.open === "number" ? point.open : point.close,
         close: point.close,
         high: point.high,
         low: point.low,
@@ -369,6 +373,7 @@ function normalizeCachedPoints(points: Point[]) {
   return points
     .map((p) => ({
       date: String(p?.date ?? ""),
+      open: p?.open == null ? undefined : Number(p.open),
       close: Number(p?.close),
       high: p?.high == null ? undefined : Number(p.high),
       low: p?.low == null ? undefined : Number(p.low),
@@ -459,6 +464,7 @@ async function fetchHistory(symbol: string, days: number): Promise<Point[]> {
   return pts
     .map((p) => ({
       date: String(p?.date ?? ""),
+      open: p?.open == null ? undefined : Number(p.open),
       close: Number(p?.close),
       high: p?.high == null ? undefined : Number(p.high),
       low: p?.low == null ? undefined : Number(p.low),
@@ -495,6 +501,10 @@ function toPlayItem(
     .slice(-chartBars)
     .map((point) => ({
       date: point.date,
+      open:
+        typeof point.open === "number"
+          ? Number(point.open.toFixed(2))
+          : undefined,
       close: Number(point.close.toFixed(2)),
       high:
         typeof point.high === "number"
