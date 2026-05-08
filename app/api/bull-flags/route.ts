@@ -490,7 +490,10 @@ async function fetchHistory(symbol: string, days: number): Promise<Point[]> {
 function buildDashboardHref(symbol: string, timeframe: "M" | "ST" | "D" | "W") {
   const params = new URLSearchParams();
   params.set("symbol", symbol);
-  params.set("tf", timeframe === "ST" ? "D" : timeframe === "M" ? "W" : timeframe);
+  params.set(
+    "tf",
+    timeframe === "ST" ? "D" : timeframe === "M" ? "W" : timeframe
+  );
 
   return `/?${params.toString()}`;
 }
@@ -508,7 +511,9 @@ function toPlayItem(
       ? Math.min(260, Math.max(90, result.flagBars + result.poleBars + 18))
       : displayTimeframe === "W"
         ? Math.min(220, Math.max(52, result.flagBars + result.poleBars + 10))
-        : Math.min(280, Math.max(90, result.flagBars + result.poleBars + 25));
+        : displayTimeframe === "D"
+          ? Math.min(360, Math.max(120, result.flagBars + result.poleBars + 35))
+          : Math.min(180, Math.max(45, result.flagBars + result.poleBars + 18));
 
   const chartPoints = sourcePoints
     .slice(-chartBars)
@@ -524,9 +529,7 @@ function toPlayItem(
           ? Number(point.high.toFixed(2))
           : undefined,
       low:
-        typeof point.low === "number"
-          ? Number(point.low.toFixed(2))
-          : undefined,
+        typeof point.low === "number" ? Number(point.low.toFixed(2)) : undefined,
       volume:
         typeof point.volume === "number" && Number.isFinite(point.volume)
           ? point.volume
@@ -618,6 +621,37 @@ function toMacroBullFlagResult(result: BullFlagResult) {
   };
 }
 
+function toShortTermBullFlagResult(result: BullFlagResult) {
+  return {
+    ...result,
+    timeframe: "D" as const,
+    note: `Short-term bull flag candidate: ${result.poleGainPct.toFixed(
+      1
+    )}% pole move, ${result.flagRetracementPct.toFixed(
+      1
+    )}% retracement, ${result.distanceToBreakoutPct.toFixed(
+      1
+    )}% below breakout area.`,
+  };
+}
+
+function scoreResultForTimeframe(
+  result: BullFlagResult,
+  timeframe: "M" | "ST" | "D" | "W"
+) {
+  const structureBars = result.flagBars + result.poleBars;
+
+  const wideFlagBonus =
+    timeframe === "D"
+      ? Math.min(18, Math.max(0, result.flagBars - 18) * 0.45)
+      : timeframe === "M"
+        ? Math.min(12, Math.max(0, structureBars - 44) * 0.35)
+        : timeframe === "W"
+          ? Math.min(10, Math.max(0, result.flagBars - 10) * 0.35)
+          : 0;
+
+  return result.score + wideFlagBonus;
+}
 
 function bestFlagForWindows(
   points: Point[],
@@ -633,13 +667,13 @@ function bestFlagForWindows(
     timeframe === "M" ? 8 : timeframe === "W" ? 6 : timeframe === "ST" ? 4 : 18;
 
   const maxFlagBars =
-    timeframe === "M" ? 52 : timeframe === "W" ? 40 : timeframe === "ST" ? 20 : 70;
+    timeframe === "M" ? 70 : timeframe === "W" ? 52 : timeframe === "ST" ? 24 : 115;
 
   const maxFlagRetracementPct =
-    timeframe === "M" ? 62 : timeframe === "W" ? 62 : timeframe === "ST" ? 52 : 62;
+    timeframe === "M" ? 70 : timeframe === "W" ? 66 : timeframe === "ST" ? 52 : 72;
 
   const maxDistanceToBreakoutPct =
-    timeframe === "M" ? 18 : timeframe === "W" ? 18 : timeframe === "ST" ? 9 : 14;
+    timeframe === "M" ? 22 : timeframe === "W" ? 18 : timeframe === "ST" ? 9 : 16;
 
   const minStructureBars =
     timeframe === "M" ? 44 : timeframe === "W" ? 26 : timeframe === "D" ? 42 : 0;
@@ -659,43 +693,17 @@ function bestFlagForWindows(
     .filter((result): result is BullFlagResult => result !== null)
     .filter((result) => result.flagBars + result.poleBars >= minStructureBars)
     .map((result) => {
-      if (timeframe === "M") {
-        return toMacroBullFlagResult(result);
-      }
-
-      if (timeframe === "ST") {
-        return {
-          ...result,
-          timeframe: "D" as const,
-          note: `Short-term bull flag candidate: ${result.poleGainPct.toFixed(
-            1
-          )}% pole move, ${result.flagRetracementPct.toFixed(
-            1
-          )}% retracement, ${result.distanceToBreakoutPct.toFixed(
-            1
-          )}% below breakout area.`,
-        };
-      }
-
+      if (timeframe === "M") return toMacroBullFlagResult(result);
+      if (timeframe === "ST") return toShortTermBullFlagResult(result);
       return result;
     });
 
   if (!results.length) return null;
 
-  return [...results].sort((a, b) => {
-    const aStructureBars = a.flagBars + a.poleBars;
-    const bStructureBars = b.flagBars + b.poleBars;
-
-    const aAdjustedScore =
-      a.score +
-      (timeframe === "M" ? Math.min(8, Math.max(0, aStructureBars - 44) * 0.5) : 0);
-
-    const bAdjustedScore =
-      b.score +
-      (timeframe === "M" ? Math.min(8, Math.max(0, bStructureBars - 44) * 0.5) : 0);
-
-    return bAdjustedScore - aAdjustedScore;
-  })[0];
+  return [...results].sort(
+    (a, b) =>
+      scoreResultForTimeframe(b, timeframe) - scoreResultForTimeframe(a, timeframe)
+  )[0];
 }
 
 function debugFlagWindows(
@@ -711,6 +719,7 @@ function debugFlagWindows(
     if (!result) {
       return {
         timeframe,
+        detectorTimeframe,
         lookbackBars,
         passed: false,
         reason: "detector_returned_null",
@@ -725,11 +734,13 @@ function debugFlagWindows(
       reason: "passed",
       result: {
         score: result.score,
+        adjustedScore: scoreResultForTimeframe(result, timeframe),
         poleGainPct: result.poleGainPct,
         flagRetracementPct: result.flagRetracementPct,
         distanceToBreakoutPct: result.distanceToBreakoutPct,
         flagBars: result.flagBars,
         poleBars: result.poleBars,
+        structureBars: result.flagBars + result.poleBars,
         flagHigh: result.flagHigh,
         flagLow: result.flagLow,
         flagAngleDeg: result.flagAngleDeg,
@@ -742,6 +753,16 @@ function debugFlagWindows(
       },
     };
   });
+}
+
+function addDebugMatch(debugSymbolScan: any, match: string) {
+  if (!debugSymbolScan) return;
+
+  if (!Array.isArray(debugSymbolScan.matched)) {
+    debugSymbolScan.matched = [];
+  }
+
+  debugSymbolScan.matched.push(match);
 }
 
 async function buildPlaysPayload(
@@ -827,7 +848,7 @@ async function buildPlaysPayload(
         freshFetchSkippedBecauseBudgetUsed: false,
         dailyBars: 0,
         weeklyBars: 0,
-        matched: null,
+        matched: [],
         diagnostics: null,
       }
     : null;
@@ -904,7 +925,14 @@ async function buildPlaysPayload(
                 156,
                 208,
               ]),
-             daily: debugFlagWindows(dailyPoints, "D", [90, 120, 160, 220, 260]),
+              daily: debugFlagWindows(dailyPoints, "D", [
+                90,
+                120,
+                160,
+                220,
+                260,
+                320,
+              ]),
               shortTerm: debugFlagWindows(dailyPoints, "ST", [35, 50, 70]),
             };
           }
@@ -920,51 +948,40 @@ async function buildPlaysPayload(
           ]);
 
           if (macroFlag) {
-            if (symbol === normalizedDebugSymbol && debugSymbolScan) {
-              debugSymbolScan.matched = "macro";
-            }
+            addDebugMatch(debugSymbolScan, "macro");
 
             macroBullFlags.push(
               toPlayItem(symbol, macroFlag, weeklyPoints, "M")
             );
-            return;
           }
 
-const weeklyFlag = bestFlagForWindows(weeklyPoints, "W", [
-  39,
-  52,
-  80,
-  104,
-  156,
-  208,
-]);
+          const weeklyFlag = bestFlagForWindows(weeklyPoints, "W", [
+            39,
+            52,
+            80,
+            104,
+            156,
+            208,
+          ]);
 
-if (weeklyFlag) {
-  if (isMacroBullFlagCandidate(weeklyFlag)) {
-    if (symbol === normalizedDebugSymbol && debugSymbolScan) {
-      debugSymbolScan.matched = "macro_from_weekly";
-    }
+          if (weeklyFlag) {
+            addDebugMatch(debugSymbolScan, "weekly");
 
-    macroBullFlags.push(
-      toPlayItem(
-        symbol,
-        toMacroBullFlagResult(weeklyFlag),
-        weeklyPoints,
-        "M"
-      )
-    );
-    return;
-  }
+            weeklyBullFlags.push(toPlayItem(symbol, weeklyFlag, weeklyPoints));
 
-  if (symbol === normalizedDebugSymbol && debugSymbolScan) {
-    debugSymbolScan.matched = "weekly";
-  }
+            if (!macroFlag && isMacroBullFlagCandidate(weeklyFlag)) {
+              addDebugMatch(debugSymbolScan, "macro_from_weekly");
 
-  weeklyBullFlags.push(
-    toPlayItem(symbol, weeklyFlag, weeklyPoints)
-  );
-  return;
-}
+              macroBullFlags.push(
+                toPlayItem(
+                  symbol,
+                  toMacroBullFlagResult(weeklyFlag),
+                  weeklyPoints,
+                  "M"
+                )
+              );
+            }
+          }
 
           const dailyFlag = bestFlagForWindows(dailyPoints, "D", [
             90,
@@ -972,17 +989,13 @@ if (weeklyFlag) {
             160,
             220,
             260,
+            320,
           ]);
 
           if (dailyFlag) {
-            if (symbol === normalizedDebugSymbol && debugSymbolScan) {
-              debugSymbolScan.matched = "daily";
-            }
+            addDebugMatch(debugSymbolScan, "daily");
 
-            dailyBullFlags.push(
-              toPlayItem(symbol, dailyFlag, dailyPoints)
-            );
-            return;
+            dailyBullFlags.push(toPlayItem(symbol, dailyFlag, dailyPoints));
           }
 
           const shortTermFlag = bestFlagForWindows(dailyPoints, "ST", [
@@ -992,12 +1005,10 @@ if (weeklyFlag) {
           ]);
 
           if (shortTermFlag) {
-            if (symbol === normalizedDebugSymbol && debugSymbolScan) {
-              debugSymbolScan.matched = "shortTerm";
-            }
+            addDebugMatch(debugSymbolScan, "shortTerm");
 
             shortTermBullFlags.push({
-              ...toPlayItem(symbol, shortTermFlag, dailyPoints),
+              ...toPlayItem(symbol, shortTermFlag, dailyPoints, "ST"),
               timeframe: "ST",
               note: shortTermFlag.note,
               dashboardHref: buildDashboardHref(symbol, "ST"),
