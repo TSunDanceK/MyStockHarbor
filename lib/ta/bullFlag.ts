@@ -2,6 +2,7 @@
 
 export type PatternPoint = {
   date: string;
+  open?: number;
   close: number;
   high?: number;
   low?: number;
@@ -79,16 +80,23 @@ function pctDiff(from: number, to: number) {
 
 function normalisePoints(points: PatternPoint[]) {
   return points
-    .map((point) => ({
-      date: String(point.date ?? ""),
-      close: Number(point.close),
-      high: isFiniteNumber(point.high) ? point.high : Number(point.close),
-      low: isFiniteNumber(point.low) ? point.low : Number(point.close),
-      volume: isFiniteNumber(point.volume) ? point.volume : undefined,
-    }))
+    .map((point) => {
+      const close = Number(point.close);
+      const open = isFiniteNumber(point.open) ? point.open : close;
+
+      return {
+        date: String(point.date ?? ""),
+        open,
+        close,
+        high: isFiniteNumber(point.high) ? point.high : close,
+        low: isFiniteNumber(point.low) ? point.low : close,
+        volume: isFiniteNumber(point.volume) ? point.volume : undefined,
+      };
+    })
     .filter(
       (point) =>
         point.date &&
+        Number.isFinite(point.open) &&
         Number.isFinite(point.close) &&
         Number.isFinite(point.high) &&
         Number.isFinite(point.low)
