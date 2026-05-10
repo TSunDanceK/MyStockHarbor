@@ -2234,9 +2234,9 @@ export async function getStockNewsAiData(
     isInvalidTicker,
   } = baseData;
 
-  const aiBriefs = isInvalidTicker
-    ? []
-    : await getAiNewsBriefs({
+  const aiBriefsPromise = isInvalidTicker
+    ? Promise.resolve([])
+    : getAiNewsBriefs({
         symbol,
         companyName,
         trend,
@@ -2249,17 +2249,10 @@ export async function getStockNewsAiData(
         })),
       });
 
-  const summaryByTitle = Object.fromEntries(
-    detailedNews.map((item, index) => [
-      item.title,
-      aiBriefs[index]?.summary ?? item.description ?? "",
-    ])
-  );
-
-  const aiInsight =
+  const aiInsightPromise =
     isInvalidTicker || !includeInsight
-      ? null
-      : await getAiNewsInsight({
+      ? Promise.resolve(null)
+      : getAiNewsInsight({
           symbol,
           companyName,
           trend,
@@ -2271,15 +2264,24 @@ export async function getStockNewsAiData(
           priceVs200,
           recentHigh,
           recentLow,
-          items: detailedNews.map((item, index) => ({
+          items: detailedNews.map((item) => ({
             title: item.title,
             source: item.source,
             pubDate: item.pubDate,
             description: item.description,
-            summary: aiBriefs[index]?.summary ?? null,
-            whyItMatters: aiBriefs[index]?.whyItMatters ?? null,
+            summary: item.description ?? null,
+            whyItMatters: null,
           })),
         });
+
+  const [aiBriefs, aiInsight] = await Promise.all([
+    aiBriefsPromise,
+    aiInsightPromise,
+  ]);
+
+  const summaryByTitle = Object.fromEntries(
+    detailedNews.map((item) => [item.title, item.description ?? ""])
+  );
 
   return {
     aiBriefs,
