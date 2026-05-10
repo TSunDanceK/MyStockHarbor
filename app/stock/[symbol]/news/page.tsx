@@ -2303,7 +2303,13 @@ function EarningsNewsSection({
   );
 }
 
-function LatestEarningsCard({ earnings }: { earnings: LatestEarningsData }) {
+function LatestEarningsCard({
+  earnings,
+  symbol,
+}: {
+  earnings: LatestEarningsData;
+  symbol: string;
+}) {
   const toneCopy = earnings.hasStructuredData ? earnings.toneLabel : "Unavailable";
 
   return (
@@ -2883,7 +2889,7 @@ export default async function StockNewsPage({ params }: Props) {
               </div>
             </section>
 
-            <LatestEarningsCard earnings={latestEarnings} />
+            <LatestEarningsCard earnings={latestEarnings} symbol={upper} />
 
             <Suspense fallback={<GoingForwardFallbackCard />}>
               <GoingForwardAiCard
