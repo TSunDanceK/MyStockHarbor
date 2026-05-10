@@ -1548,13 +1548,6 @@ export default function InsightPostClient({
             font-size: 42px !important;
             line-height: 1.05 !important;
           }
-          .insightArticleLayout {
-            grid-template-columns: 1fr !important;
-          }
-
-          .insightSidebar {
-            position: static !important;
-          }
 
           .insightTrendValue {
             font-size: 36px !important;
@@ -1572,6 +1565,14 @@ export default function InsightPostClient({
             line-height: 1.08 !important;
           }
         }
+
+                  .insightArticleLayout {
+            grid-template-columns: 1fr !important;
+          }
+
+          .insightSidebar {
+            position: static !important;
+          }
 
         @media (max-width: 640px) {
           .wrap {
