@@ -137,7 +137,7 @@ export async function GET(req: NextRequest) {
   if (!process.env.FMP_API_KEY) {
     return NextResponse.json(
       { error: "Missing FMP_API_KEY environment variable." },
-      { status: 500 }
+      { status: 500 } 
     );
   }
 
