@@ -164,6 +164,69 @@ function trendLabel(args: {
   return "Range / Mixed";
 }
 
+function formatMultiple(value: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  return `${value.toFixed(2)}×`;
+}
+
+function buildPriceMultipleRead(args: {
+  lastClose: number | null;
+  history: Point[];
+}) {
+  const { lastClose, history } = args;
+
+  const closes = history
+    .map((point) => point.close)
+    .filter((value) => Number.isFinite(value));
+
+  const highs = history
+    .map((point) => (typeof point.high === "number" ? point.high : point.close))
+    .filter((value) => Number.isFinite(value));
+
+  const lows = history
+    .map((point) => (typeof point.low === "number" ? point.low : point.close))
+    .filter((value) => Number.isFinite(value));
+
+  if (
+    typeof lastClose !== "number" ||
+    !Number.isFinite(lastClose) ||
+    !closes.length ||
+    !highs.length ||
+    !lows.length
+  ) {
+    return {
+      averageMultiple: null,
+      highMultiple: null,
+      lowMultiple: null,
+      tone: "yellow" as const,
+    };
+  }
+
+  const average = closes.reduce((sum, value) => sum + value, 0) / closes.length;
+  const high = Math.max(...highs);
+  const low = Math.min(...lows);
+
+  const averageMultiple = average > 0 ? lastClose / average : null;
+  const highMultiple = high > 0 ? lastClose / high : null;
+  const lowMultiple = low > 0 ? lastClose / low : null;
+
+  const tone: "green" | "yellow" | "red" =
+    averageMultiple == null
+      ? "yellow"
+      : averageMultiple >= 1.08
+        ? "green"
+        : averageMultiple <= 0.92
+          ? "red"
+          : "yellow";
+
+  return {
+    averageMultiple,
+    highMultiple,
+    lowMultiple,
+    tone,
+  };
+}
+
 function toneColor(tone: "green" | "yellow" | "red") {
   if (tone === "green") return "#22c55e";
   if (tone === "yellow") return "#eab308";
@@ -1065,6 +1128,15 @@ if (!cancelled) setPriceLoading(false);
   const ma50Pct = pctFromBase(lastClose, typeof lastMA50 === "number" ? lastMA50 : null);
   const ma200Pct = pctFromBase(lastClose, typeof lastMA200 === "number" ? lastMA200 : null);
 
+  const priceMultipleRead = useMemo(
+    () =>
+      buildPriceMultipleRead({
+        lastClose,
+        history,
+      }),
+    [lastClose, history]
+  );
+
   const tradeContext = useMemo(
     () =>
       buildTradeContext({
@@ -1246,10 +1318,14 @@ if (!cancelled) setPriceLoading(false);
                     </div>
                   </div>
 
-                  <div style={alignedMetricCardStyle(trendTone)}>
-                    <div style={miniLabelStyle}>Regime</div>
-                    <div style={miniMetricValueStyle}>{trend}</div>
-                    <div style={miniMetricSubStyle}>Overall chart structure</div>
+                  <div style={alignedMetricCardStyle(priceMultipleRead.tone)}>
+                    <div style={miniLabelStyle}>Price multiple</div>
+                    <div style={miniMetricValueStyle}>
+                      {formatMultiple(priceMultipleRead.averageMultiple)} avg
+                    </div>
+                    <div style={miniMetricSubStyle}>
+                      High {formatMultiple(priceMultipleRead.highMultiple)} · Low {formatMultiple(priceMultipleRead.lowMultiple)}
+                    </div>
                   </div>
 
                   <Link
@@ -1291,41 +1367,49 @@ if (!cancelled) setPriceLoading(false);
                   </Link>
                 </div>
 
-                <div className="trendChecksStrip">
-                  <div style={miniLabelStyle}>Trend checks</div>
-                  <div className="trendChecksGrid">
-                    <div style={{ opacity: 0.9 }}>
-                      <span
-                        style={trendCheckIconStyle(
-                          lastClose !== null && lastMA50 !== null && lastClose > lastMA50
-                        )}
-                      >
-                        {lastClose !== null && lastMA50 !== null && lastClose > lastMA50 ? "✓" : "✕"}
-                      </span>
-                      Price above MA50
-                    </div>
+                <div className="trendContextRow">
+                  <div className="trendChecksStrip">
+                    <div style={miniLabelStyle}>Trend checks</div>
+                    <div className="trendChecksGrid">
+                      <div style={{ opacity: 0.9 }}>
+                        <span
+                          style={trendCheckIconStyle(
+                            lastClose !== null && lastMA50 !== null && lastClose > lastMA50
+                          )}
+                        >
+                          {lastClose !== null && lastMA50 !== null && lastClose > lastMA50 ? "✓" : "✕"}
+                        </span>
+                        Price above MA50
+                      </div>
 
-                    <div style={{ opacity: 0.9 }}>
-                      <span
-                        style={trendCheckIconStyle(
-                          lastClose !== null && lastMA200 !== null && lastClose > lastMA200
-                        )}
-                      >
-                        {lastClose !== null && lastMA200 !== null && lastClose > lastMA200 ? "✓" : "✕"}
-                      </span>
-                      Price above MA200
-                    </div>
+                      <div style={{ opacity: 0.9 }}>
+                        <span
+                          style={trendCheckIconStyle(
+                            lastClose !== null && lastMA200 !== null && lastClose > lastMA200
+                          )}
+                        >
+                          {lastClose !== null && lastMA200 !== null && lastClose > lastMA200 ? "✓" : "✕"}
+                        </span>
+                        Price above MA200
+                      </div>
 
-                    <div style={{ opacity: 0.9 }}>
-                      <span
-                        style={trendCheckIconStyle(
-                          lastMA50 !== null && lastMA200 !== null && lastMA50 > lastMA200
-                        )}
-                      >
-                        {lastMA50 !== null && lastMA200 !== null && lastMA50 > lastMA200 ? "✓" : "✕"}
-                      </span>
-                      MA50 above MA200
+                      <div style={{ opacity: 0.9 }}>
+                        <span
+                          style={trendCheckIconStyle(
+                            lastMA50 !== null && lastMA200 !== null && lastMA50 > lastMA200
+                          )}
+                        >
+                          {lastMA50 !== null && lastMA200 !== null && lastMA50 > lastMA200 ? "✓" : "✕"}
+                        </span>
+                        MA50 above MA200
+                      </div>
                     </div>
+                  </div>
+
+                  <div style={alignedMetricCardStyle(trendTone)}>
+                    <div style={miniLabelStyle}>Regime</div>
+                    <div style={miniMetricValueStyle}>{trend}</div>
+                    <div style={miniMetricSubStyle}>Overall chart structure</div>
                   </div>
                 </div>
               </div>
@@ -2022,17 +2106,24 @@ if (!cancelled) setPriceLoading(false);
     align-items: stretch;
   }
 
+  .trendContextRow {
+    display: grid;
+    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+    gap: 12px;
+    align-items: stretch;
+  }
+
   .trendChecksStrip {
     border: 1px solid rgba(255,255,255,0.09);
     border-radius: 16px;
-    padding: 14px;
+    padding: 12px;
     background: rgba(255,255,255,0.035);
   }
 
   .trendChecksGrid {
-    margin-top: 10px;
+    margin-top: 9px;
     display: grid;
-    gap: 8px;
+    gap: 7px;
     font-size: 13px;
   }
 
@@ -2102,7 +2193,8 @@ if (!cancelled) setPriceLoading(false);
             padding: 18px 16px 34px !important;
           }
 .stockAnalysisHeroGrid,
-.tradeContextGrid {
+.tradeContextGrid,
+.trendContextRow {
   grid-template-columns: 1fr !important;
 }
           .heroGrid,
