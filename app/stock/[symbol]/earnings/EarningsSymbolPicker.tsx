@@ -14,18 +14,34 @@ type Props = {
   currentSymbol: string;
 };
 
-type StockSearchResult = {
+type SymbolResult = {
   symbol: string;
   name: string;
-  exchange?: string;
+  exchange: string;
 };
-
-function cleanInput(value: string) {
-  return value.toUpperCase().replace(/[^A-Z0-9. -]/g, "").trim();
-}
 
 function cleanSymbol(value: string) {
   return value.toUpperCase().replace(/[^A-Z0-9.-]/g, "").trim();
+}
+
+function cleanSearch(value: string) {
+  return value.toUpperCase().replace(/[^A-Z0-9. -]/g, "").trim();
+}
+
+function rankResult(item: SymbolResult, query: string) {
+  const q = cleanSearch(query);
+  const symbol = cleanSymbol(item.symbol);
+  const name = String(item.name || "").toUpperCase();
+
+  if (!q) return 999;
+
+  if (symbol === q) return 0;
+  if (symbol.startsWith(q)) return 10;
+  if (name.startsWith(q)) return 20;
+  if (symbol.includes(q)) return 30;
+  if (name.includes(q)) return 40;
+
+  return 90;
 }
 
 export default function EarningsSymbolPicker({ currentSymbol }: Props) {
@@ -36,11 +52,12 @@ export default function EarningsSymbolPicker({ currentSymbol }: Props) {
   );
 
   const [value, setValue] = useState(cleanCurrentSymbol);
-  const [selected, setSelected] = useState<StockSearchResult | null>({
+  const [selected, setSelected] = useState<SymbolResult | null>({
     symbol: cleanCurrentSymbol,
     name: cleanCurrentSymbol,
+    exchange: "",
   });
-  const [results, setResults] = useState<StockSearchResult[]>([]);
+  const [results, setResults] = useState<SymbolResult[]>([]);
   const [open, setOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [searching, setSearching] = useState(false);
@@ -48,14 +65,22 @@ export default function EarningsSymbolPicker({ currentSymbol }: Props) {
 
   const requestIdRef = useRef(0);
 
-  const cleanValue = cleanInput(value);
+  const cleanValue = cleanSearch(value);
   const canSubmit = Boolean(selected?.symbol);
   const isCurrentSymbol = selected?.symbol === cleanCurrentSymbol;
 
   useEffect(() => {
-    const query = cleanInput(value);
+    const query = cleanSearch(value);
 
-    if (!query || selected?.symbol === cleanSymbol(value)) {
+    if (!query) {
+      setResults([]);
+      setOpen(false);
+      setSearching(false);
+      setSearchError(null);
+      return;
+    }
+
+    if (selected?.symbol && query === selected.symbol) {
       setResults([]);
       setOpen(false);
       setSearching(false);
@@ -71,35 +96,43 @@ export default function EarningsSymbolPicker({ currentSymbol }: Props) {
 
     const timer = window.setTimeout(async () => {
       try {
-        const response = await fetch(
-          `/api/stock-search?query=${encodeURIComponent(query)}`,
-          { cache: "no-store" }
-        );
+        const response = await fetch(`/api/symbols?q=${encodeURIComponent(query)}`, {
+          cache: "no-store",
+        });
 
         if (!response.ok) {
           throw new Error("Search failed");
         }
 
-        const data = (await response.json()) as { results?: StockSearchResult[] };
+        const data = (await response.json()) as { results?: SymbolResult[] };
+        const rows = Array.isArray(data.results) ? data.results : [];
+
+        const safeResults = rows
+          .map((item) => ({
+            symbol: cleanSymbol(item.symbol || ""),
+            name: String(item.name || "").trim(),
+            exchange: String(item.exchange || "").trim(),
+          }))
+          .filter((item) => item.symbol && item.name)
+          .sort((a, b) => {
+            const rankDelta = rankResult(a, query) - rankResult(b, query);
+            if (rankDelta !== 0) return rankDelta;
+
+            const symbolLengthDelta = a.symbol.length - b.symbol.length;
+            if (symbolLengthDelta !== 0) return symbolLengthDelta;
+
+            return a.symbol.localeCompare(b.symbol);
+          })
+          .slice(0, 8);
 
         if (requestIdRef.current !== requestId) return;
-
-        const safeResults = Array.isArray(data.results)
-          ? data.results
-              .map((item) => ({
-                symbol: cleanSymbol(item.symbol),
-                name: String(item.name || "").trim(),
-                exchange: String(item.exchange || "").trim(),
-              }))
-              .filter((item) => item.symbol && item.name)
-              .slice(0, 8)
-          : [];
 
         setResults(safeResults);
         setHighlightedIndex(0);
-        setOpen(true);
+        setOpen(Boolean(safeResults.length));
       } catch {
         if (requestIdRef.current !== requestId) return;
+
         setResults([]);
         setOpen(false);
         setSearchError("Stock search is unavailable right now.");
@@ -113,12 +146,18 @@ export default function EarningsSymbolPicker({ currentSymbol }: Props) {
     return () => window.clearTimeout(timer);
   }, [value, selected?.symbol]);
 
-  function selectResult(result: StockSearchResult) {
-    setSelected(result);
-    setValue(result.symbol);
+  function selectResult(result: SymbolResult) {
+    const symbol = cleanSymbol(result.symbol);
+
+    setSelected({
+      ...result,
+      symbol,
+    });
+    setValue(symbol);
     setOpen(false);
     setResults([]);
     setHighlightedIndex(0);
+    setSearchError(null);
   }
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -201,18 +240,18 @@ export default function EarningsSymbolPicker({ currentSymbol }: Props) {
           top: calc(100% + 8px);
           left: 0;
           right: 0;
-          z-index: 80;
+          z-index: 100;
           border-radius: 16px;
-          border: 1px solid rgba(96,165,250,0.24);
+          border: 1px solid rgba(96,165,250,0.26);
           background: #020617;
-          box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+          box-shadow: 0 24px 60px rgba(0,0,0,0.58);
           overflow: hidden;
         }
 
         .earningsSearchOption {
           width: 100%;
           display: grid;
-          grid-template-columns: 72px minmax(0, 1fr);
+          grid-template-columns: 76px minmax(0, 1fr);
           gap: 10px;
           align-items: center;
           padding: 11px 12px;
@@ -230,7 +269,7 @@ export default function EarningsSymbolPicker({ currentSymbol }: Props) {
 
         .earningsSearchOption:hover,
         .earningsSearchOption.active {
-          background: rgba(59,130,246,0.16);
+          background: rgba(59,130,246,0.18);
         }
 
         .earningsSearchSymbol {
@@ -240,6 +279,7 @@ export default function EarningsSymbolPicker({ currentSymbol }: Props) {
         }
 
         .earningsSearchName {
+          display: block;
           min-width: 0;
           font-size: 13px;
           font-weight: 750;
@@ -250,6 +290,7 @@ export default function EarningsSymbolPicker({ currentSymbol }: Props) {
         }
 
         .earningsSearchExchange {
+          display: block;
           margin-top: 3px;
           font-size: 11px;
           color: rgba(148,163,184,0.78);
@@ -274,7 +315,7 @@ export default function EarningsSymbolPicker({ currentSymbol }: Props) {
 
         @media (max-width: 640px) {
           .earningsSearchOption {
-            grid-template-columns: 62px minmax(0, 1fr);
+            grid-template-columns: 64px minmax(0, 1fr);
           }
         }
       `}</style>
@@ -345,7 +386,9 @@ export default function EarningsSymbolPicker({ currentSymbol }: Props) {
               : searching
                 ? "Searching stocks…"
                 : selected
-                  ? `Selected ${selected.symbol}${selected.name ? ` — ${selected.name}` : ""}`
+                  ? `Selected ${selected.symbol}${
+                      selected.name ? ` — ${selected.name}` : ""
+                    }`
                   : cleanValue
                     ? "Choose a stock from the list before opening the report."
                     : "Type a ticker or company name to search."}
