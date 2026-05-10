@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import MiniPickerCandleChart, { type MiniCandlePoint } from "@/app/components/MiniPickerCandleChart";
 import { headers } from "next/headers";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +20,7 @@ type Ma200Entry = {
   symbol: string;
   timeframe: "Daily" | "Weekly";
   stockHref: string;
+  chartPoints: MiniCandlePoint[];
 };
 
 export const metadata: Metadata = {
@@ -89,6 +91,7 @@ async function getMa200Entries(): Promise<{
           symbol,
           timeframe: "Weekly",
           stockHref: `/stock/${encodeURIComponent(symbol)}`,
+          chartPoints: Array.isArray(record?.chartPoints) ? record.chartPoints : [],
         });
       }
 
@@ -97,6 +100,7 @@ async function getMa200Entries(): Promise<{
           symbol,
           timeframe: "Daily",
           stockHref: `/stock/${encodeURIComponent(symbol)}`,
+          chartPoints: Array.isArray(record?.chartPoints) ? record.chartPoints : [],
         });
       }
     }
@@ -736,6 +740,8 @@ export default async function StocksNear200DayMovingAveragePage() {
                       {entry.timeframe} MA200
                     </div>
                   </div>
+
+                  <MiniPickerCandleChart points={entry.chartPoints} tone="blue" />
 
 <ul
   style={{
