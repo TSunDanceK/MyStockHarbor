@@ -574,8 +574,8 @@ export default function InsightPostClient({
     post.timeframe === "d"
       ? snapshot?.weeklyMA200Pct ?? null
       : null;
-
-  const maSpreadPct =
+  
+    const maSpreadPct =
     typeof lastMA50 === "number" && typeof lastMA200 === "number" && lastMA200 !== 0
       ? ((lastMA50 - lastMA200) / lastMA200) * 100
       : null;
@@ -592,7 +592,7 @@ export default function InsightPostClient({
       ? `Snapshot from ${post.date}`
       : "Archived snapshot";
 
-  const overallBreakdown =
+    const overallBreakdown =
     post.overallBreakdown ||
     post.excerpt ||
     "This insight is focused on the current chart structure and the key decision point for traders.";
@@ -613,271 +613,97 @@ export default function InsightPostClient({
     <main
       style={{
         minHeight: "100vh",
-        background: "#06080d",
+        background:
+          "radial-gradient(circle at top left, rgba(37,99,235,0.18), transparent 24%), radial-gradient(circle at top right, rgba(34,197,94,0.10), transparent 24%), #06080d",
         color: "#f1f5f9",
         fontFamily: "system-ui, Arial",
       }}
     >
       <div className="wrap">
-        <div
-          className="insightTopActions"
-          style={{
-            display: "grid",
-            gridTemplateColumns: symbol ? "repeat(2, minmax(0, 1fr))" : "1fr",
-            gap: 10,
-            marginBottom: 16,
-          }}
-        >
-          <Link href="/insights" style={topLinkStyle("blue")}>
+        <nav className="insightTopNav" aria-label="Insight navigation">
+          <Link href="/insights" className="insightQuietBack">
             ← Back to Insights
           </Link>
 
-          {symbol ? (
-            <Link href={`/stock/${symbol}`} style={topLinkStyle("gold")}>
-              {symbol} Stock Page →
-            </Link>
-          ) : null}
-        </div>
-
-        <section
-          style={{
-            border: "1px solid rgba(59,130,246,0.24)",
-            borderRadius: 22,
-            padding: 20,
-            background:
-              "linear-gradient(135deg, rgba(10,16,32,0.98), rgba(7,11,22,0.98))",
-            boxShadow:
-              "inset 0 1px 0 rgba(255,255,255,0.05), 0 14px 34px rgba(0,0,0,0.30)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              flexWrap: "wrap",
-              marginBottom: 12,
-            }}
-          >
+          <div className="insightTopNavLinks">
             {symbol ? (
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  padding: "7px 12px",
-                  borderRadius: 999,
-                  background:
-                    "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
-                  border: "1px solid rgba(59,130,246,0.32)",
-                  color: "#dbeafe",
-                  fontWeight: 950,
-                  letterSpacing: "0.08em",
-                  fontSize: 12,
-                  textTransform: "uppercase",
-                }}
-              >
-                {symbol}
-              </div>
+              <Link href={`/stock/${symbol}`}>
+                {symbol} stock page
+              </Link>
             ) : null}
 
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                padding: "7px 12px",
-                borderRadius: 999,
-                background: insightTag.bg,
-                border: `1px solid ${insightTag.border}`,
-                color: insightTag.color,
-                fontWeight: 900,
-                fontSize: 12,
-                letterSpacing: "0.05em",
-                textTransform: "uppercase",
-              }}
-            >
-              {insightTag.label}
-            </div>
-            <div
-              className="insightTimeframePill"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                padding: "7px 12px",
-                borderRadius: 999,
-                background: "rgba(255,255,255,0.06)",
-                border: "1px solid rgba(255,255,255,0.12)",
-                color: "#e2e8f0",
-                fontWeight: 900,
-                fontSize: 12,
-                letterSpacing: "0.05em",
-                textTransform: "uppercase",
-              }}
-            >
-              <span className="insightTimeframeDesktop">{timeframeLabel} Chart</span>
-              <span className="insightTimeframeMobile">{post.timeframe === "w" ? "W.Chart" : "D.Chart"}</span>
-            </div>
-
-<div
-  className="insightMetaRows"
-  style={{
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    flexWrap: "wrap",
-  }}
->
-  {snapshot?.snapshotDate ? (
-    <div
-      className="insightMetaGroup insightMetaSnapshot"
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        flexWrap: "wrap",
-      }}
-    >
-      <span
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          padding: "6px 10px",
-          borderRadius: 999,
-          background: "rgba(59,130,246,0.10)",
-          border: "1px solid rgba(59,130,246,0.20)",
-          color: "#dbeafe",
-          fontSize: 12,
-          fontWeight: 900,
-          letterSpacing: "0.06em",
-          textTransform: "uppercase",
-        }}
-      >
-        Snapshot
-      </span>
-
-      <span
-        style={{
-          fontSize: 14,
-          fontWeight: 700,
-          color: "#cbd5e1",
-        }}
-      >
-        {snapshot?.snapshotDate
-  ? formatPostDate(snapshot.snapshotDate)
-  : snapshotDateText}
-      </span>
-    </div>
-  ) : null}
-
-  <div
-    className="insightMetaGroup insightMetaPublished"
-    style={{
-      display: "flex",
-      alignItems: "center",
-      gap: 8,
-      flexWrap: "wrap",
-    }}
-  >
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        padding: "6px 10px",
-        borderRadius: 999,
-        background: "rgba(255,255,255,0.06)",
-        border: "1px solid rgba(255,255,255,0.12)",
-        color: "#e2e8f0",
-        fontSize: 12,
-        fontWeight: 900,
-        letterSpacing: "0.06em",
-        textTransform: "uppercase",
-      }}
-    >
-      Published
-    </span>
-
-    <span
-      style={{
-        fontSize: 14,
-        fontWeight: 800,
-        color: "#f8fafc",
-      }}
-    >
-      {formatPostDate(post.date)}
-    </span>
-  </div>
-</div>
+            {symbol ? (
+              <Link href={`/stock/${symbol}/news`}>
+                Latest news
+              </Link>
+            ) : null}
           </div>
+        </nav>
 
-          <h1
-            className="insightHeroTitle"
-            style={{
-              margin: 0,
-              fontSize: 42,
-              lineHeight: 1.06,
-              letterSpacing: "-0.05em",
-            }}
-          >
-            {post.title}
-          </h1>
-
-          <p
-            className="insightHeroText"
-            style={{
-              marginTop: 12,
-              fontSize: 17,
-              lineHeight: 1.68,
-              opacity: 0.84,
-              maxWidth: 860,
-            }}
-          >
-            {post.excerpt}
-          </p>
-
-          <div className="insightSummaryGrid" style={{ marginTop: 18 }}>
-            <div style={summaryCardStyle}>
-              <div style={miniLabelStyle}>Last price</div>
-              <div
-                className="insightPriceValue"
-                style={{ marginTop: 8, fontWeight: 950 }}
-              >
-                {typeof lastPrice === "number" ? `$${lastPrice.toFixed(2)}` : "—"}
-              </div>
-              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.72 }}>
-{hasSnapshot
-  ? `Snapshot: ${
-      snapshot?.snapshotDate
-        ? formatPostDate(snapshot.snapshotDate)
-        : snapshotDateText
-    }`
-  : symbol
-  ? "Snapshot unavailable"
-  : "No ticker linked"}
-              </div>
+        <section className="insightHeroShell">
+          <div className="insightHeroMain">
+            <div className="insightHeroPills">
+              {symbol ? <span className="symbolPill">{symbol}</span> : null}
+              <span className="riskPill">{insightTag.label}</span>
+              <span className="timeframePill">
+                <span className="insightTimeframeDesktop">{timeframeLabel} chart</span>
+                <span className="insightTimeframeMobile">{post.timeframe === "w" ? "W chart" : "D chart"}</span>
+              </span>
+              <span className="datePill">Published {formatPostDate(post.date)}</span>
             </div>
 
-            <div style={summaryCardStyle}>
-              <div style={miniLabelStyle}>Trend structure</div>
-              <div
-                className="insightTrendValue"
-                style={{
-                  marginTop: 8,
-                  fontWeight: 950,
-                  color:
-                    trend === "Uptrend"
-                      ? "#22c55e"
-                      : trend === "Downtrend"
-                      ? "#ef4444"
-                      : "#eab308",
-                }}
-              >
-                {trend}
-              </div>
-              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.72 }}>
-                {companyName || (symbol ? `${symbol} archived chart structure` : "Editorial insight")}
+            <h1 className="insightHeroTitle">{post.title}</h1>
+
+            <p className="insightHeroText">{post.excerpt}</p>
+
+            <div className="simpleViewCard">
+              <span className="simpleViewIcon">💡</span>
+              <div>
+                <strong>Simple view:</strong> {overallBreakdown}
               </div>
             </div>
           </div>
 
+          <aside className="insightHeroSide">
+            <div className="heroScoreCard">
+              <div className="scoreTopRow">
+                <div>
+                  <div style={miniLabelStyle}>Insight snapshot</div>
+                  <div className="scoreValue">{trend}</div>
+                </div>
+                <span className="scoreIcon">↘</span>
+              </div>
+              <p>
+                This is an editorial chart note based on the frozen article snapshot,
+                not a live buy or sell signal.
+              </p>
+            </div>
+
+            <div className="heroMiniGrid">
+              <div className="heroMiniCard">
+                <div style={miniLabelStyle}>Last price</div>
+                <strong>{typeof lastPrice === "number" ? `$${lastPrice.toFixed(2)}` : "—"}</strong>
+                <span>
+                  {hasSnapshot
+                    ? snapshot?.snapshotDate
+                      ? formatPostDate(snapshot.snapshotDate)
+                      : snapshotDateText
+                    : symbol
+                    ? "Snapshot unavailable"
+                    : "No ticker linked"}
+                </span>
+              </div>
+
+              <div className="heroMiniCard">
+                <div style={miniLabelStyle}>Company</div>
+                <strong>{symbol || "Insight"}</strong>
+                <span>{companyName || "Editorial stock setup"}</span>
+              </div>
+            </div>
+          </aside>
+        </section>
+
+        <section className="insightShell">
           {symbol ? (
             <section
               style={{
@@ -904,7 +730,7 @@ export default function InsightPostClient({
                   fontSize: 12,
                 }}
               >
-                CHART SNAPSHOT
+                📊 CHART VIEW
               </div>
 
               <h2
@@ -915,7 +741,7 @@ export default function InsightPostClient({
                   letterSpacing: "-0.03em",
                 }}
               >
-                {symbol} chart showing {timeframeLabel.toLowerCase()} {formatIndicatorLabel(selectedIndicators)}
+                {symbol} {timeframeLabel.toLowerCase()} chart with {formatIndicatorLabel(selectedIndicators)}
               </h2>
 
               <p
@@ -927,7 +753,7 @@ export default function InsightPostClient({
                   fontSize: 15,
                 }}
               >
-                This {post.timeframe === "w" ? "weekly" : "daily"} chart snapshot is frozen to the original article analysis date, showing the last {chartSlice.length} bars with the indicators chosen for this article.
+                Use this frozen {post.timeframe === "w" ? "weekly" : "daily"} snapshot to see the original setup, then compare it with the current stock page before making decisions.
               </p>
 
               {hasSnapshot ? (
@@ -1083,37 +909,19 @@ export default function InsightPostClient({
                       }}
                     >
                       <Link
-                        href={`/stock/${encodeURIComponent(symbol)}/news`}
-                        className="insightDesktopOnly"
-                        style={chartActionStyle("gold")}
-                      >
-                        Check out {symbol} headlines →
-                      </Link>
-
-                      <a
-                        href={tradingViewHref(symbol)}
-                        target="_blank"
-                        rel="noopener noreferrer sponsored"
-                        className="insightDesktopOnly"
-                        style={chartActionStyle("green")}
-                      >
-                        Open in TradingView ↗
-                      </a>
-
-                      <Link
-                        href={`/?symbol=${encodeURIComponent(symbol)}`}
+                        href={`/stock/${encodeURIComponent(symbol)}`}
                         className="insightDesktopOnly"
                         style={chartActionStyle("blue")}
                       >
-                        Open chart dashboard →
+                        Current {symbol} stock page →
                       </Link>
 
                       <Link
-                        href="/pickers"
-                        className="insightDesktopOnly insightDesktopOnlyPickerCta"
-                        style={chartActionStyle("picker")}
+                        href={`/stock/${encodeURIComponent(symbol)}/news`}
+                        className="insightDesktopOnly"
+                        style={chartActionStyle("green")}
                       >
-                        Find Similar Setups →
+                        Latest {symbol} headlines →
                       </Link>
                     </div>
 
@@ -1124,21 +932,12 @@ export default function InsightPostClient({
                         style={chartActionStyle("blue")}
                       >
                         {symbol} stock page
-                    
-                      </Link>
-
-                      <Link
-                        href="/pickers"
-                        className="insightMobileButton insightPrimaryPickerCta"
-                        style={chartActionStyle("picker")}
-                      >
-                        Find Similar Setups
                       </Link>
 
                       <Link
                         href={`/stock/${encodeURIComponent(symbol)}/news`}
                         className="insightMobileButton"
-                        style={chartActionStyle("gold")}
+                        style={chartActionStyle("green")}
                       >
                         {symbol} headlines
                       </Link>
@@ -1154,240 +953,331 @@ export default function InsightPostClient({
           ) : null}
 
           <section className="insightArticleLayout">
-            <article
-              className="insightArticleCard"
-              style={{
-                border: "1px solid rgba(255,255,255,0.10)",
-                borderRadius: 18,
-                padding: 22,
-                background:
-                  "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.025))",
-                boxShadow: "0 14px 34px rgba(0,0,0,0.18)",
-                minWidth: 0,
-              }}
-            >
+            <article className="insightArticleCard">
               <div
                 className="insightArticleBody"
                 dangerouslySetInnerHTML={{ __html: post.contentHtml }}
-                style={{
-                  lineHeight: 1.82,
-                  fontSize: 16,
-                  color: "#e5e7eb",
-                }}
               />
             </article>
 
             <aside className="insightSidebar">
-              <div style={insightSidebarCardStyle("blue")}>
-                <div style={miniLabelStyle}>Quick breakdown</div>
-                <div
-                  style={{
-                    marginTop: 10,
-                    fontSize: 18,
-                    lineHeight: 1.35,
-                    fontWeight: 950,
-                    color: "#f8fafc",
-                  }}
-                >
-                  {overallBreakdown}
-                </div>
-              </div>
-
-              <div style={insightSidebarCardStyle("gold")}>
-                <div style={miniLabelStyle}>Latest relevant news</div>
-                <p
-                  style={{
-                    margin: "10px 0 0",
-                    fontSize: 14,
-                    lineHeight: 1.65,
-                    color: "#e5e7eb",
-                    opacity: 0.9,
-                  }}
-                >
-                  {latestNews}
-                </p>
-              </div>
-
-              <div style={insightSidebarCardStyle("green")}>
-                <div style={miniLabelStyle}>Latest earnings context</div>
-                <p
-                  style={{
-                    margin: "10px 0 0",
-                    fontSize: 14,
-                    lineHeight: 1.65,
-                    color: "#e5e7eb",
-                    opacity: 0.9,
-                  }}
-                >
-                  {latestEarnings}
-                </p>
-              </div>
-
-              <div style={insightSidebarCardStyle("purple")}>
-                <div style={miniLabelStyle}>Investor useful info</div>
-                <p
-                  style={{
-                    margin: "10px 0 0",
-                    fontSize: 14,
-                    lineHeight: 1.65,
-                    color: "#e5e7eb",
-                    opacity: 0.9,
-                  }}
-                >
-                  {investorUsefulInfo}
-                </p>
-              </div>
-
-              {symbol ? (
-                <div
-                  style={{
-                    border: "1px solid rgba(59,130,246,0.22)",
-                    borderRadius: 18,
-                    padding: 16,
-                    background:
-                      "linear-gradient(135deg, rgba(15,23,42,0.96), rgba(2,6,23,0.96))",
-                  }}
-                >
-                  <div style={miniLabelStyle}>Next step</div>
-
-                  <div
-                    style={{
-                      marginTop: 12,
-                      display: "grid",
-                      gap: 10,
-                    }}
-                  >
-                    <Link href={`/stock/${symbol}`} style={ctaStyle("blue")}>
-                      Open {symbol} Stock Page
-                    </Link>
-
-                    <Link href={`/stock/${symbol}/news`} style={ctaStyle("gold")}>
-                      Read {symbol} News
-                    </Link>
-
-                    <Link href="/pickers" style={ctaStyle("green")}>
-                      Find Similar Setups
-                    </Link>
+              <section className="insightSideCard insightSideCardFeatured">
+                <div className="insightSideHeader">
+                  <span className="sideIcon">🎯</span>
+                  <div>
+                    <div style={miniLabelStyle}>Quick read</div>
+                    <h2 className="insightSideTitle">Setup summary</h2>
                   </div>
                 </div>
+
+                <p className="insightSideLead">{overallBreakdown}</p>
+
+                <ul className="insightSideList">
+                  <li>Start with the key level from the article.</li>
+                  <li>Wait for price behaviour to confirm demand or supply.</li>
+                  <li>Compare the frozen snapshot with today’s live chart.</li>
+                </ul>
+              </section>
+
+              <section className="insightSideCard">
+                <div className="insightSideHeader">
+                  <span className="sideIcon sideIconGold">📰</span>
+                  <div>
+                    <div style={miniLabelStyle}>News context</div>
+                    <h2 className="insightSideTitle">Latest relevant news</h2>
+                  </div>
+                </div>
+                <p className="insightSideText">{latestNews}</p>
+              </section>
+
+              <section className="insightSideCard">
+                <div className="insightSideHeader">
+                  <span className="sideIcon sideIconBlue">📊</span>
+                  <div>
+                    <div style={miniLabelStyle}>Earnings context</div>
+                    <h2 className="insightSideTitle">Latest earnings read</h2>
+                  </div>
+                </div>
+                <p className="insightSideText">{latestEarnings}</p>
+              </section>
+
+              <section className="insightSideCard">
+                <div className="insightSideHeader">
+                  <span className="sideIcon sideIconGreen">👁</span>
+                  <div>
+                    <div style={miniLabelStyle}>Investor focus</div>
+                    <h2 className="insightSideTitle">What to watch next</h2>
+                  </div>
+                </div>
+                <p className="insightSideText">{investorUsefulInfo}</p>
+              </section>
+
+              {symbol ? (
+                <section className="insightSideCard insightSideActionCard">
+                  <div className="insightSideHeader">
+                    <span className="sideIcon sideIconBlue">↗</span>
+                    <div>
+                      <div style={miniLabelStyle}>Next step</div>
+                      <h2 className="insightSideTitle">Current context</h2>
+                    </div>
+                  </div>
+                  <div className="insightSideActionGrid">
+                    <Link href={`/stock/${symbol}`} style={ctaStyle("blue")}>
+                      Open {symbol} stock page
+                    </Link>
+
+                    <Link href={`/stock/${symbol}/news`} style={ctaStyle("green")}>
+                      Read latest {symbol} news
+                    </Link>
+                  </div>
+                </section>
               ) : null}
             </aside>
           </section>
 
-          <section
-            style={{
-              marginTop: 18,
-              border: "1px solid rgba(59,130,246,0.22)",
-              borderRadius: 18,
-              padding: 18,
-              background:
-                "linear-gradient(135deg, rgba(59,130,246,0.10), rgba(34,197,94,0.06))",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 12,
-                opacity: 0.78,
-                fontWeight: 900,
-                letterSpacing: "0.05em",
-                textTransform: "uppercase",
-              }}
-            >
-              Market context
+        </section>
+
+        {symbol ? (
+          <section className="insightResearchStrip">
+            <div>
+              <div className="insightResearchTitle">Continue with current context</div>
+              <div className="insightResearchText">
+                Use the stock page for the current chart and the news page for the latest live headlines.
+              </div>
             </div>
 
-            <div
-              style={{
-                marginTop: 8,
-                fontSize: 24,
-                fontWeight: 900,
-                lineHeight: 1.2,
-                letterSpacing: "-0.03em",
-              }}
-            >
-              Want the bigger market picture?
-            </div>
-
-            <p
-              style={{
-                margin: "10px 0 0",
-                maxWidth: 820,
-                lineHeight: 1.7,
-                opacity: 0.84,
-                fontSize: 15,
-              }}
-            >
-              If you want to understand what the wider market is doing, read the
-              S&amp;P 500 page for a simple breakdown of SPX trend, support and
-              resistance, RSI, MACD, and how to analyse market pullbacks without
-              panicking.
-            </p>
-
-            <div
-              style={{
-                marginTop: 14,
-                display: "flex",
-                gap: 10,
-                flexWrap: "wrap",
-              }}
-            >
-              <Link href="/markets/spx" style={ctaStyle("blue")}>
-                Read S&amp;P 500 (SPX) Analysis
+            <div className="insightResearchActions">
+              <Link href={`/stock/${symbol}`} style={bottomActionStyle("blue")}>
+                Stock page
               </Link>
 
-              <Link href="/platforms" style={ctaStyle("purple")}>
-                Compare Platforms
+              <Link href={`/stock/${symbol}/news`} style={bottomActionStyle("green")}>
+                Latest news
               </Link>
             </div>
           </section>
-        </section>
-
-        <section
-          style={{
-            marginTop: 18,
-            borderRadius: 18,
-            border: "1px solid rgba(255,255,255,0.12)",
-            background: "rgba(255,255,255,0.04)",
-            padding: 18,
-          }}
-        >
-          <div style={{ fontWeight: 900, marginBottom: 8 }}>
-            Continue exploring
-          </div>
-
-          <div className="insightExploreGrid">
-            <Link href="/pickers" style={ctaStyle("green")}>
-              Scan Stock Pickers
-            </Link>
-
-            <Link href="/platforms" style={ctaStyle("purple")}>
-              Compare Platforms
-            </Link>
-
-            <Link href="/markets/spx" style={ctaStyle("blue")}>
-              Read S&amp;P 500 Analysis
-            </Link>
-
-            {symbol ? (
-              <>
-                <Link href={`/stock/${symbol}`} style={ctaStyle("gold")}>
-                  Open {symbol} Analysis
-                </Link>
-
-                <Link href={`/stock/${symbol}/news`} style={ctaStyle("blue")}>
-                  Read {symbol} News
-                </Link>
-              </>
-            ) : null}
-          </div>
-        </section>
+        ) : null}
       </div>
-
       <style>{`
         .wrap {
           max-width: 1280px;
           margin: 0 auto;
-          padding: 28px 20px 40px;
+          padding: 28px 20px 44px;
+        }
+
+        .insightTopNav {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 14px;
+          margin-bottom: 16px;
+        }
+
+        .insightQuietBack,
+        .insightTopNavLinks a {
+          color: rgba(226,232,240,0.82);
+          text-decoration: none;
+          font-weight: 850;
+          font-size: 13px;
+        }
+
+        .insightTopNavLinks {
+          display: flex;
+          gap: 12px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+
+        .insightHeroShell {
+          border: 1px solid rgba(59,130,246,0.22);
+          border-radius: 28px;
+          padding: 22px;
+          background: linear-gradient(135deg, rgba(15,23,42,0.98), rgba(6,10,18,0.98));
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 18px 38px rgba(0,0,0,0.26);
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 360px;
+          gap: 22px;
+          align-items: stretch;
+        }
+
+        .insightHeroMain {
+          min-width: 0;
+        }
+
+        .insightHeroTitle {
+          margin: 0;
+          max-width: 820px;
+          font-size: 43px;
+          line-height: 1.04;
+          letter-spacing: -0.06em;
+        }
+
+        .insightHeroText {
+          margin: 12px 0 0;
+          max-width: 760px;
+          color: rgba(226,232,240,0.80);
+          font-size: 16px;
+          line-height: 1.68;
+        }
+
+        .insightHeroPills {
+          display: flex;
+          align-items: center;
+          gap: 9px;
+          flex-wrap: wrap;
+          margin-bottom: 16px;
+        }
+
+        .symbolPill,
+        .riskPill,
+        .timeframePill,
+        .datePill {
+          display: inline-flex;
+          align-items: center;
+          min-height: 27px;
+          padding: 6px 10px;
+          border-radius: 999px;
+          font-size: 11px;
+          font-weight: 950;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          border: 1px solid rgba(255,255,255,0.10);
+          background: rgba(255,255,255,0.045);
+          color: rgba(226,232,240,0.90);
+        }
+
+        .symbolPill {
+          border-color: rgba(59,130,246,0.34);
+          background: rgba(59,130,246,0.14);
+          color: #dbeafe;
+        }
+
+        .riskPill {
+          border-color: rgba(248,113,113,0.28);
+          background: rgba(127,29,29,0.16);
+          color: #fecaca;
+        }
+
+        .timeframePill {
+          border-color: rgba(147,197,253,0.22);
+          color: #bfdbfe;
+        }
+
+        .datePill {
+          color: rgba(203,213,225,0.78);
+        }
+
+        .simpleViewCard {
+          margin-top: 18px;
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr);
+          gap: 12px;
+          align-items: start;
+          max-width: 760px;
+          border: 1px solid rgba(34,197,94,0.22);
+          border-radius: 18px;
+          padding: 14px;
+          background: linear-gradient(135deg, rgba(34,197,94,0.10), rgba(15,23,42,0.74));
+          color: rgba(241,245,249,0.86);
+          line-height: 1.62;
+          font-size: 14px;
+        }
+
+        .simpleViewCard strong {
+          color: #f8fafc;
+        }
+
+        .simpleViewIcon,
+        .scoreIcon,
+        .sideIcon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 30px;
+          height: 30px;
+          border-radius: 999px;
+          background: rgba(34,197,94,0.14);
+          border: 1px solid rgba(34,197,94,0.24);
+          flex: 0 0 auto;
+        }
+
+        .insightHeroSide {
+          display: grid;
+          gap: 12px;
+          min-width: 0;
+        }
+
+        .heroScoreCard,
+        .heroMiniCard {
+          border: 1px solid rgba(255,255,255,0.10);
+          border-radius: 20px;
+          background: linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.022));
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+        }
+
+        .heroScoreCard {
+          padding: 18px;
+          border-color: rgba(248,113,113,0.24);
+          background: linear-gradient(135deg, rgba(127,29,29,0.20), rgba(15,23,42,0.88));
+        }
+
+        .scoreTopRow {
+          display: flex;
+          justify-content: space-between;
+          align-items: start;
+          gap: 14px;
+        }
+
+        .scoreValue {
+          margin-top: 8px;
+          color: #f87171;
+          font-size: 35px;
+          line-height: 1;
+          font-weight: 950;
+          letter-spacing: -0.06em;
+        }
+
+        .heroScoreCard p {
+          margin: 12px 0 0;
+          color: rgba(241,245,249,0.74);
+          line-height: 1.58;
+          font-size: 13px;
+        }
+
+        .heroMiniGrid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
+        }
+
+        .heroMiniCard {
+          padding: 14px;
+        }
+
+        .heroMiniCard strong {
+          display: block;
+          margin-top: 8px;
+          font-size: 24px;
+          line-height: 1;
+          color: #f8fafc;
+          letter-spacing: -0.04em;
+        }
+
+        .heroMiniCard span {
+          display: block;
+          margin-top: 7px;
+          color: rgba(203,213,225,0.72);
+          font-size: 12px;
+          line-height: 1.35;
+        }
+
+        .insightShell {
+          margin-top: 18px;
+          border: 1px solid rgba(59,130,246,0.20);
+          border-radius: 24px;
+          padding: 18px;
+          background: linear-gradient(180deg, rgba(8,14,28,0.94), rgba(6,10,18,0.98));
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
         }
 
         .insightSummaryGrid {
@@ -1424,7 +1314,12 @@ export default function InsightPostClient({
         }
 
         .insightArticleCard {
-          overflow: hidden;
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 24px;
+          padding: 22px;
+          background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.024));
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+          min-width: 0;
         }
 
         .insightSidebar {
@@ -1433,6 +1328,87 @@ export default function InsightPostClient({
           display: grid;
           gap: 14px;
           min-width: 0;
+        }
+
+        .insightSideCard {
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 20px;
+          padding: 18px;
+          background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02));
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+        }
+
+        .insightSideCardFeatured {
+          border-color: rgba(59,130,246,0.22);
+          background: linear-gradient(135deg, rgba(59,130,246,0.10), rgba(7,12,22,0.96));
+        }
+
+        .insightSideHeader {
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr);
+          gap: 11px;
+          align-items: start;
+        }
+
+        .sideIconGold {
+          background: rgba(250,204,21,0.12);
+          border-color: rgba(250,204,21,0.24);
+        }
+
+        .sideIconBlue {
+          background: rgba(59,130,246,0.13);
+          border-color: rgba(59,130,246,0.26);
+        }
+
+        .sideIconGreen {
+          background: rgba(34,197,94,0.13);
+          border-color: rgba(34,197,94,0.26);
+        }
+
+        .insightSideActionCard {
+          border-color: rgba(34,197,94,0.18);
+        }
+
+        .insightSideTitle {
+          margin: 8px 0 0;
+          font-size: 21px;
+          line-height: 1.12;
+          letter-spacing: -0.03em;
+          color: #f8fafc;
+        }
+
+        .insightSideLead {
+          margin: 12px 0 0;
+          font-size: 15px;
+          line-height: 1.66;
+          color: rgba(241,245,249,0.86);
+        }
+
+        .insightSideText {
+          margin: 12px 0 0;
+          font-size: 14px;
+          line-height: 1.7;
+          color: rgba(241,245,249,0.80);
+        }
+
+        .insightSideList {
+          margin: 14px 0 0;
+          padding-left: 18px;
+          display: grid;
+          gap: 8px;
+          color: rgba(241,245,249,0.78);
+          font-size: 14px;
+          line-height: 1.55;
+        }
+
+        .insightSideList li::marker {
+          color: #60a5fa;
+        }
+
+        .insightSideActionGrid {
+          margin-top: 14px;
+          display: grid;
+          gap: 10px;
         }
 
         .insightMobileOnly {
@@ -1447,66 +1423,18 @@ export default function InsightPostClient({
           display: none;
         }
 
-        .insightPrimaryPickerCta {
-          position: relative;
-          overflow: hidden;
-          animation: insightPickerPulse 2.8s ease-in-out infinite;
-        }
-
-        .insightPrimaryPickerCta::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          background: linear-gradient(
-            120deg,
-            rgba(255,255,255,0) 0%,
-            rgba(255,255,255,0.18) 50%,
-            rgba(255,255,255,0) 100%
-          );
-          transform: translateX(-130%);
-          animation: insightPickerShine 3.6s ease-in-out infinite;
-          pointer-events: none;
-        }
-
-        .insightPrimaryPickerCta:hover {
-          transform: translateY(-2px) scale(1.02);
-          box-shadow:
-            0 0 0 1px rgba(255,255,255,0.06) inset,
-            0 14px 34px rgba(34,197,94,0.24);
-          filter: brightness(1.05);
-        }
-
-        @keyframes insightPickerPulse {
-          0%,
-          100% {
-            box-shadow:
-              0 0 0 1px rgba(255,255,255,0.04) inset,
-              0 10px 28px rgba(34,197,94,0.18);
-          }
-          50% {
-            box-shadow:
-              0 0 0 1px rgba(255,255,255,0.06) inset,
-              0 14px 36px rgba(34,197,94,0.28);
-          }
-        }
-
-        @keyframes insightPickerShine {
-          0%,
-          70%,
-          100% {
-            transform: translateX(-130%);
-          }
-          85% {
-            transform: translateX(130%);
-          }
+        .insightArticleBody {
+          line-height: 1.86;
+          font-size: 17px;
+          color: rgba(229,231,235,0.92);
         }
 
         .insightArticleBody h2 {
           margin: 30px 0 12px;
-          padding-top: 4px;
-          font-size: 26px;
-          line-height: 1.18;
-          letter-spacing: -0.03em;
+          padding-top: 6px;
+          font-size: 27px;
+          line-height: 1.14;
+          letter-spacing: -0.035em;
           color: #f8fafc;
         }
 
@@ -1515,14 +1443,14 @@ export default function InsightPostClient({
         }
 
         .insightArticleBody h3 {
-          margin: 20px 0 8px;
+          margin: 22px 0 8px;
           font-size: 18px;
           line-height: 1.25;
           color: #f8fafc;
         }
 
         .insightArticleBody p {
-          margin: 0 0 16px;
+          margin: 0 0 17px;
         }
 
         .insightArticleBody ul {
@@ -1532,6 +1460,11 @@ export default function InsightPostClient({
 
         .insightArticleBody li {
           margin-bottom: 8px;
+          line-height: 1.65;
+        }
+
+        .insightArticleBody li::marker {
+          color: #60a5fa;
         }
 
         .insightArticleBody strong {
@@ -1540,8 +1473,7 @@ export default function InsightPostClient({
 
         .insightArticleBody a {
           color: #93c5fd;
-          font-weight: 800;
-          text-decoration-thickness: 1px;
+          text-decoration-color: rgba(147,197,253,0.38);
           text-underline-offset: 3px;
         }
 
@@ -1556,6 +1488,39 @@ export default function InsightPostClient({
 
         .insightTimeframeDesktop {
           display: inline;
+        }
+
+        .insightResearchStrip {
+          margin-top: 18px;
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 22px;
+          padding: 18px;
+          background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02));
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 16px;
+          align-items: center;
+        }
+
+        .insightResearchTitle {
+          font-size: 20px;
+          line-height: 1.2;
+          font-weight: 950;
+          letter-spacing: -0.03em;
+        }
+
+        .insightResearchText {
+          margin-top: 6px;
+          font-size: 14px;
+          line-height: 1.6;
+          color: rgba(241,245,249,0.72);
+        }
+
+        .insightResearchActions {
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
         }
 
         @media (min-width: 901px) {
@@ -1580,6 +1545,14 @@ export default function InsightPostClient({
             line-height: 1.08 !important;
           }
 
+          .insightHeroShell {
+            grid-template-columns: 1fr !important;
+          }
+
+          .insightHeroSide {
+            position: static !important;
+          }
+
           .insightArticleLayout {
             grid-template-columns: 1fr !important;
           }
@@ -1587,12 +1560,253 @@ export default function InsightPostClient({
           .insightSidebar {
             position: static !important;
           }
+
+          .insightResearchStrip {
+            grid-template-columns: 1fr !important;
+          }
+
+          .insightResearchActions {
+            justify-content: stretch !important;
+          }
         }
 
         @media (max-width: 640px) {
           .wrap {
             padding-left: 12px !important;
             padding-right: 12px !important;
+          }
+
+          .insightTopNav {
+            align-items: flex-start !important;
+            flex-direction: column !important;
+          }
+
+          .insightTopNavLinks {
+            width: 100%;
+            justify-content: flex-start !important;
+          }
+
+          .heroMiniGrid {
+            grid-template-columns: 1fr !important;
+          }
+
+          .insightTopNav {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 14px;
+          margin-bottom: 16px;
+        }
+
+        .insightQuietBack,
+        .insightTopNavLinks a {
+          color: rgba(226,232,240,0.82);
+          text-decoration: none;
+          font-weight: 850;
+          font-size: 13px;
+        }
+
+        .insightTopNavLinks {
+          display: flex;
+          gap: 12px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+
+        .insightHeroShell {
+          border: 1px solid rgba(59,130,246,0.22);
+          border-radius: 28px;
+          padding: 22px;
+          background: linear-gradient(135deg, rgba(15,23,42,0.98), rgba(6,10,18,0.98));
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 18px 38px rgba(0,0,0,0.26);
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 360px;
+          gap: 22px;
+          align-items: stretch;
+        }
+
+        .insightHeroMain {
+          min-width: 0;
+        }
+
+        .insightHeroTitle {
+          margin: 0;
+          max-width: 820px;
+          font-size: 43px;
+          line-height: 1.04;
+          letter-spacing: -0.06em;
+        }
+
+        .insightHeroText {
+          margin: 12px 0 0;
+          max-width: 760px;
+          color: rgba(226,232,240,0.80);
+          font-size: 16px;
+          line-height: 1.68;
+        }
+
+        .insightHeroPills {
+          display: flex;
+          align-items: center;
+          gap: 9px;
+          flex-wrap: wrap;
+          margin-bottom: 16px;
+        }
+
+        .symbolPill,
+        .riskPill,
+        .timeframePill,
+        .datePill {
+          display: inline-flex;
+          align-items: center;
+          min-height: 27px;
+          padding: 6px 10px;
+          border-radius: 999px;
+          font-size: 11px;
+          font-weight: 950;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          border: 1px solid rgba(255,255,255,0.10);
+          background: rgba(255,255,255,0.045);
+          color: rgba(226,232,240,0.90);
+        }
+
+        .symbolPill {
+          border-color: rgba(59,130,246,0.34);
+          background: rgba(59,130,246,0.14);
+          color: #dbeafe;
+        }
+
+        .riskPill {
+          border-color: rgba(248,113,113,0.28);
+          background: rgba(127,29,29,0.16);
+          color: #fecaca;
+        }
+
+        .timeframePill {
+          border-color: rgba(147,197,253,0.22);
+          color: #bfdbfe;
+        }
+
+        .datePill {
+          color: rgba(203,213,225,0.78);
+        }
+
+        .simpleViewCard {
+          margin-top: 18px;
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr);
+          gap: 12px;
+          align-items: start;
+          max-width: 760px;
+          border: 1px solid rgba(34,197,94,0.22);
+          border-radius: 18px;
+          padding: 14px;
+          background: linear-gradient(135deg, rgba(34,197,94,0.10), rgba(15,23,42,0.74));
+          color: rgba(241,245,249,0.86);
+          line-height: 1.62;
+          font-size: 14px;
+        }
+
+        .simpleViewCard strong {
+          color: #f8fafc;
+        }
+
+        .simpleViewIcon,
+        .scoreIcon,
+        .sideIcon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 30px;
+          height: 30px;
+          border-radius: 999px;
+          background: rgba(34,197,94,0.14);
+          border: 1px solid rgba(34,197,94,0.24);
+          flex: 0 0 auto;
+        }
+
+        .insightHeroSide {
+          display: grid;
+          gap: 12px;
+          min-width: 0;
+        }
+
+        .heroScoreCard,
+        .heroMiniCard {
+          border: 1px solid rgba(255,255,255,0.10);
+          border-radius: 20px;
+          background: linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.022));
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+        }
+
+        .heroScoreCard {
+          padding: 18px;
+          border-color: rgba(248,113,113,0.24);
+          background: linear-gradient(135deg, rgba(127,29,29,0.20), rgba(15,23,42,0.88));
+        }
+
+        .scoreTopRow {
+          display: flex;
+          justify-content: space-between;
+          align-items: start;
+          gap: 14px;
+        }
+
+        .scoreValue {
+          margin-top: 8px;
+          color: #f87171;
+          font-size: 35px;
+          line-height: 1;
+          font-weight: 950;
+          letter-spacing: -0.06em;
+        }
+
+        .heroScoreCard p {
+          margin: 12px 0 0;
+          color: rgba(241,245,249,0.74);
+          line-height: 1.58;
+          font-size: 13px;
+        }
+
+        .heroMiniGrid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
+        }
+
+        .heroMiniCard {
+          padding: 14px;
+        }
+
+        .heroMiniCard strong {
+          display: block;
+          margin-top: 8px;
+          font-size: 24px;
+          line-height: 1;
+          color: #f8fafc;
+          letter-spacing: -0.04em;
+        }
+
+        .heroMiniCard span {
+          display: block;
+          margin-top: 7px;
+          color: rgba(203,213,225,0.72);
+          font-size: 12px;
+          line-height: 1.35;
+        }
+
+        .insightShell {
+          margin-top: 18px;
+          border: 1px solid rgba(59,130,246,0.20);
+          border-radius: 24px;
+          padding: 18px;
+          background: linear-gradient(180deg, rgba(8,14,28,0.94), rgba(6,10,18,0.98));
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+        }
+
+        .insightSummaryGrid {
+            grid-template-columns: 1fr !important;
           }
 
           .insightMetaRows {
@@ -1637,10 +1851,6 @@ export default function InsightPostClient({
             gap: 10px;
             width: 100%;
             align-items: stretch;
-          }
-
-          .insightMobileOnlyWrapper > :nth-child(3) {
-            grid-column: 1 / -1;
           }
 
           .insightSmallStatCard {
@@ -1693,6 +1903,11 @@ export default function InsightPostClient({
             line-height: 1.6 !important;
           }
 
+          .insightArticleCard {
+            padding: 16px !important;
+            border-radius: 20px !important;
+          }
+
           .insightArticleBody h2 {
             font-size: 22px !important;
           }
@@ -1740,6 +1955,11 @@ export default function InsightPostClient({
 
           .insightMobileOnly {
             display: inline-flex !important;
+          }
+
+          .insightResearchActions {
+            display: grid !important;
+            grid-template-columns: 1fr !important;
           }
         }
       `}</style>
@@ -1958,6 +2178,31 @@ function chartActionStyle(
     textAlign: "center",
     transition:
       "transform 160ms ease, box-shadow 160ms ease, filter 160ms ease, border-color 160ms ease",
+  };
+}
+
+function bottomActionStyle(tint: "blue" | "green"): React.CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 42,
+    padding: "10px 14px",
+    borderRadius: 14,
+    border:
+      tint === "green"
+        ? "1px solid rgba(34,197,94,0.30)"
+        : "1px solid rgba(59,130,246,0.34)",
+    background:
+      tint === "green"
+        ? "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))"
+        : "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
+    color: tint === "green" ? "#dcfce7" : "#dbeafe",
+    textDecoration: "none",
+    fontWeight: 900,
+    fontSize: 13,
+    letterSpacing: "0.03em",
+    whiteSpace: "nowrap",
   };
 }
 
