@@ -214,6 +214,14 @@ function getHeaderHelp(title: string) {
     return "These stocks have the strongest current trend structure based on price relative to MA50 and MA200, moving average alignment, and positive MACD momentum.";
   }
 
+  if (title.includes("Positive Last Earnings")) {
+    return "These stocks rank well on the latest completed earnings report, giving preference to EPS beats, revenue beats, positive EPS and recent reports.";
+  }
+
+  if (title.includes("Strong Earnings Growth")) {
+    return "These stocks rank well on year-over-year earnings improvement, recent positive EPS consistency, revenue growth and earnings beat history.";
+  }
+
   if (title.includes("Overbought")) {
     return "These are ranked overbought setups, not just raw matches. The list leans toward stronger extension, better liquidity and cleaner pullback-risk profiles.";
   }
@@ -729,8 +737,15 @@ const res = await fetch(`/api/pickers?t=${Date.now()}`, {
 
   .pickers-shell {
     width: 100%;
-    max-width: 980px;
+    max-width: 1280px;
     min-width: 0;
+  }
+
+  .pickers-sections-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    align-items: start;
   }
 
   .pickers-filter-grid {
@@ -751,6 +766,12 @@ const res = await fetch(`/api/pickers?t=${Date.now()}`, {
     gap: 10px;
   }
 
+  @media (max-width: 980px) {
+    .pickers-sections-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
   @media (max-width: 820px) {
     .pickers-filter-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -768,7 +789,8 @@ const res = await fetch(`/api/pickers?t=${Date.now()}`, {
   @media (max-width: 640px) {
     .pickers-filter-grid,
     .pickers-card-grid,
-    .pickers-section-results-grid {
+    .pickers-section-results-grid,
+    .pickers-sections-grid {
       grid-template-columns: minmax(0, 1fr);
     }
 
@@ -1399,7 +1421,7 @@ href={toChartHref(
             )}
           </section>
         ) : (
-          <>
+          <div className="pickers-sections-grid pickers-shell">
             {displaySections.map((sec) => {
               const items = Array.isArray(sec.items)
                 ? sec.items
@@ -1693,7 +1715,7 @@ color: "#cbd5f5",
                 </section>
               );
             })}
-          </>
+          </div>
         )}
 
         {!loading && !err && SHOW_FORCE_FETCH_BUTTON ? (
