@@ -63,7 +63,7 @@ function formatVideoDate(value: string) {
 
 export default async function InsightsPage() {
   const posts = getAllPosts();
-  const videos = await getLatestYouTubeVideos(3);
+  const videos = await getLatestYouTubeVideos(7);
   const featuredVideo = videos[0] ?? null;
   const secondaryVideos = videos.slice(1);
 
