@@ -23,6 +23,7 @@ export type PickerResultConfig = {
   kind: PickerResultKind;
   sectionIncludes?: string[];
   maxItems?: number;
+  filterTimeframe?: "D" | "W";
 };
 
 type PickerSectionItem = {
@@ -33,6 +34,7 @@ type PickerSectionItem = {
   indicator?: string;
   dashboardHref?: string;
   chartPoints?: MiniCandlePoint[];
+  score?: number;
 };
 
 type PickerSection = {
@@ -48,6 +50,7 @@ type SignalRecord = {
   note?: string;
   tone?: PickerTone;
   chartPoints?: MiniCandlePoint[];
+  score?: number;
   dashboardHref?: string;
 
   oversold?: boolean;
@@ -138,6 +141,12 @@ const PICKER_NAV: Array<{
     href: "/stocks-near-200-day-moving-average",
     label: "Near 200-Day",
     icon: "◇",
+    tone: "yellow",
+  },
+  {
+    href: "/stocks-near-weekly-200-day-moving-average",
+    label: "Weekly MA200",
+    icon: "◆",
     tone: "yellow",
   },
   {
@@ -280,18 +289,22 @@ function entriesFromSection(args: {
   recordMap: Map<string, SignalRecord>;
   fallbackTone: PickerTone;
   maxItems: number;
+  filterTimeframe?: "D" | "W";
 }) {
   const items = Array.isArray(args.section?.items) ? args.section.items : [];
+  const filteredItems = args.filterTimeframe
+    ? items.filter((item) => item.timeframe === args.filterTimeframe)
+    : items;
 
-  return items.slice(0, args.maxItems).map((item): ResultEntry | null => {
+  return filteredItems.slice(0, args.maxItems).map((item): ResultEntry | null => {
     const symbol = cleanSymbol(item.symbol);
     if (!symbol) return null;
 
     const record = args.recordMap.get(symbol);
-    const chartPoints = Array.isArray(record?.chartPoints)
-      ? record.chartPoints
-      : Array.isArray(item.chartPoints)
-        ? item.chartPoints
+    const chartPoints = Array.isArray(item.chartPoints)
+      ? item.chartPoints
+      : Array.isArray(record?.chartPoints)
+        ? record.chartPoints
         : [];
 
     const tone = item.tone || record?.tone || args.fallbackTone;
@@ -309,6 +322,7 @@ function entriesFromSection(args: {
       chartHref: chartHrefFor(symbol, item.dashboardHref || record?.dashboardHref),
       chartPoints,
       badge: [item.timeframe, item.indicator].filter(Boolean).join(" · "),
+      score: typeof item.score === "number" ? item.score : typeof record?.score === "number" ? record.score : undefined,
     };
   }).filter((entry): entry is ResultEntry => Boolean(entry));
 }
@@ -376,6 +390,7 @@ function buildEntries(args: {
     recordMap,
     fallbackTone: config.tone,
     maxItems,
+    filterTimeframe: config.filterTimeframe,
   });
 }
 
@@ -413,9 +428,11 @@ async function getPickerData(config: PickerResultConfig) {
         typeof payload.universeSize === "number" ? payload.universeSize : null,
       entries,
       foundCount:
-        typeof matchedSection?.foundCount === "number"
-          ? matchedSection.foundCount
-          : entries.length,
+        config.filterTimeframe
+          ? entries.length
+          : typeof matchedSection?.foundCount === "number"
+            ? matchedSection.foundCount
+            : entries.length,
     };
   } catch {
     return {
@@ -454,6 +471,36 @@ function SignalNav({ currentHref }: { currentHref: string }) {
     </nav>
   );
 }
+
+function chartOverlayForEntry(config: PickerResultConfig, entry: ResultEntry) {
+  const href = config.href.toLowerCase();
+  const text = `${config.title} ${entry.badge ?? ""} ${entry.note}`.toLowerCase();
+
+  if (text.includes("macd")) return "macd" as const;
+  if (text.includes("rsi") || href.includes("overbought") || href.includes("oversold")) {
+    return "rsi" as const;
+  }
+  if (href.includes("200-day") || href.includes("ma200") || href.includes("best-trend")) {
+    return href.includes("best-trend") ? ("trend" as const) : ("ma200" as const);
+  }
+  if (href.includes("all-time-high-breakout")) return "ath" as const;
+  if (href.includes("3-month-high")) return "recentHigh" as const;
+  if (href.includes("all-time-highs")) return "ath" as const;
+
+  return "none" as const;
+}
+
+function scoreLabelForEntry(entry: ResultEntry) {
+  if (typeof entry.score === "number" && Number.isFinite(entry.score)) {
+    return Math.round(entry.score);
+  }
+
+  const match = entry.note.match(/(\d+)\s+(?:buy|sell) signal/i);
+  if (match) return Number(match[1]);
+
+  return null;
+}
+
 
 function MetricCard({ label, value }: { label: string; value: string | number }) {
   return (
@@ -562,7 +609,7 @@ export default async function PickerResultPage({
         }
 
         .heroGrid {
-          margin-top: 16px;
+          margin-top: 10px;
           display: grid;
           grid-template-columns: minmax(0, 1fr) 330px;
           gap: 20px;
@@ -745,6 +792,34 @@ export default async function PickerResultPage({
           white-space: nowrap;
         }
 
+        .scorePill {
+          display: inline-flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          min-width: 62px;
+          min-height: 52px;
+          border-radius: 15px;
+          border: 1px solid rgba(34,197,94,0.26);
+          background: rgba(34,197,94,0.10);
+          color: #dcfce7;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
+        }
+
+        .scorePill strong {
+          font-size: 22px;
+          line-height: 1;
+          letter-spacing: -0.04em;
+        }
+
+        .scorePill span {
+          margin-top: 5px;
+          font-size: 10px;
+          font-weight: 950;
+          letter-spacing: 0.04em;
+          color: rgba(220,252,231,0.72);
+        }
+
         .note {
           margin: 10px 0 0;
           color: rgba(226,232,240,0.74);
@@ -887,16 +962,24 @@ export default async function PickerResultPage({
                         />
                         <h3>{entry.symbol}</h3>
                       </div>
-                      <div className="note">{entry.note}</div>
+                      {entry.badge ? <div className="badge" style={{ marginTop: 8 }}>{entry.badge}</div> : null}
                     </div>
 
-                    {entry.badge ? <div className="badge">{entry.badge}</div> : null}
+                    {scoreLabelForEntry(entry) != null ? (
+                      <div className="scorePill">
+                        <strong>{scoreLabelForEntry(entry)}</strong>
+                        <span>Score</span>
+                      </div>
+                    ) : null}
                   </div>
 
                   <MiniPickerCandleChart
                     points={entry.chartPoints}
                     tone={config.tone}
+                    overlay={chartOverlayForEntry(config, entry)}
                   />
+
+                  <div className="note">{entry.note}</div>
 
                   <div className="cardActions">
                     <Link className="green" href={entry.chartHref}>
