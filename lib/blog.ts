@@ -30,6 +30,7 @@ export type BlogPost = {
   latestEarnings: string;
   investorUsefulInfo: string;
 };
+
 export type InsightSnapshotPoint = {
   date: string;
   close: number;
@@ -113,7 +114,9 @@ function normalizeChartIndicators(value: unknown): InsightChartIndicator[] {
 
   return value
     .map((item) => String(item).trim())
-    .filter((item): item is InsightChartIndicator => allowed.has(item as InsightChartIndicator));
+    .filter((item): item is InsightChartIndicator =>
+      allowed.has(item as InsightChartIndicator)
+    );
 }
 
 export function getAllPosts(): BlogPost[] {
@@ -144,8 +147,9 @@ export function getAllPosts(): BlogPost[] {
       latestEarnings: normalizeFrontmatterText(data.latestEarnings),
       investorUsefulInfo: normalizeFrontmatterText(data.investorUsefulInfo),
     };
+  });
 
-   return posts.sort((a, b) => {
+  return posts.sort((a, b) => {
     if (a.date === b.date) return 0;
     if (!a.date) return 1;
     if (!b.date) return -1;
