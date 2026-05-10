@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import MiniPickerCandleChart, { type MiniCandlePoint } from "@/app/components/MiniPickerCandleChart";
 import { headers } from "next/headers";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ type SignalRecord = {
   bullishRsiDivergence?: boolean;
   bullishMacdDivergence?: boolean;
   dashboardHref?: string;
+  chartPoints?: MiniCandlePoint[];
 };
 
 type PickersPayload = {
@@ -29,6 +31,7 @@ type BuySignalEntry = {
   label: string;
   stockHref: string;
   chartHref: string;
+  chartPoints: MiniCandlePoint[];
   buyCount: number;
 };
 
@@ -128,6 +131,7 @@ async function getBuySignalEntries(): Promise<{
           chartHref: chartBase.includes("#chart")
             ? chartBase
             : `${chartBase}#chart`,
+          chartPoints: Array.isArray(record?.chartPoints) ? record.chartPoints : [],
           buyCount,
         };
       })
@@ -760,6 +764,8 @@ export default async function TopStocksWithBuySignalsPage() {
                       {entry.label}
                     </div>
                   </div>
+
+                  <MiniPickerCandleChart points={entry.chartPoints} tone="green" />
 
 <ul
   style={{
