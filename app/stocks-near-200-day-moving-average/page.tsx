@@ -9,6 +9,7 @@ type SignalRecord = {
   symbol: string;
   dailyMa200Proximity?: boolean;
   weeklyMa200Proximity?: boolean;
+  chartPoints?: MiniCandlePoint[];
 };
 
 type PickersPayload = {
