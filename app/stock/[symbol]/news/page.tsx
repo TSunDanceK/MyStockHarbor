@@ -2268,7 +2268,7 @@ function EarningsNewsSection({
 
       <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
         {earningsNews.length ? (
-          earningsNews.slice(0, 2).map((item, index) => (
+          earningsNews.map((item, index) => (
             <a
               key={`${item.link}-${index}`}
               href={item.link}
@@ -2399,6 +2399,19 @@ function LatestEarningsCard({ earnings }: { earnings: LatestEarningsData }) {
             </div>
           ) : null}
 
+          <div style={earningsGuidanceBoxStyle}>
+            <div style={earningsMiniLabelStyle}>Guidance summary</div>
+            <div
+              style={{
+                marginTop: 6,
+                lineHeight: 1.55,
+                color: "rgba(241,245,249,0.82)",
+              }}
+            >
+              {earnings.guidanceSummary ??
+                "No structured guidance summary available from the earnings feed."}
+            </div>
+          </div>
         </>
       )}
 
@@ -3687,6 +3700,14 @@ function earningsMetricMetaStyle(tone?: ScoreTone): CSSProperties {
   };
 }
 
+const earningsGuidanceBoxStyle: CSSProperties = {
+  marginTop: 14,
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 14,
+  padding: 12,
+  background: "rgba(255,255,255,0.026)",
+  fontSize: 13,
+};
 
 const earningsNewsRowStyle: CSSProperties = {
   display: "grid",
