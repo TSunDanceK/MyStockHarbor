@@ -1,9 +1,26 @@
-"use client";
-
+import type { CSSProperties } from "react";
+import { Suspense } from "react";
+import StockNewsTickerJump from "./StockNewsTickerJump";
+import type { Metadata } from "next";
 import Link from "next/link";
-import { useMemo } from "react";
-import PriceChart, { type Overlay } from "@/app/components/PriceChart";
-import type { InsightSnapshot } from "@/lib/blog";
+import {
+  getStockNewsBaseData,
+  getStockNewsAiData,
+} from "@/lib/stock-news-data";
+
+export const runtime = "nodejs";
+
+type Props = { 
+  params: Promise<{ symbol: string }>;
+};
+
+type Quote = {
+  symbol: string;
+  price: number | null;
+  date: string | null;
+  time: string | null;
+  source: string;
+};
 
 type Point = {
   date: string;
@@ -13,32 +30,197 @@ type Point = {
   volume?: number;
 };
 
-type InsightPostData = {
-  slug: string;
+type NewsItem = {
   title: string;
-  date: string;
-  excerpt: string;
-  symbol?: string | null;
-  timeframe: "d" | "w";
-  chartBars: number | null;
-  chartIndicators: Overlay[];
-  overallBreakdown: string;
-  latestNews: string;
-  latestEarnings: string;
-  investorUsefulInfo: string;
-  contentHtml: string;
+  link: string;
+  pubDate: string | null;
+  source: string | null;
+  description: string | null;
 };
 
-function formatPostDate(dateString: string) {
-  const date = new Date(dateString);
+type ScoreTone = "green" | "yellow" | "red";
 
-  if (Number.isNaN(date.getTime())) return dateString;
+type NewsScoreResult = {
+  score: number;
+  tone: ScoreTone;
+  label: string;
+  reason: string;
+  positives: string[];
+  negatives: string[];
+  confidence: "Low" | "Medium" | "High";
+};
 
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  }).format(date);
+function decodeHtml(value: string) {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
+function cleanRssDescription(value: string | null) {
+  if (!value) return null;
+
+  const cleaned = decodeHtml(
+    value
+      .replace(/<!\[CDATA\[(.*?)\]\]>/g, "$1")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
+
+  return cleaned || null;
+}
+
+function parseRss(xml: string): NewsItem[] {
+  const items: NewsItem[] = [];
+  const blocks = xml.split("<item>").slice(1);
+
+  for (const block of blocks) {
+    const title =
+      block.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1] ??
+      block.match(/<title>(.*?)<\/title>/)?.[1] ??
+      "";
+
+    const link = block.match(/<link>(.*?)<\/link>/)?.[1] ?? "";
+    const pubDate = block.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] ?? null;
+    const source = block.match(/<source[^>]*>(.*?)<\/source>/)?.[1] ?? null;
+    const description =
+      block.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/)?.[1] ??
+      block.match(/<description>(.*?)<\/description>/)?.[1] ??
+      null;
+
+    if (title && link) {
+      items.push({
+        title: decodeHtml(title.replace(/\s+-\s+Google News$/i, "").trim()),
+        link: link.trim(),
+        pubDate,
+        source: source ? decodeHtml(source.trim()) : null,
+        description: cleanRssDescription(description),
+      });
+    }
+  }
+
+  return items;
+}
+
+async function fetchQuote(symbol: string): Promise<Quote | null> {
+  const stooqSymbol = `${symbol.toLowerCase()}.us`;
+  const url = `https://stooq.com/q/l/?s=${stooqSymbol}&f=sd2t2l&h&e=csv`;
+
+  try {
+    const res = await fetch(url, {
+      next: { revalidate: 1800 },
+    });
+
+    if (!res.ok) return null;
+
+    const text = await res.text();
+    const lines = text.trim().split("\n");
+    if (lines.length < 2) return null;
+
+    const row = lines[1].split(",");
+    const price = Number(row[3] ?? "");
+
+    return {
+      symbol,
+      price: Number.isFinite(price) ? price : null,
+      date: row[1] ?? null,
+      time: row[2] ?? null,
+      source: "Stooq",
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchHistory(symbol: string): Promise<Point[]> {
+  const stooqSymbol = `${symbol.toLowerCase()}.us`;
+  const url = `https://stooq.com/q/d/l/?s=${stooqSymbol}&i=d`;
+
+  try {
+    const res = await fetch(url, {
+      next: { revalidate: 1800 },
+    });
+
+    if (!res.ok) return [];
+
+    const text = await res.text();
+    const lines = text.trim().split("\n");
+    if (lines.length < 3) return [];
+
+    const points: Point[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(",");
+      const date = String(cols[0] ?? "").replace(/\r/g, "").trim();
+      const high = Number(String(cols[2] ?? "").replace(/\r/g, ""));
+      const low = Number(String(cols[3] ?? "").replace(/\r/g, ""));
+      const close = Number(String(cols[4] ?? "").replace(/\r/g, ""));
+      const volume = Number(String(cols[5] ?? "").replace(/\r/g, ""));
+
+      if (!date || !Number.isFinite(close)) continue;
+
+      points.push({
+        date,
+        close,
+        high: Number.isFinite(high) ? high : undefined,
+        low: Number.isFinite(low) ? low : undefined,
+        volume: Number.isFinite(volume) ? volume : undefined,
+      });
+    }
+
+    return points.slice(-320);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchCompanyName(symbol: string): Promise<string> {
+  try {
+    const [nasdaqTxt, otherTxt] = await Promise.all([
+      fetch("https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.txt", {
+        next: { revalidate: 86400 },
+      }).then((r) => r.text()),
+      fetch("https://www.nasdaqtrader.com/dynamic/symdir/otherlisted.txt", {
+        next: { revalidate: 86400 },
+      }).then((r) => r.text()),
+    ]);
+
+    const rows = `${nasdaqTxt}\n${otherTxt}`.split("\n");
+
+    for (const row of rows) {
+      const cols = row.split("|");
+      if ((cols[0] ?? "").trim().toUpperCase() === symbol.toUpperCase()) {
+        return (cols[1] ?? "").trim();
+      }
+    }
+
+    return "";
+  } catch {
+    return "";
+  }
+}
+
+async function fetchNews(symbol: string, companyName: string): Promise<NewsItem[]> {
+  const baseQuery = companyName ? `${companyName} ${symbol} stock` : `${symbol} stock`;
+  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(
+    baseQuery
+  )}&hl=en-GB&gl=GB&ceid=GB:en`;
+
+  try {
+    const res = await fetch(url, {
+      next: { revalidate: 1800 },
+    });
+
+    if (!res.ok) return [];
+
+    const xml = await res.text();
+    return parseRss(xml).slice(0, 8);
+  } catch {
+    return [];
+  }
 }
 
 function movingAverage(values: number[], window: number): (number | null)[] {
@@ -49,62 +231,6 @@ function movingAverage(values: number[], window: number): (number | null)[] {
     sum += values[i];
     if (i >= window) sum -= values[i - window];
     if (i >= window - 1) out[i] = sum / window;
-  }
-
-  return out;
-}
-
-function rollingStd(values: number[], window: number): (number | null)[] {
-  const out: (number | null)[] = Array(values.length).fill(null);
-
-  for (let i = window - 1; i < values.length; i++) {
-    let mean = 0;
-    for (let j = i - window + 1; j <= i; j++) mean += values[j];
-    mean /= window;
-
-    let variance = 0;
-    for (let j = i - window + 1; j <= i; j++) {
-      const d = values[j] - mean;
-      variance += d * d;
-    }
-    variance /= window;
-
-    out[i] = Math.sqrt(variance);
-  }
-
-  return out;
-}
-
-function bollinger(values: number[], window = 20, k = 2) {
-  const mid = movingAverage(values, window);
-  const sd = rollingStd(values, window);
-  const upper = mid.map((m, i) => (m == null || sd[i] == null ? null : m + k * sd[i]!));
-  const lower = mid.map((m, i) => (m == null || sd[i] == null ? null : m - k * sd[i]!));
-  return { upper, mid, lower };
-}
-
-function ema(values: number[], period: number): (number | null)[] {
-  const out: (number | null)[] = Array(values.length).fill(null);
-  if (!values.length) return out;
-
-  const k = 2 / (period + 1);
-  let emaPrev: number | null = null;
-  let sum = 0;
-
-  for (let i = 0; i < values.length; i++) {
-    const v = values[i];
-
-    if (i < period) {
-      sum += v;
-      if (i === period - 1) {
-        emaPrev = sum / period;
-        out[i] = emaPrev;
-      }
-      continue;
-    }
-
-    emaPrev = emaPrev == null ? v : v * k + emaPrev * (1 - k);
-    out[i] = emaPrev;
   }
 
   return out;
@@ -125,7 +251,6 @@ function rsiWilder(values: number[], period = 14): (number | null)[] {
 
   let avgGain = gain / period;
   let avgLoss = loss / period;
-
   const rs0 = avgLoss === 0 ? Infinity : avgGain / avgLoss;
   out[period] = 100 - 100 / (1 + rs0);
 
@@ -144,1821 +269,2609 @@ function rsiWilder(values: number[], period = 14): (number | null)[] {
   return out;
 }
 
-function macd(values: number[], fast = 12, slow = 26, signal = 9) {
-  const emaFast = ema(values, fast);
-  const emaSlow = ema(values, slow);
+function lastNum(arr: (number | null)[]) {
+  return arr.length ? arr[arr.length - 1] : null;
+}
 
-  const line: (number | null)[] = values.map((_, i) => {
-    const f = emaFast[i];
-    const s = emaSlow[i];
-    if (typeof f !== "number" || !Number.isFinite(f)) return null;
-    if (typeof s !== "number" || !Number.isFinite(s)) return null;
-    return f - s;
+function pctFromBase(last: number | null, base: number | null) {
+  if (
+    typeof last !== "number" ||
+    typeof base !== "number" ||
+    !Number.isFinite(last) ||
+    !Number.isFinite(base) ||
+    base === 0
+  ) {
+    return null;
+  }
+
+  return ((last - base) / base) * 100;
+}
+
+function trendLabel(lastClose: number | null, ma50: number | null, ma200: number | null) {
+  if (
+    typeof lastClose === "number" &&
+    typeof ma50 === "number" &&
+    typeof ma200 === "number"
+  ) {
+    if (lastClose > ma50 && ma50 > ma200) return "Bullish trend";
+    if (lastClose < ma50 && ma50 < ma200) return "Bearish trend";
+    if (lastClose > ma200 && lastClose < ma50) return "Pullback in larger uptrend";
+    if (lastClose < ma200 && lastClose > ma50) return "Counter-trend bounce";
+  }
+
+  return "Mixed / range";
+}
+
+function formatMoney(value: number | null) {
+  return typeof value === "number" && Number.isFinite(value) ? `$${value.toFixed(2)}` : "—";
+}
+
+function formatPercent(value: number | null, digits = 1) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  return `${value > 0 ? "+" : ""}${value.toFixed(digits)}%`;
+}
+
+function formatDate(value: string | null) {
+  if (!value) return "Recent";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
+
+function compactSource(source: string | null) {
+  if (!source) return "Publisher";
+  return source.replace(/\s+News$/i, "").trim();
+}
+
+function keywordHits(text: string, words: string[]) {
+  const lower = text.toLowerCase();
+  return words.some((word) => lower.includes(word));
+}
+
+function scoreNews(news: NewsItem[]): NewsScoreResult {
+  if (!news.length) {
+    return {
+      score: 50,
+      tone: "yellow",
+      label: "Neutral",
+      reason:
+        "There are not enough fresh headlines here to lean clearly bullish or bearish, so the score stays neutral.",
+      positives: [],
+      negatives: [],
+      confidence: "Low",
+    };
+  }
+
+  const ranked = [...news].sort((a, b) => {
+    const scoreDiff = scoreNewsItem(b) - scoreNewsItem(a);
+    if (scoreDiff !== 0) return scoreDiff;
+
+    const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+    const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
+    return bTime - aTime;
   });
 
-  const sig: (number | null)[] = Array(values.length).fill(null);
-  const hist: (number | null)[] = Array(values.length).fill(null);
+  const highValue = ranked.filter((item) => !isLowValueNewsItem(item));
+  const candidates = (highValue.length ? highValue : ranked).slice(0, 5);
 
-  const validMacd: { index: number; value: number }[] = [];
-  for (let i = 0; i < line.length; i++) {
-    const v = line[i];
-    if (typeof v === "number" && Number.isFinite(v)) {
-      validMacd.push({ index: i, value: v });
-    }
-  }
+  const positiveTitles: string[] = [];
+  const negativeTitles: string[] = [];
 
-  if (validMacd.length < signal) {
-    return { line, signal: sig, hist };
-  }
+  let weightedSum = 0;
+  let totalWeight = 0;
+  let signalCount = 0;
 
-  let signalSeed = 0;
-  for (let i = 0; i < signal; i++) {
-    signalSeed += validMacd[i].value;
-  }
+  for (let i = 0; i < candidates.length; i++) {
+    const item = candidates[i];
+    const title = item.title.toLowerCase();
 
-  let prevSignal = signalSeed / signal;
-  sig[validMacd[signal - 1].index] = prevSignal;
+    const positionWeight = i === 0 ? 1.35 : i === 1 ? 1.18 : i === 2 ? 1.02 : 0.9;
+    let itemScore = 0;
 
-  const k = 2 / (signal + 1);
+    const strongPositive = [
+      "beat",
+      "beats",
+      "strong",
+      "surge",
+      "record",
+      "upgrade",
+      "buy rating",
+      "top pick",
+      "price target raised",
+      "raises guidance",
+      "growth",
+      "expansion",
+      "partnership",
+      "wins",
+      "rebound",
+      "demand",
+      "momentum",
+      "profit jump",
+    ];
 
-  for (let i = signal; i < validMacd.length; i++) {
-    prevSignal = validMacd[i].value * k + prevSignal * (1 - k);
-    sig[validMacd[i].index] = prevSignal;
-  }
+    const moderatePositive = [
+      "launch",
+      "production",
+      "deliveries",
+      "delivery",
+      "analyst",
+      "bullish",
+      "margin",
+      "forecast",
+      "outlook",
+      "sec filing",
+      "insider buy",
+    ];
 
-  for (let i = 0; i < line.length; i++) {
-    const l = line[i];
-    const s = sig[i];
-    if (typeof l === "number" && Number.isFinite(l) && typeof s === "number" && Number.isFinite(s)) {
-      hist[i] = l - s;
-    }
-  }
+    const strongNegative = [
+      "miss",
+      "misses",
+      "warning",
+      "downgrade",
+      "sell rating",
+      "price target cut",
+      "lawsuit",
+      "probe",
+      "investigation",
+      "recall",
+      "delay",
+      "cuts guidance",
+      "weak",
+      "slump",
+      "plunge",
+      "loss",
+    ];
 
-  return { line, signal: sig, hist };
-}
+    const moderateNegative = [
+      "falls",
+      "drop",
+      "soft",
+      "tariff",
+      "concern",
+      "pressure",
+      "decline",
+      "headwinds",
+      "insider sale",
+      "tax-driven share sale",
+    ];
 
-function vwma(values: number[], volumes: (number | undefined)[], window = 20): (number | null)[] {
-  const out: (number | null)[] = Array(values.length).fill(null);
+    if (keywordHits(title, strongPositive)) itemScore += 3.2;
+    if (keywordHits(title, moderatePositive)) itemScore += 1.4;
 
-  for (let i = 0; i < values.length; i++) {
-    if (i < window - 1) continue;
+    if (keywordHits(title, strongNegative)) itemScore -= 3.2;
+    if (keywordHits(title, moderateNegative)) itemScore -= 1.4;
 
-    let pvSum = 0;
-    let vSum = 0;
-
-    for (let j = i - window + 1; j <= i; j++) {
-      const price = values[j];
-      const volume = volumes[j];
-
-      if (
-        typeof price !== "number" ||
-        !Number.isFinite(price) ||
-        typeof volume !== "number" ||
-        !Number.isFinite(volume) ||
-        volume <= 0
-      ) {
-        continue;
-      }
-
-      pvSum += price * volume;
-      vSum += volume;
-    }
-
-    out[i] = vSum > 0 ? pvSum / vSum : null;
-  }
-
-  return out;
-}
-
-function stochastic(points: Point[], kPeriod = 14, dPeriod = 3) {
-  const k: (number | null)[] = Array(points.length).fill(null);
-
-  for (let i = 0; i < points.length; i++) {
-    if (i < kPeriod - 1) continue;
-
-    let highestHigh = -Infinity;
-    let lowestLow = Infinity;
-
-    for (let j = i - kPeriod + 1; j <= i; j++) {
-      const hh = points[j].high;
-      const ll = points[j].low;
-
-      if (typeof hh !== "number" || !Number.isFinite(hh)) {
-        highestHigh = NaN;
-        break;
-      }
-      if (typeof ll !== "number" || !Number.isFinite(ll)) {
-        lowestLow = NaN;
-        break;
-      }
-
-      if (hh > highestHigh) highestHigh = hh;
-      if (ll < lowestLow) lowestLow = ll;
+    if (
+      keywordHits(title, ["earnings", "results", "revenue", "guidance", "quarter"]) &&
+      keywordHits(title, ["beat", "beats", "strong", "raises", "growth", "record"])
+    ) {
+      itemScore += 2.2;
     }
 
-    if (!Number.isFinite(highestHigh) || !Number.isFinite(lowestLow)) continue;
-
-    const denom = highestHigh - lowestLow;
-    if (denom <= 0) continue;
-
-    k[i] = ((points[i].close - lowestLow) / denom) * 100;
-  }
-
-  const d = movingAverage(
-    k.map((v) => (typeof v === "number" ? v : 0)),
-    dPeriod
-  ).map((v, i) => (k[i] == null ? null : v));
-
-  return { k, d };
-}
-
-function atr(points: Point[], period = 14): (number | null)[] {
-  const tr: (number | null)[] = Array(points.length).fill(null);
-
-  for (let i = 0; i < points.length; i++) {
-    const h = points[i].high;
-    const l = points[i].low;
-    const cPrev = i > 0 ? points[i - 1].close : null;
-
-    if (typeof h !== "number" || !Number.isFinite(h)) continue;
-    if (typeof l !== "number" || !Number.isFinite(l)) continue;
-
-    const hl = h - l;
-    const hc = cPrev == null ? hl : Math.abs(h - cPrev);
-    const lc = cPrev == null ? hl : Math.abs(l - cPrev);
-
-    tr[i] = Math.max(hl, hc, lc);
-  }
-
-  const out: (number | null)[] = Array(points.length).fill(null);
-
-  let sum = 0;
-  let count = 0;
-  let prevATR: number | null = null;
-
-  for (let i = 0; i < points.length; i++) {
-    const v = tr[i];
-
-    if (v == null) {
-      out[i] = prevATR;
-      continue;
+    if (
+      keywordHits(title, ["earnings", "results", "revenue", "guidance", "quarter"]) &&
+      keywordHits(title, ["miss", "warning", "cuts", "weak", "loss"])
+    ) {
+      itemScore -= 2.2;
     }
 
-    if (prevATR == null) {
-      sum += v;
-      count++;
-      if (count === period) {
-        prevATR = sum / period;
-        out[i] = prevATR;
-      }
-      continue;
+    if (
+      keywordHits(title, ["insider", "cfo", "director", "executive"]) &&
+      keywordHits(title, ["tax-driven", "rsu", "vesting"])
+    ) {
+      itemScore += 0.5;
     }
 
-    prevATR = (prevATR * (period - 1) + v) / period;
-    out[i] = prevATR;
+    if (itemScore > 0.75) {
+      positiveTitles.push(item.title);
+      signalCount += 1;
+    } else if (itemScore < -0.75) {
+      negativeTitles.push(item.title);
+      signalCount += 1;
+    }
+
+    weightedSum += itemScore * positionWeight;
+    totalWeight += positionWeight;
   }
 
-  return out;
-}
-
-function normalizeInsightIndicators(indicators: Overlay[]) {
-  const allowed = new Set<Overlay>([
-    "MA50",
-    "MA200",
-    "EMA20",
-    "VWMA(20)",
-    "Bollinger(20,2)",
-    "RSI(14)",
-    "MACD(12,26,9)",
-    "Stochastic(14,3)",
-    "ATR(14)",
-    "Volume",
-  ]);
-
-  return indicators.filter((item): item is Overlay => allowed.has(item));
-}
-
-function getFocusedOverlay(indicators: Overlay[]): Overlay {
-  const lower = indicators.find(
-    (item) =>
-      item === "RSI(14)" ||
-      item === "MACD(12,26,9)" ||
-      item === "Stochastic(14,3)" ||
-      item === "ATR(14)" ||
-      item === "Volume"
-  );
-
-  return lower ?? "None";
-}
-
-function formatIndicatorLabel(indicators: Overlay[]) {
-  if (!indicators.length) return "price";
-  return indicators.join(" + ");
-}
-
-function aggregateToWeekly(points: Point[]): Point[] {
-  if (!points.length) return [];
-
-  const buckets = new Map<
-    string,
-    {
-      date: string;
-      close: number;
-      high: number;
-      low: number;
-      volume: number;
-    }
-  >();
-
-  for (const point of points) {
-    const d = new Date(`${point.date}T00:00:00Z`);
-    if (Number.isNaN(d.getTime())) continue;
-
-    const utcDay = d.getUTCDay();
-    const diffToMonday = utcDay === 0 ? -6 : 1 - utcDay;
-
-    const weekStart = new Date(d);
-    weekStart.setUTCDate(d.getUTCDate() + diffToMonday);
-
-    const key = weekStart.toISOString().slice(0, 10);
-    const existing = buckets.get(key);
-
-    if (!existing) {
-      buckets.set(key, {
-        date: point.date,
-        close: point.close,
-        high: point.high ?? point.close,
-        low: point.low ?? point.close,
-        volume: point.volume ?? 0,
-      });
-      continue;
-    }
-
-    existing.date = point.date;
-    existing.close = point.close;
-    existing.high = Math.max(existing.high, point.high ?? point.close);
-    existing.low = Math.min(existing.low, point.low ?? point.close);
-    existing.volume += point.volume ?? 0;
-  }
-
-  return Array.from(buckets.entries())
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([, value]) => value);
-}
-
-function inferInsightTag(title: string, excerpt: string, contentHtml: string) {
-  const hay = `${title} ${excerpt} ${contentHtml}`.toLowerCase();
-
-  if (
-    hay.includes("breakdown") ||
-    hay.includes("bearish") ||
-    hay.includes("downside") ||
-    hay.includes("support break")
-  ) {
+  if (!totalWeight) {
     return {
-      label: "Breakdown Risk",
-      color: "#fca5a5",
-      border: "rgba(239,68,68,0.26)",
-      bg: "linear-gradient(135deg, rgba(239,68,68,0.14), rgba(127,29,29,0.08))",
+      score: 50,
+      tone: "yellow",
+      label: "Neutral",
+      reason:
+        "There is not enough usable headline detail here to push sentiment strongly either way.",
+      positives: [],
+      negatives: [],
+      confidence: "Low",
     };
   }
 
-  if (
-    hay.includes("breakout") ||
-    hay.includes("bullish") ||
-    hay.includes("reclaim") ||
-    hay.includes("upside")
-  ) {
-    return {
-      label: "Bullish Watch",
-      color: "#bbf7d0",
-      border: "rgba(34,197,94,0.26)",
-      bg: "linear-gradient(135deg, rgba(34,197,94,0.14), rgba(16,185,129,0.08))",
-    };
+  const avg = weightedSum / totalWeight;
+
+  let rawScore = 50 + avg * 11;
+
+  if (signalCount >= 3) rawScore += avg > 0 ? 4 : avg < 0 ? -4 : 0;
+  if (signalCount >= 4) rawScore += avg > 0 ? 2 : avg < 0 ? -2 : 0;
+
+  const score = Math.max(0, Math.min(100, Math.round(rawScore)));
+
+  let tone: ScoreTone = "yellow";
+  let label = "Neutral";
+
+  if (score >= 66) {
+    tone = "green";
+    label = "Bullish";
+  } else if (score <= 34) {
+    tone = "red";
+    label = "Bearish";
+  } else if (score >= 58) {
+    tone = "green";
+    label = "Slightly Bullish";
+  } else if (score <= 42) {
+    tone = "red";
+    label = "Slightly Bearish";
   }
 
-  if (
-    hay.includes("bounce") ||
-    hay.includes("dip") ||
-    hay.includes("pullback") ||
-    hay.includes("oversold")
-  ) {
-    return {
-      label: "Bounce Watch",
-      color: "#fde68a",
-      border: "rgba(250,204,21,0.26)",
-      bg: "linear-gradient(135deg, rgba(250,204,21,0.14), rgba(202,138,4,0.08))",
-    };
+  const confidence: "Low" | "Medium" | "High" =
+    signalCount >= 4 ? "High" : signalCount >= 2 ? "Medium" : "Low";
+
+  let reason =
+    "The latest headline mix looks fairly balanced, so the score stays close to neutral rather than showing a strong directional lean.";
+
+  if (label === "Bullish") {
+    reason =
+      "Recent coverage is leaning clearly constructive, with the stronger usable headlines skewing toward upgrades, growth, better-than-feared developments, or supportive business momentum.";
+  } else if (label === "Slightly Bullish") {
+    reason =
+      "Recent coverage is leaning constructive overall, although the positive read is not strong enough yet to count as a fully decisive bullish headline backdrop.";
+  } else if (label === "Bearish") {
+    reason =
+      "Recent coverage is leaning clearly weaker, with the stronger usable headlines skewing toward downgrades, misses, legal or operational risk, or broader pressure on the story.";
+  } else if (label === "Slightly Bearish") {
+    reason =
+      "Recent coverage is leaning a bit weaker than supportive, although the negative read is not broad or strong enough yet to count as a fully decisive bearish backdrop.";
   }
 
   return {
-    label: "Chart Insight",
-    color: "#dbeafe",
-    border: "rgba(59,130,246,0.26)",
-    bg: "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(37,99,235,0.08))",
+    score,
+    tone,
+    label,
+    reason,
+    positives: positiveTitles.slice(0, 3),
+    negatives: negativeTitles.slice(0, 3),
+    confidence,
+  };
+}
+function scoreEarnings(news: NewsItem[]) {
+  const ranked = [...news].sort((a, b) => {
+    const scoreDiff = scoreNewsItem(b) - scoreNewsItem(a);
+    if (scoreDiff !== 0) return scoreDiff;
+
+    const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+    const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
+    return bTime - aTime;
+  });
+
+  const earningsNews = ranked.filter(
+    (item) =>
+      !isLowValueNewsItem(item) &&
+      keywordHits(item.title, [
+        "earnings",
+        "results",
+        "revenue",
+        "guidance",
+        "quarter",
+        "q1",
+        "q2",
+        "q3",
+        "q4",
+      ])
+  );
+
+  if (!earningsNews.length) {
+    return {
+      score: 50,
+      tone: "yellow" as ScoreTone,
+      label: "No clear earnings read",
+      reason:
+        "There is not enough obvious earnings-specific coverage in the latest higher-value headlines to push this score strongly either way.",
+    };
+  }
+
+  let raw = 50;
+
+  earningsNews.slice(0, 4).forEach((item, index) => {
+    const weight = index === 0 ? 1.3 : index === 1 ? 1.15 : 1;
+    const title = item.title.toLowerCase();
+
+    if (keywordHits(title, ["beat", "beats", "strong", "raises", "growth", "tops", "record"])) {
+      raw += 9 * weight;
+    }
+
+    if (keywordHits(title, ["miss", "cuts", "warning", "weak", "drops", "loss"])) {
+      raw -= 9 * weight;
+    }
+  });
+
+  const score = Math.max(0, Math.min(100, Math.round(raw)));
+
+  let tone: ScoreTone = "yellow";
+  let label = "Mixed earnings tone";
+  let reason =
+    "Recent earnings-linked headlines are mixed, so the score stays close to the middle.";
+
+  if (score >= 64) {
+    tone = "green";
+    label = "Positive earnings tone";
+    reason =
+      "The earnings-linked headlines look more constructive than negative, which may help support confidence in the next leg of the story.";
+  } else if (score <= 36) {
+    tone = "red";
+    label = "Weak earnings tone";
+    reason =
+      "The earnings-linked headlines look more pressured than supportive, which can weigh on sentiment until the business story improves again.";
+  }
+
+  return { score, tone, label, reason };
+}
+
+function buildLeadSummary(args: {
+  symbol: string;
+  companyName: string;
+  trend: string;
+  newsScore: NewsScoreResult;
+  earningsScore: { score: number; tone: ScoreTone; label: string; reason: string };
+}) {
+  const { symbol, companyName, trend, newsScore, earningsScore } = args;
+  const lead = companyName ? `${companyName} (${symbol})` : symbol;
+
+  return `${lead} is currently showing a ${newsScore.label.toLowerCase()} headline tone with a ${trend.toLowerCase()} backdrop. The latest news flow is being framed here as context rather than prediction, so beginners can quickly see whether headlines are helping, hurting, or complicating the chart story. Earnings tone is currently ${earningsScore.label.toLowerCase()}.`;
+}
+
+function buildNewsSummary(item: NewsItem, symbol: string, trend: string, newsScore: NewsScoreResult) {
+  const source = compactSource(item.source);
+  const title = item.title;
+  const lower = title.toLowerCase();
+
+  if (keywordHits(lower, ["earnings", "results", "revenue", "guidance", "quarter"])) {
+    return `${source} is highlighting an earnings-related update for ${symbol}. Recent coverage is focusing on whether the latest results or guidance shift expectations for the next phase of the stock story.`;
+  }
+
+  if (keywordHits(lower, ["upgrade", "downgrade", "price target", "analyst"])) {
+    return `${source} is focusing on analyst sentiment around ${symbol}. That can matter for short-term attention, especially when the chart is already leaning in the same direction.`;
+  }
+
+  if (keywordHits(lower, ["delivery", "deliveries", "production", "factory", "supply"])) {
+    return `${source} is focusing on operating execution around ${symbol}. The latest coverage suggests traders are watching whether real business performance is lining up with the bigger growth narrative.`;
+  }
+
+  if (keywordHits(lower, ["lawsuit", "probe", "investigation", "recall"])) {
+    return `${source} is highlighting a risk-related development around ${symbol}. Recent headlines suggest the market may need time to judge whether this is temporary noise or a more durable problem.`;
+  }
+
+  if (keywordHits(lower, ["ai", "chip", "product", "launch", "software"])) {
+    return `${source} is discussing product or theme momentum around ${symbol}. That can help explain why investors stay engaged with the stock, especially when the broader setup already looks active.`;
+  }
+
+  if (keywordHits(lower, ["market", "sector", "fed", "rates", "tariff"])) {
+    return `${source} is framing ${symbol} inside a wider market or sector story. That matters because a stock move is not always driven by company-specific news alone.`;
+  }
+
+  if (newsScore.tone === "red" && trend === "Bearish trend") {
+    return `${source} is drawing attention to a development that fits into an already softer backdrop for ${symbol}. The key question is whether the latest headline adds fresh pressure or simply extends an already weak setup.`;
+  }
+
+  if (newsScore.tone === "green" && trend === "Bullish trend") {
+    return `${source} is highlighting a development that may support an already stronger backdrop for ${symbol}. In this kind of setup, traders usually watch for follow-through rather than assuming the headline alone changes everything.`;
+  }
+
+  return `${source} is drawing attention to a recent development around ${symbol}. Traders will usually care most about whether the stock shows real follow-through after the market has time to digest the headline.`;
+}
+
+function buildWhyItMatters(item: NewsItem, symbol: string, trend: string, newsScore: NewsScoreResult) {
+  const lower = item.title.toLowerCase();
+
+  if (keywordHits(lower, ["earnings", "results", "revenue", "guidance", "quarter"])) {
+    return `Quarterly updates can reset expectations quickly, so even one earnings-related headline can change how investors frame ${symbol} in the near term.`;
+  }
+
+  if (keywordHits(lower, ["upgrade", "downgrade", "price target", "analyst"])) {
+    return `Analyst calls can shift attention fast, but they usually matter more when price action starts confirming the same message.`;
+  }
+
+  if (keywordHits(lower, ["delivery", "deliveries", "production", "factory", "supply"])) {
+    return `Execution headlines matter because investors want proof that the business story is holding up in real operations, not just in market hype.`;
+  }
+
+  if (keywordHits(lower, ["lawsuit", "probe", "investigation", "recall"])) {
+    return `Risk headlines can weigh on sentiment because uncertainty often stays in the stock until the market sees the issue is contained.`;
+  }
+
+  if (keywordHits(lower, ["ai", "chip", "product", "launch", "software"])) {
+    return `Product and theme headlines matter when traders are trying to decide whether a stock still has a strong reason to stay in focus.`;
+  }
+
+  if (keywordHits(lower, ["market", "sector", "fed", "rates", "tariff"])) {
+    return `Sometimes a stock reacts more to the environment around it than to company-specific news, so broader context can matter more than one isolated headline.`;
+  }
+
+  if (newsScore.tone === "green" && trend === "Bullish trend") {
+    return `The headline matters more when the chart is already supportive, because news and price structure are pulling in the same direction.`;
+  }
+
+  if (newsScore.tone === "red" && trend === "Bearish trend") {
+    return `The headline matters more when the chart is already weak, because bad news has less technical support underneath it.`;
+  }
+
+  return `This matters mainly because traders now watch whether the chart absorbs the headline calmly or starts to break in response.`;
+}
+function isLowValueNewsItem(item: NewsItem) {
+  const title = item.title.toLowerCase();
+  const source = (item.source ?? "").toLowerCase();
+
+  const lowValuePatterns = [
+    "stock price",
+    "current price",
+    "live price",
+    "price chart",
+    "quote today",
+    "stock quote",
+    "company profile",
+    "market cap",
+    "forecast 2025",
+    "forecast 2026",
+    "forecast 2030",
+    "buy sell hold",
+    "prediction",
+    "how to buy",
+    "review",
+    "price prediction",
+    "current chart",
+  ];
+
+  const lowValueSources = [
+    "financialcontent",
+    "capital.com",
+  ];
+
+  if (lowValuePatterns.some((pattern) => title.includes(pattern))) {
+    return true;
+  }
+
+  if (
+    lowValueSources.includes(source) &&
+    !keywordHits(title, [
+      "earnings",
+      "revenue",
+      "guidance",
+      "analyst",
+      "upgrade",
+      "downgrade",
+      "price target",
+      "delivery",
+      "deliveries",
+      "production",
+      "lawsuit",
+      "investigation",
+      "recall",
+      "partnership",
+      "launch",
+      "insider",
+      "sec",
+    ])
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function scoreNewsItem(item: NewsItem) {
+  const title = item.title.toLowerCase();
+  const source = (item.source ?? "").toLowerCase();
+  let score = 0;
+
+  const strongSignals = [
+    "earnings",
+    "results",
+    "revenue",
+    "guidance",
+    "quarter",
+    "analyst",
+    "upgrade",
+    "downgrade",
+    "price target",
+    "delivery",
+    "deliveries",
+    "production",
+    "factory",
+    "supply",
+    "recall",
+    "investigation",
+    "lawsuit",
+    "probe",
+    "launch",
+    "partnership",
+    "acquisition",
+    "margin",
+    "forecast",
+    "insider",
+    "sec",
+    "tariff",
+    "fed",
+    "regulation",
+    "robotaxi",
+    "autonomous",
+  ];
+
+  const weakSignals = [
+    "stock price",
+    "current price",
+    "live price",
+    "price chart",
+    "quote today",
+    "stock quote",
+    "company profile",
+    "market cap",
+    "prediction",
+    "buy sell hold",
+    "how to buy",
+    "review",
+  ];
+
+  for (const term of strongSignals) {
+    if (title.includes(term)) {
+      score += 3;
+    }
+  }
+
+  for (const term of weakSignals) {
+    if (title.includes(term)) {
+      score -= 4;
+    }
+  }
+
+  if (item.description && item.description.trim().length > 80) {
+    score += 1;
+  }
+
+  if (source.includes("reuters")) score += 3;
+  if (source.includes("barron")) score += 2;
+  if (source.includes("marketwatch")) score += 2;
+  if (source.includes("stock titan")) score += 2;
+  if (source.includes("financialcontent")) score -= 2;
+  if (source.includes("capital.com")) score -= 2;
+
+  const pubTime = item.pubDate ? new Date(item.pubDate).getTime() : 0;
+  if (pubTime) {
+    const ageHours = (Date.now() - pubTime) / (1000 * 60 * 60);
+    if (ageHours <= 24) score += 3;
+    else if (ageHours <= 72) score += 2;
+    else if (ageHours <= 168) score += 1;
+  }
+
+  return score;
+}
+
+function buildWhatItMeans(args: {
+  symbol: string;
+  trend: string;
+  newsScore: NewsScoreResult;
+  rsi: number | null;
+  priceVs50: number | null;
+}) {
+  const { symbol, trend, newsScore, rsi, priceVs50 } = args;
+  const lines: string[] = [];
+
+  if (newsScore.tone === "green" && trend === "Bullish trend") {
+    lines.push(
+      `${symbol} has a cleaner backdrop when positive headlines are landing into an already supportive chart, because the news and the structure are pointing in the same direction.`
+    );
+  } else if (newsScore.tone === "green") {
+    lines.push(
+      `The recent headline flow for ${symbol} looks better than the chart structure, so traders may now watch for stronger price confirmation rather than assuming the story has already fully improved.`
+    );
+  } else if (newsScore.tone === "red" && trend === "Bearish trend") {
+    lines.push(
+      `${symbol} looks more vulnerable when weaker headlines arrive into an already soft chart, because negative news has less technical support underneath it.`
+    );
+  } else if (newsScore.tone === "red") {
+    lines.push(
+      `The chart may still be holding up better than the recent headline tone, but traders will watch whether weaker coverage starts damaging support or simply gets absorbed.`
+    );
+  } else {
+    lines.push(
+      `${symbol} currently sits in a more mixed zone where headline tone alone is unlikely to settle the next move without clearer price confirmation.`
+    );
+  }
+
+  if (typeof rsi === "number" && rsi >= 70) {
+    lines.push(
+      `Momentum already looks warm, so even strong news may lead to pause-and-hold behaviour before the next cleaner move higher.`
+    );
+  } else if (typeof rsi === "number" && rsi <= 35) {
+    lines.push(
+      `Momentum is softer, which means modestly better news could matter more than usual if traders start looking for stabilisation or rebound attempts.`
+    );
+  }
+
+  if (typeof priceVs50 === "number" && priceVs50 >= 10) {
+    lines.push(
+      `Because ${symbol} is already stretched above the 50-day average, the next bullish step often depends on support holding rather than on endless excitement.`
+    );
+  } else if (typeof priceVs50 === "number" && priceVs50 <= -10) {
+    lines.push(
+      `Because ${symbol} is trading well below the 50-day average, stronger headlines may first need to repair damage before the market treats them as a fresh uptrend signal.`
+    );
+  }
+
+  return lines.slice(0, 3);
+}
+
+function buildBeyondHeadline(args: {
+  symbol: string;
+  newsScore: NewsScoreResult;
+  trend: string;
+  recentHigh: number | null;
+  recentLow: number | null;
+}) {
+  const { symbol, newsScore, trend, recentHigh, recentLow } = args;
+
+  if (newsScore.tone === "red" && trend !== "Bearish trend") {
+    return `The outside-the-box read for ${symbol} is that apparently bad news does not always become lasting damage. If price keeps holding above important structure despite weaker headlines, that can mean some fear was already priced in or that stronger hands are still supporting the stock.`;
+  }
+
+  if (newsScore.tone === "green" && trend === "Bearish trend") {
+    return `The outside-the-box read for ${symbol} is that good news can still disappoint if the chart remains weak. Traders often want to see reclaim attempts and better price behaviour before assuming the headlines have truly changed the bigger trend.`;
+  }
+
+  if (typeof recentHigh === "number" && typeof recentLow === "number") {
+    return `${symbol} may not need perfect headlines to improve. Sometimes the more important clue is whether the stock stops making lower lows near ${formatMoney(
+      recentLow
+    )} and starts building toward resistance near ${formatMoney(
+      recentHigh
+    )}. That kind of behaviour can quietly matter more than a dramatic headline.`;
+  }
+
+  return `The deeper read for ${symbol} is that headlines often matter most when they confirm or challenge the chart at a key moment. Good news is most useful when it attracts follow-through. Bad news is most dangerous when support is already fragile.`;
+}
+
+function buildTechnicalRead(args: {
+  symbol: string;
+  price: number | null;
+  ma50: number | null;
+  ma200: number | null;
+  trend: string;
+  rsi: number | null;
+  priceVs50: number | null;
+  priceVs200: number | null;
+}) {
+  const { symbol, price, ma50, ma200, trend, rsi, priceVs50, priceVs200 } = args;
+
+  const trendText =
+    trend === "Bullish trend"
+      ? `${symbol} is trading in a stronger trend structure, with price holding above the shorter and longer trend references.`
+      : trend === "Bearish trend"
+      ? `${symbol} is trading in a weaker trend structure, with price still sitting below key trend references.`
+      : `${symbol} is not giving a fully clean trend read right now, which makes the quality of follow-through especially important.`;
+
+  let momentumText =
+    "Momentum is not especially stretched right now, so price behaviour around fresh headlines may matter more than an extreme oscillator reading.";
+
+  if (typeof rsi === "number" && rsi >= 70) {
+    momentumText =
+      "Momentum looks hot rather than calm, which can support strength but also raises the chance of chop, pause, or pullback after fast gains.";
+  } else if (typeof rsi === "number" && rsi <= 30) {
+    momentumText =
+      "Momentum looks washed out rather than strong, which can create rebound interest but does not by itself prove a durable reversal.";
+  }
+
+  const levelText = `Last price is ${formatMoney(price)}, versus MA50 at ${formatMoney(
+    ma50
+  )} and MA200 at ${formatMoney(ma200)}. Relative to those reference points, ${symbol} is ${formatPercent(
+    priceVs50
+  )} vs MA50 and ${formatPercent(priceVs200)} vs MA200.`;
+
+  return {
+    trendText,
+    momentumText,
+    levelText,
   };
 }
 
-function tradingViewHref(symbol: string) {
-  return `/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`;
+function structuredNews(news: NewsItem[], summaryByTitle: Record<string, string>) {
+  return news.map((item) => ({
+    "@type": "NewsArticle",
+    headline: item.title,
+    datePublished: item.pubDate,
+    description: summaryByTitle[item.title] ?? item.description ?? undefined,
+    publisher: {
+      "@type": "Organization",
+      name: compactSource(item.source),
+    },
+  }));
 }
 
-export default function InsightPostClient({
-  post,
-  snapshot,
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { symbol } = await params;
+  const upper = symbol.toUpperCase();
+
+  return {
+    title: `${upper} Stock News, Summary & Analysis | MyStockHarbor`,
+      description: `Read ${upper} stock news with beginner-friendly summaries, headline tone, earnings context and technical analysis on MyStockHarbor.`,
+    alternates: {
+      canonical: `https://www.mystockharbor.com/stock/${upper}/news`,
+    },
+    openGraph: {
+      title: `${upper} Stock News & Analysis | MyStockHarbor`,
+      description: `Latest ${upper} stock news with beginner-friendly summaries, earnings context and chart-based analysis.`,
+      url: `https://www.mystockharbor.com/stock/${upper}/news`,
+      siteName: "MyStockHarbor",
+      type: "article",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${upper} Stock News & Analysis | MyStockHarbor`,
+      description: `Latest ${upper} stock headlines with simple summaries and chart context.`,
+    },
+  };
+}
+
+async function DetailedNewsAiSection({
+  aiData,
+  symbol,
+  companyName,
+  trend,
+  newsScore,
+  detailedNews,
+  compactNews,
 }: {
-  post: InsightPostData;
-  snapshot: InsightSnapshot | null;
+  aiData: Awaited<ReturnType<typeof getStockNewsAiData>>;
+  symbol: string;
+  companyName: string;
+  trend: string;
+  newsScore: NewsScoreResult;
+  detailedNews: NewsItem[];
+  compactNews: NewsItem[];
 }) {
-  const symbol = post.symbol?.toUpperCase() ?? snapshot?.symbol?.toUpperCase() ?? "";
-
-  const insightTag = useMemo(
-    () => inferInsightTag(post.title, post.excerpt, post.contentHtml),
-    [post.title, post.excerpt, post.contentHtml]
-  );
-
-  const dailyChartPoints: Point[] = Array.isArray(snapshot?.chartPoints)
-    ? snapshot.chartPoints
-    : [];
-
-  const chartPoints = useMemo(
-    () =>
-      post.timeframe === "w"
-        ? aggregateToWeekly(dailyChartPoints)
-        : dailyChartPoints,
-    [dailyChartPoints, post.timeframe]
-  );
-
-  const closes = useMemo(() => chartPoints.map((p) => p.close), [chartPoints]);
-  const ma50 = useMemo(() => movingAverage(closes, 50), [closes]);
-  const ma200 = useMemo(() => movingAverage(closes, 200), [closes]);
-  const ema20 = useMemo(() => ema(closes, 20), [closes]);
-  const boll = useMemo(() => bollinger(closes, 20, 2), [closes]);
-  const rsi14 = useMemo(() => rsiWilder(closes, 14), [closes]);
-  const macdValues = useMemo(() => macd(closes, 12, 26, 9), [closes]);
-  const vwma20 = useMemo(
-    () => vwma(chartPoints.map((p) => p.close), chartPoints.map((p) => p.volume), 20),
-    [chartPoints]
-  );
-  const stoch = useMemo(() => stochastic(chartPoints, 14, 3), [chartPoints]);
-  const atr14 = useMemo(() => atr(chartPoints, 14), [chartPoints]);
-
-  const selectedIndicators = useMemo<Overlay[]>(() => {
-    const normalized = normalizeInsightIndicators(post.chartIndicators);
-    return normalized.length ? normalized : ["MA50", "MA200"];
-  }, [post.chartIndicators]);
-
-  const focusedOverlay = useMemo(
-    () => getFocusedOverlay(selectedIndicators),
-    [selectedIndicators]
-  );
-
-  const chartBars = post.chartBars ?? (post.timeframe === "w" ? 104 : 240);
-  const chartStart = Math.max(0, chartPoints.length - chartBars);
-
-  const chartSlice = chartPoints.slice(chartStart);
-  const ma50Slice = ma50.slice(chartStart);
-  const ma200Slice = ma200.slice(chartStart);
-  const ema20Slice = ema20.slice(chartStart);
-  const bollUpperSlice = boll.upper.slice(chartStart);
-  const bollMidSlice = boll.mid.slice(chartStart);
-  const bollLowerSlice = boll.lower.slice(chartStart);
-  const rsi14Slice = rsi14.slice(chartStart);
-  const macdLineSlice = macdValues.line.slice(chartStart);
-  const macdSignalSlice = macdValues.signal.slice(chartStart);
-  const macdHistSlice = macdValues.hist.slice(chartStart);
-  const vwma20Slice = vwma20.slice(chartStart);
-  const stochKSlice = stoch.k.slice(chartStart);
-  const stochDSlice = stoch.d.slice(chartStart);
-  const atr14Slice = atr14.slice(chartStart);
-  const volumeSlice = chartPoints.slice(chartStart).map((p) =>
-    typeof p.volume === "number" && Number.isFinite(p.volume) ? p.volume : null
-  );
-
-  const hasSnapshot = Boolean(snapshot && chartPoints.length >= 2);
-
-  const companyName = snapshot?.companyName ?? "";
-  const lastPrice = typeof snapshot?.price === "number"
-    ? snapshot.price
-    : chartPoints.length
-    ? chartPoints[chartPoints.length - 1]?.close ?? null
-    : null;
-  const trend = snapshot?.trend ?? (symbol ? "Archived snapshot" : "Article");
-
-  const lastChartMA50 = ma50.length ? ma50[ma50.length - 1] : null;
-  const lastChartMA200 = ma200.length ? ma200[ma200.length - 1] : null;
-
-  const lastMA50 =
-    post.timeframe === "w"
-      ? lastChartMA50
-      : snapshot?.lastMA50 ?? lastChartMA50;
-
-  const lastMA200 =
-    post.timeframe === "w"
-      ? lastChartMA200
-      : snapshot?.lastMA200 ?? lastChartMA200;
-
-  const lastWeeklyMA200 = post.timeframe === "d" ? snapshot?.lastWeeklyMA200 : null;
-
-  const ma50Pct =
-    typeof lastPrice === "number" && typeof lastMA50 === "number" && lastPrice !== 0
-      ? ((lastMA50 - lastPrice) / lastPrice) * 100
-      : null;
-
-  const ma200Pct =
-    typeof lastPrice === "number" && typeof lastMA200 === "number" && lastPrice !== 0
-      ? ((lastMA200 - lastPrice) / lastPrice) * 100
-      : null;
-
-  const weeklyMA200Pct =
-    post.timeframe === "d"
-      ? snapshot?.weeklyMA200Pct ?? null
-      : null;
-  
-    const maSpreadPct =
-    typeof lastMA50 === "number" && typeof lastMA200 === "number" && lastMA200 !== 0
-      ? ((lastMA50 - lastMA200) / lastMA200) * 100
-      : null;
-
-  const timeframeLabel = post.timeframe === "w" ? "Weekly" : "Daily";
-  const showWeeklyMA200Card = post.timeframe === "d";
-
-  const snapshotDateText =
-    snapshot?.snapshotDate && snapshot?.snapshotTime
-      ? `${snapshot.snapshotDate} ${snapshot.snapshotTime}`
-      : snapshot?.snapshotDate
-      ? snapshot.snapshotDate
-      : post.date
-      ? `Snapshot from ${post.date}`
-      : "Archived snapshot";
-
-    const overallBreakdown =
-    post.overallBreakdown ||
-    post.excerpt ||
-    "This insight is focused on the current chart structure and the key decision point for traders.";
-
-  const latestNews =
-    post.latestNews ||
-    "No specific recent news catalyst was included in this insight. Treat the move as chart-led unless the article states otherwise.";
-
-  const latestEarnings =
-    post.latestEarnings ||
-    "No specific earnings update was included in this insight. Check the latest company filings or earnings release before making an investment decision.";
-
-  const investorUsefulInfo =
-    post.investorUsefulInfo ||
-    "The key investor question is whether price action confirms the thesis or starts to invalidate the setup.";
 
   return (
+    <section style={editorialCardStyle}>
+      <div style={sectionEyebrowStyle}>Latest briefing</div>
+      <h2 style={sectionTitleStyle}>What’s happening with {symbol}</h2>
+
+      <div style={{ display: "grid", gap: 14, marginTop: 16 }}>
+        {detailedNews.length ? (
+          detailedNews.map((item, index) => {
+            const aiBrief = aiData.aiBriefs[index];
+            const hasAi =
+              !!aiBrief?.summary?.trim() && !!aiBrief?.whyItMatters?.trim();
+
+            return (
+              <article
+                key={`${item.link}-${index}`}
+                style={{
+                  ...newsLeadCardStyle,
+                  borderLeft:
+                    index === 0
+                      ? "3px solid rgba(59,130,246,0.75)"
+                      : "3px solid rgba(255,255,255,0.08)",
+                }}
+              >
+                <div style={newsMetaRowStyle}>
+                  <span style={newsSourcePillStyle}>{compactSource(item.source)}</span>
+                  <span style={newsDateStyle}>{formatDate(item.pubDate)}</span>
+                </div>
+
+                <h3 style={newsHeadlineStyle}>{item.title}</h3>
+
+                <p style={newsSummaryStyle}>
+                  {hasAi
+                    ? aiBrief!.summary
+                    : buildNewsSummary(item, symbol, trend, newsScore)}
+                </p>
+
+                <div style={whyItMattersBoxStyle}>
+                  <div style={whyItMattersLabelStyle}>Why this matters</div>
+                  <div style={whyItMattersTextStyle}>
+                    {hasAi
+                      ? aiBrief!.whyItMatters
+                      : buildWhyItMatters(item, symbol, trend, newsScore)}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    ...sourceFooterStyle,
+                    display: "flex",
+                    alignItems: "flex-end",
+                    justifyContent: "space-between",
+                    gap: 12,
+                  }}
+                >
+                  <span>
+                    Paraphrased on-page brief based on the headline and available source
+                    context. Source noted for context: {compactSource(item.source)}
+                  </span>
+
+                  <span
+                    style={{
+                      fontSize: 10,
+                      opacity: 0.22,
+                      fontWeight: 700,
+                      letterSpacing: "0.08em",
+                      flex: "0 0 auto",
+                    }}
+                  >
+                    {hasAi ? "1" : "0"}
+                  </span>
+                </div>
+              </article>
+            );
+          })
+        ) : (
+          <div style={newsLeadCardStyle}>
+            <h3 style={{ ...newsHeadlineStyle, marginTop: 0 }}>No fresh headline set available</h3>
+            <p style={newsSummaryStyle}>
+              This page still works as a stock-news analysis hub, but the current news feed
+              is light. In that case, the page leans more on structure, levels, and what
+              traders may watch next.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {compactNews.length ? (
+        <div style={{ marginTop: 16 }}>
+          <div style={compactFeedLabelStyle}>Older updates drop into a lighter feed</div>
+
+          <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+            {compactNews.map((item, index) => (
+              <article
+                key={`${item.link}-compact-${index}`}
+                className="compactNewsRow"
+                style={compactNewsRowStyle}
+              >
+                <div style={{ minWidth: 88 }}>
+                  <div style={compactSourceStyle}>{compactSource(item.source)}</div>
+                  <div style={compactDateStyle}>{formatDate(item.pubDate)}</div>
+                </div>
+
+                <div style={{ minWidth: 0 }}>
+                  <div style={compactHeadlineStyle}>{item.title}</div>
+                </div>
+
+                <div style={compactMutedStyle}>On-page summary only</div>
+              </article>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+async function InsightAiCard({
+  aiData,
+  symbol,
+  companyName,
+  trend,
+  newsScore,
+  earningsScore,
+  lastRsi,
+  priceVs50,
+  priceVs200,
+  recentHigh,
+  recentLow,
+  detailedNews,
+  fallbackBeyondHeadline,
+}: {
+  aiData: Awaited<ReturnType<typeof getStockNewsAiData>>;
+  symbol: string;
+  companyName: string;
+  trend: string;
+  newsScore: NewsScoreResult;
+  earningsScore: { score: number; label: string; tone: ScoreTone; reason: string };
+  lastRsi: number | null;
+  priceVs50: number | null;
+  priceVs200: number | null;
+  recentHigh: number | null;
+  recentLow: number | null;
+  detailedNews: NewsItem[];
+  fallbackBeyondHeadline: string;
+}) {
+
+  const displayBeyondHeadline = aiData.aiInsight?.beyondHeadline?.trim()
+    ? aiData.aiInsight.beyondHeadline
+    : fallbackBeyondHeadline;
+
+  const hasAiInsight =
+    !!aiData.aiInsight?.beyondHeadline?.trim() &&
+    Array.isArray(aiData.aiInsight?.whatItMeans) &&
+    aiData.aiInsight.whatItMeans.length > 0;
+
+  return (
+    <section style={{ ...featuredInsightShellStyle, position: "relative" }}>
+      <div style={sectionEyebrowStyle}>Beyond the headline</div>
+      <h2 style={sectionTitleStyle}>A deeper look for beginners</h2>
+      <p style={bodyCopyStyle}>{displayBeyondHeadline}</p>
+
+      <div
+        style={{
+          position: "absolute",
+          right: 16,
+          bottom: 14,
+          fontSize: 10,
+          opacity: 0.18,
+          fontWeight: 700,
+          letterSpacing: "0.08em",
+        }}
+      >
+        {hasAiInsight ? "1" : "0"}
+      </div>
+    </section>
+  );
+}
+
+async function GoingForwardAiCard({
+  aiData,
+  symbol,
+  companyName,
+  trend,
+  newsScore,
+  earningsScore,
+  lastRsi,
+  priceVs50,
+  priceVs200,
+  recentHigh,
+  recentLow,
+  detailedNews,
+  fallbackWhatItMeans,
+}: {
+  aiData: Awaited<ReturnType<typeof getStockNewsAiData>>;
+  symbol: string;
+  companyName: string;
+  trend: string;
+  newsScore: NewsScoreResult;
+  earningsScore: { score: number; label: string; tone: ScoreTone; reason: string };
+  lastRsi: number | null;
+  priceVs50: number | null;
+  priceVs200: number | null;
+  recentHigh: number | null;
+  recentLow: number | null;
+  detailedNews: NewsItem[];
+  fallbackWhatItMeans: string[];
+}) {
+
+  const displayWhatItMeans =
+    aiData.aiInsight?.whatItMeans?.length
+      ? aiData.aiInsight.whatItMeans
+      : fallbackWhatItMeans;
+
+  const hasAiInsight =
+    !!aiData.aiInsight?.beyondHeadline?.trim() &&
+    Array.isArray(aiData.aiInsight?.whatItMeans) &&
+    aiData.aiInsight.whatItMeans.length > 0;
+
+  return (
+    <section style={{ ...sidebarCardStyle, position: "relative" }}>
+      <div style={sectionEyebrowStyle}>What this could mean</div>
+      <h2 style={sectionTitleSmallStyle}>Going Forward</h2>
+
+      <div style={{ display: "grid", gap: 12, marginTop: 14 }}>
+        {displayWhatItMeans.map((line) => (
+          <div key={line} style={bulletRowStyle}>
+            <div style={bulletDotStyle} />
+            <div style={bulletTextStyle}>{line}</div>
+          </div>
+        ))}
+      </div>
+
+      <div
+        style={{
+          position: "absolute",
+          right: 16,
+          bottom: 14,
+          fontSize: 10,
+          opacity: 0.18,
+          fontWeight: 700,
+          letterSpacing: "0.08em",
+        }}
+      >
+        {hasAiInsight ? "1" : "0"}
+      </div>
+    </section>
+  );
+}
+
+function loadingBarStyle(width: string): CSSProperties {
+  return {
+    width,
+    height: 12,
+    borderRadius: 999,
+    background: "rgba(30,41,59,0.9)",
+  };
+}
+
+function loadingParagraphStyle(widths: string[]) {
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      {widths.map((width, index) => (
+       <div
+  key={`${width}-${index}`}
+  className="shimmer"
+  style={loadingBarStyle(width)}
+/>
+      ))}
+    </div>
+  );
+}
+
+function DetailedNewsFallback({
+  symbol,
+  detailedNews,
+  compactNews,
+}: {
+  symbol: string;
+  detailedNews: NewsItem[];
+  compactNews: NewsItem[];
+}) {
+  return (
+    <section style={editorialCardStyle}>
+      <div style={sectionEyebrowStyle}>Latest briefing</div>
+      <h2 style={sectionTitleStyle}>What’s happening with {symbol}</h2>
+
+      <div style={{ display: "grid", gap: 14, marginTop: 16 }}>
+        {detailedNews.length ? (
+          detailedNews.map((item, index) => (
+            <article
+              key={`${item.link}-${index}`}
+              style={{
+                ...newsLeadCardStyle,
+                borderLeft:
+                  index === 0
+                    ? "3px solid rgba(59,130,246,0.75)"
+                    : "3px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              <div style={newsMetaRowStyle}>
+                <span style={newsSourcePillStyle}>{compactSource(item.source)}</span>
+                <span style={newsDateStyle}>{formatDate(item.pubDate)}</span>
+              </div>
+
+              <h3 style={newsHeadlineStyle}>{item.title}</h3>
+
+              <div style={{ marginTop: 12 }}>
+                {loadingParagraphStyle(["94%", "88%", "61%"])}
+              </div>
+
+              <div style={whyItMattersBoxStyle}>
+                <div style={whyItMattersLabelStyle}>Why this matters</div>
+                <div style={{ marginTop: 10 }}>
+                  {loadingParagraphStyle(["92%", "72%"])}
+                </div>
+              </div>
+
+              <div style={sourceFooterStyle}>
+                Paraphrased on-page brief is loading…
+              </div>
+            </article>
+          ))
+        ) : (
+          <div style={newsLeadCardStyle}>
+            <h3 style={{ ...newsHeadlineStyle, marginTop: 0 }}>No fresh headline set available</h3>
+            <p style={newsSummaryStyle}>
+              This page still works as a stock-news analysis hub, but the current news feed
+              is light. In that case, the page leans more on structure, levels, and what
+              traders may watch next.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {compactNews.length ? (
+        <div style={{ marginTop: 16 }}>
+          <div style={compactFeedLabelStyle}>Older updates drop into a lighter feed</div>
+
+          <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+            {compactNews.map((item, index) => (
+              <article
+                key={`${item.link}-compact-${index}`}
+                className="compactNewsRow"
+                style={compactNewsRowStyle}
+              >
+                <div style={{ minWidth: 88 }}>
+                  <div style={compactSourceStyle}>{compactSource(item.source)}</div>
+                  <div style={compactDateStyle}>{formatDate(item.pubDate)}</div>
+                </div>
+
+                <div style={{ minWidth: 0 }}>
+                  <div style={compactHeadlineStyle}>{item.title}</div>
+                </div>
+
+                <div style={compactMutedStyle}>On-page summary only</div>
+              </article>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function InsightFallbackCard() {
+  return (
+    <section style={{ ...featuredInsightShellStyle, position: "relative" }}>
+      <div style={sectionEyebrowStyle}>Beyond the headline</div>
+      <h2 style={sectionTitleStyle}>A deeper look for beginners</h2>
+      <div style={{ marginTop: 16 }}>
+        {loadingParagraphStyle(["96%", "90%", "86%", "68%"])}
+      </div>
+    </section>
+  );
+}
+
+function GoingForwardFallbackCard() {
+  return (
+    <section style={{ ...sidebarCardStyle, position: "relative" }}>
+      <div style={sectionEyebrowStyle}>What this could mean</div>
+      <h2 style={sectionTitleSmallStyle}>Going Forward</h2>
+
+      <div style={{ display: "grid", gap: 12, marginTop: 14 }}>
+        {[1, 2, 3].map((item) => (
+          <div key={item} style={bulletRowStyle}>
+            <div style={bulletDotStyle} />
+            <div style={{ display: "grid", gap: 8 }}>
+              <div style={loadingBarStyle(item === 1 ? "92%" : item === 2 ? "86%" : "78%")} />
+              <div style={loadingBarStyle(item === 1 ? "76%" : item === 2 ? "68%" : "62%")} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export default async function StockNewsPage({ params }: Props) {
+  const { symbol } = await params;
+  const upper = symbol.toUpperCase();
+
+  const newsData = await getStockNewsBaseData(upper, {
+    maxDetailedItems: 3,
+  });
+
+  const {
+    quote,
+    history,
+    companyName,
+    news,
+    trend,
+    lastClose,
+    lastMA50,
+    lastMA200,
+    lastRsi,
+       isInvalidTicker,
+    isDataUnavailable,
+    priceVs50,
+    priceVs200,
+    recentHigh,
+    recentLow,
+    newsScore,
+    earningsScore,
+    detailedNews,
+    compactNews,
+  } = newsData;
+
+  const leadSummary = buildLeadSummary({
+    symbol: upper,
+    companyName,
+    trend,
+    newsScore,
+    earningsScore,
+  });
+
+  const whatItMeans = buildWhatItMeans({
+    symbol: upper,
+    trend,
+    newsScore,
+    rsi: lastRsi,
+    priceVs50,
+  });
+
+  const beyondHeadline = buildBeyondHeadline({
+    symbol: upper,
+    newsScore,
+    trend,
+    recentHigh,
+    recentLow,
+  });
+
+  const technicalRead = buildTechnicalRead({
+    symbol: upper,
+    price: quote?.price ?? lastClose,
+    ma50: lastMA50,
+    ma200: lastMA200,
+    trend,
+    rsi: lastRsi,
+    priceVs50,
+    priceVs200,
+  });
+
+  const displayBeyondHeadline = beyondHeadline;
+  const displayWhatItMeans = whatItMeans;
+
+  const summaryByTitle = Object.fromEntries(
+    detailedNews.map((item) => [item.title, item.description ?? ""])
+  );
+
+  const aiData = await getStockNewsAiData(
+    {
+      symbol: upper,
+      companyName,
+      quote: null,
+      history: [],
+      news: [],
+      trend,
+      lastClose: null,
+      lastMA50: null,
+      lastMA200: null,
+      lastRsi,
+      priceVs50,
+      priceVs200,
+      recentHigh,
+      recentLow,
+      isInvalidTicker,
+      isDataUnavailable,
+      newsScore,
+      earningsScore,
+      rankedNews: detailedNews,
+      detailedNews,
+      compactNews,
+    },
+    { includeInsight: true }
+  );
+
+  return (
+    
     <main
       style={{
         minHeight: "100vh",
         background:
-          "radial-gradient(circle at top left, rgba(37,99,235,0.18), transparent 24%), radial-gradient(circle at top right, rgba(34,197,94,0.10), transparent 24%), #06080d",
+          "radial-gradient(circle at top left, rgba(37,99,235,0.18), transparent 22%), radial-gradient(circle at top right, rgba(34,197,94,0.10), transparent 22%), #06080d",
         color: "#f1f5f9",
         fontFamily: "system-ui, Arial",
       }}
     >
-      <div className="wrap">
-        <div
-          className="insightTopActions"
-          style={{
-            display: "grid",
-            gridTemplateColumns: symbol ? "repeat(2, minmax(0, 1fr))" : "1fr",
-            gap: 10,
-            marginBottom: 16,
-          }}
-        >
-          <Link href="/insights" style={topLinkStyle("blue")}>
-            ← Back to Insights
-          </Link>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@graph": [
+              {
+                "@type": "Organization",
+                "@id": "https://www.mystockharbor.com/#organization",
+                name: "MyStockHarbor",
+                url: "https://www.mystockharbor.com",
+                logo: {
+                  "@type": "ImageObject",
+                  url: "https://www.mystockharbor.com/logo.png",
+                },
+              },
+              {
+                "@type": "WebSite",
+                "@id": "https://www.mystockharbor.com/#website",
+                name: "MyStockHarbor",
+                url: "https://www.mystockharbor.com",
+                publisher: {
+                  "@id": "https://www.mystockharbor.com/#organization",
+                },
+              },
+              {
+                "@type": "WebPage",
+                "@id": `https://www.mystockharbor.com/stock/${encodeURIComponent(upper)}/news#webpage`,
+                url: `https://www.mystockharbor.com/stock/${encodeURIComponent(upper)}/news`,
+                name: `${upper} Stock News, Summary & Analysis | MyStockHarbor`,
+                description: leadSummary,
+                isPartOf: {
+                  "@id": "https://www.mystockharbor.com/#website",
+                },
+                about: {
+                  "@id": `https://www.mystockharbor.com/stock/${encodeURIComponent(upper)}#financialproduct`,
+                },
+                breadcrumb: {
+                  "@id": `https://www.mystockharbor.com/stock/${encodeURIComponent(upper)}/news#breadcrumb`,
+                },
+                mainEntity: {
+                  "@id": `https://www.mystockharbor.com/stock/${encodeURIComponent(upper)}/news#collection`,
+                },
+              },
+              {
+                "@type": "CollectionPage",
+                "@id": `https://www.mystockharbor.com/stock/${encodeURIComponent(upper)}/news#collection`,
+                url: `https://www.mystockharbor.com/stock/${encodeURIComponent(upper)}/news`,
+                name: `${upper} Stock News`,
+                description: `Latest ${upper} stock news with beginner-friendly summaries, news score, earnings tone and technical context.`,
+                isPartOf: {
+                  "@id": "https://www.mystockharbor.com/#website",
+                },
+                about: {
+                  "@id": `https://www.mystockharbor.com/stock/${encodeURIComponent(upper)}#financialproduct`,
+                },
+                hasPart: structuredNews(news, summaryByTitle),
+              },
+              {
+                "@type": "BreadcrumbList",
+                "@id": `https://www.mystockharbor.com/stock/${encodeURIComponent(upper)}/news#breadcrumb`,
+                itemListElement: [
+                  {
+                    "@type": "ListItem",
+                    position: 1,
+                    name: "Home",
+                    item: "https://www.mystockharbor.com/",
+                  },
+                  {
+                    "@type": "ListItem",
+                    position: 2,
+                    name: `${upper} Stock Analysis`,
+                    item: `https://www.mystockharbor.com/stock/${encodeURIComponent(upper)}`,
+                  },
+                  {
+                    "@type": "ListItem",
+                    position: 3,
+                    name: `${upper} Stock News`,
+                    item: `https://www.mystockharbor.com/stock/${encodeURIComponent(upper)}/news`,
+                  },
+                ],
+              },
+            ],
+          }),
+        }}
+      />
 
-          {symbol ? (
-            <Link href={`/stock/${symbol}`} style={topLinkStyle("gold")}>
-              {symbol} Stock Page →
+      <div className="newsWrap">
+        <div className="newsTopUtilityRow" style={topUtilityRowStyle}>
+          <div className="newsTopUtilityInner" style={topUtilityInnerStyle}>
+            <Link
+              href={`/?symbol=${encodeURIComponent(upper)}`}
+              className="newsTopBtn"
+              style={topUtilityBtnStyle("gold")}
+            >
+              📈 Dashboard
             </Link>
-          ) : null}
+
+            <Link
+              href="/platforms"
+              className="newsTopBtn"
+              style={topUtilityBtnStyle("green")}
+            >
+              🏦 Platforms
+            </Link>
+
+            <Link
+              href="/pickers"
+              className="newsTopBtn"
+              style={topUtilityBtnStyle("red")}
+            >
+              📊 Stock Pickers
+            </Link>
+
+            <Link
+              href="/learn"
+              className="newsTopBtn"
+              style={topUtilityBtnStyle("blue")}
+            >
+              📘 Learn
+            </Link>
+          </div>
         </div>
 
-        <section
-          style={{
-            border: "1px solid rgba(59,130,246,0.24)",
-            borderRadius: 22,
-            padding: 20,
-            background:
-              "linear-gradient(135deg, rgba(10,16,32,0.98), rgba(7,11,22,0.98))",
-            boxShadow:
-              "inset 0 1px 0 rgba(255,255,255,0.05), 0 14px 34px rgba(0,0,0,0.30)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              flexWrap: "wrap",
-              marginBottom: 12,
-            }}
-          >
-            {symbol ? (
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  padding: "7px 12px",
-                  borderRadius: 999,
-                  background:
-                    "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
-                  border: "1px solid rgba(59,130,246,0.32)",
-                  color: "#dbeafe",
-                  fontWeight: 950,
-                  letterSpacing: "0.08em",
-                  fontSize: 12,
-                  textTransform: "uppercase",
-                }}
-              >
-                {symbol}
-              </div>
-            ) : null}
+        <section className="newsHeroShell" style={heroShellStyle}>
+          <div className="newsHeroLeft" style={heroLeftStyle}>
+            <div style={newsDeskTagStyle}>NEWS DESK</div>
+
+            <h1 className="newsHeroTitle" style={heroTitleStyle}>
+              {upper} Stock News, News Score & What It Could Mean
+            </h1>
+
+            <p className="newsHeroLead" style={heroLeadStyle}>
+              {leadSummary}
+            </p>
 
             <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                padding: "7px 12px",
-                borderRadius: 999,
-                background: insightTag.bg,
-                border: `1px solid ${insightTag.border}`,
-                color: insightTag.color,
-                fontWeight: 900,
-                fontSize: 12,
-                letterSpacing: "0.05em",
-                textTransform: "uppercase",
-              }}
-            >
-              {insightTag.label}
-            </div>
-            <div
-              className="insightTimeframePill"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                padding: "7px 12px",
-                borderRadius: 999,
-                background: "rgba(255,255,255,0.06)",
-                border: "1px solid rgba(255,255,255,0.12)",
-                color: "#e2e8f0",
-                fontWeight: 900,
-                fontSize: 12,
-                letterSpacing: "0.05em",
-                textTransform: "uppercase",
-              }}
-            >
-              <span className="insightTimeframeDesktop">{timeframeLabel} Chart</span>
-              <span className="insightTimeframeMobile">{post.timeframe === "w" ? "W.Chart" : "D.Chart"}</span>
-            </div>
-
-<div
-  className="insightMetaRows"
   style={{
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    flexWrap: "wrap",
+    marginTop: 18,
+    padding: "14px 16px",
+    borderRadius: 14,
+    border: "1px solid rgba(59,130,246,0.25)",
+    background:
+      "linear-gradient(135deg, rgba(59,130,246,0.10), rgba(8,18,30,0.92))",
+    fontSize: 14,
+    lineHeight: 1.6,
+    color: "#e5e7eb",
+    maxWidth: 620,
   }}
 >
-  {snapshot?.snapshotDate ? (
-    <div
-      className="insightMetaGroup insightMetaSnapshot"
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        flexWrap: "wrap",
-      }}
-    >
-      <span
+  <strong style={{ color: "#93c5fd" }}>HEADLINE TAKE:</strong>{" "}
+  {newsScore.reason}
+</div>
+
+            <StockNewsTickerJump currentSymbol={upper} />
+
+            <div className="newsHeroCtaRow" style={heroCtaRowStyle}>
+              <a
+                href={`/api/go/tradingview?symbol=${encodeURIComponent(upper)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="newsHeroBtn"
+                style={heroPrimaryCtaStyle}
+              >
+                OPEN ON TRADINGVIEW ↗
+              </a>
+
+              <Link
+                href="/platforms"
+                className="newsHeroBtn"
+                style={heroSecondaryCtaStyle}
+              >
+                TRADE THIS STOCK
+              </Link>
+            </div>
+
+            <div className="newsHeroSubCopy" style={heroSubCopyStyle}>
+              Full chart, indicators and drawing tools on TradingView. Move to Platforms when you
+              are ready to act.
+            </div>
+          </div>
+
+          <div className="newsHeroRight" style={heroRightStyle}>
+            <div style={scorePanelStyle(newsScore.tone)}>
+              <NewsScoreGauge newsScore={newsScore} />
+            </div>
+
+            <div style={miniScoreGridStyle}>
+              <div style={miniScoreCardStyle(earningsScore.tone)}>
+                <div style={miniScoreTitleStyle}>Earnings Tone</div>
+                <div style={miniScoreNumberStyle}>{earningsScore.score}</div>
+                <div style={miniScoreLabelStyle}>{earningsScore.label}</div>
+              </div>
+
+              <div style={miniScoreCardStyle(newsScore.tone)}>
+                <div style={miniScoreTitleStyle}>Confidence</div>
+                <div style={miniScoreNumberStyle}>{newsScore.confidence}</div>
+                <div style={miniScoreLabelStyle}>Headline depth</div>
+              </div>
+            </div>
+                        <div style={miniScoreGridStyle}>
+              <div style={heroMetricStyle}>
+                <div style={heroMetricLabelStyle}>Last Price</div>
+                <div style={heroMetricValueStyle}>
+                  {isDataUnavailable
+                    ? "DATA UNAVAILABLE"
+                    : formatMoney(quote?.price ?? lastClose)}
+                </div>
+              </div>
+
+              <div style={heroMetricStyle}>
+                <div style={heroMetricLabelStyle}>Trend Context</div>
+                <div style={heroMetricValueStyle}>{trend}</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="newsGrid" style={newsGridStyle}>
+          <div className="newsMainColumn" style={{ display: "grid", gap: 18 }}>
+            <Suspense
+              fallback={
+                <DetailedNewsFallback
+                  symbol={upper}
+                  detailedNews={detailedNews}
+                  compactNews={compactNews}
+                />
+              }
+            >
+              <DetailedNewsAiSection
+                aiData={aiData}
+                symbol={upper}
+                companyName={companyName}
+                trend={trend}
+                newsScore={newsScore}
+                detailedNews={detailedNews}
+                compactNews={compactNews}
+              />
+            </Suspense>
+
+            <Suspense
+              fallback={<InsightFallbackCard />}
+            >
+              <InsightAiCard
+                aiData={aiData}
+                symbol={upper}
+                companyName={companyName}
+                trend={trend}
+                newsScore={newsScore}
+                earningsScore={earningsScore}
+                lastRsi={lastRsi}
+                priceVs50={priceVs50}
+                priceVs200={priceVs200}
+                recentHigh={recentHigh}
+                recentLow={recentLow}
+                detailedNews={detailedNews}
+                fallbackBeyondHeadline={displayBeyondHeadline}
+              />
+            </Suspense>
+          </div>
+
+             <aside className="newsSidebar" style={{ display: "grid", gap: 18 }}>
+            <section style={sidebarCardStyle}>
+              <div style={sectionEyebrowStyle}>Why the score looks like this</div>
+              <h2 style={sectionTitleSmallStyle}>News Score Breakdown</h2>
+
+              <p style={bodyCopyStyle}>{newsScore.reason}</p>
+
+              <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
+                <div style={signalBoxStyle("green")}>
+                  <div style={signalBoxTitleStyle}>Positive drivers</div>
+                  {newsScore.positives.length ? (
+                    newsScore.positives.map((item) => (
+                      <div key={item} style={signalBoxItemStyle}>
+                        {item}
+                      </div>
+                    ))
+                  ) : (
+                    <div style={signalBoxEmptyStyle}>No strong positive driver stood out in the latest higher-value headlines.</div>
+                  )}
+                </div>
+
+                <div style={signalBoxStyle("red")}>
+                  <div style={signalBoxTitleStyle}>Negative drivers</div>
+                  {newsScore.negatives.length ? (
+                    newsScore.negatives.map((item) => (
+                      <div key={item} style={signalBoxItemStyle}>
+                        {item}
+                      </div>
+                    ))
+                  ) : (
+                    <div style={signalBoxEmptyStyle}>No strong negative driver stood out in the latest higher-value headlines.</div>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            <Suspense
+              fallback={<GoingForwardFallbackCard />}
+            >
+              <GoingForwardAiCard
+                aiData={aiData}
+                symbol={upper}
+                companyName={companyName}
+                trend={trend}
+                newsScore={newsScore}
+                earningsScore={earningsScore}
+                lastRsi={lastRsi}
+                priceVs50={priceVs50}
+                priceVs200={priceVs200}
+                recentHigh={recentHigh}
+                recentLow={recentLow}
+                detailedNews={detailedNews}
+                fallbackWhatItMeans={displayWhatItMeans}
+              />
+            </Suspense>
+
+            <section style={sidebarCardStyle}>
+              <div style={sectionEyebrowStyle}>Chart context</div>
+              <h2 style={sectionTitleSmallStyle}>Technical Picture</h2>
+
+              <div style={{ display: "grid", gap: 14, marginTop: 14 }}>
+                <p style={bodyCopyStyle}>{technicalRead.trendText}</p>
+                <p style={bodyCopyStyle}>{technicalRead.momentumText}</p>
+                <p style={bodyCopyStyle}>{technicalRead.levelText}</p>
+              </div>
+            </section>
+          </aside>
+        </section>
+
+        <section className="newsBottomStrip" style={bottomStripStyle}>
+          <div>
+            <div style={bottomStripTitleStyle}>Continue your {upper} research</div>
+            <div style={bottomStripTextStyle}>
+              Use the stock analysis page for a fuller technical read, open TradingView for charting,
+              or head to Platforms when you are ready to place a trade.
+            </div>
+          </div>
+
+          <div className="newsBottomActions" style={bottomStripActionsStyle}> 
+            <Link href={`/stock/${encodeURIComponent(upper)}`} style={bottomActionStyle("blue")}>
+              Stock Analysis
+            </Link>
+
+            <a
+              href={`/api/go/tradingview?symbol=${encodeURIComponent(upper)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={bottomActionStyle("green")}
+            >
+              OPEN ON TRADINGVIEW ↗
+            </a>
+
+            <Link href="/platforms" style={bottomActionStyle("red")}>
+              TRADE THIS STOCK
+            </Link>
+          </div>
+        </section>
+      </div>
+
+
+      <style>{`
+        .newsWrap {
+          max-width: 1240px;
+          margin: 0 auto;
+          padding: 24px 40px 42px;
+        }
+
+        .newsGrid {
+          display: grid;
+          grid-template-columns: minmax(0, 1.22fr) minmax(320px, 0.78fr);
+          gap: 22px;
+          margin-top: 22px;
+          align-items: start;
+        }
+
+        .newsHeroShell {
+          display: grid;
+          grid-template-columns: minmax(0, 1.24fr) minmax(280px, 0.76fr);
+          gap: 18px;
+        }
+
+        .newsHeroTitle {
+          margin: 14px 0 0 0;
+          max-width: 760px;
+          word-break: break-word;
+        }
+
+        .newsHeroLead {
+          margin: 14px 0 0 0;
+          max-width: 780px;
+        }
+
+        .newsHeroMetricRow {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 12px;
+          margin-top: 18px;
+        }
+
+        .newsHeroCtaRow {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 12px;
+          margin-top: 18px;
+        }
+
+        .newsBottomStrip {
+          display: flex;
+          justify-content: space-between;
+          gap: 16px;
+          flex-wrap: wrap;
+          align-items: center;
+        }
+
+        .compactNewsRow {
+          display: grid;
+          grid-template-columns: 88px minmax(0, 1fr) 120px;
+          gap: 12px;
+          align-items: start;
+        }
+
+        @media (max-width: 1180px) {
+          .newsWrap {
+            padding: 22px 24px 38px;
+          }
+
+          .newsHeroShell {
+            grid-template-columns: 1fr !important;
+          }
+
+          .newsGrid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+
+        @media (max-width: 820px) {
+          .newsWrap {
+            padding: 18px 16px 32px;
+          }
+
+          .newsTopUtilityRow {
+            justify-content: stretch !important;
+          }
+
+          .newsTopUtilityInner {
+            width: 100%;
+            justify-content: stretch !important;
+            gap: 10px !important;
+          }
+
+          .newsTopBtn {
+            flex: 1 1 calc(50% - 5px);
+            justify-content: center !important;
+            min-height: 44px !important;
+            padding: 11px 12px !important;
+            font-size: 13px !important;
+          }
+
+          .newsHeroTitle {
+            font-size: 34px !important;
+            line-height: 1.06 !important;
+            letter-spacing: -0.045em !important;
+          }
+
+          .newsHeroLead {
+            font-size: 15px !important;
+            line-height: 1.7 !important;
+          }
+
+          .newsHeroMetricRow {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+
+          .newsHeroCtaRow {
+            flex-direction: column !important;
+            align-items: stretch !important;
+          }
+
+          .newsHeroBtn {
+            width: 100%;
+            justify-content: center !important;
+          }
+
+          .newsBottomStrip {
+            flex-direction: column !important;
+            align-items: stretch !important;
+          }
+
+          .newsBottomActions {
+            width: 100%;
+          }
+        }
+
+        @media (max-width: 560px) {
+          .newsWrap {
+            padding: 14px 12px 26px;
+          }
+
+          .newsTopUtilityInner {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            width: 100%;
+          }
+
+          .newsTopBtn {
+            width: 100%;
+            min-width: 0;
+          }
+
+          .newsHeroShell {
+            grid-template-columns: 1fr !important;
+            border-radius: 22px !important;
+            padding: 16px !important;
+          }
+
+          .newsHeroTitle {
+            font-size: 28px !important;
+            line-height: 1.08 !important;
+            letter-spacing: -0.035em !important;
+          }
+
+          .newsHeroLead {
+            font-size: 14px !important;
+            line-height: 1.65 !important;
+          }
+
+          .newsHeroMetricRow {
+            grid-template-columns: 1fr !important;
+          }
+
+          .compactNewsRow {
+            grid-template-columns: 1fr !important;
+          }
+
+          .newsBottomActions {
+            display: grid !important;
+            grid-template-columns: 1fr !important;
+            width: 100%;
+          }
+
+          .newsBottomActions a {
+            width: 100%;
+            justify-content: center !important;
+          }
+
+          .newsMainColumn,
+          .newsSidebar {
+            min-width: 0;
+          }
+
+          .newsSidebar section,
+          .newsMainColumn section,
+          .compactNewsRow,
+          .newsHeroRight > div,
+          .newsHeroMetricRow > div {
+            min-width: 0;
+          }
+        }
+      @keyframes shimmer {
+  0% {
+    background-position: -400px 0;
+  }
+  100% {
+    background-position: 400px 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(30,41,59,0.9) 0%,
+    rgba(71,85,105,0.55) 50%,
+    rgba(30,41,59,0.9) 100%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite linear;
+}
+
+`}</style>
+
+
+      
+    </main>
+  );
+}
+
+const topUtilityRowStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "flex-end",
+  alignItems: "center",
+  marginBottom: 18,
+};
+
+const topUtilityInnerStyle: CSSProperties = {
+  display: "flex",
+  gap: 12,
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
+};
+
+const heroShellStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1.24fr) minmax(280px, 0.76fr)",
+  gap: 18,
+  border: "1px solid rgba(255,255,255,0.09)",
+  borderRadius: 28,
+  padding: 22,
+  background:
+    "linear-gradient(135deg, rgba(10,16,32,0.98), rgba(6,9,15,0.98))",
+  boxShadow:
+    "inset 0 1px 0 rgba(255,255,255,0.05), 0 20px 54px rgba(0,0,0,0.36)",
+};
+
+const heroLeftStyle: CSSProperties = {
+  minWidth: 0,
+};
+
+const heroRightStyle: CSSProperties = {
+  display: "grid",
+  gap: 14,
+  alignContent: "start",
+};
+
+const newsDeskTagStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid rgba(59,130,246,0.28)",
+  background: "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.08))",
+  color: "#dbeafe",
+  fontSize: 12,
+  fontWeight: 950,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+};
+
+const heroTitleStyle: CSSProperties = {
+  margin: "14px 0 0 0",
+  fontSize: 44,
+  lineHeight: 1.02,
+  letterSpacing: "-0.055em",
+  maxWidth: 760,
+};
+
+const heroLeadStyle: CSSProperties = {
+  margin: "14px 0 0 0",
+  maxWidth: 780,
+  fontSize: 16,
+  lineHeight: 1.75,
+  color: "rgba(241,245,249,0.82)",
+};
+
+const heroMetricRowStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gap: 12,
+  marginTop: 18,
+};
+
+const heroMetricStyle: CSSProperties = {
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 16,
+  padding: 14,
+  background: "rgba(255,255,255,0.03)",
+};
+
+const heroMetricLabelStyle: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+  color: "rgba(191,219,254,0.86)",
+};
+
+const heroMetricValueStyle: CSSProperties = {
+  marginTop: 8,
+  fontSize: 24,
+  lineHeight: 1.08,
+  fontWeight: 950,
+  letterSpacing: "-0.04em",
+  color: "#f8fafc",
+};
+
+const heroCtaRowStyle: CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 12,
+  marginTop: 18,
+};
+
+const heroPrimaryCtaStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 46,
+  padding: "12px 16px",
+  borderRadius: 14,
+  border: "1px solid rgba(59,130,246,0.34)",
+  background: "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
+  color: "#dbeafe",
+  textDecoration: "none",
+  fontWeight: 900,
+  fontSize: 13,
+  letterSpacing: "0.04em",
+};
+
+const heroSecondaryCtaStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 46,
+  padding: "12px 16px",
+  borderRadius: 14,
+  border: "1px solid rgba(34,197,94,0.30)",
+  background: "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))",
+  color: "#dcfce7",
+  textDecoration: "none",
+  fontWeight: 900,
+  fontSize: 13,
+  letterSpacing: "0.04em",
+};
+
+const heroSubCopyStyle: CSSProperties = {
+  marginTop: 10,
+  fontSize: 13,
+  lineHeight: 1.6,
+  color: "rgba(241,245,249,0.62)",
+};
+
+function scorePanelStyle(tone: ScoreTone): CSSProperties {
+  if (tone === "green") {
+    return {
+      border: "1px solid rgba(34,197,94,0.26)",
+      borderRadius: 20,
+      padding: 18,
+      background: "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(7,16,12,0.96))",
+    };
+  }
+
+  if (tone === "red") {
+    return {
+      border: "1px solid rgba(248,113,113,0.24)",
+      borderRadius: 20,
+      padding: 18,
+      background: "linear-gradient(135deg, rgba(248,113,113,0.16), rgba(18,10,10,0.96))",
+    };
+  }
+
+  return {
+    border: "1px solid rgba(250,204,21,0.24)",
+    borderRadius: 20,
+    padding: 18,
+    background: "linear-gradient(135deg, rgba(250,204,21,0.14), rgba(18,16,8,0.96))",
+  };
+}
+
+const scorePanelKickerStyle: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 950,
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+  color: "rgba(255,255,255,0.76)",
+};
+
+
+function newsGaugeColour(tone: ScoreTone) {
+  if (tone === "green") return "#22c55e";
+  if (tone === "red") return "#ef4444";
+  return "#eab308";
+}
+
+function NewsScoreGauge({ newsScore }: { newsScore: NewsScoreResult }) {
+  const safeScore = Math.max(0, Math.min(100, newsScore.score));
+  const colour = newsGaugeColour(newsScore.tone);
+  const markerX = 24 + (192 * safeScore) / 100;
+  const markerY = 122 - Math.sin((safeScore / 100) * Math.PI) * 96;
+
+  return (
+    <div>
+      <div style={scorePanelKickerStyle}>NEWS SCORE</div>
+
+      <div
         style={{
-          display: "inline-flex",
-          alignItems: "center",
-          padding: "6px 10px",
-          borderRadius: 999,
-          background: "rgba(59,130,246,0.10)",
-          border: "1px solid rgba(59,130,246,0.20)",
-          color: "#dbeafe",
-          fontSize: 12,
+          marginTop: 14,
+          position: "relative",
+          minHeight: 178,
+        }}
+      >
+        <svg
+          viewBox="0 0 240 145"
+          role="img"
+          aria-label={`News score ${safeScore} out of 100: ${newsScore.label}`}
+          style={{
+            width: "100%",
+            display: "block",
+            overflow: "visible",
+          }}
+        >
+          <defs>
+            <linearGradient id="newsGaugeWarmGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#ef4444" />
+              <stop offset="48%" stopColor="#eab308" />
+              <stop offset="100%" stopColor="#22c55e" />
+            </linearGradient>
+          </defs>
+
+          <path
+            d="M 24 122 A 96 96 0 0 1 216 122"
+            fill="none"
+            stroke="rgba(148,163,184,0.22)"
+            strokeWidth="22"
+            strokeLinecap="round"
+            pathLength={100}
+          />
+
+          <path
+            d="M 24 122 A 96 96 0 0 1 216 122"
+            fill="none"
+            stroke="url(#newsGaugeWarmGradient)"
+            strokeWidth="22"
+            strokeLinecap="round"
+            strokeDasharray={`${safeScore} 100`}
+            pathLength={100}
+            style={{ filter: `drop-shadow(0 0 10px ${colour}55)` }}
+          />
+
+          <circle
+            cx={markerX}
+            cy={markerY}
+            r="8"
+            fill={colour}
+            stroke="rgba(255,255,255,0.88)"
+            strokeWidth="3"
+            style={{ filter: `drop-shadow(0 0 10px ${colour}88)` }}
+          />
+        </svg>
+
+        <div
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: 18,
+            display: "grid",
+            justifyItems: "center",
+            pointerEvents: "none",
+          }}
+        >
+          <div style={scoreValueStyle}>{safeScore}/100</div>
+          <div style={scoreLabelStyle(newsScore.tone)}>{newsScore.label}</div>
+        </div>
+      </div>
+
+      <div
+        style={{
+          marginTop: 8,
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: 8,
+          fontSize: 11,
           fontWeight: 900,
           letterSpacing: "0.06em",
           textTransform: "uppercase",
         }}
       >
-        Snapshot
-      </span>
-
-      <span
-        style={{
-          fontSize: 14,
-          fontWeight: 700,
-          color: "#cbd5e1",
-        }}
-      >
-        {snapshot?.snapshotDate
-  ? formatPostDate(snapshot.snapshotDate)
-  : snapshotDateText}
-      </span>
-    </div>
-  ) : null}
-
-  <div
-    className="insightMetaGroup insightMetaPublished"
-    style={{
-      display: "flex",
-      alignItems: "center",
-      gap: 8,
-      flexWrap: "wrap",
-    }}
-  >
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        padding: "6px 10px",
-        borderRadius: 999,
-        background: "rgba(255,255,255,0.06)",
-        border: "1px solid rgba(255,255,255,0.12)",
-        color: "#e2e8f0",
-        fontSize: 12,
-        fontWeight: 900,
-        letterSpacing: "0.06em",
-        textTransform: "uppercase",
-      }}
-    >
-      Published
-    </span>
-
-    <span
-      style={{
-        fontSize: 14,
-        fontWeight: 800,
-        color: "#f8fafc",
-      }}
-    >
-      {formatPostDate(post.date)}
-    </span>
-  </div>
-</div>
-          </div>
-
-          <h1
-            className="insightHeroTitle"
-            style={{
-              margin: 0,
-              fontSize: 42,
-              lineHeight: 1.06,
-              letterSpacing: "-0.05em",
-            }}
-          >
-            {post.title}
-          </h1>
-
-          <p
-            className="insightHeroText"
-            style={{
-              marginTop: 12,
-              fontSize: 17,
-              lineHeight: 1.68,
-              opacity: 0.84,
-              maxWidth: 860,
-            }}
-          >
-            {post.excerpt}
-          </p>
-
-          <div className="insightSummaryGrid" style={{ marginTop: 18 }}>
-            <div style={summaryCardStyle}>
-              <div style={miniLabelStyle}>Last price</div>
-              <div
-                className="insightPriceValue"
-                style={{ marginTop: 8, fontWeight: 950 }}
-              >
-                {typeof lastPrice === "number" ? `$${lastPrice.toFixed(2)}` : "—"}
-              </div>
-              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.72 }}>
-{hasSnapshot
-  ? `Snapshot: ${
-      snapshot?.snapshotDate
-        ? formatPostDate(snapshot.snapshotDate)
-        : snapshotDateText
-    }`
-  : symbol
-  ? "Snapshot unavailable"
-  : "No ticker linked"}
-              </div>
-            </div>
-
-            <div style={summaryCardStyle}>
-              <div style={miniLabelStyle}>Trend structure</div>
-              <div
-                className="insightTrendValue"
-                style={{
-                  marginTop: 8,
-                  fontWeight: 950,
-                  color:
-                    trend === "Uptrend"
-                      ? "#22c55e"
-                      : trend === "Downtrend"
-                      ? "#ef4444"
-                      : "#eab308",
-                }}
-              >
-                {trend}
-              </div>
-              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.72 }}>
-                {companyName || (symbol ? `${symbol} archived chart structure` : "Editorial insight")}
-              </div>
-            </div>
-          </div>
-
-          {symbol ? (
-            <section
-              style={{
-                marginTop: 18,
-                border: "1px solid rgba(59,130,246,0.22)",
-                borderRadius: 18,
-                padding: 18,
-                background:
-                  "linear-gradient(180deg, rgba(8,14,28,0.98), rgba(6,10,18,0.98))",
-              }}
-            >
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  padding: "7px 12px",
-                  borderRadius: 999,
-                  background:
-                    "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
-                  border: "1px solid rgba(59,130,246,0.32)",
-                  color: "#dbeafe",
-                  fontWeight: 950,
-                  letterSpacing: "0.08em",
-                  fontSize: 12,
-                }}
-              >
-                CHART SNAPSHOT
-              </div>
-
-              <h2
-                style={{
-                  margin: "14px 0 0 0",
-                  fontSize: 26,
-                  lineHeight: 1.12,
-                  letterSpacing: "-0.03em",
-                }}
-              >
-                {symbol} chart showing {timeframeLabel.toLowerCase()} {formatIndicatorLabel(selectedIndicators)}
-              </h2>
-
-              <p
-                style={{
-                  margin: "10px 0 0 0",
-                  lineHeight: 1.7,
-                  opacity: 0.82,
-                  maxWidth: 820,
-                  fontSize: 15,
-                }}
-              >
-                This {post.timeframe === "w" ? "weekly" : "daily"} chart snapshot is frozen to the original article analysis date, showing the last {chartSlice.length} bars with the indicators chosen for this article.
-              </p>
-
-              {hasSnapshot ? (
-                <div>
-                  <div style={{ marginTop: 16 }}>
-                    <PriceChart
-                      symbol={symbol}
-                      data={chartSlice}
-                      ma50={ma50Slice}
-                      ma200={ma200Slice}
-                      overlay={focusedOverlay}
-                      selectedIndicators={selectedIndicators}
-                      bollUpper={bollUpperSlice}
-                      bollMid={bollMidSlice}
-                      bollLower={bollLowerSlice}
-                      ema20={ema20Slice}
-                      vwma20={vwma20Slice}
-                      rsi14={rsi14Slice}
-                      macdLine={macdLineSlice}
-                      macdSignal={macdSignalSlice}
-                      macdHist={macdHistSlice}
-                      stochK={stochKSlice}
-                      stochD={stochDSlice}
-                      atr14={atr14Slice}
-                      volume={volumeSlice}
-                      height={420}
-                    />
-                  </div>
-
-                  <div
-                    style={{
-                      marginTop: 10,
-                      fontSize: 13,
-                      opacity: 0.72,
-                    }}
-                  >
-                    Snapshot date:{" "}
-{snapshot?.snapshotDate
-  ? formatPostDate(snapshot.snapshotDate)
-  : snapshotDateText}
-                  </div>
-
-                  <div
-                    className="insightChartMetaGrid"
-                    style={{
-                      marginTop: 14,
-                      display: "grid",
-                      gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                      gap: 12,
-                    }}
-                  >
-                    <div className="insightSmallStatCard" style={smallStatCardStyle}>
-                      <div className="insightSmallStatLabel" style={smallStatLabelStyle}>
-                        {timeframeLabel} MA50
-                      </div>
-                      <div className="insightSmallStatValue" style={smallStatValueStyle}>
-                        {typeof lastMA50 === "number" ? `$${lastMA50.toFixed(2)}` : "—"}
-                      </div>
-                      <div className="insightSmallStatMeta" style={smallStatMetaStyle}>
-                        {typeof ma50Pct === "number"
-                          ? `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}% vs price`
-                          : "Distance unavailable"}
-                      </div>
-                    </div>
-
-                    <div className="insightSmallStatCard" style={smallStatCardStyle}>
-                      <div className="insightSmallStatLabel" style={smallStatLabelStyle}>
-                        {timeframeLabel} MA200
-                      </div>
-                      <div className="insightSmallStatValue" style={smallStatValueStyle}>
-                        {typeof lastMA200 === "number" ? `$${lastMA200.toFixed(2)}` : "—"}
-                      </div>
-                      <div className="insightSmallStatMeta" style={smallStatMetaStyle}>
-                        {typeof ma200Pct === "number"
-                          ? `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}% vs price`
-                          : "Distance unavailable"}
-                      </div>
-                    </div>
-
-                    {showWeeklyMA200Card ? (
-                      <div
-                        className="insightSmallStatCard insightDesktopOnlyStat"
-                        style={smallStatCardStyle}
-                      >
-                        <div className="insightSmallStatLabel" style={smallStatLabelStyle}>
-                          Weekly MA200
-                        </div>
-                        <div className="insightSmallStatValue" style={smallStatValueStyle}>
-                          {typeof lastWeeklyMA200 === "number"
-                            ? `$${lastWeeklyMA200.toFixed(2)}`
-                            : "—"}
-                        </div>
-                        <div className="insightSmallStatMeta" style={smallStatMetaStyle}>
-                          {typeof weeklyMA200Pct === "number"
-                            ? `${weeklyMA200Pct >= 0 ? "+" : ""}${weeklyMA200Pct.toFixed(2)}% vs price`
-                            : "Distance unavailable"}
-                        </div>
-                      </div>
-                    ) : (
-                      <div
-                        className="insightSmallStatCard insightDesktopOnlyStat"
-                        style={smallStatCardStyle}
-                      >
-                        <div className="insightSmallStatLabel" style={smallStatLabelStyle}>
-                          MA Spread
-                        </div>
-                        <div className="insightSmallStatValue" style={smallStatValueStyle}>
-                          {typeof maSpreadPct === "number"
-                            ? `${maSpreadPct >= 0 ? "+" : ""}${maSpreadPct.toFixed(2)}%`
-                            : "—"}
-                        </div>
-                        <div className="insightSmallStatMeta" style={smallStatMetaStyle}>
-                          {typeof lastMA50 === "number" && typeof lastMA200 === "number"
-                            ? `${timeframeLabel} MA50 vs ${timeframeLabel} MA200`
-                            : "Spread unavailable"}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div
-                    className="insightChartActions"
-                    style={{
-                      marginTop: 14,
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 12,
-                      alignItems: "center",
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <div
-                      className="insightChartActionsDesktop"
-                      style={{ fontSize: 13, opacity: 0.74 }}
-                    >
-                      This article chart is frozen. Use the links to compare this {post.timeframe === "w" ? "weekly" : "daily"} setup with current data, headlines, or TradingView.
-                    </div>
-
-                    <div
-                      className="insightChartActionsMobile"
-                      style={{ fontSize: 13, opacity: 0.78 }}
-                    >
-                      Quick links for {symbol}
-                    </div>
-
-                    <div
-                      className="insightChartActionsButtons"
-                      style={{
-                        display: "flex",
-                        gap: 10,
-                        alignItems: "center",
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <Link
-                        href={`/stock/${encodeURIComponent(symbol)}`}
-                        className="insightDesktopOnly"
-                        style={chartActionStyle("blue")}
-                      >
-                        Current {symbol} stock page →
-                      </Link>
-
-                      <Link
-                        href={`/stock/${encodeURIComponent(symbol)}/news`}
-                        className="insightDesktopOnly"
-                        style={chartActionStyle("green")}
-                      >
-                        Latest {symbol} headlines →
-                      </Link>
-                    </div>
-
-                    <div className="insightMobileOnlyWrapper">
-                      <Link
-                        href={`/stock/${encodeURIComponent(symbol)}`}
-                        className="insightMobileButton"
-                        style={chartActionStyle("blue")}
-                      >
-                        {symbol} stock page
-                      </Link>
-
-                      <Link
-                        href={`/stock/${encodeURIComponent(symbol)}/news`}
-                        className="insightMobileButton"
-                        style={chartActionStyle("green")}
-                      >
-                        {symbol} headlines
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div style={{ marginTop: 16, opacity: 0.78 }}>
-                  Snapshot data was not saved for this article.
-                </div>
-              )}
-            </section>
-          ) : null}
-
-          <section className="insightArticleLayout">
-            <article className="insightArticleCard">
-              <div
-                className="insightArticleBody"
-                dangerouslySetInnerHTML={{ __html: post.contentHtml }}
-              />
-            </article>
-
-            <aside className="insightSidebar">
-              <section className="insightSideCard insightSideCardFeatured">
-                <div style={miniLabelStyle}>Quick read</div>
-                <h2 className="insightSideTitle">Setup summary</h2>
-
-                <p className="insightSideLead">{overallBreakdown}</p>
-
-                <ul className="insightSideList">
-                  <li>Watch the main level from the article before chasing the move.</li>
-                  <li>Look for price behaviour that confirms demand, not just a single bounce.</li>
-                  <li>Use the chart snapshot as context, then compare it with current price action.</li>
-                </ul>
-              </section>
-
-              <section className="insightSideCard">
-                <div style={miniLabelStyle}>News context</div>
-                <h2 className="insightSideTitle">Latest relevant news</h2>
-                <p className="insightSideText">{latestNews}</p>
-              </section>
-
-              <section className="insightSideCard">
-                <div style={miniLabelStyle}>Earnings context</div>
-                <h2 className="insightSideTitle">Latest earnings read</h2>
-                <p className="insightSideText">{latestEarnings}</p>
-              </section>
-
-              <section className="insightSideCard">
-                <div style={miniLabelStyle}>Investor focus</div>
-                <h2 className="insightSideTitle">What to watch next</h2>
-                <p className="insightSideText">{investorUsefulInfo}</p>
-              </section>
-
-              {symbol ? (
-                <section className="insightSideCard insightSideActionCard">
-                  <div style={miniLabelStyle}>Next step</div>
-                  <div className="insightSideActionGrid">
-                    <Link href={`/stock/${symbol}`} style={ctaStyle("blue")}>
-                      Open {symbol} stock page
-                    </Link>
-
-                    <Link href={`/stock/${symbol}/news`} style={ctaStyle("green")}>
-                      Read latest {symbol} news
-                    </Link>
-                  </div>
-                </section>
-              ) : null}
-            </aside>
-          </section>
-
-        </section>
-
-        {symbol ? (
-          <section className="insightResearchStrip">
-            <div>
-              <div className="insightResearchTitle">Continue with current context</div>
-              <div className="insightResearchText">
-                Use the stock page for the current chart and the news page for the latest live headlines.
-              </div>
-            </div>
-
-            <div className="insightResearchActions">
-              <Link href={`/stock/${symbol}`} style={bottomActionStyle("blue")}>
-                Stock page
-              </Link>
-
-              <Link href={`/stock/${symbol}/news`} style={bottomActionStyle("green")}>
-                Latest news
-              </Link>
-            </div>
-          </section>
-        ) : null}
+        <div style={{ color: "#fca5a5" }}>Bearish</div>
+        <div style={{ color: "#fde68a", textAlign: "center" }}>Neutral</div>
+        <div style={{ color: "#86efac", textAlign: "right" }}>Bullish</div>
       </div>
-      <style>{`
-        .wrap {
-          max-width: 1280px;
-          margin: 0 auto;
-          padding: 28px 20px 44px;
-        }
 
-        .insightSummaryGrid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 14px;
-        }
-
-        .insightExploreGrid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 12px;
-          align-items: stretch;
-        }
-
-        .insightMobileOnlyWrapper {
-          display: none;
-        }
-
-        .insightDesktopOnly {
-          display: inline-flex;
-        }
-
-        .insightDesktopOnlyStat {
-          display: flex;
-        }
-
-        .insightArticleLayout {
-          margin-top: 18px;
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) 360px;
-          gap: 18px;
-          align-items: start;
-        }
-
-        .insightArticleCard {
-          border: 1px solid rgba(255,255,255,0.08);
-          border-radius: 24px;
-          padding: 22px;
-          background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.024));
-          box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
-          min-width: 0;
-        }
-
-        .insightSidebar {
-          position: sticky;
-          top: 18px;
-          display: grid;
-          gap: 14px;
-          min-width: 0;
-        }
-
-        .insightSideCard {
-          border: 1px solid rgba(255,255,255,0.08);
-          border-radius: 20px;
-          padding: 18px;
-          background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02));
-          box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
-        }
-
-        .insightSideCardFeatured {
-          border-color: rgba(59,130,246,0.22);
-          background: linear-gradient(135deg, rgba(59,130,246,0.10), rgba(7,12,22,0.96));
-        }
-
-        .insightSideActionCard {
-          border-color: rgba(34,197,94,0.18);
-        }
-
-        .insightSideTitle {
-          margin: 8px 0 0;
-          font-size: 21px;
-          line-height: 1.12;
-          letter-spacing: -0.03em;
-          color: #f8fafc;
-        }
-
-        .insightSideLead {
-          margin: 12px 0 0;
-          font-size: 15px;
-          line-height: 1.66;
-          color: rgba(241,245,249,0.86);
-        }
-
-        .insightSideText {
-          margin: 12px 0 0;
-          font-size: 14px;
-          line-height: 1.7;
-          color: rgba(241,245,249,0.80);
-        }
-
-        .insightSideList {
-          margin: 14px 0 0;
-          padding-left: 18px;
-          display: grid;
-          gap: 8px;
-          color: rgba(241,245,249,0.78);
-          font-size: 14px;
-          line-height: 1.55;
-        }
-
-        .insightSideList li::marker {
-          color: #60a5fa;
-        }
-
-        .insightSideActionGrid {
-          margin-top: 14px;
-          display: grid;
-          gap: 10px;
-        }
-
-        .insightMobileOnly {
-          display: none;
-        }
-
-        .insightChartActionsDesktop {
-          display: block;
-        }
-
-        .insightChartActionsMobile {
-          display: none;
-        }
-
-        .insightArticleBody {
-          line-height: 1.82;
-          font-size: 16px;
-          color: rgba(229,231,235,0.92);
-        }
-
-        .insightArticleBody h2 {
-          margin: 30px 0 12px;
-          padding-top: 6px;
-          font-size: 27px;
-          line-height: 1.14;
-          letter-spacing: -0.035em;
-          color: #f8fafc;
-        }
-
-        .insightArticleBody h2:first-child {
-          margin-top: 0;
-        }
-
-        .insightArticleBody h3 {
-          margin: 22px 0 8px;
-          font-size: 18px;
-          line-height: 1.25;
-          color: #f8fafc;
-        }
-
-        .insightArticleBody p {
-          margin: 0 0 17px;
-        }
-
-        .insightArticleBody ul {
-          margin: 0 0 18px;
-          padding-left: 22px;
-        }
-
-        .insightArticleBody li {
-          margin-bottom: 8px;
-          line-height: 1.65;
-        }
-
-        .insightArticleBody li::marker {
-          color: #60a5fa;
-        }
-
-        .insightArticleBody strong {
-          color: #f8fafc;
-        }
-
-        .insightArticleBody a {
-          color: #93c5fd;
-          text-decoration-color: rgba(147,197,253,0.38);
-          text-underline-offset: 3px;
-        }
-
-        a:hover {
-          filter: brightness(1.05);
-          transform: translateY(-1px);
-        }
-
-        .insightTimeframeMobile {
-          display: none;
-        }
-
-        .insightTimeframeDesktop {
-          display: inline;
-        }
-
-        .insightResearchStrip {
-          margin-top: 18px;
-          border: 1px solid rgba(255,255,255,0.08);
-          border-radius: 22px;
-          padding: 18px;
-          background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02));
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) auto;
-          gap: 16px;
-          align-items: center;
-        }
-
-        .insightResearchTitle {
-          font-size: 20px;
-          line-height: 1.2;
-          font-weight: 950;
-          letter-spacing: -0.03em;
-        }
-
-        .insightResearchText {
-          margin-top: 6px;
-          font-size: 14px;
-          line-height: 1.6;
-          color: rgba(241,245,249,0.72);
-        }
-
-        .insightResearchActions {
-          display: flex;
-          gap: 10px;
-          flex-wrap: wrap;
-          justify-content: flex-end;
-        }
-
-        @media (min-width: 901px) {
-          .insightPriceValue {
-            font-size: 42px !important;
-            line-height: 1.05 !important;
-          }
-
-          .insightTrendValue {
-            font-size: 36px !important;
-            line-height: 1.05 !important;
-          }
-        }
-
-        @media (max-width: 900px) {
-          .wrap {
-            padding: 18px 16px 34px !important;
-          }
-
-          .insightHeroTitle {
-            font-size: 34px !important;
-            line-height: 1.08 !important;
-          }
-
-          .insightArticleLayout {
-            grid-template-columns: 1fr !important;
-          }
-
-          .insightSidebar {
-            position: static !important;
-          }
-
-          .insightResearchStrip {
-            grid-template-columns: 1fr !important;
-          }
-
-          .insightResearchActions {
-            justify-content: stretch !important;
-          }
-        }
-
-        @media (max-width: 640px) {
-          .wrap {
-            padding-left: 12px !important;
-            padding-right: 12px !important;
-          }
-
-          .insightSummaryGrid {
-            grid-template-columns: 1fr !important;
-          }
-
-          .insightMetaRows {
-            display: flex !important;
-            flex-direction: column !important;
-            align-items: flex-start !important;
-            gap: 6px !important;
-            width: 100%;
-          }
-
-          .insightMetaGroup {
-            display: flex !important;
-            align-items: center !important;
-            gap: 8px !important;
-            flex-wrap: wrap !important;
-            width: 100%;
-          }
-
-          .insightDesktopOnlyPickerCta {
-            display: none !important;
-          }
-
-          .insightMetaSnapshot {
-            order: 1;
-          }
-
-          .insightMetaPublished {
-            order: 2;
-          }
-
-          .insightTimeframeDesktop {
-            display: none !important;
-          }
-
-          .insightTimeframeMobile {
-            display: inline !important;
-          }
-
-          .insightMobileOnlyWrapper {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 10px;
-            width: 100%;
-            align-items: stretch;
-          }
-
-          .insightSmallStatCard {
-            padding: 10px 10px !important;
-            border-radius: 14px !important;
-          }
-
-          .insightSmallStatLabel {
-            margin-bottom: 6px !important;
-            font-size: 11px !important;
-          }
-
-          .insightSmallStatValue {
-            margin-top: 2px !important;
-            font-size: 16px !important;
-          }
-
-          .insightSmallStatMeta {
-            margin-top: 2px !important;
-            font-size: 11px !important;
-            line-height: 1.35 !important;
-          }
-
-          .insightDesktopOnlyStat {
-            display: none !important;
-          }
-
-          .insightPriceValue {
-            font-size: 26px !important;
-          }
-
-          .insightTrendValue {
-            font-size: 22px !important;
-            line-height: 1.1 !important;
-          }
-
-          .insightMobileButton {
-            font-size: 13px !important;
-            padding: 10px 10px !important;
-          }
-
-          .insightHeroTitle {
-            font-size: 30px !important;
-            line-height: 1.1 !important;
-            letter-spacing: -0.04em !important;
-          }
-
-          .insightHeroText {
-            font-size: 15px !important;
-            line-height: 1.6 !important;
-          }
-
-          .insightArticleCard {
-            padding: 16px !important;
-            border-radius: 20px !important;
-          }
-
-          .insightArticleBody h2 {
-            font-size: 22px !important;
-          }
-
-          .insightArticleBody h3 {
-            font-size: 17px !important;
-          }
-
-          .insightTopActions {
-            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-          }
-
-          .insightChartMetaGrid {
-            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-            gap: 10px !important;
-          }
-
-          .insightExploreGrid {
-            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-            gap: 10px !important;
-          }
-
-          .insightChartActions {
-            align-items: stretch !important;
-          }
-
-          .insightChartActionsDesktop {
-            display: none !important;
-          }
-
-          .insightChartActionsMobile {
-            display: block !important;
-            width: 100%;
-          }
-
-          .insightChartActionsButtons {
-            width: 100%;
-            display: flex !important;
-            gap: 10px !important;
-          }
-
-          .insightDesktopOnly {
-            display: none !important;
-          }
-
-          .insightMobileOnly {
-            display: inline-flex !important;
-          }
-
-          .insightResearchActions {
-            display: grid !important;
-            grid-template-columns: 1fr !important;
-          }
-        }
-      `}</style>
-    </main>
+    </div>
   );
 }
 
-function topLinkStyle(tint: "blue" | "gold"): React.CSSProperties {
-  if (tint === "gold") {
-    return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-      minHeight: 42,
-      width: "100%",
-      padding: "9px 12px",
-      borderRadius: 14,
-      border: "1px solid rgba(250,204,21,0.45)",
-      background:
-        "linear-gradient(135deg, rgba(250,204,21,0.20), rgba(202,138,4,0.10))",
-      color: "#fefce8",
-      textDecoration: "none",
-      fontWeight: 900,
-      fontSize: 14,
-      whiteSpace: "nowrap",
-      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-      transition:
-        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-    };
-  }
+const scoreValueStyle: CSSProperties = {
+  marginTop: 8,
+  fontSize: 42,
+  lineHeight: 1,
+  fontWeight: 950,
+  letterSpacing: "-0.06em",
+};
 
+function scoreLabelStyle(tone: ScoreTone): CSSProperties {
   return {
+    marginTop: 8,
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "7px 11px",
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: 900,
+    letterSpacing: "0.06em",
+    textTransform: "uppercase",
+    color:
+      tone === "green"
+        ? "#dcfce7"
+        : tone === "red"
+        ? "#fee2e2"
+        : "#fef3c7",
+    background:
+      tone === "green"
+        ? "rgba(34,197,94,0.18)"
+        : tone === "red"
+        ? "rgba(248,113,113,0.16)"
+        : "rgba(250,204,21,0.14)",
+    border:
+      tone === "green"
+        ? "1px solid rgba(34,197,94,0.28)"
+        : tone === "red"
+        ? "1px solid rgba(248,113,113,0.24)"
+        : "1px solid rgba(250,204,21,0.22)",
+  };
+}
+
+const scoreReasonStyle: CSSProperties = {
+  margin: "12px 0 0 0",
+  fontSize: 14,
+  lineHeight: 1.7,
+  color: "rgba(241,245,249,0.82)",
+};
+
+const miniScoreGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 12,
+};
+
+function miniScoreCardStyle(tone: ScoreTone): CSSProperties {
+  return {
+    border:
+      tone === "green"
+        ? "1px solid rgba(34,197,94,0.22)"
+        : tone === "red"
+        ? "1px solid rgba(248,113,113,0.20)"
+        : "1px solid rgba(255,255,255,0.08)",
+    borderRadius: 16,
+    padding: 14,
+    background: "rgba(255,255,255,0.03)",
+  };
+}
+
+const miniScoreTitleStyle: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+  color: "rgba(241,245,249,0.66)",
+};
+
+const miniScoreNumberStyle: CSSProperties = {
+  marginTop: 8,
+  fontSize: 24,
+  lineHeight: 1.05,
+  fontWeight: 950,
+  letterSpacing: "-0.04em",
+};
+
+const miniScoreLabelStyle: CSSProperties = {
+  marginTop: 6,
+  fontSize: 13,
+  color: "rgba(241,245,249,0.76)",
+};
+
+const newsGridStyle: CSSProperties = {};
+
+const editorialCardStyle: CSSProperties = {
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 24,
+  padding: 20,
+  background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.025))",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+};
+
+const featuredInsightShellStyle: CSSProperties = {
+  border: "1px solid rgba(59,130,246,0.22)",
+  borderRadius: 24,
+  padding: 20,
+  background: "linear-gradient(135deg, rgba(59,130,246,0.10), rgba(7,12,22,0.96))",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+};
+
+const sidebarCardStyle: CSSProperties = {
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 20,
+  padding: 18,
+  background: "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02))",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+};
+
+const sectionEyebrowStyle: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 950,
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+  color: "rgba(147,197,253,0.82)",
+};
+
+const sectionTitleStyle: CSSProperties = {
+  margin: "8px 0 0 0",
+  fontSize: 28,
+  lineHeight: 1.08,
+  letterSpacing: "-0.04em",
+};
+
+const sectionTitleSmallStyle: CSSProperties = {
+  margin: "8px 0 0 0",
+  fontSize: 22,
+  lineHeight: 1.12,
+  letterSpacing: "-0.03em",
+};
+
+const bodyCopyStyle: CSSProperties = {
+  margin: "14px 0 0 0",
+  fontSize: 15,
+  lineHeight: 1.72,
+  color: "rgba(241,245,249,0.82)",
+};
+
+const newsLeadCardStyle: CSSProperties = {
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 16,
+  padding: 16,
+  background: "rgba(255,255,255,0.028)",
+};
+
+const newsMetaRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const newsSourcePillStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "6px 10px",
+  borderRadius: 999,
+  background: "rgba(59,130,246,0.12)",
+  border: "1px solid rgba(59,130,246,0.22)",
+  color: "#dbeafe",
+  fontSize: 12,
+  fontWeight: 800,
+};
+
+const newsDateStyle: CSSProperties = {
+  fontSize: 12,
+  fontWeight: 700,
+  color: "rgba(241,245,249,0.58)",
+};
+
+const newsHeadlineStyle: CSSProperties = {
+  margin: "12px 0 0 0",
+  fontSize: 22,
+  lineHeight: 1.32,
+  letterSpacing: "-0.02em",
+  color: "#f8fafc",
+};
+
+const newsSummaryStyle: CSSProperties = {
+  margin: "10px 0 0 0",
+  fontSize: 15,
+  lineHeight: 1.72,
+  color: "rgba(241,245,249,0.82)",
+};
+
+const whyItMattersBoxStyle: CSSProperties = {
+  marginTop: 14,
+  border: "1px solid rgba(59,130,246,0.16)",
+  borderRadius: 14,
+  padding: 12,
+  background: "linear-gradient(135deg, rgba(59,130,246,0.08), rgba(255,255,255,0.02))",
+};
+
+const whyItMattersLabelStyle: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+  color: "rgba(191,219,254,0.86)",
+};
+
+const whyItMattersTextStyle: CSSProperties = {
+  marginTop: 7,
+  fontSize: 14,
+  lineHeight: 1.65,
+  color: "rgba(241,245,249,0.82)",
+};
+
+const sourceFooterStyle: CSSProperties = {
+  marginTop: 12,
+  fontSize: 12,
+  lineHeight: 1.5,
+  color: "rgba(241,245,249,0.48)",
+};
+
+const compactFeedLabelStyle: CSSProperties = {
+  fontSize: 12,
+  fontWeight: 850,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  color: "rgba(241,245,249,0.56)",
+};
+
+const compactNewsRowStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "88px minmax(0, 1fr) 120px",
+  gap: 12,
+  alignItems: "start",
+  border: "1px solid rgba(255,255,255,0.06)",
+  borderRadius: 14,
+  padding: 12,
+  background: "rgba(255,255,255,0.02)",
+};
+
+const compactSourceStyle: CSSProperties = {
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#dbeafe",
+};
+
+const compactDateStyle: CSSProperties = {
+  marginTop: 4,
+  fontSize: 11,
+  color: "rgba(241,245,249,0.56)",
+};
+
+const compactHeadlineStyle: CSSProperties = {
+  fontSize: 14,
+  lineHeight: 1.55,
+  color: "rgba(241,245,249,0.84)",
+};
+
+const compactMutedStyle: CSSProperties = {
+  fontSize: 11,
+  lineHeight: 1.4,
+  color: "rgba(241,245,249,0.42)",
+  textAlign: "right",
+};
+
+function signalBoxStyle(tone: "green" | "red"): CSSProperties {
+  return {
+    border:
+      tone === "green"
+        ? "1px solid rgba(34,197,94,0.22)"
+        : "1px solid rgba(248,113,113,0.20)",
+    borderRadius: 14,
+    padding: 12,
+    background:
+      tone === "green"
+        ? "rgba(34,197,94,0.06)"
+        : "rgba(248,113,113,0.05)",
+  };
+}
+
+const signalBoxTitleStyle: CSSProperties = {
+  fontSize: 12,
+  fontWeight: 900,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  color: "rgba(241,245,249,0.8)",
+};
+
+const signalBoxItemStyle: CSSProperties = {
+  marginTop: 8,
+  fontSize: 13,
+  lineHeight: 1.55,
+  color: "rgba(241,245,249,0.78)",
+};
+
+const signalBoxEmptyStyle: CSSProperties = {
+  marginTop: 8,
+  fontSize: 13,
+  lineHeight: 1.55,
+  color: "rgba(241,245,249,0.58)",
+};
+
+const bulletRowStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "10px minmax(0, 1fr)",
+  gap: 12,
+  alignItems: "start",
+};
+
+const bulletDotStyle: CSSProperties = {
+  width: 10,
+  height: 10,
+  borderRadius: 999,
+  marginTop: 7,
+  background: "linear-gradient(135deg, #60a5fa, #22c55e)",
+  boxShadow: "0 0 0 4px rgba(59,130,246,0.10)",
+};
+
+const bulletTextStyle: CSSProperties = {
+  fontSize: 15,
+  lineHeight: 1.7,
+  color: "rgba(241,245,249,0.84)",
+};
+
+const bottomStripStyle: CSSProperties = {
+  marginTop: 22,
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 22,
+  padding: 18,
+  background: "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02))",
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 16,
+  flexWrap: "wrap",
+  alignItems: "center",
+};
+
+const bottomStripTitleStyle: CSSProperties = {
+  fontSize: 22,
+  lineHeight: 1.1,
+  fontWeight: 900,
+  letterSpacing: "-0.03em",
+};
+
+const bottomStripTextStyle: CSSProperties = {
+  marginTop: 8,
+  maxWidth: 760,
+  fontSize: 14,
+  lineHeight: 1.65,
+  color: "rgba(241,245,249,0.76)",
+};
+
+const bottomStripActionsStyle: CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 10,
+};
+
+function bottomActionStyle(tone: "blue" | "green" | "red"): CSSProperties {
+  const base: CSSProperties = {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    minHeight: 42,
-    width: "100%",
-    padding: "9px 12px",
-    borderRadius: 14,
-    border: "1px solid rgba(59,130,246,0.45)",
-    background:
-      "linear-gradient(135deg, rgba(59,130,246,0.20), rgba(37,99,235,0.10))",
-    color: "#eff6ff",
+    minHeight: 44,
+    padding: "11px 15px",
+    borderRadius: 999,
     textDecoration: "none",
+    fontSize: 13,
+    fontWeight: 850,
+    lineHeight: 1,
+    whiteSpace: "nowrap",
+  };
+
+  if (tone === "blue") {
+    return {
+      ...base,
+      border: "1px solid rgba(59,130,246,0.24)",
+      background: "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(37,99,235,0.08))",
+      color: "#dbeafe",
+    };
+  }
+
+  if (tone === "green") {
+    return {
+      ...base,
+      border: "1px solid rgba(34,197,94,0.22)",
+      background: "linear-gradient(135deg, rgba(34,197,94,0.14), rgba(21,128,61,0.08))",
+      color: "#dcfce7",
+    };
+  }
+
+  return {
+    ...base,
+    border: "1px solid rgba(248,113,113,0.22)",
+    background: "linear-gradient(135deg, rgba(248,113,113,0.14), rgba(185,28,28,0.08))",
+    color: "#fee2e2",
+  };
+}
+
+function topUtilityBtnStyle(type: "gold" | "green" | "red" | "blue"): CSSProperties {
+  const base: CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    minHeight: 40,
+    padding: "9px 14px",
+    borderRadius: 14,
+    textDecoration: "none",
+    fontSize: 13,
     fontWeight: 900,
-    fontSize: 14,
+    lineHeight: 1,
     whiteSpace: "nowrap",
     boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-    transition:
-      "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
   };
-}
 
-function ctaStyle(
-  tint: "green" | "purple" | "gold" | "blue"
-): React.CSSProperties {
-  if (tint === "green") {
+  if (type === "gold") {
     return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      width: "100%",
-      minWidth: 0,
-      padding: "11px 12px",
-      borderRadius: 12,
-      border: "1px solid rgba(34,197,94,0.32)",
-      background:
-        "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(59,130,246,0.10))",
-      color: "#ecfdf5",
-      textDecoration: "none",
-      fontWeight: 900,
-      textAlign: "center",
-    };
-  }
-
-  if (tint === "purple") {
-    return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      width: "100%",
-      minWidth: 0,
-      padding: "11px 12px",
-      borderRadius: 12,
-      border: "1px solid rgba(168,85,247,0.32)",
-      background:
-        "linear-gradient(135deg, rgba(168,85,247,0.18), rgba(59,130,246,0.10))",
-      color: "#faf5ff",
-      textDecoration: "none",
-      fontWeight: 900,
-      textAlign: "center",
-    };
-  }
-
-  if (tint === "gold") {
-    return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      width: "100%",
-      minWidth: 0,
-      padding: "11px 12px",
-      borderRadius: 12,
-      border: "1px solid rgba(250,204,21,0.32)",
-      background:
-        "linear-gradient(135deg, rgba(250,204,21,0.18), rgba(245,158,11,0.10))",
-      color: "#fefce8",
-      textDecoration: "none",
-      fontWeight: 900,
-      textAlign: "center",
-    };
-  }
-
-  return {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    width: "100%",
-    minWidth: 0,
-    padding: "11px 12px",
-    borderRadius: 12,
-    border: "1px solid rgba(59,130,246,0.32)",
-    background:
-      "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
-    color: "#eff6ff",
-    textDecoration: "none",
-    fontWeight: 900,
-    textAlign: "center",
-  };
-}
-
-function chartActionStyle(
-  tint: "gold" | "green" | "blue" | "picker"
-): React.CSSProperties {
-  if (tint === "gold") {
-    return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: "11px 14px",
-      borderRadius: 14,
+      ...base,
       border: "1px solid rgba(250,204,21,0.34)",
-      background:
-        "linear-gradient(135deg, rgba(250,204,21,0.16), rgba(202,138,4,0.08))",
+      background: "linear-gradient(135deg, rgba(250,204,21,0.18), rgba(202,138,4,0.08))",
       color: "#fef3c7",
-      textDecoration: "none",
-      fontWeight: 900,
-      whiteSpace: "nowrap",
-      minWidth: 0,
-      textAlign: "center",
-      transition:
-        "transform 160ms ease, box-shadow 160ms ease, filter 160ms ease, border-color 160ms ease",
     };
   }
 
-  if (tint === "green") {
+  if (type === "green") {
     return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: "11px 14px",
-      borderRadius: 14,
-      border: "1px solid rgba(34,197,94,0.40)",
-      background:
-        "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(16,185,129,0.10))",
-      color: "#ecfdf5",
-      textDecoration: "none",
-      fontWeight: 900,
-      whiteSpace: "nowrap",
-      minWidth: 0,
-      textAlign: "center",
-      transition:
-        "transform 160ms ease, box-shadow 160ms ease, filter 160ms ease, border-color 160ms ease",
+      ...base,
+      border: "1px solid rgba(34,197,94,0.30)",
+      background: "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))",
+      color: "#dcfce7",
     };
   }
 
-  if (tint === "picker") {
+  if (type === "red") {
     return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: "14px 22px",
-      borderRadius: 16,
-      border: "1px solid rgba(34,197,94,0.56)",
-      background:
-        "linear-gradient(135deg, rgba(34,197,94,0.30), rgba(59,130,246,0.26))",
-      color: "#f8fafc",
-      textDecoration: "none",
-      fontWeight: 950,
-      whiteSpace: "nowrap",
-      minWidth: 0,
-      textAlign: "center",
-      boxShadow:
-        "0 0 0 1px rgba(255,255,255,0.04) inset, 0 10px 28px rgba(34,197,94,0.18)",
-      transition:
-        "transform 160ms ease, box-shadow 160ms ease, filter 160ms ease, border-color 160ms ease",
+      ...base,
+      border: "1px solid rgba(248,113,113,0.28)",
+      background: "linear-gradient(135deg, rgba(248,113,113,0.16), rgba(185,28,28,0.08))",
+      color: "#fee2e2",
     };
   }
 
   return {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "11px 14px",
-    borderRadius: 14,
-    border: "1px solid rgba(59,130,246,0.45)",
-    background:
-      "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(37,99,235,0.12))",
-    color: "#eff6ff",
-    textDecoration: "none",
-    fontWeight: 900,
-    whiteSpace: "nowrap",
-    minWidth: 0,
-    textAlign: "center",
-    transition:
-      "transform 160ms ease, box-shadow 160ms ease, filter 160ms ease, border-color 160ms ease",
-  };
-}
-
-function bottomActionStyle(tint: "blue" | "green"): React.CSSProperties {
-  return {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 42,
-    padding: "10px 14px",
-    borderRadius: 14,
-    border:
-      tint === "green"
-        ? "1px solid rgba(34,197,94,0.30)"
-        : "1px solid rgba(59,130,246,0.34)",
-    background:
-      tint === "green"
-        ? "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))"
-        : "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
-    color: tint === "green" ? "#dcfce7" : "#dbeafe",
-    textDecoration: "none",
-    fontWeight: 900,
-    fontSize: 13,
-    letterSpacing: "0.03em",
-    whiteSpace: "nowrap",
-  };
-}
-
-const summaryCardStyle: React.CSSProperties = {
-  border: "1px solid rgba(255,255,255,0.10)",
-  borderRadius: 18,
-  padding: 18,
-  background: "rgba(255,255,255,0.04)",
-};
-
-const miniLabelStyle: React.CSSProperties = {
-  fontSize: 12,
-  opacity: 0.72,
-  fontWeight: 900,
-  textTransform: "uppercase",
-  letterSpacing: "0.05em",
-};
-
-const smallStatCardStyle: React.CSSProperties = {
-  border: "1px solid rgba(255,255,255,0.10)",
-  borderRadius: 16,
-  padding: 14,
-  background: "rgba(255,255,255,0.04)",
-  display: "flex",
-  flexDirection: "column",
-  justifyContent: "center",
-  minHeight: 0,
-};
-
-const smallStatLabelStyle: React.CSSProperties = {
-  fontSize: 12,
-  opacity: 0.72,
-  marginBottom: 8,
-  fontWeight: 900,
-  textTransform: "uppercase",
-  letterSpacing: "0.05em",
-};
-
-const smallStatValueStyle: React.CSSProperties = {
-  marginTop: 4,
-  fontSize: 22,
-  fontWeight: 900,
-};
-
-const smallStatMetaStyle: React.CSSProperties = {
-  marginTop: 8,
-  fontSize: 13,
-  opacity: 0.72,
-  lineHeight: 1.45,
-};
-function insightSidebarCardStyle(
-  tint: "blue" | "gold" | "green" | "purple"
-): React.CSSProperties {
-  const tintMap = {
-    blue: {
-      border: "rgba(59,130,246,0.24)",
-      background:
-        "linear-gradient(135deg, rgba(59,130,246,0.12), rgba(15,23,42,0.92))",
-    },
-    gold: {
-      border: "rgba(250,204,21,0.24)",
-      background:
-        "linear-gradient(135deg, rgba(250,204,21,0.11), rgba(15,23,42,0.92))",
-    },
-    green: {
-      border: "rgba(34,197,94,0.24)",
-      background:
-        "linear-gradient(135deg, rgba(34,197,94,0.11), rgba(15,23,42,0.92))",
-    },
-    purple: {
-      border: "rgba(168,85,247,0.24)",
-      background:
-        "linear-gradient(135deg, rgba(168,85,247,0.11), rgba(15,23,42,0.92))",
-    },
-  };
-
-  return {
-    border: `1px solid ${tintMap[tint].border}`,
-    borderRadius: 18,
-    padding: 16,
-    background: tintMap[tint].background,
-    boxShadow: "0 12px 28px rgba(0,0,0,0.16)",
+    ...base,
+    border: "1px solid rgba(59,130,246,0.30)",
+    background: "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(37,99,235,0.08))",
+    color: "#dbeafe",
   };
 }
