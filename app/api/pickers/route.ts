@@ -13,6 +13,16 @@ import {
 type Point = {
   date: string;
   close: number;
+  open?: number;
+  high?: number;
+  low?: number;
+  volume?: number;
+};
+
+type PickerChartPoint = {
+  date: string;
+  open?: number;
+  close: number;
   high?: number;
   low?: number;
   volume?: number;
@@ -44,6 +54,7 @@ type PickerItem = {
   timeframe?: "D" | "W" | "M";
   indicator?: "MA200" | "RSI(14)" | "MACD(12,26,9)";
   dashboardHref?: string;
+  chartPoints?: PickerChartPoint[];
   _score?: number;
 };
 
@@ -59,6 +70,7 @@ type PickerSection = {
     timeframe?: "D" | "W" | "M";
     indicator?: "MA200" | "RSI(14)" | "MACD(12,26,9)";
     dashboardHref?: string;
+    chartPoints?: PickerChartPoint[];
   }[];
 };
 
@@ -98,6 +110,7 @@ type SignalRecord = {
   preferredTimeframe?: "D" | "W" | "M";
   preferredIndicator?: "MA200" | "RSI(14)" | "MACD(12,26,9)";
   dashboardHref?: string;
+  chartPoints?: PickerChartPoint[];
 
   isDynamicUniverse?: boolean;
 };
@@ -177,9 +190,9 @@ const CACHE_SECONDS = 60 * 6; // 6 minutes
 const STALE_SECONDS = 60 * 6; // 6 minutes
 const MEMORY_CACHE_MS = 60_000;
 
-const PICKERS_REDIS_KEY = "msh:pickers:v4:main";
+const PICKERS_REDIS_KEY = "msh:pickers:v5:candle-previews";
 const PICKERS_REDIS_TTL_SECONDS = 6 * 60;
-const PICKERS_LOCK_KEY = "msh:pickers:v4:main:lock";
+const PICKERS_LOCK_KEY = "msh:pickers:v5:candle-previews:lock";
 const PICKERS_LOCK_TTL_SECONDS = 120;
 
 /* ------------------------ small util helpers ------------------------ */
@@ -211,6 +224,35 @@ function avg(values: number[]) {
 function pctChange(from: number, to: number) {
   if (!Number.isFinite(from) || !Number.isFinite(to) || from === 0) return 0;
   return ((to - from) / from) * 100;
+}
+
+function buildPickerChartPoints(points: Point[], bars = 56): PickerChartPoint[] {
+  return points
+    .slice(-bars)
+    .map((point, index, arr) => {
+      const fallbackOpen = index > 0 ? arr[index - 1].close : point.close;
+      return {
+        date: point.date,
+        open:
+          typeof point.open === "number" && Number.isFinite(point.open)
+            ? Number(point.open.toFixed(2))
+            : Number(fallbackOpen.toFixed(2)),
+        close: Number(point.close.toFixed(2)),
+        high:
+          typeof point.high === "number" && Number.isFinite(point.high)
+            ? Number(point.high.toFixed(2))
+            : undefined,
+        low:
+          typeof point.low === "number" && Number.isFinite(point.low)
+            ? Number(point.low.toFixed(2))
+            : undefined,
+        volume:
+          typeof point.volume === "number" && Number.isFinite(point.volume)
+            ? point.volume
+            : undefined,
+      };
+    })
+    .filter((point) => point.date && Number.isFinite(point.close));
 }
 
 function buildDashboardHref(args: {
@@ -1358,6 +1400,7 @@ async function fetchHistory(symbol: string, days: number) {
     .map((p) => ({
       date: String(p?.date ?? ""),
       close: Number(p?.close),
+      open: p?.open == null ? undefined : Number(p.open),
       high: p?.high == null ? undefined : Number(p.high),
       low: p?.low == null ? undefined : Number(p.low),
       volume: p?.volume == null ? undefined : Number(p.volume),
@@ -1469,6 +1512,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
           if (!pts.length) return;
 
           const dynamicName = isDynamicUniverse(symbol);
+          const chartPoints = buildPickerChartPoints(pts);
           const comp = buildCompositeFromHistory(pts);
           const trendScore = buildTrendScoreFromHistory(pts);
 
@@ -1481,6 +1525,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
             if (dynamicName && hotSignals > 0) {
               hotDynamicNames.push({
                 symbol,
+                chartPoints,
                 tone: comp.tone,
                 note: `${comp.tag} • ${comp.flagged}/${comp.total} checks`,
                 _score: hotSignals * 100 + comp.flagged * 10 + dynamicBoost(symbol),
@@ -1492,6 +1537,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
           if (oversoldCandidate) {
             green.push({
               symbol,
+              chartPoints,
               tone: "green",
               note: oversoldCandidate.note,
               _score: oversoldCandidate.score + dynamicBoost(symbol),
@@ -1502,6 +1548,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
           if (overboughtCandidate) {
             red.push({
               symbol,
+              chartPoints,
               tone: "red",
               note: overboughtCandidate.note,
               _score: overboughtCandidate.score + dynamicBoost(symbol),
@@ -1521,6 +1568,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
 
             trendLeaders.push({
               symbol,
+              chartPoints,
               tone: trendScore.passed === 4 ? "green" : "yellow",
               note: `${trendScore.passed}/${trendScore.total} trend checks`,
               _score: score,
@@ -1531,6 +1579,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
           if (athPullback) {
             dips.push({
               symbol,
+              chartPoints,
               tone: athPullback.drawdownPct <= 35 ? "yellow" : "orange",
               note: `Down ${athPullback.drawdownPct.toFixed(1)}% from ATH • liquid ${Math.round(liquidityScore(pts))}`,
               _score: athPullback.score + dynamicBoost(symbol),
@@ -1541,6 +1590,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
           if (athBo) {
             athBreakouts.push({
               symbol,
+              chartPoints,
               tone: "orange",
               note: `ATH breakout • ${athBo.breakoutBarsAgo} bars ago`,
               _score: athBo.score + dynamicBoost(symbol),
@@ -1551,6 +1601,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
           if (threeMonthBo) {
             threeMonthBreakouts.push({
               symbol,
+              chartPoints,
               tone: "orange",
               note: `3-month breakout • ${threeMonthBo.breakoutBarsAgo} bars ago`,
               _score: threeMonthBo.score + dynamicBoost(symbol),
@@ -1563,6 +1614,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
 
             ma200Proximity.push({
               symbol,
+              chartPoints,
               tone: dailyMa200Candidate.pctDistance >= 0 ? "yellow" : "orange",
               note: `Near Daily MA200 • ${Math.abs(dailyMa200Candidate.pctDistance).toFixed(1)}% ${side} • deep-under ${dailyMa200Candidate.deepUnderPct.toFixed(0)}%`,
               timeframe: "D",
@@ -1582,6 +1634,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
 
             ma200Proximity.push({
               symbol,
+              chartPoints,
               tone: weeklyMa200Candidate.pctDistance >= 0 ? "yellow" : "orange",
               note: `Near Weekly MA200 • ${Math.abs(weeklyMa200Candidate.pctDistance).toFixed(1)}% ${side} • deep-under ${weeklyMa200Candidate.deepUnderPct.toFixed(0)}%`,
               timeframe: "W",
@@ -1693,6 +1746,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
 
             divergences.push({
               symbol,
+              chartPoints,
               tone: bestDiv.div.kind === "bullish" ? "green" : "red",
               note: `${timeframeLabel} ${bestDiv.div.note} • ${bestDiv.div.priceSwingPct.toFixed(1)}% • ${bestDiv.div.pivotSpanBars} bars`,
               timeframe: bestDiv.timeframe,
@@ -1784,6 +1838,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
 
           signalRecords.push({
             symbol,
+            chartPoints,
             note: comp ? `${comp.flagged}/${comp.total} checks • ${comp.tag}` : undefined,
             tone: comp?.tone,
             oversold,
@@ -1823,14 +1878,17 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
 
   const takeTop = (arr: PickerItem[], n: number) => {
     const sorted = [...arr].sort((a, b) => (b._score ?? 0) - (a._score ?? 0));
-    return sorted.slice(0, n).map(({ symbol, note, tone, timeframe, indicator, dashboardHref }) => ({
-      symbol,
-      note,
-      tone,
-      timeframe,
-      indicator,
-      dashboardHref,
-    }));
+    return sorted
+      .slice(0, n)
+      .map(({ symbol, note, tone, timeframe, indicator, dashboardHref, chartPoints }) => ({
+        symbol,
+        note,
+        tone,
+        timeframe,
+        indicator,
+        dashboardHref,
+        chartPoints,
+      }));
   };
 
   const buildSection = (args: {
