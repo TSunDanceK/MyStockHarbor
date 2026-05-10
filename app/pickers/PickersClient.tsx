@@ -347,6 +347,245 @@ function createEmptySignalRecord(symbol: string, item?: PickerItem): SignalRecor
   };
 }
 
+
+type PlayCardDef = {
+  title: string;
+  subtitle: string;
+  href: string;
+  tone: "green" | "red" | "blue";
+  pattern: "ascending" | "descending" | "bullFlag";
+};
+
+const PLAY_CARDS: PlayCardDef[] = [
+  {
+    title: "Ascending Triangle Plays",
+    subtitle: "Bullish compression setups with flat resistance and rising lows.",
+    href: "/plays",
+    tone: "green",
+    pattern: "ascending",
+  },
+  {
+    title: "Descending Triangle Plays",
+    subtitle: "Bearish compression setups with flat support and lower highs.",
+    href: "/plays/descending-triangles",
+    tone: "red",
+    pattern: "descending",
+  },
+  {
+    title: "Bull Flag Plays",
+    subtitle: "Momentum continuation setups after a sharp impulse and tight flag.",
+    href: "/plays/bull-flags",
+    tone: "blue",
+    pattern: "bullFlag",
+  },
+];
+
+function playTone(tone: PlayCardDef["tone"]) {
+  if (tone === "green") {
+    return {
+      dot: "#22c55e",
+      border: "rgba(34,197,94,0.26)",
+      bg: "linear-gradient(180deg, rgba(8,24,18,0.92), rgba(8,13,22,0.98))",
+      line: "#22c55e",
+      accent: "#60a5fa",
+      buttonBg: "rgba(34,197,94,0.10)",
+      buttonColor: "#dcfce7",
+    };
+  }
+
+  if (tone === "red") {
+    return {
+      dot: "#ef4444",
+      border: "rgba(239,68,68,0.26)",
+      bg: "linear-gradient(180deg, rgba(32,12,18,0.92), rgba(8,13,22,0.98))",
+      line: "#ef4444",
+      accent: "#60a5fa",
+      buttonBg: "rgba(239,68,68,0.10)",
+      buttonColor: "#fecaca",
+    };
+  }
+
+  return {
+    dot: "#60a5fa",
+    border: "rgba(96,165,250,0.26)",
+    bg: "linear-gradient(180deg, rgba(10,18,36,0.94), rgba(8,13,22,0.98))",
+    line: "#60a5fa",
+    accent: "#22c55e",
+    buttonBg: "rgba(59,130,246,0.10)",
+    buttonColor: "#dbeafe",
+  };
+}
+
+function PlayDiagram({ pattern, tone }: { pattern: PlayCardDef["pattern"]; tone: PlayCardDef["tone"] }) {
+  const colors = playTone(tone);
+
+  if (pattern === "descending") {
+    return (
+      <svg viewBox="0 0 320 138" className="playDiagram" role="img" aria-label="Descending triangle diagram">
+        <rect x="0" y="0" width="320" height="138" rx="16" fill="rgba(2,6,23,0.72)" />
+        <path d="M24 104 L64 76 L94 98 L128 64 L164 87 L202 51 L238 72 L292 31" stroke="rgba(226,232,240,0.74)" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M38 110 H286" stroke={colors.line} strokeWidth="3" strokeDasharray="7 7" strokeLinecap="round" />
+        <path d="M52 34 L286 93" stroke={colors.accent} strokeWidth="3" strokeLinecap="round" />
+        <path d="M52 126 V113 M86 126 V111 M120 126 V108 M154 126 V112 M188 126 V108 M222 126 V114 M256 126 V110 M290 126 V116" stroke="rgba(59,130,246,0.30)" strokeWidth="5" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (pattern === "bullFlag") {
+    return (
+      <svg viewBox="0 0 320 138" className="playDiagram" role="img" aria-label="Bull flag diagram">
+        <rect x="0" y="0" width="320" height="138" rx="16" fill="rgba(2,6,23,0.72)" />
+        <path d="M30 108 L56 95 L78 76 L98 38" stroke={colors.accent} strokeWidth="5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M98 38 L140 55 L184 48 L226 64 L270 54" stroke="rgba(226,232,240,0.78)" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M105 31 L276 48" stroke={colors.line} strokeWidth="3" strokeDasharray="7 7" strokeLinecap="round" />
+        <path d="M100 70 L270 88" stroke={colors.line} strokeWidth="3" strokeDasharray="7 7" strokeLinecap="round" />
+        <path d="M270 54 L292 37" stroke="#22c55e" strokeWidth="4" strokeLinecap="round" />
+        <path d="M292 37 l-16 0 M292 37 l-6 15" stroke="#22c55e" strokeWidth="4" strokeLinecap="round" />
+        <path d="M42 126 V111 M76 126 V101 M110 126 V83 M144 126 V101 M178 126 V96 M212 126 V106 M246 126 V101 M280 126 V95" stroke="rgba(59,130,246,0.30)" strokeWidth="5" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 320 138" className="playDiagram" role="img" aria-label="Ascending triangle diagram">
+      <rect x="0" y="0" width="320" height="138" rx="16" fill="rgba(2,6,23,0.72)" />
+      <path d="M26 91 L58 65 L88 82 L122 58 L154 76 L194 50 L230 67 L292 37" stroke="rgba(226,232,240,0.76)" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M52 40 H292" stroke={colors.line} strokeWidth="3" strokeDasharray="7 7" strokeLinecap="round" />
+      <path d="M62 108 L292 52" stroke={colors.accent} strokeWidth="3" strokeLinecap="round" />
+      <path d="M42 126 V108 M76 126 V98 M110 126 V111 M144 126 V100 M178 126 V106 M212 126 V91 M246 126 V98 M280 126 V83" stroke="rgba(59,130,246,0.30)" strokeWidth="5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function PatternPlaysSection() {
+  return (
+    <section
+      className="pattern-plays-panel"
+      style={{
+        border: "1px solid rgba(59,130,246,0.18)",
+        borderRadius: 18,
+        padding: 16,
+        background: "linear-gradient(180deg, rgba(8,13,26,0.98), rgba(6,10,18,1))",
+        boxSizing: "border-box",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 12,
+          alignItems: "flex-end",
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "7px 11px",
+              borderRadius: 999,
+              border: "1px solid rgba(96,165,250,0.28)",
+              background: "rgba(59,130,246,0.10)",
+              color: "#dbeafe",
+              fontSize: 11,
+              fontWeight: 950,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+            }}
+          >
+            Chart pattern plays
+          </div>
+
+          <h2
+            style={{
+              margin: "12px 0 0",
+              fontSize: 25,
+              lineHeight: 1.12,
+              letterSpacing: "-0.035em",
+            }}
+          >
+            Pattern setups that need the chart
+          </h2>
+
+          <p
+            style={{
+              margin: "8px 0 0",
+              maxWidth: 760,
+              color: "rgba(226,232,240,0.74)",
+              fontSize: 14,
+              lineHeight: 1.65,
+            }}
+          >
+            These are visual chart-pattern pages, so the cards below act as quick links
+            into the full play pages rather than simple ticker lists.
+          </p>
+        </div>
+      </div>
+
+      <div className="pattern-plays-grid">
+        {PLAY_CARDS.map((play) => {
+          const colors = playTone(play.tone);
+
+          return (
+            <a
+              key={play.href}
+              href={play.href}
+              className="pattern-play-card"
+              style={{
+                border: `1px solid ${colors.border}`,
+                background: colors.bg,
+                color: "#f8fafc",
+              }}
+            >
+              <PlayDiagram pattern={play.pattern} tone={play.tone} />
+
+              <div className="pattern-play-copy">
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    minWidth: 0,
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 999,
+                      background: colors.dot,
+                      boxShadow: `0 0 14px ${colors.dot}66`,
+                      flex: "0 0 auto",
+                    }}
+                  />
+                  <h3>{play.title}</h3>
+                </div>
+
+                <p>{play.subtitle}</p>
+
+                <span
+                  className="pattern-play-button"
+                  style={{
+                    borderColor: colors.border,
+                    background: colors.buttonBg,
+                    color: colors.buttonColor,
+                  }}
+                >
+                  Open plays →
+                </span>
+              </div>
+            </a>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+
 export default function PickersClient() {
   const SHOW_FORCE_FETCH_BUTTON = false;
 
@@ -942,6 +1181,86 @@ const res = await fetch(`/api/pickers?t=${Date.now()}`, {
     align-items: start;
   }
 
+
+  .pattern-plays-grid {
+    margin-top: 16px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .pattern-play-card {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: 12px;
+    padding: 12px;
+    border-radius: 18px;
+    text-decoration: none;
+    min-width: 0;
+    box-sizing: border-box;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
+    transition: transform 150ms ease, filter 150ms ease, border-color 150ms ease;
+  }
+
+  .pattern-play-card:hover {
+    transform: translateY(-2px);
+    filter: brightness(1.08);
+  }
+
+  .playDiagram {
+    width: 100%;
+    display: block;
+    border-radius: 16px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(2,6,23,0.64);
+  }
+
+  .pattern-play-copy h3 {
+    margin: 0;
+    font-size: 17px;
+    line-height: 1.18;
+    letter-spacing: -0.025em;
+  }
+
+  .pattern-play-copy p {
+    margin: 8px 0 0;
+    color: rgba(226,232,240,0.72);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .pattern-play-button {
+    margin-top: 12px;
+    min-height: 36px;
+    padding: 8px 11px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 11px;
+    border: 1px solid;
+    font-size: 12px;
+    font-weight: 950;
+  }
+
+  @media (max-width: 980px) {
+    .pattern-plays-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .pattern-play-card {
+      grid-template-columns: 170px minmax(0, 1fr);
+      grid-template-rows: auto;
+      align-items: center;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .pattern-play-card {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+
   .pickers-filter-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
@@ -984,7 +1303,87 @@ const res = await fetch(`/api/pickers?t=${Date.now()}`, {
   }
 
   @media (max-width: 820px) {
-    .pickers-filter-grid {
+  
+  .pattern-plays-grid {
+    margin-top: 16px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .pattern-play-card {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: 12px;
+    padding: 12px;
+    border-radius: 18px;
+    text-decoration: none;
+    min-width: 0;
+    box-sizing: border-box;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
+    transition: transform 150ms ease, filter 150ms ease, border-color 150ms ease;
+  }
+
+  .pattern-play-card:hover {
+    transform: translateY(-2px);
+    filter: brightness(1.08);
+  }
+
+  .playDiagram {
+    width: 100%;
+    display: block;
+    border-radius: 16px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(2,6,23,0.64);
+  }
+
+  .pattern-play-copy h3 {
+    margin: 0;
+    font-size: 17px;
+    line-height: 1.18;
+    letter-spacing: -0.025em;
+  }
+
+  .pattern-play-copy p {
+    margin: 8px 0 0;
+    color: rgba(226,232,240,0.72);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .pattern-play-button {
+    margin-top: 12px;
+    min-height: 36px;
+    padding: 8px 11px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 11px;
+    border: 1px solid;
+    font-size: 12px;
+    font-weight: 950;
+  }
+
+  @media (max-width: 980px) {
+    .pattern-plays-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .pattern-play-card {
+      grid-template-columns: 170px minmax(0, 1fr);
+      grid-template-rows: auto;
+      align-items: center;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .pattern-play-card {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+
+  .pickers-filter-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
@@ -1337,6 +1736,8 @@ const res = await fetch(`/api/pickers?t=${Date.now()}`, {
           boxSizing: "border-box",
         }}
       >
+        {!loading && !err && !customMode ? <PatternPlaysSection /> : null}
+
         {customMode ? (
           <section
             style={{
