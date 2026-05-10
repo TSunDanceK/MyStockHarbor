@@ -538,10 +538,13 @@ export async function GET(_request: Request, { params }: Props) {
           matchingIncome?.date?.slice(0, 4) ||
           item.date?.slice(0, 4),
         periodEndDate: matchingIncome?.date,
+        // Prefer FMP's earnings EPS first because this is usually the market-facing
+        // adjusted/non-GAAP EPS used in earnings headlines. Income-statement EPS is
+        // GAAP/basic/diluted and is only a fallback.
         epsActual:
+          safeNumber(item.epsActual) ??
           matchingCalendar?.epsActual ??
-          incomeEps ??
-          safeNumber(item.epsActual),
+          incomeEps,
         epsEstimated:
           matchingCalendar?.epsEstimated ??
           safeNumber(item.epsEstimated),
