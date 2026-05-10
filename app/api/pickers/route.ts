@@ -1425,6 +1425,72 @@ async function fetchHistory(symbol: string, days: number) {
     .slice(-days);
 }
 
+type FmpEarningsRow = {
+  symbol?: string;
+  date?: string;
+  epsActual?: number | null;
+  epsEstimated?: number | null;
+  revenueActual?: number | null;
+  revenueEstimated?: number | null;
+  lastUpdated?: string;
+};
+
+async function fetchFmpEarnings(symbol: string): Promise<FmpEarningsRow[]> {
+  const apiKey = process.env.FMP_API_KEY;
+
+  if (!apiKey) return [];
+
+  try {
+    const cleanSymbol = symbol.toUpperCase().replace(/[^A-Z0-9.-]/g, "");
+
+    if (!cleanSymbol) return [];
+
+    const url = `https://financialmodelingprep.com/stable/earnings?symbol=${encodeURIComponent(
+      cleanSymbol
+    )}&apikey=${apiKey}`;
+
+    const response = await fetch(url, {
+      next: { revalidate: 60 * 60 * 6 },
+    });
+
+    if (!response.ok) return [];
+
+    const json = await response.json();
+
+    if (!Array.isArray(json)) return [];
+
+    return json
+      .map((item): FmpEarningsRow => ({
+        symbol: typeof item?.symbol === "string" ? item.symbol : cleanSymbol,
+        date: typeof item?.date === "string" ? item.date : "",
+        epsActual:
+          typeof item?.epsActual === "number" && Number.isFinite(item.epsActual)
+            ? item.epsActual
+            : null,
+        epsEstimated:
+          typeof item?.epsEstimated === "number" &&
+          Number.isFinite(item.epsEstimated)
+            ? item.epsEstimated
+            : null,
+        revenueActual:
+          typeof item?.revenueActual === "number" &&
+          Number.isFinite(item.revenueActual)
+            ? item.revenueActual
+            : null,
+        revenueEstimated:
+          typeof item?.revenueEstimated === "number" &&
+          Number.isFinite(item.revenueEstimated)
+            ? item.revenueEstimated
+            : null,
+        lastUpdated:
+          typeof item?.lastUpdated === "string" ? item.lastUpdated : "",
+      }))
+      .filter((item) => Boolean(item.date));
+  } catch {
+    return [];
+  }
+}
+
 /* ------------------------------ universe ----------------------------- */
 
 const PRESET_UNIVERSE: string[] = [
