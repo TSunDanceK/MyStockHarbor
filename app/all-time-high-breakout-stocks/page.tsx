@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import MiniPickerCandleChart, { type MiniCandlePoint } from "@/app/components/MiniPickerCandleChart";
 import { headers } from "next/headers";
 
 export const dynamic = "force-dynamic";
@@ -9,6 +10,7 @@ type PickerItem = {
   note?: string;
   tone?: "green" | "yellow" | "orange" | "red";
   dashboardHref?: string;
+  chartPoints?: MiniCandlePoint[];
 };
 
 type PickerSection = {
@@ -29,6 +31,7 @@ type AthBreakoutEntry = {
   label: string;
   stockHref: string;
   chartHref: string;
+  chartPoints: MiniCandlePoint[];
 };
 
 export const metadata: Metadata = {
@@ -114,6 +117,7 @@ async function getAthBreakoutEntries(): Promise<{
           chartHref: chartBase.includes("#chart")
             ? chartBase
             : `${chartBase}#chart`,
+          chartPoints: Array.isArray(item?.chartPoints) ? item.chartPoints : [],
         };
       })
       .filter((entry): entry is AthBreakoutEntry => Boolean(entry));
@@ -743,6 +747,8 @@ export default async function AllTimeHighBreakoutStocksPage() {
                       ATH Breakout
                     </div>
                   </div>
+
+                  <MiniPickerCandleChart points={entry.chartPoints} tone="orange" />
 
                   <ul
                     style={{
