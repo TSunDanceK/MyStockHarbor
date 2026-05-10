@@ -57,6 +57,26 @@ type EarningsScoreResult = {
   reason: string;
 };
 
+type EarningsPeriodSummary = {
+  label: string;
+  date: string | null;
+  tone: ScoreTone;
+  toneLabel: "Good" | "Neutral" | "Weak";
+  actualEps: number | null;
+  estimatedEps: number | null;
+  epsSurprisePercent: number | null;
+  revenueSurprisePercent: number | null;
+};
+
+type EarningsYearSummary = {
+  year: string;
+  tone: ScoreTone;
+  toneLabel: "Good" | "Neutral" | "Weak";
+  goodCount: number;
+  neutralCount: number;
+  weakCount: number;
+};
+
 type LatestEarningsData = {
   hasStructuredData: boolean;
   tone: ScoreTone;
@@ -76,6 +96,8 @@ type LatestEarningsData = {
   netIncome: number | null;
   guidanceSummary: string | null;
   nextEarningsDate: string | null;
+  recentReports: EarningsPeriodSummary[];
+  yearlySummaries: EarningsYearSummary[];
   sourceNote: string;
 };
 
@@ -542,6 +564,165 @@ function buildEarningsTone(args: {
   return { tone: "yellow", toneLabel: "Neutral" };
 }
 
+
+function quarterLabel(dateValue: string | null | undefined) {
+  if (!dateValue) return "Recent";
+  const date = new Date(`${dateValue}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return dateValue;
+  const quarter = Math.floor(date.getUTCMonth() / 3) + 1;
+  return `Q${quarter} ${String(date.getUTCFullYear()).slice(-2)}`;
+}
+
+function completedEarningsTone(item: FmpStableEarningsItem): EarningsPeriodSummary["tone"] {
+  const actualEps = safeNumber(item.epsActual);
+  const estimatedEps = safeNumber(item.epsEstimated);
+  const revenue = safeNumber(item.revenueActual);
+  const revenueEstimate = safeNumber(item.revenueEstimated);
+
+  const epsSurprisePercent =
+    typeof actualEps === "number" &&
+    typeof estimatedEps === "number" &&
+    estimatedEps !== 0
+      ? ((actualEps - estimatedEps) / Math.abs(estimatedEps)) * 100
+      : null;
+
+  const revenueSurprisePercent =
+    typeof revenue === "number" &&
+    typeof revenueEstimate === "number" &&
+    revenueEstimate !== 0
+      ? ((revenue - revenueEstimate) / Math.abs(revenueEstimate)) * 100
+      : null;
+
+  let score = 0;
+
+  if (typeof epsSurprisePercent === "number") {
+    if (epsSurprisePercent >= 2) score += 1;
+    if (epsSurprisePercent <= -2) score -= 1;
+  }
+
+  if (typeof revenueSurprisePercent === "number") {
+    if (revenueSurprisePercent >= 1) score += 1;
+    if (revenueSurprisePercent <= -1) score -= 1;
+  }
+
+  if (typeof actualEps === "number" && actualEps < 0) score -= 0.25;
+
+  if (score >= 1) return "green";
+  if (score <= -1) return "red";
+  return "yellow";
+}
+
+function earningsToneLabel(tone: ScoreTone): "Good" | "Neutral" | "Weak" {
+  if (tone === "green") return "Good";
+  if (tone === "red") return "Weak";
+  return "Neutral";
+}
+
+function buildRecentEarningsReports(items: FmpStableEarningsItem[]): EarningsPeriodSummary[] {
+  return items.slice(0, 6).map((item) => {
+    const tone = completedEarningsTone(item);
+    const actualEps = safeNumber(item.epsActual);
+    const estimatedEps = safeNumber(item.epsEstimated);
+    const revenue = safeNumber(item.revenueActual);
+    const revenueEstimate = safeNumber(item.revenueEstimated);
+    const epsSurprisePercent =
+      typeof actualEps === "number" &&
+      typeof estimatedEps === "number" &&
+      estimatedEps !== 0
+        ? ((actualEps - estimatedEps) / Math.abs(estimatedEps)) * 100
+        : null;
+    const revenueSurprisePercent =
+      typeof revenue === "number" &&
+      typeof revenueEstimate === "number" &&
+      revenueEstimate !== 0
+        ? ((revenue - revenueEstimate) / Math.abs(revenueEstimate)) * 100
+        : null;
+
+    return {
+      label: quarterLabel(item.date),
+      date: item.date ?? null,
+      tone,
+      toneLabel: earningsToneLabel(tone),
+      actualEps,
+      estimatedEps,
+      epsSurprisePercent,
+      revenueSurprisePercent,
+    };
+  });
+}
+
+function buildYearlyEarningsSummaries(items: FmpStableEarningsItem[]): EarningsYearSummary[] {
+  const byYear = new Map<string, EarningsPeriodSummary[]>();
+
+  for (const item of items) {
+    if (!item.date) continue;
+    const year = item.date.slice(0, 4);
+    if (!/^\d{4}$/.test(year)) continue;
+
+    const tone = completedEarningsTone(item);
+    const actualEps = safeNumber(item.epsActual);
+    const estimatedEps = safeNumber(item.epsEstimated);
+    const revenue = safeNumber(item.revenueActual);
+    const revenueEstimate = safeNumber(item.revenueEstimated);
+    const epsSurprisePercent =
+      typeof actualEps === "number" &&
+      typeof estimatedEps === "number" &&
+      estimatedEps !== 0
+        ? ((actualEps - estimatedEps) / Math.abs(estimatedEps)) * 100
+        : null;
+    const revenueSurprisePercent =
+      typeof revenue === "number" &&
+      typeof revenueEstimate === "number" &&
+      revenueEstimate !== 0
+        ? ((revenue - revenueEstimate) / Math.abs(revenueEstimate)) * 100
+        : null;
+
+    const entry: EarningsPeriodSummary = {
+      label: quarterLabel(item.date),
+      date: item.date,
+      tone,
+      toneLabel: earningsToneLabel(tone),
+      actualEps,
+      estimatedEps,
+      epsSurprisePercent,
+      revenueSurprisePercent,
+    };
+
+    const current = byYear.get(year) ?? [];
+    current.push(entry);
+    byYear.set(year, current);
+  }
+
+  return [...byYear.entries()]
+    .sort((a, b) => Number(b[0]) - Number(a[0]))
+    .slice(0, 5)
+    .map(([year, entries]) => {
+      const goodCount = entries.filter((item) => item.tone === "green").length;
+      const neutralCount = entries.filter((item) => item.tone === "yellow").length;
+      const weakCount = entries.filter((item) => item.tone === "red").length;
+      let tone: ScoreTone = "yellow";
+
+      if (goodCount > weakCount && goodCount >= neutralCount) tone = "green";
+      if (weakCount > goodCount && weakCount >= neutralCount) tone = "red";
+
+      return {
+        year,
+        tone,
+        toneLabel: earningsToneLabel(tone),
+        goodCount,
+        neutralCount,
+        weakCount,
+      };
+    });
+}
+
+function earningsToneScore(earnings: LatestEarningsData) {
+  if (!earnings.hasStructuredData) return 50;
+  if (earnings.tone === "green") return 78;
+  if (earnings.tone === "red") return 28;
+  return 55;
+}
+
 async function getLatestEarningsData(
   symbol: string,
   fallbackEarningsScore: EarningsScoreResult,
@@ -567,6 +748,8 @@ async function getLatestEarningsData(
     netIncome: null,
     guidanceSummary: null,
     nextEarningsDate: null,
+    recentReports: [],
+    yearlySummaries: [],
     sourceNote: "Structured earnings data is unavailable right now.",
   };
 
@@ -744,6 +927,9 @@ async function getLatestEarningsData(
     typeof netIncome === "number",
   );
 
+  const recentReports = buildRecentEarningsReports(completedEarningsRows);
+  const yearlySummaries = buildYearlyEarningsSummaries(completedEarningsRows);
+
   return {
     hasStructuredData,
     tone: hasStructuredData ? tone.tone : fallbackEarningsScore.tone,
@@ -763,6 +949,8 @@ async function getLatestEarningsData(
     netIncome,
     guidanceSummary: null,
     nextEarningsDate: nextEarningsRow?.date ?? null,
+    recentReports,
+    yearlySummaries,
     sourceNote: hasStructuredData
       ? "Structured earnings data from Financial Modeling Prep. Latest completed report is selected before upcoming report dates. Guidance is shown only when available from structured data."
       : "Structured earnings data is unavailable right now.",
@@ -1995,10 +2183,95 @@ function GoingForwardFallbackCard() {
   );
 }
 
+function isEarningsHeadline(item: NewsItem) {
+  const text = `${item.title} ${item.description ?? ""}`.toLowerCase();
+  return keywordHits(text, [
+    "earnings",
+    "eps",
+    "results",
+    "quarter",
+    "quarterly",
+    "revenue",
+    "guidance",
+    "profit",
+    "loss",
+    "margin",
+    "q1",
+    "q2",
+    "q3",
+    "q4",
+  ]);
+}
+
+function getEarningsNewsItems(news: NewsItem[]) {
+  return [...news]
+    .filter((item) => !isLowValueNewsItem(item) && isEarningsHeadline(item))
+    .sort((a, b) => {
+      const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+      const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
+      return bTime - aTime;
+    })
+    .slice(0, 5);
+}
+
+function EarningsNewsSection({
+  symbol,
+  earningsNews,
+  latestEarnings,
+}: {
+  symbol: string;
+  earningsNews: NewsItem[];
+  latestEarnings: LatestEarningsData;
+}) {
+  return (
+    <section style={editorialCardStyle}>
+      <div style={sectionEyebrowStyle}>Earnings news</div>
+      <h2 style={sectionTitleStyle}>{symbol} earnings headlines</h2>
+
+      <p style={bodyCopyStyle}>
+        This section is separated from the general news feed so investors can
+        quickly connect the latest headlines with the structured earnings report.
+      </p>
+
+      <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
+        {earningsNews.length ? (
+          earningsNews.map((item, index) => (
+            <a
+              key={`${item.link}-${index}`}
+              href={item.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={earningsNewsRowStyle}
+            >
+              <div style={earningsNewsNumberStyle}>{index + 1}</div>
+              <div style={{ minWidth: 0 }}>
+                <div style={newsMetaRowStyle}>
+                  <span style={newsSourcePillStyle}>{compactSource(item.source)}</span>
+                  <span style={newsDateStyle}>{formatDate(item.pubDate)}</span>
+                </div>
+                <h3 style={earningsNewsHeadlineStyle}>{item.title}</h3>
+                {item.description ? (
+                  <p style={earningsNewsTextStyle}>{item.description}</p>
+                ) : null}
+              </div>
+            </a>
+          ))
+        ) : (
+          <div style={earningsNoNewsStyle}>
+            <strong>No recent earnings-specific headlines found.</strong>
+            <span>
+              The latest structured earnings snapshot is still shown using FMP
+              data{latestEarnings.reportDate ? ` from ${formatPlainDate(latestEarnings.reportDate)}` : ""}.
+            </span>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function LatestEarningsCard({ earnings }: { earnings: LatestEarningsData }) {
-  const toneCopy = earnings.hasStructuredData
-    ? earnings.toneLabel
-    : "Unavailable";
+  const toneCopy = earnings.hasStructuredData ? earnings.toneLabel : "Unavailable";
 
   return (
     <section style={earningsCardStyle(earnings.tone)}>
@@ -2022,15 +2295,15 @@ function LatestEarningsCard({ earnings }: { earnings: LatestEarningsData }) {
 
       {!earnings.hasStructuredData ? (
         <p style={bodyCopyStyle}>
-          Structured EPS, revenue and margin data is not available for this
-          symbol right now. The page will show the latest numbers here when the
-          earnings feed returns usable data.
+          Structured EPS and revenue data is not available for this symbol right
+          now. The page will show the latest reported earnings here when FMP
+          returns usable data.
         </p>
       ) : (
         <>
           <div style={earningsDateRowStyle}>
             <div>
-              <div style={earningsMiniLabelStyle}>Report date</div>
+              <div style={earningsMiniLabelStyle}>Latest report</div>
               <div style={earningsMiniValueStyle}>
                 {formatPlainDate(earnings.reportDate)}
               </div>
@@ -2044,47 +2317,54 @@ function LatestEarningsCard({ earnings }: { earnings: LatestEarningsData }) {
           </div>
 
           <div style={earningsMetricGridStyle}>
-            <EarningsMetric
-              label="Actual EPS"
-              value={formatMoney(earnings.actualEps)}
-            />
-            <EarningsMetric
-              label="Estimated EPS"
-              value={formatMoney(earnings.estimatedEps)}
-            />
+            <EarningsMetric label="Actual EPS" value={formatMoney(earnings.actualEps)} />
+            <EarningsMetric label="Estimated EPS" value={formatMoney(earnings.estimatedEps)} />
             <EarningsMetric
               label="EPS surprise"
               value={formatMoney(earnings.epsSurprise)}
               meta={formatPercent(earnings.epsSurprisePercent, 1)}
               tone={metricTone(earnings.epsSurprisePercent)}
             />
-            <EarningsMetric
-              label="Revenue"
-              value={formatLargeMoney(earnings.revenue)}
-            />
-            <EarningsMetric
-              label="Revenue estimate"
-              value={formatLargeMoney(earnings.revenueEstimate)}
-            />
+            <EarningsMetric label="Revenue" value={formatLargeMoney(earnings.revenue)} />
+            <EarningsMetric label="Revenue estimate" value={formatLargeMoney(earnings.revenueEstimate)} />
             <EarningsMetric
               label="Revenue surprise"
               value={formatLargeMoney(earnings.revenueSurprise)}
               meta={formatPercent(earnings.revenueSurprisePercent, 1)}
               tone={metricTone(earnings.revenueSurprisePercent)}
             />
-            <EarningsMetric
-              label="Gross margin"
-              value={formatPercent(earnings.grossMargin, 1)}
-            />
-            <EarningsMetric
-              label="Operating margin"
-              value={formatPercent(earnings.operatingMargin, 1)}
-            />
-            <EarningsMetric
-              label="Net income"
-              value={formatLargeMoney(earnings.netIncome)}
-            />
+            <EarningsMetric label="Gross margin" value={formatPercent(earnings.grossMargin, 1)} />
+            <EarningsMetric label="Operating margin" value={formatPercent(earnings.operatingMargin, 1)} />
+            <EarningsMetric label="Net income" value={formatLargeMoney(earnings.netIncome)} />
           </div>
+
+          {earnings.recentReports.length ? (
+            <div style={earningsTrendBoxStyle}>
+              <div style={earningsMiniLabelStyle}>Recent earnings trend</div>
+              <div style={earningsDotRowStyle}>
+                {[...earnings.recentReports].reverse().map((item) => (
+                  <div key={`${item.label}-${item.date}`} style={earningsDotItemStyle}>
+                    <span style={earningsDotStyle(item.tone)} />
+                    <span style={earningsDotLabelStyle}>{item.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {earnings.yearlySummaries.length ? (
+            <div style={earningsTrendBoxStyle}>
+              <div style={earningsMiniLabelStyle}>Yearly earnings read</div>
+              <div style={yearlyEarningsGridStyle}>
+                {earnings.yearlySummaries.map((item) => (
+                  <div key={item.year} style={yearlyEarningsBadgeStyle(item.tone)}>
+                    <strong>{item.year}</strong>
+                    <span>{item.toneLabel}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           <div style={earningsGuidanceBoxStyle}>
             <div style={earningsMiniLabelStyle}>Guidance summary</div>
@@ -2167,6 +2447,7 @@ export default async function StockNewsPage({ params }: Props) {
   } = newsData;
 
   const latestEarnings = await getLatestEarningsData(upper, earningsScore);
+  const earningsNewsItems = getEarningsNewsItems(news);
 
   const leadSummary = buildLeadSummary({
     symbol: upper,
@@ -2435,10 +2716,14 @@ export default async function StockNewsPage({ params }: Props) {
             </div>
 
             <div style={miniScoreGridStyle}>
-              <div style={miniScoreCardStyle(earningsScore.tone)}>
+              <div style={miniScoreCardStyle(latestEarnings.tone)}>
                 <div style={miniScoreTitleStyle}>Earnings Tone</div>
-                <div style={miniScoreNumberStyle}>{earningsScore.score}</div>
-                <div style={miniScoreLabelStyle}>{earningsScore.label}</div>
+                <div style={miniScoreNumberStyle}>{earningsToneScore(latestEarnings)}</div>
+                <div style={miniScoreLabelStyle}>
+                  {latestEarnings.hasStructuredData
+                    ? `${latestEarnings.toneLabel} based on actual EPS/revenue`
+                    : "Structured data unavailable"}
+                </div>
               </div>
 
               <div style={miniScoreCardStyle(newsScore.tone)}>
@@ -2486,6 +2771,12 @@ export default async function StockNewsPage({ params }: Props) {
                 compactNews={compactNews}
               />
             </Suspense>
+
+            <EarningsNewsSection
+              symbol={upper}
+              earningsNews={earningsNewsItems}
+              latestEarnings={latestEarnings}
+            />
 
             <Suspense fallback={<InsightFallbackCard />}>
               <InsightAiCard
@@ -3384,6 +3675,138 @@ const earningsGuidanceBoxStyle: CSSProperties = {
   background: "rgba(255,255,255,0.026)",
   fontSize: 13,
 };
+
+const earningsNewsRowStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "34px minmax(0, 1fr)",
+  gap: 12,
+  border: "1px solid rgba(255,255,255,0.08)",
+  background: "rgba(255,255,255,0.035)",
+  borderRadius: 16,
+  padding: 14,
+  color: "#f1f5f9",
+  textDecoration: "none",
+};
+
+const earningsNewsNumberStyle: CSSProperties = {
+  width: 28,
+  height: 28,
+  borderRadius: 999,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  border: "1px solid rgba(59,130,246,0.36)",
+  background: "rgba(59,130,246,0.14)",
+  color: "#bfdbfe",
+  fontSize: 13,
+  fontWeight: 950,
+};
+
+const earningsNewsHeadlineStyle: CSSProperties = {
+  margin: "9px 0 0",
+  fontSize: 16,
+  lineHeight: 1.38,
+  color: "#f8fafc",
+};
+
+const earningsNewsTextStyle: CSSProperties = {
+  margin: "8px 0 0",
+  fontSize: 13,
+  lineHeight: 1.6,
+  color: "rgba(226,232,240,0.76)",
+};
+
+const earningsNoNewsStyle: CSSProperties = {
+  border: "1px solid rgba(250,204,21,0.20)",
+  background: "rgba(250,204,21,0.07)",
+  borderRadius: 16,
+  padding: 14,
+  display: "grid",
+  gap: 6,
+  color: "rgba(254,249,195,0.88)",
+  fontSize: 14,
+  lineHeight: 1.55,
+};
+
+const earningsTrendBoxStyle: CSSProperties = {
+  marginTop: 14,
+  borderRadius: 14,
+  border: "1px solid rgba(255,255,255,0.10)",
+  background: "rgba(255,255,255,0.035)",
+  padding: 12,
+};
+
+const earningsDotRowStyle: CSSProperties = {
+  marginTop: 10,
+  display: "flex",
+  gap: 12,
+  alignItems: "center",
+  flexWrap: "wrap",
+};
+
+const earningsDotItemStyle: CSSProperties = {
+  display: "grid",
+  gap: 6,
+  justifyItems: "center",
+  minWidth: 46,
+};
+
+const earningsDotLabelStyle: CSSProperties = {
+  fontSize: 11,
+  color: "rgba(226,232,240,0.78)",
+  fontWeight: 850,
+};
+
+function earningsDotStyle(tone: ScoreTone): CSSProperties {
+  const color =
+    tone === "green" ? "#2dd4bf" : tone === "red" ? "#fb7185" : "#fbbf24";
+
+  return {
+    width: 15,
+    height: 15,
+    borderRadius: 999,
+    background: color,
+    boxShadow: `0 0 0 5px ${color}22`,
+  };
+}
+
+const yearlyEarningsGridStyle: CSSProperties = {
+  marginTop: 10,
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 8,
+};
+
+function yearlyEarningsBadgeStyle(tone: ScoreTone): CSSProperties {
+  const border =
+    tone === "green"
+      ? "rgba(34,197,94,0.32)"
+      : tone === "red"
+        ? "rgba(244,63,94,0.34)"
+        : "rgba(250,204,21,0.30)";
+  const background =
+    tone === "green"
+      ? "rgba(34,197,94,0.10)"
+      : tone === "red"
+        ? "rgba(244,63,94,0.10)"
+        : "rgba(250,204,21,0.10)";
+  const color =
+    tone === "green" ? "#dcfce7" : tone === "red" ? "#ffe4e6" : "#fef9c3";
+
+  return {
+    border: `1px solid ${border}`,
+    background,
+    color,
+    borderRadius: 12,
+    padding: "9px 10px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    fontSize: 12,
+    fontWeight: 850,
+  };
+}
 
 const earningsSourceStyle: CSSProperties = {
   marginTop: 12,
