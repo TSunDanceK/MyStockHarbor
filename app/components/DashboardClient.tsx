@@ -64,6 +64,15 @@ type NewsPayload = {
   ctaHref: string;
 };
 
+type StockEarningsSummary = {
+  hasStructuredData?: boolean;
+  tone?: "green" | "yellow" | "red";
+  toneLabel?: "Good" | "Neutral" | "Weak" | "Unavailable";
+  reportDate?: string | null;
+  epsSurprisePercent?: number | null;
+  revenueSurprisePercent?: number | null;
+};
+
 type CachedSymbolData = {
   quote: Quote | null;
   history: Point[];
@@ -792,6 +801,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
 
   const [bench, setBench] = useState<BenchPayload | null>(null);
   const [news, setNews] = useState<NewsPayload | null>(null);
+  const [earningsSummary, setEarningsSummary] = useState<StockEarningsSummary | null>(null);
 
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [expanded, setExpanded] = useState(false);
@@ -1126,6 +1136,37 @@ useEffect(() => {
     }
 
     loadNews();
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadEarningsSummary() {
+      setEarningsSummary(null);
+
+      try {
+        const res = await fetch(`/api/stock-earnings/${encodeURIComponent(symbol)}`, {
+          cache: "no-store",
+        });
+
+        if (!res.ok) throw new Error("Stock earnings API failed");
+
+        const data = (await res.json()) as StockEarningsSummary;
+
+        if (!cancelled) {
+          setEarningsSummary(data);
+        }
+      } catch {
+        if (!cancelled) {
+          setEarningsSummary(null);
+        }
+      }
+    }
+
+    loadEarningsSummary();
     return () => {
       cancelled = true;
     };
@@ -1880,6 +1921,34 @@ function chooseSymbol(s: string, name?: string) {
       push({ key: "atr", label: "ATR", tone: "muted", valueText: "—", severity: 0 });
     }
 
+    if (earningsSummary?.hasStructuredData && earningsSummary.tone) {
+      push({
+        key: "earnings",
+        label: "Earnings",
+        tone:
+          earningsSummary.tone === "green"
+            ? "green"
+            : earningsSummary.tone === "red"
+              ? "red"
+              : "yellow",
+        valueText: earningsSummary.toneLabel ?? "Neutral",
+        severity:
+          earningsSummary.tone === "red"
+            ? 0.35
+            : earningsSummary.tone === "green"
+              ? 0.25
+              : 0.1,
+      });
+    } else {
+      push({
+        key: "earnings",
+        label: "Earnings",
+        tone: "muted",
+        valueText: "—",
+        severity: 0,
+      });
+    }
+
     if (divergence.rsi !== "none") {
       push({
         key: "div_rsi",
@@ -1918,6 +1987,7 @@ function chooseSymbol(s: string, name?: string) {
     atrLast,
     atrSmaLast,
     divergence,
+    earningsSummary,
   ]);
 
   function chipToneColor(tone: OverviewItem["tone"]) {
