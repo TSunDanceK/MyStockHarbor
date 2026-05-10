@@ -10,7 +10,7 @@ import {
 
 export const runtime = "nodejs";
 
-type Props = { 
+type Props = {
   params: Promise<{ symbol: string }>;
 };
 
@@ -50,6 +50,69 @@ type NewsScoreResult = {
   confidence: "Low" | "Medium" | "High";
 };
 
+type EarningsScoreResult = {
+  score: number;
+  label: string;
+  tone: ScoreTone;
+  reason: string;
+};
+
+type LatestEarningsData = {
+  hasStructuredData: boolean;
+  tone: ScoreTone;
+  toneLabel: "Good" | "Neutral" | "Weak" | "Unavailable";
+  reportDate: string | null;
+  fiscalDate: string | null;
+  actualEps: number | null;
+  estimatedEps: number | null;
+  epsSurprise: number | null;
+  epsSurprisePercent: number | null;
+  revenue: number | null;
+  revenueEstimate: number | null;
+  revenueSurprise: number | null;
+  revenueSurprisePercent: number | null;
+  grossMargin: number | null;
+  operatingMargin: number | null;
+  netIncome: number | null;
+  guidanceSummary: string | null;
+  nextEarningsDate: string | null;
+  sourceNote: string;
+};
+
+type FmpEarningsSurprise = {
+  date?: string;
+  symbol?: string;
+  actualEarningResult?: number | string | null;
+  estimatedEarning?: number | string | null;
+};
+
+type FmpIncomeStatement = {
+  date?: string;
+  calendarYear?: string;
+  period?: string;
+  revenue?: number | string | null;
+  grossProfit?: number | string | null;
+  operatingIncome?: number | string | null;
+  netIncome?: number | string | null;
+};
+
+type FmpAnalystEstimate = {
+  date?: string;
+  estimatedRevenueAvg?: number | string | null;
+  revenueAvg?: number | string | null;
+  estimatedEpsAvg?: number | string | null;
+  epsAvg?: number | string | null;
+};
+
+type FmpEarningsCalendarItem = {
+  date?: string;
+  symbol?: string;
+  eps?: number | string | null;
+  epsEstimated?: number | string | null;
+  revenue?: number | string | null;
+  revenueEstimated?: number | string | null;
+};
+
 function decodeHtml(value: string) {
   return value
     .replace(/&amp;/g, "&")
@@ -67,7 +130,7 @@ function cleanRssDescription(value: string | null) {
       .replace(/<!\[CDATA\[(.*?)\]\]>/g, "$1")
       .replace(/<[^>]+>/g, " ")
       .replace(/\s+/g, " ")
-      .trim()
+      .trim(),
   );
 
   return cleaned || null;
@@ -154,7 +217,9 @@ async function fetchHistory(symbol: string): Promise<Point[]> {
 
     for (let i = 1; i < lines.length; i++) {
       const cols = lines[i].split(",");
-      const date = String(cols[0] ?? "").replace(/\r/g, "").trim();
+      const date = String(cols[0] ?? "")
+        .replace(/\r/g, "")
+        .trim();
       const high = Number(String(cols[2] ?? "").replace(/\r/g, ""));
       const low = Number(String(cols[3] ?? "").replace(/\r/g, ""));
       const close = Number(String(cols[4] ?? "").replace(/\r/g, ""));
@@ -203,10 +268,15 @@ async function fetchCompanyName(symbol: string): Promise<string> {
   }
 }
 
-async function fetchNews(symbol: string, companyName: string): Promise<NewsItem[]> {
-  const baseQuery = companyName ? `${companyName} ${symbol} stock` : `${symbol} stock`;
+async function fetchNews(
+  symbol: string,
+  companyName: string,
+): Promise<NewsItem[]> {
+  const baseQuery = companyName
+    ? `${companyName} ${symbol} stock`
+    : `${symbol} stock`;
   const url = `https://news.google.com/rss/search?q=${encodeURIComponent(
-    baseQuery
+    baseQuery,
   )}&hl=en-GB&gl=GB&ceid=GB:en`;
 
   try {
@@ -287,7 +357,11 @@ function pctFromBase(last: number | null, base: number | null) {
   return ((last - base) / base) * 100;
 }
 
-function trendLabel(lastClose: number | null, ma50: number | null, ma200: number | null) {
+function trendLabel(
+  lastClose: number | null,
+  ma50: number | null,
+  ma200: number | null,
+) {
   if (
     typeof lastClose === "number" &&
     typeof ma50 === "number" &&
@@ -295,7 +369,8 @@ function trendLabel(lastClose: number | null, ma50: number | null, ma200: number
   ) {
     if (lastClose > ma50 && ma50 > ma200) return "Bullish trend";
     if (lastClose < ma50 && ma50 < ma200) return "Bearish trend";
-    if (lastClose > ma200 && lastClose < ma50) return "Pullback in larger uptrend";
+    if (lastClose > ma200 && lastClose < ma50)
+      return "Pullback in larger uptrend";
     if (lastClose < ma200 && lastClose > ma50) return "Counter-trend bounce";
   }
 
@@ -303,7 +378,9 @@ function trendLabel(lastClose: number | null, ma50: number | null, ma200: number
 }
 
 function formatMoney(value: number | null) {
-  return typeof value === "number" && Number.isFinite(value) ? `$${value.toFixed(2)}` : "—";
+  return typeof value === "number" && Number.isFinite(value)
+    ? `$${value.toFixed(2)}`
+    : "—";
 }
 
 function formatPercent(value: number | null, digits = 1) {
@@ -321,6 +398,343 @@ function formatDate(value: string | null) {
     month: "short",
     year: "numeric",
   }).format(date);
+}
+
+function formatLargeMoney(value: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+
+  const abs = Math.abs(value);
+  const sign = value < 0 ? "-" : "";
+
+  if (abs >= 1_000_000_000_000)
+    return `${sign}$${(abs / 1_000_000_000_000).toFixed(2)}T`;
+  if (abs >= 1_000_000_000)
+    return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`;
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(1)}K`;
+  return `${sign}$${abs.toFixed(2)}`;
+}
+
+function formatPlainDate(value: string | null) {
+  if (!value) return "—";
+  const date = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
+
+function safeNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function dateTime(value: string | null | undefined) {
+  if (!value) return null;
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isNaN(date.getTime()) ? null : date.getTime();
+}
+
+function findClosestByDate<T extends { date?: string }>(
+  items: T[],
+  targetDate: string | null,
+) {
+  if (!items.length) return null;
+  const target = dateTime(targetDate);
+  if (target == null) return items[0] ?? null;
+
+  return (
+    [...items]
+      .filter((item) => dateTime(item.date) != null)
+      .sort(
+        (a, b) =>
+          Math.abs((dateTime(a.date) ?? 0) - target) -
+          Math.abs((dateTime(b.date) ?? 0) - target),
+      )[0] ?? null
+  );
+}
+
+async function fetchFmpJson<T>(url: string): Promise<T | null> {
+  try {
+    const res = await fetch(url, {
+      next: { revalidate: 21600 },
+    });
+
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+function buildEarningsTone(args: {
+  actualEps: number | null;
+  estimatedEps: number | null;
+  revenue: number | null;
+  revenueEstimate: number | null;
+  netIncome: number | null;
+  fallbackTone: ScoreTone;
+}): {
+  tone: ScoreTone;
+  toneLabel: "Good" | "Neutral" | "Weak" | "Unavailable";
+} {
+  const epsSurprisePercent =
+    typeof args.actualEps === "number" &&
+    typeof args.estimatedEps === "number" &&
+    args.estimatedEps !== 0
+      ? ((args.actualEps - args.estimatedEps) / Math.abs(args.estimatedEps)) *
+        100
+      : null;
+
+  const revenueSurprisePercent =
+    typeof args.revenue === "number" &&
+    typeof args.revenueEstimate === "number" &&
+    args.revenueEstimate !== 0
+      ? ((args.revenue - args.revenueEstimate) /
+          Math.abs(args.revenueEstimate)) *
+        100
+      : null;
+
+  const hasStructuredComparison =
+    typeof epsSurprisePercent === "number" ||
+    typeof revenueSurprisePercent === "number";
+
+  if (!hasStructuredComparison && typeof args.netIncome !== "number") {
+    return { tone: args.fallbackTone, toneLabel: "Unavailable" };
+  }
+
+  let score = 0;
+
+  if (typeof epsSurprisePercent === "number") {
+    if (epsSurprisePercent >= 2) score += 1;
+    if (epsSurprisePercent <= -2) score -= 1;
+  }
+
+  if (typeof revenueSurprisePercent === "number") {
+    if (revenueSurprisePercent >= 1) score += 1;
+    if (revenueSurprisePercent <= -1) score -= 1;
+  }
+
+  if (typeof args.netIncome === "number") {
+    if (args.netIncome > 0) score += 0.5;
+    if (args.netIncome < 0) score -= 0.5;
+  }
+
+  if (score >= 1.5) return { tone: "green", toneLabel: "Good" };
+  if (score <= -1) return { tone: "red", toneLabel: "Weak" };
+  return { tone: "yellow", toneLabel: "Neutral" };
+}
+
+async function getLatestEarningsData(
+  symbol: string,
+  fallbackEarningsScore: EarningsScoreResult,
+): Promise<LatestEarningsData> {
+  const apiKey = process.env.FMP_API_KEY;
+
+  const empty: LatestEarningsData = {
+    hasStructuredData: false,
+    tone: fallbackEarningsScore.tone,
+    toneLabel: "Unavailable",
+    reportDate: null,
+    fiscalDate: null,
+    actualEps: null,
+    estimatedEps: null,
+    epsSurprise: null,
+    epsSurprisePercent: null,
+    revenue: null,
+    revenueEstimate: null,
+    revenueSurprise: null,
+    revenueSurprisePercent: null,
+    grossMargin: null,
+    operatingMargin: null,
+    netIncome: null,
+    guidanceSummary: null,
+    nextEarningsDate: null,
+    sourceNote: "Structured earnings data is unavailable right now.",
+  };
+
+  if (!apiKey) return empty;
+
+  const encoded = encodeURIComponent(symbol);
+  const key = encodeURIComponent(apiKey);
+
+  const [surprisesA, surprisesB, incomeStatements, analystEstimates, calendar] =
+    await Promise.all([
+      fetchFmpJson<FmpEarningsSurprise[]>(
+        `https://financialmodelingprep.com/api/v3/earnings-surprises/${encoded}?apikey=${key}`,
+      ),
+      fetchFmpJson<FmpEarningsSurprise[]>(
+        `https://financialmodelingprep.com/api/v3/earning_surprises/${encoded}?apikey=${key}`,
+      ),
+      fetchFmpJson<FmpIncomeStatement[]>(
+        `https://financialmodelingprep.com/api/v3/income-statement/${encoded}?period=quarter&limit=6&apikey=${key}`,
+      ),
+      fetchFmpJson<FmpAnalystEstimate[]>(
+        `https://financialmodelingprep.com/api/v3/analyst-estimates/${encoded}?period=quarter&limit=8&apikey=${key}`,
+      ),
+      fetchFmpJson<FmpEarningsCalendarItem[]>(
+        `https://financialmodelingprep.com/api/v3/earning_calendar?symbol=${encoded}&limit=12&apikey=${key}`,
+      ),
+    ]);
+
+  const surprises =
+    Array.isArray(surprisesA) && surprisesA.length
+      ? surprisesA
+      : Array.isArray(surprisesB)
+        ? surprisesB
+        : [];
+  const statements = Array.isArray(incomeStatements) ? incomeStatements : [];
+  const estimates = Array.isArray(analystEstimates) ? analystEstimates : [];
+  const calendarItems = Array.isArray(calendar) ? calendar : [];
+
+  const today = Date.now();
+  const latestSurprise =
+    [...surprises]
+      .filter(
+        (item) =>
+          dateTime(item.date) != null && (dateTime(item.date) ?? 0) <= today,
+      )
+      .sort((a, b) => (dateTime(b.date) ?? 0) - (dateTime(a.date) ?? 0))[0] ??
+    null;
+
+  const latestStatement =
+    [...statements]
+      .filter((item) => dateTime(item.date) != null)
+      .sort((a, b) => (dateTime(b.date) ?? 0) - (dateTime(a.date) ?? 0))[0] ??
+    null;
+
+  const reportDate = latestSurprise?.date ?? latestStatement?.date ?? null;
+  const matchedEstimate = findClosestByDate(estimates, reportDate);
+  const matchedCalendar = findClosestByDate(
+    calendarItems.filter(
+      (item) =>
+        dateTime(item.date) != null && (dateTime(item.date) ?? 0) <= today,
+    ),
+    reportDate,
+  );
+
+  const nextEarnings =
+    calendarItems
+      .filter(
+        (item) =>
+          dateTime(item.date) != null && (dateTime(item.date) ?? 0) > today,
+      )
+      .sort((a, b) => (dateTime(a.date) ?? 0) - (dateTime(b.date) ?? 0))[0] ??
+    null;
+
+  const actualEps =
+    safeNumber(latestSurprise?.actualEarningResult) ??
+    safeNumber(matchedCalendar?.eps) ??
+    null;
+
+  const estimatedEps =
+    safeNumber(latestSurprise?.estimatedEarning) ??
+    safeNumber(matchedCalendar?.epsEstimated) ??
+    safeNumber(matchedEstimate?.estimatedEpsAvg) ??
+    safeNumber(matchedEstimate?.epsAvg) ??
+    null;
+
+  const revenue =
+    safeNumber(latestStatement?.revenue) ??
+    safeNumber(matchedCalendar?.revenue) ??
+    null;
+
+  const revenueEstimate =
+    safeNumber(matchedCalendar?.revenueEstimated) ??
+    safeNumber(matchedEstimate?.estimatedRevenueAvg) ??
+    safeNumber(matchedEstimate?.revenueAvg) ??
+    null;
+
+  const grossProfit = safeNumber(latestStatement?.grossProfit);
+  const operatingIncome = safeNumber(latestStatement?.operatingIncome);
+  const netIncome = safeNumber(latestStatement?.netIncome);
+
+  const epsSurprise =
+    typeof actualEps === "number" && typeof estimatedEps === "number"
+      ? actualEps - estimatedEps
+      : null;
+
+  const epsSurprisePercent =
+    typeof epsSurprise === "number" &&
+    typeof estimatedEps === "number" &&
+    estimatedEps !== 0
+      ? (epsSurprise / Math.abs(estimatedEps)) * 100
+      : null;
+
+  const revenueSurprise =
+    typeof revenue === "number" && typeof revenueEstimate === "number"
+      ? revenue - revenueEstimate
+      : null;
+
+  const revenueSurprisePercent =
+    typeof revenueSurprise === "number" &&
+    typeof revenueEstimate === "number" &&
+    revenueEstimate !== 0
+      ? (revenueSurprise / Math.abs(revenueEstimate)) * 100
+      : null;
+
+  const grossMargin =
+    typeof grossProfit === "number" &&
+    typeof revenue === "number" &&
+    revenue !== 0
+      ? (grossProfit / revenue) * 100
+      : null;
+
+  const operatingMargin =
+    typeof operatingIncome === "number" &&
+    typeof revenue === "number" &&
+    revenue !== 0
+      ? (operatingIncome / revenue) * 100
+      : null;
+
+  const tone = buildEarningsTone({
+    actualEps,
+    estimatedEps,
+    revenue,
+    revenueEstimate,
+    netIncome,
+    fallbackTone: fallbackEarningsScore.tone,
+  });
+
+  const hasStructuredData = Boolean(
+    reportDate ||
+    typeof actualEps === "number" ||
+    typeof estimatedEps === "number" ||
+    typeof revenue === "number" ||
+    typeof revenueEstimate === "number" ||
+    typeof netIncome === "number",
+  );
+
+  return {
+    hasStructuredData,
+    tone: hasStructuredData ? tone.tone : fallbackEarningsScore.tone,
+    toneLabel: hasStructuredData ? tone.toneLabel : "Unavailable",
+    reportDate,
+    fiscalDate: latestStatement?.date ?? reportDate,
+    actualEps,
+    estimatedEps,
+    epsSurprise,
+    epsSurprisePercent,
+    revenue,
+    revenueEstimate,
+    revenueSurprise,
+    revenueSurprisePercent,
+    grossMargin,
+    operatingMargin,
+    netIncome,
+    guidanceSummary: null,
+    nextEarningsDate: nextEarnings?.date ?? null,
+    sourceNote: hasStructuredData
+      ? "Structured earnings data from Financial Modeling Prep. Guidance is shown only when available from structured data."
+      : "Structured earnings data is unavailable right now.",
+  };
 }
 
 function compactSource(source: string | null) {
@@ -370,7 +784,8 @@ function scoreNews(news: NewsItem[]): NewsScoreResult {
     const item = candidates[i];
     const title = item.title.toLowerCase();
 
-    const positionWeight = i === 0 ? 1.35 : i === 1 ? 1.18 : i === 2 ? 1.02 : 0.9;
+    const positionWeight =
+      i === 0 ? 1.35 : i === 1 ? 1.18 : i === 2 ? 1.02 : 0.9;
     let itemScore = 0;
 
     const strongPositive = [
@@ -447,14 +862,33 @@ function scoreNews(news: NewsItem[]): NewsScoreResult {
     if (keywordHits(title, moderateNegative)) itemScore -= 1.4;
 
     if (
-      keywordHits(title, ["earnings", "results", "revenue", "guidance", "quarter"]) &&
-      keywordHits(title, ["beat", "beats", "strong", "raises", "growth", "record"])
+      keywordHits(title, [
+        "earnings",
+        "results",
+        "revenue",
+        "guidance",
+        "quarter",
+      ]) &&
+      keywordHits(title, [
+        "beat",
+        "beats",
+        "strong",
+        "raises",
+        "growth",
+        "record",
+      ])
     ) {
       itemScore += 2.2;
     }
 
     if (
-      keywordHits(title, ["earnings", "results", "revenue", "guidance", "quarter"]) &&
+      keywordHits(title, [
+        "earnings",
+        "results",
+        "revenue",
+        "guidance",
+        "quarter",
+      ]) &&
       keywordHits(title, ["miss", "warning", "cuts", "weak", "loss"])
     ) {
       itemScore -= 2.2;
@@ -571,7 +1005,7 @@ function scoreEarnings(news: NewsItem[]) {
         "q2",
         "q3",
         "q4",
-      ])
+      ]),
   );
 
   if (!earningsNews.length) {
@@ -590,11 +1024,23 @@ function scoreEarnings(news: NewsItem[]) {
     const weight = index === 0 ? 1.3 : index === 1 ? 1.15 : 1;
     const title = item.title.toLowerCase();
 
-    if (keywordHits(title, ["beat", "beats", "strong", "raises", "growth", "tops", "record"])) {
+    if (
+      keywordHits(title, [
+        "beat",
+        "beats",
+        "strong",
+        "raises",
+        "growth",
+        "tops",
+        "record",
+      ])
+    ) {
       raw += 9 * weight;
     }
 
-    if (keywordHits(title, ["miss", "cuts", "warning", "weak", "drops", "loss"])) {
+    if (
+      keywordHits(title, ["miss", "cuts", "warning", "weak", "drops", "loss"])
+    ) {
       raw -= 9 * weight;
     }
   });
@@ -621,108 +1067,17 @@ function scoreEarnings(news: NewsItem[]) {
   return { score, tone, label, reason };
 }
 
-
-function buildEarningsInvestorPoints(args: {
-  symbol: string;
-  earningsScore: { score: number; tone: ScoreTone; label: string; reason: string };
-  news: NewsItem[];
-  trend: string;
-  priceVs50: number | null;
-  priceVs200: number | null;
-}) {
-  const { symbol, earningsScore, news, trend, priceVs50, priceVs200 } = args;
-
-  const earningsItems = news
-    .filter(
-      (item) =>
-        !isLowValueNewsItem(item) &&
-        keywordHits(`${item.title} ${item.description ?? ""}`, [
-          "earnings",
-          "results",
-          "revenue",
-          "guidance",
-          "quarter",
-          "q1",
-          "q2",
-          "q3",
-          "q4",
-          "eps",
-          "profit",
-          "loss",
-          "margin",
-        ])
-    )
-    .sort((a, b) => {
-      const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
-      const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
-      return bTime - aTime;
-    });
-
-  const latest = earningsItems[0];
-  const latestSource = latest ? compactSource(latest.source) : null;
-  const latestDate = latest ? formatDate(latest.pubDate) : null;
-  const latestTitle = latest?.title ?? "";
-  const combinedText = earningsItems
-    .slice(0, 4)
-    .map((item) => `${item.title} ${item.description ?? ""}`)
-    .join(" ")
-    .toLowerCase();
-
-  const points: string[] = [];
-
-  points.push(
-    latest
-      ? `Latest earnings-linked item: ${latestSource} covered “${latestTitle}”${latestDate ? ` on ${latestDate}` : ""}. Treat this as headline context, not a full earnings model.`
-      : `No clear earnings-specific headline is showing in the current feed for ${symbol}, so investors should treat the earnings read as limited until a fresh report or company release is checked.`
-  );
-
-  points.push(
-    `${symbol}'s earnings tone is currently marked as ${earningsScore.label.toLowerCase()} with a score of ${earningsScore.score}. The key investor question is whether results and guidance support the market's current expectations.`
-  );
-
-  if (keywordHits(combinedText, ["revenue", "sales", "growth", "demand", "orders", "deliveries", "subscriber", "volume"])) {
-    points.push(
-      "Revenue and demand signals are the first thing to check: investors want to know whether the business is still expanding or whether growth is slowing."
-    );
-  } else {
-    points.push(
-      "Revenue growth is still the first checkpoint, even if the current headline set does not give enough detail to judge it properly."
-    );
-  }
-
-  if (keywordHits(combinedText, ["margin", "profit", "eps", "earnings per share", "cost", "expense", "loss", "cash flow"])) {
-    points.push(
-      "Profitability matters next: margins, EPS, costs, losses, and cash flow usually decide whether investors reward or punish the report after the first headline reaction."
-    );
-  } else {
-    points.push(
-      "Profitability is the second checkpoint: without margin, EPS, cost, or cash-flow detail, the headline alone is not enough to judge earnings quality."
-    );
-  }
-
-  if (keywordHits(combinedText, ["guidance", "outlook", "forecast", "raises", "cuts", "warning", "expects"])) {
-    points.push(
-      "Guidance is the swing factor: a strong current quarter can still fade if outlook is weak, while a messy quarter can recover if forward guidance improves."
-    );
-  } else {
-    points.push(
-      "Guidance remains the missing swing factor if it is not clear in the latest coverage; investors usually care more about the next quarter than the last one."
-    );
-  }
-
-  points.push(
-    `Watch the price reaction against the chart: ${trend.toLowerCase()} with ${formatPercent(priceVs50)} vs MA50 and ${formatPercent(priceVs200)} vs MA200 tells you whether investors are accepting or rejecting the earnings narrative.`
-  );
-
-  return points.slice(0, 5);
-}
-
 function buildLeadSummary(args: {
   symbol: string;
   companyName: string;
   trend: string;
   newsScore: NewsScoreResult;
-  earningsScore: { score: number; tone: ScoreTone; label: string; reason: string };
+  earningsScore: {
+    score: number;
+    tone: ScoreTone;
+    label: string;
+    reason: string;
+  };
 }) {
   const { symbol, companyName, trend, newsScore, earningsScore } = args;
   const lead = companyName ? `${companyName} (${symbol})` : symbol;
@@ -730,12 +1085,25 @@ function buildLeadSummary(args: {
   return `${lead} is currently showing a ${newsScore.label.toLowerCase()} headline tone with a ${trend.toLowerCase()} backdrop. The latest news flow is being framed here as context rather than prediction, so beginners can quickly see whether headlines are helping, hurting, or complicating the chart story. Earnings tone is currently ${earningsScore.label.toLowerCase()}.`;
 }
 
-function buildNewsSummary(item: NewsItem, symbol: string, trend: string, newsScore: NewsScoreResult) {
+function buildNewsSummary(
+  item: NewsItem,
+  symbol: string,
+  trend: string,
+  newsScore: NewsScoreResult,
+) {
   const source = compactSource(item.source);
   const title = item.title;
   const lower = title.toLowerCase();
 
-  if (keywordHits(lower, ["earnings", "results", "revenue", "guidance", "quarter"])) {
+  if (
+    keywordHits(lower, [
+      "earnings",
+      "results",
+      "revenue",
+      "guidance",
+      "quarter",
+    ])
+  ) {
     return `${source} is highlighting an earnings-related update for ${symbol}. Recent coverage is focusing on whether the latest results or guidance shift expectations for the next phase of the stock story.`;
   }
 
@@ -743,7 +1111,15 @@ function buildNewsSummary(item: NewsItem, symbol: string, trend: string, newsSco
     return `${source} is focusing on analyst sentiment around ${symbol}. That can matter for short-term attention, especially when the chart is already leaning in the same direction.`;
   }
 
-  if (keywordHits(lower, ["delivery", "deliveries", "production", "factory", "supply"])) {
+  if (
+    keywordHits(lower, [
+      "delivery",
+      "deliveries",
+      "production",
+      "factory",
+      "supply",
+    ])
+  ) {
     return `${source} is focusing on operating execution around ${symbol}. The latest coverage suggests traders are watching whether real business performance is lining up with the bigger growth narrative.`;
   }
 
@@ -770,10 +1146,23 @@ function buildNewsSummary(item: NewsItem, symbol: string, trend: string, newsSco
   return `${source} is drawing attention to a recent development around ${symbol}. Traders will usually care most about whether the stock shows real follow-through after the market has time to digest the headline.`;
 }
 
-function buildWhyItMatters(item: NewsItem, symbol: string, trend: string, newsScore: NewsScoreResult) {
+function buildWhyItMatters(
+  item: NewsItem,
+  symbol: string,
+  trend: string,
+  newsScore: NewsScoreResult,
+) {
   const lower = item.title.toLowerCase();
 
-  if (keywordHits(lower, ["earnings", "results", "revenue", "guidance", "quarter"])) {
+  if (
+    keywordHits(lower, [
+      "earnings",
+      "results",
+      "revenue",
+      "guidance",
+      "quarter",
+    ])
+  ) {
     return `Quarterly updates can reset expectations quickly, so even one earnings-related headline can change how investors frame ${symbol} in the near term.`;
   }
 
@@ -781,7 +1170,15 @@ function buildWhyItMatters(item: NewsItem, symbol: string, trend: string, newsSc
     return `Analyst calls can shift attention fast, but they usually matter more when price action starts confirming the same message.`;
   }
 
-  if (keywordHits(lower, ["delivery", "deliveries", "production", "factory", "supply"])) {
+  if (
+    keywordHits(lower, [
+      "delivery",
+      "deliveries",
+      "production",
+      "factory",
+      "supply",
+    ])
+  ) {
     return `Execution headlines matter because investors want proof that the business story is holding up in real operations, not just in market hype.`;
   }
 
@@ -831,10 +1228,7 @@ function isLowValueNewsItem(item: NewsItem) {
     "current chart",
   ];
 
-  const lowValueSources = [
-    "financialcontent",
-    "capital.com",
-  ];
+  const lowValueSources = ["financialcontent", "capital.com"];
 
   if (lowValuePatterns.some((pattern) => title.includes(pattern))) {
     return true;
@@ -967,43 +1361,43 @@ function buildWhatItMeans(args: {
 
   if (newsScore.tone === "green" && trend === "Bullish trend") {
     lines.push(
-      `${symbol} has a cleaner backdrop when positive headlines are landing into an already supportive chart, because the news and the structure are pointing in the same direction.`
+      `${symbol} has a cleaner backdrop when positive headlines are landing into an already supportive chart, because the news and the structure are pointing in the same direction.`,
     );
   } else if (newsScore.tone === "green") {
     lines.push(
-      `The recent headline flow for ${symbol} looks better than the chart structure, so traders may now watch for stronger price confirmation rather than assuming the story has already fully improved.`
+      `The recent headline flow for ${symbol} looks better than the chart structure, so traders may now watch for stronger price confirmation rather than assuming the story has already fully improved.`,
     );
   } else if (newsScore.tone === "red" && trend === "Bearish trend") {
     lines.push(
-      `${symbol} looks more vulnerable when weaker headlines arrive into an already soft chart, because negative news has less technical support underneath it.`
+      `${symbol} looks more vulnerable when weaker headlines arrive into an already soft chart, because negative news has less technical support underneath it.`,
     );
   } else if (newsScore.tone === "red") {
     lines.push(
-      `The chart may still be holding up better than the recent headline tone, but traders will watch whether weaker coverage starts damaging support or simply gets absorbed.`
+      `The chart may still be holding up better than the recent headline tone, but traders will watch whether weaker coverage starts damaging support or simply gets absorbed.`,
     );
   } else {
     lines.push(
-      `${symbol} currently sits in a more mixed zone where headline tone alone is unlikely to settle the next move without clearer price confirmation.`
+      `${symbol} currently sits in a more mixed zone where headline tone alone is unlikely to settle the next move without clearer price confirmation.`,
     );
   }
 
   if (typeof rsi === "number" && rsi >= 70) {
     lines.push(
-      `Momentum already looks warm, so even strong news may lead to pause-and-hold behaviour before the next cleaner move higher.`
+      `Momentum already looks warm, so even strong news may lead to pause-and-hold behaviour before the next cleaner move higher.`,
     );
   } else if (typeof rsi === "number" && rsi <= 35) {
     lines.push(
-      `Momentum is softer, which means modestly better news could matter more than usual if traders start looking for stabilisation or rebound attempts.`
+      `Momentum is softer, which means modestly better news could matter more than usual if traders start looking for stabilisation or rebound attempts.`,
     );
   }
 
   if (typeof priceVs50 === "number" && priceVs50 >= 10) {
     lines.push(
-      `Because ${symbol} is already stretched above the 50-day average, the next bullish step often depends on support holding rather than on endless excitement.`
+      `Because ${symbol} is already stretched above the 50-day average, the next bullish step often depends on support holding rather than on endless excitement.`,
     );
   } else if (typeof priceVs50 === "number" && priceVs50 <= -10) {
     lines.push(
-      `Because ${symbol} is trading well below the 50-day average, stronger headlines may first need to repair damage before the market treats them as a fresh uptrend signal.`
+      `Because ${symbol} is trading well below the 50-day average, stronger headlines may first need to repair damage before the market treats them as a fresh uptrend signal.`,
     );
   }
 
@@ -1029,9 +1423,9 @@ function buildBeyondHeadline(args: {
 
   if (typeof recentHigh === "number" && typeof recentLow === "number") {
     return `${symbol} may not need perfect headlines to improve. Sometimes the more important clue is whether the stock stops making lower lows near ${formatMoney(
-      recentLow
+      recentLow,
     )} and starts building toward resistance near ${formatMoney(
-      recentHigh
+      recentHigh,
     )}. That kind of behaviour can quietly matter more than a dramatic headline.`;
   }
 
@@ -1048,14 +1442,15 @@ function buildTechnicalRead(args: {
   priceVs50: number | null;
   priceVs200: number | null;
 }) {
-  const { symbol, price, ma50, ma200, trend, rsi, priceVs50, priceVs200 } = args;
+  const { symbol, price, ma50, ma200, trend, rsi, priceVs50, priceVs200 } =
+    args;
 
   const trendText =
     trend === "Bullish trend"
       ? `${symbol} is trading in a stronger trend structure, with price holding above the shorter and longer trend references.`
       : trend === "Bearish trend"
-      ? `${symbol} is trading in a weaker trend structure, with price still sitting below key trend references.`
-      : `${symbol} is not giving a fully clean trend read right now, which makes the quality of follow-through especially important.`;
+        ? `${symbol} is trading in a weaker trend structure, with price still sitting below key trend references.`
+        : `${symbol} is not giving a fully clean trend read right now, which makes the quality of follow-through especially important.`;
 
   let momentumText =
     "Momentum is not especially stretched right now, so price behaviour around fresh headlines may matter more than an extreme oscillator reading.";
@@ -1069,9 +1464,9 @@ function buildTechnicalRead(args: {
   }
 
   const levelText = `Last price is ${formatMoney(price)}, versus MA50 at ${formatMoney(
-    ma50
+    ma50,
   )} and MA200 at ${formatMoney(ma200)}. Relative to those reference points, ${symbol} is ${formatPercent(
-    priceVs50
+    priceVs50,
   )} vs MA50 and ${formatPercent(priceVs200)} vs MA200.`;
 
   return {
@@ -1081,7 +1476,10 @@ function buildTechnicalRead(args: {
   };
 }
 
-function structuredNews(news: NewsItem[], summaryByTitle: Record<string, string>) {
+function structuredNews(
+  news: NewsItem[],
+  summaryByTitle: Record<string, string>,
+) {
   return news.map((item) => ({
     "@type": "NewsArticle",
     headline: item.title,
@@ -1100,7 +1498,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   return {
     title: `${upper} Stock News, Summary & Analysis | MyStockHarbor`,
-      description: `Read ${upper} stock news with beginner-friendly summaries, headline tone, earnings context and technical analysis on MyStockHarbor.`,
+    description: `Read ${upper} stock news with beginner-friendly summaries, headline tone, earnings context and technical analysis on MyStockHarbor.`,
     alternates: {
       canonical: `https://www.mystockharbor.com/stock/${upper}/news`,
     },
@@ -1136,7 +1534,6 @@ async function DetailedNewsAiSection({
   detailedNews: NewsItem[];
   compactNews: NewsItem[];
 }) {
-
   return (
     <section style={editorialCardStyle}>
       <div style={sectionEyebrowStyle}>Latest briefing</div>
@@ -1161,7 +1558,9 @@ async function DetailedNewsAiSection({
                 }}
               >
                 <div style={newsMetaRowStyle}>
-                  <span style={newsSourcePillStyle}>{compactSource(item.source)}</span>
+                  <span style={newsSourcePillStyle}>
+                    {compactSource(item.source)}
+                  </span>
                   <span style={newsDateStyle}>{formatDate(item.pubDate)}</span>
                 </div>
 
@@ -1192,8 +1591,9 @@ async function DetailedNewsAiSection({
                   }}
                 >
                   <span>
-                    Paraphrased on-page brief based on the headline and available source
-                    context. Source noted for context: {compactSource(item.source)}
+                    Paraphrased on-page brief based on the headline and
+                    available source context. Source noted for context:{" "}
+                    {compactSource(item.source)}
                   </span>
 
                   <span
@@ -1213,11 +1613,13 @@ async function DetailedNewsAiSection({
           })
         ) : (
           <div style={newsLeadCardStyle}>
-            <h3 style={{ ...newsHeadlineStyle, marginTop: 0 }}>No fresh headline set available</h3>
+            <h3 style={{ ...newsHeadlineStyle, marginTop: 0 }}>
+              No fresh headline set available
+            </h3>
             <p style={newsSummaryStyle}>
-              This page still works as a stock-news analysis hub, but the current news feed
-              is light. In that case, the page leans more on structure, levels, and what
-              traders may watch next.
+              This page still works as a stock-news analysis hub, but the
+              current news feed is light. In that case, the page leans more on
+              structure, levels, and what traders may watch next.
             </p>
           </div>
         )}
@@ -1225,7 +1627,9 @@ async function DetailedNewsAiSection({
 
       {compactNews.length ? (
         <div style={{ marginTop: 16 }}>
-          <div style={compactFeedLabelStyle}>Older updates drop into a lighter feed</div>
+          <div style={compactFeedLabelStyle}>
+            Older updates drop into a lighter feed
+          </div>
 
           <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
             {compactNews.map((item, index) => (
@@ -1235,7 +1639,9 @@ async function DetailedNewsAiSection({
                 style={compactNewsRowStyle}
               >
                 <div style={{ minWidth: 88 }}>
-                  <div style={compactSourceStyle}>{compactSource(item.source)}</div>
+                  <div style={compactSourceStyle}>
+                    {compactSource(item.source)}
+                  </div>
                   <div style={compactDateStyle}>{formatDate(item.pubDate)}</div>
                 </div>
 
@@ -1273,7 +1679,12 @@ async function InsightAiCard({
   companyName: string;
   trend: string;
   newsScore: NewsScoreResult;
-  earningsScore: { score: number; label: string; tone: ScoreTone; reason: string };
+  earningsScore: {
+    score: number;
+    label: string;
+    tone: ScoreTone;
+    reason: string;
+  };
   lastRsi: number | null;
   priceVs50: number | null;
   priceVs200: number | null;
@@ -1282,7 +1693,6 @@ async function InsightAiCard({
   detailedNews: NewsItem[];
   fallbackBeyondHeadline: string;
 }) {
-
   const displayBeyondHeadline = aiData.aiInsight?.beyondHeadline?.trim()
     ? aiData.aiInsight.beyondHeadline
     : fallbackBeyondHeadline;
@@ -1335,7 +1745,12 @@ async function GoingForwardAiCard({
   companyName: string;
   trend: string;
   newsScore: NewsScoreResult;
-  earningsScore: { score: number; label: string; tone: ScoreTone; reason: string };
+  earningsScore: {
+    score: number;
+    label: string;
+    tone: ScoreTone;
+    reason: string;
+  };
   lastRsi: number | null;
   priceVs50: number | null;
   priceVs200: number | null;
@@ -1344,11 +1759,9 @@ async function GoingForwardAiCard({
   detailedNews: NewsItem[];
   fallbackWhatItMeans: string[];
 }) {
-
-  const displayWhatItMeans =
-    aiData.aiInsight?.whatItMeans?.length
-      ? aiData.aiInsight.whatItMeans
-      : fallbackWhatItMeans;
+  const displayWhatItMeans = aiData.aiInsight?.whatItMeans?.length
+    ? aiData.aiInsight.whatItMeans
+    : fallbackWhatItMeans;
 
   const hasAiInsight =
     !!aiData.aiInsight?.beyondHeadline?.trim() &&
@@ -1399,11 +1812,11 @@ function loadingParagraphStyle(widths: string[]) {
   return (
     <div style={{ display: "grid", gap: 10 }}>
       {widths.map((width, index) => (
-       <div
-  key={`${width}-${index}`}
-  className="shimmer"
-  style={loadingBarStyle(width)}
-/>
+        <div
+          key={`${width}-${index}`}
+          className="shimmer"
+          style={loadingBarStyle(width)}
+        />
       ))}
     </div>
   );
@@ -1437,7 +1850,9 @@ function DetailedNewsFallback({
               }}
             >
               <div style={newsMetaRowStyle}>
-                <span style={newsSourcePillStyle}>{compactSource(item.source)}</span>
+                <span style={newsSourcePillStyle}>
+                  {compactSource(item.source)}
+                </span>
                 <span style={newsDateStyle}>{formatDate(item.pubDate)}</span>
               </div>
 
@@ -1461,11 +1876,13 @@ function DetailedNewsFallback({
           ))
         ) : (
           <div style={newsLeadCardStyle}>
-            <h3 style={{ ...newsHeadlineStyle, marginTop: 0 }}>No fresh headline set available</h3>
+            <h3 style={{ ...newsHeadlineStyle, marginTop: 0 }}>
+              No fresh headline set available
+            </h3>
             <p style={newsSummaryStyle}>
-              This page still works as a stock-news analysis hub, but the current news feed
-              is light. In that case, the page leans more on structure, levels, and what
-              traders may watch next.
+              This page still works as a stock-news analysis hub, but the
+              current news feed is light. In that case, the page leans more on
+              structure, levels, and what traders may watch next.
             </p>
           </div>
         )}
@@ -1473,7 +1890,9 @@ function DetailedNewsFallback({
 
       {compactNews.length ? (
         <div style={{ marginTop: 16 }}>
-          <div style={compactFeedLabelStyle}>Older updates drop into a lighter feed</div>
+          <div style={compactFeedLabelStyle}>
+            Older updates drop into a lighter feed
+          </div>
 
           <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
             {compactNews.map((item, index) => (
@@ -1483,7 +1902,9 @@ function DetailedNewsFallback({
                 style={compactNewsRowStyle}
               >
                 <div style={{ minWidth: 88 }}>
-                  <div style={compactSourceStyle}>{compactSource(item.source)}</div>
+                  <div style={compactSourceStyle}>
+                    {compactSource(item.source)}
+                  </div>
                   <div style={compactDateStyle}>{formatDate(item.pubDate)}</div>
                 </div>
 
@@ -1524,14 +1945,163 @@ function GoingForwardFallbackCard() {
           <div key={item} style={bulletRowStyle}>
             <div style={bulletDotStyle} />
             <div style={{ display: "grid", gap: 8 }}>
-              <div style={loadingBarStyle(item === 1 ? "92%" : item === 2 ? "86%" : "78%")} />
-              <div style={loadingBarStyle(item === 1 ? "76%" : item === 2 ? "68%" : "62%")} />
+              <div
+                style={loadingBarStyle(
+                  item === 1 ? "92%" : item === 2 ? "86%" : "78%",
+                )}
+              />
+              <div
+                style={loadingBarStyle(
+                  item === 1 ? "76%" : item === 2 ? "68%" : "62%",
+                )}
+              />
             </div>
           </div>
         ))}
       </div>
     </section>
   );
+}
+
+function LatestEarningsCard({ earnings }: { earnings: LatestEarningsData }) {
+  const toneCopy = earnings.hasStructuredData
+    ? earnings.toneLabel
+    : "Unavailable";
+
+  return (
+    <section style={earningsCardStyle(earnings.tone)}>
+      <div style={sectionEyebrowStyle}>Latest earnings</div>
+
+      <div
+        style={{
+          marginTop: 8,
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 12,
+          alignItems: "flex-start",
+          flexWrap: "wrap",
+        }}
+      >
+        <h2 style={{ ...sectionTitleSmallStyle, margin: 0 }}>
+          Earnings snapshot
+        </h2>
+        <div style={earningsTonePillStyle(earnings.tone)}>{toneCopy}</div>
+      </div>
+
+      {!earnings.hasStructuredData ? (
+        <p style={bodyCopyStyle}>
+          Structured EPS, revenue and margin data is not available for this
+          symbol right now. The page will show the latest numbers here when the
+          earnings feed returns usable data.
+        </p>
+      ) : (
+        <>
+          <div style={earningsDateRowStyle}>
+            <div>
+              <div style={earningsMiniLabelStyle}>Report date</div>
+              <div style={earningsMiniValueStyle}>
+                {formatPlainDate(earnings.reportDate)}
+              </div>
+            </div>
+            <div>
+              <div style={earningsMiniLabelStyle}>Next earnings</div>
+              <div style={earningsMiniValueStyle}>
+                {formatPlainDate(earnings.nextEarningsDate)}
+              </div>
+            </div>
+          </div>
+
+          <div style={earningsMetricGridStyle}>
+            <EarningsMetric
+              label="Actual EPS"
+              value={formatMoney(earnings.actualEps)}
+            />
+            <EarningsMetric
+              label="Estimated EPS"
+              value={formatMoney(earnings.estimatedEps)}
+            />
+            <EarningsMetric
+              label="EPS surprise"
+              value={formatMoney(earnings.epsSurprise)}
+              meta={formatPercent(earnings.epsSurprisePercent, 1)}
+              tone={metricTone(earnings.epsSurprisePercent)}
+            />
+            <EarningsMetric
+              label="Revenue"
+              value={formatLargeMoney(earnings.revenue)}
+            />
+            <EarningsMetric
+              label="Revenue estimate"
+              value={formatLargeMoney(earnings.revenueEstimate)}
+            />
+            <EarningsMetric
+              label="Revenue surprise"
+              value={formatLargeMoney(earnings.revenueSurprise)}
+              meta={formatPercent(earnings.revenueSurprisePercent, 1)}
+              tone={metricTone(earnings.revenueSurprisePercent)}
+            />
+            <EarningsMetric
+              label="Gross margin"
+              value={formatPercent(earnings.grossMargin, 1)}
+            />
+            <EarningsMetric
+              label="Operating margin"
+              value={formatPercent(earnings.operatingMargin, 1)}
+            />
+            <EarningsMetric
+              label="Net income"
+              value={formatLargeMoney(earnings.netIncome)}
+            />
+          </div>
+
+          <div style={earningsGuidanceBoxStyle}>
+            <div style={earningsMiniLabelStyle}>Guidance summary</div>
+            <div
+              style={{
+                marginTop: 6,
+                lineHeight: 1.55,
+                color: "rgba(241,245,249,0.82)",
+              }}
+            >
+              {earnings.guidanceSummary ??
+                "No structured guidance summary available from the earnings feed."}
+            </div>
+          </div>
+        </>
+      )}
+
+      <div style={earningsSourceStyle}>{earnings.sourceNote}</div>
+    </section>
+  );
+}
+
+function EarningsMetric({
+  label,
+  value,
+  meta,
+  tone,
+}: {
+  label: string;
+  value: string;
+  meta?: string;
+  tone?: ScoreTone;
+}) {
+  return (
+    <div style={earningsMetricStyle(tone)}>
+      <div style={earningsMiniLabelStyle}>{label}</div>
+      <div style={earningsMetricValueStyle}>{value}</div>
+      {meta && meta !== "—" ? (
+        <div style={earningsMetricMetaStyle(tone)}>{meta}</div>
+      ) : null}
+    </div>
+  );
+}
+
+function metricTone(value: number | null): ScoreTone | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  if (value > 0) return "green";
+  if (value < 0) return "red";
+  return "yellow";
 }
 
 export default async function StockNewsPage({ params }: Props) {
@@ -1552,7 +2122,7 @@ export default async function StockNewsPage({ params }: Props) {
     lastMA50,
     lastMA200,
     lastRsi,
-       isInvalidTicker,
+    isInvalidTicker,
     isDataUnavailable,
     priceVs50,
     priceVs200,
@@ -1563,6 +2133,8 @@ export default async function StockNewsPage({ params }: Props) {
     detailedNews,
     compactNews,
   } = newsData;
+
+  const latestEarnings = await getLatestEarningsData(upper, earningsScore);
 
   const leadSummary = buildLeadSummary({
     symbol: upper,
@@ -1602,17 +2174,8 @@ export default async function StockNewsPage({ params }: Props) {
   const displayBeyondHeadline = beyondHeadline;
   const displayWhatItMeans = whatItMeans;
 
-  const earningsInvestorPoints = buildEarningsInvestorPoints({
-    symbol: upper,
-    earningsScore,
-    news,
-    trend,
-    priceVs50,
-    priceVs200,
-  });
-
   const summaryByTitle = Object.fromEntries(
-    detailedNews.map((item) => [item.title, item.description ?? ""])
+    detailedNews.map((item) => [item.title, item.description ?? ""]),
   );
 
   const aiData = await getStockNewsAiData(
@@ -1639,11 +2202,10 @@ export default async function StockNewsPage({ params }: Props) {
       detailedNews,
       compactNews,
     },
-    { includeInsight: true }
+    { includeInsight: true },
   );
 
   return (
-    
     <main
       style={{
         minHeight: "100vh",
@@ -1790,22 +2352,22 @@ export default async function StockNewsPage({ params }: Props) {
             </p>
 
             <div
-  style={{
-    marginTop: 18,
-    padding: "14px 16px",
-    borderRadius: 14,
-    border: "1px solid rgba(59,130,246,0.25)",
-    background:
-      "linear-gradient(135deg, rgba(59,130,246,0.10), rgba(8,18,30,0.92))",
-    fontSize: 14,
-    lineHeight: 1.6,
-    color: "#e5e7eb",
-    maxWidth: 620,
-  }}
->
-  <strong style={{ color: "#93c5fd" }}>HEADLINE TAKE:</strong>{" "}
-  {newsScore.reason}
-</div>
+              style={{
+                marginTop: 18,
+                padding: "14px 16px",
+                borderRadius: 14,
+                border: "1px solid rgba(59,130,246,0.25)",
+                background:
+                  "linear-gradient(135deg, rgba(59,130,246,0.10), rgba(8,18,30,0.92))",
+                fontSize: 14,
+                lineHeight: 1.6,
+                color: "#e5e7eb",
+                maxWidth: 620,
+              }}
+            >
+              <strong style={{ color: "#93c5fd" }}>HEADLINE TAKE:</strong>{" "}
+              {newsScore.reason}
+            </div>
 
             <StockNewsTickerJump currentSymbol={upper} />
 
@@ -1830,8 +2392,8 @@ export default async function StockNewsPage({ params }: Props) {
             </div>
 
             <div className="newsHeroSubCopy" style={heroSubCopyStyle}>
-              Full chart, indicators and drawing tools on TradingView. Move to Platforms when you
-              are ready to act.
+              Full chart, indicators and drawing tools on TradingView. Move to
+              Platforms when you are ready to act.
             </div>
           </div>
 
@@ -1853,7 +2415,7 @@ export default async function StockNewsPage({ params }: Props) {
                 <div style={miniScoreLabelStyle}>Headline depth</div>
               </div>
             </div>
-                        <div style={miniScoreGridStyle}>
+            <div style={miniScoreGridStyle}>
               <div style={heroMetricStyle}>
                 <div style={heroMetricLabelStyle}>Last Price</div>
                 <div style={heroMetricValueStyle}>
@@ -1893,9 +2455,7 @@ export default async function StockNewsPage({ params }: Props) {
               />
             </Suspense>
 
-            <Suspense
-              fallback={<InsightFallbackCard />}
-            >
+            <Suspense fallback={<InsightFallbackCard />}>
               <InsightAiCard
                 aiData={aiData}
                 symbol={upper}
@@ -1914,9 +2474,11 @@ export default async function StockNewsPage({ params }: Props) {
             </Suspense>
           </div>
 
-             <aside className="newsSidebar" style={{ display: "grid", gap: 18 }}>
+          <aside className="newsSidebar" style={{ display: "grid", gap: 18 }}>
             <section style={sidebarCardStyle}>
-              <div style={sectionEyebrowStyle}>Why the score looks like this</div>
+              <div style={sectionEyebrowStyle}>
+                Why the score looks like this
+              </div>
               <h2 style={sectionTitleSmallStyle}>News Score Breakdown</h2>
 
               <p style={bodyCopyStyle}>{newsScore.reason}</p>
@@ -1931,7 +2493,10 @@ export default async function StockNewsPage({ params }: Props) {
                       </div>
                     ))
                   ) : (
-                    <div style={signalBoxEmptyStyle}>No strong positive driver stood out in the latest higher-value headlines.</div>
+                    <div style={signalBoxEmptyStyle}>
+                      No strong positive driver stood out in the latest
+                      higher-value headlines.
+                    </div>
                   )}
                 </div>
 
@@ -1944,29 +2509,18 @@ export default async function StockNewsPage({ params }: Props) {
                       </div>
                     ))
                   ) : (
-                    <div style={signalBoxEmptyStyle}>No strong negative driver stood out in the latest higher-value headlines.</div>
+                    <div style={signalBoxEmptyStyle}>
+                      No strong negative driver stood out in the latest
+                      higher-value headlines.
+                    </div>
                   )}
                 </div>
               </div>
             </section>
 
-            <section style={sidebarCardStyle}>
-              <div style={sectionEyebrowStyle}>Latest earnings</div>
-              <h2 style={sectionTitleSmallStyle}>5 investor points</h2>
+            <LatestEarningsCard earnings={latestEarnings} />
 
-              <div style={{ display: "grid", gap: 12, marginTop: 14 }}>
-                {earningsInvestorPoints.map((point, index) => (
-                  <div key={`${upper}-earnings-point-${index}`} style={numberedInsightRowStyle}>
-                    <div style={numberBadgeStyle}>{index + 1}</div>
-                    <div style={numberedInsightTextStyle}>{point}</div>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <Suspense
-              fallback={<GoingForwardFallbackCard />}
-            >
+            <Suspense fallback={<GoingForwardFallbackCard />}>
               <GoingForwardAiCard
                 aiData={aiData}
                 symbol={upper}
@@ -1999,15 +2553,21 @@ export default async function StockNewsPage({ params }: Props) {
 
         <section className="newsBottomStrip" style={bottomStripStyle}>
           <div>
-            <div style={bottomStripTitleStyle}>Continue your {upper} research</div>
+            <div style={bottomStripTitleStyle}>
+              Continue your {upper} research
+            </div>
             <div style={bottomStripTextStyle}>
-              Use the stock analysis page for a fuller technical read, open TradingView for charting,
-              or head to Platforms when you are ready to place a trade.
+              Use the stock analysis page for a fuller technical read, open
+              TradingView for charting, or head to Platforms when you are ready
+              to place a trade.
             </div>
           </div>
 
-          <div className="newsBottomActions" style={bottomStripActionsStyle}> 
-            <Link href={`/stock/${encodeURIComponent(upper)}`} style={bottomActionStyle("blue")}>
+          <div className="newsBottomActions" style={bottomStripActionsStyle}>
+            <Link
+              href={`/stock/${encodeURIComponent(upper)}`}
+              style={bottomActionStyle("blue")}
+            >
               Stock Analysis
             </Link>
 
@@ -2026,7 +2586,6 @@ export default async function StockNewsPage({ params }: Props) {
           </div>
         </section>
       </div>
-
 
       <style>{`
         .newsWrap {
@@ -2247,9 +2806,6 @@ export default async function StockNewsPage({ params }: Props) {
 }
 
 `}</style>
-
-
-      
     </main>
   );
 }
@@ -2275,8 +2831,7 @@ const heroShellStyle: CSSProperties = {
   border: "1px solid rgba(255,255,255,0.09)",
   borderRadius: 28,
   padding: 22,
-  background:
-    "linear-gradient(135deg, rgba(10,16,32,0.98), rgba(6,9,15,0.98))",
+  background: "linear-gradient(135deg, rgba(10,16,32,0.98), rgba(6,9,15,0.98))",
   boxShadow:
     "inset 0 1px 0 rgba(255,255,255,0.05), 0 20px 54px rgba(0,0,0,0.36)",
 };
@@ -2297,7 +2852,8 @@ const newsDeskTagStyle: CSSProperties = {
   padding: "8px 12px",
   borderRadius: 999,
   border: "1px solid rgba(59,130,246,0.28)",
-  background: "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.08))",
+  background:
+    "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.08))",
   color: "#dbeafe",
   fontSize: 12,
   fontWeight: 950,
@@ -2367,7 +2923,8 @@ const heroPrimaryCtaStyle: CSSProperties = {
   padding: "12px 16px",
   borderRadius: 14,
   border: "1px solid rgba(59,130,246,0.34)",
-  background: "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
+  background:
+    "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
   color: "#dbeafe",
   textDecoration: "none",
   fontWeight: 900,
@@ -2383,7 +2940,8 @@ const heroSecondaryCtaStyle: CSSProperties = {
   padding: "12px 16px",
   borderRadius: 14,
   border: "1px solid rgba(34,197,94,0.30)",
-  background: "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))",
+  background:
+    "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))",
   color: "#dcfce7",
   textDecoration: "none",
   fontWeight: 900,
@@ -2404,7 +2962,8 @@ function scorePanelStyle(tone: ScoreTone): CSSProperties {
       border: "1px solid rgba(34,197,94,0.26)",
       borderRadius: 20,
       padding: 18,
-      background: "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(7,16,12,0.96))",
+      background:
+        "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(7,16,12,0.96))",
     };
   }
 
@@ -2413,7 +2972,8 @@ function scorePanelStyle(tone: ScoreTone): CSSProperties {
       border: "1px solid rgba(248,113,113,0.24)",
       borderRadius: 20,
       padding: 18,
-      background: "linear-gradient(135deg, rgba(248,113,113,0.16), rgba(18,10,10,0.96))",
+      background:
+        "linear-gradient(135deg, rgba(248,113,113,0.16), rgba(18,10,10,0.96))",
     };
   }
 
@@ -2421,7 +2981,8 @@ function scorePanelStyle(tone: ScoreTone): CSSProperties {
     border: "1px solid rgba(250,204,21,0.24)",
     borderRadius: 20,
     padding: 18,
-    background: "linear-gradient(135deg, rgba(250,204,21,0.14), rgba(18,16,8,0.96))",
+    background:
+      "linear-gradient(135deg, rgba(250,204,21,0.14), rgba(18,16,8,0.96))",
   };
 }
 
@@ -2432,7 +2993,6 @@ const scorePanelKickerStyle: CSSProperties = {
   textTransform: "uppercase",
   color: "rgba(255,255,255,0.76)",
 };
-
 
 function newsGaugeColour(tone: ScoreTone) {
   if (tone === "green") return "#22c55e";
@@ -2468,7 +3028,13 @@ function NewsScoreGauge({ newsScore }: { newsScore: NewsScoreResult }) {
           }}
         >
           <defs>
-            <linearGradient id="newsGaugeWarmGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <linearGradient
+              id="newsGaugeWarmGradient"
+              x1="0%"
+              y1="0%"
+              x2="100%"
+              y2="0%"
+            >
               <stop offset="0%" stopColor="#ef4444" />
               <stop offset="48%" stopColor="#eab308" />
               <stop offset="100%" stopColor="#22c55e" />
@@ -2538,7 +3104,6 @@ function NewsScoreGauge({ newsScore }: { newsScore: NewsScoreResult }) {
         <div style={{ color: "#fde68a", textAlign: "center" }}>Neutral</div>
         <div style={{ color: "#86efac", textAlign: "right" }}>Bullish</div>
       </div>
-
     </div>
   );
 }
@@ -2563,23 +3128,19 @@ function scoreLabelStyle(tone: ScoreTone): CSSProperties {
     letterSpacing: "0.06em",
     textTransform: "uppercase",
     color:
-      tone === "green"
-        ? "#dcfce7"
-        : tone === "red"
-        ? "#fee2e2"
-        : "#fef3c7",
+      tone === "green" ? "#dcfce7" : tone === "red" ? "#fee2e2" : "#fef3c7",
     background:
       tone === "green"
         ? "rgba(34,197,94,0.18)"
         : tone === "red"
-        ? "rgba(248,113,113,0.16)"
-        : "rgba(250,204,21,0.14)",
+          ? "rgba(248,113,113,0.16)"
+          : "rgba(250,204,21,0.14)",
     border:
       tone === "green"
         ? "1px solid rgba(34,197,94,0.28)"
         : tone === "red"
-        ? "1px solid rgba(248,113,113,0.24)"
-        : "1px solid rgba(250,204,21,0.22)",
+          ? "1px solid rgba(248,113,113,0.24)"
+          : "1px solid rgba(250,204,21,0.22)",
   };
 }
 
@@ -2602,8 +3163,8 @@ function miniScoreCardStyle(tone: ScoreTone): CSSProperties {
       tone === "green"
         ? "1px solid rgba(34,197,94,0.22)"
         : tone === "red"
-        ? "1px solid rgba(248,113,113,0.20)"
-        : "1px solid rgba(255,255,255,0.08)",
+          ? "1px solid rgba(248,113,113,0.20)"
+          : "1px solid rgba(255,255,255,0.08)",
     borderRadius: 16,
     padding: 14,
     background: "rgba(255,255,255,0.03)",
@@ -2638,7 +3199,8 @@ const editorialCardStyle: CSSProperties = {
   border: "1px solid rgba(255,255,255,0.08)",
   borderRadius: 24,
   padding: 20,
-  background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.025))",
+  background:
+    "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.025))",
   boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
 };
 
@@ -2646,15 +3208,164 @@ const featuredInsightShellStyle: CSSProperties = {
   border: "1px solid rgba(59,130,246,0.22)",
   borderRadius: 24,
   padding: 20,
-  background: "linear-gradient(135deg, rgba(59,130,246,0.10), rgba(7,12,22,0.96))",
+  background:
+    "linear-gradient(135deg, rgba(59,130,246,0.10), rgba(7,12,22,0.96))",
   boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+};
+
+function earningsCardStyle(tone: ScoreTone): CSSProperties {
+  const toneMap = {
+    green: {
+      border: "rgba(34,197,94,0.24)",
+      bg: "linear-gradient(135deg, rgba(34,197,94,0.09), rgba(255,255,255,0.022))",
+    },
+    yellow: {
+      border: "rgba(250,204,21,0.24)",
+      bg: "linear-gradient(135deg, rgba(250,204,21,0.09), rgba(255,255,255,0.022))",
+    },
+    red: {
+      border: "rgba(239,68,68,0.26)",
+      bg: "linear-gradient(135deg, rgba(239,68,68,0.10), rgba(255,255,255,0.022))",
+    },
+  } as const;
+
+  return {
+    border: `1px solid ${toneMap[tone].border}`,
+    borderRadius: 20,
+    padding: 18,
+    background: toneMap[tone].bg,
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+  };
+}
+
+function earningsTonePillStyle(tone: ScoreTone): CSSProperties {
+  const toneMap = {
+    green: {
+      border: "rgba(34,197,94,0.32)",
+      color: "#bbf7d0",
+      bg: "rgba(34,197,94,0.12)",
+    },
+    yellow: {
+      border: "rgba(250,204,21,0.32)",
+      color: "#fde68a",
+      bg: "rgba(250,204,21,0.12)",
+    },
+    red: {
+      border: "rgba(239,68,68,0.34)",
+      color: "#fecaca",
+      bg: "rgba(239,68,68,0.13)",
+    },
+  } as const;
+
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "7px 10px",
+    borderRadius: 999,
+    border: `1px solid ${toneMap[tone].border}`,
+    background: toneMap[tone].bg,
+    color: toneMap[tone].color,
+    fontSize: 12,
+    fontWeight: 950,
+    textTransform: "uppercase",
+    letterSpacing: "0.06em",
+  };
+}
+
+const earningsDateRowStyle: CSSProperties = {
+  marginTop: 14,
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 10,
+};
+
+const earningsMetricGridStyle: CSSProperties = {
+  marginTop: 14,
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 10,
+};
+
+function earningsMetricStyle(tone?: ScoreTone): CSSProperties {
+  const toneBorder =
+    tone === "green"
+      ? "rgba(34,197,94,0.22)"
+      : tone === "red"
+        ? "rgba(239,68,68,0.24)"
+        : tone === "yellow"
+          ? "rgba(250,204,21,0.22)"
+          : "rgba(255,255,255,0.08)";
+
+  return {
+    border: `1px solid ${toneBorder}`,
+    borderRadius: 14,
+    padding: 12,
+    background: "rgba(2,6,23,0.30)",
+    minWidth: 0,
+  };
+}
+
+const earningsMiniLabelStyle: CSSProperties = {
+  fontSize: 10,
+  fontWeight: 950,
+  letterSpacing: "0.09em",
+  textTransform: "uppercase",
+  color: "rgba(203,213,225,0.72)",
+};
+
+const earningsMiniValueStyle: CSSProperties = {
+  marginTop: 5,
+  fontSize: 14,
+  fontWeight: 900,
+  color: "#f8fafc",
+};
+
+const earningsMetricValueStyle: CSSProperties = {
+  marginTop: 6,
+  fontSize: 18,
+  lineHeight: 1.08,
+  fontWeight: 950,
+  letterSpacing: "-0.035em",
+  color: "#f8fafc",
+};
+
+function earningsMetricMetaStyle(tone?: ScoreTone): CSSProperties {
+  return {
+    marginTop: 5,
+    fontSize: 12,
+    fontWeight: 850,
+    color:
+      tone === "green"
+        ? "#86efac"
+        : tone === "red"
+          ? "#fca5a5"
+          : "rgba(226,232,240,0.70)",
+  };
+}
+
+const earningsGuidanceBoxStyle: CSSProperties = {
+  marginTop: 14,
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 14,
+  padding: 12,
+  background: "rgba(255,255,255,0.026)",
+  fontSize: 13,
+};
+
+const earningsSourceStyle: CSSProperties = {
+  marginTop: 12,
+  fontSize: 11,
+  lineHeight: 1.5,
+  color: "rgba(203,213,225,0.58)",
 };
 
 const sidebarCardStyle: CSSProperties = {
   border: "1px solid rgba(255,255,255,0.08)",
   borderRadius: 20,
   padding: 18,
-  background: "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02))",
+  background:
+    "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02))",
   boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
 };
 
@@ -2739,7 +3450,8 @@ const whyItMattersBoxStyle: CSSProperties = {
   border: "1px solid rgba(59,130,246,0.16)",
   borderRadius: 14,
   padding: 12,
-  background: "linear-gradient(135deg, rgba(59,130,246,0.08), rgba(255,255,255,0.02))",
+  background:
+    "linear-gradient(135deg, rgba(59,130,246,0.08), rgba(255,255,255,0.02))",
 };
 
 const whyItMattersLabelStyle: CSSProperties = {
@@ -2817,9 +3529,7 @@ function signalBoxStyle(tone: "green" | "red"): CSSProperties {
     borderRadius: 14,
     padding: 12,
     background:
-      tone === "green"
-        ? "rgba(34,197,94,0.06)"
-        : "rgba(248,113,113,0.05)",
+      tone === "green" ? "rgba(34,197,94,0.06)" : "rgba(248,113,113,0.05)",
   };
 }
 
@@ -2843,38 +3553,6 @@ const signalBoxEmptyStyle: CSSProperties = {
   fontSize: 13,
   lineHeight: 1.55,
   color: "rgba(241,245,249,0.58)",
-};
-
-
-const numberedInsightRowStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "28px minmax(0, 1fr)",
-  gap: 12,
-  alignItems: "start",
-  border: "1px solid rgba(255,255,255,0.06)",
-  borderRadius: 14,
-  padding: 12,
-  background: "rgba(255,255,255,0.025)",
-};
-
-const numberBadgeStyle: CSSProperties = {
-  width: 28,
-  height: 28,
-  borderRadius: 999,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  border: "1px solid rgba(59,130,246,0.28)",
-  background: "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.08))",
-  color: "#dbeafe",
-  fontSize: 12,
-  fontWeight: 950,
-};
-
-const numberedInsightTextStyle: CSSProperties = {
-  fontSize: 14,
-  lineHeight: 1.65,
-  color: "rgba(241,245,249,0.82)",
 };
 
 const bulletRowStyle: CSSProperties = {
@@ -2904,7 +3582,8 @@ const bottomStripStyle: CSSProperties = {
   border: "1px solid rgba(255,255,255,0.08)",
   borderRadius: 22,
   padding: 18,
-  background: "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02))",
+  background:
+    "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02))",
   display: "flex",
   justifyContent: "space-between",
   gap: 16,
@@ -2953,7 +3632,8 @@ function bottomActionStyle(tone: "blue" | "green" | "red"): CSSProperties {
     return {
       ...base,
       border: "1px solid rgba(59,130,246,0.24)",
-      background: "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(37,99,235,0.08))",
+      background:
+        "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(37,99,235,0.08))",
       color: "#dbeafe",
     };
   }
@@ -2962,7 +3642,8 @@ function bottomActionStyle(tone: "blue" | "green" | "red"): CSSProperties {
     return {
       ...base,
       border: "1px solid rgba(34,197,94,0.22)",
-      background: "linear-gradient(135deg, rgba(34,197,94,0.14), rgba(21,128,61,0.08))",
+      background:
+        "linear-gradient(135deg, rgba(34,197,94,0.14), rgba(21,128,61,0.08))",
       color: "#dcfce7",
     };
   }
@@ -2970,12 +3651,15 @@ function bottomActionStyle(tone: "blue" | "green" | "red"): CSSProperties {
   return {
     ...base,
     border: "1px solid rgba(248,113,113,0.22)",
-    background: "linear-gradient(135deg, rgba(248,113,113,0.14), rgba(185,28,28,0.08))",
+    background:
+      "linear-gradient(135deg, rgba(248,113,113,0.14), rgba(185,28,28,0.08))",
     color: "#fee2e2",
   };
 }
 
-function topUtilityBtnStyle(type: "gold" | "green" | "red" | "blue"): CSSProperties {
+function topUtilityBtnStyle(
+  type: "gold" | "green" | "red" | "blue",
+): CSSProperties {
   const base: CSSProperties = {
     display: "inline-flex",
     alignItems: "center",
@@ -2996,7 +3680,8 @@ function topUtilityBtnStyle(type: "gold" | "green" | "red" | "blue"): CSSPropert
     return {
       ...base,
       border: "1px solid rgba(250,204,21,0.34)",
-      background: "linear-gradient(135deg, rgba(250,204,21,0.18), rgba(202,138,4,0.08))",
+      background:
+        "linear-gradient(135deg, rgba(250,204,21,0.18), rgba(202,138,4,0.08))",
       color: "#fef3c7",
     };
   }
@@ -3005,7 +3690,8 @@ function topUtilityBtnStyle(type: "gold" | "green" | "red" | "blue"): CSSPropert
     return {
       ...base,
       border: "1px solid rgba(34,197,94,0.30)",
-      background: "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))",
+      background:
+        "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))",
       color: "#dcfce7",
     };
   }
@@ -3014,7 +3700,8 @@ function topUtilityBtnStyle(type: "gold" | "green" | "red" | "blue"): CSSPropert
     return {
       ...base,
       border: "1px solid rgba(248,113,113,0.28)",
-      background: "linear-gradient(135deg, rgba(248,113,113,0.16), rgba(185,28,28,0.08))",
+      background:
+        "linear-gradient(135deg, rgba(248,113,113,0.16), rgba(185,28,28,0.08))",
       color: "#fee2e2",
     };
   }
@@ -3022,7 +3709,8 @@ function topUtilityBtnStyle(type: "gold" | "green" | "red" | "blue"): CSSPropert
   return {
     ...base,
     border: "1px solid rgba(59,130,246,0.30)",
-    background: "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(37,99,235,0.08))",
+    background:
+      "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(37,99,235,0.08))",
     color: "#dbeafe",
   };
 }
