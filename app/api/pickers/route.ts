@@ -206,10 +206,16 @@ const CACHE_SECONDS = 60 * 6; // 6 minutes
 const STALE_SECONDS = 60 * 6; // 6 minutes
 const MEMORY_CACHE_MS = 60_000;
 
-const PICKERS_REDIS_KEY = "msh:pickers:v6:earnings-sections";
+const PICKERS_REDIS_KEY = "msh:pickers:v7:earnings-bg-cache";
 const PICKERS_REDIS_TTL_SECONDS = 6 * 60;
-const PICKERS_LOCK_KEY = "msh:pickers:v6:earnings-sections:lock";
+const PICKERS_LOCK_KEY = "msh:pickers:v7:earnings-bg-cache:lock";
 const PICKERS_LOCK_TTL_SECONDS = 120;
+
+const EARNINGS_REDIS_KEY_PREFIX = "msh:pickers:earnings:v1:";
+const EARNINGS_QUEUE_KEY = "msh:pickers:earnings:v1:queue";
+const EARNINGS_DUE_KEY_PREFIX = "msh:pickers:earnings:v1:due:";
+const EARNINGS_CACHE_TTL_SECONDS = 60 * 60 * 24; // 24 hours
+const EARNINGS_WARMUP_DELAY_MS = 70_000;
 
 /* ------------------------ small util helpers ------------------------ */
 
@@ -399,6 +405,224 @@ function smaNullable(values: (number | null)[], window: number): (number | null)
     out[i] = ok ? sum / window : null;
   }
   return out;
+}
+
+
+function normalizeEarningsRows(value: unknown, fallbackSymbol: string): EarningsRow[] {
+  if (!Array.isArray(value)) return [];
+
+  const cleanSymbol = fallbackSymbol.toUpperCase().replace(/[^A-Z0-9.-]/g, "");
+
+  return value
+    .map((item): EarningsRow => ({
+      symbol: typeof item?.symbol === "string" ? item.symbol : cleanSymbol,
+      date: typeof item?.date === "string" ? item.date : "",
+      epsActual:
+        typeof item?.epsActual === "number" && Number.isFinite(item.epsActual)
+          ? item.epsActual
+          : null,
+      epsEstimated:
+        typeof item?.epsEstimated === "number" &&
+        Number.isFinite(item.epsEstimated)
+          ? item.epsEstimated
+          : null,
+      revenueActual:
+        typeof item?.revenueActual === "number" &&
+        Number.isFinite(item.revenueActual)
+          ? item.revenueActual
+          : null,
+      revenueEstimated:
+        typeof item?.revenueEstimated === "number" &&
+        Number.isFinite(item.revenueEstimated)
+          ? item.revenueEstimated
+          : null,
+      lastUpdated: typeof item?.lastUpdated === "string" ? item.lastUpdated : "",
+    }))
+    .filter((item) => Boolean(item.date))
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+}
+
+async function readCachedFmpEarnings(symbol: string): Promise<EarningsRow[]> {
+  if (!redis) return [];
+
+  const cleanSymbol = symbol.toUpperCase().replace(/[^A-Z0-9.-]/g, "");
+  if (!cleanSymbol) return [];
+
+  try {
+    const cached = await redis.get<EarningsRow[]>(`${EARNINGS_REDIS_KEY_PREFIX}${cleanSymbol}`);
+    return normalizeEarningsRows(cached, cleanSymbol);
+  } catch {
+    return [];
+  }
+}
+
+async function queueEarningsWarmupSymbols(symbols: string[]) {
+  if (!redis) return;
+
+  const now = Date.now();
+  const dueAt = now + EARNINGS_WARMUP_DELAY_MS;
+  const cleanSymbols = Array.from(
+    new Set(
+      symbols
+        .map((symbol) => symbol.toUpperCase().replace(/[^A-Z0-9.-]/g, ""))
+        .filter(Boolean)
+    )
+  );
+
+  await Promise.all(
+    cleanSymbols.map(async (symbol) => {
+      try {
+        const cacheKey = `${EARNINGS_REDIS_KEY_PREFIX}${symbol}`;
+        const dueKey = `${EARNINGS_DUE_KEY_PREFIX}${symbol}`;
+        const [cached, existingDue] = await Promise.all([
+          redis.get<EarningsRow[]>(cacheKey),
+          redis.get<number>(dueKey),
+        ]);
+
+        if (Array.isArray(cached) && cached.length > 0) return;
+        if (typeof existingDue === "number" && existingDue > now) return;
+
+        await Promise.all([
+          redis.sadd(EARNINGS_QUEUE_KEY, symbol),
+          redis.set(dueKey, dueAt, { ex: EARNINGS_CACHE_TTL_SECONDS }),
+        ]);
+      } catch {
+        // Queueing is best-effort; picker results should still load.
+      }
+    })
+  );
+}
+
+function selectLatestCompletedEarnings(rows: EarningsRow[]) {
+  const now = Date.now();
+  return rows.find((row) => {
+    const dateMs = row.date ? new Date(row.date).getTime() : NaN;
+    const hasActual = row.epsActual != null || row.revenueActual != null;
+    return hasActual && (!Number.isFinite(dateMs) || dateMs <= now + 24 * 60 * 60 * 1000);
+  }) ?? null;
+}
+
+function earningsSurprisePct(actual: number | null | undefined, estimate: number | null | undefined) {
+  if (typeof actual !== "number" || !Number.isFinite(actual)) return null;
+  if (typeof estimate !== "number" || !Number.isFinite(estimate)) return null;
+  if (estimate === 0) return null;
+  return ((actual - estimate) / Math.abs(estimate)) * 100;
+}
+
+function completedEarningsRows(rows: EarningsRow[]) {
+  return rows.filter((row) => row.epsActual != null || row.revenueActual != null);
+}
+
+function computePositiveLastEarningsCandidate(rows: EarningsRow[]): EarningsCandidate | null {
+  const latest = selectLatestCompletedEarnings(rows);
+  if (!latest) return null;
+
+  const epsSurprise = earningsSurprisePct(latest.epsActual, latest.epsEstimated);
+  const revenueSurprise = earningsSurprisePct(latest.revenueActual, latest.revenueEstimated);
+  const epsPositive = typeof latest.epsActual === "number" && latest.epsActual > 0;
+  const revenuePositive = typeof latest.revenueActual === "number" && latest.revenueActual > 0;
+
+  const epsScore = epsSurprise == null ? 0 : scoreLinear(epsSurprise, -5, 20) * 0.35;
+  const revenueScore = revenueSurprise == null ? 0 : scoreLinear(revenueSurprise, -5, 15) * 0.35;
+  const positiveScore = (epsPositive ? 10 : 0) + (revenuePositive ? 5 : 0);
+
+  const dateMs = latest.date ? new Date(latest.date).getTime() : NaN;
+  const ageDays = Number.isFinite(dateMs) ? (Date.now() - dateMs) / 86_400_000 : 999;
+  const freshnessScore = scoreInverse(ageDays, 0, 180) * 0.10;
+
+  const score = clamp(epsScore + revenueScore + positiveScore + freshnessScore, 0, 100);
+
+  const hasGoodEarnings =
+    (epsSurprise != null && epsSurprise > 0) ||
+    (revenueSurprise != null && revenueSurprise > 0);
+
+  if (!hasGoodEarnings || score < 45) return null;
+
+  const tone: PickerTone = score >= 75 ? "green" : score >= 58 ? "yellow" : "orange";
+  const epsText = epsSurprise == null ? "EPS surprise unavailable" : `EPS surprise ${epsSurprise >= 0 ? "+" : ""}${epsSurprise.toFixed(1)}%`;
+  const revenueText = revenueSurprise == null ? "revenue surprise unavailable" : `revenue surprise ${revenueSurprise >= 0 ? "+" : ""}${revenueSurprise.toFixed(1)}%`;
+
+  return {
+    score,
+    tone,
+    note: `Latest earnings: ${epsText}; ${revenueText}.`,
+  };
+}
+
+function findSameQuarterPreviousYear(row: EarningsRow, rows: EarningsRow[]) {
+  if (!row.date) return null;
+  const currentDate = new Date(row.date);
+  if (!Number.isFinite(currentDate.getTime())) return null;
+
+  const targetYear = currentDate.getUTCFullYear() - 1;
+  const targetMonth = currentDate.getUTCMonth();
+
+  return rows.find((candidate) => {
+    if (!candidate.date || candidate.date === row.date) return false;
+    const date = new Date(candidate.date);
+    if (!Number.isFinite(date.getTime())) return false;
+    return date.getUTCFullYear() === targetYear && Math.abs(date.getUTCMonth() - targetMonth) <= 1;
+  }) ?? null;
+}
+
+function computeStrongEarningsGrowthCandidate(rows: EarningsRow[]): EarningsCandidate | null {
+  const completed = completedEarningsRows(rows);
+  const latest = selectLatestCompletedEarnings(rows);
+  if (!latest || completed.length < 4) return null;
+
+  const previousYear = findSameQuarterPreviousYear(latest, completed);
+  if (!previousYear) return null;
+
+  const epsGrowth =
+    typeof latest.epsActual === "number" &&
+    typeof previousYear.epsActual === "number" &&
+    Number.isFinite(latest.epsActual) &&
+    Number.isFinite(previousYear.epsActual) &&
+    previousYear.epsActual !== 0
+      ? ((latest.epsActual - previousYear.epsActual) / Math.abs(previousYear.epsActual)) * 100
+      : null;
+
+  const revenueGrowth =
+    typeof latest.revenueActual === "number" &&
+    typeof previousYear.revenueActual === "number" &&
+    Number.isFinite(latest.revenueActual) &&
+    Number.isFinite(previousYear.revenueActual) &&
+    previousYear.revenueActual !== 0
+      ? ((latest.revenueActual - previousYear.revenueActual) / Math.abs(previousYear.revenueActual)) * 100
+      : null;
+
+  const recent = completed.slice(0, 6);
+  const positiveEpsCount = recent.filter((row) => typeof row.epsActual === "number" && row.epsActual > 0).length;
+  const beatCount = recent.filter((row) => {
+    const eps = earningsSurprisePct(row.epsActual, row.epsEstimated);
+    const rev = earningsSurprisePct(row.revenueActual, row.revenueEstimated);
+    return (eps != null && eps > 0) || (rev != null && rev > 0);
+  }).length;
+
+  const epsGrowthScore = epsGrowth == null ? 0 : scoreLinear(epsGrowth, -20, 60) * 0.25;
+  const revenueGrowthScore = revenueGrowth == null ? 0 : scoreLinear(revenueGrowth, -10, 35) * 0.25;
+  const positiveConsistencyScore = scoreLinear(positiveEpsCount, 1, Math.min(6, recent.length)) * 0.30;
+  const beatConsistencyScore = scoreLinear(beatCount, 1, Math.min(6, recent.length)) * 0.15;
+  const latestPositiveScore = typeof latest.epsActual === "number" && latest.epsActual > 0 ? 5 : 0;
+
+  const score = clamp(
+    epsGrowthScore + revenueGrowthScore + positiveConsistencyScore + beatConsistencyScore + latestPositiveScore,
+    0,
+    100
+  );
+
+  const hasGrowth = (epsGrowth != null && epsGrowth > 0) || (revenueGrowth != null && revenueGrowth > 0);
+  if (!hasGrowth || score < 50) return null;
+
+  const tone: PickerTone = score >= 75 ? "green" : score >= 60 ? "yellow" : "orange";
+  const epsText = epsGrowth == null ? "EPS YoY unavailable" : `EPS YoY ${epsGrowth >= 0 ? "+" : ""}${epsGrowth.toFixed(1)}%`;
+  const revenueText = revenueGrowth == null ? "revenue YoY unavailable" : `revenue YoY ${revenueGrowth >= 0 ? "+" : ""}${revenueGrowth.toFixed(1)}%`;
+
+  return {
+    score,
+    tone,
+    note: `${epsText}; ${revenueText}; ${positiveEpsCount}/${recent.length} recent EPS-positive reports.`,
+  };
 }
 
 function movingAverage(values: number[], window: number): (number | null)[] {
@@ -1425,72 +1649,6 @@ async function fetchHistory(symbol: string, days: number) {
     .slice(-days);
 }
 
-type FmpEarningsRow = {
-  symbol?: string;
-  date?: string;
-  epsActual?: number | null;
-  epsEstimated?: number | null;
-  revenueActual?: number | null;
-  revenueEstimated?: number | null;
-  lastUpdated?: string;
-};
-
-async function fetchFmpEarnings(symbol: string): Promise<FmpEarningsRow[]> {
-  const apiKey = process.env.FMP_API_KEY;
-
-  if (!apiKey) return [];
-
-  try {
-    const cleanSymbol = symbol.toUpperCase().replace(/[^A-Z0-9.-]/g, "");
-
-    if (!cleanSymbol) return [];
-
-    const url = `https://financialmodelingprep.com/stable/earnings?symbol=${encodeURIComponent(
-      cleanSymbol
-    )}&apikey=${apiKey}`;
-
-    const response = await fetch(url, {
-      next: { revalidate: 60 * 60 * 6 },
-    });
-
-    if (!response.ok) return [];
-
-    const json = await response.json();
-
-    if (!Array.isArray(json)) return [];
-
-    return json
-      .map((item): FmpEarningsRow => ({
-        symbol: typeof item?.symbol === "string" ? item.symbol : cleanSymbol,
-        date: typeof item?.date === "string" ? item.date : "",
-        epsActual:
-          typeof item?.epsActual === "number" && Number.isFinite(item.epsActual)
-            ? item.epsActual
-            : null,
-        epsEstimated:
-          typeof item?.epsEstimated === "number" &&
-          Number.isFinite(item.epsEstimated)
-            ? item.epsEstimated
-            : null,
-        revenueActual:
-          typeof item?.revenueActual === "number" &&
-          Number.isFinite(item.revenueActual)
-            ? item.revenueActual
-            : null,
-        revenueEstimated:
-          typeof item?.revenueEstimated === "number" &&
-          Number.isFinite(item.revenueEstimated)
-            ? item.revenueEstimated
-            : null,
-        lastUpdated:
-          typeof item?.lastUpdated === "string" ? item.lastUpdated : "",
-      }))
-      .filter((item) => Boolean(item.date));
-  } catch {
-    return [];
-  }
-}
-
 /* ------------------------------ universe ----------------------------- */
 
 const PRESET_UNIVERSE: string[] = [
@@ -1569,6 +1727,10 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
     )
   ).slice(0, UNIVERSE_CAP);
 
+  // Queue missing earnings data for the background warmer. The picker route reads
+  // earnings from Redis only, so page loads never spend FMP calls on earnings.
+  await queueEarningsWarmupSymbols(universe);
+
   const limit = pLimit(10);
   const days = 1300;
 
@@ -1592,11 +1754,10 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
     universe.map((symbol) =>
       limit(async () => {
         try {
-          const [pts, earningsRows] = await Promise.all([
-            fetchHistory(symbol, days),
-            fetchFmpEarnings(symbol),
-          ]);
+          const pts = await fetchHistory(symbol, days);
           if (!pts.length) return;
+
+          const earningsRows = await readCachedFmpEarnings(symbol);
 
           const dynamicName = isDynamicUniverse(symbol);
           const chartPoints = buildPickerChartPoints(pts);
