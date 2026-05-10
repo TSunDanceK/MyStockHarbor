@@ -2391,20 +2391,6 @@ color: "#cbd5f5",
                             : "Fetch Earnings"}
                       </button>
 
-                      {earningsFetchMessage ? (
-                        <span
-                          style={{
-                            flex: "1 1 180px",
-                            minWidth: 0,
-                            color: "rgba(203,213,225,0.68)",
-                            fontSize: 11,
-                            lineHeight: 1.45,
-                            textAlign: "right",
-                          }}
-                        >
-                          {earningsFetchMessage}
-                        </span>
-                      ) : null}
                     </div>
                   ) : null}
 {(() => {
