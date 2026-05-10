@@ -425,16 +425,7 @@ function PlayDiagram({ pattern, tone }: { pattern: PlayCardDef["pattern"]; tone:
         <rect x="0" y="0" width="320" height="138" rx="16" fill="rgba(2,6,23,0.72)" />
 
         <path
-          d="M26 50 L58 84 L92 59 L126 87 L160 68 L196 92 L230 78 L286 108"
-          stroke="rgba(226,232,240,0.78)"
-          strokeWidth="3"
-          fill="none"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-
-        <path
-          d="M38 108 H286"
+          d="M42 108 H282"
           stroke={colors.line}
           strokeWidth="3"
           strokeDasharray="7 7"
@@ -442,14 +433,23 @@ function PlayDiagram({ pattern, tone }: { pattern: PlayCardDef["pattern"]; tone:
         />
 
         <path
-          d="M36 45 L286 108"
+          d="M44 38 L282 108"
           stroke={colors.accent}
           strokeWidth="3"
           strokeLinecap="round"
         />
 
         <path
-          d="M52 126 V113 M86 126 V111 M120 126 V108 M154 126 V112 M188 126 V108 M222 126 V114 M256 126 V110 M290 126 V116"
+          d="M46 44 L74 108 L104 56 L132 108 L162 72 L190 108 L220 88 L250 108 L278 105"
+          stroke="rgba(226,232,240,0.80)"
+          strokeWidth="3"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        <path
+          d="M52 126 V114 M86 126 V115 M120 126 V112 M154 126 V115 M188 126 V112 M222 126 V115 M256 126 V113 M290 126 V116"
           stroke="rgba(59,130,246,0.30)"
           strokeWidth="5"
           strokeLinecap="round"
