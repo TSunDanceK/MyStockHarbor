@@ -1252,10 +1252,43 @@ if (!cancelled) setPriceLoading(false);
                     <div style={miniMetricSubStyle}>Overall chart structure</div>
                   </div>
 
-                  <div style={alignedMetricCardStyle(earningsScoreTone(earningsReadScore(earnings, earningsLoading)))}>
-                    <div style={miniLabelStyle}>Earnings read</div>
+                  <Link
+                    href={`/stock/${encodeURIComponent(symbol)}/earnings`}
+                    className="earningsReadHeroCard"
+                    style={{
+                      ...alignedMetricCardStyle(earningsScoreTone(earningsReadScore(earnings, earningsLoading))),
+                      display: "block",
+                      textDecoration: "none",
+                      color: "inherit",
+                      cursor: "pointer",
+                      transition:
+                        "transform 140ms ease, filter 140ms ease, border-color 140ms ease, box-shadow 140ms ease",
+                    }}
+                    aria-label={`Open ${symbol} earnings page`}
+                    title={`Open ${symbol} earnings page`}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 8,
+                      }}
+                    >
+                      <div style={miniLabelStyle}>Earnings read</div>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 950,
+                          color: "rgba(219,234,254,0.86)",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Open →
+                      </span>
+                    </div>
                     <EarningsReadScale earnings={earnings} loading={earningsLoading} />
-                  </div>
+                  </Link>
                 </div>
 
                 <div className="trendChecksStrip">
@@ -2001,6 +2034,17 @@ if (!cancelled) setPriceLoading(false);
     display: grid;
     gap: 8px;
     font-size: 13px;
+  }
+
+  .earningsReadHeroCard:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.06);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 12px 28px rgba(0,0,0,0.20);
+  }
+
+  .earningsReadHeroCard:focus-visible {
+    outline: 2px solid rgba(147,197,253,0.9);
+    outline-offset: 3px;
   }
 
   .earningsMetricGrid {
