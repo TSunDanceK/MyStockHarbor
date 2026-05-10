@@ -43,6 +43,8 @@ type SignalRecord = {
   bearishRsiDivergence: boolean;
   bullishMacdDivergence: boolean;
   bearishMacdDivergence: boolean;
+  positiveLastEarnings?: boolean;
+  strongEarningsGrowth?: boolean;
 
   preferredTimeframe?: "D" | "W" | "M";
   preferredIndicator?: "MA200" | "RSI(14)" | "MACD(12,26,9)";
@@ -77,7 +79,9 @@ type FilterKey =
   | "bullishRsiDivergence"
   | "bearishRsiDivergence"
   | "bullishMacdDivergence"
-  | "bearishMacdDivergence";
+  | "bearishMacdDivergence"
+  | "positiveLastEarnings"
+  | "strongEarningsGrowth";
 
 type FilterDef = {
   key: FilterKey;
@@ -102,6 +106,8 @@ const FILTER_DEFS: FilterDef[] = [
   { key: "bearishRsiDivergence", label: "Bearish RSI Divergence", tone: "red" },
   { key: "bullishMacdDivergence", label: "Bullish MACD Divergence", tone: "green" },
   { key: "bearishMacdDivergence", label: "Bearish MACD Divergence", tone: "red" },
+  { key: "positiveLastEarnings", label: "Positive Last Earnings", tone: "green" },
+  { key: "strongEarningsGrowth", label: "Strong Earnings Growth", tone: "green" },
 ];
 
 function toneDot(tone?: string) {
@@ -141,6 +147,8 @@ function matchedSignalsForRecord(record: SignalRecord): FilterKey[] {
   if (record.bearishRsiDivergence) out.push("bearishRsiDivergence");
   if (record.bullishMacdDivergence) out.push("bullishMacdDivergence");
   if (record.bearishMacdDivergence) out.push("bearishMacdDivergence");
+  if (record.positiveLastEarnings) out.push("positiveLastEarnings");
+  if (record.strongEarningsGrowth) out.push("strongEarningsGrowth");
 
   return out;
 }
@@ -281,8 +289,8 @@ function HelpTip({ text }: { text: string }) {
           style={{
             position: "absolute",
             top: "calc(100% + 8px)",
-            left: 0,
-            zIndex: 50,
+            right: 0,
+            zIndex: 999,
             width: 260,
             maxWidth: "min(260px, 78vw)",
             padding: "10px 12px",
@@ -295,6 +303,7 @@ function HelpTip({ text }: { text: string }) {
             fontWeight: 700,
             boxShadow: "0 14px 30px rgba(0,0,0,0.35)",
             textAlign: "left",
+            pointerEvents: "none",
           }}
         >
           {text}
@@ -321,6 +330,65 @@ export default function PickersClient() {
   const [dynamicUniversePreview, setDynamicUniversePreview] = useState<string[] | null>(null);
   const [dynamicSymbols, setDynamicSymbols] = useState<string[]>([]);
   const [estimatedApiCalls, setEstimatedApiCalls] = useState<number | null>(null);
+  const [earningsFetchBusy, setEarningsFetchBusy] = useState(false);
+  const [earningsFetchLockedUntil, setEarningsFetchLockedUntil] = useState(0);
+  const [earningsFetchTick, setEarningsFetchTick] = useState(0);
+  const [earningsFetchMessage, setEarningsFetchMessage] = useState<string | null>(null);
+
+  const EARNINGS_FETCH_LOCK_MS = 90 * 1000;
+
+  void earningsFetchTick;
+
+  const earningsFetchRemainingSeconds = Math.max(
+    0,
+    Math.ceil((earningsFetchLockedUntil - Date.now()) / 1000)
+  );
+
+  async function handleFetchEarnings() {
+    if (earningsFetchBusy || Date.now() < earningsFetchLockedUntil) return;
+
+    setEarningsFetchBusy(true);
+    setEarningsFetchMessage(null);
+
+    try {
+      const res = await fetch(`/api/jobs/warm-earnings?t=${Date.now()}`, {
+        cache: "no-store",
+      });
+
+      if (!res.ok) throw new Error("Earnings warm-up failed");
+
+      const data = (await res.json()) as {
+        fetchedCount?: number;
+        checked?: number;
+        deferredCount?: number;
+        failedCount?: number;
+      };
+
+      const fetched = typeof data?.fetchedCount === "number" ? data.fetchedCount : 0;
+      const checked = typeof data?.checked === "number" ? data.checked : 0;
+      const deferred = typeof data?.deferredCount === "number" ? data.deferredCount : 0;
+      const failed = typeof data?.failedCount === "number" ? data.failedCount : 0;
+
+      setEarningsFetchMessage(
+        `Earnings warm-up checked ${checked} symbols, fetched ${fetched}, deferred ${deferred}, failed ${failed}.`
+      );
+
+      const lockUntil = Date.now() + EARNINGS_FETCH_LOCK_MS;
+      setEarningsFetchLockedUntil(lockUntil);
+
+      try {
+        window.localStorage.setItem("msh:lastEarningsFetchUntil", String(lockUntil));
+      } catch {
+        // Ignore localStorage issues.
+      }
+
+      await loadPickers(false);
+    } catch {
+      setEarningsFetchMessage("Earnings warm-up failed. Try again in a moment.");
+    } finally {
+      setEarningsFetchBusy(false);
+    }
+  }
 
   async function loadPickers(force = false) {
     const setBusy = force ? setForceRefreshing : setLoading;
@@ -386,6 +454,27 @@ const res = await fetch(url, { cache: "no-store" });
       setBusy(false);
     }
   }
+
+  useEffect(() => {
+    try {
+      const saved = Number(window.localStorage.getItem("msh:lastEarningsFetchUntil") || "0");
+      if (Number.isFinite(saved) && saved > Date.now()) {
+        setEarningsFetchLockedUntil(saved);
+      }
+    } catch {
+      // Ignore localStorage issues.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!earningsFetchLockedUntil) return;
+
+    const interval = window.setInterval(() => {
+      setEarningsFetchTick((value) => value + 1);
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [earningsFetchLockedUntil]);
 
   useEffect(() => {
     let cancelled = false;
@@ -764,6 +853,23 @@ const res = await fetch(`/api/pickers?t=${Date.now()}`, {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
+  }
+
+  .pickers-section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+
+  .pickers-section-title-text {
+    min-width: 0;
+    line-height: 1.22;
+  }
+
+  .pickers-earnings-fetch-button:hover:not(:disabled) {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
   }
 
   @media (max-width: 980px) {
@@ -1450,7 +1556,7 @@ href={toChartHref(
                     padding: 16,
                     background: "#0b1220",
                     boxSizing: "border-box",
-                    overflow: "hidden",
+                    overflow: "visible",
                   }}
                 >
 
@@ -1473,11 +1579,11 @@ href={toChartHref(
                           letterSpacing: "-0.02em",
                           display: "flex",
                           alignItems: "center",
-                          gap: 6,
-                          flexWrap: "wrap",
+                          gap: 8,
+                          flexWrap: "nowrap",
                         }}
                       >
-                        {sec.title}
+                        <span className="pickers-section-title-text">{sec.title}</span>
                         <HelpTip text={getHeaderHelp(sec.title)} />
                       </h2>
 
@@ -1516,11 +1622,10 @@ href={toChartHref(
                       <div
                         key={it.symbol}
                         style={{
-                          display: "flex",
+                          display: "grid",
+                          gridTemplateColumns: "minmax(0, 1fr) auto",
                           alignItems: "center",
-                          justifyContent: "space-between",
                           gap: 10,
-                          flexWrap: "nowrap",
                           border: "1px solid rgba(255,255,255,0.14)",
                           borderRadius: 16,
                           padding: 12,
@@ -1533,12 +1638,9 @@ href={toChartHref(
                           it.dashboardHref ?? `/?symbol=${encodeURIComponent(it.symbol)}`
                            )}
                           style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 8,
+                            display: "block",
                             minWidth: 0,
                             maxWidth: "100%",
-                            flex: "1 1 auto",
                             color: "#f1f5f9",
                             textDecoration: "none",
                             fontWeight: 900,
@@ -1548,15 +1650,33 @@ href={toChartHref(
                         >
                           <span
                             style={{
-                              width: 10,
-                              height: 10,
-                              borderRadius: 999,
-                              background: toneDot(it.tone),
-                              boxShadow: "0 0 0 3px rgba(255,255,255,0.04)",
-                              flex: "0 0 auto",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                              minWidth: 0,
                             }}
-                          />
-                          <span style={{ minWidth: 0 }}>{it.symbol}</span>
+                          >
+                            <span
+                              style={{
+                                width: 10,
+                                height: 10,
+                                borderRadius: 999,
+                                background: toneDot(it.tone),
+                                boxShadow: "0 0 0 3px rgba(255,255,255,0.04)",
+                                flex: "0 0 auto",
+                              }}
+                            />
+                            <span
+                              style={{
+                                minWidth: 0,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {it.symbol}
+                            </span>
+                          </span>
 
                           {it.note ? (
                             <span
@@ -1564,9 +1684,13 @@ href={toChartHref(
                                 /MA200/i.test(it.note) ? " pickers-item-note-show-mobile" : ""
                               }`}
                               style={{
-                                fontSize: 12,
-                                opacity: 0.65,
-                                fontWeight: 700,
+                                display: "block",
+                                marginTop: 5,
+                                paddingLeft: 18,
+                                fontSize: 11,
+                                lineHeight: 1.35,
+                                opacity: 0.68,
+                                fontWeight: 750,
                                 minWidth: 0,
                                 whiteSpace: "nowrap",
                                 overflow: "hidden",
@@ -1579,7 +1703,7 @@ href={toChartHref(
                                   ? "Weekly"
                                   : /Daily/i.test(it.note)
                                     ? "Daily"
-                                    : ""}
+                                    : it.note}
                               </span>
                             </span>
                           ) : null}
@@ -1611,6 +1735,70 @@ color: "#cbd5f5",
                       </div>
                     ))}
                   </div>
+
+                  {sec.title.toLowerCase().includes("earnings") ? (
+                    <div
+                      style={{
+                        marginTop: 12,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 10,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <button
+                        type="button"
+                        className="pickers-earnings-fetch-button"
+                        onClick={handleFetchEarnings}
+                        disabled={earningsFetchBusy || earningsFetchRemainingSeconds > 0}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          minHeight: 38,
+                          padding: "8px 12px",
+                          borderRadius: 10,
+                          border: "1px solid rgba(34,197,94,0.30)",
+                          background:
+                            earningsFetchBusy || earningsFetchRemainingSeconds > 0
+                              ? "rgba(34,197,94,0.07)"
+                              : "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(16,185,129,0.10))",
+                          color: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? "rgba(220,252,231,0.62)" : "#dcfce7",
+                          fontSize: 12,
+                          fontWeight: 950,
+                          cursor:
+                            earningsFetchBusy || earningsFetchRemainingSeconds > 0
+                              ? "not-allowed"
+                              : "pointer",
+                          opacity: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? 0.76 : 1,
+                          transition: "transform 140ms ease, filter 140ms ease, opacity 140ms ease",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {earningsFetchBusy
+                          ? "Fetching earnings…"
+                          : earningsFetchRemainingSeconds > 0
+                            ? `Fetch Earnings (${earningsFetchRemainingSeconds}s)`
+                            : "Fetch Earnings"}
+                      </button>
+
+                      {earningsFetchMessage ? (
+                        <span
+                          style={{
+                            flex: "1 1 180px",
+                            minWidth: 0,
+                            color: "rgba(203,213,225,0.68)",
+                            fontSize: 11,
+                            lineHeight: 1.45,
+                            textAlign: "right",
+                          }}
+                        >
+                          {earningsFetchMessage}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
 {(() => {
   const title = sec.title.toLowerCase();
 
