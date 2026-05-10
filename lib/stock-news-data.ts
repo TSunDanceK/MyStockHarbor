@@ -308,47 +308,27 @@ async function fetchFmpStockNews(symbol: string): Promise<NewsItem[]> {
   return [];
 }
 
-async function fetchGoogleNewsFallback(symbol: string, companyName: string): Promise<NewsItem[]> {
-  const company = companyName.trim();
-  const baseNameQuery = company ? `${company} ${symbol}` : symbol;
-  const queries = [`${baseNameQuery} stock`, `${baseNameQuery} earnings results revenue guidance`];
+function isVideoOrLowQualitySource(item: NewsItem) {
+  const combined = `${item.source ?? ""} ${item.link} ${item.title}`.toLowerCase();
 
-  try {
-    const results = await Promise.all(
-      queries.map(async (query) => {
-        const url = `https://news.google.com/rss/search?q=${encodeURIComponent(
-          query
-        )}&hl=en-GB&gl=GB&ceid=GB:en`;
-
-        try {
-          const res = await fetch(url, {
-            next: { revalidate: 1800 },
-          });
-
-          if (!res.ok) return [];
-
-          const xml = await res.text();
-          return parseRss(xml).slice(0, 12);
-        } catch {
-          return [];
-        }
-      })
-    );
-
-    return mergeNewsPools(results).slice(0, 24);
-  } catch {
-    return [];
-  }
+  return [
+    "youtube.com",
+    "youtu.be",
+    "m.youtube.com",
+    "youtube",
+    "podcast",
+    "livestream",
+    "live stream",
+    "watch video",
+  ].some((term) => combined.includes(term));
 }
 
-async function fetchNews(symbol: string, companyName: string): Promise<NewsItem[]> {
+async function fetchNews(symbol: string, _companyName: string): Promise<NewsItem[]> {
   const fmpNews = await fetchFmpStockNews(symbol);
 
-  if (fmpNews.length) {
-    return mergeNewsPools([fmpNews]).slice(0, 40);
-  }
-
-  return fetchGoogleNewsFallback(symbol, companyName);
+  return mergeNewsPools([
+    fmpNews.filter((item) => !isVideoOrLowQualitySource(item)),
+  ]).slice(0, 50);
 }
 
 function isEarningsNewsItem(item: NewsItem) {
@@ -371,16 +351,14 @@ function isEarningsNewsItem(item: NewsItem) {
   ]);
 }
 
-async function fetchEarningsNews(symbol: string, companyName: string): Promise<NewsItem[]> {
+async function fetchEarningsNews(symbol: string, _companyName: string): Promise<NewsItem[]> {
   const fmpNews = await fetchFmpStockNews(symbol);
-  const fmpEarningsNews = fmpNews.filter(isEarningsNewsItem);
 
-  if (fmpEarningsNews.length) {
-    return fmpEarningsNews.slice(0, 24);
-  }
-
-  const googleFallback = await fetchGoogleNewsFallback(symbol, companyName);
-  return googleFallback.filter(isEarningsNewsItem).slice(0, 24);
+  return mergeNewsPools([
+    fmpNews
+      .filter((item) => !isVideoOrLowQualitySource(item))
+      .filter(isEarningsNewsItem),
+  ]).slice(0, 30);
 }
 
 function movingAverage(values: number[], window: number): (number | null)[] {
@@ -2151,6 +2129,9 @@ async function buildStockNewsBaseData(
     score: fallbackNewsScoreValue,
     tone: scoreToTone(fallbackNewsScoreValue),
     label: scoreToNewsLabel(fallbackNewsScoreValue),
+    reason: news.length
+      ? keywordNewsScore.reason
+      : "FMP did not return recent stock-specific headlines for this ticker.",
   };
 
   const earningsScore = {
@@ -2160,7 +2141,11 @@ async function buildStockNewsBaseData(
     label: hasActualEarningsHeadlines
       ? scoreToEarningsLabel(fallbackEarningsScoreValue)
       : "No clear earnings read",
+    reason: hasActualEarningsHeadlines
+      ? keywordEarningsScore.reason
+      : "FMP did not return recent earnings-specific headlines. Use the structured earnings snapshot instead.",
   };
+
   const highValueNews = rankedNews.filter((item) => !isLowValueNewsItem(item));
   const fallbackNews = rankedNews.filter((item) => isLowValueNewsItem(item));
 
