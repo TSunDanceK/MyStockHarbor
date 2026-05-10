@@ -221,6 +221,10 @@ export default async function InsightPostPage({ params }: Props) {
           timeframe: post.timeframe,
           chartBars: post.chartBars,
           chartIndicators: post.chartIndicators,
+          overallBreakdown: post.overallBreakdown,
+          latestNews: post.latestNews,
+          latestEarnings: post.latestEarnings,
+          investorUsefulInfo: post.investorUsefulInfo,
           contentHtml,
         }}
         snapshot={snapshot}
