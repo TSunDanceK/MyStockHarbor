@@ -621,6 +621,102 @@ function scoreEarnings(news: NewsItem[]) {
   return { score, tone, label, reason };
 }
 
+
+function buildEarningsInvestorPoints(args: {
+  symbol: string;
+  earningsScore: { score: number; tone: ScoreTone; label: string; reason: string };
+  news: NewsItem[];
+  trend: string;
+  priceVs50: number | null;
+  priceVs200: number | null;
+}) {
+  const { symbol, earningsScore, news, trend, priceVs50, priceVs200 } = args;
+
+  const earningsItems = news
+    .filter(
+      (item) =>
+        !isLowValueNewsItem(item) &&
+        keywordHits(`${item.title} ${item.description ?? ""}`, [
+          "earnings",
+          "results",
+          "revenue",
+          "guidance",
+          "quarter",
+          "q1",
+          "q2",
+          "q3",
+          "q4",
+          "eps",
+          "profit",
+          "loss",
+          "margin",
+        ])
+    )
+    .sort((a, b) => {
+      const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+      const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
+      return bTime - aTime;
+    });
+
+  const latest = earningsItems[0];
+  const latestSource = latest ? compactSource(latest.source) : null;
+  const latestDate = latest ? formatDate(latest.pubDate) : null;
+  const latestTitle = latest?.title ?? "";
+  const combinedText = earningsItems
+    .slice(0, 4)
+    .map((item) => `${item.title} ${item.description ?? ""}`)
+    .join(" ")
+    .toLowerCase();
+
+  const points: string[] = [];
+
+  points.push(
+    latest
+      ? `Latest earnings-linked item: ${latestSource} covered “${latestTitle}”${latestDate ? ` on ${latestDate}` : ""}. Treat this as headline context, not a full earnings model.`
+      : `No clear earnings-specific headline is showing in the current feed for ${symbol}, so investors should treat the earnings read as limited until a fresh report or company release is checked.`
+  );
+
+  points.push(
+    `${symbol}'s earnings tone is currently marked as ${earningsScore.label.toLowerCase()} with a score of ${earningsScore.score}. The key investor question is whether results and guidance support the market's current expectations.`
+  );
+
+  if (keywordHits(combinedText, ["revenue", "sales", "growth", "demand", "orders", "deliveries", "subscriber", "volume"])) {
+    points.push(
+      "Revenue and demand signals are the first thing to check: investors want to know whether the business is still expanding or whether growth is slowing."
+    );
+  } else {
+    points.push(
+      "Revenue growth is still the first checkpoint, even if the current headline set does not give enough detail to judge it properly."
+    );
+  }
+
+  if (keywordHits(combinedText, ["margin", "profit", "eps", "earnings per share", "cost", "expense", "loss", "cash flow"])) {
+    points.push(
+      "Profitability matters next: margins, EPS, costs, losses, and cash flow usually decide whether investors reward or punish the report after the first headline reaction."
+    );
+  } else {
+    points.push(
+      "Profitability is the second checkpoint: without margin, EPS, cost, or cash-flow detail, the headline alone is not enough to judge earnings quality."
+    );
+  }
+
+  if (keywordHits(combinedText, ["guidance", "outlook", "forecast", "raises", "cuts", "warning", "expects"])) {
+    points.push(
+      "Guidance is the swing factor: a strong current quarter can still fade if outlook is weak, while a messy quarter can recover if forward guidance improves."
+    );
+  } else {
+    points.push(
+      "Guidance remains the missing swing factor if it is not clear in the latest coverage; investors usually care more about the next quarter than the last one."
+    );
+  }
+
+  points.push(
+    `Watch the price reaction against the chart: ${trend.toLowerCase()} with ${formatPercent(priceVs50)} vs MA50 and ${formatPercent(priceVs200)} vs MA200 tells you whether investors are accepting or rejecting the earnings narrative.`
+  );
+
+  return points.slice(0, 5);
+}
+
 function buildLeadSummary(args: {
   symbol: string;
   companyName: string;
@@ -1506,6 +1602,15 @@ export default async function StockNewsPage({ params }: Props) {
   const displayBeyondHeadline = beyondHeadline;
   const displayWhatItMeans = whatItMeans;
 
+  const earningsInvestorPoints = buildEarningsInvestorPoints({
+    symbol: upper,
+    earningsScore,
+    news,
+    trend,
+    priceVs50,
+    priceVs200,
+  });
+
   const summaryByTitle = Object.fromEntries(
     detailedNews.map((item) => [item.title, item.description ?? ""])
   );
@@ -1842,6 +1947,20 @@ export default async function StockNewsPage({ params }: Props) {
                     <div style={signalBoxEmptyStyle}>No strong negative driver stood out in the latest higher-value headlines.</div>
                   )}
                 </div>
+              </div>
+            </section>
+
+            <section style={sidebarCardStyle}>
+              <div style={sectionEyebrowStyle}>Latest earnings</div>
+              <h2 style={sectionTitleSmallStyle}>5 investor points</h2>
+
+              <div style={{ display: "grid", gap: 12, marginTop: 14 }}>
+                {earningsInvestorPoints.map((point, index) => (
+                  <div key={`${upper}-earnings-point-${index}`} style={numberedInsightRowStyle}>
+                    <div style={numberBadgeStyle}>{index + 1}</div>
+                    <div style={numberedInsightTextStyle}>{point}</div>
+                  </div>
+                ))}
               </div>
             </section>
 
@@ -2724,6 +2843,38 @@ const signalBoxEmptyStyle: CSSProperties = {
   fontSize: 13,
   lineHeight: 1.55,
   color: "rgba(241,245,249,0.58)",
+};
+
+
+const numberedInsightRowStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "28px minmax(0, 1fr)",
+  gap: 12,
+  alignItems: "start",
+  border: "1px solid rgba(255,255,255,0.06)",
+  borderRadius: 14,
+  padding: 12,
+  background: "rgba(255,255,255,0.025)",
+};
+
+const numberBadgeStyle: CSSProperties = {
+  width: 28,
+  height: 28,
+  borderRadius: 999,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  border: "1px solid rgba(59,130,246,0.28)",
+  background: "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.08))",
+  color: "#dbeafe",
+  fontSize: 12,
+  fontWeight: 950,
+};
+
+const numberedInsightTextStyle: CSSProperties = {
+  fontSize: 14,
+  lineHeight: 1.65,
+  color: "rgba(241,245,249,0.82)",
 };
 
 const bulletRowStyle: CSSProperties = {
