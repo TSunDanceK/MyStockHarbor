@@ -167,6 +167,46 @@ function toneBg(tone: EarningsTone) {
   return "rgba(250,204,21,0.10)";
 }
 
+function getMetricHelp(label: string) {
+  if (label === "Actual EPS") {
+    return "EPS means earnings per share. It shows how much profit the company made for each share, after costs and taxes.";
+  }
+
+  if (label === "EPS surprise") {
+    return "EPS surprise compares actual EPS with the analyst estimate. A positive number means profit beat expectations.";
+  }
+
+  if (label === "Revenue surprise") {
+    return "Revenue surprise compares actual revenue with the analyst estimate. A positive number means sales came in better than expected.";
+  }
+
+  if (label === "Revenue") {
+    return "Revenue is the company’s sales for the quarter before expenses are removed.";
+  }
+
+  if (label === "YoY EPS growth") {
+    return "Year-over-year EPS growth compares this quarter’s EPS with the same quarter last year.";
+  }
+
+  if (label === "YoY revenue growth") {
+    return "Year-over-year revenue growth compares this quarter’s revenue with the same quarter last year.";
+  }
+
+  return "This metric helps investors judge whether the latest earnings report was stronger, weaker, or broadly in line with expectations.";
+}
+
+function MetricLabelWithHelp({ label }: { label: string }) {
+  return (
+    <div className="metricLabelWrap">
+      <span className="metricLabel">{label}</span>
+      <span className="metricHelp" tabIndex={0} aria-label={`${label} explanation`}>
+        ?
+        <span className="metricHelpBubble">{getMetricHelp(label)}</span>
+      </span>
+    </div>
+  );
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
@@ -733,6 +773,7 @@ export default async function StockEarningsPage({ params }: Props) {
           padding: 18px;
           background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.022));
           box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
+          overflow: visible;
         }
 
         .card h2,
@@ -760,6 +801,16 @@ export default async function StockEarningsPage({ params }: Props) {
           display: grid;
           grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 12px;
+          overflow: visible;
+        }
+
+        .metricLabelWrap {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          max-width: 100%;
+          overflow: visible;
         }
 
         .metricLabel {
@@ -768,6 +819,69 @@ export default async function StockEarningsPage({ params }: Props) {
           letter-spacing: 0.08em;
           text-transform: uppercase;
           color: rgba(203,213,225,0.72);
+        }
+
+        .metricHelp {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 17px;
+          height: 17px;
+          border-radius: 999px;
+          border: 1px solid rgba(147,197,253,0.30);
+          background: #1e293b;
+          color: #dbeafe;
+          font-size: 11px;
+          font-weight: 950;
+          line-height: 1;
+          cursor: help;
+          z-index: 20;
+          flex: 0 0 auto;
+        }
+
+        .metricHelpBubble {
+          position: absolute;
+          left: 50%;
+          bottom: calc(100% + 10px);
+          transform: translateX(-50%);
+          width: 260px;
+          max-width: min(260px, 72vw);
+          padding: 11px 12px;
+          border-radius: 13px;
+          border: 1px solid rgba(147,197,253,0.22);
+          background: #020617;
+          color: #e5e7eb;
+          box-shadow: 0 18px 44px rgba(0,0,0,0.55);
+          font-size: 12px;
+          font-weight: 750;
+          letter-spacing: 0;
+          line-height: 1.55;
+          text-transform: none;
+          text-align: left;
+          opacity: 0;
+          visibility: hidden;
+          pointer-events: none;
+          white-space: normal;
+          z-index: 9999;
+        }
+
+        .metricHelpBubble::after {
+          content: "";
+          position: absolute;
+          left: 50%;
+          top: 100%;
+          transform: translateX(-50%);
+          border-width: 7px;
+          border-style: solid;
+          border-color: #020617 transparent transparent transparent;
+        }
+
+        .metricHelp:hover .metricHelpBubble,
+        .metricHelp:focus .metricHelpBubble,
+        .metricHelp:focus-visible .metricHelpBubble {
+          opacity: 1;
+          visibility: visible;
         }
 
         .metricValue {
@@ -1005,31 +1119,31 @@ export default async function StockEarningsPage({ params }: Props) {
               ) : (
                 <div className="metricGrid">
                   <div style={metricCardStyle(score.tone)}>
-                    <div className="metricLabel">Actual EPS</div>
+                    <MetricLabelWithHelp label="Actual EPS" />
                     <div className="metricValue">{formatMoney(epsActual)}</div>
                     <div className="metricSub">Estimate: {formatMoney(epsEstimated)}</div>
                   </div>
 
                   <div style={metricCardStyle(epsSurprise != null && epsSurprise >= 0 ? "good" : "weak")}>
-                    <div className="metricLabel">EPS surprise</div>
+                    <MetricLabelWithHelp label="EPS surprise" />
                     <div className="metricValue">{formatMoney(epsSurprise)}</div>
                     <div className="metricSub">{formatPercent(epsSurprisePct)}</div>
                   </div>
 
                   <div style={metricCardStyle(revenueSurprise != null && revenueSurprise >= 0 ? "good" : "weak")}>
-                    <div className="metricLabel">Revenue surprise</div>
+                    <MetricLabelWithHelp label="Revenue surprise" />
                     <div className="metricValue">{formatMoney(revenueSurprise, true)}</div>
                     <div className="metricSub">{formatPercent(revenueSurprisePct)}</div>
                   </div>
 
                   <div style={metricCardStyle("default")}>
-                    <div className="metricLabel">Revenue</div>
+                    <MetricLabelWithHelp label="Revenue" />
                     <div className="metricValue">{formatMoney(revenueActual, true)}</div>
                     <div className="metricSub">Estimate: {formatMoney(revenueEstimated, true)}</div>
                   </div>
 
                   <div style={metricCardStyle(yoyEpsGrowth != null && yoyEpsGrowth >= 0 ? "good" : "weak")}>
-                    <div className="metricLabel">YoY EPS growth</div>
+                    <MetricLabelWithHelp label="YoY EPS growth" />
                     <div className="metricValue">{formatPercent(yoyEpsGrowth)}</div>
                     <div className="metricSub">
                       Compared with {quarterLabel(data.sameQuarterLastYear?.date)}
@@ -1037,7 +1151,7 @@ export default async function StockEarningsPage({ params }: Props) {
                   </div>
 
                   <div style={metricCardStyle(yoyRevenueGrowth != null && yoyRevenueGrowth >= 0 ? "good" : "weak")}>
-                    <div className="metricLabel">YoY revenue growth</div>
+                    <MetricLabelWithHelp label="YoY revenue growth" />
                     <div className="metricValue">{formatPercent(yoyRevenueGrowth)}</div>
                     <div className="metricSub">
                       Compared with {quarterLabel(data.sameQuarterLastYear?.date)}
