@@ -2416,7 +2416,19 @@ color: "#cbd5f5",
   let seoBackground = "rgba(59,130,246,0.08)";
   let seoColor = "#dbeafe";
 
-  if (title.includes("all-time high breakout")) {
+  if (title.includes("positive last earnings")) {
+    seoHref = "/stocks-with-positive-last-earnings";
+    seoLabel = "See all positive earnings stocks →";
+    seoBorder = "1px solid rgba(34,197,94,0.22)";
+    seoBackground = "rgba(34,197,94,0.08)";
+    seoColor = "#dcfce7";
+  } else if (title.includes("strong earnings growth")) {
+    seoHref = "/stocks-with-strong-earnings-growth";
+    seoLabel = "See all earnings growth stocks →";
+    seoBorder = "1px solid rgba(34,197,94,0.22)";
+    seoBackground = "rgba(34,197,94,0.08)";
+    seoColor = "#dcfce7";
+  } else if (title.includes("all-time high breakout")) {
     seoHref = "/all-time-high-breakout-stocks";
     seoLabel = "See all ATH breakout stocks →";
     seoBorder = "1px solid rgba(251,146,60,0.22)";
