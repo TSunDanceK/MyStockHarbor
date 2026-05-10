@@ -138,6 +138,18 @@ const PICKER_NAV: Array<{
     tone: "green",
   },
   {
+    href: "/stocks-with-positive-last-earnings",
+    label: "Last Earnings",
+    icon: "✓",
+    tone: "green",
+  },
+  {
+    href: "/stocks-with-strong-earnings-growth",
+    label: "Earnings Growth",
+    icon: "↗",
+    tone: "green",
+  },
+  {
     href: "/stocks-near-200-day-moving-average",
     label: "Near 200-Day",
     icon: "◇",
@@ -499,6 +511,10 @@ function scoreLabelForEntry(entry: ResultEntry) {
   if (match) return Number(match[1]);
 
   return null;
+}
+
+function isEarningsPickerPage(config: PickerResultConfig) {
+  return config.href.includes("earnings");
 }
 
 
@@ -1014,9 +1030,19 @@ export default async function PickerResultPage({
                   <div className="note">{entry.note}</div>
 
                   <div className="cardActions">
-                    <Link className="green" href={entry.chartHref}>
-                      Open chart ↗
-                    </Link>
+                    {isEarningsPickerPage(config) ? (
+                      <Link
+                        className="green"
+                        href={`/stock/${encodeURIComponent(entry.symbol)}/earnings`}
+                      >
+                        Open earnings →
+                      </Link>
+                    ) : (
+                      <Link className="green" href={entry.chartHref}>
+                        Open chart ↗
+                      </Link>
+                    )}
+
                     <Link href={entry.stockHref}>Stock page →</Link>
                   </div>
                 </article>
