@@ -152,7 +152,8 @@ export async function GET(req: NextRequest) {
   const failed: string[] = [];
 
   try {
-    const queue = (await redis.smembers<string>(EARNINGS_QUEUE_KEY)) || [];
+    const queueRaw = (await redis.smembers(EARNINGS_QUEUE_KEY)) || [];
+    const queue = Array.isArray(queueRaw) ? queueRaw.map(String) : [];
     const cleanQueue = Array.from(new Set(queue.map(cleanSymbol).filter(Boolean)));
 
     for (const symbol of cleanQueue) {
