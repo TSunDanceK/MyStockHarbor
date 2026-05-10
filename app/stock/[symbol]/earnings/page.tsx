@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import Link from "next/link";
 import EarningsSymbolPicker from "./EarningsSymbolPicker";
 
@@ -56,6 +57,12 @@ type YearlySummary = {
   toneLabel: string;
   positiveCount: number;
   totalCount: number;
+};
+
+type SharedEarningsScore = {
+  score: number | null;
+  tone: "green" | "yellow" | "red";
+  toneLabel: "Good" | "Neutral" | "Weak" | "Unavailable";
 };
 
 const FMP_BASE = "https://financialmodelingprep.com/stable";
@@ -207,6 +214,74 @@ function toneBg(tone: EarningsTone) {
   return "rgba(250,204,21,0.10)";
 }
 
+function sharedToneToEarningsTone(tone: SharedEarningsScore["tone"]): EarningsTone {
+  if (tone === "green") return "good";
+  if (tone === "red") return "weak";
+  return "neutral";
+}
+
+function scoreExplanation(tone: EarningsTone) {
+  if (tone === "good") {
+    return "The latest earnings read is constructive because the report shows stronger-than-expected fundamentals or improving year-over-year momentum.";
+  }
+
+  if (tone === "weak") {
+    return "The latest earnings read is weak because the report shows pressure in estimates, profitability, revenue momentum, or recent consistency.";
+  }
+
+  return "The latest earnings read is mixed, so investors should focus on whether future reports confirm improvement or reveal more pressure.";
+}
+
+function buildScoreResult(score: number, tone: EarningsTone) {
+  return {
+    score,
+    tone,
+    label: toneLabel(tone),
+    explanation: scoreExplanation(tone),
+  };
+}
+
+async function getOriginFromHeaders() {
+  const headerStore = await headers();
+  const host =
+    headerStore.get("x-forwarded-host") ||
+    headerStore.get("host") ||
+    "www.mystockharbor.com";
+
+  const proto =
+    headerStore.get("x-forwarded-proto") ||
+    (host.includes("localhost") ? "http" : "https");
+
+  return `${proto}://${host}`;
+}
+
+async function fetchSharedEarningsScore(symbol: string) {
+  try {
+    const origin = await getOriginFromHeaders();
+    const response = await fetch(
+      `${origin}/api/stock-earnings/${encodeURIComponent(symbol)}`,
+      {
+        cache: "no-store",
+      }
+    );
+
+    if (!response.ok) return null;
+
+    const data = (await response.json()) as SharedEarningsScore;
+
+    if (typeof data.score !== "number" || !Number.isFinite(data.score)) {
+      return null;
+    }
+
+    return buildScoreResult(
+      data.score,
+      sharedToneToEarningsTone(data.tone)
+    );
+  } catch {
+    return null;
+  }
+}
+
 function getMetricHelp(label: string) {
   if (label === "Actual EPS") {
     return "EPS means earnings per share. It shows how much profit the company made for each share, after costs and taxes.";
@@ -307,23 +382,7 @@ function scoreEarnings(args: {
   const rounded = Math.round(clamp(score, 0, maxScore));
   const tone: EarningsTone = rounded >= 66 ? "good" : rounded <= 39 ? "weak" : "neutral";
 
-  let explanation =
-    "The latest earnings read is mixed, so investors should focus on whether future reports confirm improvement or reveal more pressure.";
-
-  if (tone === "good") {
-    explanation =
-      "The latest earnings read is constructive because the report shows stronger-than-expected fundamentals or improving year-over-year momentum.";
-  } else if (tone === "weak") {
-    explanation =
-      "The latest earnings read is weak because the report shows pressure in estimates, profitability, revenue momentum, or recent consistency.";
-  }
-
-  return {
-    score: rounded,
-    tone,
-    label: toneLabel(tone),
-    explanation,
-  };
+  return buildScoreResult(rounded, tone);
 }
 
 function makeYearlySummaries(rows: FmpEarningsRow[]): YearlySummary[] {
@@ -571,11 +630,14 @@ async function getEarningsData(symbol: string) {
 
   const yearlySummaries = makeYearlySummaries(completedRows);
 
-  const score = scoreEarnings({
+  const localScore = scoreEarnings({
     latest,
     sameQuarterLastYear,
     completedRows,
   });
+
+  const sharedScore = await fetchSharedEarningsScore(symbol);
+  const score = sharedScore ?? localScore;
 
   return {
     rows: earningsRows,
