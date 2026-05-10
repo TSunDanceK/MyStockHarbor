@@ -551,10 +551,13 @@ async function getEarningsData(symbol: string) {
           matchingIncome?.date?.slice(0, 4) ||
           row.date?.slice(0, 4),
         periodEndDate: matchingIncome?.date,
+        // Prefer FMP's earnings EPS first because this is usually the market-facing
+        // adjusted/non-GAAP EPS used in earnings headlines. Income-statement EPS is
+        // GAAP/basic/diluted and is only a fallback.
         epsActual:
+          row.epsActual ??
           matchingCalendar?.epsActual ??
           incomeEps ??
-          row.epsActual ??
           null,
         epsEstimated:
           matchingCalendar?.epsEstimated ??
