@@ -539,6 +539,156 @@ function earningsMiniText(earnings: StockEarningsData | null, loading: boolean) 
   return earnings.reportDate ? `Latest report ${formatShortDate(earnings.reportDate)}` : "Latest report loaded";
 }
 
+
+function clampScore(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function capContribution(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function earningsReadScore(earnings: StockEarningsData | null, loading: boolean) {
+  if (loading || !earnings?.hasStructuredData) return null;
+
+  let score = 50;
+
+  if (typeof earnings.epsSurprisePercent === "number") {
+    score += capContribution(earnings.epsSurprisePercent * 2, -35, 35);
+  }
+
+  if (typeof earnings.revenueSurprisePercent === "number") {
+    score += capContribution(earnings.revenueSurprisePercent * 3, -25, 25);
+  }
+
+  if (typeof earnings.actualEps === "number") {
+    score += earnings.actualEps > 0 ? 10 : -10;
+  }
+
+  if (typeof earnings.revenue === "number" && typeof earnings.revenueEstimate === "number") {
+    score += earnings.revenue >= earnings.revenueEstimate ? 5 : -5;
+  }
+
+  const recentGoodCount = Array.isArray(earnings.recentReports)
+    ? earnings.recentReports.filter((item) => item.tone === "green").length
+    : 0;
+  const recentWeakCount = Array.isArray(earnings.recentReports)
+    ? earnings.recentReports.filter((item) => item.tone === "red").length
+    : 0;
+
+  score += capContribution((recentGoodCount - recentWeakCount) * 3, -9, 9);
+
+  return clampScore(score);
+}
+
+function earningsScoreTone(score: number | null): "green" | "yellow" | "red" {
+  if (typeof score !== "number") return "yellow";
+  if (score >= 65) return "green";
+  if (score >= 45) return "yellow";
+  return "red";
+}
+
+function earningsScaleSummary(earnings: StockEarningsData | null, loading: boolean) {
+  if (loading) return "Checking latest earnings";
+  if (!earnings?.hasStructuredData) return "Earnings data unavailable";
+
+  const eps = formatSignedPercent(earnings.epsSurprisePercent);
+  const revenue = formatSignedPercent(earnings.revenueSurprisePercent);
+
+  return `EPS ${eps} · Revenue ${revenue}`;
+}
+
+function EarningsReadScale({
+  earnings,
+  loading,
+}: {
+  earnings: StockEarningsData | null;
+  loading: boolean;
+}) {
+  const score = earningsReadScore(earnings, loading);
+  const tone = earningsScoreTone(score);
+  const markerLeft = `${typeof score === "number" ? score : 50}%`;
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+        }}
+      >
+        <div style={{ fontSize: 22, lineHeight: 1 }} aria-hidden="true">
+          ⚖️
+        </div>
+        <div
+          style={{
+            fontSize: 26,
+            lineHeight: 1,
+            fontWeight: 950,
+            letterSpacing: "-0.06em",
+            color: toneColor(tone),
+            whiteSpace: "nowrap",
+          }}
+        >
+          {typeof score === "number" ? `${score}/100` : "—"}
+        </div>
+      </div>
+
+      <div
+        aria-hidden="true"
+        style={{
+          position: "relative",
+          marginTop: 12,
+          height: 10,
+          borderRadius: 999,
+          background:
+            "linear-gradient(90deg, rgba(239,68,68,0.95), rgba(250,204,21,0.95), rgba(34,197,94,0.95))",
+          boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.14)",
+        }}
+      >
+        <span
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: markerLeft,
+            width: 18,
+            height: 18,
+            borderRadius: 999,
+            background: "#f8fafc",
+            border: `3px solid ${toneColor(tone)}`,
+            transform: "translate(-50%, -50%)",
+            boxShadow: "0 8px 18px rgba(0,0,0,0.32)",
+          }}
+        />
+      </div>
+
+      <div
+        style={{
+          marginTop: 9,
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 8,
+          fontSize: 10,
+          fontWeight: 900,
+          letterSpacing: "0.05em",
+          textTransform: "uppercase",
+          color: "rgba(226,232,240,0.58)",
+        }}
+      >
+        <span>Weak</span>
+        <span>Mixed</span>
+        <span>Strong</span>
+      </div>
+
+      <div style={{ marginTop: 8, ...miniMetricSubStyle }}>
+        {earningsScaleSummary(earnings, loading)}
+      </div>
+    </div>
+  );
+}
+
 function earningsPanelTone(earnings: StockEarningsData | null): "green" | "yellow" | "red" {
   if (!earnings?.hasStructuredData) return "yellow";
   return earnings.tone;
@@ -1022,7 +1172,7 @@ if (!cancelled) setPriceLoading(false);
                   letterSpacing: "-0.04em",
                 }}
               >
-                {symbol} Stock Analysis, Chart Overview & Earnings Context
+                {symbol} Stock Analysis, Chart Overview & Technical Summary
               </h1>
 
               <p
@@ -1035,7 +1185,7 @@ if (!cancelled) setPriceLoading(false);
                 }}
               >
                 {companyName || `${symbol} technical overview`} {companyName ? `(${symbol})` : ""}.
-                Review price trend, moving averages, momentum and latest earnings context in one cleaner stock read.
+                Review price trend, moving averages, momentum and earnings balance in one cleaner stock read.
               </p>
 
               <div style={{ marginTop: 18, maxWidth: 520 }}>
@@ -1058,7 +1208,7 @@ if (!cancelled) setPriceLoading(false);
               >
                 <div style={circleIconStyle("green")}>💡</div>
                 <div style={{ fontSize: 14, lineHeight: 1.65, opacity: 0.9 }}>
-                  <strong style={{ color: "#86efac" }}>Simple view:</strong> this page combines price action, trend checks and structured earnings data so you can judge whether {symbol} looks constructive, weak, mixed, or simply waiting for confirmation.
+                  <strong style={{ color: "#86efac" }}>Simple view:</strong> this page combines price action, trend checks and a compact earnings balance so you can judge whether {symbol} looks constructive, weak, mixed, or simply waiting for confirmation.
                 </div>
               </div>
             </div>
@@ -1102,10 +1252,9 @@ if (!cancelled) setPriceLoading(false);
                     <div style={miniMetricSubStyle}>Overall chart structure</div>
                   </div>
 
-                  <div style={alignedMetricCardStyle(earningsPanelTone(earnings))}>
+                  <div style={alignedMetricCardStyle(earningsScoreTone(earningsReadScore(earnings, earningsLoading)))}>
                     <div style={miniLabelStyle}>Earnings read</div>
-                    <div style={miniMetricValueStyle}>{earningsToneText(earnings, earningsLoading)}</div>
-                    <div style={miniMetricSubStyle}>{earningsMiniText(earnings, earningsLoading)}</div>
+                    <EarningsReadScale earnings={earnings} loading={earningsLoading} />
                   </div>
                 </div>
 
@@ -1476,12 +1625,6 @@ if (!cancelled) setPriceLoading(false);
                 </div>
               </section>
 
-
-              <StockEarningsPanel
-                symbol={symbol}
-                earnings={earnings}
-                loading={earningsLoading}
-              />
 
               <section
                 style={{
