@@ -571,7 +571,8 @@ const res = await fetch(`/api/pickers?t=${Date.now()}`, {
         section !== buyTheDipSection &&
         section !== athBreakoutSection &&
         section !== threeMonthBreakoutSection &&
-        section !== oversoldSection
+        section !== oversoldSection &&
+        !section.title.toLowerCase().includes("hot market names")
     );
 
     if (ma200Section) out.push(ma200Section);
@@ -695,6 +696,35 @@ const res = await fetch(`/api/pickers?t=${Date.now()}`, {
     transform: translateX(-120%);
     animation: pickersShimmer 3.2s ease-in-out infinite;
     pointer-events: none;
+  }
+
+  .pickers-more-link {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.03) inset,
+                0 10px 24px rgba(0,0,0,0.18);
+  }
+
+  .pickers-more-link::after {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    z-index: -1;
+    background: linear-gradient(
+      120deg,
+      rgba(255,255,255,0) 0%,
+      rgba(255,255,255,0.34) 46%,
+      rgba(255,255,255,0) 72%
+    );
+    transform: translateX(-130%);
+    animation: pickersShimmer 3.8s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  .pickers-more-link:hover {
+    filter: brightness(1.12);
+    transform: translateY(-1px);
   }
 
   .pickers-shell {
@@ -1386,7 +1416,7 @@ href={toChartHref(
                         isDynamic,
                       };
                     })
-                    .slice(0, 10)
+                    .slice(0, 4)
                 : [];
 
               return (
@@ -1616,9 +1646,6 @@ color: "#cbd5f5",
     seoBorder = "1px solid rgba(34,197,94,0.22)";
     seoBackground = "rgba(34,197,94,0.08)";
     seoColor = "#dcfce7";
-  } else if (title.includes("hot market names")) {
-    seoHref = "/hot-market-names-right-now";
-    seoLabel = "See all hot market names →";
   } else if (title.includes("divergence")) {
     seoHref = "/bullish-bearish-divergence-stocks";
     seoLabel = "See all divergence stocks →";
@@ -1642,6 +1669,7 @@ color: "#cbd5f5",
     >
       <a
         href={seoHref}
+        className="pickers-more-link"
         style={{
           display: "inline-flex",
           alignItems: "center",
