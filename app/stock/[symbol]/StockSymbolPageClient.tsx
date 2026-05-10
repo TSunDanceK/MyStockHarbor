@@ -14,6 +14,14 @@ type Quote = {
   source: string;
 };
 
+type StockValuationData = {
+  peRatio: number | null;
+  priceToSalesRatio: number | null;
+  priceToBookRatio: number | null;
+  evToEbitda: number | null;
+  sourceNote: string;
+};
+
 type ScoreTone = "green" | "yellow" | "red";
 
 type EarningsPeriodSummary = {
@@ -164,68 +172,21 @@ function trendLabel(args: {
   return "Range / Mixed";
 }
 
-function formatMultiple(value: number | null) {
+function formatValuationMultiple(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  if (value < 0) return "N/A";
+  if (value >= 100) return `${Math.round(value)}×`;
+  if (value >= 10) return `${value.toFixed(1)}×`;
   return `${value.toFixed(2)}×`;
 }
 
-function buildPriceMultipleRead(args: {
-  lastClose: number | null;
-  history: Point[];
-}) {
-  const { lastClose, history } = args;
-
-  const closes = history
-    .map((point) => point.close)
-    .filter((value) => Number.isFinite(value));
-
-  const highs = history
-    .map((point) => (typeof point.high === "number" ? point.high : point.close))
-    .filter((value) => Number.isFinite(value));
-
-  const lows = history
-    .map((point) => (typeof point.low === "number" ? point.low : point.close))
-    .filter((value) => Number.isFinite(value));
-
-  if (
-    typeof lastClose !== "number" ||
-    !Number.isFinite(lastClose) ||
-    !closes.length ||
-    !highs.length ||
-    !lows.length
-  ) {
-    return {
-      averageMultiple: null,
-      highMultiple: null,
-      lowMultiple: null,
-      tone: "yellow" as const,
-    };
-  }
-
-  const average = closes.reduce((sum, value) => sum + value, 0) / closes.length;
-  const high = Math.max(...highs);
-  const low = Math.min(...lows);
-
-  const averageMultiple = average > 0 ? lastClose / average : null;
-  const highMultiple = high > 0 ? lastClose / high : null;
-  const lowMultiple = low > 0 ? lastClose / low : null;
-
-  const tone: "green" | "yellow" | "red" =
-    averageMultiple == null
-      ? "yellow"
-      : averageMultiple >= 1.08
-        ? "green"
-        : averageMultiple <= 0.92
-          ? "red"
-          : "yellow";
-
-  return {
-    averageMultiple,
-    highMultiple,
-    lowMultiple,
-    tone,
-  };
+function valuationTone(value: number | null | undefined): "green" | "yellow" | "red" {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return "yellow";
+  if (value >= 80) return "red";
+  if (value >= 30) return "yellow";
+  return "green";
 }
+
 
 function toneColor(tone: "green" | "yellow" | "red") {
   if (tone === "green") return "#22c55e";
@@ -980,6 +941,8 @@ const [priceLoading, setPriceLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [earnings, setEarnings] = useState<StockEarningsData | null>(null);
   const [earningsLoading, setEarningsLoading] = useState(true);
+  const [valuation, setValuation] = useState<StockValuationData | null>(null);
+  const [valuationLoading, setValuationLoading] = useState(true);
   const [openScoreHelp, setOpenScoreHelp] = useState<"fundamentals" | "future" | null>(null);
 
   useEffect(() => {
@@ -1076,6 +1039,35 @@ if (!cancelled) setPriceLoading(false);
     };
   }, [symbol]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadValuation() {
+      setValuationLoading(true);
+
+      try {
+        const res = await fetch(`/api/stock-valuation/${encodeURIComponent(symbol)}?t=${Date.now()}`, {
+          cache: "no-store",
+        });
+
+        if (!res.ok) throw new Error("Valuation fetch failed");
+
+        const data = (await res.json()) as StockValuationData;
+        if (!cancelled) setValuation(data);
+      } catch {
+        if (!cancelled) setValuation(null);
+      } finally {
+        if (!cancelled) setValuationLoading(false);
+      }
+    }
+
+    loadValuation();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol]);
+
   const closes = useMemo(() => history.map((p) => p.close), [history]);
   const ma50 = useMemo(() => movingAverage(closes, 50), [closes]);
   const ma200 = useMemo(() => movingAverage(closes, 200), [closes]);
@@ -1127,15 +1119,6 @@ if (!cancelled) setPriceLoading(false);
 
   const ma50Pct = pctFromBase(lastClose, typeof lastMA50 === "number" ? lastMA50 : null);
   const ma200Pct = pctFromBase(lastClose, typeof lastMA200 === "number" ? lastMA200 : null);
-
-  const priceMultipleRead = useMemo(
-    () =>
-      buildPriceMultipleRead({
-        lastClose,
-        history,
-      }),
-    [lastClose, history]
-  );
 
   const tradeContext = useMemo(
     () =>
@@ -1318,13 +1301,13 @@ if (!cancelled) setPriceLoading(false);
                     </div>
                   </div>
 
-                  <div style={alignedMetricCardStyle(priceMultipleRead.tone)}>
-                    <div style={miniLabelStyle}>Price multiple</div>
+                  <div style={alignedMetricCardStyle(valuationTone(valuation?.peRatio))}>
+                    <div style={miniLabelStyle}>Valuation</div>
                     <div style={miniMetricValueStyle}>
-                      {formatMultiple(priceMultipleRead.averageMultiple)} avg
+                      {valuationLoading ? "Loading…" : `P/E ${formatValuationMultiple(valuation?.peRatio)}`}
                     </div>
                     <div style={miniMetricSubStyle}>
-                      High {formatMultiple(priceMultipleRead.highMultiple)} · Low {formatMultiple(priceMultipleRead.lowMultiple)}
+                      P/S {formatValuationMultiple(valuation?.priceToSalesRatio)} · P/B {formatValuationMultiple(valuation?.priceToBookRatio)}
                     </div>
                   </div>
 
