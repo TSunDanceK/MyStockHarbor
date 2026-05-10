@@ -30,6 +30,17 @@ export type NewsItem = {
   description: string | null;
 };
 
+type FmpStockNewsItem = {
+  symbol?: string;
+  publishedDate?: string;
+  publisher?: string;
+  title?: string;
+  image?: string;
+  site?: string;
+  text?: string;
+  url?: string;
+};
+
 type ScoreTone = "green" | "yellow" | "red";
 
 export type NewsScoreResult = {
@@ -239,17 +250,68 @@ async function fetchCompanyName(symbol: string): Promise<string> {
   }
 }
 
-async function fetchNews(symbol: string, companyName: string): Promise<NewsItem[]> {
+async function fetchFmpStockNews(symbol: string): Promise<NewsItem[]> {
+  const apiKey = process.env.FMP_API_KEY;
+  if (!apiKey) return [];
+
+  const encoded = encodeURIComponent(symbol.toUpperCase());
+  const key = encodeURIComponent(apiKey);
+
+  const endpoints = [
+    `https://financialmodelingprep.com/stable/news/stock?symbols=${encoded}&limit=50&apikey=${key}`,
+    `https://financialmodelingprep.com/api/v3/stock_news?tickers=${encoded}&limit=50&apikey=${key}`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        next: { revalidate: 900 },
+      });
+
+      if (!res.ok) continue;
+
+      const data = (await res.json()) as unknown;
+      if (!Array.isArray(data)) continue;
+
+      const items = data
+        .map((item: FmpStockNewsItem): NewsItem | null => {
+          const title = typeof item.title === "string" ? item.title.trim() : "";
+          const link = typeof item.url === "string" ? item.url.trim() : "";
+
+          if (!title || !link) return null;
+
+          return {
+            title: decodeHtml(title),
+            link,
+            pubDate:
+              typeof item.publishedDate === "string" ? item.publishedDate : null,
+            source:
+              typeof item.site === "string" && item.site.trim()
+                ? item.site.trim()
+                : typeof item.publisher === "string" && item.publisher.trim()
+                  ? item.publisher.trim()
+                  : "FMP News",
+            description:
+              typeof item.text === "string" && item.text.trim()
+                ? cleanRssDescription(item.text.slice(0, 650))
+                : null,
+          };
+        })
+        .filter((item): item is NewsItem => Boolean(item));
+
+      if (items.length) return items;
+    } catch {
+      continue;
+    }
+  }
+
+  return [];
+}
+
+async function fetchGoogleNewsFallback(symbol: string, companyName: string): Promise<NewsItem[]> {
   const company = companyName.trim();
   const baseNameQuery = company ? `${company} ${symbol}` : symbol;
-
-  const queries = [
-    `${baseNameQuery} stock`,
-    baseNameQuery,
-    `${symbol} partnership OR deal OR joins OR project`,
-    `${company || symbol} Elon OR Musk OR SpaceX OR xAI`,
-    `${company || symbol} AI chip project`,
-  ];
+  const queries = [`${baseNameQuery} stock`, `${baseNameQuery} earnings results revenue guidance`];
 
   try {
     const results = await Promise.all(
@@ -273,49 +335,52 @@ async function fetchNews(symbol: string, companyName: string): Promise<NewsItem[
       })
     );
 
-    return mergeNewsPools(results).slice(0, 40);
+    return mergeNewsPools(results).slice(0, 24);
   } catch {
     return [];
   }
 }
 
-async function fetchEarningsNews(symbol: string, companyName: string): Promise<NewsItem[]> {
-  const company = companyName.trim();
-  const baseNameQuery = company ? `${company} ${symbol}` : symbol;
+async function fetchNews(symbol: string, companyName: string): Promise<NewsItem[]> {
+  const fmpNews = await fetchFmpStockNews(symbol);
 
-  const queries = [
-    `${baseNameQuery} reported earnings results revenue EPS guidance`,
-    `${baseNameQuery} quarterly financial results revenue guidance net loss`,
-    `${baseNameQuery} earnings beat miss guidance revenue net loss`,
-    `${baseNameQuery} investor relations financial results earnings revenue`,
-  ];
-
-  try {
-    const results = await Promise.all(
-      queries.map(async (query) => {
-        const url = `https://news.google.com/rss/search?q=${encodeURIComponent(
-          query
-        )}&hl=en-GB&gl=GB&ceid=GB:en`;
-
-        try {
-          const res = await fetch(url, {
-            next: { revalidate: 3600 },
-          });
-
-          if (!res.ok) return [];
-
-          const xml = await res.text();
-          return parseRss(xml).slice(0, 10);
-        } catch {
-          return [];
-        }
-      })
-    );
-
-    return mergeNewsPools(results).slice(0, 24);
-  } catch {
-    return [];
+  if (fmpNews.length) {
+    return mergeNewsPools([fmpNews]).slice(0, 40);
   }
+
+  return fetchGoogleNewsFallback(symbol, companyName);
+}
+
+function isEarningsNewsItem(item: NewsItem) {
+  const text = `${item.title} ${item.description ?? ""}`.toLowerCase();
+  return keywordHits(text, [
+    "earnings",
+    "eps",
+    "results",
+    "quarter",
+    "quarterly",
+    "revenue",
+    "guidance",
+    "profit",
+    "loss",
+    "margin",
+    "q1",
+    "q2",
+    "q3",
+    "q4",
+  ]);
+}
+
+async function fetchEarningsNews(symbol: string, companyName: string): Promise<NewsItem[]> {
+  const fmpNews = await fetchFmpStockNews(symbol);
+  const fmpEarningsNews = fmpNews.filter(isEarningsNewsItem);
+
+  if (fmpEarningsNews.length) {
+    return fmpEarningsNews.slice(0, 24);
+  }
+
+  const googleFallback = await fetchGoogleNewsFallback(symbol, companyName);
+  return googleFallback.filter(isEarningsNewsItem).slice(0, 24);
 }
 
 function movingAverage(values: number[], window: number): (number | null)[] {
@@ -2071,15 +2136,9 @@ async function buildStockNewsBaseData(
 
   const keywordNewsScore = scoreNews(news);
   const keywordEarningsScore = scoreEarnings(earningsNews);
-  const aiScores = await getAiScoredNews({
-    symbol: upper,
-    companyName,
-    trend,
-    rankedNews,
-    rankedEarningsNews,
-    keywordNewsScore,
-    keywordEarningsScore,
-  });
+  // FMP headlines are now the primary news source. Keep OpenAI for article summaries,
+  // but avoid using it as the main scoring engine for the page-level news and earnings scores.
+  const aiScores: Awaited<ReturnType<typeof getAiScoredNews>> = null;
 
   const earningsQualityGuardrails = getEarningsQualityGuardrails(rankedEarningsNews);
 
@@ -2252,7 +2311,7 @@ const getCachedStockNewsBaseData = unstable_cache(
 
     return buildStockNewsBaseData(parsed.symbol, parsed.options);
   },
-  ["msh-stock-news-base-data-v21"],
+  ["msh-stock-news-base-data-v22-fmp-primary"],
   {
     revalidate: 60,
   }
