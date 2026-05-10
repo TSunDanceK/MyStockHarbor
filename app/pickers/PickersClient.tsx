@@ -2478,9 +2478,11 @@ color: "#cbd5f5",
   return (
     <div
       style={{
-        marginTop: 12,
+        marginTop: title.includes("earnings") ? -40 : 12,
         display: "flex",
         justifyContent: "flex-end",
+        position: "relative",
+        zIndex: 1,
       }}
     >
       <a
