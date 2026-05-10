@@ -13,6 +13,9 @@ type EarningsTone = "good" | "neutral" | "weak";
 type FmpEarningsRow = {
   symbol?: string;
   date?: string;
+  fiscalLabel?: string;
+  fiscalYear?: string;
+  periodEndDate?: string;
   epsActual?: number | null;
   epsEstimated?: number | null;
   revenueActual?: number | null;
@@ -22,10 +25,20 @@ type FmpEarningsRow = {
 
 type FmpIncomeStatementRow = {
   date?: string;
+  calendarYear?: string;
+  period?: string;
   revenue?: number | null;
   grossProfit?: number | null;
   operatingIncome?: number | null;
   netIncome?: number | null;
+  eps?: number | null;
+  epsDiluted?: number | null;
+};
+
+type FmpHistoricalEarningCalendarRow = {
+  date?: string;
+  epsActual?: number | null;
+  epsEstimated?: number | null;
 };
 
 type EarningsTrendPoint = {
@@ -55,7 +68,14 @@ function cleanSymbol(value: string) {
 }
 
 function asNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value.replace(/,/g, ""));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
 }
 
 function formatDate(value?: string | null) {
@@ -116,6 +136,25 @@ function quarterLabel(date?: string | null) {
   const year = String(dt.getUTCFullYear()).slice(-2);
 
   return `Q${quarter} ${year}`;
+}
+
+function fiscalLabelFromStatement(row?: FmpIncomeStatementRow | null) {
+  if (!row) return null;
+
+  const period = String(row.period || "").toUpperCase();
+  const year =
+    row.calendarYear ||
+    (row.date && row.date.length >= 4 ? row.date.slice(0, 4) : "");
+
+  if (/^Q[1-4]$/.test(period) && year) {
+    return `${period} ${String(year).slice(-2)}`;
+  }
+
+  return row.date ? quarterLabel(row.date) : null;
+}
+
+function displayQuarterLabel(row: FmpEarningsRow) {
+  return row.fiscalLabel || quarterLabel(row.date);
 }
 
 function classifyQuarter(row: FmpEarningsRow): EarningsTone {
@@ -258,7 +297,13 @@ function scoreEarnings(args: {
     if (tone === "weak") score -= 2.5;
   }
 
-  const rounded = Math.round(clamp(score, 0, 100));
+  const recentTones = completedRows.slice(0, 6).map(classifyQuarter);
+  const weakRecentCount = recentTones.filter((item) => item === "weak").length;
+  const mixedRecentCount = recentTones.filter((item) => item === "neutral").length;
+  const maxScore =
+    weakRecentCount > 0 ? 92 : mixedRecentCount > 0 ? 95 : 100;
+
+  const rounded = Math.round(clamp(score, 0, maxScore));
   const tone: EarningsTone = rounded >= 66 ? "good" : rounded <= 39 ? "weak" : "neutral";
 
   let explanation =
@@ -285,7 +330,7 @@ function makeYearlySummaries(rows: FmpEarningsRow[]): YearlySummary[] {
 
   for (const row of rows) {
     if (!row.date) continue;
-    const year = row.date.slice(0, 4);
+    const year = row.fiscalYear || row.date.slice(0, 4);
     if (!groups.has(year)) groups.set(year, []);
     groups.get(year)?.push(row);
   }
@@ -332,11 +377,35 @@ async function fetchFmpJson<T>(path: string): Promise<T | null> {
   }
 }
 
+async function fetchFmpLegacyJson<T>(path: string): Promise<T | null> {
+  const apiKey = process.env.FMP_API_KEY;
+  if (!apiKey) return null;
+
+  const url = `https://financialmodelingprep.com/api/v3${path}${
+    path.includes("?") ? "&" : "?"
+  }apikey=${apiKey}`;
+
+  try {
+    const response = await fetch(url, {
+      next: { revalidate: 60 * 60 * 6 },
+    });
+
+    if (!response.ok) return null;
+
+    return (await response.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
 async function getEarningsData(symbol: string) {
-  const [earningsJson, incomeJson] = await Promise.all([
+  const [earningsJson, incomeJson, historicalCalendarJson] = await Promise.all([
     fetchFmpJson<unknown[]>(`/earnings?symbol=${encodeURIComponent(symbol)}`),
     fetchFmpJson<unknown[]>(
-      `/income-statement?symbol=${encodeURIComponent(symbol)}&period=quarter&limit=8`
+      `/income-statement?symbol=${encodeURIComponent(symbol)}&period=quarter&limit=12`
+    ),
+    fetchFmpLegacyJson<unknown[]>(
+      `/historical/earning_calendar/${encodeURIComponent(symbol)}`
     ),
   ]);
 
@@ -364,20 +433,79 @@ async function getEarningsData(symbol: string) {
           const row = item as Record<string, unknown>;
           return {
             date: typeof row.date === "string" ? row.date : "",
+            calendarYear:
+              typeof row.calendarYear === "string" ? row.calendarYear : "",
+            period: typeof row.period === "string" ? row.period : "",
             revenue: asNumber(row.revenue),
             grossProfit: asNumber(row.grossProfit),
             operatingIncome: asNumber(row.operatingIncome),
             netIncome: asNumber(row.netIncome),
+            eps: asNumber(row.eps),
+            epsDiluted: asNumber(row.epsDiluted),
           };
         })
         .filter((row) => Boolean(row.date))
     : [];
 
+  const historicalCalendarRows: FmpHistoricalEarningCalendarRow[] = Array.isArray(
+    historicalCalendarJson
+  )
+    ? historicalCalendarJson
+        .map((item) => {
+          const row = item as Record<string, unknown>;
+
+          return {
+            date: typeof row.date === "string" ? row.date : "",
+            epsActual:
+              asNumber(row.actualEarningResult) ??
+              asNumber(row.epsActual) ??
+              asNumber(row.actualEPS),
+            epsEstimated:
+              asNumber(row.estimatedEarning) ??
+              asNumber(row.epsEstimated) ??
+              asNumber(row.estimatedEPS),
+          };
+        })
+        .filter((row) => Boolean(row.date))
+        .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    : [];
+
+  const historicalByDate = new Map(
+    historicalCalendarRows.map((row) => [row.date, row])
+  );
+
   const today = new Date();
 
-  const completedRows = earningsRows.filter(
-    (row) => row.epsActual != null || row.revenueActual != null
-  );
+  const completedRows = earningsRows
+    .filter((row) => row.epsActual != null || row.revenueActual != null)
+    .map((row, index) => {
+      const matchingCalendar = row.date ? historicalByDate.get(row.date) : null;
+      const matchingIncome = incomeRows[index] ?? null;
+      const incomeEps = matchingIncome?.epsDiluted ?? matchingIncome?.eps ?? null;
+
+      return {
+        ...row,
+        fiscalLabel: fiscalLabelFromStatement(matchingIncome) ?? undefined,
+        fiscalYear:
+          matchingIncome?.calendarYear ||
+          matchingIncome?.date?.slice(0, 4) ||
+          row.date?.slice(0, 4),
+        periodEndDate: matchingIncome?.date,
+        epsActual:
+          matchingCalendar?.epsActual ??
+          incomeEps ??
+          row.epsActual ??
+          null,
+        epsEstimated:
+          matchingCalendar?.epsEstimated ??
+          row.epsEstimated ??
+          null,
+        revenueActual:
+          matchingIncome?.revenue ??
+          row.revenueActual ??
+          null,
+      };
+    });
 
   const latest = completedRows[0] ?? null;
 
@@ -391,21 +519,28 @@ async function getEarningsData(symbol: string) {
     );
   }) ?? null;
 
-  const latestDate = latest?.date ? new Date(`${latest.date}T00:00:00Z`) : null;
-  const sameQuarterLastYear =
-    latestDate != null
-      ? completedRows.find((row) => {
-          if (!row.date || row.date === latest?.date) return false;
-          const dt = new Date(`${row.date}T00:00:00Z`);
-          return (
-            dt.getUTCFullYear() === latestDate.getUTCFullYear() - 1 &&
-            Math.floor(dt.getUTCMonth() / 3) === Math.floor(latestDate.getUTCMonth() / 3)
-          );
-        }) ?? null
+  const latestFiscalQuarter = latest?.fiscalLabel?.split(" ")[0] ?? null;
+  const latestFiscalYear =
+    latest?.fiscalYear && Number.isFinite(Number(latest.fiscalYear))
+      ? Number(latest.fiscalYear)
       : null;
 
-  const matchingIncome = latest?.date
-    ? incomeRows.find((row) => row.date === latest.date) ?? incomeRows[0] ?? null
+  const sameQuarterLastYear =
+    latestFiscalQuarter && latestFiscalYear
+      ? completedRows.find((row) => {
+          if (!row.date || row.date === latest?.date) return false;
+          const rowQuarter = row.fiscalLabel?.split(" ")[0] ?? null;
+          const rowYear =
+            row.fiscalYear && Number.isFinite(Number(row.fiscalYear))
+              ? Number(row.fiscalYear)
+              : null;
+
+          return rowQuarter === latestFiscalQuarter && rowYear === latestFiscalYear - 1;
+        }) ?? null
+      : completedRows[4] ?? null;
+
+  const matchingIncome = latest?.periodEndDate
+    ? incomeRows.find((row) => row.date === latest.periodEndDate) ?? incomeRows[0] ?? null
     : incomeRows[0] ?? null;
 
   const grossMargin =
@@ -425,7 +560,7 @@ async function getEarningsData(symbol: string) {
   const netIncome = matchingIncome?.netIncome ?? null;
 
   const recentTrend: EarningsTrendPoint[] = completedRows.slice(0, 6).map((row) => ({
-    label: quarterLabel(row.date),
+    label: displayQuarterLabel(row),
     tone: classifyQuarter(row),
     epsActual: row.epsActual ?? null,
     epsEstimated: row.epsEstimated ?? null,
@@ -1146,7 +1281,7 @@ export default async function StockEarningsPage({ params }: Props) {
                     <MetricLabelWithHelp label="YoY EPS growth" />
                     <div className="metricValue">{formatPercent(yoyEpsGrowth)}</div>
                     <div className="metricSub">
-                      Compared with {quarterLabel(data.sameQuarterLastYear?.date)}
+                      Compared with {displayQuarterLabel(data.sameQuarterLastYear)}
                     </div>
                   </div>
 
@@ -1154,7 +1289,7 @@ export default async function StockEarningsPage({ params }: Props) {
                     <MetricLabelWithHelp label="YoY revenue growth" />
                     <div className="metricValue">{formatPercent(yoyRevenueGrowth)}</div>
                     <div className="metricSub">
-                      Compared with {quarterLabel(data.sameQuarterLastYear?.date)}
+                      Compared with {displayQuarterLabel(data.sameQuarterLastYear)}
                     </div>
                   </div>
                 </div>
@@ -1217,7 +1352,7 @@ export default async function StockEarningsPage({ params }: Props) {
 
                       return (
                         <tr key={`${row.date}-${row.epsActual}-${row.revenueActual}`}>
-                          <td>{quarterLabel(row.date)}</td>
+                          <td>{displayQuarterLabel(row)}</td>
                           <td>{formatMoney(rowEpsActual)}</td>
                           <td>{formatMoney(rowEpsEstimated)}</td>
                           <td>{formatPercent(calcPercentDifference(rowEpsActual, rowEpsEstimated))}</td>
