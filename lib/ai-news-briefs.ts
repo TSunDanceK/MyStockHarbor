@@ -95,23 +95,15 @@ async function generateAiNewsBriefs(input: BatchInput): Promise<AiNewsBrief[]> {
   };
 
   const systemPrompt =
-    "You write short stock-news briefing copy for MyStockHarbor, a beginner-friendly stock analysis site. " +
+    "You write short investor context lines for MyStockHarbor, a beginner-friendly stock analysis site. " +
     "Use only the provided headline, source, publication date, feed description, stock symbol, company name, trend context, and news-score label. " +
     "Return one output item for each input article in the exact same order. " +
-    "Do not include or rewrite the headline. " +
-    "Make each summary clearly specific to that article, not a reusable template. " +
-    "Treat importance and tone as separate ideas. A story can sound neutral in wording but still be an important market catalyst. " +
-    "When an article appears to describe a major partnership, earnings shift, guidance change, funding event, regulatory action, major customer relationship, or other meaningful corporate development, say that plainly in calm language. " +
-    "If the article appears vague, recycled, thin, or low-information, say so cautiously and explain what traders may be watching instead. " +
+    "The page already shows the original headline and FMP feed excerpt, so do not rewrite or summarise the article. " +
+    "Set summary to an empty string unless a few words are needed for valid JSON. " +
+    "Use whyItMatters for one short investor-focused sentence explaining why the item could matter for sentiment, earnings expectations, regulation, demand, margins, valuation, or the chart. " +
+    "If the article appears vague, recycled, thin, or low-information, say what traders may watch instead. " +
     "Do not invent facts. Do not imply full article access or independent verification. " +
-    "Keep attribution light and natural, such as 'Reuters reports that' or 'Barron's highlights'. " +
-    "Do not copy likely article wording. Paraphrase clearly. " +
-    "Each summary must feel useful, specific, editorial, and cautious. " +
-    "Each summary should be 2 to 3 sentences, around 45 to 80 words total. " +
-    "The first sentence should explain what the coverage is about. " +
-    "The second sentence should explain how traders or investors may interpret it. " +
-    "A third sentence is allowed only when it adds genuinely useful context. " +
-    "Each whyItMatters line should be 1 sentence in plain English and should differ across articles when the headlines differ. " +
+    "Keep whyItMatters under 28 words. " +
     "Use 'Neutral' when the item is informative without a clear directional lean. Use 'Mixed' only when the article contains genuinely offsetting positives and negatives. " +
     "Avoid hype, predictions, sensational language, fake certainty, and filler.";
 
@@ -125,7 +117,7 @@ async function generateAiNewsBriefs(input: BatchInput): Promise<AiNewsBrief[]> {
     },
     body: JSON.stringify({
       model,
-      max_output_tokens: 1200,
+      max_output_tokens: 550,
       input: [
         {
           role: "system",
@@ -191,7 +183,7 @@ const getCachedAiNewsBriefs = unstable_cache(
     const payload = JSON.parse(payloadJson) as BatchInput;
     return generateAiNewsBriefs(payload);
   },
-  ["msh-ai-news-briefs-v3"],
+  ["msh-ai-news-briefs-v4-why-only"],
   {
     revalidate: 60 * 60,
   }
