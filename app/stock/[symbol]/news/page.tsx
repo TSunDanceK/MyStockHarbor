@@ -1696,6 +1696,18 @@ function buildTechnicalRead(args: {
   };
 }
 
+function getArticleSnippet(item: NewsItem, symbol: string) {
+  const text = item.description?.replace(/\s+/g, " ").trim();
+
+  if (text && text.length >= 40) {
+    return text.length > 520 ? `${text.slice(0, 520).trim()}…` : text;
+  }
+
+  return `${item.title} is one of the latest ${symbol} headlines from ${compactSource(
+    item.source,
+  )}. Use the full article link for the complete source context.`;
+}
+
 function structuredNews(
   news: NewsItem[],
   summaryByTitle: Record<string, string>,
@@ -1786,11 +1798,7 @@ async function DetailedNewsAiSection({
 
                 <h3 style={newsHeadlineStyle}>{item.title}</h3>
 
-                <p style={newsSummaryStyle}>
-                  {hasAi
-                    ? aiBrief!.summary
-                    : buildNewsSummary(item, symbol, trend, newsScore)}
-                </p>
+                <p style={newsSummaryStyle}>{getArticleSnippet(item, symbol)}</p>
 
                 <div style={whyItMattersBoxStyle}>
                   <div style={whyItMattersLabelStyle}>Why this matters</div>
@@ -1805,28 +1813,24 @@ async function DetailedNewsAiSection({
                   style={{
                     ...sourceFooterStyle,
                     display: "flex",
-                    alignItems: "flex-end",
+                    alignItems: "center",
                     justifyContent: "space-between",
                     gap: 12,
+                    flexWrap: "wrap",
                   }}
                 >
                   <span>
-                    Paraphrased on-page brief based on the headline and
-                    available source context. Source noted for context:{" "}
-                    {compactSource(item.source)}
+                    Article excerpt provided by the FMP news feed. AI is used only for the short investor read above.
                   </span>
 
-                  <span
-                    style={{
-                      fontSize: 10,
-                      opacity: 0.22,
-                      fontWeight: 700,
-                      letterSpacing: "0.08em",
-                      flex: "0 0 auto",
-                    }}
+                  <a
+                    href={item.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={readArticleLinkStyle}
                   >
-                    {hasAi ? "1" : "0"}
-                  </span>
+                    Read full article ↗
+                  </a>
                 </div>
               </article>
             );
@@ -1869,7 +1873,14 @@ async function DetailedNewsAiSection({
                   <div style={compactHeadlineStyle}>{item.title}</div>
                 </div>
 
-                <div style={compactMutedStyle}>On-page summary only</div>
+                <a
+                  href={item.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={compactMutedLinkStyle}
+                >
+                  Read ↗
+                </a>
               </article>
             ))}
           </div>
@@ -2078,19 +2089,34 @@ function DetailedNewsFallback({
 
               <h3 style={newsHeadlineStyle}>{item.title}</h3>
 
-              <div style={{ marginTop: 12 }}>
-                {loadingParagraphStyle(["94%", "88%", "61%"])}
-              </div>
+              <p style={newsSummaryStyle}>{getArticleSnippet(item, symbol)}</p>
 
               <div style={whyItMattersBoxStyle}>
                 <div style={whyItMattersLabelStyle}>Why this matters</div>
-                <div style={{ marginTop: 10 }}>
-                  {loadingParagraphStyle(["92%", "72%"])}
+                <div style={whyItMattersTextStyle}>
+                  The source item may affect how investors interpret {symbol}'s latest news flow, especially if it connects to earnings, guidance, demand, regulation, or sentiment.
                 </div>
               </div>
 
-              <div style={sourceFooterStyle}>
-                Paraphrased on-page brief is loading…
+              <div
+                style={{
+                  ...sourceFooterStyle,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  flexWrap: "wrap",
+                }}
+              >
+                <span>Article excerpt provided by the FMP news feed.</span>
+                <a
+                  href={item.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={readArticleLinkStyle}
+                >
+                  Read full article ↗
+                </a>
               </div>
             </article>
           ))
@@ -2132,7 +2158,14 @@ function DetailedNewsFallback({
                   <div style={compactHeadlineStyle}>{item.title}</div>
                 </div>
 
-                <div style={compactMutedStyle}>On-page summary only</div>
+                <a
+                  href={item.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={compactMutedLinkStyle}
+                >
+                  Read ↗
+                </a>
               </article>
             ))}
           </div>
@@ -2488,7 +2521,7 @@ export default async function StockNewsPage({ params }: Props) {
   const displayWhatItMeans = whatItMeans;
 
   const summaryByTitle = Object.fromEntries(
-    detailedNews.map((item) => [item.title, item.description ?? ""]),
+    detailedNews.map((item) => [item.title, getArticleSnippet(item, upper)]),
   );
 
   const aiData = await getStockNewsAiData(
@@ -3973,6 +4006,30 @@ const compactMutedStyle: CSSProperties = {
   lineHeight: 1.4,
   color: "rgba(241,245,249,0.42)",
   textAlign: "right",
+};
+
+const compactMutedLinkStyle: CSSProperties = {
+  fontSize: 12,
+  color: "#93c5fd",
+  textAlign: "right",
+  textDecoration: "none",
+  fontWeight: 900,
+  whiteSpace: "nowrap",
+};
+
+const readArticleLinkStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "8px 10px",
+  borderRadius: 999,
+  border: "1px solid rgba(59,130,246,0.30)",
+  background: "rgba(59,130,246,0.10)",
+  color: "#bfdbfe",
+  textDecoration: "none",
+  fontWeight: 900,
+  fontSize: 12,
+  whiteSpace: "nowrap",
 };
 
 function signalBoxStyle(tone: "green" | "red"): CSSProperties {
