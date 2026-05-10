@@ -574,8 +574,8 @@ export default function InsightPostClient({
     post.timeframe === "d"
       ? snapshot?.weeklyMA200Pct ?? null
       : null;
-  
-    const maSpreadPct =
+
+  const maSpreadPct =
     typeof lastMA50 === "number" && typeof lastMA200 === "number" && lastMA200 !== 0
       ? ((lastMA50 - lastMA200) / lastMA200) * 100
       : null;
@@ -592,7 +592,7 @@ export default function InsightPostClient({
       ? `Snapshot from ${post.date}`
       : "Archived snapshot";
 
-    const overallBreakdown =
+  const overallBreakdown =
     post.overallBreakdown ||
     post.excerpt ||
     "This insight is focused on the current chart structure and the key decision point for traders.";
@@ -1155,11 +1155,14 @@ export default function InsightPostClient({
 
           <section className="insightArticleLayout">
             <article
+              className="insightArticleCard"
               style={{
                 border: "1px solid rgba(255,255,255,0.10)",
                 borderRadius: 18,
-                padding: 18,
-                background: "rgba(255,255,255,0.03)",
+                padding: 22,
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.025))",
+                boxShadow: "0 14px 34px rgba(0,0,0,0.18)",
                 minWidth: 0,
               }}
             >
@@ -1382,7 +1385,7 @@ export default function InsightPostClient({
 
       <style>{`
         .wrap {
-          max-width: 1100px;
+          max-width: 1280px;
           margin: 0 auto;
           padding: 28px 20px 40px;
         }
@@ -1415,9 +1418,13 @@ export default function InsightPostClient({
         .insightArticleLayout {
           margin-top: 18px;
           display: grid;
-          grid-template-columns: minmax(0, 1fr) 340px;
+          grid-template-columns: minmax(0, 1fr) 360px;
           gap: 18px;
           align-items: start;
+        }
+
+        .insightArticleCard {
+          overflow: hidden;
         }
 
         .insightSidebar {
@@ -1495,11 +1502,16 @@ export default function InsightPostClient({
         }
 
         .insightArticleBody h2 {
-          margin: 26px 0 10px;
+          margin: 30px 0 12px;
+          padding-top: 4px;
           font-size: 26px;
           line-height: 1.18;
           letter-spacing: -0.03em;
           color: #f8fafc;
+        }
+
+        .insightArticleBody h2:first-child {
+          margin-top: 0;
         }
 
         .insightArticleBody h3 {
@@ -1528,6 +1540,9 @@ export default function InsightPostClient({
 
         .insightArticleBody a {
           color: #93c5fd;
+          font-weight: 800;
+          text-decoration-thickness: 1px;
+          text-underline-offset: 3px;
         }
 
         a:hover {
@@ -1564,15 +1579,15 @@ export default function InsightPostClient({
             font-size: 34px !important;
             line-height: 1.08 !important;
           }
-        }
 
-                  .insightArticleLayout {
+          .insightArticleLayout {
             grid-template-columns: 1fr !important;
           }
 
           .insightSidebar {
             position: static !important;
           }
+        }
 
         @media (max-width: 640px) {
           .wrap {
