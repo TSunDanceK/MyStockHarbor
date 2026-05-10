@@ -153,7 +153,8 @@ function fiscalLabelFromStatement(row?: FmpIncomeStatementRow | null) {
   return row.date ? quarterLabel(row.date) : null;
 }
 
-function displayQuarterLabel(row: FmpEarningsRow) {
+function displayQuarterLabel(row?: FmpEarningsRow | null) {
+  if (!row) return "—";
   return row.fiscalLabel || quarterLabel(row.date);
 }
 
