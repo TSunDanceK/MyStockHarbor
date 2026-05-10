@@ -22,5 +22,15 @@
       "destination": "https://mystockharbor.com/:path*",
       "permanent": true
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/jobs/warm-picker-universe",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/jobs/warm-earnings",
+      "schedule": "*/5 * * * *"
+    }
   ]
 }
