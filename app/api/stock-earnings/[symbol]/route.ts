@@ -31,6 +31,9 @@ type EarningsYearSummary = {
 type FmpStableEarningsItem = {
   symbol?: string;
   date?: string;
+  fiscalLabel?: string;
+  fiscalYear?: string;
+  periodEndDate?: string;
   epsActual?: number | string | null;
   epsEstimated?: number | string | null;
   revenueActual?: number | string | null;
@@ -46,6 +49,14 @@ type FmpIncomeStatement = {
   grossProfit?: number | string | null;
   operatingIncome?: number | string | null;
   netIncome?: number | string | null;
+  eps?: number | string | null;
+  epsDiluted?: number | string | null;
+};
+
+type FmpHistoricalEarningCalendarItem = {
+  date?: string;
+  epsActual?: number | null;
+  epsEstimated?: number | null;
 };
 
 type StockEarningsData = {
@@ -95,6 +106,25 @@ function quarterLabel(dateValue: string | null | undefined) {
   if (Number.isNaN(date.getTime())) return dateValue;
   const quarter = Math.floor(date.getUTCMonth() / 3) + 1;
   return `Q${quarter} ${String(date.getUTCFullYear()).slice(-2)}`;
+}
+
+function fiscalLabelFromStatement(row?: FmpIncomeStatement | null) {
+  if (!row) return null;
+
+  const period = String(row.period || "").toUpperCase();
+  const year =
+    row.calendarYear ||
+    (row.date && row.date.length >= 4 ? row.date.slice(0, 4) : "");
+
+  if (/^Q[1-4]$/.test(period) && year) {
+    return `${period} ${String(year).slice(-2)}`;
+  }
+
+  return row.date ? quarterLabel(row.date) : null;
+}
+
+function displayQuarterLabel(item: FmpStableEarningsItem) {
+  return item.fiscalLabel || quarterLabel(item.date);
 }
 
 function earningsToneLabel(tone: ScoreTone): "Good" | "Neutral" | "Weak" {
@@ -165,7 +195,7 @@ function buildRecentEarningsReports(items: FmpStableEarningsItem[]): EarningsPer
         : null;
 
     return {
-      label: quarterLabel(item.date),
+      label: displayQuarterLabel(item),
       date: item.date ?? null,
       tone,
       toneLabel: earningsToneLabel(tone),
@@ -182,7 +212,7 @@ function buildYearlyEarningsSummaries(items: FmpStableEarningsItem[]): EarningsY
 
   for (const item of items) {
     if (!item.date) continue;
-    const year = item.date.slice(0, 4);
+    const year = item.fiscalYear || item.date.slice(0, 4);
     if (!/^\d{4}$/.test(year)) continue;
 
     const current = byYear.get(year) ?? [];
@@ -326,15 +356,18 @@ export async function GET(_request: Request, { params }: Props) {
   const encoded = encodeURIComponent(clean);
   const key = encodeURIComponent(apiKey);
 
-  const [earningsRowsRaw, stableIncomeRaw, legacyIncomeRaw] = await Promise.all([
+  const [earningsRowsRaw, stableIncomeRaw, legacyIncomeRaw, historicalCalendarRaw] = await Promise.all([
     fetchFmpJson<FmpStableEarningsItem[]>(
       `https://financialmodelingprep.com/stable/earnings?symbol=${encoded}&apikey=${key}`,
     ),
     fetchFmpJson<FmpIncomeStatement[]>(
-      `https://financialmodelingprep.com/stable/income-statement?symbol=${encoded}&period=quarter&limit=6&apikey=${key}`,
+      `https://financialmodelingprep.com/stable/income-statement?symbol=${encoded}&period=quarter&limit=12&apikey=${key}`,
     ),
     fetchFmpJson<FmpIncomeStatement[]>(
-      `https://financialmodelingprep.com/api/v3/income-statement/${encoded}?period=quarter&limit=6&apikey=${key}`,
+      `https://financialmodelingprep.com/api/v3/income-statement/${encoded}?period=quarter&limit=12&apikey=${key}`,
+    ),
+    fetchFmpJson<unknown[]>(
+      `https://financialmodelingprep.com/api/v3/historical/earning_calendar/${encoded}?apikey=${key}`,
     ),
   ]);
 
@@ -346,13 +379,68 @@ export async function GET(_request: Request, { params }: Props) {
         ? legacyIncomeRaw
         : [];
 
+  const historicalCalendarRows: FmpHistoricalEarningCalendarItem[] = Array.isArray(
+    historicalCalendarRaw,
+  )
+    ? historicalCalendarRaw
+        .map((item) => {
+          const row = item as Record<string, unknown>;
+
+          return {
+            date: typeof row.date === "string" ? row.date : "",
+            epsActual:
+              safeNumber(row.actualEarningResult) ??
+              safeNumber(row.epsActual) ??
+              safeNumber(row.actualEPS),
+            epsEstimated:
+              safeNumber(row.estimatedEarning) ??
+              safeNumber(row.epsEstimated) ??
+              safeNumber(row.estimatedEPS),
+          };
+        })
+        .filter((item) => Boolean(item.date))
+        .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    : [];
+
+  const historicalByDate = new Map(
+    historicalCalendarRows.map((item) => [item.date, item]),
+  );
+
   const completedRows = [...earningsRows]
     .filter((item) => {
       const itemTime = dateTime(item.date);
       if (itemTime == null || itemTime > Date.now()) return false;
       return safeNumber(item.epsActual) != null || safeNumber(item.revenueActual) != null;
     })
-    .sort((a, b) => (dateTime(b.date) ?? 0) - (dateTime(a.date) ?? 0));
+    .sort((a, b) => (dateTime(b.date) ?? 0) - (dateTime(a.date) ?? 0))
+    .map((item, index) => {
+      const matchingCalendar = item.date ? historicalByDate.get(item.date) : null;
+      const matchingIncome = incomeStatements[index] ?? null;
+      const incomeEps =
+        safeNumber(matchingIncome?.epsDiluted) ??
+        safeNumber(matchingIncome?.eps) ??
+        null;
+
+      return {
+        ...item,
+        fiscalLabel: fiscalLabelFromStatement(matchingIncome) ?? undefined,
+        fiscalYear:
+          matchingIncome?.calendarYear ||
+          matchingIncome?.date?.slice(0, 4) ||
+          item.date?.slice(0, 4),
+        periodEndDate: matchingIncome?.date,
+        epsActual:
+          matchingCalendar?.epsActual ??
+          incomeEps ??
+          safeNumber(item.epsActual),
+        epsEstimated:
+          matchingCalendar?.epsEstimated ??
+          safeNumber(item.epsEstimated),
+        revenueActual:
+          safeNumber(matchingIncome?.revenue) ??
+          safeNumber(item.revenueActual),
+      };
+    });
 
   const latest = completedRows[0] ?? null;
 
@@ -365,7 +453,10 @@ export async function GET(_request: Request, { params }: Props) {
     .sort((a, b) => (dateTime(a.date) ?? 0) - (dateTime(b.date) ?? 0))[0] ?? null;
 
   const reportDate = latest?.date ?? null;
-  const statement = findClosestStatement(incomeStatements, reportDate);
+  const statement = latest?.periodEndDate
+    ? incomeStatements.find((item) => item.date === latest.periodEndDate) ??
+      findClosestStatement(incomeStatements, reportDate)
+    : findClosestStatement(incomeStatements, reportDate);
 
   const actualEps = safeNumber(latest?.epsActual);
   const estimatedEps = safeNumber(latest?.epsEstimated);
