@@ -578,31 +578,35 @@ function earningsReadScore(earnings: StockEarningsData | null, loading: boolean)
   let score = 50;
 
   if (typeof earnings.epsSurprisePercent === "number") {
-    score += capContribution(earnings.epsSurprisePercent * 2, -35, 35);
+    score += capContribution(earnings.epsSurprisePercent * 1.35, -22, 22);
   }
 
   if (typeof earnings.revenueSurprisePercent === "number") {
-    score += capContribution(earnings.revenueSurprisePercent * 3, -25, 25);
+    score += capContribution(earnings.revenueSurprisePercent * 3.2, -20, 20);
   }
 
   if (typeof earnings.actualEps === "number") {
-    score += earnings.actualEps > 0 ? 10 : -10;
+    score += earnings.actualEps > 0 ? 6 : -8;
   }
 
-  if (typeof earnings.revenue === "number" && typeof earnings.revenueEstimate === "number") {
-    score += earnings.revenue >= earnings.revenueEstimate ? 5 : -5;
+  const recent = Array.isArray(earnings.recentReports)
+    ? earnings.recentReports.slice(0, 4)
+    : [];
+
+  for (const row of recent) {
+    if (row.tone === "green") score += 2.5;
+    if (row.tone === "red") score -= 2.5;
   }
 
-  const recentGoodCount = Array.isArray(earnings.recentReports)
-    ? earnings.recentReports.filter((item) => item.tone === "green").length
-    : 0;
-  const recentWeakCount = Array.isArray(earnings.recentReports)
-    ? earnings.recentReports.filter((item) => item.tone === "red").length
-    : 0;
+  const recentSix = Array.isArray(earnings.recentReports)
+    ? earnings.recentReports.slice(0, 6)
+    : [];
 
-  score += capContribution((recentGoodCount - recentWeakCount) * 3, -9, 9);
+  const weakRecentCount = recentSix.filter((item) => item.tone === "red").length;
+  const mixedRecentCount = recentSix.filter((item) => item.tone === "yellow").length;
+  const maxScore = weakRecentCount > 0 ? 92 : mixedRecentCount > 0 ? 95 : 100;
 
-  return clampScore(score);
+  return Math.round(Math.min(maxScore, Math.max(0, score)));
 }
 
 function earningsScoreTone(score: number | null): "green" | "yellow" | "red" {
