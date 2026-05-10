@@ -2349,27 +2349,49 @@ function LatestEarningsCard({ earnings }: { earnings: LatestEarningsData }) {
             </div>
           </div>
 
-          <div style={earningsMetricGridStyle}>
-            <EarningsMetric label="Actual EPS" value={formatMoney(earnings.actualEps)} />
-            <EarningsMetric label="Estimated EPS" value={formatMoney(earnings.estimatedEps)} />
-            <EarningsMetric
-              label="EPS surprise"
-              value={formatMoney(earnings.epsSurprise)}
-              meta={formatPercent(earnings.epsSurprisePercent, 1)}
-              tone={metricTone(earnings.epsSurprisePercent)}
-            />
-            <EarningsMetric label="Revenue" value={formatLargeMoney(earnings.revenue)} />
-            <EarningsMetric label="Revenue estimate" value={formatLargeMoney(earnings.revenueEstimate)} />
-            <EarningsMetric
-              label="Revenue surprise"
-              value={formatLargeMoney(earnings.revenueSurprise)}
-              meta={formatPercent(earnings.revenueSurprisePercent, 1)}
-              tone={metricTone(earnings.revenueSurprisePercent)}
-            />
-            <EarningsMetric label="Gross margin" value={formatPercent(earnings.grossMargin, 1)} />
-            <EarningsMetric label="Operating margin" value={formatPercent(earnings.operatingMargin, 1)} />
-            <EarningsMetric label="Net income" value={formatLargeMoney(earnings.netIncome)} />
-          </div>
+<div style={earningsMetricGridStyle}>
+  <EarningsMetric label="Actual EPS" value={formatMoney(earnings.actualEps)} />
+  <EarningsMetric label="Estimated EPS" value={formatMoney(earnings.estimatedEps)} />
+  <EarningsMetric
+    label="EPS surprise"
+    value={formatMoney(earnings.epsSurprise)}
+    meta={formatPercent(earnings.epsSurprisePercent, 1)}
+    tone={metricTone(earnings.epsSurprisePercent)}
+  />
+  <EarningsMetric label="Revenue" value={formatLargeMoney(earnings.revenue)} />
+  <EarningsMetric label="Revenue estimate" value={formatLargeMoney(earnings.revenueEstimate)} />
+  <EarningsMetric
+    label="Revenue surprise"
+    value={formatLargeMoney(earnings.revenueSurprise)}
+    meta={formatPercent(earnings.revenueSurprisePercent, 1)}
+    tone={metricTone(earnings.revenueSurprisePercent)}
+  />
+  <EarningsMetric label="Gross margin" value={formatPercent(earnings.grossMargin, 1)} />
+  <EarningsMetric label="Operating margin" value={formatPercent(earnings.operatingMargin, 1)} />
+  <EarningsMetric label="Net income" value={formatLargeMoney(earnings.netIncome)} />
+
+  <Link
+    href={`/stock/${encodeURIComponent(symbol)}/earnings`}
+    style={{
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: 82,
+      borderRadius: 14,
+      border: "1px solid rgba(59,130,246,0.32)",
+      background:
+        "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(15,23,42,0.30))",
+      color: "#dbeafe",
+      textDecoration: "none",
+      fontSize: 13,
+      fontWeight: 950,
+      letterSpacing: "0.02em",
+      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035)",
+    }}
+  >
+    See full report →
+  </Link>
+</div>
 
           {earnings.recentReports.length ? (
             <div style={earningsTrendBoxStyle}>
@@ -2399,19 +2421,6 @@ function LatestEarningsCard({ earnings }: { earnings: LatestEarningsData }) {
             </div>
           ) : null}
 
-          <div style={earningsGuidanceBoxStyle}>
-            <div style={earningsMiniLabelStyle}>Guidance summary</div>
-            <div
-              style={{
-                marginTop: 6,
-                lineHeight: 1.55,
-                color: "rgba(241,245,249,0.82)",
-              }}
-            >
-              {earnings.guidanceSummary ??
-                "No structured guidance summary available from the earnings feed."}
-            </div>
-          </div>
         </>
       )}
 
@@ -3700,14 +3709,6 @@ function earningsMetricMetaStyle(tone?: ScoreTone): CSSProperties {
   };
 }
 
-const earningsGuidanceBoxStyle: CSSProperties = {
-  marginTop: 14,
-  border: "1px solid rgba(255,255,255,0.08)",
-  borderRadius: 14,
-  padding: 12,
-  background: "rgba(255,255,255,0.026)",
-  fontSize: 13,
-};
 
 const earningsNewsRowStyle: CSSProperties = {
   display: "grid",
