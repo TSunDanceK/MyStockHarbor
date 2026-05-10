@@ -595,9 +595,13 @@ export default async function PickerResultPage({
 
         .heroTop {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) auto;
-          gap: 16px;
+          grid-template-columns: minmax(0, 1fr) 360px;
+          gap: 24px;
           align-items: start;
+        }
+
+        .heroCopy {
+          min-width: 0;
         }
 
         .eyebrow {
@@ -617,16 +621,8 @@ export default async function PickerResultPage({
           white-space: nowrap;
         }
 
-        .heroGrid {
-          margin-top: 12px;
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) 330px;
-          gap: 22px;
-          align-items: start;
-        }
-
         .hero h1 {
-          margin: 0;
+          margin: 12px 0 0;
           font-size: 46px;
           line-height: 1.03;
           letter-spacing: -0.055em;
@@ -640,37 +636,60 @@ export default async function PickerResultPage({
           line-height: 1.65;
         }
 
-        .metricGrid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 10px;
-        }
-
-        .metricCard {
-          border: 1px solid rgba(255,255,255,0.09);
-          border-radius: 16px;
-          padding: 13px;
-          background: rgba(255,255,255,0.035);
+        .scanPanel {
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 22px;
+          padding: 18px 20px;
+          background: linear-gradient(180deg, rgba(3,7,18,0.72), rgba(2,6,23,0.92));
           box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
         }
 
+        .scanPanelTitle {
+          font-size: 12px;
+          font-weight: 950;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: #93c5fd;
+          margin-bottom: 10px;
+        }
+
+        .metricGrid {
+          display: grid;
+          gap: 0;
+        }
+
+        .metricCard {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 16px;
+          padding: 11px 0;
+          border-top: 1px solid rgba(255,255,255,0.08);
+          background: transparent;
+        }
+
+        .metricCard:first-child {
+          border-top: 0;
+        }
+
         .metricCard div {
-          font-size: 11px;
+          font-size: 12px;
           font-weight: 950;
           letter-spacing: 0.08em;
           text-transform: uppercase;
-          color: rgba(203,213,225,0.70);
+          color: rgba(203,213,225,0.78);
         }
 
         .metricCard strong {
           display: block;
-          margin-top: 8px;
-          font-size: 20px;
+          font-size: 18px;
           letter-spacing: -0.03em;
+          text-align: right;
+          white-space: nowrap;
         }
 
         .signalTabs {
-          margin-top: 0;
+          margin-top: 18px;
           display: flex;
           flex-wrap: wrap;
           gap: 10px;
@@ -920,27 +939,29 @@ export default async function PickerResultPage({
 
         <section className="hero">
           <div className="heroTop">
-            <div>
+            <div className="heroCopy">
+              <div className="eyebrow">
+                <span style={{ color: toneColour(config.tone) }}>●</span>
+                {config.eyebrow}
+              </div>
+
               <h1>{config.title}</h1>
               <p>{config.description}</p>
             </div>
 
-            <div className="eyebrow">
-              <span style={{ color: toneColour(config.tone) }}>●</span>
-              {config.eyebrow}
-            </div>
+            <aside className="scanPanel" aria-label="Current scan summary">
+              <div className="scanPanelTitle">Current scan</div>
+
+              <div className="metricGrid">
+                <MetricCard label="Live matches" value={foundCount} />
+                <MetricCard label="Shown here" value={entries.length} />
+                <MetricCard label="Universe" value={universeSize ?? "Live"} />
+                <MetricCard label="Updated" value={formatUpdatedAt(updatedAt)} />
+              </div>
+            </aside>
           </div>
 
-          <div className="heroGrid">
-            <SignalNav currentHref={config.href} />
-
-            <div className="metricGrid">
-              <MetricCard label="Live matches" value={foundCount} />
-              <MetricCard label="Shown here" value={entries.length} />
-              <MetricCard label="Universe" value={universeSize ?? "Live"} />
-              <MetricCard label="Updated" value={formatUpdatedAt(updatedAt)} />
-            </div>
-          </div>
+          <SignalNav currentHref={config.href} />
         </section>
 
         <section className="explainer">
