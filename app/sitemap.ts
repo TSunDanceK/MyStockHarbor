@@ -60,7 +60,15 @@ const seoGuides = [
   "/top-stocks-with-buy-signals",
   "/top-stocks-with-sell-signals",
   "/stocks-near-200-day-moving-average",
-  "/hot-market-names-right-now",
+  "/stocks-near-weekly-200-day-moving-average",
+  "/stocks-down-20-from-all-time-highs",
+  "/stocks-with-positive-last-earnings",
+  "/stocks-with-strong-earnings-growth",
+
+  // chart pattern plays
+  "/plays",
+  "/plays/descending-triangles",
+  "/plays/bull-flags",
 ];
 
 const coreMegaCaps = [
@@ -239,7 +247,7 @@ const etfs = [
 
 
 const priorityStocks = Array.from(
-  new Set([...coreMegaCaps, ...retailInterestStocks])
+  new Set([...coreMegaCaps, ...retailInterestStocks, ...recognizableMidCaps])
 );
 
 const uniqueEtfs = Array.from(new Set(etfs));
@@ -294,6 +302,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.7,
   }));
 
+  const stockEarningsEntries: MetadataRoute.Sitemap = priorityStocks.map((symbol) => ({
+    url: toAbsoluteUrl(`/stock/${encodeURIComponent(symbol.toUpperCase())}/earnings`),
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.69,
+  }));
+
   const etfEntries: MetadataRoute.Sitemap = uniqueEtfs.map((symbol) => ({
     url: toAbsoluteUrl(`/stock/${encodeURIComponent(symbol.toUpperCase())}`),
     lastModified: now,
@@ -308,6 +323,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.69,
   }));
 
+  const etfEarningsEntries: MetadataRoute.Sitemap = uniqueEtfs.map((symbol) => ({
+    url: toAbsoluteUrl(`/stock/${encodeURIComponent(symbol.toUpperCase())}/earnings`),
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.62,
+  }));
+
   return [
     ...mainPageEntries,
     ...seoGuideEntries,
@@ -315,7 +337,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
     ...learnEntries,
     ...stockEntries,
     ...stockNewsEntries,
+    ...stockEarningsEntries,
     ...etfEntries,
     ...etfNewsEntries,
+    ...etfEarningsEntries,
   ];
 }
