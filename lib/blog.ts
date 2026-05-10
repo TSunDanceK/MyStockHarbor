@@ -25,6 +25,10 @@ export type BlogPost = {
   timeframe: "d" | "w";
   chartBars: number | null;
   chartIndicators: InsightChartIndicator[];
+  overallBreakdown: string;
+  latestNews: string;
+  latestEarnings: string;
+  investorUsefulInfo: string;
 };
 export type InsightSnapshotPoint = {
   date: string;
@@ -59,6 +63,10 @@ export type BlogPostFull = {
   timeframe: "d" | "w";
   chartBars: number | null;
   chartIndicators: InsightChartIndicator[];
+  overallBreakdown: string;
+  latestNews: string;
+  latestEarnings: string;
+  investorUsefulInfo: string;
   content: string;
 };
 
@@ -72,6 +80,11 @@ function formatFrontmatterDate(value: unknown): string {
   }
 
   return "";
+}
+
+function normalizeFrontmatterText(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value.trim();
 }
 
 function normalizeChartBars(value: unknown): number | null {
@@ -126,8 +139,11 @@ export function getAllPosts(): BlogPost[] {
       timeframe: (data.timeframe === "w" ? "w" : "d") as "d" | "w",
       chartBars: normalizeChartBars(data.chartBars),
       chartIndicators: normalizeChartIndicators(data.chartIndicators),
+      overallBreakdown: normalizeFrontmatterText(data.overallBreakdown),
+      latestNews: normalizeFrontmatterText(data.latestNews),
+      latestEarnings: normalizeFrontmatterText(data.latestEarnings),
+      investorUsefulInfo: normalizeFrontmatterText(data.investorUsefulInfo),
     };
-  });
 
    return posts.sort((a, b) => {
     if (a.date === b.date) return 0;
@@ -152,6 +168,10 @@ export function getPostBySlug(slug: string): BlogPostFull {
     timeframe: (data.timeframe === "w" ? "w" : "d") as "d" | "w",
     chartBars: normalizeChartBars(data.chartBars),
     chartIndicators: normalizeChartIndicators(data.chartIndicators),
+    overallBreakdown: normalizeFrontmatterText(data.overallBreakdown),
+    latestNews: normalizeFrontmatterText(data.latestNews),
+    latestEarnings: normalizeFrontmatterText(data.latestEarnings),
+    investorUsefulInfo: normalizeFrontmatterText(data.investorUsefulInfo),
     content,
   };
 }
