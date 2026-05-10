@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import MiniPickerCandleChart, { type MiniCandlePoint } from "@/app/components/MiniPickerCandleChart";
 import { headers } from "next/headers";
 
 export const dynamic = "force-dynamic";
@@ -9,6 +10,7 @@ type PickerItem = {
   note?: string;
   tone?: "green" | "yellow" | "orange" | "red";
   dashboardHref?: string;
+  chartPoints?: MiniCandlePoint[];
 };
 
 type PickerSection = {
@@ -29,6 +31,7 @@ type AthPullbackEntry = {
   label: string;
   stockHref: string;
   chartHref: string;
+  chartPoints: MiniCandlePoint[];
 };
 
 export const metadata: Metadata = {
@@ -112,6 +115,7 @@ async function getAthPullbackEntries(): Promise<{
           chartHref: chartBase.includes("#chart")
             ? chartBase
             : `${chartBase}#chart`,
+          chartPoints: Array.isArray(item?.chartPoints) ? item.chartPoints : [],
         };
       })
       .filter((entry): entry is AthPullbackEntry => Boolean(entry));
@@ -739,6 +743,8 @@ export default async function StocksDown20FromAllTimeHighsPage() {
                       Pullback Setup
                     </div>
                   </div>
+
+                  <MiniPickerCandleChart points={entry.chartPoints} tone="yellow" />
 
                   <ul
                     style={{
