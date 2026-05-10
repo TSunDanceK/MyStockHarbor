@@ -2268,7 +2268,7 @@ function EarningsNewsSection({
 
       <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
         {earningsNews.length ? (
-          earningsNews.map((item, index) => (
+          earningsNews.slice(0, 2).map((item, index) => (
             <a
               key={`${item.link}-${index}`}
               href={item.link}
