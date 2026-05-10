@@ -86,6 +86,16 @@ type FmpEarningsSurprise = {
   estimatedEarning?: number | string | null;
 };
 
+type FmpStableEarningsItem = {
+  symbol?: string;
+  date?: string;
+  epsActual?: number | string | null;
+  epsEstimated?: number | string | null;
+  revenueActual?: number | string | null;
+  revenueEstimated?: number | string | null;
+  lastUpdated?: string;
+};
+
 type FmpIncomeStatement = {
   date?: string;
   calendarYear?: string;
@@ -565,13 +575,13 @@ async function getLatestEarningsData(
   const encoded = encodeURIComponent(symbol);
   const key = encodeURIComponent(apiKey);
 
-  const [surprisesA, surprisesB, incomeStatements, analystEstimates, calendar] =
+  const [stableEarnings, stableIncomeStatements, legacyIncomeStatements, analystEstimates, surprisesA, surprisesB] =
     await Promise.all([
-      fetchFmpJson<FmpEarningsSurprise[]>(
-        `https://financialmodelingprep.com/api/v3/earnings-surprises/${encoded}?apikey=${key}`,
+      fetchFmpJson<FmpStableEarningsItem[]>(
+        `https://financialmodelingprep.com/stable/earnings?symbol=${encoded}&apikey=${key}`,
       ),
-      fetchFmpJson<FmpEarningsSurprise[]>(
-        `https://financialmodelingprep.com/api/v3/earning_surprises/${encoded}?apikey=${key}`,
+      fetchFmpJson<FmpIncomeStatement[]>(
+        `https://financialmodelingprep.com/stable/income-statement?symbol=${encoded}&period=quarter&limit=6&apikey=${key}`,
       ),
       fetchFmpJson<FmpIncomeStatement[]>(
         `https://financialmodelingprep.com/api/v3/income-statement/${encoded}?period=quarter&limit=6&apikey=${key}`,
@@ -579,10 +589,41 @@ async function getLatestEarningsData(
       fetchFmpJson<FmpAnalystEstimate[]>(
         `https://financialmodelingprep.com/api/v3/analyst-estimates/${encoded}?period=quarter&limit=8&apikey=${key}`,
       ),
-      fetchFmpJson<FmpEarningsCalendarItem[]>(
-        `https://financialmodelingprep.com/api/v3/earning_calendar?symbol=${encoded}&limit=12&apikey=${key}`,
+      fetchFmpJson<FmpEarningsSurprise[]>(
+        `https://financialmodelingprep.com/api/v3/earnings-surprises/${encoded}?apikey=${key}`,
+      ),
+      fetchFmpJson<FmpEarningsSurprise[]>(
+        `https://financialmodelingprep.com/api/v3/earning_surprises/${encoded}?apikey=${key}`,
       ),
     ]);
+
+  const earningsRows = Array.isArray(stableEarnings) ? stableEarnings : [];
+
+  const completedEarningsRows = [...earningsRows]
+    .filter((item) => {
+      const itemTime = dateTime(item.date);
+      if (itemTime == null || itemTime > Date.now()) return false;
+
+      return (
+        typeof safeNumber(item.epsActual) === "number" ||
+        typeof safeNumber(item.revenueActual) === "number"
+      );
+    })
+    .sort((a, b) => (dateTime(b.date) ?? 0) - (dateTime(a.date) ?? 0));
+
+  const latestCompletedEarnings = completedEarningsRows[0] ?? null;
+
+  const nextEarningsRow = [...earningsRows]
+    .filter((item) => {
+      const itemTime = dateTime(item.date);
+      if (itemTime == null || itemTime <= Date.now()) return false;
+
+      return (
+        safeNumber(item.epsActual) == null &&
+        safeNumber(item.revenueActual) == null
+      );
+    })
+    .sort((a, b) => (dateTime(a.date) ?? 0) - (dateTime(b.date) ?? 0))[0] ?? null;
 
   const surprises =
     Array.isArray(surprisesA) && surprisesA.length
@@ -590,11 +631,16 @@ async function getLatestEarningsData(
       : Array.isArray(surprisesB)
         ? surprisesB
         : [];
-  const statements = Array.isArray(incomeStatements) ? incomeStatements : [];
-  const estimates = Array.isArray(analystEstimates) ? analystEstimates : [];
-  const calendarItems = Array.isArray(calendar) ? calendar : [];
 
+  const statements = Array.isArray(stableIncomeStatements) && stableIncomeStatements.length
+    ? stableIncomeStatements
+    : Array.isArray(legacyIncomeStatements)
+      ? legacyIncomeStatements
+      : [];
+
+  const estimates = Array.isArray(analystEstimates) ? analystEstimates : [];
   const today = Date.now();
+
   const latestSurprise =
     [...surprises]
       .filter(
@@ -604,50 +650,36 @@ async function getLatestEarningsData(
       .sort((a, b) => (dateTime(b.date) ?? 0) - (dateTime(a.date) ?? 0))[0] ??
     null;
 
+  const reportDate = latestCompletedEarnings?.date ?? latestSurprise?.date ?? null;
+
   const latestStatement =
+    findClosestByDate(statements, reportDate) ??
     [...statements]
       .filter((item) => dateTime(item.date) != null)
       .sort((a, b) => (dateTime(b.date) ?? 0) - (dateTime(a.date) ?? 0))[0] ??
     null;
 
-  const reportDate = latestSurprise?.date ?? latestStatement?.date ?? null;
   const matchedEstimate = findClosestByDate(estimates, reportDate);
-  const matchedCalendar = findClosestByDate(
-    calendarItems.filter(
-      (item) =>
-        dateTime(item.date) != null && (dateTime(item.date) ?? 0) <= today,
-    ),
-    reportDate,
-  );
-
-  const nextEarnings =
-    calendarItems
-      .filter(
-        (item) =>
-          dateTime(item.date) != null && (dateTime(item.date) ?? 0) > today,
-      )
-      .sort((a, b) => (dateTime(a.date) ?? 0) - (dateTime(b.date) ?? 0))[0] ??
-    null;
 
   const actualEps =
+    safeNumber(latestCompletedEarnings?.epsActual) ??
     safeNumber(latestSurprise?.actualEarningResult) ??
-    safeNumber(matchedCalendar?.eps) ??
     null;
 
   const estimatedEps =
+    safeNumber(latestCompletedEarnings?.epsEstimated) ??
     safeNumber(latestSurprise?.estimatedEarning) ??
-    safeNumber(matchedCalendar?.epsEstimated) ??
     safeNumber(matchedEstimate?.estimatedEpsAvg) ??
     safeNumber(matchedEstimate?.epsAvg) ??
     null;
 
   const revenue =
+    safeNumber(latestCompletedEarnings?.revenueActual) ??
     safeNumber(latestStatement?.revenue) ??
-    safeNumber(matchedCalendar?.revenue) ??
     null;
 
   const revenueEstimate =
-    safeNumber(matchedCalendar?.revenueEstimated) ??
+    safeNumber(latestCompletedEarnings?.revenueEstimated) ??
     safeNumber(matchedEstimate?.estimatedRevenueAvg) ??
     safeNumber(matchedEstimate?.revenueAvg) ??
     null;
@@ -730,9 +762,9 @@ async function getLatestEarningsData(
     operatingMargin,
     netIncome,
     guidanceSummary: null,
-    nextEarningsDate: nextEarnings?.date ?? null,
+    nextEarningsDate: nextEarningsRow?.date ?? null,
     sourceNote: hasStructuredData
-      ? "Structured earnings data from Financial Modeling Prep. Guidance is shown only when available from structured data."
+      ? "Structured earnings data from Financial Modeling Prep. Latest completed report is selected before upcoming report dates. Guidance is shown only when available from structured data."
       : "Structured earnings data is unavailable right now.",
   };
 }
