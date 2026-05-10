@@ -38,8 +38,8 @@ type DynamicQuoteRecord = {
 
 const PAYLOAD_CACHE_MS = 6 * 60 * 1000;
 
-const DISCOVERY_INTERVAL_MS = 6 * 60 * 1000; // 6 minutes
-const DYNAMIC_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+const DISCOVERY_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const DYNAMIC_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const DYNAMIC_MAX_SIZE = 700;
 const DISCOVERY_BATCH_SIZE = 50;
 const DISCOVERY_ESTIMATED_MAX_CALLS = 100; // up to 50 quote calls + up to 50 history fills
@@ -813,11 +813,12 @@ export async function GET() {
   }
 
   const intervalElapsed = now - state.lastDiscoveryAt >= DISCOVERY_INTERVAL_MS;
+  const dynamicUniverseFull = Object.keys(state.dynamic).length >= DYNAMIC_MAX_SIZE;
   const hasCapacity = await hasFmpCapacity(
     DISCOVERY_ESTIMATED_MAX_CALLS,
     DISCOVERY_MIN_HEADROOM_CALLS
   );
-  const allowDiscoveryNow = intervalElapsed && hasCapacity;
+  const allowDiscoveryNow = !dynamicUniverseFull && intervalElapsed && hasCapacity;
 
   const debugErrors: any[] = [];
 
@@ -829,7 +830,9 @@ export async function GET() {
   let historyRejected = 0;
 
   if (!allowDiscoveryNow) {
-    if (!intervalElapsed) {
+    if (dynamicUniverseFull) {
+      discoveryReason = "dynamic_universe_full";
+    } else if (!intervalElapsed) {
       discoveryReason = "interval_not_elapsed";
     } else if (!hasCapacity) {
       discoveryReason = "insufficient_fmp_headroom";
