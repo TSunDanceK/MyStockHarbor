@@ -80,8 +80,19 @@ FRONTMATTER RULES:
 
 title:
 - MUST be under 60 characters
-- Include ticker where possible
-- Focus on ONE clear idea: support, resistance, breakout, breakdown, pullback, divergence, trend test, or reversal
+- SHOULD include ticker near the start
+- SHOULD include the full company name when it fits naturally under 60 characters
+- SHOULD include "stock" when natural for SEO
+- MUST focus on ONE clear setup idea: support, resistance, breakout, breakdown, bounce, pullback, divergence, trend test, MA200/200-MA test, or reversal
+- Use trader-search language without sounding clickbait
+- If the full company name makes the title too long, use the ticker plus the cleanest searchable setup phrase instead
+Good SEO title examples:
+- "Coinbase COIN Stock Holds 200-MA Support"
+- "GE Vernova GEV Stock Tests Trend Support"
+- "Nvidia NVDA Stock Pullback Tests Support"
+- "Tesla TSLA Stock Faces Breakout Resistance"
+- "Palantir PLTR Stock Reclaims Momentum"
+
 
 excerpt:
 - One short sentence
