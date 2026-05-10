@@ -48,6 +48,7 @@ type StockEarningsData = {
   hasStructuredData: boolean;
   tone: ScoreTone;
   toneLabel: "Good" | "Neutral" | "Weak" | "Unavailable";
+  score?: number | null;
   reportDate: string | null;
   actualEps: number | null;
   estimatedEps: number | null;
@@ -575,38 +576,11 @@ function capContribution(value: number, min: number, max: number) {
 function earningsReadScore(earnings: StockEarningsData | null, loading: boolean) {
   if (loading || !earnings?.hasStructuredData) return null;
 
-  let score = 50;
-
-  if (typeof earnings.epsSurprisePercent === "number") {
-    score += capContribution(earnings.epsSurprisePercent * 1.35, -22, 22);
+  if (typeof earnings.score === "number" && Number.isFinite(earnings.score)) {
+    return earnings.score;
   }
 
-  if (typeof earnings.revenueSurprisePercent === "number") {
-    score += capContribution(earnings.revenueSurprisePercent * 3.2, -20, 20);
-  }
-
-  if (typeof earnings.actualEps === "number") {
-    score += earnings.actualEps > 0 ? 6 : -8;
-  }
-
-  const recent = Array.isArray(earnings.recentReports)
-    ? earnings.recentReports.slice(0, 4)
-    : [];
-
-  for (const row of recent) {
-    if (row.tone === "green") score += 2.5;
-    if (row.tone === "red") score -= 2.5;
-  }
-
-  const recentSix = Array.isArray(earnings.recentReports)
-    ? earnings.recentReports.slice(0, 6)
-    : [];
-
-  const weakRecentCount = recentSix.filter((item) => item.tone === "red").length;
-  const mixedRecentCount = recentSix.filter((item) => item.tone === "yellow").length;
-  const maxScore = weakRecentCount > 0 ? 92 : mixedRecentCount > 0 ? 95 : 100;
-
-  return Math.round(Math.min(maxScore, Math.max(0, score)));
+  return null;
 }
 
 function earningsScoreTone(score: number | null): "green" | "yellow" | "red" {
