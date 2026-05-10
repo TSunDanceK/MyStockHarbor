@@ -26,6 +26,10 @@ type PickerChartPoint = {
   high?: number;
   low?: number;
   volume?: number;
+  ma50?: number;
+  ma200?: number;
+  rsi14?: number;
+  macdHist?: number;
 };
 
 type MarketRow = {
@@ -45,7 +49,7 @@ type MarketPayload = {
   dynamicSymbols?: string[];
 };
 
-type PickerTone = "green" | "yellow" | "orange" | "red";
+type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
 type PickerItem = {
   symbol: string;
@@ -55,6 +59,7 @@ type PickerItem = {
   indicator?: "MA200" | "RSI(14)" | "MACD(12,26,9)";
   dashboardHref?: string;
   chartPoints?: PickerChartPoint[];
+  score?: number;
   _score?: number;
 };
 
@@ -71,6 +76,7 @@ type PickerSection = {
     indicator?: "MA200" | "RSI(14)" | "MACD(12,26,9)";
     dashboardHref?: string;
     chartPoints?: PickerChartPoint[];
+    score?: number;
   }[];
 };
 
@@ -248,11 +254,26 @@ function pctChange(from: number, to: number) {
   return ((to - from) / from) * 100;
 }
 
-function buildPickerChartPoints(points: Point[], bars = 56): PickerChartPoint[] {
-  return points
-    .slice(-bars)
-    .map((point, index, arr) => {
-      const fallbackOpen = index > 0 ? arr[index - 1].close : point.close;
+function buildPickerChartPoints(points: Point[], bars = 72): PickerChartPoint[] {
+  const clean = points.filter((point) => point?.date && Number.isFinite(point.close));
+  const closes = clean.map((point) => point.close);
+  const ma50Arr = movingAverage(closes, 50);
+  const ma200Arr = movingAverage(closes, 200);
+  const rsiArr = rsiWilder(closes, 14);
+  const macdArr = macd(closes, 12, 26, 9);
+  const start = Math.max(0, clean.length - bars);
+
+  return clean
+    .slice(start)
+    .map((point, localIndex) => {
+      const index = start + localIndex;
+      const previous = clean[index - 1];
+      const fallbackOpen = previous?.close ?? point.close;
+      const ma50 = ma50Arr[index];
+      const ma200 = ma200Arr[index];
+      const rsi14 = rsiArr[index];
+      const macdHist = macdArr.hist[index];
+
       return {
         date: point.date,
         open:
@@ -272,9 +293,24 @@ function buildPickerChartPoints(points: Point[], bars = 56): PickerChartPoint[] 
           typeof point.volume === "number" && Number.isFinite(point.volume)
             ? point.volume
             : undefined,
+        ma50:
+          typeof ma50 === "number" && Number.isFinite(ma50)
+            ? Number(ma50.toFixed(2))
+            : undefined,
+        ma200:
+          typeof ma200 === "number" && Number.isFinite(ma200)
+            ? Number(ma200.toFixed(2))
+            : undefined,
+        rsi14:
+          typeof rsi14 === "number" && Number.isFinite(rsi14)
+            ? Number(rsi14.toFixed(2))
+            : undefined,
+        macdHist:
+          typeof macdHist === "number" && Number.isFinite(macdHist)
+            ? Number(macdHist.toFixed(4))
+            : undefined,
       };
-    })
-    .filter((point) => point.date && Number.isFinite(point.close));
+    });
 }
 
 function buildDashboardHref(args: {
@@ -1905,7 +1941,16 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
 
             ma200Proximity.push({
               symbol,
-              chartPoints,
+              chartPoints: buildPickerChartPoints(
+                aggregatePoints(pts, "w").map((p) => ({
+                  date: p.date,
+                  close: p.close,
+                  high: p.high,
+                  low: p.low,
+                  volume: p.volume,
+                })),
+                72
+              ),
               tone: weeklyMa200Candidate.pctDistance >= 0 ? "yellow" : "orange",
               note: `Near Weekly MA200 • ${Math.abs(weeklyMa200Candidate.pctDistance).toFixed(1)}% ${side} • deep-under ${weeklyMa200Candidate.deepUnderPct.toFixed(0)}%`,
               timeframe: "W",
@@ -2151,7 +2196,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
     const sorted = [...arr].sort((a, b) => (b._score ?? 0) - (a._score ?? 0));
     return sorted
       .slice(0, n)
-      .map(({ symbol, note, tone, timeframe, indicator, dashboardHref, chartPoints }) => ({
+      .map(({ symbol, note, tone, timeframe, indicator, dashboardHref, chartPoints, _score, score }) => ({
         symbol,
         note,
         tone,
@@ -2159,6 +2204,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
         indicator,
         dashboardHref,
         chartPoints,
+        score: typeof score === "number" ? score : typeof _score === "number" ? Math.round(_score) : undefined,
       }));
   };
 
