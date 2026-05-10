@@ -63,6 +63,7 @@ type StockEarningsData = {
   hasStructuredData: boolean;
   tone: ScoreTone;
   toneLabel: "Good" | "Neutral" | "Weak" | "Unavailable";
+  score: number | null;
   reportDate: string | null;
   actualEps: number | null;
   estimatedEps: number | null;
@@ -243,6 +244,113 @@ function buildYearlyEarningsSummaries(items: FmpStableEarningsItem[]): EarningsY
     });
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function calcGrowth(current: number | null, previous: number | null) {
+  if (current == null || previous == null || previous === 0) return null;
+  return ((current - previous) / Math.abs(previous)) * 100;
+}
+
+function findSameQuarterLastYear(
+  latest: FmpStableEarningsItem | null,
+  completedRows: FmpStableEarningsItem[],
+) {
+  if (!latest) return null;
+
+  const latestFiscalQuarter = latest.fiscalLabel?.split(" ")[0] ?? null;
+  const latestFiscalYear =
+    latest.fiscalYear && Number.isFinite(Number(latest.fiscalYear))
+      ? Number(latest.fiscalYear)
+      : null;
+
+  if (latestFiscalQuarter && latestFiscalYear) {
+    const matched =
+      completedRows.find((row) => {
+        if (!row.date || row.date === latest.date) return false;
+
+        const rowQuarter = row.fiscalLabel?.split(" ")[0] ?? null;
+        const rowYear =
+          row.fiscalYear && Number.isFinite(Number(row.fiscalYear))
+            ? Number(row.fiscalYear)
+            : null;
+
+        return rowQuarter === latestFiscalQuarter && rowYear === latestFiscalYear - 1;
+      }) ?? null;
+
+    if (matched) return matched;
+  }
+
+  return completedRows[4] ?? null;
+}
+
+function buildEarningsScore(args: {
+  latest: FmpStableEarningsItem | null;
+  sameQuarterLastYear: FmpStableEarningsItem | null;
+  completedRows: FmpStableEarningsItem[];
+}) {
+  const { latest, sameQuarterLastYear, completedRows } = args;
+
+  if (!latest) return null;
+
+  const epsActual = safeNumber(latest.epsActual);
+  const epsEstimated = safeNumber(latest.epsEstimated);
+  const revenueActual = safeNumber(latest.revenueActual);
+  const revenueEstimated = safeNumber(latest.revenueEstimated);
+
+  const epsSurprisePct =
+    epsActual != null && epsEstimated != null && epsEstimated !== 0
+      ? ((epsActual - epsEstimated) / Math.abs(epsEstimated)) * 100
+      : null;
+
+  const revenueSurprisePct =
+    revenueActual != null && revenueEstimated != null && revenueEstimated !== 0
+      ? ((revenueActual - revenueEstimated) / Math.abs(revenueEstimated)) * 100
+      : null;
+
+  const yoyEpsGrowth = calcGrowth(
+    epsActual,
+    safeNumber(sameQuarterLastYear?.epsActual),
+  );
+
+  const yoyRevenueGrowth = calcGrowth(
+    revenueActual,
+    safeNumber(sameQuarterLastYear?.revenueActual),
+  );
+
+  let score = 50;
+
+  if (epsSurprisePct != null) score += clamp(epsSurprisePct * 1.35, -22, 22);
+  if (revenueSurprisePct != null) score += clamp(revenueSurprisePct * 3.2, -20, 20);
+
+  if (epsActual != null) score += epsActual > 0 ? 6 : -8;
+
+  if (yoyEpsGrowth != null) score += clamp(yoyEpsGrowth * 0.18, -10, 10);
+  if (yoyRevenueGrowth != null) score += clamp(yoyRevenueGrowth * 0.22, -10, 10);
+
+  const recent = completedRows.slice(0, 4);
+  for (const row of recent) {
+    const tone = completedEarningsTone(row);
+    if (tone === "green") score += 2.5;
+    if (tone === "red") score -= 2.5;
+  }
+
+  const recentTones = completedRows.slice(0, 6).map(completedEarningsTone);
+  const weakRecentCount = recentTones.filter((item) => item === "red").length;
+  const mixedRecentCount = recentTones.filter((item) => item === "yellow").length;
+  const maxScore = weakRecentCount > 0 ? 92 : mixedRecentCount > 0 ? 95 : 100;
+
+  return Math.round(clamp(score, 0, maxScore));
+}
+
+function toneFromScore(score: number | null): ScoreTone {
+  if (typeof score !== "number") return "yellow";
+  if (score >= 66) return "green";
+  if (score <= 39) return "red";
+  return "yellow";
+}
+
 function buildOverallTone(args: {
   actualEps: number | null;
   estimatedEps: number | null;
@@ -325,6 +433,7 @@ function emptyPayload(): StockEarningsData {
     hasStructuredData: false,
     tone: "yellow",
     toneLabel: "Unavailable",
+    score: null,
     reportDate: null,
     actualEps: null,
     estimatedEps: null,
@@ -508,6 +617,17 @@ export async function GET(_request: Request, { params }: Props) {
       typeof netIncome === "number",
   );
 
+  const sameQuarterLastYear = findSameQuarterLastYear(latest, completedRows);
+
+  const score = hasStructuredData
+    ? buildEarningsScore({
+        latest,
+        sameQuarterLastYear,
+        completedRows,
+      })
+    : null;
+
+  const scoreTone = toneFromScore(score);
   const tone = buildOverallTone({
     actualEps,
     estimatedEps,
@@ -518,8 +638,9 @@ export async function GET(_request: Request, { params }: Props) {
 
   return NextResponse.json({
     hasStructuredData,
-    tone: hasStructuredData ? tone.tone : "yellow",
-    toneLabel: hasStructuredData ? tone.toneLabel : "Unavailable",
+    tone: hasStructuredData ? scoreTone : "yellow",
+    toneLabel: hasStructuredData ? earningsToneLabel(scoreTone) : "Unavailable",
+    score,
     reportDate,
     actualEps,
     estimatedEps,
