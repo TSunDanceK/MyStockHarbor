@@ -593,9 +593,17 @@ export default async function PickerResultPage({
           box-shadow: inset 0 1px 0 rgba(255,255,255,0.045), 0 18px 42px rgba(0,0,0,0.26);
         }
 
+        .heroTop {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 16px;
+          align-items: start;
+        }
+
         .eyebrow {
           display: inline-flex;
           align-items: center;
+          justify-content: center;
           gap: 8px;
           padding: 8px 12px;
           border-radius: 999px;
@@ -606,14 +614,15 @@ export default async function PickerResultPage({
           font-weight: 950;
           letter-spacing: 0.08em;
           text-transform: uppercase;
+          white-space: nowrap;
         }
 
         .heroGrid {
-          margin-top: 10px;
+          margin-top: 12px;
           display: grid;
           grid-template-columns: minmax(0, 1fr) 330px;
-          gap: 20px;
-          align-items: end;
+          gap: 22px;
+          align-items: start;
         }
 
         .hero h1 {
@@ -624,7 +633,7 @@ export default async function PickerResultPage({
         }
 
         .hero p {
-          margin: 12px 0 0;
+          margin: 10px 0 0;
           max-width: 820px;
           color: rgba(226,232,240,0.78);
           font-size: 16px;
@@ -661,7 +670,7 @@ export default async function PickerResultPage({
         }
 
         .signalTabs {
-          margin-top: 18px;
+          margin-top: 0;
           display: flex;
           flex-wrap: wrap;
           gap: 10px;
@@ -910,16 +919,20 @@ export default async function PickerResultPage({
         </nav>
 
         <section className="hero">
-          <div className="eyebrow">
-            <span style={{ color: toneColour(config.tone) }}>●</span>
-            {config.eyebrow}
-          </div>
-
-          <div className="heroGrid">
+          <div className="heroTop">
             <div>
               <h1>{config.title}</h1>
               <p>{config.description}</p>
             </div>
+
+            <div className="eyebrow">
+              <span style={{ color: toneColour(config.tone) }}>●</span>
+              {config.eyebrow}
+            </div>
+          </div>
+
+          <div className="heroGrid">
+            <SignalNav currentHref={config.href} />
 
             <div className="metricGrid">
               <MetricCard label="Live matches" value={foundCount} />
@@ -928,8 +941,6 @@ export default async function PickerResultPage({
               <MetricCard label="Updated" value={formatUpdatedAt(updatedAt)} />
             </div>
           </div>
-
-          <SignalNav currentHref={config.href} />
         </section>
 
         <section className="explainer">
