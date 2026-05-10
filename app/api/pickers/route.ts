@@ -172,6 +172,22 @@ type BreakoutCandidate = {
   avgDollarVolume: number;
 };
 
+type EarningsRow = {
+  symbol?: string;
+  date?: string;
+  epsActual?: number | null;
+  epsEstimated?: number | null;
+  revenueActual?: number | null;
+  revenueEstimated?: number | null;
+  lastUpdated?: string;
+};
+
+type EarningsCandidate = {
+  score: number;
+  note: string;
+  tone: PickerTone;
+};
+
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
     ? Redis.fromEnv()
@@ -190,9 +206,9 @@ const CACHE_SECONDS = 60 * 6; // 6 minutes
 const STALE_SECONDS = 60 * 6; // 6 minutes
 const MEMORY_CACHE_MS = 60_000;
 
-const PICKERS_REDIS_KEY = "msh:pickers:v5:candle-previews";
+const PICKERS_REDIS_KEY = "msh:pickers:v6:earnings-sections";
 const PICKERS_REDIS_TTL_SECONDS = 6 * 60;
-const PICKERS_LOCK_KEY = "msh:pickers:v5:candle-previews:lock";
+const PICKERS_LOCK_KEY = "msh:pickers:v6:earnings-sections:lock";
 const PICKERS_LOCK_TTL_SECONDS = 120;
 
 /* ------------------------ small util helpers ------------------------ */
@@ -1499,6 +1515,8 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
   const threeMonthBreakouts: PickerItem[] = [];
   const ma200Proximity: PickerItem[] = [];
   const divergences: PickerItem[] = [];
+  const positiveLastEarnings: PickerItem[] = [];
+  const strongEarningsGrowth: PickerItem[] = [];
   const signalRecords: SignalRecord[] = [];
 
   const isDynamicUniverse = (sym: string) => dynamicUniverseSet.has(sym);
@@ -1508,11 +1526,37 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
     universe.map((symbol) =>
       limit(async () => {
         try {
-          const pts = await fetchHistory(symbol, days);
+          const [pts, earningsRows] = await Promise.all([
+            fetchHistory(symbol, days),
+            fetchFmpEarnings(symbol),
+          ]);
           if (!pts.length) return;
 
           const dynamicName = isDynamicUniverse(symbol);
           const chartPoints = buildPickerChartPoints(pts);
+
+          const positiveLastEarningsCandidate = computePositiveLastEarningsCandidate(earningsRows);
+          if (positiveLastEarningsCandidate) {
+            positiveLastEarnings.push({
+              symbol,
+              chartPoints,
+              tone: positiveLastEarningsCandidate.tone,
+              note: positiveLastEarningsCandidate.note,
+              _score: positiveLastEarningsCandidate.score + dynamicBoost(symbol),
+            });
+          }
+
+          const strongEarningsGrowthCandidate = computeStrongEarningsGrowthCandidate(earningsRows);
+          if (strongEarningsGrowthCandidate) {
+            strongEarningsGrowth.push({
+              symbol,
+              chartPoints,
+              tone: strongEarningsGrowthCandidate.tone,
+              note: strongEarningsGrowthCandidate.note,
+              _score: strongEarningsGrowthCandidate.score + dynamicBoost(symbol),
+            });
+          }
+
           const comp = buildCompositeFromHistory(pts);
           const trendScore = buildTrendScoreFromHistory(pts);
 
@@ -1924,6 +1968,20 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
       take: 20,
     }),
     buildSection({
+      title: "Stocks With Positive Last Earnings",
+      description:
+        "Stocks ranked by the latest reported earnings beat, using EPS surprise, revenue surprise, positive EPS and report freshness.",
+      source: positiveLastEarnings,
+      take: 20,
+    }),
+    buildSection({
+      title: "Stocks With Strong Earnings Growth",
+      description:
+        "Stocks ranked by year-over-year EPS and revenue growth, recent positive earnings consistency and beat history.",
+      source: strongEarningsGrowth,
+      take: 20,
+    }),
+    buildSection({
       title: "MA200 Proximity",
       description:
         "Stocks trading close to their Daily or Weekly MA200, with ranking favouring constructive MA200 behaviour over messy long-term weakness.",
@@ -1984,7 +2042,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
         : dynamicUniverse.length,
     dynamicUniversePreview: dynamicUniverse.slice(0, 20),
     dynamicSymbols: dynamicUniverse,
-    estimatedApiCalls: universe.length + 1,
+    estimatedApiCalls: process.env.FMP_API_KEY ? universe.length * 2 + 1 : universe.length + 1,
     sections,
     signalRecords: filteredSignalRecords,
   };
