@@ -462,13 +462,61 @@ function PlayDiagram({ pattern, tone }: { pattern: PlayCardDef["pattern"]; tone:
     return (
       <svg viewBox="0 0 320 138" className="playDiagram" role="img" aria-label="Bull flag diagram">
         <rect x="0" y="0" width="320" height="138" rx="16" fill="rgba(2,6,23,0.72)" />
-        <path d="M30 108 L56 95 L78 76 L98 38" stroke={colors.accent} strokeWidth="5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M98 38 L140 55 L184 48 L226 64 L270 54" stroke="rgba(226,232,240,0.78)" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M105 31 L276 48" stroke={colors.line} strokeWidth="3" strokeDasharray="7 7" strokeLinecap="round" />
-        <path d="M100 70 L270 88" stroke={colors.line} strokeWidth="3" strokeDasharray="7 7" strokeLinecap="round" />
-        <path d="M270 54 L292 37" stroke="#22c55e" strokeWidth="4" strokeLinecap="round" />
-        <path d="M292 37 l-16 0 M292 37 l-6 15" stroke="#22c55e" strokeWidth="4" strokeLinecap="round" />
-        <path d="M42 126 V111 M76 126 V101 M110 126 V83 M144 126 V101 M178 126 V96 M212 126 V106 M246 126 V101 M280 126 V95" stroke="rgba(59,130,246,0.30)" strokeWidth="5" strokeLinecap="round" />
+
+        <path
+          d="M34 108 L62 96 L84 73 L104 36"
+          stroke="#22c55e"
+          strokeWidth="5"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        <path
+          d="M106 36 L144 52 L184 46 L222 61 L262 54"
+          stroke="rgba(226,232,240,0.80)"
+          strokeWidth="3"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        <path
+          d="M108 34 L272 53"
+          stroke={colors.line}
+          strokeWidth="3"
+          strokeDasharray="7 7"
+          strokeLinecap="round"
+        />
+
+        <path
+          d="M102 66 L266 85"
+          stroke={colors.line}
+          strokeWidth="3"
+          strokeDasharray="7 7"
+          strokeLinecap="round"
+        />
+
+        <path
+          d="M262 54 L292 36"
+          stroke="#22c55e"
+          strokeWidth="4"
+          strokeLinecap="round"
+        />
+        <path
+          d="M292 36 L276 37 M292 36 L286 51"
+          stroke="#22c55e"
+          strokeWidth="4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        <path
+          d="M42 126 V112 M76 126 V101 M110 126 V84 M144 126 V103 M178 126 V97 M212 126 V106 M246 126 V100 M280 126 V94"
+          stroke="rgba(59,130,246,0.30)"
+          strokeWidth="5"
+          strokeLinecap="round"
+        />
       </svg>
     );
   }
@@ -476,10 +524,37 @@ function PlayDiagram({ pattern, tone }: { pattern: PlayCardDef["pattern"]; tone:
   return (
     <svg viewBox="0 0 320 138" className="playDiagram" role="img" aria-label="Ascending triangle diagram">
       <rect x="0" y="0" width="320" height="138" rx="16" fill="rgba(2,6,23,0.72)" />
-      <path d="M26 91 L58 65 L88 82 L122 58 L154 76 L194 50 L230 67 L292 37" stroke="rgba(226,232,240,0.76)" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M52 40 H292" stroke={colors.line} strokeWidth="3" strokeDasharray="7 7" strokeLinecap="round" />
-      <path d="M62 108 L292 52" stroke={colors.accent} strokeWidth="3" strokeLinecap="round" />
-      <path d="M42 126 V108 M76 126 V98 M110 126 V111 M144 126 V100 M178 126 V106 M212 126 V91 M246 126 V98 M280 126 V83" stroke="rgba(59,130,246,0.30)" strokeWidth="5" strokeLinecap="round" />
+
+      <path
+        d="M42 36 H282"
+        stroke={colors.line}
+        strokeWidth="3"
+        strokeDasharray="7 7"
+        strokeLinecap="round"
+      />
+
+      <path
+        d="M44 108 L282 36"
+        stroke={colors.accent}
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
+
+      <path
+        d="M46 94 L76 36 L106 84 L136 36 L166 72 L196 36 L226 58 L256 36 L282 38"
+        stroke="rgba(226,232,240,0.80)"
+        strokeWidth="3"
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+
+      <path
+        d="M52 126 V114 M86 126 V105 M120 126 V112 M154 126 V99 M188 126 V108 M222 126 V92 M256 126 V100 M290 126 V84"
+        stroke="rgba(59,130,246,0.30)"
+        strokeWidth="5"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
