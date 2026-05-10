@@ -22,6 +22,10 @@ type InsightPostData = {
   timeframe: "d" | "w";
   chartBars: number | null;
   chartIndicators: Overlay[];
+  overallBreakdown: string;
+  latestNews: string;
+  latestEarnings: string;
+  investorUsefulInfo: string;
   contentHtml: string;
 };
 
@@ -588,6 +592,23 @@ export default function InsightPostClient({
       ? `Snapshot from ${post.date}`
       : "Archived snapshot";
 
+    const overallBreakdown =
+    post.overallBreakdown ||
+    post.excerpt ||
+    "This insight is focused on the current chart structure and the key decision point for traders.";
+
+  const latestNews =
+    post.latestNews ||
+    "No specific recent news catalyst was included in this insight. Treat the move as chart-led unless the article states otherwise.";
+
+  const latestEarnings =
+    post.latestEarnings ||
+    "No specific earnings update was included in this insight. Check the latest company filings or earnings release before making an investment decision.";
+
+  const investorUsefulInfo =
+    post.investorUsefulInfo ||
+    "The key investor question is whether price action confirms the thesis or starts to invalidate the setup.";
+
   return (
     <main
       style={{
@@ -1132,24 +1153,122 @@ export default function InsightPostClient({
             </section>
           ) : null}
 
-          <section
-            style={{
-              marginTop: 18,
-              border: "1px solid rgba(255,255,255,0.10)",
-              borderRadius: 18,
-              padding: 18,
-              background: "rgba(255,255,255,0.03)",
-            }}
-          >
-            <div
-              className="insightArticleBody"
-              dangerouslySetInnerHTML={{ __html: post.contentHtml }}
+          <section className="insightArticleLayout">
+            <article
               style={{
-                lineHeight: 1.82,
-                fontSize: 16,
-                color: "#e5e7eb",
+                border: "1px solid rgba(255,255,255,0.10)",
+                borderRadius: 18,
+                padding: 18,
+                background: "rgba(255,255,255,0.03)",
+                minWidth: 0,
               }}
-            />
+            >
+              <div
+                className="insightArticleBody"
+                dangerouslySetInnerHTML={{ __html: post.contentHtml }}
+                style={{
+                  lineHeight: 1.82,
+                  fontSize: 16,
+                  color: "#e5e7eb",
+                }}
+              />
+            </article>
+
+            <aside className="insightSidebar">
+              <div style={insightSidebarCardStyle("blue")}>
+                <div style={miniLabelStyle}>Quick breakdown</div>
+                <div
+                  style={{
+                    marginTop: 10,
+                    fontSize: 18,
+                    lineHeight: 1.35,
+                    fontWeight: 950,
+                    color: "#f8fafc",
+                  }}
+                >
+                  {overallBreakdown}
+                </div>
+              </div>
+
+              <div style={insightSidebarCardStyle("gold")}>
+                <div style={miniLabelStyle}>Latest relevant news</div>
+                <p
+                  style={{
+                    margin: "10px 0 0",
+                    fontSize: 14,
+                    lineHeight: 1.65,
+                    color: "#e5e7eb",
+                    opacity: 0.9,
+                  }}
+                >
+                  {latestNews}
+                </p>
+              </div>
+
+              <div style={insightSidebarCardStyle("green")}>
+                <div style={miniLabelStyle}>Latest earnings context</div>
+                <p
+                  style={{
+                    margin: "10px 0 0",
+                    fontSize: 14,
+                    lineHeight: 1.65,
+                    color: "#e5e7eb",
+                    opacity: 0.9,
+                  }}
+                >
+                  {latestEarnings}
+                </p>
+              </div>
+
+              <div style={insightSidebarCardStyle("purple")}>
+                <div style={miniLabelStyle}>Investor useful info</div>
+                <p
+                  style={{
+                    margin: "10px 0 0",
+                    fontSize: 14,
+                    lineHeight: 1.65,
+                    color: "#e5e7eb",
+                    opacity: 0.9,
+                  }}
+                >
+                  {investorUsefulInfo}
+                </p>
+              </div>
+
+              {symbol ? (
+                <div
+                  style={{
+                    border: "1px solid rgba(59,130,246,0.22)",
+                    borderRadius: 18,
+                    padding: 16,
+                    background:
+                      "linear-gradient(135deg, rgba(15,23,42,0.96), rgba(2,6,23,0.96))",
+                  }}
+                >
+                  <div style={miniLabelStyle}>Next step</div>
+
+                  <div
+                    style={{
+                      marginTop: 12,
+                      display: "grid",
+                      gap: 10,
+                    }}
+                  >
+                    <Link href={`/stock/${symbol}`} style={ctaStyle("blue")}>
+                      Open {symbol} Stock Page
+                    </Link>
+
+                    <Link href={`/stock/${symbol}/news`} style={ctaStyle("gold")}>
+                      Read {symbol} News
+                    </Link>
+
+                    <Link href="/pickers" style={ctaStyle("green")}>
+                      Find Similar Setups
+                    </Link>
+                  </div>
+                </div>
+              ) : null}
+            </aside>
           </section>
 
           <section
@@ -1293,6 +1412,22 @@ export default function InsightPostClient({
           display: flex;
         }
 
+        .insightArticleLayout {
+          margin-top: 18px;
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 340px;
+          gap: 18px;
+          align-items: start;
+        }
+
+        .insightSidebar {
+          position: sticky;
+          top: 18px;
+          display: grid;
+          gap: 14px;
+          min-width: 0;
+        }
+
         .insightMobileOnly {
           display: none;
         }
@@ -1412,6 +1547,13 @@ export default function InsightPostClient({
           .insightPriceValue {
             font-size: 42px !important;
             line-height: 1.05 !important;
+          }
+          .insightArticleLayout {
+            grid-template-columns: 1fr !important;
+          }
+
+          .insightSidebar {
+            position: static !important;
           }
 
           .insightTrendValue {
@@ -1850,3 +1992,37 @@ const smallStatMetaStyle: React.CSSProperties = {
   opacity: 0.72,
   lineHeight: 1.45,
 };
+function insightSidebarCardStyle(
+  tint: "blue" | "gold" | "green" | "purple"
+): React.CSSProperties {
+  const tintMap = {
+    blue: {
+      border: "rgba(59,130,246,0.24)",
+      background:
+        "linear-gradient(135deg, rgba(59,130,246,0.12), rgba(15,23,42,0.92))",
+    },
+    gold: {
+      border: "rgba(250,204,21,0.24)",
+      background:
+        "linear-gradient(135deg, rgba(250,204,21,0.11), rgba(15,23,42,0.92))",
+    },
+    green: {
+      border: "rgba(34,197,94,0.24)",
+      background:
+        "linear-gradient(135deg, rgba(34,197,94,0.11), rgba(15,23,42,0.92))",
+    },
+    purple: {
+      border: "rgba(168,85,247,0.24)",
+      background:
+        "linear-gradient(135deg, rgba(168,85,247,0.11), rgba(15,23,42,0.92))",
+    },
+  };
+
+  return {
+    border: `1px solid ${tintMap[tint].border}`,
+    borderRadius: 18,
+    padding: 16,
+    background: tintMap[tint].background,
+    boxShadow: "0 12px 28px rgba(0,0,0,0.16)",
+  };
+}
