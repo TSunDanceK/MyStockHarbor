@@ -423,10 +423,37 @@ function PlayDiagram({ pattern, tone }: { pattern: PlayCardDef["pattern"]; tone:
     return (
       <svg viewBox="0 0 320 138" className="playDiagram" role="img" aria-label="Descending triangle diagram">
         <rect x="0" y="0" width="320" height="138" rx="16" fill="rgba(2,6,23,0.72)" />
-        <path d="M24 104 L64 76 L94 98 L128 64 L164 87 L202 51 L238 72 L292 31" stroke="rgba(226,232,240,0.74)" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M38 110 H286" stroke={colors.line} strokeWidth="3" strokeDasharray="7 7" strokeLinecap="round" />
-        <path d="M52 34 L286 93" stroke={colors.accent} strokeWidth="3" strokeLinecap="round" />
-        <path d="M52 126 V113 M86 126 V111 M120 126 V108 M154 126 V112 M188 126 V108 M222 126 V114 M256 126 V110 M290 126 V116" stroke="rgba(59,130,246,0.30)" strokeWidth="5" strokeLinecap="round" />
+
+        <path
+          d="M26 50 L58 84 L92 59 L126 87 L160 68 L196 92 L230 78 L286 108"
+          stroke="rgba(226,232,240,0.78)"
+          strokeWidth="3"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        <path
+          d="M38 108 H286"
+          stroke={colors.line}
+          strokeWidth="3"
+          strokeDasharray="7 7"
+          strokeLinecap="round"
+        />
+
+        <path
+          d="M36 45 L286 108"
+          stroke={colors.accent}
+          strokeWidth="3"
+          strokeLinecap="round"
+        />
+
+        <path
+          d="M52 126 V113 M86 126 V111 M120 126 V108 M154 126 V112 M188 126 V108 M222 126 V114 M256 126 V110 M290 126 V116"
+          stroke="rgba(59,130,246,0.30)"
+          strokeWidth="5"
+          strokeLinecap="round"
+        />
       </svg>
     );
   }
