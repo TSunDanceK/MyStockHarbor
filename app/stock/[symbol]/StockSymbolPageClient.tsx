@@ -14,6 +14,50 @@ type Quote = {
   source: string;
 };
 
+type ScoreTone = "green" | "yellow" | "red";
+
+type EarningsPeriodSummary = {
+  label: string;
+  date: string | null;
+  tone: ScoreTone;
+  toneLabel: "Good" | "Neutral" | "Weak";
+  actualEps: number | null;
+  estimatedEps: number | null;
+  epsSurprisePercent: number | null;
+  revenueSurprisePercent: number | null;
+};
+
+type EarningsYearSummary = {
+  year: string;
+  tone: ScoreTone;
+  toneLabel: "Good" | "Neutral" | "Weak";
+  goodCount: number;
+  neutralCount: number;
+  weakCount: number;
+};
+
+type StockEarningsData = {
+  hasStructuredData: boolean;
+  tone: ScoreTone;
+  toneLabel: "Good" | "Neutral" | "Weak" | "Unavailable";
+  reportDate: string | null;
+  actualEps: number | null;
+  estimatedEps: number | null;
+  epsSurprise: number | null;
+  epsSurprisePercent: number | null;
+  revenue: number | null;
+  revenueEstimate: number | null;
+  revenueSurprise: number | null;
+  revenueSurprisePercent: number | null;
+  grossMargin: number | null;
+  operatingMargin: number | null;
+  netIncome: number | null;
+  nextEarningsDate: string | null;
+  recentReports: EarningsPeriodSummary[];
+  yearlySummaries: EarningsYearSummary[];
+  sourceNote: string;
+};
+
 type Point = {
   date: string;
   close: number;
@@ -446,6 +490,264 @@ function buildTradeContext(args: {
   };
 }
 
+function formatMoneyCompact(value: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  const abs = Math.abs(value);
+  const sign = value < 0 ? "-" : "";
+
+  if (abs >= 1_000_000_000) return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`;
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(1)}K`;
+  return `${sign}$${abs.toFixed(2)}`;
+}
+
+function formatEps(value: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  return `${value < 0 ? "-" : ""}$${Math.abs(value).toFixed(2)}`;
+}
+
+function formatSignedPercent(value: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+
+function formatSignedMoney(value: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  return `${value >= 0 ? "+" : "-"}${formatMoneyCompact(Math.abs(value))}`;
+}
+
+function formatShortDate(value: string | null) {
+  if (!value) return "—";
+  const dt = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(dt.getTime())) return value;
+  return dt.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function earningsToneText(earnings: StockEarningsData | null, loading: boolean) {
+  if (loading) return "Loading";
+  if (!earnings?.hasStructuredData) return "Unavailable";
+  return earnings.toneLabel;
+}
+
+function earningsMiniText(earnings: StockEarningsData | null, loading: boolean) {
+  if (loading) return "Checking FMP earnings";
+  if (!earnings?.hasStructuredData) return "Structured earnings unavailable";
+  return earnings.reportDate ? `Latest report ${formatShortDate(earnings.reportDate)}` : "Latest report loaded";
+}
+
+function earningsPanelTone(earnings: StockEarningsData | null): "green" | "yellow" | "red" {
+  if (!earnings?.hasStructuredData) return "yellow";
+  return earnings.tone;
+}
+
+function earningsMetricStyle(tone: "green" | "yellow" | "red" = "yellow"): React.CSSProperties {
+  return {
+    border: toneBorder(tone),
+    borderRadius: 16,
+    padding: 14,
+    background: toneSoftBackground(tone),
+    minWidth: 0,
+  };
+}
+
+function yearlyEarningsBadgeStyle(tone: ScoreTone): React.CSSProperties {
+  return {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    border: toneBorder(tone),
+    borderRadius: 12,
+    padding: "10px 12px",
+    background: toneSoftBackground(tone),
+    fontSize: 13,
+    fontWeight: 900,
+  };
+}
+
+function StockEarningsPanel({
+  symbol,
+  earnings,
+  loading,
+}: {
+  symbol: string;
+  earnings: StockEarningsData | null;
+  loading: boolean;
+}) {
+  const tone = earningsPanelTone(earnings);
+
+  return (
+    <section
+      style={{
+        marginTop: 18,
+        border: toneBorder(tone),
+        borderRadius: 18,
+        padding: 18,
+        background: toneSoftBackground(tone),
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 12px 30px rgba(0,0,0,0.20)",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 14,
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "7px 12px",
+              borderRadius: 999,
+              background: "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
+              border: "1px solid rgba(59,130,246,0.32)",
+              color: "#dbeafe",
+              fontWeight: 950,
+              letterSpacing: "0.08em",
+              fontSize: 12,
+            }}
+          >
+            <span aria-hidden="true" style={{ marginRight: 8 }}>🧾</span> LATEST EARNINGS
+          </div>
+
+          <h2
+            style={{
+              margin: "14px 0 0 0",
+              fontSize: 26,
+              lineHeight: 1.12,
+              letterSpacing: "-0.03em",
+            }}
+          >
+            {symbol} earnings snapshot
+          </h2>
+
+          <p
+            style={{
+              margin: "10px 0 0 0",
+              fontSize: 15,
+              lineHeight: 1.75,
+              opacity: 0.84,
+              maxWidth: 760,
+            }}
+          >
+            {loading
+              ? "Loading the latest structured earnings data from Financial Modeling Prep."
+              : earnings?.hasStructuredData
+                ? `Latest completed report: ${formatShortDate(earnings.reportDate)}. Next expected earnings date: ${formatShortDate(earnings.nextEarningsDate)}.`
+                : "Structured earnings data is not available for this symbol right now."}
+          </p>
+        </div>
+
+        <div
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 10,
+            border: toneBorder(tone),
+            borderRadius: 999,
+            padding: "9px 12px",
+            background: toneSoftBackground(tone),
+            color: toneColor(tone),
+            fontSize: 13,
+            fontWeight: 950,
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+          }}
+        >
+          {loading ? "Loading" : earnings?.toneLabel ?? "Unavailable"}
+        </div>
+      </div>
+
+      <div className="earningsMetricGrid" style={{ marginTop: 16 }}>
+        <div style={earningsMetricStyle(metricToneFromPct(earnings?.epsSurprisePercent ?? null))}>
+          <div style={miniLabelStyle}>Actual EPS</div>
+          <div style={statValueStyle}>{loading ? "—" : formatEps(earnings?.actualEps ?? null)}</div>
+          <div style={statMetaStyle}>Estimate: {loading ? "—" : formatEps(earnings?.estimatedEps ?? null)}</div>
+        </div>
+
+        <div style={earningsMetricStyle(metricToneFromPct(earnings?.epsSurprisePercent ?? null))}>
+          <div style={miniLabelStyle}>EPS surprise</div>
+          <div style={statValueStyle}>{loading ? "—" : formatEps(earnings?.epsSurprise ?? null)}</div>
+          <div style={statMetaStyle}>{loading ? "—" : formatSignedPercent(earnings?.epsSurprisePercent ?? null)}</div>
+        </div>
+
+        <div style={earningsMetricStyle(metricToneFromPct(earnings?.revenueSurprisePercent ?? null))}>
+          <div style={miniLabelStyle}>Revenue</div>
+          <div style={statValueStyle}>{loading ? "—" : formatMoneyCompact(earnings?.revenue ?? null)}</div>
+          <div style={statMetaStyle}>Estimate: {loading ? "—" : formatMoneyCompact(earnings?.revenueEstimate ?? null)}</div>
+        </div>
+
+        <div style={earningsMetricStyle(metricToneFromPct(earnings?.revenueSurprisePercent ?? null))}>
+          <div style={miniLabelStyle}>Revenue surprise</div>
+          <div style={statValueStyle}>{loading ? "—" : formatSignedMoney(earnings?.revenueSurprise ?? null)}</div>
+          <div style={statMetaStyle}>{loading ? "—" : formatSignedPercent(earnings?.revenueSurprisePercent ?? null)}</div>
+        </div>
+
+        <div style={earningsMetricStyle(metricToneFromPct(earnings?.grossMargin ?? null))}>
+          <div style={miniLabelStyle}>Gross margin</div>
+          <div style={statValueStyle}>{loading ? "—" : formatSignedPercent(earnings?.grossMargin ?? null)}</div>
+          <div style={statMetaStyle}>If available from FMP</div>
+        </div>
+
+        <div style={earningsMetricStyle(metricToneFromPct(earnings?.operatingMargin ?? null))}>
+          <div style={miniLabelStyle}>Operating margin</div>
+          <div style={statValueStyle}>{loading ? "—" : formatSignedPercent(earnings?.operatingMargin ?? null)}</div>
+          <div style={statMetaStyle}>If available from FMP</div>
+        </div>
+      </div>
+
+      {earnings?.recentReports?.length ? (
+        <div style={{ marginTop: 16, ...statCardStyle }}>
+          <div style={miniLabelStyle}>Recent earnings trend</div>
+          <div className="earningsDotGrid" style={{ marginTop: 12 }}>
+            {earnings.recentReports.map((item) => (
+              <div key={`${item.label}-${item.date ?? ""}`} style={{ display: "grid", justifyItems: "center", gap: 7 }}>
+                <span
+                  title={`${item.label}: ${item.toneLabel}`}
+                  style={{
+                    width: 18,
+                    height: 18,
+                    borderRadius: 999,
+                    background: toneColor(item.tone),
+                    boxShadow: `0 0 0 5px ${item.tone === "green" ? "rgba(34,197,94,0.12)" : item.tone === "red" ? "rgba(239,68,68,0.12)" : "rgba(250,204,21,0.12)"}`,
+                  }}
+                />
+                <span style={{ fontSize: 11, fontWeight: 900, opacity: 0.86 }}>{item.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {earnings?.yearlySummaries?.length ? (
+        <div style={{ marginTop: 16, ...statCardStyle }}>
+          <div style={miniLabelStyle}>Yearly earnings read</div>
+          <div className="yearlyEarningsGrid" style={{ marginTop: 12 }}>
+            {earnings.yearlySummaries.map((item) => (
+              <div key={item.year} style={yearlyEarningsBadgeStyle(item.tone)}>
+                <strong>{item.year}</strong>
+                <span>{item.toneLabel}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div style={{ marginTop: 12, fontSize: 12, lineHeight: 1.6, opacity: 0.6 }}>
+        {earnings?.sourceNote ?? "Structured earnings data is provided by Financial Modeling Prep when available."}
+      </div>
+    </section>
+  );
+}
+
 function trendCheckIconStyle(pass: boolean): React.CSSProperties {
   return {
     color: pass ? "#4ade80" : "#f87171",
@@ -463,6 +765,8 @@ export default function StockSymbolPageClient({
   const [companyName, setCompanyName] = useState("");
 const [priceLoading, setPriceLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [earnings, setEarnings] = useState<StockEarningsData | null>(null);
+  const [earningsLoading, setEarningsLoading] = useState(true);
   const [openScoreHelp, setOpenScoreHelp] = useState<"fundamentals" | "future" | null>(null);
 
   useEffect(() => {
@@ -524,6 +828,35 @@ if (!cancelled) setPriceLoading(false);
     }
 
     load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadEarnings() {
+      setEarningsLoading(true);
+
+      try {
+        const res = await fetch(`/api/stock-earnings/${encodeURIComponent(symbol)}?t=${Date.now()}`, {
+          cache: "no-store",
+        });
+
+        if (!res.ok) throw new Error("Earnings fetch failed");
+
+        const data = (await res.json()) as StockEarningsData;
+        if (!cancelled) setEarnings(data);
+      } catch {
+        if (!cancelled) setEarnings(null);
+      } finally {
+        if (!cancelled) setEarningsLoading(false);
+      }
+    }
+
+    loadEarnings();
 
     return () => {
       cancelled = true;
@@ -679,117 +1012,81 @@ if (!cancelled) setPriceLoading(false);
           </div>
 
           <div className="stockAnalysisHeroGrid">
-            <div>
-<h1
-style={{
-  margin: "14px 0 0 0",
-  fontSize: 34,
-  lineHeight: 1.2,
-  fontWeight: 700,
-}}
->
-  {symbol} Stock Analysis, Chart Overview, Trend Signals & Technical Summary
-</h1>
+            <div className="stockAnalysisHeroCopy">
+              <h1
+                style={{
+                  margin: "14px 0 0 0",
+                  fontSize: 34,
+                  lineHeight: 1.16,
+                  fontWeight: 800,
+                  letterSpacing: "-0.04em",
+                }}
+              >
+                {symbol} Stock Analysis, Chart Overview & Earnings Context
+              </h1>
 
-          <p
-            style={{
-              marginTop: 12,
-              fontSize: 16,
-              lineHeight: 1.7,
-              opacity: 0.84,
-              maxWidth: 860,
-            }}
-          >
-            {companyName || `${symbol} technical overview`}{" "}
-            {companyName ? `(${symbol})` : ""}. Review the chart, trend structure,
-            moving averages and momentum context in a more readable, beginner-friendly way.
-          </p>
+              <p
+                style={{
+                  marginTop: 12,
+                  fontSize: 16,
+                  lineHeight: 1.7,
+                  opacity: 0.84,
+                  maxWidth: 760,
+                }}
+              >
+                {companyName || `${symbol} technical overview`} {companyName ? `(${symbol})` : ""}.
+                Review price trend, moving averages, momentum and latest earnings context in one cleaner stock read.
+              </p>
 
-          <div style={{ marginTop: 18, maxWidth: 520 }}>
-            <StockTickerJump currentSymbol={symbol} />
-          </div>
+              <div style={{ marginTop: 18, maxWidth: 520 }}>
+                <StockTickerJump currentSymbol={symbol} />
+              </div>
 
-          <div
-            style={{
-              marginTop: 16,
-              borderRadius: 16,
-              border: "1px solid rgba(34,197,94,0.28)",
-              background:
-                "linear-gradient(135deg, rgba(34,197,94,0.11), rgba(8,18,30,0.86))",
-              padding: "14px 16px",
-              display: "flex",
-              gap: 12,
-              alignItems: "flex-start",
-              maxWidth: 780,
-            }}
-          >
-            <div style={circleIconStyle("green")}>💡</div>
-            <div style={{ fontSize: 14, lineHeight: 1.65, opacity: 0.9 }}>
-              <strong style={{ color: "#86efac" }}>Simple view:</strong> this page combines the latest available price, trend checks, moving averages and RSI so you can judge whether {symbol} looks constructive, stretched, weak or mixed before opening the full dashboard.
-            </div>
-          </div>
-            </div>
-
-{!priceLoading && !err ? (
-              <div className="stockAnalysisSidePanel">
-                <div style={featuredMetricCardStyle(trendTone)}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                    <div style={miniLabelStyle}>Trend score</div>
-                    <div style={circleIconStyle(trendTone)}>{trendTone === "green" ? "↗" : trendTone === "red" ? "↘" : "↔"}</div>
-                  </div>
-                  <div
-                    style={{
-                      marginTop: 8,
-                      fontSize: 44,
-                      lineHeight: 1,
-                      fontWeight: 950,
-                      letterSpacing: "-0.06em",
-                      color: toneColor(trendTone),
-                    }}
-                  >
-                    {trendScore.passed}/{trendScore.total}
-                  </div>
-<div style={{ marginTop: 10, fontSize: 14, lineHeight: 1.65, opacity: 0.84 }}>
-  Based on three simple trend checks:
-</div>
-<div style={{ marginTop: 12, display: "grid", gap: 8, fontSize: 13 }}>
-  <div style={{ opacity: 0.9 }}>
-    <span
-      style={trendCheckIconStyle(
-        lastClose !== null && lastMA50 !== null && lastClose > lastMA50
-      )}
-    >
-      {lastClose !== null && lastMA50 !== null && lastClose > lastMA50 ? "✓" : "✕"}
-    </span>
-    Price above MA50
-  </div>
-
-  <div style={{ opacity: 0.9 }}>
-    <span
-      style={trendCheckIconStyle(
-        lastClose !== null && lastMA200 !== null && lastClose > lastMA200
-      )}
-    >
-      {lastClose !== null && lastMA200 !== null && lastClose > lastMA200 ? "✓" : "✕"}
-    </span>
-    Price above MA200
-  </div>
-
-  <div style={{ opacity: 0.9 }}>
-    <span
-      style={trendCheckIconStyle(
-        lastMA50 !== null && lastMA200 !== null && lastMA50 > lastMA200
-      )}
-    >
-      {lastMA50 !== null && lastMA200 !== null && lastMA50 > lastMA200 ? "✓" : "✕"}
-    </span>
-    MA50 above MA200
-  </div>
-</div>
+              <div
+                style={{
+                  marginTop: 16,
+                  borderRadius: 16,
+                  border: "1px solid rgba(34,197,94,0.28)",
+                  background:
+                    "linear-gradient(135deg, rgba(34,197,94,0.11), rgba(8,18,30,0.86))",
+                  padding: "14px 16px",
+                  display: "flex",
+                  gap: 12,
+                  alignItems: "flex-start",
+                  maxWidth: 780,
+                }}
+              >
+                <div style={circleIconStyle("green")}>💡</div>
+                <div style={{ fontSize: 14, lineHeight: 1.65, opacity: 0.9 }}>
+                  <strong style={{ color: "#86efac" }}>Simple view:</strong> this page combines price action, trend checks and structured earnings data so you can judge whether {symbol} looks constructive, weak, mixed, or simply waiting for confirmation.
                 </div>
+              </div>
+            </div>
 
-                <div className="stockAnalysisMiniGrid">
-                  <div style={miniMetricCardStyle}>
+            {!priceLoading && !err ? (
+              <div className="stockAnalysisSidePanel">
+                <div className="stockMetricMatrix">
+                  <div style={alignedMetricCardStyle(trendTone)}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                      <div style={miniLabelStyle}>Trend score</div>
+                      <div style={circleIconStyle(trendTone)}>{trendTone === "green" ? "↗" : trendTone === "red" ? "↘" : "↔"}</div>
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 8,
+                        fontSize: 32,
+                        lineHeight: 1,
+                        fontWeight: 950,
+                        letterSpacing: "-0.06em",
+                        color: toneColor(trendTone),
+                      }}
+                    >
+                      {trendScore.passed}/{trendScore.total}
+                    </div>
+                    <div style={miniMetricSubStyle}>Core trend checks passing</div>
+                  </div>
+
+                  <div style={alignedMetricCardStyle("blue")}>
                     <div style={miniLabelStyle}>Last price</div>
                     <div style={miniMetricValueStyle}>
                       {typeof quote?.price === "number" ? `$${quote.price.toFixed(2)}` : "—"}
@@ -799,10 +1096,54 @@ style={{
                     </div>
                   </div>
 
-                  <div style={miniMetricCardStyle}>
+                  <div style={alignedMetricCardStyle(trendTone)}>
                     <div style={miniLabelStyle}>Regime</div>
                     <div style={miniMetricValueStyle}>{trend}</div>
                     <div style={miniMetricSubStyle}>Overall chart structure</div>
+                  </div>
+
+                  <div style={alignedMetricCardStyle(earningsPanelTone(earnings))}>
+                    <div style={miniLabelStyle}>Earnings read</div>
+                    <div style={miniMetricValueStyle}>{earningsToneText(earnings, earningsLoading)}</div>
+                    <div style={miniMetricSubStyle}>{earningsMiniText(earnings, earningsLoading)}</div>
+                  </div>
+                </div>
+
+                <div className="trendChecksStrip">
+                  <div style={miniLabelStyle}>Trend checks</div>
+                  <div className="trendChecksGrid">
+                    <div style={{ opacity: 0.9 }}>
+                      <span
+                        style={trendCheckIconStyle(
+                          lastClose !== null && lastMA50 !== null && lastClose > lastMA50
+                        )}
+                      >
+                        {lastClose !== null && lastMA50 !== null && lastClose > lastMA50 ? "✓" : "✕"}
+                      </span>
+                      Price above MA50
+                    </div>
+
+                    <div style={{ opacity: 0.9 }}>
+                      <span
+                        style={trendCheckIconStyle(
+                          lastClose !== null && lastMA200 !== null && lastClose > lastMA200
+                        )}
+                      >
+                        {lastClose !== null && lastMA200 !== null && lastClose > lastMA200 ? "✓" : "✕"}
+                      </span>
+                      Price above MA200
+                    </div>
+
+                    <div style={{ opacity: 0.9 }}>
+                      <span
+                        style={trendCheckIconStyle(
+                          lastMA50 !== null && lastMA200 !== null && lastMA50 > lastMA200
+                        )}
+                      >
+                        {lastMA50 !== null && lastMA200 !== null && lastMA50 > lastMA200 ? "✓" : "✕"}
+                      </span>
+                      MA50 above MA200
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1134,6 +1475,13 @@ style={{
                   </div>
                 </div>
               </section>
+
+
+              <StockEarningsPanel
+                symbol={symbol}
+                earnings={earnings}
+                loading={earningsLoading}
+              />
 
               <section
                 style={{
@@ -1588,6 +1936,47 @@ style={{
     gap: 14px;
   }
 
+  .stockMetricMatrix {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  .trendChecksStrip {
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 16px;
+    padding: 14px;
+    background: rgba(255,255,255,0.035);
+  }
+
+  .trendChecksGrid {
+    margin-top: 10px;
+    display: grid;
+    gap: 8px;
+    font-size: 13px;
+  }
+
+  .earningsMetricGrid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .earningsDotGrid {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+  }
+
+  .yearlyEarningsGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 10px;
+  }
+
+
   .stockAnalysisMiniGrid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1659,7 +2048,9 @@ style={{
             width: 100%;
           }
 
-          .stockAnalysisMiniGrid {
+          .stockAnalysisMiniGrid,
+          .stockMetricMatrix,
+          .earningsMetricGrid {
   grid-template-columns: 1fr !important;
 }
 
@@ -1802,6 +2193,34 @@ function featuredMetricCardStyle(tone: "green" | "yellow" | "red"): React.CSSPro
         : tone === "red"
         ? "linear-gradient(135deg, rgba(248,113,113,0.16), rgba(18,10,10,0.96))"
         : "linear-gradient(135deg, rgba(250,204,21,0.14), rgba(18,16,8,0.96))",
+  };
+}
+
+function alignedMetricCardStyle(tone: "green" | "yellow" | "red" | "blue"): React.CSSProperties {
+  if (tone === "blue") {
+    return {
+      border: "1px solid rgba(59,130,246,0.20)",
+      borderRadius: 16,
+      padding: 14,
+      background: "linear-gradient(135deg, rgba(59,130,246,0.10), rgba(255,255,255,0.035))",
+      minHeight: 128,
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "space-between",
+      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+    };
+  }
+
+  return {
+    border: toneBorder(tone),
+    borderRadius: 16,
+    padding: 14,
+    background: toneSoftBackground(tone),
+    minHeight: 128,
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "space-between",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
   };
 }
 
