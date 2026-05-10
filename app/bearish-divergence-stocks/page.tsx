@@ -1,705 +1,208 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import MiniPickerCandleChart, { type MiniCandlePoint } from "@/app/components/MiniPickerCandleChart";
+import { headers } from "next/headers";
+
+export const dynamic = "force-dynamic";
+
+type PickerItem = {
+  symbol?: string;
+  note?: string;
+  tone?: "green" | "yellow" | "orange" | "red";
+  dashboardHref?: string;
+  chartPoints?: MiniCandlePoint[];
+};
+
+type PickerSection = {
+  title?: string;
+  description?: string;
+  foundCount?: number;
+  shownCount?: number;
+  items?: PickerItem[];
+};
+
+type PickersPayload = {
+  updatedAt?: string;
+  sections?: PickerSection[];
+};
+
+type DivergenceEntry = {
+  symbol: string;
+  label: string;
+  stockHref: string;
+  chartHref: string;
+  chartPoints: MiniCandlePoint[];
+  tone: "green" | "red" | "yellow" | "orange";
+  badge: string;
+};
 
 export const metadata: Metadata = {
-  title: "Bearish Divergence Stocks: How to Spot Early Weakness Signals | MyStockHarbor",
+  title:
+    "Bullish & Bearish Divergence Stocks | RSI & MACD Signals | MyStockHarbor",
   description:
-    "Learn what bearish divergence means in stocks, how traders use RSI and MACD divergence to spot weakening upside momentum, and how to explore live stock ideas with MyStockHarbor.",
+    "Browse bullish and bearish divergence stocks using live MyStockHarbor picker data. Review RSI and MACD divergence signals, open each stock page, and jump straight to the chart for deeper analysis.",
   alternates: {
-    canonical: "/bearish-divergence-stocks",
+    canonical: "https://www.mystockharbor.com/bullish-bearish-divergence-stocks",
   },
   openGraph: {
-    title: "Bearish Divergence Stocks | MyStockHarbor",
+    title: "Bullish & Bearish Divergence Stocks | MyStockHarbor",
     description:
-      "A beginner-friendly guide to bearish divergence stocks, early weakness signals and how to explore live stock ideas.",
-    url: "https://mystockharbor.com/bearish-divergence-stocks",
+      "Explore bullish and bearish divergence stocks with RSI and MACD signals using live MyStockHarbor picker data.",
+    url: "https://www.mystockharbor.com/bullish-bearish-divergence-stocks",
     siteName: "MyStockHarbor",
-    type: "article",
+    type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Bearish Divergence Stocks | MyStockHarbor",
+    title: "Bullish & Bearish Divergence Stocks | MyStockHarbor",
     description:
-      "Learn how traders identify bearish divergence stocks and early weakness setups.",
+      "Explore bullish and bearish divergence stocks with RSI and MACD signals using live MyStockHarbor picker data.",
   },
 };
 
-export default function BearishDivergenceStocksPage() {
-  return (
-    <main
-      style={{
-        minHeight: "100vh",
-        background: "#06080d",
-        color: "#f1f5f9",
-        fontFamily: "system-ui, Arial",
-      }}
-    >
-      <div className="wrap">
-        <div style={{ display: "grid", gap: 14 }}>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "flex-end",
-              alignItems: "flex-start",
-              gap: 10,
-              flexWrap: "wrap",
-            }}
-          >
-            <Link href="/" style={topNavBtnStyle("dashboard")}>
-              <span
-                aria-hidden="true"
-                style={{
-                  fontSize: 15,
-                  lineHeight: 1,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {topNavIcon("dashboard")}
-              </span>
-              <span>Dashboard</span>
-            </Link>
+async function getOriginFromHeaders() {
+  const headerStore = await headers();
+  const host =
+    headerStore.get("x-forwarded-host") ||
+    headerStore.get("host") ||
+    "www.mystockharbor.com";
 
-            <Link href="/platforms" style={topNavBtnStyle("platforms")}>
-              <span
-                aria-hidden="true"
-                style={{
-                  fontSize: 15,
-                  lineHeight: 1,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {topNavIcon("platforms")}
-              </span>
-              <span>Platforms</span>
-            </Link>
+  const proto =
+    headerStore.get("x-forwarded-proto") ||
+    (host.includes("localhost") ? "http" : "https");
 
-            <Link href="/pickers" style={topNavBtnStyle("pickers")}>
-              <span
-                aria-hidden="true"
-                style={{
-                  fontSize: 15,
-                  lineHeight: 1,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {topNavIcon("pickers")}
-              </span>
-              <span>Stock Pickers</span>
-            </Link>
-
-            <Link href="/utilities" style={topNavBtnStyle("calculators")}>
-              <span
-                aria-hidden="true"
-                style={{
-                  fontSize: 15,
-                  lineHeight: 1,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {topNavIcon("calculators")}
-              </span>
-              <span>Calculators</span>
-            </Link>
-          </div>
-
-          <div style={{ maxWidth: 780 }}>
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                padding: "7px 12px",
-                borderRadius: 999,
-                background:
-                  "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.10))",
-                border: "1px solid rgba(239,68,68,0.34)",
-                color: "#fee2e2",
-                fontWeight: 950,
-                letterSpacing: "0.08em",
-                fontSize: 12,
-              }}
-            >
-              BEARISH DIVERGENCE GUIDE
-            </div>
-
-            <h1
-              style={{
-                margin: "14px 0 0 0",
-                fontSize: 42,
-                lineHeight: 1.08,
-                letterSpacing: "-0.6px",
-              }}
-            >
-              Bearish Divergence Stocks: How to Spot Early Weakness Signals
-            </h1>
-
-            <p
-              style={{
-                margin: "12px 0 0 0",
-                fontSize: 17,
-                lineHeight: 1.65,
-                opacity: 0.84,
-              }}
-            >
-              Bearish divergence happens when price makes a higher high, but momentum
-              does not confirm that new strength. Traders watch for this because it
-              can suggest upside pressure is fading even though price still looks
-              strong on the surface.
-            </p>
-
-            <p
-              style={{
-                margin: "12px 0 0 0",
-                opacity: 0.8,
-                lineHeight: 1.65,
-              }}
-            >
-              This can sometimes appear before a pullback, failed breakout or early
-              reversal, but it is not a guarantee. Bearish divergence is most useful
-              when it appears near resistance, after a stretched move up, or when
-              other signs suggest buying pressure may be weakening.
-            </p>
-          </div>
-        </div>
-
-        <section
-          style={{
-            marginTop: 24,
-            padding: 20,
-            borderRadius: 18,
-            border: "1px solid rgba(239,68,68,0.28)",
-            background:
-              "linear-gradient(135deg, rgba(239,68,68,0.14), rgba(59,130,246,0.08))",
-            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-          }}
-        >
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              padding: "7px 12px",
-              borderRadius: 999,
-              background:
-                "linear-gradient(135deg, rgba(239,68,68,0.18), rgba(127,29,29,0.10))",
-              border: "1px solid rgba(239,68,68,0.32)",
-              color: "#fee2e2",
-              fontWeight: 950,
-              letterSpacing: "0.08em",
-              fontSize: 12,
-            }}
-          >
-            SIMPLE WAY TO THINK ABOUT IT
-          </div>
-
-          <div
-            style={{
-              marginTop: 12,
-              fontSize: 28,
-              fontWeight: 950,
-              lineHeight: 1.15,
-              letterSpacing: "-0.5px",
-            }}
-          >
-            Price looks stronger, but momentum is no longer improving at the same pace.
-          </div>
-
-          <div
-            style={{
-              marginTop: 14,
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: 12,
-            }}
-          >
-            <HighlightCard
-              title="Price"
-              text="Pushes to a higher high."
-              tint="red"
-            />
-            <HighlightCard
-              title="Momentum"
-              text="Makes a lower high or a less strong reading."
-              tint="blue"
-            />
-            <HighlightCard
-              title="Idea"
-              text="Buyers may be losing control even before price turns."
-              tint="amber"
-            />
-          </div>
-        </section>
-
-        <section
-          style={{
-            marginTop: 24,
-            display: "grid",
-            gap: 18,
-          }}
-        >
-          <ContentSection
-            number="1"
-            title="What is bearish divergence in stocks?"
-            tint="red"
-          >
-            <p style={paragraphStyle}>
-              Bearish divergence is a disagreement between price and momentum.
-              Price makes a new high, but an indicator such as RSI or MACD fails to
-              make a matching new high. That mismatch can suggest the bullish move
-              is losing strength.
-            </p>
-
-            <p style={paragraphStyle}>
-              Traders often look for bearish divergence after a strong rally or
-              when a stock is approaching resistance. It can help identify charts
-              that deserve a closer look rather than assuming strength will simply
-              continue without pause.
-            </p>
-          </ContentSection>
-
-          <ContentSection
-            number="2"
-            title="Indicators often used for bearish divergence"
-            tint="purple"
-          >
-            <div
-              style={{
-                marginTop: 14,
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: 12,
-              }}
-            >
-              <IndicatorCard
-                title="RSI divergence"
-                text="Price makes a higher high while RSI makes a lower high or refuses to confirm the same upside extreme."
-              />
-              <IndicatorCard
-                title="MACD divergence"
-                text="Price strengthens further, but MACD momentum does not make an equally strong new high."
-              />
-              <IndicatorCard
-                title="Stochastic or other momentum tools"
-                text="Other oscillators can also reveal when upside momentum is no longer confirming fresh strength in price."
-              />
-            </div>
-          </ContentSection>
-
-          <ContentSection
-            number="3"
-            title="Why traders look for bearish divergence"
-            tint="amber"
-          >
-            <div
-              style={{
-                marginTop: 14,
-                display: "grid",
-                gap: 10,
-              }}
-            >
-              <BulletRow text="It can help identify early pullback or reversal candidates." />
-              <BulletRow text="It may reveal fading upside momentum." />
-              <BulletRow text="It works well alongside overbought conditions and resistance." />
-              <BulletRow text="It can help traders avoid assuming every higher high means growing strength." />
-            </div>
-
-            <p style={paragraphStyle}>
-              The strongest setups usually happen when divergence appears with a
-              clear chart level or a broader reason for sellers to step in.
-            </p>
-          </ContentSection>
-
-          <ContentSection
-            number="4"
-            title="The biggest mistake with bearish divergence"
-            tint="blue"
-          >
-            <p style={paragraphStyle}>
-              The biggest mistake is treating divergence as an automatic sell signal.
-              A stock can show bearish divergence and still keep rising, especially
-              in a strong uptrend or supportive market. Divergence is better used as
-              an alert that something may be changing, not proof that the top is in.
-            </p>
-
-            <p style={paragraphStyle}>
-              That is why chart structure matters. It helps to see whether price is
-              near resistance, whether buying pressure is slowing, and whether the
-              broader context supports a pullback attempt.
-            </p>
-          </ContentSection>
-
-          <ContentSection
-            number="5"
-            title="How MyStockHarbor helps you find bearish divergence stocks"
-            tint="green"
-          >
-            <p style={paragraphStyle}>
-              MyStockHarbor helps you scan for stock ideas without checking large
-              watchlists manually. Instead of building a complicated screen from
-              scratch, you can browse grouped setups and then inspect the chart
-              more closely.
-            </p>
-
-            <p style={paragraphStyle}>
-              The{" "}
-              <Link href="/pickers" style={inlineLinkStyle}>
-                Find Your Next Stock
-              </Link>{" "}
-              page is useful here because it includes divergence setups alongside
-              oversold-leaning stocks, buy-the-dip candidates and breakouts. That
-              makes it easier to build a shortlist of possible weakness or reversal
-              charts worth reviewing.
-            </p>
-          </ContentSection>
-
-          <ContentSection
-            number="6"
-            title="A simple beginner approach"
-            tint="red"
-          >
-            <p style={paragraphStyle}>
-              Treat bearish divergence as a clue, not a conclusion. First look for
-              the divergence. Then check resistance, trend structure, stretch and
-              market context before deciding whether the chart deserves more attention.
-            </p>
-
-            <p style={paragraphStyle}>
-              In practice, divergence helps you find interesting ideas earlier,
-              but price action still needs to confirm the setup.
-            </p>
-          </ContentSection>
-        </section>
-
-        <section
-          style={{
-            marginTop: 28,
-            padding: 20,
-            borderRadius: 18,
-            border: "1px solid rgba(34,197,94,0.28)",
-            background:
-              "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(59,130,246,0.08))",
-            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-          }}
-        >
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              padding: "7px 12px",
-              borderRadius: 999,
-              background:
-                "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(16,185,129,0.10))",
-              border: "1px solid rgba(34,197,94,0.34)",
-              color: "#dcfce7",
-              fontWeight: 950,
-              letterSpacing: "0.08em",
-              fontSize: 12,
-            }}
-          >
-            NEXT STEP
-          </div>
-
-          <h2
-            style={{
-              margin: "14px 0 0 0",
-              fontWeight: 900,
-              fontSize: 26,
-              letterSpacing: "-0.4px",
-            }}
-          >
-            Explore live bearish divergence stock ideas on MyStockHarbor
-          </h2>
-
-          <p
-            style={{
-              marginTop: 10,
-              opacity: 0.86,
-              lineHeight: 1.6,
-              maxWidth: 820,
-            }}
-          >
-            Use MyStockHarbor to review trend, momentum, stretch, divergence and
-            chart structure in one place. Start with live stock ideas, then open
-            the chart and decide whether the setup deserves a closer look.
-          </p>
-
-          <div
-            style={{
-              marginTop: 14,
-              display: "flex",
-              gap: 10,
-              flexWrap: "wrap",
-            }}
-          >
-            <Link
-              href="/pickers"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "13px 18px",
-                borderRadius: 14,
-                border: "1px solid rgba(239,68,68,0.42)",
-                background:
-                  "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.10))",
-                color: "#fef2f2",
-                textDecoration: "none",
-                fontWeight: 900,
-                minHeight: 48,
-                whiteSpace: "nowrap",
-              }}
-            >
-              Browse Stock Ideas →
-            </Link>
-
-            <Link
-              href="/"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "13px 18px",
-                borderRadius: 14,
-                border: "1px solid rgba(250,204,21,0.42)",
-                background:
-                  "linear-gradient(135deg, rgba(250,204,21,0.22), rgba(202,138,4,0.12))",
-                color: "#fefce8",
-                textDecoration: "none",
-                fontWeight: 900,
-                minHeight: 48,
-                whiteSpace: "nowrap",
-              }}
-            >
-              Open the Dashboard →
-            </Link>
-          </div>
-        </section>
-      </div>
-
-      <style>{`
-        .wrap {
-          max-width: 900px;
-          margin: 0 auto;
-          padding: 28px 20px 40px;
-        }
-
-        a:hover {
-          filter: brightness(1.05);
-          transform: translateY(-1px);
-        }
-
-        @media (max-width: 760px) {
-          .wrap {
-            padding: 18px 16px 34px !important;
-          }
-        }
-      `}</style>
-    </main>
-  );
+  return `${proto}://${host}`;
 }
 
-function ContentSection({
-  number,
-  title,
-  tint,
-  children,
-}: {
-  number: string;
-  title: string;
-  tint: "blue" | "green" | "red" | "amber" | "purple";
-  children: React.ReactNode;
-}) {
-  const styles =
-    tint === "blue"
-      ? {
-          border: "1px solid rgba(59,130,246,0.22)",
-          background:
-            "linear-gradient(180deg, rgba(10,18,34,0.96), rgba(7,12,24,0.98))",
-          badgeBg:
-            "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
-          badgeBorder: "1px solid rgba(59,130,246,0.34)",
-          badgeColor: "#dbeafe",
-        }
-      : tint === "green"
-      ? {
-          border: "1px solid rgba(34,197,94,0.22)",
-          background:
-            "linear-gradient(180deg, rgba(9,18,16,0.96), rgba(7,12,11,0.98))",
-          badgeBg:
-            "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(16,185,129,0.10))",
-          badgeBorder: "1px solid rgba(34,197,94,0.34)",
-          badgeColor: "#dcfce7",
-        }
-      : tint === "red"
-      ? {
-          border: "1px solid rgba(239,68,68,0.22)",
-          background:
-            "linear-gradient(180deg, rgba(24,12,12,0.96), rgba(14,7,7,0.98))",
-          badgeBg:
-            "linear-gradient(135deg, rgba(239,68,68,0.18), rgba(127,29,29,0.10))",
-          badgeBorder: "1px solid rgba(239,68,68,0.34)",
-          badgeColor: "#fee2e2",
-        }
-      : tint === "amber"
-      ? {
-          border: "1px solid rgba(234,179,8,0.22)",
-          background:
-            "linear-gradient(180deg, rgba(18,16,10,0.96), rgba(12,10,7,0.98))",
-          badgeBg:
-            "linear-gradient(135deg, rgba(234,179,8,0.18), rgba(202,138,4,0.10))",
-          badgeBorder: "1px solid rgba(234,179,8,0.34)",
-          badgeColor: "#fef3c7",
-        }
-      : {
-          border: "1px solid rgba(168,85,247,0.22)",
-          background:
-            "linear-gradient(180deg, rgba(12,16,34,0.96), rgba(8,11,24,0.98))",
-          badgeBg:
-            "linear-gradient(135deg, rgba(168,85,247,0.18), rgba(139,92,246,0.10))",
-          badgeBorder: "1px solid rgba(168,85,247,0.34)",
-          badgeColor: "#f3e8ff",
+function getToneColor(tone: DivergenceEntry["tone"]) {
+  if (tone === "green") return "#22c55e";
+  if (tone === "red") return "#ef4444";
+  if (tone === "orange") return "#fb923c";
+  return "#eab308";
+}
+
+function getToneBorder(tone: DivergenceEntry["tone"]) {
+  if (tone === "green") return "rgba(34,197,94,0.28)";
+  if (tone === "red") return "rgba(239,68,68,0.28)";
+  if (tone === "orange") return "rgba(251,146,60,0.28)";
+  return "rgba(234,179,8,0.28)";
+}
+
+function getToneBackground(tone: DivergenceEntry["tone"]) {
+  if (tone === "green") {
+    return "linear-gradient(135deg, rgba(34,197,94,0.14), rgba(22,163,74,0.08))";
+  }
+  if (tone === "red") {
+    return "linear-gradient(135deg, rgba(239,68,68,0.14), rgba(185,28,28,0.08))";
+  }
+  if (tone === "orange") {
+    return "linear-gradient(135deg, rgba(251,146,60,0.14), rgba(249,115,22,0.08))";
+  }
+  return "linear-gradient(135deg, rgba(234,179,8,0.14), rgba(202,138,4,0.08))";
+}
+
+async function getDivergenceEntries(): Promise<{
+  updatedAt: string | null;
+  entries: DivergenceEntry[];
+}> {
+  try {
+    const origin = await getOriginFromHeaders();
+    const res = await fetch(`${origin}/api/pickers`, {
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      return { updatedAt: null, entries: [] };
+    }
+
+    const data = (await res.json()) as PickersPayload;
+    const sections = Array.isArray(data?.sections) ? data.sections : [];
+
+    const divergenceSection = sections.find((section) =>
+      String(section?.title || "").toLowerCase().includes("divergence")
+    );
+
+    const items = Array.isArray(divergenceSection?.items)
+      ? divergenceSection.items
+      : [];
+
+    const entries: DivergenceEntry[] = items
+      .map((item) => {
+        const symbol = String(item?.symbol || "").trim().toUpperCase();
+        if (!symbol) return null;
+
+        const note = String(item?.note || "Divergence setup").trim() || "Divergence setup";
+        const noteLower = note.toLowerCase();
+
+        const tone =
+          item?.tone === "green" ||
+          item?.tone === "red" ||
+          item?.tone === "yellow" ||
+          item?.tone === "orange"
+            ? item.tone
+            : noteLower.includes("bullish")
+              ? "green"
+              : noteLower.includes("bearish")
+                ? "red"
+                : "yellow";
+
+        const badge = noteLower.includes("bullish")
+          ? "Bullish Divergence"
+          : noteLower.includes("bearish")
+            ? "Bearish Divergence"
+            : "Divergence";
+
+        const stockHref = `/stock/${encodeURIComponent(symbol)}`;
+        const chartBase =
+          typeof item?.dashboardHref === "string" && item.dashboardHref.trim()
+            ? item.dashboardHref
+            : `/?symbol=${encodeURIComponent(symbol)}`;
+
+        return {
+          symbol,
+          label: note,
+          stockHref,
+          chartHref: chartBase.includes("#chart")
+            ? chartBase
+            : `${chartBase}#chart`,
+          chartPoints: Array.isArray(item?.chartPoints) ? item.chartPoints : [],
+          tone,
+          badge,
         };
+      })
+      .filter((entry): entry is DivergenceEntry => Boolean(entry));
 
-  return (
-    <section
-      style={{
-        border: styles.border,
-        borderRadius: 18,
-        padding: 20,
-        background: styles.background,
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-      }}
-    >
-      <div
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          padding: "7px 12px",
-          borderRadius: 999,
-          background: styles.badgeBg,
-          border: styles.badgeBorder,
-          color: styles.badgeColor,
-          fontWeight: 950,
-          letterSpacing: "0.08em",
-          fontSize: 12,
-        }}
-      >
-        SECTION {number}
-      </div>
-
-      <h2
-        style={{
-          margin: "14px 0 0 0",
-          fontSize: 26,
-          lineHeight: 1.2,
-          letterSpacing: "-0.4px",
-        }}
-      >
-        {title}
-      </h2>
-
-      <div style={{ marginTop: 12 }}>{children}</div>
-    </section>
-  );
+    return {
+      updatedAt: typeof data?.updatedAt === "string" ? data.updatedAt : null,
+      entries,
+    };
+  } catch {
+    return { updatedAt: null, entries: [] };
+  }
 }
 
-function HighlightCard({
-  title,
-  text,
-  tint,
-}: {
-  title: string;
-  text: string;
-  tint: "blue" | "red" | "amber";
-}) {
-  const styles =
-    tint === "blue"
-      ? {
-          border: "1px solid rgba(59,130,246,0.24)",
-          background:
-            "linear-gradient(180deg, rgba(10,18,34,0.94), rgba(7,12,24,0.98))",
-        }
-      : tint === "red"
-      ? {
-          border: "1px solid rgba(239,68,68,0.24)",
-          background:
-            "linear-gradient(180deg, rgba(24,12,12,0.94), rgba(14,7,7,0.98))",
-        }
-      : {
-          border: "1px solid rgba(234,179,8,0.24)",
-          background:
-            "linear-gradient(180deg, rgba(18,16,10,0.94), rgba(12,10,7,0.98))",
-        };
-
-  return (
-    <div
-      style={{
-        ...styles,
-        borderRadius: 16,
-        padding: 16,
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-      }}
-    >
-      <div style={{ fontWeight: 900, fontSize: 15 }}>{title}</div>
-      <div style={{ marginTop: 6, opacity: 0.84, lineHeight: 1.55 }}>{text}</div>
-    </div>
-  );
-}
-
-function IndicatorCard({ title, text }: { title: string; text: string }) {
-  return (
-    <div
-      style={{
-        borderRadius: 16,
-        border: "1px solid rgba(255,255,255,0.12)",
-        background: "rgba(255,255,255,0.05)",
-        padding: 16,
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-      }}
-    >
-      <div style={{ fontWeight: 900, fontSize: 16 }}>{title}</div>
-      <div style={{ marginTop: 6, opacity: 0.84, lineHeight: 1.6 }}>{text}</div>
-    </div>
-  );
-}
-
-function BulletRow({ text }: { text: string }) {
-  return (
-    <div
-      style={{
-        borderRadius: 14,
-        border: "1px solid rgba(255,255,255,0.10)",
-        background: "rgba(255,255,255,0.04)",
-        padding: "12px 14px",
-        lineHeight: 1.55,
-        opacity: 0.9,
-      }}
-    >
-      {text}
-    </div>
-  );
-}
-
-const paragraphStyle: React.CSSProperties = {
-  marginTop: 12,
-  opacity: 0.86,
-  lineHeight: 1.7,
+const panelStyle: React.CSSProperties = {
+  marginTop: 22,
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 20,
+  padding: 20,
+  background: "linear-gradient(180deg, rgba(9,13,20,0.92), rgba(7,10,16,0.96))",
+  maxWidth: 980,
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+  boxSizing: "border-box",
+  width: "100%",
 };
 
-const inlineLinkStyle: React.CSSProperties = {
-  color: "#60a5fa",
-  fontWeight: 800,
-  textDecoration: "none",
+const topNavIconWrapStyle: React.CSSProperties = {
+  fontSize: 15,
+  lineHeight: 1,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
 };
 
 function topNavBtnStyle(
-  type: "dashboard" | "platforms" | "pickers" | "calculators"
+  type: "dashboard" | "platforms" | "learn" | "calculators"
 ): React.CSSProperties {
   if (type === "dashboard") {
     return {
@@ -747,7 +250,7 @@ function topNavBtnStyle(
     };
   }
 
-  if (type === "pickers") {
+  if (type === "calculators") {
     return {
       display: "inline-flex",
       alignItems: "center",
@@ -756,10 +259,10 @@ function topNavBtnStyle(
       minHeight: 42,
       padding: "9px 13px",
       borderRadius: 14,
-      border: "1px solid rgba(239,68,68,0.45)",
+      border: "1px solid rgba(168,85,247,0.45)",
       background:
-        "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.10))",
-      color: "#fef2f2",
+        "linear-gradient(135deg, rgba(168,85,247,0.20), rgba(139,92,246,0.10))",
+      color: "#faf5ff",
       textDecoration: "none",
       fontWeight: 900,
       fontSize: 14,
@@ -778,10 +281,10 @@ function topNavBtnStyle(
     minHeight: 42,
     padding: "9px 13px",
     borderRadius: 14,
-    border: "1px solid rgba(168,85,247,0.45)",
+    border: "1px solid rgba(59,130,246,0.45)",
     background:
-      "linear-gradient(135deg, rgba(168,85,247,0.20), rgba(139,92,246,0.10))",
-    color: "#faf5ff",
+      "linear-gradient(135deg, rgba(59,130,246,0.20), rgba(37,99,235,0.10))",
+    color: "#eff6ff",
     textDecoration: "none",
     fontWeight: 900,
     fontSize: 14,
@@ -792,9 +295,743 @@ function topNavBtnStyle(
   };
 }
 
-function topNavIcon(type: "dashboard" | "platforms" | "pickers" | "calculators") {
+function topNavIcon(type: "dashboard" | "platforms" | "learn" | "calculators") {
   if (type === "dashboard") return "📈";
   if (type === "platforms") return "🏦";
-  if (type === "pickers") return "📊";
-  return "🧮";
+  if (type === "calculators") return "🧮";
+  return "📘";
+}
+
+export default async function BullishBearishDivergenceStocksPage() {
+  const { updatedAt, entries } = await getDivergenceEntries();
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    name: "Bullish & Bearish Divergence Stocks",
+    url: "https://www.mystockharbor.com/bullish-bearish-divergence-stocks",
+    description:
+      "Live page showing bullish and bearish divergence stocks from the MyStockHarbor picker feed.",
+    mainEntity: {
+      "@type": "ItemList",
+      itemListElement: entries.slice(0, 24).map((entry, index) => ({
+        "@type": "ListItem",
+        position: index + 1,
+        item: {
+          "@type": "Thing",
+          name: `${entry.symbol} divergence stock setup`,
+          url: `https://www.mystockharbor.com${entry.stockHref}`,
+        },
+      })),
+    },
+    breadcrumb: {
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        {
+          "@type": "ListItem",
+          position: 1,
+          name: "Home",
+          item: "https://www.mystockharbor.com/",
+        },
+        {
+          "@type": "ListItem",
+          position: 2,
+          name: "Stock Pickers",
+          item: "https://www.mystockharbor.com/pickers",
+        },
+        {
+          "@type": "ListItem",
+          position: 3,
+          name: "Bullish & Bearish Divergence Stocks",
+          item: "https://www.mystockharbor.com/bullish-bearish-divergence-stocks",
+        },
+      ],
+    },
+  };
+
+  return (
+    <main
+      style={{
+        padding: 0,
+        fontFamily: "system-ui, Arial",
+        background: "#06080d",
+        color: "#f1f5f9",
+        minHeight: "100vh",
+      }}
+    >
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            .wrap {
+              max-width: 1100px;
+              margin: 0 auto;
+              padding: 28px 16px 72px;
+              box-sizing: border-box;
+            }
+
+            .divergence-grid {
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+              gap: 14px;
+            }
+
+            .topNavRow a:hover {
+              filter: brightness(1.04);
+            }
+
+            .ctaPulse {
+              animation: ctaPulseGlow 2.8s ease-in-out infinite;
+            }
+
+            @keyframes ctaPulseGlow {
+              0% {
+                box-shadow: 0 0 0 rgba(239,68,68,0.0);
+              }
+              50% {
+                box-shadow: 0 0 18px rgba(239,68,68,0.25);
+              }
+              100% {
+                box-shadow: 0 0 0 rgba(239,68,68,0.0);
+              }
+            }
+
+            .ctaHover {
+              transition: transform 140ms ease, box-shadow 140ms ease;
+            }
+
+            .ctaHover:hover {
+              transform: translateY(-2px);
+              box-shadow: 0 10px 28px rgba(239,68,68,0.25);
+            }
+
+            .ctaShimmer {
+              position: relative;
+              overflow: hidden;
+            }
+
+            .ctaShimmer::after {
+              content: "";
+              position: absolute;
+              top: 0;
+              left: -120%;
+              width: 60%;
+              height: 100%;
+              background: linear-gradient(
+                120deg,
+                transparent,
+                rgba(255,255,255,0.12),
+                transparent
+              );
+              transform: skewX(-20deg);
+              animation: shimmerMove 3.5s infinite;
+            }
+
+            @keyframes shimmerMove {
+              0% {
+                left: -120%;
+              }
+              100% {
+                left: 140%;
+              }
+            }
+
+            @media (max-width: 760px) {
+              .topNavRow {
+                justify-content: center !important;
+              }
+
+              .heroTitle {
+                font-size: 34px !important;
+              }
+
+              .heroText {
+                font-size: 15px !important;
+              }
+            }
+          `,
+        }}
+      />
+
+      <div className="wrap">
+        <div style={{ display: "grid", gap: 14 }}>
+          <div
+            className="topNavRow"
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              alignItems: "flex-start",
+              gap: 10,
+              flexWrap: "wrap",
+              minWidth: 0,
+            }}
+          >
+            <Link href="/" style={topNavBtnStyle("dashboard")}>
+              <span aria-hidden="true" style={topNavIconWrapStyle}>
+                {topNavIcon("dashboard")}
+              </span>
+              <span>Dashboard</span>
+            </Link>
+
+            <Link href="/platforms" style={topNavBtnStyle("platforms")}>
+              <span aria-hidden="true" style={topNavIconWrapStyle}>
+                {topNavIcon("platforms")}
+              </span>
+              <span>Platforms</span>
+            </Link>
+
+            <Link href="/learn" style={topNavBtnStyle("learn")}>
+              <span aria-hidden="true" style={topNavIconWrapStyle}>
+                {topNavIcon("learn")}
+              </span>
+              <span>Learn</span>
+            </Link>
+
+            <Link href="/utilities" style={topNavBtnStyle("calculators")}>
+              <span aria-hidden="true" style={topNavIconWrapStyle}>
+                {topNavIcon("calculators")}
+              </span>
+              <span>Calculators</span>
+            </Link>
+          </div>
+
+          <section
+            style={{
+              border: "1px solid rgba(168,85,247,0.22)",
+              borderRadius: 22,
+              padding: 18,
+              background:
+                "linear-gradient(135deg, rgba(18,12,28,0.98), rgba(10,12,18,0.98))",
+              boxShadow:
+                "inset 0 1px 0 rgba(255,255,255,0.05), 0 14px 34px rgba(0,0,0,0.30)",
+              minWidth: 0,
+              width: "100%",
+              boxSizing: "border-box",
+              overflow: "hidden",
+              maxWidth: 980,
+            }}
+          >
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "8px 12px",
+                borderRadius: 999,
+                border: "1px solid rgba(168,85,247,0.32)",
+                background:
+                  "linear-gradient(135deg, rgba(168,85,247,0.16), rgba(139,92,246,0.08))",
+                fontSize: 12,
+                fontWeight: 950,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: "#f3e8ff",
+              }}
+            >
+              DIVERGENCE STOCK SCREENER PAGE
+            </div>
+
+            <h1
+              className="heroTitle"
+              style={{
+                margin: "14px 0 0 0",
+                fontSize: 44,
+                lineHeight: 1.04,
+                letterSpacing: "-0.05em",
+              }}
+            >
+              Bullish & Bearish Divergence Stocks
+            </h1>
+
+            <p
+              className="heroText"
+              style={{
+                marginTop: 12,
+                fontSize: 17,
+                lineHeight: 1.65,
+                opacity: 0.84,
+                maxWidth: 760,
+              }}
+            >
+              This page shows stocks currently screening for bullish and bearish
+              divergence setups using live MyStockHarbor picker data. It is built
+              for traders who want to review RSI and MACD divergence signals, spot
+              potential reversals, and quickly inspect whether momentum is starting
+              to disagree with price.
+            </p>
+
+            <p
+              style={{
+                marginTop: 12,
+                lineHeight: 1.7,
+                opacity: 0.78,
+                maxWidth: 820,
+              }}
+            >
+              Divergence can be useful, but it is not enough on its own. Some
+              signals lead to strong reversals, while others fail or take time to
+              develop. Use this page as a live shortlist, then inspect structure,
+              support and resistance, timeframe context, and follow-through before
+              making any decision.
+            </p>
+
+            <div
+              style={{
+                marginTop: 18,
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                gap: 10,
+                maxWidth: 560,
+              }}
+            >
+              <div
+                style={{
+                  borderRadius: 16,
+                  padding: 14,
+                  border: "1px solid rgba(168,85,247,0.24)",
+                  background:
+                    "linear-gradient(135deg, rgba(168,85,247,0.10), rgba(15,23,42,0.08))",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 900,
+                    letterSpacing: "0.08em",
+                    color: "#e9d5ff",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Live Results
+                </div>
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: 18,
+                    fontWeight: 950,
+                    color: "#faf5ff",
+                  }}
+                >
+                  {entries.length} divergence setups
+                </div>
+              </div>
+
+              <div
+                style={{
+                  borderRadius: 16,
+                  padding: 14,
+                  border: "1px solid rgba(59,130,246,0.24)",
+                  background:
+                    "linear-gradient(135deg, rgba(59,130,246,0.10), rgba(15,23,42,0.08))",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 900,
+                    letterSpacing: "0.08em",
+                    color: "#dbeafe",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Last Updated
+                </div>
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: 16,
+                    fontWeight: 900,
+                    color: "#eff6ff",
+                  }}
+                >
+                  {updatedAt ? new Date(updatedAt).toLocaleString() : "Live data"}
+                </div>
+              </div>
+            </div>
+          </section>
+                  <section
+          style={{
+            marginTop: 22,
+            maxWidth: 860,
+            lineHeight: 1.7,
+            opacity: 0.82,
+          }}
+        >
+          <p>
+            Divergence setups appear when price and momentum stop moving in sync,
+            which can sometimes signal early signs of a potential shift in
+            direction. Traders often watch for these conditions when looking for
+            reversal or exhaustion setups.
+          </p>
+
+          <ul style={{ marginTop: 10, paddingLeft: 18 }}>
+            <li>Price and momentum beginning to move out of alignment</li>
+            <li>Can signal potential reversal or trend exhaustion</li>
+            <li>Includes both bullish and bearish divergence setups</li>
+            <li>Still requires confirmation from price structure</li>
+          </ul>
+
+          <p style={{ marginTop: 10 }}>
+            The stocks listed below are currently showing divergence signals and
+            may be worth reviewing for potential reversal or continuation shift
+            setups.
+          </p>
+        </section>
+        </div>
+
+        <section style={panelStyle}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "7px 12px",
+              borderRadius: 999,
+              background:
+                "linear-gradient(135deg, rgba(168,85,247,0.16), rgba(139,92,246,0.08))",
+              border: "1px solid rgba(168,85,247,0.26)",
+              color: "#f3e8ff",
+              fontWeight: 950,
+              letterSpacing: "0.08em",
+              fontSize: 12,
+            }}
+          >
+            LIVE DIVERGENCE RESULTS
+          </div>
+
+          <h2
+            style={{
+              margin: "14px 0 0 0",
+              fontSize: 28,
+              lineHeight: 1.12,
+              letterSpacing: "-0.03em",
+            }}
+          >
+            Stocks currently showing bullish or bearish divergence
+          </h2>
+
+          <p
+            style={{
+              margin: "10px 0 0",
+              lineHeight: 1.7,
+              opacity: 0.8,
+              maxWidth: 860,
+            }}
+          >
+            Review the current divergence setups below, then open any stock page
+            for more detail or jump straight to the chart.
+          </p>
+
+          <div className="divergence-grid" style={{ marginTop: 18 }}>
+            {entries.length > 0 ? (
+              entries.map((entry) => (
+                <article
+                  key={`${entry.symbol}-${entry.label}`}
+                  style={{
+                    border: "1px solid rgba(168,85,247,0.16)",
+                    borderRadius: 18,
+                    padding: 16,
+                    background:
+                      "linear-gradient(180deg, rgba(14,10,24,0.96), rgba(6,10,18,0.96))",
+                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 10,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 8,
+                        minWidth: 0,
+                      }}
+                    >
+                      <span
+                        aria-hidden="true"
+                        style={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: 999,
+                          background: getToneColor(entry.tone),
+                          boxShadow: `0 0 12px ${getToneBorder(entry.tone)}`,
+                          flex: "0 0 auto",
+                        }}
+                      />
+                      <div
+                        style={{
+                          fontSize: 22,
+                          fontWeight: 950,
+                          letterSpacing: "-0.03em",
+                        }}
+                      >
+                        {entry.symbol}
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        border: `1px solid ${getToneBorder(entry.tone)}`,
+                        background: getToneBackground(entry.tone),
+                        color:
+                          entry.tone === "green"
+                            ? "#dcfce7"
+                            : entry.tone === "red"
+                              ? "#fecaca"
+                              : entry.tone === "orange"
+                                ? "#fed7aa"
+                                : "#fef3c7",
+                        fontWeight: 900,
+                        fontSize: 12,
+                        letterSpacing: "0.06em",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {entry.badge}
+                    </div>
+                  </div>
+
+                  <MiniPickerCandleChart points={entry.chartPoints} tone={entry.tone} />
+
+                  <ul
+                    style={{
+                      marginTop: 12,
+                      paddingLeft: 18,
+                      fontSize: 14,
+                      lineHeight: 1.6,
+                      opacity: 0.8,
+                    }}
+                  >
+                    <li>{entry.label}</li>
+                    <li>Review price structure and confirmation before acting</li>
+                  </ul>
+
+                  <div
+                    style={{
+                      marginTop: 14,
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 10,
+                    }}
+                  >
+                    <Link
+                      href={entry.stockHref}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        minHeight: 42,
+                        padding: "10px 14px",
+                        borderRadius: 12,
+                        textDecoration: "none",
+                        fontWeight: 900,
+                        border: "1px solid rgba(59,130,246,0.35)",
+                        background:
+                          "linear-gradient(135deg, rgba(30,64,175,0.22), rgba(29,78,216,0.12))",
+                        color: "#eff6ff",
+                      }}
+                    >
+                      Stock Page →
+                    </Link>
+
+                    <Link
+                      href={entry.chartHref}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        minHeight: 42,
+                        padding: "10px 14px",
+                        borderRadius: 12,
+                        textDecoration: "none",
+                        fontWeight: 900,
+                        border: "1px solid rgba(168,85,247,0.35)",
+                        background:
+                          "linear-gradient(135deg, rgba(107,33,168,0.22), rgba(126,34,206,0.12))",
+                        color: "#f3e8ff",
+                      }}
+                    >
+                      Chart →
+                    </Link>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <div
+                style={{
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  borderRadius: 18,
+                  padding: 18,
+                  background: "rgba(255,255,255,0.03)",
+                  lineHeight: 1.7,
+                  opacity: 0.82,
+                }}
+              >
+                No divergence results are currently available from the live picker feed.
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section style={panelStyle}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "7px 12px",
+              borderRadius: 999,
+              background:
+                "linear-gradient(135deg, rgba(168,85,247,0.16), rgba(139,92,246,0.08))",
+              border: "1px solid rgba(168,85,247,0.26)",
+              color: "#f3e8ff",
+              fontWeight: 950,
+              letterSpacing: "0.08em",
+              fontSize: 12,
+            }}
+          >
+            HOW TRADERS USE THIS PAGE
+          </div>
+
+          <h2
+            style={{
+              margin: "14px 0 0 0",
+              fontSize: 24,
+              lineHeight: 1.15,
+              letterSpacing: "-0.03em",
+            }}
+          >
+            What it means when a stock is showing divergence
+          </h2>
+
+          <p
+            style={{
+              margin: "10px 0 0",
+              lineHeight: 1.7,
+              opacity: 0.82,
+              maxWidth: 860,
+            }}
+          >
+            Divergence appears when price and momentum stop moving in sync. In
+            bullish divergence, price may keep weakening while momentum starts to
+            improve. In bearish divergence, price may keep pushing higher while
+            momentum begins to fade. That is why traders often watch divergence
+            for early signs of reversal or trend exhaustion.
+          </p>
+
+          <p
+            style={{
+              margin: "10px 0 0",
+              lineHeight: 1.7,
+              opacity: 0.82,
+              maxWidth: 860,
+            }}
+          >
+            That does not mean every divergence leads to an immediate turn. Some
+            signals resolve well, while others fail or need more time. Traders
+            still need to assess support, resistance, structure, timeframe, and
+            whether price action is actually confirming the setup.
+          </p>
+
+          <p
+            style={{
+              margin: "10px 0 0",
+              lineHeight: 1.7,
+              opacity: 0.82,
+              maxWidth: 860,
+            }}
+          >
+            This page is best used as a starting point. Open the stock page,
+            inspect the chart, and decide whether the RSI or MACD divergence fits
+            your own process and risk approach.
+          </p>
+        </section>
+
+        <section
+          style={{
+            marginTop: 22,
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: 14,
+            maxWidth: 980,
+            width: "100%",
+            boxSizing: "border-box",
+          }}
+        >
+          <Link
+            href="/pickers"
+            className="ctaPulse ctaHover ctaShimmer"
+            style={{
+              border: "1px solid rgba(239,68,68,0.35)",
+              borderRadius: 16,
+              padding: 16,
+              background:
+                "linear-gradient(180deg, rgba(60,10,10,0.92), rgba(30,6,6,0.96))",
+              textDecoration: "none",
+              color: "#fee2e2",
+              display: "block",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+            }}
+          >
+            <div style={{ fontSize: 18, fontWeight: 950 }}>
+              Open the full Stock Pickers page
+            </div>
+            <div
+              style={{
+                marginTop: 8,
+                fontSize: 14,
+                lineHeight: 1.65,
+                opacity: 0.74,
+              }}
+            >
+              Explore oversold setups, breakouts, divergence ideas, buy-the-dip
+              names and other screened stock results.
+            </div>
+          </Link>
+
+          <Link
+            href="/top-stocks-with-buy-signals"
+            style={{
+              border: "1px solid rgba(34,197,94,0.22)",
+              borderRadius: 16,
+              padding: 16,
+              background:
+                "linear-gradient(180deg, rgba(8,24,18,0.92), rgba(6,18,12,0.96))",
+              textDecoration: "none",
+              color: "#f1f5f9",
+              display: "block",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+            }}
+          >
+            <div style={{ fontSize: 18, fontWeight: 950 }}>
+              Explore buy signals
+            </div>
+            <div
+              style={{
+                marginTop: 8,
+                fontSize: 14,
+                lineHeight: 1.65,
+                opacity: 0.74,
+              }}
+            >
+              Compare divergence setups with stocks currently showing broader
+              bullish technical signal alignment.
+            </div>
+          </Link>
+        </section>
+      </div>
+    </main>
+  );
 }
