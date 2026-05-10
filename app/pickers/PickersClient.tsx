@@ -313,6 +313,40 @@ function HelpTip({ text }: { text: string }) {
   );
 }
 
+
+function createEmptySignalRecord(symbol: string, item?: PickerItem): SignalRecord {
+  const cleanSymbol = String(symbol || "").trim().toUpperCase();
+
+  return {
+    symbol: cleanSymbol,
+    note: item?.note,
+    tone: item?.tone,
+    oversold: false,
+    overbought: false,
+    buyTheDip: false,
+    breakout: false,
+    volumeSpike: false,
+    atrSpike: false,
+    aboveMA50: false,
+    belowMA50: false,
+    aboveMA200: false,
+    belowMA200: false,
+    dailyMa200Proximity: false,
+    weeklyMa200Proximity: false,
+    bullishRsiDivergence: false,
+    bearishRsiDivergence: false,
+    bullishMacdDivergence: false,
+    bearishMacdDivergence: false,
+    positiveLastEarnings: false,
+    strongEarningsGrowth: false,
+    preferredTimeframe: item?.timeframe,
+    preferredIndicator: item?.indicator,
+    dashboardHref:
+      item?.dashboardHref ??
+      `/?symbol=${encodeURIComponent(cleanSymbol)}#chart`,
+  };
+}
+
 export default function PickersClient() {
   const SHOW_FORCE_FETCH_BUTTON = false;
 
@@ -557,17 +591,88 @@ const res = await fetch(`/api/pickers?t=${Date.now()}`, {
     return Array.isArray(signalRecords) ? signalRecords : [];
   }, [signalRecords]);
 
-  const signalRecordMap = useMemo(() => {
+  const earningsSectionSymbolSets = useMemo(() => {
+    const positiveLastEarnings = new Set<string>();
+    const strongEarningsGrowth = new Set<string>();
+
+    for (const section of safeSections) {
+      const title = String(section.title || "").toLowerCase();
+      const isPositiveLastEarnings = title.includes("positive last earnings");
+      const isStrongEarningsGrowth = title.includes("strong earnings growth");
+
+      if (!isPositiveLastEarnings && !isStrongEarningsGrowth) continue;
+
+      for (const item of Array.isArray(section.items) ? section.items : []) {
+        const symbol = String(item.symbol || "").trim().toUpperCase();
+        if (!symbol) continue;
+
+        if (isPositiveLastEarnings) positiveLastEarnings.add(symbol);
+        if (isStrongEarningsGrowth) strongEarningsGrowth.add(symbol);
+      }
+    }
+
+    return { positiveLastEarnings, strongEarningsGrowth };
+  }, [safeSections]);
+
+  const enrichedSignalRecords = useMemo(() => {
     const map = new Map<string, SignalRecord>();
 
     for (const record of safeSignalRecords) {
+      const symbol = String(record.symbol ?? "").trim().toUpperCase();
+      if (!symbol) continue;
+
+      map.set(symbol, {
+        ...record,
+        symbol,
+        positiveLastEarnings:
+          record.positiveLastEarnings === true ||
+          earningsSectionSymbolSets.positiveLastEarnings.has(symbol),
+        strongEarningsGrowth:
+          record.strongEarningsGrowth === true ||
+          earningsSectionSymbolSets.strongEarningsGrowth.has(symbol),
+      });
+    }
+
+    for (const section of safeSections) {
+      const title = String(section.title || "").toLowerCase();
+      const isPositiveLastEarnings = title.includes("positive last earnings");
+      const isStrongEarningsGrowth = title.includes("strong earnings growth");
+
+      if (!isPositiveLastEarnings && !isStrongEarningsGrowth) continue;
+
+      for (const item of Array.isArray(section.items) ? section.items : []) {
+        const symbol = String(item.symbol || "").trim().toUpperCase();
+        if (!symbol) continue;
+
+        const existing = map.get(symbol) ?? createEmptySignalRecord(symbol, item);
+
+        map.set(symbol, {
+          ...existing,
+          note: existing.note ?? item.note,
+          tone: existing.tone ?? item.tone,
+          dashboardHref: existing.dashboardHref ?? item.dashboardHref,
+          positiveLastEarnings:
+            existing.positiveLastEarnings === true || isPositiveLastEarnings,
+          strongEarningsGrowth:
+            existing.strongEarningsGrowth === true || isStrongEarningsGrowth,
+        });
+      }
+    }
+
+    return Array.from(map.values());
+  }, [safeSections, safeSignalRecords, earningsSectionSymbolSets]);
+
+  const signalRecordMap = useMemo(() => {
+    const map = new Map<string, SignalRecord>();
+
+    for (const record of enrichedSignalRecords) {
       const symbol = String(record.symbol ?? "").trim().toUpperCase();
       if (!symbol) continue;
       map.set(symbol, record);
     }
 
     return map;
-  }, [safeSignalRecords]);
+  }, [enrichedSignalRecords]);
 
   const dynamicSymbolSet = useMemo(() => {
     return new Set(
@@ -688,7 +793,7 @@ const res = await fetch(`/api/pickers?t=${Date.now()}`, {
   const customMatches = useMemo(() => {
     if (!customMode) return [];
 
-    return safeSignalRecords
+    return enrichedSignalRecords
       .filter((record) => selectedFilters.every((filter) => record[filter] === true))
       .map((record) => {
         const matchedSignals = matchedSignalsForRecord(record).filter((key) =>
@@ -707,7 +812,7 @@ const res = await fetch(`/api/pickers?t=${Date.now()}`, {
         if (bCount !== aCount) return bCount - aCount;
         return a.symbol.localeCompare(b.symbol);
       });
-  }, [customMode, safeSignalRecords, selectedFilters]);
+  }, [customMode, enrichedSignalRecords, selectedFilters]);
 
   function toggleFilter(key: FilterKey) {
     setSelectedFilters((prev) =>
