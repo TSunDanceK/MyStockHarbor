@@ -2136,30 +2136,31 @@ async function buildStockNewsBaseData(
 
   const keywordNewsScore = scoreNews(news);
   const keywordEarningsScore = scoreEarnings(earningsNews);
-  // FMP headlines are now the primary news source. Keep OpenAI for article summaries,
-  // but avoid using it as the main scoring engine for the page-level news and earnings scores.
-  const aiScores: Awaited<ReturnType<typeof getAiScoredNews>> = null;
 
   const earningsQualityGuardrails = getEarningsQualityGuardrails(rankedEarningsNews);
 
   const fallbackNewsScoreValue = keywordNewsScore.score;
-  const hasActualEarningsHeadlines = earningsQualityGuardrails.actualEarningsResultCatalysts > 0;
-  const fallbackEarningsScoreValue = hasActualEarningsHeadlines ? keywordEarningsScore.score : 50;
+  const hasActualEarningsHeadlines =
+    earningsQualityGuardrails.actualEarningsResultCatalysts > 0;
+  const fallbackEarningsScoreValue = hasActualEarningsHeadlines
+    ? keywordEarningsScore.score
+    : 50;
 
-  const newsScore = aiScores?.newsScore ?? {
+  const newsScore = {
     ...keywordNewsScore,
     score: fallbackNewsScoreValue,
     tone: scoreToTone(fallbackNewsScoreValue),
     label: scoreToNewsLabel(fallbackNewsScoreValue),
   };
 
-  const earningsScore = aiScores?.earningsScore ?? {
+  const earningsScore = {
     ...keywordEarningsScore,
     score: fallbackEarningsScoreValue,
     tone: scoreToTone(fallbackEarningsScoreValue),
-    label: hasActualEarningsHeadlines ? scoreToEarningsLabel(fallbackEarningsScoreValue) : "No clear earnings read",
+    label: hasActualEarningsHeadlines
+      ? scoreToEarningsLabel(fallbackEarningsScoreValue)
+      : "No clear earnings read",
   };
-
   const highValueNews = rankedNews.filter((item) => !isLowValueNewsItem(item));
   const fallbackNews = rankedNews.filter((item) => isLowValueNewsItem(item));
 
