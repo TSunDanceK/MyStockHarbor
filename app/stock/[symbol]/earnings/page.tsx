@@ -283,12 +283,12 @@ async function fetchSharedEarningsScore(symbol: string) {
 }
 
 function getMetricHelp(label: string) {
-  if (label === "Actual EPS") {
-    return "EPS means earnings per share. It shows how much profit the company made for each share, after costs and taxes.";
+  if (label === "FMP EPS") {
+    return "EPS means earnings per share. This value comes from FMP earnings data and may differ from GAAP EPS or adjusted EPS quoted in company headlines.";
   }
 
   if (label === "EPS surprise") {
-    return "EPS surprise compares actual EPS with the analyst estimate. A positive number means profit beat expectations.";
+    return "EPS surprise compares FMP EPS with the FMP analyst estimate. A positive number means EPS came in better than FMP's estimate.";
   }
 
   if (label === "Revenue surprise") {
@@ -300,7 +300,7 @@ function getMetricHelp(label: string) {
   }
 
   if (label === "YoY EPS growth") {
-    return "Year-over-year EPS growth compares this quarter’s EPS with the same quarter last year.";
+    return "Year-over-year EPS growth compares this quarter’s FMP EPS with the same quarter last year.";
   }
 
   if (label === "YoY revenue growth") {
@@ -1092,6 +1092,13 @@ export default async function StockEarningsPage({ params }: Props) {
           letter-spacing: -0.035em;
         }
 
+        .earningsDataNote {
+          margin: 10px 0 0;
+          color: rgba(148, 163, 184, 0.78);
+          font-size: 12px;
+          line-height: 1.45;
+        }
+
         .metricSub {
           margin-top: 8px;
           font-size: 12px;
@@ -1320,9 +1327,9 @@ export default async function StockEarningsPage({ params }: Props) {
               ) : (
                 <div className="metricGrid">
                   <div style={metricCardStyle(score.tone)}>
-                    <MetricLabelWithHelp label="Actual EPS" />
+                    <MetricLabelWithHelp label="FMP EPS" />
                     <div className="metricValue">{formatMoney(epsActual)}</div>
-                    <div className="metricSub">Estimate: {formatMoney(epsEstimated)}</div>
+                    <div className="metricSub">FMP estimate: {formatMoney(epsEstimated)}</div>
                   </div>
 
                   <div style={metricCardStyle(epsSurprise != null && epsSurprise >= 0 ? "good" : "weak")}>
@@ -1359,6 +1366,10 @@ export default async function StockEarningsPage({ params }: Props) {
                     </div>
                   </div>
                 </div>
+
+                <p className="earningsDataNote">
+                  EPS fields are shown from FMP earnings data. They can differ from GAAP EPS or adjusted EPS quoted in earnings headlines.
+                </p>
               )}
             </section>
 
