@@ -1325,51 +1325,53 @@ export default async function StockEarningsPage({ params }: Props) {
                   the latest report here.
                 </p>
               ) : (
-                <div className="metricGrid">
-                  <div style={metricCardStyle(score.tone)}>
-                    <MetricLabelWithHelp label="FMP EPS" />
-                    <div className="metricValue">{formatMoney(epsActual)}</div>
-                    <div className="metricSub">FMP estimate: {formatMoney(epsEstimated)}</div>
-                  </div>
+                <>
+                  <div className="metricGrid">
+                    <div style={metricCardStyle(score.tone)}>
+                      <MetricLabelWithHelp label="FMP EPS" />
+                      <div className="metricValue">{formatMoney(epsActual)}</div>
+                      <div className="metricSub">FMP estimate: {formatMoney(epsEstimated)}</div>
+                    </div>
 
-                  <div style={metricCardStyle(epsSurprise != null && epsSurprise >= 0 ? "good" : "weak")}>
-                    <MetricLabelWithHelp label="EPS surprise" />
-                    <div className="metricValue">{formatMoney(epsSurprise)}</div>
-                    <div className="metricSub">{formatPercent(epsSurprisePct)}</div>
-                  </div>
+                    <div style={metricCardStyle(epsSurprise != null && epsSurprise >= 0 ? "good" : "weak")}>
+                      <MetricLabelWithHelp label="EPS surprise" />
+                      <div className="metricValue">{formatMoney(epsSurprise)}</div>
+                      <div className="metricSub">{formatPercent(epsSurprisePct)}</div>
+                    </div>
 
-                  <div style={metricCardStyle(revenueSurprise != null && revenueSurprise >= 0 ? "good" : "weak")}>
-                    <MetricLabelWithHelp label="Revenue surprise" />
-                    <div className="metricValue">{formatMoney(revenueSurprise, true)}</div>
-                    <div className="metricSub">{formatPercent(revenueSurprisePct)}</div>
-                  </div>
+                    <div style={metricCardStyle(revenueSurprise != null && revenueSurprise >= 0 ? "good" : "weak")}>
+                      <MetricLabelWithHelp label="Revenue surprise" />
+                      <div className="metricValue">{formatMoney(revenueSurprise, true)}</div>
+                      <div className="metricSub">{formatPercent(revenueSurprisePct)}</div>
+                    </div>
 
-                  <div style={metricCardStyle("default")}>
-                    <MetricLabelWithHelp label="Revenue" />
-                    <div className="metricValue">{formatMoney(revenueActual, true)}</div>
-                    <div className="metricSub">Estimate: {formatMoney(revenueEstimated, true)}</div>
-                  </div>
+                    <div style={metricCardStyle("default")}>
+                      <MetricLabelWithHelp label="Revenue" />
+                      <div className="metricValue">{formatMoney(revenueActual, true)}</div>
+                      <div className="metricSub">Estimate: {formatMoney(revenueEstimated, true)}</div>
+                    </div>
 
-                  <div style={metricCardStyle(yoyEpsGrowth != null && yoyEpsGrowth >= 0 ? "good" : "weak")}>
-                    <MetricLabelWithHelp label="YoY EPS growth" />
-                    <div className="metricValue">{formatPercent(yoyEpsGrowth)}</div>
-                    <div className="metricSub">
-                      Compared with {displayQuarterLabel(data.sameQuarterLastYear)}
+                    <div style={metricCardStyle(yoyEpsGrowth != null && yoyEpsGrowth >= 0 ? "good" : "weak")}>
+                      <MetricLabelWithHelp label="YoY EPS growth" />
+                      <div className="metricValue">{formatPercent(yoyEpsGrowth)}</div>
+                      <div className="metricSub">
+                        Compared with {displayQuarterLabel(data.sameQuarterLastYear)}
+                      </div>
+                    </div>
+
+                    <div style={metricCardStyle(yoyRevenueGrowth != null && yoyRevenueGrowth >= 0 ? "good" : "weak")}>
+                      <MetricLabelWithHelp label="YoY revenue growth" />
+                      <div className="metricValue">{formatPercent(yoyRevenueGrowth)}</div>
+                      <div className="metricSub">
+                        Compared with {displayQuarterLabel(data.sameQuarterLastYear)}
+                      </div>
                     </div>
                   </div>
 
-                  <div style={metricCardStyle(yoyRevenueGrowth != null && yoyRevenueGrowth >= 0 ? "good" : "weak")}>
-                    <MetricLabelWithHelp label="YoY revenue growth" />
-                    <div className="metricValue">{formatPercent(yoyRevenueGrowth)}</div>
-                    <div className="metricSub">
-                      Compared with {displayQuarterLabel(data.sameQuarterLastYear)}
-                    </div>
-                  </div>
-                </div>
-
-                <p className="earningsDataNote">
-                  EPS fields are shown from FMP earnings data. They can differ from GAAP EPS or adjusted EPS quoted in earnings headlines.
-                </p>
+                  <p className="earningsDataNote">
+                    EPS fields are shown from FMP earnings data. They can differ from GAAP EPS or adjusted EPS quoted in earnings headlines.
+                  </p>
+                </>
               )}
             </section>
 
