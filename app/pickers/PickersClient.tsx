@@ -757,7 +757,9 @@ export default function PickersClient() {
         // Ignore localStorage issues.
       }
 
-      await loadPickers(false);
+      // Refresh the picker payload after earnings warm-up so the earnings cards
+      // can immediately use the newly fetched data instead of appearing unchanged.
+      await loadPickers(true);
     } catch {
       setEarningsFetchMessage("Earnings warm-up failed. Try again in a moment.");
     } finally {
@@ -850,6 +852,19 @@ const res = await fetch(url, { cache: "no-store" });
 
     return () => window.clearInterval(interval);
   }, [earningsFetchLockedUntil]);
+
+  useEffect(() => {
+    if (!earningsFetchLockedUntil) return;
+    if (Date.now() < earningsFetchLockedUntil) return;
+
+    setEarningsFetchLockedUntil(0);
+
+    try {
+      window.localStorage.removeItem("msh:lastEarningsFetchUntil");
+    } catch {
+      // Ignore localStorage issues.
+    }
+  }, [earningsFetchTick, earningsFetchLockedUntil]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2391,6 +2406,20 @@ color: "#cbd5f5",
                             : "Fetch Earnings"}
                       </button>
 
+                      {earningsFetchMessage ? (
+                        <span
+                          style={{
+                            flex: "1 1 180px",
+                            minWidth: 0,
+                            color: "rgba(203,213,225,0.68)",
+                            fontSize: 11,
+                            lineHeight: 1.45,
+                            textAlign: "right",
+                          }}
+                        >
+                          {earningsFetchMessage}
+                        </span>
+                      ) : null}
                     </div>
                   ) : null}
 {(() => {
@@ -2478,7 +2507,9 @@ color: "#cbd5f5",
   return (
     <div
       style={{
-        marginTop: title.includes("earnings") ? -40 : 12,
+        // Keep this below the Fetch Earnings button. The old negative margin could
+        // overlap the button area and make the button feel broken/unresponsive.
+        marginTop: 12,
         display: "flex",
         justifyContent: "flex-end",
         position: "relative",
