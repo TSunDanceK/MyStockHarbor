@@ -1733,7 +1733,7 @@ if (!cancelled) setPriceLoading(false);
                     <a
                       href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`}
                       target="_blank"
-                      rel="noopener noreferrer sponsored"
+                      rel="noopener noreferrer sponsored nofollow"
                       style={{
                         display: "inline-flex",
                         alignItems: "center",
