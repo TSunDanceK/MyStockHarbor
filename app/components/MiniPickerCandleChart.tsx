@@ -22,10 +22,17 @@ type ChartOverlay =
   | "macd"
   | "trend";
 
+export type SupportResistanceZone = {
+  kind: "support" | "resistance";
+  lower: number;
+  upper: number;
+};
+
 type MiniPickerCandleChartProps = {
   points?: MiniCandlePoint[];
   tone?: "green" | "red" | "yellow" | "orange" | "blue";
   overlay?: ChartOverlay;
+  supportResistanceZone?: SupportResistanceZone;
 };
 
 function toneBorder(tone?: MiniPickerCandleChartProps["tone"]) {
@@ -148,6 +155,7 @@ export default function MiniPickerCandleChart({
   points = [],
   tone = "green",
   overlay = "none",
+  supportResistanceZone,
 }: MiniPickerCandleChartProps) {
   const cleanPoints = points.filter(
     (point) => point && point.date && Number.isFinite(point.close)
@@ -157,7 +165,8 @@ export default function MiniPickerCandleChart({
     return <div style={emptyStyle}>Chart preview unavailable</div>;
   }
 
-  const visiblePoints = cleanPoints.slice(-64);
+  const visibleLimit = supportResistanceZone ? 104 : 64;
+  const visiblePoints = cleanPoints.slice(-visibleLimit);
   const visibleStart = Math.max(0, cleanPoints.length - visiblePoints.length);
   const closes = cleanPoints.map((point) => point.close);
   const fallbackMa50 = fallbackSma(closes, 50);
@@ -195,6 +204,22 @@ export default function MiniPickerCandleChart({
   });
 
   const priceOverlayValues: number[] = [];
+  const validSupportResistanceZone =
+    supportResistanceZone &&
+    isFiniteNumber(supportResistanceZone.lower) &&
+    isFiniteNumber(supportResistanceZone.upper) &&
+    supportResistanceZone.lower > 0 &&
+    supportResistanceZone.upper > 0
+      ? {
+          kind: supportResistanceZone.kind,
+          lower: Math.min(supportResistanceZone.lower, supportResistanceZone.upper),
+          upper: Math.max(supportResistanceZone.lower, supportResistanceZone.upper),
+        }
+      : null;
+
+  if (validSupportResistanceZone) {
+    priceOverlayValues.push(validSupportResistanceZone.lower, validSupportResistanceZone.upper);
+  }
   if (overlay === "ma200") {
     for (const value of ma200Values) {
       if (isFiniteNumber(value)) priceOverlayValues.push(value);
@@ -284,6 +309,14 @@ export default function MiniPickerCandleChart({
   const macdFinite = macdValues.filter(isFiniteNumber);
   const macdMax = Math.max(0.01, ...macdFinite.map((value) => Math.abs(value)));
   const highLineLabel = overlay === "ath" ? "Previous ATH" : "Previous 3M high";
+  const supportResistanceColour =
+    validSupportResistanceZone?.kind === "support" ? "#22c55e" : "#fb923c";
+  const supportResistanceFill =
+    validSupportResistanceZone?.kind === "support"
+      ? "rgba(34,197,94,0.11)"
+      : "rgba(251,146,60,0.12)";
+  const supportResistanceLabel =
+    validSupportResistanceZone?.kind === "support" ? "Macro support" : "Macro resistance";
 
   return (
     <div
@@ -317,6 +350,41 @@ export default function MiniPickerCandleChart({
             strokeWidth="1"
           />
         ))}
+
+        {validSupportResistanceZone ? (
+          <g>
+            <rect
+              x={paddingX}
+              y={Math.min(yAt(validSupportResistanceZone.upper), yAt(validSupportResistanceZone.lower))}
+              width={width - paddingX * 2}
+              height={Math.max(3, Math.abs(yAt(validSupportResistanceZone.lower) - yAt(validSupportResistanceZone.upper)))}
+              fill={supportResistanceFill}
+              stroke={supportResistanceColour}
+              strokeWidth="1"
+              strokeDasharray="5 5"
+              opacity="0.95"
+            />
+            <line
+              x1={paddingX}
+              x2={width - paddingX}
+              y1={yAt((validSupportResistanceZone.lower + validSupportResistanceZone.upper) / 2)}
+              y2={yAt((validSupportResistanceZone.lower + validSupportResistanceZone.upper) / 2)}
+              stroke={supportResistanceColour}
+              strokeWidth="1.8"
+              opacity="0.88"
+            />
+            <text
+              x={width - paddingX}
+              y={Math.max(12, yAt(validSupportResistanceZone.upper) - 5)}
+              textAnchor="end"
+              fill={validSupportResistanceZone.kind === "support" ? "#bbf7d0" : "#fed7aa"}
+              fontSize="10"
+              fontWeight="900"
+            >
+              {supportResistanceLabel}
+            </text>
+          </g>
+        ) : null}
 
         {isFiniteNumber(previousHigh) ? (
           <g>
