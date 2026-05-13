@@ -12,14 +12,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const upper = symbol.toUpperCase();
 
   return {
-    title: `${upper} Stock Analysis, Trade Context, Company Overview & Chart Summary | MyStockHarbor`,
-    description: `View ${upper} stock analysis with company overview, AI outlook, trade context, moving averages and chart structure from MyStockHarbor.`,
+    title: `${upper} Stock Analysis: Chart, RSI, MACD & Macro Support | MyStockHarbor`,
+    description: `View ${upper} stock analysis with chart context, RSI, MACD, moving averages, macro support levels and trade context from MyStockHarbor.`,
     alternates: {
       canonical: `https://www.mystockharbor.com/stock/${upper}`,
     },
     openGraph: {
       title: `${upper} Stock Analysis | MyStockHarbor`,
-      description: `Company overview, AI outlook, trade context and technical analysis for ${upper}.`,
+      description: `Company overview, AI outlook, trade context, RSI, MACD, moving averages and macro support analysis for ${upper}.`,
       url: `https://www.mystockharbor.com/stock/${upper}`,
       siteName: "MyStockHarbor",
       type: "article",
@@ -35,7 +35,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     twitter: {
       card: "summary_large_image",
       title: `${upper} Stock Analysis | MyStockHarbor`,
-      description: `Company overview, AI outlook, trade context and technical summary for ${upper}.`,
+      description: `Company overview, AI outlook, trade context, RSI, MACD, moving averages and macro support summary for ${upper}.`,
       images: ["https://www.mystockharbor.com/og-image-v2.png"],
     },
   };
@@ -78,7 +78,7 @@ export default async function StockPage({ params }: Props) {
                 "@id": `https://www.mystockharbor.com/stock/${upper}#webpage`,
                 url: `https://www.mystockharbor.com/stock/${upper}`,
                 name: `${upper} Stock Analysis | MyStockHarbor`,
-                description: `View ${upper} stock analysis with company overview, AI outlook, trade context, technical summary and chart-based insights from MyStockHarbor.`,
+                description: `View ${upper} stock analysis with company overview, AI outlook, trade context, RSI, MACD, moving averages, macro support levels and chart-based insights from MyStockHarbor.`,
                 isPartOf: {
                   "@id": "https://www.mystockharbor.com/#website",
                 },
@@ -99,7 +99,7 @@ export default async function StockPage({ params }: Props) {
                   "@id": "https://www.mystockharbor.com/#organization",
                 },
                 url: `https://www.mystockharbor.com/stock/${upper}`,
-                description: `${upper} stock analysis with AI business overview, outlook scores, trade context and chart-based market context.`,
+                description: `${upper} stock analysis with AI business overview, outlook scores, trade context, RSI, MACD, moving averages and macro support context.`,
               },
               {
                 "@type": "BreadcrumbList",
