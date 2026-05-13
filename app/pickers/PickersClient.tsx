@@ -358,7 +358,7 @@ type PlayCardDef = {
   subtitle: string;
   href: string;
   tone: "green" | "red" | "blue";
-  pattern: "ascending" | "descending" | "bullFlag";
+  pattern: "ascending" | "descending" | "bullFlag" | "macroSR";
 };
 
 const PLAY_CARDS: PlayCardDef[] = [
@@ -382,6 +382,13 @@ const PLAY_CARDS: PlayCardDef[] = [
     href: "/plays/bull-flags",
     tone: "blue",
     pattern: "bullFlag",
+  },
+  {
+    title: "Macro Support / Resistance Plays",
+    subtitle: "Stocks trading near wider weekly support or resistance zones with repeated touches and volume-at-zone context.",
+    href: "/macro-support-resistance-stocks",
+    tone: "blue",
+    pattern: "macroSR",
   },
 ];
 
@@ -455,6 +462,46 @@ function PlayDiagram({ pattern, tone }: { pattern: PlayCardDef["pattern"]; tone:
 
         <path
           d="M52 126 V114 M86 126 V115 M120 126 V112 M154 126 V115 M188 126 V112 M222 126 V115 M256 126 V113 M290 126 V116"
+          stroke="rgba(59,130,246,0.30)"
+          strokeWidth="5"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  }
+
+  if (pattern === "macroSR") {
+    return (
+      <svg viewBox="0 0 320 138" className="playDiagram" role="img" aria-label="Macro support and resistance diagram">
+        <rect x="0" y="0" width="320" height="138" rx="16" fill="rgba(2,6,23,0.72)" />
+
+        <path
+          d="M36 36 H284"
+          stroke="#ef4444"
+          strokeWidth="4"
+          strokeDasharray="8 7"
+          strokeLinecap="round"
+        />
+
+        <path
+          d="M36 102 H284"
+          stroke="#22c55e"
+          strokeWidth="4"
+          strokeDasharray="8 7"
+          strokeLinecap="round"
+        />
+
+        <path
+          d="M44 91 L72 64 L100 96 L130 72 L160 39 L190 76 L220 101 L250 73 L278 50"
+          stroke="rgba(226,232,240,0.82)"
+          strokeWidth="3"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        <path
+          d="M52 126 V113 M86 126 V104 M120 126 V111 M154 126 V91 M188 126 V101 M222 126 V113 M256 126 V98 M290 126 V86"
           stroke="rgba(59,130,246,0.30)"
           strokeWidth="5"
           strokeLinecap="round"
@@ -681,7 +728,7 @@ function PatternPlaysSection() {
                     color: colors.buttonColor,
                   }}
                 >
-                  Open plays →
+                  {play.pattern === "macroSR" ? "Open macro S/R →" : "Open plays →"}
                 </span>
               </div>
             </a>
