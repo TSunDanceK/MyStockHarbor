@@ -3,12 +3,12 @@ export const dynamic = "force-dynamic";
 
 import { Redis } from "@upstash/redis";
 import { NextRequest, NextResponse } from "next/server";
-import { detectDivergenceFromHistory } from "../../../lib/ta/divergence";
-import { getDailyHistory } from "../../../lib/server/historyCache";
+import { detectDivergenceFromHistory } from "../../../../lib/ta/divergence";
+import { getDailyHistory } from "../../../../lib/server/historyCache";
 import {
   addToDynamicUniverse,
   readDynamicUniverse,
-} from "../../../lib/server/dynamicUniverseCache";
+} from "../../../../lib/server/dynamicUniverseCache";
 
 type Point = {
   date: string;
