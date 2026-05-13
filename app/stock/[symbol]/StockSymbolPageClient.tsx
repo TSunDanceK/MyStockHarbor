@@ -235,6 +235,253 @@ function pctFromBase(last: number | null, base: number | null) {
   return ((last - base) / base) * 100;
 }
 
+
+type MacroSupportResult = {
+  lower: number;
+  upper: number;
+  level: number;
+  distancePct: number;
+  touches: number;
+  volumeRatio: number | null;
+};
+
+type MacdResult = {
+  macd: number;
+  signal: number;
+  histogram: number;
+  label: "Bullish" | "Bearish" | "Mixed";
+  tone: "green" | "yellow" | "red";
+  meta: string;
+};
+
+function avg(values: number[]) {
+  if (!values.length) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function aggregateWeekly(points: Point[]): Point[] {
+  const buckets = new Map<string, Point>();
+
+  for (const point of points) {
+    const date = new Date(`${point.date}T00:00:00Z`);
+    if (Number.isNaN(date.getTime())) continue;
+
+    const day = date.getUTCDay();
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+    date.setUTCDate(date.getUTCDate() + mondayOffset);
+    const key = date.toISOString().slice(0, 10);
+
+    const existing = buckets.get(key);
+    const high = typeof point.high === "number" && Number.isFinite(point.high) ? point.high : point.close;
+    const low = typeof point.low === "number" && Number.isFinite(point.low) ? point.low : point.close;
+    const volume = typeof point.volume === "number" && Number.isFinite(point.volume) ? point.volume : 0;
+
+    if (!existing) {
+      buckets.set(key, {
+        date: key,
+        close: point.close,
+        high,
+        low,
+        volume,
+      });
+    } else {
+      buckets.set(key, {
+        date: key,
+        close: point.close,
+        high: Math.max(existing.high ?? existing.close, high),
+        low: Math.min(existing.low ?? existing.close, low),
+        volume: (existing.volume ?? 0) + volume,
+      });
+    }
+  }
+
+  return Array.from(buckets.values()).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function computeMacroSupport(points: Point[], lastClose: number | null): MacroSupportResult | null {
+  if (typeof lastClose !== "number" || !Number.isFinite(lastClose) || lastClose <= 0) return null;
+
+  const weekly = aggregateWeekly(points).slice(-156);
+  if (weekly.length < 35) return null;
+
+  type Pivot = { idx: number; price: number };
+  const pivots: Pivot[] = [];
+  const leftRight = 2;
+
+  for (let i = leftRight; i < weekly.length - leftRight; i++) {
+    const point = weekly[i];
+    const low = typeof point.low === "number" ? point.low : point.close;
+    if (!Number.isFinite(low)) continue;
+
+    let isSwingLow = true;
+    for (let offset = 1; offset <= leftRight; offset++) {
+      const leftLow = weekly[i - offset].low ?? weekly[i - offset].close;
+      const rightLow = weekly[i + offset].low ?? weekly[i + offset].close;
+      if (low > leftLow || low > rightLow) {
+        isSwingLow = false;
+        break;
+      }
+    }
+
+    if (isSwingLow && low > 0) pivots.push({ idx: i, price: low });
+  }
+
+  if (pivots.length < 2) return null;
+
+  const maxZonePct = 5.5;
+  const candidates: Array<MacroSupportResult & { score: number }> = [];
+
+  for (const pivot of pivots) {
+    const members = pivots.filter((candidate) => {
+      const mid = (candidate.price + pivot.price) / 2;
+      if (mid <= 0) return false;
+      return Math.abs(((candidate.price - pivot.price) / mid) * 100) <= maxZonePct;
+    });
+
+    if (members.length < 2) continue;
+
+    const prices = members.map((member) => member.price);
+    const lower = Math.min(...prices);
+    const upper = Math.max(...prices);
+    const level = avg(prices);
+    const zoneWidthPct = level > 0 ? ((upper - lower) / level) * 100 : 999;
+    if (zoneWidthPct > maxZonePct) continue;
+
+    const firstIdx = Math.min(...members.map((member) => member.idx));
+    const lastIdx = Math.max(...members.map((member) => member.idx));
+    const spanWeeks = lastIdx - firstIdx;
+    if (spanWeeks < 8) continue;
+
+    const distancePct = lastClose >= upper ? ((lastClose - upper) / lastClose) * 100 : 0;
+    if (lastClose < lower * 0.97) continue;
+    if (distancePct > 35) continue;
+
+    const normalVolume = avg(
+      weekly
+        .slice(-52)
+        .map((week) => week.volume ?? 0)
+        .filter((volume) => volume > 0)
+    );
+
+    const zoneVolumes = weekly
+      .filter((week) => {
+        const low = week.low ?? week.close;
+        const high = week.high ?? week.close;
+        return high >= lower && low <= upper;
+      })
+      .map((week) => week.volume ?? 0)
+      .filter((volume) => volume > 0);
+
+    const volumeRatio = normalVolume > 0 && zoneVolumes.length ? avg(zoneVolumes) / normalVolume : null;
+
+    const touchScore = Math.min(members.length / 5, 1) * 36;
+    const proximityScore = Math.max(0, 1 - distancePct / 35) * 28;
+    const spanScore = Math.min(spanWeeks / 80, 1) * 16;
+    const tightnessScore = Math.max(0, 1 - zoneWidthPct / maxZonePct) * 12;
+    const volumeScore = typeof volumeRatio === "number" ? Math.min(volumeRatio / 1.6, 1) * 8 : 2;
+
+    candidates.push({
+      lower,
+      upper,
+      level,
+      distancePct,
+      touches: members.length,
+      volumeRatio,
+      score: touchScore + proximityScore + spanScore + tightnessScore + volumeScore,
+    });
+  }
+
+  return candidates.sort((a, b) => b.score - a.score || a.distancePct - b.distancePct)[0] ?? null;
+}
+
+function ema(values: number[], period: number): (number | null)[] {
+  const out: (number | null)[] = Array(values.length).fill(null);
+  if (values.length < period) return out;
+
+  const multiplier = 2 / (period + 1);
+  let current = avg(values.slice(0, period));
+  out[period - 1] = current;
+
+  for (let i = period; i < values.length; i++) {
+    current = (values[i] - current) * multiplier + current;
+    out[i] = current;
+  }
+
+  return out;
+}
+
+function buildMacd(values: number[]): MacdResult | null {
+  if (values.length < 35) return null;
+
+  const ema12 = ema(values, 12);
+  const ema26 = ema(values, 26);
+  const macdLine = values.map((_, index) => {
+    const fast = ema12[index];
+    const slow = ema26[index];
+    return typeof fast === "number" && typeof slow === "number" ? fast - slow : null;
+  });
+
+  const firstMacdIndex = macdLine.findIndex((value) => typeof value === "number");
+  if (firstMacdIndex < 0) return null;
+
+  const macdValues = macdLine.slice(firstMacdIndex).filter((value): value is number => typeof value === "number");
+  const signalValues = ema(macdValues, 9);
+  const lastSignal = lastNum(signalValues);
+  const lastMacd = macdValues.length ? macdValues[macdValues.length - 1] : null;
+
+  if (typeof lastMacd !== "number" || typeof lastSignal !== "number") return null;
+
+  const histogram = lastMacd - lastSignal;
+  const absHistogram = Math.abs(histogram);
+  const quietThreshold = Math.max(values[values.length - 1] * 0.001, 0.03);
+
+  if (absHistogram <= quietThreshold) {
+    return {
+      macd: lastMacd,
+      signal: lastSignal,
+      histogram,
+      label: "Mixed",
+      tone: "yellow",
+      meta: "MACD near signal line",
+    };
+  }
+
+  if (histogram > 0) {
+    return {
+      macd: lastMacd,
+      signal: lastSignal,
+      histogram,
+      label: "Bullish",
+      tone: "green",
+      meta: "Momentum above signal",
+    };
+  }
+
+  return {
+    macd: lastMacd,
+    signal: lastSignal,
+    histogram,
+    label: "Bearish",
+    tone: "red",
+    meta: "Momentum below signal",
+  };
+}
+
+function supportTone(distancePct: number | null): "green" | "yellow" | "red" {
+  if (typeof distancePct !== "number") return "yellow";
+  if (distancePct <= 8) return "green";
+  if (distancePct <= 18) return "yellow";
+  return "red";
+}
+
+function supportQualityTone(support: MacroSupportResult | null): "green" | "yellow" | "red" {
+  if (!support) return "yellow";
+  const volumeRatio = support.volumeRatio ?? 1;
+  if (support.touches >= 4 && volumeRatio >= 1.1) return "green";
+  if (support.touches >= 2) return "yellow";
+  return "red";
+}
+
 function scoreBandLabel(score: number) {
   if (score >= 80) return "Strong";
   if (score >= 65) return "Good";
@@ -933,7 +1180,7 @@ setPriceLoading(true);
       try {
         const [quoteRes, historyRes, symbolsRes] = await Promise.all([
           fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" }),
-          fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=400`, {
+          fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=900`, {
             cache: "no-store",
           }),
           fetch(`/api/symbols?q=${encodeURIComponent(symbol)}`, { cache: "no-store" }),
@@ -1097,6 +1344,9 @@ if (!cancelled) setPriceLoading(false);
 
   const ma50Pct = pctFromBase(lastClose, typeof lastMA50 === "number" ? lastMA50 : null);
   const ma200Pct = pctFromBase(lastClose, typeof lastMA200 === "number" ? lastMA200 : null);
+
+  const macroSupport = useMemo(() => computeMacroSupport(history, lastClose), [history, lastClose]);
+  const macdSignal = useMemo(() => buildMacd(closes), [closes]);
 
   const tradeContext = useMemo(
     () =>
@@ -1833,6 +2083,56 @@ if (!cancelled) setPriceLoading(false);
                         : "Neutral zone"
                       : "Momentum unavailable"}
                   </div>
+                </div>
+              </section>
+
+
+              <section
+                aria-label={`${symbol} macro support and MACD technical levels`}
+                style={{
+                  marginTop: 14,
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: 14,
+                }}
+              >
+                <div style={technicalMetricCardStyle(supportTone(macroSupport?.distancePct ?? null))}>
+                  <div style={metricHeaderStyle}>
+                    <div style={statLabelStyle}>Macro Support</div>
+                    <div style={circleIconStyle(supportTone(macroSupport?.distancePct ?? null))}>↧</div>
+                  </div>
+                  <div style={statValueStyle}>
+                    {macroSupport
+                      ? `$${macroSupport.lower.toFixed(2)}–$${macroSupport.upper.toFixed(2)}`
+                      : "Not clear"}
+                  </div>
+                  <div style={statMetaStyle}>
+                    {macroSupport
+                      ? `${macroSupport.distancePct.toFixed(1)}% below price`
+                      : "No repeated weekly support zone found"}
+                  </div>
+                </div>
+
+                <div style={technicalMetricCardStyle(supportQualityTone(macroSupport))}>
+                  <div style={metricHeaderStyle}>
+                    <div style={statLabelStyle}>Support Quality</div>
+                    <div style={circleIconStyle(supportQualityTone(macroSupport))}>✓</div>
+                  </div>
+                  <div style={statValueStyle}>{macroSupport ? `${macroSupport.touches}` : "—"}</div>
+                  <div style={statMetaStyle}>
+                    {macroSupport
+                      ? `${macroSupport.touches === 1 ? "touch" : "touches"} • ${macroSupport.volumeRatio === null ? "volume n/a" : `${macroSupport.volumeRatio.toFixed(1)}x zone volume`}`
+                      : "Support quality unavailable"}
+                  </div>
+                </div>
+
+                <div style={technicalMetricCardStyle(macdSignal?.tone ?? "yellow")}>
+                  <div style={metricHeaderStyle}>
+                    <div style={statLabelStyle}>MACD Signal</div>
+                    <div style={circleIconStyle(macdSignal?.tone ?? "yellow")}>〽️</div>
+                  </div>
+                  <div style={statValueStyle}>{macdSignal?.label ?? "—"}</div>
+                  <div style={statMetaStyle}>{macdSignal?.meta ?? "Momentum unavailable"}</div>
                 </div>
               </section>
 
