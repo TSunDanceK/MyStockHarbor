@@ -31,6 +31,8 @@ const CHART_COLORS = {
   stochD: "#f59e0b",
   atr: "#fb923c",
   volume: "rgba(96,165,250,0.34)",
+  supportZone: "#22c55e",
+  resistanceZone: "#ef4444",
 };
 
 export type Overlay =
@@ -45,7 +47,8 @@ export type Overlay =
   | "VWMA(20)"
   | "Stochastic(14,3)"
   | "ATR(14)"
-  | "Volume";
+  | "Volume"
+  | "Support/Resistance";
 
 function fmtMoney(v: number) {
   if (!Number.isFinite(v)) return "—";
@@ -87,6 +90,13 @@ function minMax(arr: Array<number | null>) {
 
 export type ChartType = "line" | "candles";
 
+export type SupportResistanceZone = {
+  kind: "support" | "resistance";
+  lower: number;
+  upper: number;
+  label?: string;
+};
+
 type Props = {
   symbol: string;
   data: Point[];
@@ -96,6 +106,7 @@ type Props = {
   overlay?: Overlay;
   selectedIndicators?: Overlay[];
   chartType?: ChartType;
+  supportResistanceZones?: SupportResistanceZone[];
 
   divergence?: DivResult | null;
 
@@ -128,6 +139,7 @@ export default function PriceChart(props: Props) {
     overlay = "None",
     selectedIndicators = [],
     chartType = "line",
+    supportResistanceZones = [],
     divergence = null,
 
     bollUpper,
@@ -191,6 +203,7 @@ export default function PriceChart(props: Props) {
   const showBollinger = activeIndicators.includes("Bollinger(20,2)");
   const showEMA20 = activeIndicators.includes("EMA20");
   const showVWMA20 = activeIndicators.includes("VWMA(20)");
+  const showSupportResistance = activeIndicators.includes("Support/Resistance");
 
   const gap = wantsSubPanel ? 14 : 0;
   const innerH = height - padT - padB - gap;
@@ -298,6 +311,13 @@ export default function PriceChart(props: Props) {
       if (showVWMA20 && typeof p.vwma20 === "number") vals.push(p.vwma20);
     }
 
+    if (showSupportResistance) {
+      for (const zone of supportResistanceZones) {
+        if (typeof zone.lower === "number" && Number.isFinite(zone.lower)) vals.push(zone.lower);
+        if (typeof zone.upper === "number" && Number.isFinite(zone.upper)) vals.push(zone.upper);
+      }
+    }
+
     const minV = Math.min(...vals);
     const maxV = Math.max(...vals);
     const r = Math.max(1e-9, maxV - minV);
@@ -312,6 +332,8 @@ export default function PriceChart(props: Props) {
     showBollinger,
     showEMA20,
     showVWMA20,
+    showSupportResistance,
+    supportResistanceZones,
     chartType,
   ]);
 
@@ -511,6 +533,63 @@ export default function PriceChart(props: Props) {
             </text>
           </g>
         ))}
+
+        {showSupportResistance
+          ? supportResistanceZones.map((zone, idx) => {
+              if (
+                typeof zone.lower !== "number" ||
+                typeof zone.upper !== "number" ||
+                !Number.isFinite(zone.lower) ||
+                !Number.isFinite(zone.upper)
+              ) {
+                return null;
+              }
+
+              const lower = Math.min(zone.lower, zone.upper);
+              const upper = Math.max(zone.lower, zone.upper);
+              const yTop = yMain(upper);
+              const yBottom = yMain(lower);
+              const yMid = yMain((lower + upper) / 2);
+              const color = zone.kind === "support" ? CHART_COLORS.supportZone : CHART_COLORS.resistanceZone;
+              const label =
+                zone.label ??
+                `${zone.kind === "support" ? "Macro support" : "Macro resistance"} ${fmtMoney(lower)}-${fmtMoney(upper)}`;
+
+              return (
+                <g key={`${zone.kind}-${idx}`}>
+                  <rect
+                    x={padL}
+                    y={Math.min(yTop, yBottom)}
+                    width={width - padL - padR}
+                    height={Math.max(3, Math.abs(yBottom - yTop))}
+                    fill={color}
+                    opacity="0.16"
+                    rx="2"
+                  />
+                  <line
+                    x1={padL}
+                    y1={yMid}
+                    x2={width - padR}
+                    y2={yMid}
+                    stroke={color}
+                    strokeWidth="2.6"
+                    strokeDasharray="9 5"
+                    opacity="0.98"
+                  />
+                  <text
+                    x={padL + 8}
+                    y={Math.max(padT + 13, yMid - 7)}
+                    fontSize="11"
+                    fill={color}
+                    fontWeight="800"
+                    opacity="0.95"
+                  >
+                    {label}
+                  </text>
+                </g>
+              );
+            })
+          : null}
 
         {xTicks.map((t, idx) => (
           <g key={idx}>
