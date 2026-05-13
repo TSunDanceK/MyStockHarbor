@@ -2736,7 +2736,7 @@ export default async function StockNewsPage({ params }: Props) {
               <a
                 href={`/api/go/tradingview?symbol=${encodeURIComponent(upper)}`}
                 target="_blank"
-                rel="noopener noreferrer"
+                rel="noopener noreferrer sponsored nofollow"
                 className="newsHeroBtn"
                 style={heroPrimaryCtaStyle}
               >
@@ -2945,7 +2945,7 @@ export default async function StockNewsPage({ params }: Props) {
             <a
               href={`/api/go/tradingview?symbol=${encodeURIComponent(upper)}`}
               target="_blank"
-              rel="noopener noreferrer"
+              rel="noopener noreferrer sponsored nofollow"
               style={bottomActionStyle("green")}
             >
               OPEN ON TRADINGVIEW ↗
