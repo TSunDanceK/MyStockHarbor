@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import PriceChart, { type Overlay, type ChartType } from "./PriceChart";
+import PriceChart, { type Overlay, type ChartType, type SupportResistanceZone } from "./PriceChart";
 import { detectDivergenceFromHistory } from "../../lib/ta/divergence";
 
 type Quote = {
@@ -412,6 +412,160 @@ function lastNum(arr: (number | null)[]) {
   return arr.length ? arr[arr.length - 1] : null;
 }
 
+function avg(values: number[]) {
+  if (!values.length) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function aggregateWeeklyPoints(points: Point[]): Point[] {
+  const buckets = new Map<string, Point>();
+
+  for (const point of points) {
+    const date = new Date(`${point.date}T00:00:00Z`);
+    if (Number.isNaN(date.getTime())) continue;
+
+    const day = date.getUTCDay();
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+    date.setUTCDate(date.getUTCDate() + mondayOffset);
+    const key = date.toISOString().slice(0, 10);
+
+    const high = typeof point.high === "number" && Number.isFinite(point.high) ? point.high : point.close;
+    const low = typeof point.low === "number" && Number.isFinite(point.low) ? point.low : point.close;
+    const volume = typeof point.volume === "number" && Number.isFinite(point.volume) ? point.volume : 0;
+    const existing = buckets.get(key);
+
+    if (!existing) {
+      buckets.set(key, {
+        date: key,
+        open: typeof point.open === "number" && Number.isFinite(point.open) ? point.open : point.close,
+        close: point.close,
+        high,
+        low,
+        volume,
+      });
+    } else {
+      buckets.set(key, {
+        date: key,
+        open: existing.open,
+        close: point.close,
+        high: Math.max(existing.high ?? existing.close, high),
+        low: Math.min(existing.low ?? existing.close, low),
+        volume: (existing.volume ?? 0) + volume,
+      });
+    }
+  }
+
+  return Array.from(buckets.values()).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+type MacroZoneCandidate = SupportResistanceZone & {
+  touches: number;
+  distancePct: number;
+  score: number;
+};
+
+function computeMacroSupportResistanceZones(
+  points: Point[],
+  lastClose: number | null
+): SupportResistanceZone[] {
+  if (typeof lastClose !== "number" || !Number.isFinite(lastClose) || lastClose <= 0) return [];
+
+  const weekly = aggregateWeeklyPoints(points).slice(-156);
+  if (weekly.length < 35) return [];
+
+  type Pivot = { idx: number; price: number; kind: "support" | "resistance" };
+  const pivots: Pivot[] = [];
+  const leftRight = 2;
+
+  for (let i = leftRight; i < weekly.length - leftRight; i++) {
+    const point = weekly[i];
+    const high = typeof point.high === "number" && Number.isFinite(point.high) ? point.high : point.close;
+    const low = typeof point.low === "number" && Number.isFinite(point.low) ? point.low : point.close;
+
+    let isSwingHigh = true;
+    let isSwingLow = true;
+
+    for (let offset = 1; offset <= leftRight; offset++) {
+      const left = weekly[i - offset];
+      const right = weekly[i + offset];
+      const leftHigh = left.high ?? left.close;
+      const rightHigh = right.high ?? right.close;
+      const leftLow = left.low ?? left.close;
+      const rightLow = right.low ?? right.close;
+
+      if (high < leftHigh || high < rightHigh) isSwingHigh = false;
+      if (low > leftLow || low > rightLow) isSwingLow = false;
+    }
+
+    if (isSwingLow && low > 0) pivots.push({ idx: i, price: low, kind: "support" });
+    if (isSwingHigh && high > 0) pivots.push({ idx: i, price: high, kind: "resistance" });
+  }
+
+  if (pivots.length < 2) return [];
+
+  const maxZonePct = 5.5;
+  const candidates: MacroZoneCandidate[] = [];
+
+  for (const pivot of pivots) {
+    const sameKind = pivots.filter((candidate) => candidate.kind === pivot.kind);
+    const members = sameKind.filter((candidate) => {
+      const mid = (candidate.price + pivot.price) / 2;
+      if (mid <= 0) return false;
+      return Math.abs(((candidate.price - pivot.price) / mid) * 100) <= maxZonePct;
+    });
+
+    if (members.length < 2) continue;
+
+    const prices = members.map((member) => member.price);
+    const lower = Math.min(...prices);
+    const upper = Math.max(...prices);
+    const level = avg(prices);
+    const zoneWidthPct = level > 0 ? ((upper - lower) / level) * 100 : 999;
+    if (zoneWidthPct > maxZonePct) continue;
+
+    const firstIdx = Math.min(...members.map((member) => member.idx));
+    const lastIdx = Math.max(...members.map((member) => member.idx));
+    const spanWeeks = lastIdx - firstIdx;
+    if (spanWeeks < 8) continue;
+
+    let distancePct: number;
+    if (pivot.kind === "support") {
+      if (lastClose < lower * 0.97) continue;
+      distancePct = lastClose >= upper ? ((lastClose - upper) / lastClose) * 100 : 0;
+      if (distancePct > 40) continue;
+    } else {
+      if (lastClose > upper * 1.03) continue;
+      distancePct = lastClose <= lower ? ((lower - lastClose) / lastClose) * 100 : 0;
+      if (distancePct > 40) continue;
+    }
+
+    const touchScore = Math.min(members.length / 5, 1) * 40;
+    const proximityScore = Math.max(0, 1 - distancePct / 40) * 34;
+    const spanScore = Math.min(spanWeeks / 80, 1) * 16;
+    const tightnessScore = Math.max(0, 1 - zoneWidthPct / maxZonePct) * 10;
+
+    candidates.push({
+      kind: pivot.kind,
+      lower,
+      upper,
+      touches: members.length,
+      distancePct,
+      score: touchScore + proximityScore + spanScore + tightnessScore,
+      label: `${pivot.kind === "support" ? "Macro support" : "Macro resistance"} (${members.length} touches)`,
+    });
+  }
+
+  const bestSupport = candidates
+    .filter((candidate) => candidate.kind === "support")
+    .sort((a, b) => b.score - a.score || a.distancePct - b.distancePct)[0];
+
+  const bestResistance = candidates
+    .filter((candidate) => candidate.kind === "resistance")
+    .sort((a, b) => b.score - a.score || a.distancePct - b.distancePct)[0];
+
+  return [bestSupport, bestResistance].filter(Boolean) as SupportResistanceZone[];
+}
+
 /* ----------------------------- helpers ----------------------------- */
 
 function divStateForIndicator(
@@ -738,6 +892,7 @@ const PRICE_OVERLAY_OPTIONS: Overlay[] = [
   "EMA20",
    "VWMA(20)",
   "Bollinger(20,2)",
+  "Support/Resistance",
 ];
 
 const LOWER_OVERLAY_OPTIONS: Overlay[] = [
@@ -1300,6 +1455,10 @@ useEffect(() => {
   );
 
   const lastClose = displayedHistory.length ? displayedHistory[displayedHistory.length - 1].close : null;
+  const supportResistanceZones = useMemo(
+    () => computeMacroSupportResistanceZones(historyAll, lastClose),
+    [historyAll, lastClose]
+  );
   const lastMA50 = lastNum(ma50);
   const lastMA200 = lastNum(ma200);
 
@@ -3041,6 +3200,7 @@ return (
               overlay={indicator}
               selectedIndicators={selectedIndicators}
               chartType={chartType}
+              supportResistanceZones={supportResistanceZones}
               bollUpper={bollUpper}
               bollMid={bollMid}
               bollLower={bollLower}
@@ -4329,6 +4489,7 @@ onKeyDown={(e) => {
                   overlay={indicator}
                   selectedIndicators={selectedIndicators}
                   chartType={chartType}
+                  supportResistanceZones={supportResistanceZones}
                   bollUpper={bollUpper}
                   bollMid={bollMid}
                   bollLower={bollLower}
