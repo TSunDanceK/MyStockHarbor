@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 
-type PickerTone = "green" | "yellow" | "orange" | "red";
+type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
 type PickerItem = {
   symbol: string;
@@ -115,6 +115,7 @@ function toneDot(tone?: string) {
   if (tone === "yellow") return "#eab308";
   if (tone === "orange") return "#fb923c";
   if (tone === "red") return "#ef4444";
+  if (tone === "blue") return "#60a5fa";
   return "rgba(255,255,255,0.35)";
 }
 
@@ -236,6 +237,10 @@ function getHeaderHelp(title: string) {
 
   if (title.includes("Divergence")) {
     return "Divergence is ranked by timeframe, duration, structure quality, magnitude and context. Weekly divergences usually carry more weight than daily ones.";
+  }
+
+  if (title.includes("Macro Support") || title.includes("Resistance")) {
+    return "These stocks are trading near wider weekly support or resistance zones. The ranking favours repeated touches, distance to the zone, structure length and trading volume around that level.";
   }
 
   if (title.includes("All-Time Highs")) {
@@ -1123,6 +1128,11 @@ const res = await fetch(`/api/pickers?t=${Date.now()}`, {
       section.title.toLowerCase().includes("oversold")
     );
 
+    const macroSupportResistanceSection = safeSections.find((section) => {
+      const title = section.title.toLowerCase();
+      return title.includes("macro") && title.includes("support") && title.includes("resistance");
+    });
+
     const otherSections = safeSections.filter(
       (section) =>
         section !== ma200Section &&
@@ -1130,12 +1140,14 @@ const res = await fetch(`/api/pickers?t=${Date.now()}`, {
         section !== athBreakoutSection &&
         section !== threeMonthBreakoutSection &&
         section !== oversoldSection &&
+        section !== macroSupportResistanceSection &&
         !section.title.toLowerCase().includes("hot market names")
     );
 
     if (ma200Section) out.push(ma200Section);
     if (topBuySection) out.push(topBuySection);
     if (buyTheDipSection) out.push(buyTheDipSection);
+    if (macroSupportResistanceSection) out.push(macroSupportResistanceSection);
     if (athBreakoutSection) out.push(athBreakoutSection);
     if (threeMonthBreakoutSection) out.push(threeMonthBreakoutSection);
     if (topSellSection) out.push(topSellSection);
@@ -2461,6 +2473,12 @@ color: "#cbd5f5",
     seoBorder = "1px solid rgba(234,179,8,0.22)";
     seoBackground = "rgba(234,179,8,0.08)";
     seoColor = "#fef3c7";
+  } else if (title.includes("macro") && title.includes("support") && title.includes("resistance")) {
+    seoHref = "/macro-support-resistance-stocks";
+    seoLabel = "See all macro support and resistance stocks →";
+    seoBorder = "1px solid rgba(96,165,250,0.24)";
+    seoBackground = "rgba(59,130,246,0.09)";
+    seoColor = "#dbeafe";
   } else if (title.includes("buy signals")) {
     seoHref = "/top-stocks-with-buy-signals";
     seoLabel = "See all buy signal stocks →";
