@@ -6,10 +6,7 @@ import MiniPickerCandleChart, {
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
-export type PickerResultKind =
-  | "section"
-  | "buySignals"
-  | "sellSignals";
+export type PickerResultKind = "section" | "buySignals" | "sellSignals";
 
 export type PickerResultConfig = {
   href: string;
@@ -162,6 +159,12 @@ const PICKER_NAV: Array<{
     tone: "yellow",
   },
   {
+    href: "/macro-support-resistance-stocks",
+    label: "Macro S/R",
+    icon: "⇄",
+    tone: "blue",
+  },
+  {
     href: "/overbought-stocks-today",
     label: "Overbought",
     icon: "●",
@@ -221,7 +224,8 @@ function cleanSymbol(value: unknown) {
 }
 
 function chartHrefFor(symbol: string, href?: string) {
-  const base = href && href.trim() ? href : `/?symbol=${encodeURIComponent(symbol)}`;
+  const base =
+    href && href.trim() ? href : `/?symbol=${encodeURIComponent(symbol)}`;
   return base.includes("#chart") ? base : `${base}#chart`;
 }
 
@@ -308,35 +312,46 @@ function entriesFromSection(args: {
     ? items.filter((item) => item.timeframe === args.filterTimeframe)
     : items;
 
-  return filteredItems.slice(0, args.maxItems).map((item): ResultEntry | null => {
-    const symbol = cleanSymbol(item.symbol);
-    if (!symbol) return null;
+  return filteredItems
+    .slice(0, args.maxItems)
+    .map((item): ResultEntry | null => {
+      const symbol = cleanSymbol(item.symbol);
+      if (!symbol) return null;
 
-    const record = args.recordMap.get(symbol);
-    const chartPoints = Array.isArray(item.chartPoints)
-      ? item.chartPoints
-      : Array.isArray(record?.chartPoints)
-        ? record.chartPoints
-        : [];
+      const record = args.recordMap.get(symbol);
+      const chartPoints = Array.isArray(item.chartPoints)
+        ? item.chartPoints
+        : Array.isArray(record?.chartPoints)
+          ? record.chartPoints
+          : [];
 
-    const tone = item.tone || record?.tone || args.fallbackTone;
-    const note =
-      item.note ||
-      record?.note ||
-      [item.timeframe, item.indicator].filter(Boolean).join(" · ") ||
-      "Screened setup";
+      const tone = item.tone || record?.tone || args.fallbackTone;
+      const note =
+        item.note ||
+        record?.note ||
+        [item.timeframe, item.indicator].filter(Boolean).join(" · ") ||
+        "Screened setup";
 
-    return {
-      symbol,
-      note,
-      tone,
-      stockHref: `/stock/${encodeURIComponent(symbol)}`,
-      chartHref: chartHrefFor(symbol, item.dashboardHref || record?.dashboardHref),
-      chartPoints,
-      badge: [item.timeframe, item.indicator].filter(Boolean).join(" · "),
-      score: typeof item.score === "number" ? item.score : typeof record?.score === "number" ? record.score : undefined,
-    };
-  }).filter((entry): entry is ResultEntry => Boolean(entry));
+      return {
+        symbol,
+        note,
+        tone,
+        stockHref: `/stock/${encodeURIComponent(symbol)}`,
+        chartHref: chartHrefFor(
+          symbol,
+          item.dashboardHref || record?.dashboardHref,
+        ),
+        chartPoints,
+        badge: [item.timeframe, item.indicator].filter(Boolean).join(" · "),
+        score:
+          typeof item.score === "number"
+            ? item.score
+            : typeof record?.score === "number"
+              ? record.score
+              : undefined,
+      };
+    })
+    .filter((entry): entry is ResultEntry => Boolean(entry));
 }
 
 function buildEntries(args: {
@@ -363,12 +378,17 @@ function buildEntries(args: {
           score,
           stockHref: `/stock/${encodeURIComponent(symbol)}`,
           chartHref: chartHrefFor(symbol, record.dashboardHref),
-          chartPoints: Array.isArray(record.chartPoints) ? record.chartPoints : [],
+          chartPoints: Array.isArray(record.chartPoints)
+            ? record.chartPoints
+            : [],
           badge: "Buy signals",
         };
       })
       .filter((entry): entry is ResultEntry => Boolean(entry))
-      .sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.symbol.localeCompare(b.symbol))
+      .sort(
+        (a, b) =>
+          (b.score ?? 0) - (a.score ?? 0) || a.symbol.localeCompare(b.symbol),
+      )
       .slice(0, maxItems);
   }
 
@@ -387,12 +407,17 @@ function buildEntries(args: {
           score,
           stockHref: `/stock/${encodeURIComponent(symbol)}`,
           chartHref: chartHrefFor(symbol, record.dashboardHref),
-          chartPoints: Array.isArray(record.chartPoints) ? record.chartPoints : [],
+          chartPoints: Array.isArray(record.chartPoints)
+            ? record.chartPoints
+            : [],
           badge: "Sell signals",
         };
       })
       .filter((entry): entry is ResultEntry => Boolean(entry))
-      .sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.symbol.localeCompare(b.symbol))
+      .sort(
+        (a, b) =>
+          (b.score ?? 0) - (a.score ?? 0) || a.symbol.localeCompare(b.symbol),
+      )
       .slice(0, maxItems);
   }
 
@@ -424,9 +449,13 @@ async function getPickerData(config: PickerResultConfig) {
 
     const payload = (await res.json()) as PickersPayload;
     const sections = Array.isArray(payload.sections) ? payload.sections : [];
-    const signalRecords = Array.isArray(payload.signalRecords) ? payload.signalRecords : [];
+    const signalRecords = Array.isArray(payload.signalRecords)
+      ? payload.signalRecords
+      : [];
     const matchedSection =
-      config.kind === "section" ? findSection(sections, config.sectionIncludes ?? []) : undefined;
+      config.kind === "section"
+        ? findSection(sections, config.sectionIncludes ?? [])
+        : undefined;
 
     const entries = buildEntries({
       config,
@@ -435,16 +464,16 @@ async function getPickerData(config: PickerResultConfig) {
     });
 
     return {
-      updatedAt: typeof payload.updatedAt === "string" ? payload.updatedAt : null,
+      updatedAt:
+        typeof payload.updatedAt === "string" ? payload.updatedAt : null,
       universeSize:
         typeof payload.universeSize === "number" ? payload.universeSize : null,
       entries,
-      foundCount:
-        config.filterTimeframe
-          ? entries.length
-          : typeof matchedSection?.foundCount === "number"
-            ? matchedSection.foundCount
-            : entries.length,
+      foundCount: config.filterTimeframe
+        ? entries.length
+        : typeof matchedSection?.foundCount === "number"
+          ? matchedSection.foundCount
+          : entries.length,
     };
   } catch {
     return {
@@ -486,14 +515,25 @@ function SignalNav({ currentHref }: { currentHref: string }) {
 
 function chartOverlayForEntry(config: PickerResultConfig, entry: ResultEntry) {
   const href = config.href.toLowerCase();
-  const text = `${config.title} ${entry.badge ?? ""} ${entry.note}`.toLowerCase();
+  const text =
+    `${config.title} ${entry.badge ?? ""} ${entry.note}`.toLowerCase();
 
   if (text.includes("macd")) return "macd" as const;
-  if (text.includes("rsi") || href.includes("overbought") || href.includes("oversold")) {
+  if (
+    text.includes("rsi") ||
+    href.includes("overbought") ||
+    href.includes("oversold")
+  ) {
     return "rsi" as const;
   }
-  if (href.includes("200-day") || href.includes("ma200") || href.includes("best-trend")) {
-    return href.includes("best-trend") ? ("trend" as const) : ("ma200" as const);
+  if (
+    href.includes("200-day") ||
+    href.includes("ma200") ||
+    href.includes("best-trend")
+  ) {
+    return href.includes("best-trend")
+      ? ("trend" as const)
+      : ("ma200" as const);
   }
   if (href.includes("all-time-high-breakout")) return "ath" as const;
   if (href.includes("3-month-high")) return "recentHigh" as const;
@@ -517,8 +557,13 @@ function isEarningsPickerPage(config: PickerResultConfig) {
   return config.href.includes("earnings");
 }
 
-
-function MetricCard({ label, value }: { label: string; value: string | number }) {
+function MetricCard({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) {
   return (
     <div className="metricCard">
       <div>{label}</div>
@@ -532,7 +577,8 @@ export default async function PickerResultPage({
 }: {
   config: PickerResultConfig;
 }) {
-  const { entries, updatedAt, universeSize, foundCount } = await getPickerData(config);
+  const { entries, updatedAt, universeSize, foundCount } =
+    await getPickerData(config);
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -972,7 +1018,10 @@ export default async function PickerResultPage({
                 <MetricCard label="Live matches" value={foundCount} />
                 <MetricCard label="Shown here" value={entries.length} />
                 <MetricCard label="Universe" value={universeSize ?? "Live"} />
-                <MetricCard label="Updated" value={formatUpdatedAt(updatedAt)} />
+                <MetricCard
+                  label="Updated"
+                  value={formatUpdatedAt(updatedAt)}
+                />
               </div>
             </aside>
           </div>
@@ -990,8 +1039,8 @@ export default async function PickerResultPage({
             <div>
               <h2>Current screened results</h2>
               <p>
-                Each card includes a mini candle preview. Open the chart for the full
-                dashboard view or open the stock page for more context.
+                Each card includes a mini candle preview. Open the chart for the
+                full dashboard view or open the stock page for more context.
               </p>
             </div>
           </div>
@@ -999,7 +1048,10 @@ export default async function PickerResultPage({
           {entries.length ? (
             <div className="resultsGrid">
               {entries.map((entry) => (
-                <article key={`${entry.symbol}-${entry.note}`} className="resultCard">
+                <article
+                  key={`${entry.symbol}-${entry.note}`}
+                  className="resultCard"
+                >
                   <div className="resultCardTop">
                     <div>
                       <div className="symbolLine">
@@ -1010,7 +1062,11 @@ export default async function PickerResultPage({
                         />
                         <h3>{entry.symbol}</h3>
                       </div>
-                      {entry.badge ? <div className="badge" style={{ marginTop: 8 }}>{entry.badge}</div> : null}
+                      {entry.badge ? (
+                        <div className="badge" style={{ marginTop: 8 }}>
+                          {entry.badge}
+                        </div>
+                      ) : null}
                     </div>
 
                     {scoreLabelForEntry(entry) != null ? (
