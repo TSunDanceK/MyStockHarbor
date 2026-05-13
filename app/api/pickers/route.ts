@@ -178,6 +178,21 @@ type BreakoutCandidate = {
   avgDollarVolume: number;
 };
 
+type MacroSupportResistanceCandidate = {
+  score: number;
+  kind: "support" | "resistance";
+  zoneLow: number;
+  zoneHigh: number;
+  level: number;
+  touches: number;
+  distancePct: number;
+  zonePct: number;
+  spanWeeks: number;
+  volumeRatio: number;
+  tone: PickerTone;
+  note: string;
+};
+
 type EarningsRow = {
   symbol?: string;
   date?: string;
@@ -212,9 +227,9 @@ const CACHE_SECONDS = 60 * 6; // 6 minutes
 const STALE_SECONDS = 60 * 6; // 6 minutes
 const MEMORY_CACHE_MS = 60_000;
 
-const PICKERS_REDIS_KEY = "msh:pickers:v7:earnings-bg-cache";
+const PICKERS_REDIS_KEY = "msh:pickers:v8:macro-sr-cache";
 const PICKERS_REDIS_TTL_SECONDS = 6 * 60;
-const PICKERS_LOCK_KEY = "msh:pickers:v7:earnings-bg-cache:lock";
+const PICKERS_LOCK_KEY = "msh:pickers:v8:macro-sr-cache:lock";
 const PICKERS_LOCK_TTL_SECONDS = 120;
 
 const EARNINGS_REDIS_KEY_PREFIX = "msh:pickers:earnings:v1:";
@@ -985,6 +1000,227 @@ function recentVolatilityPct(points: Point[], lookback = 20) {
   }
 
   return count ? total / count : 0;
+}
+
+function computeMacroSupportResistanceCandidate(points: Point[]): MacroSupportResistanceCandidate | null {
+  const weeklyPoints = aggregatePoints(points, "w").map((point) => ({
+    date: point.date,
+    close: point.close,
+    high: point.high,
+    low: point.low,
+    volume: point.volume,
+  }));
+
+  const series = weeklyPoints.slice(-260);
+
+  if (series.length < 90) return null;
+
+  const last = series[series.length - 1];
+  const lastClose = last?.close;
+
+  if (!Number.isFinite(lastClose) || lastClose <= 0) return null;
+
+  type Pivot = {
+    idx: number;
+    price: number;
+    kind: "support" | "resistance";
+  };
+
+  const pivots: Pivot[] = [];
+  const leftRight = 2;
+
+  for (let i = leftRight; i < series.length - leftRight; i++) {
+    const point = series[i];
+    const high = typeof point.high === "number" ? point.high : point.close;
+    const low = typeof point.low === "number" ? point.low : point.close;
+
+    if (!Number.isFinite(high) || !Number.isFinite(low)) continue;
+
+    let isSwingHigh = true;
+    let isSwingLow = true;
+
+    for (let offset = 1; offset <= leftRight; offset++) {
+      const left = series[i - offset];
+      const right = series[i + offset];
+
+      const leftHigh = typeof left.high === "number" ? left.high : left.close;
+      const rightHigh = typeof right.high === "number" ? right.high : right.close;
+      const leftLow = typeof left.low === "number" ? left.low : left.close;
+      const rightLow = typeof right.low === "number" ? right.low : right.close;
+
+      if (high < leftHigh || high < rightHigh) isSwingHigh = false;
+      if (low > leftLow || low > rightLow) isSwingLow = false;
+    }
+
+    if (isSwingHigh) {
+      pivots.push({ idx: i, price: high, kind: "resistance" });
+    }
+
+    if (isSwingLow) {
+      pivots.push({ idx: i, price: low, kind: "support" });
+    }
+  }
+
+  if (pivots.length < 6) return null;
+
+  const maxZonePct = 4.5;
+  const normalVolumeValues = series
+    .slice(-52)
+    .map((point) => point.volume)
+    .filter((volume): volume is number => typeof volume === "number" && Number.isFinite(volume) && volume > 0);
+  const normalWeeklyVolume = normalVolumeValues.length ? avg(normalVolumeValues) : 0;
+
+  type Cluster = {
+    kind: "support" | "resistance";
+    level: number;
+    zoneLow: number;
+    zoneHigh: number;
+    touches: number;
+    zonePct: number;
+    spanWeeks: number;
+    distancePct: number;
+    volumeRatio: number;
+    score: number;
+  };
+
+  const clusters: Cluster[] = [];
+
+  for (const pivot of pivots) {
+    const sameKind = pivots.filter((candidate) => candidate.kind === pivot.kind);
+
+    const members = sameKind.filter((candidate) => {
+      const mid = (candidate.price + pivot.price) / 2;
+      if (mid <= 0) return false;
+      return Math.abs(((candidate.price - pivot.price) / mid) * 100) <= maxZonePct;
+    });
+
+    if (members.length < 3) continue;
+
+    const prices = members.map((member) => member.price);
+    const zoneLow = Math.min(...prices);
+    const zoneHigh = Math.max(...prices);
+    const level = avg(prices);
+    const zonePct = level > 0 ? ((zoneHigh - zoneLow) / level) * 100 : 999;
+
+    if (zonePct > maxZonePct) continue;
+
+    const firstIdx = Math.min(...members.map((member) => member.idx));
+    const lastIdx = Math.max(...members.map((member) => member.idx));
+    const spanWeeks = lastIdx - firstIdx;
+
+    if (spanWeeks < 18) continue;
+
+    let distancePct = 999;
+
+    if (pivot.kind === "support") {
+      distancePct = ((lastClose - level) / level) * 100;
+      if (distancePct < -3 || distancePct > 12) continue;
+    } else {
+      distancePct = ((level - lastClose) / lastClose) * 100;
+      if (distancePct < -3 || distancePct > 12) continue;
+    }
+
+    const zoneVolumes: number[] = [];
+
+    for (const point of series) {
+      const high = typeof point.high === "number" ? point.high : point.close;
+      const low = typeof point.low === "number" ? point.low : point.close;
+      const volume = point.volume;
+
+      if (
+        typeof volume !== "number" ||
+        !Number.isFinite(volume) ||
+        volume <= 0 ||
+        !Number.isFinite(high) ||
+        !Number.isFinite(low)
+      ) {
+        continue;
+      }
+
+      const overlapsZone = low <= zoneHigh && high >= zoneLow;
+      if (overlapsZone) zoneVolumes.push(volume);
+    }
+
+    const touchVolumes = members
+      .map((member) => series[member.idx]?.volume)
+      .filter((volume): volume is number => typeof volume === "number" && Number.isFinite(volume) && volume > 0);
+
+    const combinedZoneVolume = [...zoneVolumes, ...touchVolumes];
+    const zoneVolumeAvg = combinedZoneVolume.length ? avg(combinedZoneVolume) : 0;
+    const volumeRatio = normalWeeklyVolume > 0 && zoneVolumeAvg > 0 ? zoneVolumeAvg / normalWeeklyVolume : 1;
+
+    const touchScore = scoreLinear(members.length, 3, 7);
+    const tightnessScore = scoreInverse(zonePct, 1, maxZonePct);
+    const proximityScore = scoreInverse(Math.abs(distancePct), 0, 12);
+    const spanScore = scoreLinear(spanWeeks, 18, 120);
+    const volumeScore = scoreLinear(Math.min(volumeRatio, 2.5), 0.8, 2.2);
+    const liqScore = liquidityScore(points);
+
+    const score =
+      touchScore * 0.27 +
+      proximityScore * 0.24 +
+      tightnessScore * 0.18 +
+      volumeScore * 0.16 +
+      spanScore * 0.09 +
+      liqScore * 0.06;
+
+    clusters.push({
+      kind: pivot.kind,
+      level,
+      zoneLow,
+      zoneHigh,
+      touches: members.length,
+      zonePct,
+      spanWeeks,
+      distancePct,
+      volumeRatio,
+      score,
+    });
+  }
+
+  const deduped = clusters.filter((cluster, index, all) => {
+    const duplicateIndex = all.findIndex(
+      (candidate) =>
+        candidate.kind === cluster.kind &&
+        Math.abs(((candidate.level - cluster.level) / cluster.level) * 100) <= 1.2
+    );
+
+    return duplicateIndex === index;
+  });
+
+  const best = deduped
+    .sort((a, b) => b.score - a.score || Math.abs(a.distancePct) - Math.abs(b.distancePct))[0];
+
+  if (!best) return null;
+
+  const kindLabel = best.kind === "support" ? "Macro support" : "Macro resistance";
+  const distanceSide =
+    best.kind === "support"
+      ? best.distancePct >= 0
+        ? "above"
+        : "below"
+      : best.distancePct >= 0
+        ? "below"
+        : "above";
+  const zoneLabel =
+    Math.abs(best.zoneHigh - best.zoneLow) / best.level < 0.008
+      ? `$${best.level.toFixed(2)}`
+      : `$${best.zoneLow.toFixed(2)}-$${best.zoneHigh.toFixed(2)}`;
+
+  return {
+    score: best.score,
+    kind: best.kind,
+    zoneLow: best.zoneLow,
+    zoneHigh: best.zoneHigh,
+    level: best.level,
+    touches: best.touches,
+    distancePct: best.distancePct,
+    zonePct: best.zonePct,
+    spanWeeks: best.spanWeeks,
+    volumeRatio: best.volumeRatio,
+    tone: best.kind === "support" ? "green" : "orange",
+    note: `${kindLabel} ${zoneLabel} • ${best.touches} touches • ${Math.abs(best.distancePct).toFixed(1)}% ${distanceSide} zone • ${best.volumeRatio.toFixed(1)}x zone volume`,
+  };
 }
 
 function computeMa200Candidate(points: Point[], interval: "d" | "w"): Ma200Candidate | null {
@@ -1778,6 +2014,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
   const athBreakouts: PickerItem[] = [];
   const threeMonthBreakouts: PickerItem[] = [];
   const ma200Proximity: PickerItem[] = [];
+  const macroSupportResistance: PickerItem[] = [];
   const divergences: PickerItem[] = [];
   const positiveLastEarnings: PickerItem[] = [];
   const strongEarningsGrowth: PickerItem[] = [];
@@ -1912,6 +2149,33 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
               tone: "orange",
               note: `3-month breakout • ${threeMonthBo.breakoutBarsAgo} bars ago`,
               _score: threeMonthBo.score + dynamicBoost(symbol),
+            });
+          }
+
+          const macroSupportResistanceCandidate = computeMacroSupportResistanceCandidate(pts);
+          if (macroSupportResistanceCandidate) {
+            const weeklyChartPoints = buildPickerChartPoints(
+              aggregatePoints(pts, "w").map((p) => ({
+                date: p.date,
+                close: p.close,
+                high: p.high,
+                low: p.low,
+                volume: p.volume,
+              })),
+              72
+            );
+
+            macroSupportResistance.push({
+              symbol,
+              chartPoints: weeklyChartPoints,
+              tone: macroSupportResistanceCandidate.tone,
+              note: macroSupportResistanceCandidate.note,
+              timeframe: "W",
+              dashboardHref: buildDashboardHref({
+                symbol,
+                timeframe: "W",
+              }),
+              _score: macroSupportResistanceCandidate.score + dynamicBoost(symbol),
             });
           }
 
@@ -2259,6 +2523,13 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
       description:
         "Stocks trading close to their Daily or Weekly MA200, with ranking favouring constructive MA200 behaviour over messy long-term weakness.",
       source: ma200Proximity,
+      take: 20,
+    }),
+    buildSection({
+      title: "Macro Support and Resistance Stocks",
+      description:
+        "Stocks near wider weekly support or resistance zones, ranked by repeated touches, distance to the zone, structure length and volume traded around the level.",
+      source: macroSupportResistance,
       take: 20,
     }),
     buildSection({
