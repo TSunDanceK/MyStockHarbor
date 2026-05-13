@@ -14,7 +14,6 @@ export function middleware(request: NextRequest) {
   const pathname = url.pathname;
   const search = url.search;
 
-  // Force canonical domain: https://www.mystockharbor.com
   if (host !== "www.mystockharbor.com") {
     return NextResponse.redirect(
       `https://www.mystockharbor.com${pathname}${search}`,
@@ -22,7 +21,6 @@ export function middleware(request: NextRequest) {
     );
   }
 
-  // Force HTTPS
   if (request.headers.get("x-forwarded-proto") === "http") {
     return NextResponse.redirect(
       `https://www.mystockharbor.com${pathname}${search}`,
