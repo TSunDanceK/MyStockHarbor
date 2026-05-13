@@ -8,7 +8,7 @@
           "value": "mystockharbour.com"
         }
       ],
-      "destination": "https://mystockharbor.com/:path*",
+      "destination": "https://www.mystockharbor.com/:path*",
       "permanent": true
     },
     {
@@ -19,7 +19,7 @@
           "value": "www.mystockharbour.com"
         }
       ],
-      "destination": "https://mystockharbor.com/:path*",
+      "destination": "https://www.mystockharbor.com/:path*",
       "permanent": true
     }
   ],
