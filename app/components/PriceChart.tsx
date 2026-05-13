@@ -921,7 +921,7 @@ export default function PriceChart(props: Props) {
             <a
               href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`}
               target="_blank"
-              rel="noopener noreferrer"
+              rel="noopener noreferrer sponsored nofollow"
               style={{
                 display: "inline-flex",
                 alignItems: "center",
