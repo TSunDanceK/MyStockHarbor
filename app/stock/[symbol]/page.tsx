@@ -309,7 +309,7 @@ export default async function StockPage({ params }: Props) {
         </div>
       </section>
 
-      <StockSymbolPageClient symbol={upper} />
+      <StockSymbolPageClient symbol={upper} aiAnalysis={null} />
 
       <style>{`
         .stockSeoIntro {
