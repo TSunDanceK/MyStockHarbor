@@ -956,38 +956,210 @@ export default async function PickerResultPage({
           line-height: 1.7;
         }
 
-        @media (max-width: 900px) {
-          .heroGrid {
+        @media (max-width: 980px) {
+          .heroTop {
             grid-template-columns: 1fr;
+          }
+
+          .scanPanel {
+            width: 100%;
           }
         }
 
-        @media (max-width: 640px) {
+        @media (max-width: 720px) {
+          .pickerResultPage,
+          .pickerResultPage * {
+            box-sizing: border-box;
+          }
+
+          .pickerResultPage {
+            overflow-x: hidden;
+          }
+
           .resultWrap {
-            padding: 18px 12px 44px;
+            width: 100%;
+            padding: 14px 10px 44px;
+            overflow-x: hidden;
+          }
+
+          .topNav {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 8px;
+            justify-content: stretch;
+            margin-bottom: 12px;
+          }
+
+          .topNav a {
+            width: 100%;
+            min-height: 44px;
+            padding: 10px 12px;
+            text-align: center;
           }
 
           .hero {
-            border-radius: 22px;
-            padding: 18px;
+            border-radius: 20px;
+            padding: 15px;
+          }
+
+          .heroTop {
+            gap: 16px;
+          }
+
+          .eyebrow {
+            max-width: 100%;
+            white-space: normal;
+            text-align: center;
+            line-height: 1.35;
           }
 
           .hero h1 {
-            font-size: 34px;
+            font-size: clamp(30px, 9vw, 38px);
+            line-height: 1.08;
+            letter-spacing: -0.045em;
+          }
+
+          .hero p {
+            font-size: 14px;
+            line-height: 1.62;
+          }
+
+          .scanPanel {
+            border-radius: 18px;
+            padding: 14px;
           }
 
           .metricGrid {
             grid-template-columns: 1fr;
           }
 
+          .metricCard {
+            gap: 12px;
+            padding: 10px 0;
+          }
+
+          .metricCard div {
+            font-size: 11px;
+            line-height: 1.35;
+          }
+
+          .metricCard strong {
+            font-size: 15px;
+            white-space: normal;
+            word-break: break-word;
+          }
+
           .signalTabs {
-            flex-wrap: nowrap;
-            overflow-x: auto;
-            padding-bottom: 4px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+            margin-top: 14px;
           }
 
           .signalTab {
-            white-space: nowrap;
+            width: 100%;
+            min-height: 44px;
+            padding: 9px 8px;
+            gap: 6px;
+            border-radius: 13px;
+            font-size: 12px;
+            line-height: 1.2;
+            text-align: center;
+            white-space: normal;
+          }
+
+          .explainer {
+            margin-top: 16px;
+            border-radius: 18px;
+            padding: 15px;
+          }
+
+          .explainer h2,
+          .resultsHeader h2 {
+            font-size: 23px;
+            line-height: 1.14;
+          }
+
+          .explainer p,
+          .resultsHeader p {
+            font-size: 14px;
+            line-height: 1.62;
+          }
+
+          .resultsHeader {
+            margin-top: 18px;
+            align-items: flex-start;
+          }
+
+          .resultsGrid {
+            grid-template-columns: minmax(0, 1fr);
+            gap: 12px;
+          }
+
+          .resultCard {
+            width: 100%;
+            min-width: 0;
+            border-radius: 18px;
+            padding: 13px;
+          }
+
+          .resultCardTop {
+            gap: 10px;
+          }
+
+          .symbolLine h3 {
+            font-size: 22px;
+          }
+
+          .badge {
+            max-width: 100%;
+            white-space: normal;
+            text-align: center;
+            line-height: 1.25;
+          }
+
+          .scorePill {
+            min-width: 54px;
+            min-height: 48px;
+            border-radius: 13px;
+          }
+
+          .scorePill strong {
+            font-size: 20px;
+          }
+
+          .note {
+            min-height: 0;
+            font-size: 13px;
+          }
+
+          .cardActions {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 8px;
+          }
+
+          .cardActions a {
+            width: 100%;
+            min-height: 42px;
+          }
+        }
+
+        @media (max-width: 390px) {
+          .resultWrap {
+            padding-left: 8px;
+            padding-right: 8px;
+          }
+
+          .hero,
+          .scanPanel,
+          .explainer,
+          .resultCard {
+            padding: 12px;
+          }
+
+          .signalTabs {
+            grid-template-columns: 1fr;
           }
         }
       `}</style>
