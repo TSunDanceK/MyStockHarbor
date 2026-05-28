@@ -225,7 +225,7 @@ function cleanSymbol(value: unknown) {
 
 function chartHrefFor(symbol: string, href?: string) {
   const base =
-    href && href.trim() ? href : `/?symbol=${encodeURIComponent(symbol)}`;
+    href && href.trim() ? href : `/stock/${encodeURIComponent(symbol)}`;
   return base.includes("#chart") ? base : `${base}#chart`;
 }
 
