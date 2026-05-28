@@ -1235,18 +1235,91 @@ export default async function StockEarningsPage({ params }: Props) {
           }
         }
 
-        @media (max-width: 640px) {
+        @media (max-width: 720px) {
+          .earningsPage,
+          .earningsPage * {
+            box-sizing: border-box;
+          }
+
           .earningsWrap {
-            padding: 18px 12px 42px;
+            width: 100%;
+            padding: 14px 10px 38px;
+            overflow-x: hidden;
+          }
+
+          .topLinks {
+            display: grid;
+            grid-template-columns: 1fr;
+            justify-content: stretch;
+            gap: 8px;
+            margin-bottom: 12px;
+          }
+
+          .topLinks a,
+          .actionLink {
+            width: 100%;
+            min-height: 44px;
+            padding: 10px 12px;
+            text-align: center;
           }
 
           .hero {
-            padding: 18px;
-            border-radius: 22px;
+            padding: 16px;
+            border-radius: 20px;
+            gap: 18px;
           }
 
           .hero h1 {
-            font-size: 34px;
+            margin-top: 10px;
+            font-size: clamp(29px, 9vw, 36px);
+            line-height: 1.08;
+            letter-spacing: -0.045em;
+          }
+
+          .hero p {
+            font-size: 14px;
+            line-height: 1.65;
+          }
+
+          .scoreCard,
+          .card {
+            width: 100%;
+            min-width: 0;
+            border-radius: 18px;
+            padding: 15px;
+          }
+
+          .scoreTop {
+            align-items: flex-start;
+          }
+
+          .scoreNumber {
+            margin-top: 18px;
+            font-size: 42px;
+          }
+
+          .scoreNeedle {
+            left: calc(${score.score}% - 8px);
+            width: 16px;
+            height: 22px;
+          }
+
+          .contentGrid {
+            gap: 16px;
+          }
+
+          .card h2 {
+            font-size: 23px;
+          }
+
+          .card h3 {
+            font-size: 20px;
+          }
+
+          .card p,
+          .bulletList li {
+            font-size: 14px;
+            line-height: 1.6;
           }
 
           .metricGrid,
@@ -1255,10 +1328,124 @@ export default async function StockEarningsPage({ params }: Props) {
             grid-template-columns: 1fr;
           }
 
+          .metricGrid {
+            gap: 10px;
+          }
+
+          .metricValue {
+            font-size: 22px;
+            word-break: break-word;
+          }
+
+          .metricHelpBubble {
+            position: fixed;
+            left: 12px;
+            right: 12px;
+            bottom: auto;
+            top: 92px;
+            transform: none;
+            width: auto;
+            max-width: none;
+          }
+
+          .metricHelpBubble::after {
+            display: none;
+          }
+
+          .trendDots {
+            gap: 12px;
+            justify-content: flex-start;
+          }
+
+          .trendDot {
+            min-width: 48px;
+          }
+
           .historyTable {
             display: block;
-            overflow-x: auto;
-            white-space: nowrap;
+            width: 100%;
+            border-spacing: 0;
+            margin-top: 12px;
+          }
+
+          .historyTable thead {
+            display: none;
+          }
+
+          .historyTable tbody,
+          .historyTable tr,
+          .historyTable td {
+            display: block;
+            width: 100%;
+          }
+
+          .historyTable tr {
+            margin-bottom: 12px;
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 16px;
+            background: rgba(255,255,255,0.035);
+            overflow: hidden;
+          }
+
+          .historyTable td {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            border: none;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+            border-radius: 0;
+            background: transparent;
+            padding: 11px 12px;
+            font-size: 13px;
+            text-align: right;
+          }
+
+          .historyTable td:first-child,
+          .historyTable td:last-child {
+            border-radius: 0;
+            border-left: none;
+            border-right: none;
+          }
+
+          .historyTable td:last-child {
+            border-bottom: none;
+          }
+
+          .historyTable td::before {
+            content: "";
+            flex: 0 0 auto;
+            color: rgba(203,213,225,0.70);
+            font-size: 11px;
+            font-weight: 950;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            text-align: left;
+          }
+
+          .historyTable td:nth-child(1)::before { content: "Quarter"; }
+          .historyTable td:nth-child(2)::before { content: "EPS"; }
+          .historyTable td:nth-child(3)::before { content: "EPS Est."; }
+          .historyTable td:nth-child(4)::before { content: "EPS Surprise"; }
+          .historyTable td:nth-child(5)::before { content: "Revenue"; }
+          .historyTable td:nth-child(6)::before { content: "Revenue Surprise"; }
+          .historyTable td:nth-child(7)::before { content: "Read"; }
+        }
+
+        @media (max-width: 380px) {
+          .earningsWrap {
+            padding-left: 8px;
+            padding-right: 8px;
+          }
+
+          .hero,
+          .scoreCard,
+          .card {
+            padding: 13px;
+          }
+
+          .scoreNumber {
+            font-size: 38px;
           }
         }
       `}</style>
