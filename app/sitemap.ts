@@ -8,7 +8,6 @@ const mainPages = [
   { path: "", changeFrequency: "daily" as const, priority: 1 },
   { path: "/learn", changeFrequency: "weekly" as const, priority: 0.9 },
   { path: "/pickers", changeFrequency: "daily" as const, priority: 0.9 },
-  { path: "/platforms", changeFrequency: "weekly" as const, priority: 0.8 },
   { path: "/utilities", changeFrequency: "weekly" as const, priority: 0.7 },
   { path: "/insights", changeFrequency: "daily" as const, priority: 0.85 },
   { path: "/about", changeFrequency: "monthly" as const, priority: 0.5 },
@@ -323,14 +322,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.69,
   }));
 
-  const etfEarningsEntries: MetadataRoute.Sitemap = uniqueEtfs.map((symbol) => ({
-    url: toAbsoluteUrl(`/stock/${encodeURIComponent(symbol.toUpperCase())}/earnings`),
-    lastModified: now,
-    changeFrequency: "weekly",
-    priority: 0.62,
-  }));
+  // ETFs do not have company earnings in the same way operating companies do,
+  // so do not push ETF earnings URLs into the sitemap.
+  // Those pages can still exist if visited, but they should not be advertised to Google
+  // as important indexable pages.
 
-  return [
+  const entries: MetadataRoute.Sitemap = [
     ...mainPageEntries,
     ...seoGuideEntries,
     ...insightEntries,
@@ -340,6 +337,22 @@ export default function sitemap(): MetadataRoute.Sitemap {
     ...stockEarningsEntries,
     ...etfEntries,
     ...etfNewsEntries,
-    ...etfEarningsEntries,
   ];
+
+  // Safety guard: only return clean canonical www HTTPS URLs once.
+  // This prevents accidental duplicate sitemap entries if a symbol appears in multiple lists.
+  const seen = new Set<string>();
+
+  return entries.filter((entry) => {
+    if (!entry.url.startsWith(`${baseUrl}/`) && entry.url !== baseUrl) {
+      return false;
+    }
+
+    if (seen.has(entry.url)) {
+      return false;
+    }
+
+    seen.add(entry.url);
+    return true;
+  });
 }
