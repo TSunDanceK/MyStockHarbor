@@ -2667,7 +2667,7 @@ export default async function StockNewsPage({ params }: Props) {
         <div className="newsTopUtilityRow" style={topUtilityRowStyle}>
           <div className="newsTopUtilityInner" style={topUtilityInnerStyle}>
             <Link
-              href={`/?symbol=${encodeURIComponent(upper)}`}
+              href={`/stock/${encodeURIComponent(upper)}`}
               className="newsTopBtn"
               style={topUtilityBtnStyle("gold")}
             >
