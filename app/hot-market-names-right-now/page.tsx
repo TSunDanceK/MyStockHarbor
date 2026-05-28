@@ -103,7 +103,7 @@ async function getHotMarketEntries(): Promise<{
         const chartBase =
           typeof item?.dashboardHref === "string" && item.dashboardHref.trim()
             ? item.dashboardHref
-            : `/?symbol=${encodeURIComponent(symbol)}`;
+            : `/stock/${encodeURIComponent(symbol)}`;
 
         return {
           symbol,
