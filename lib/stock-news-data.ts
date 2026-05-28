@@ -28,17 +28,32 @@ export type NewsItem = {
   pubDate: string | null;
   source: string | null;
   description: string | null;
+  /**
+   * Ticker symbols supplied by the upstream FMP stock-news endpoint.
+   * These are used as the strongest relevance signal before falling back
+   * to text/company-name matching.
+   */
+  fmpSymbols?: string[];
+  /** True when the item came back from a symbol-specific FMP request. */
+  fmpSymbolMatched?: boolean;
 };
 
 type FmpStockNewsItem = {
   symbol?: string;
+  symbols?: string[] | string;
+  ticker?: string;
+  tickers?: string[] | string;
   publishedDate?: string;
+  date?: string;
   publisher?: string;
   title?: string;
   image?: string;
   site?: string;
   text?: string;
+  content?: string;
+  description?: string;
   url?: string;
+  link?: string;
 };
 
 type ScoreTone = "green" | "yellow" | "red";
@@ -250,6 +265,48 @@ async function fetchCompanyName(symbol: string): Promise<string> {
   }
 }
 
+function extractFmpSymbols(item: FmpStockNewsItem, requestedSymbol: string): string[] {
+  const symbols = new Set<string>();
+
+  const addValue = (value: unknown) => {
+    if (Array.isArray(value)) {
+      value.forEach(addValue);
+      return;
+    }
+
+    if (typeof value !== "string") return;
+
+    value
+      .split(/[,.|\s]+/)
+      .map((part) => part.trim().toUpperCase())
+      .filter(Boolean)
+      .forEach((part) => symbols.add(part));
+  };
+
+  addValue(item.symbol);
+  addValue(item.symbols);
+  addValue(item.ticker);
+  addValue(item.tickers);
+
+  // The FMP request itself is symbol-specific. Some FMP responses include the
+  // symbol field, some do not. Keep the requested symbol as a trusted upstream
+  // relevance signal so display cards do not disappear after text filtering.
+  addValue(requestedSymbol);
+
+  return [...symbols];
+}
+
+function articleMatchesRequestedSymbol(item: NewsItem, symbol: string) {
+  const target = symbol.trim().toUpperCase();
+  if (!target) return false;
+
+  if (item.fmpSymbolMatched) return true;
+
+  return (item.fmpSymbols ?? [])
+    .map((value) => String(value).trim().toUpperCase())
+    .some((value) => value === target);
+}
+
 async function fetchFmpStockNews(symbol: string): Promise<NewsItem[]> {
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) return [];
@@ -276,25 +333,45 @@ async function fetchFmpStockNews(symbol: string): Promise<NewsItem[]> {
       const items = data
         .map((item: FmpStockNewsItem): NewsItem | null => {
           const title = typeof item.title === "string" ? item.title.trim() : "";
-          const link = typeof item.url === "string" ? item.url.trim() : "";
+          const link =
+            typeof item.url === "string" && item.url.trim()
+              ? item.url.trim()
+              : typeof item.link === "string"
+                ? item.link.trim()
+                : "";
 
           if (!title || !link) return null;
+
+          const fmpSymbols = extractFmpSymbols(item, symbol);
+          const descriptionSource =
+            typeof item.text === "string" && item.text.trim()
+              ? item.text
+              : typeof item.content === "string" && item.content.trim()
+                ? item.content
+                : typeof item.description === "string"
+                  ? item.description
+                  : "";
 
           return {
             title: decodeHtml(title),
             link,
             pubDate:
-              typeof item.publishedDate === "string" ? item.publishedDate : null,
+              typeof item.publishedDate === "string" && item.publishedDate.trim()
+                ? item.publishedDate
+                : typeof item.date === "string" && item.date.trim()
+                  ? item.date
+                  : null,
             source:
               typeof item.site === "string" && item.site.trim()
                 ? item.site.trim()
                 : typeof item.publisher === "string" && item.publisher.trim()
                   ? item.publisher.trim()
                   : "FMP News",
-            description:
-              typeof item.text === "string" && item.text.trim()
-                ? cleanRssDescription(item.text.slice(0, 650))
-                : null,
+            description: descriptionSource.trim()
+              ? cleanRssDescription(descriptionSource.slice(0, 650))
+              : null,
+            fmpSymbols,
+            fmpSymbolMatched: fmpSymbols.includes(symbol.toUpperCase()),
           };
         })
         .filter((item): item is NewsItem => Boolean(item));
@@ -384,6 +461,10 @@ function getCleanCompanyName(companyName: string) {
 }
 
 function isClearlyAboutRequestedCompany(item: NewsItem, symbol: string, companyName: string) {
+  if (articleMatchesRequestedSymbol(item, symbol)) {
+    return true;
+  }
+
   const rawText = `${item.title} ${item.description ?? ""} ${item.source ?? ""}`.toLowerCase();
   const text = rawText.replace(/[^\w\s:$.-]/g, " ").replace(/\s+/g, " ");
 
@@ -410,7 +491,7 @@ function isClearlyAboutRequestedCompany(item: NewsItem, symbol: string, companyN
     return true;
   }
 
-  if (cleanedCompany && cleanedCompany.length >= 6 && text.includes(cleanedCompany)) {
+  if (cleanedCompany && cleanedCompany.length >= 4 && text.includes(cleanedCompany)) {
     return true;
   }
 
@@ -744,9 +825,19 @@ function dedupeNews(items: NewsItem[]): NewsItem[] {
 }
 
 function rankNews(news: NewsItem[], symbol = "", companyName = "") {
-  const relevantNews =
+  const symbolConfirmedNews = symbol
+    ? news.filter((item) => articleMatchesRequestedSymbol(item, symbol))
+    : [];
+
+  const textRelevantNews =
     symbol && companyName
       ? news.filter((item) => isClearlyAboutRequestedCompany(item, symbol, companyName))
+      : news;
+
+  const relevantNews = symbolConfirmedNews.length
+    ? symbolConfirmedNews
+    : textRelevantNews.length
+      ? textRelevantNews
       : news;
 
   return dedupeNews(
@@ -2146,8 +2237,9 @@ async function buildStockNewsBaseData(
       : "FMP did not return recent earnings-specific headlines. Use the structured earnings snapshot instead.",
   };
 
-  const highValueNews = rankedNews.filter((item) => !isLowValueNewsItem(item));
-  const fallbackNews = rankedNews.filter((item) => isLowValueNewsItem(item));
+  const displayNewsPool = rankedNews.length ? rankedNews : dedupeNews(news);
+  const highValueNews = displayNewsPool.filter((item) => !isLowValueNewsItem(item));
+  const fallbackNews = displayNewsPool.filter((item) => isLowValueNewsItem(item));
 
 const newestFirst = (items: NewsItem[]) =>
   [...items].sort((a, b) => {
@@ -2299,7 +2391,7 @@ const getCachedStockNewsBaseData = unstable_cache(
 
     return buildStockNewsBaseData(parsed.symbol, parsed.options);
   },
-  ["msh-stock-news-base-data-v22-fmp-primary"],
+  ["msh-stock-news-base-data-v23-fmp-symbol-trust"],
   {
     revalidate: 60,
   }
