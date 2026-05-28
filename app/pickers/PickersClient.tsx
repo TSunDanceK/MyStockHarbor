@@ -348,7 +348,7 @@ function createEmptySignalRecord(symbol: string, item?: PickerItem): SignalRecor
     preferredIndicator: item?.indicator,
     dashboardHref:
       item?.dashboardHref ??
-      `/?symbol=${encodeURIComponent(cleanSymbol)}#chart`,
+      `/stock/${encodeURIComponent(cleanSymbol)}#chart`,
   };
 }
 
@@ -1095,7 +1095,7 @@ const res = await fetch(`/api/pickers?t=${Date.now()}`, {
         buyCount: getBuySignalCount(record),
         dashboardHref: record.dashboardHref?.includes("#chart")
           ? record.dashboardHref
-          : `${record.dashboardHref ?? `/?symbol=${encodeURIComponent(record.symbol)}`}#chart`,
+          : `${record.dashboardHref ?? `/stock/${encodeURIComponent(record.symbol)}`}#chart`,
       }))
       .filter((item) => item.buyCount > 0)
       .sort((a, b) => {
@@ -1127,7 +1127,7 @@ const res = await fetch(`/api/pickers?t=${Date.now()}`, {
         sellCount: getSellSignalCount(record),
         dashboardHref: record.dashboardHref?.includes("#chart")
           ? record.dashboardHref
-          : `${record.dashboardHref ?? `/?symbol=${encodeURIComponent(record.symbol)}`}#chart`,
+          : `${record.dashboardHref ?? `/stock/${encodeURIComponent(record.symbol)}`}#chart`,
       }))
       .filter((item) => item.sellCount > 0)
       .sort((a, b) => {
@@ -1973,7 +1973,7 @@ const res = await fetch(`/api/pickers?t=${Date.now()}`, {
                   <a
                     key={item.symbol}
                     href={toChartHref(
-                     item.dashboardHref ?? `/?symbol=${encodeURIComponent(item.symbol)}`
+                     item.dashboardHref ?? `/stock/${encodeURIComponent(item.symbol)}`
                      )}
                     style={{
                       display: "block",
@@ -2101,7 +2101,7 @@ const res = await fetch(`/api/pickers?t=${Date.now()}`, {
                       >
 <a
 href={toChartHref(
-  item.dashboardHref ?? `/?symbol=${encodeURIComponent(item.symbol)}`
+  item.dashboardHref ?? `/stock/${encodeURIComponent(item.symbol)}`
 )}
   onClick={(e) => e.stopPropagation()}
   style={{
@@ -2317,7 +2317,7 @@ href={toChartHref(
                       >
                         <a
                           href={toChartHref(
-                          it.dashboardHref ?? `/?symbol=${encodeURIComponent(it.symbol)}`
+                          it.dashboardHref ?? `/stock/${encodeURIComponent(it.symbol)}`
                            )}
                           style={{
                             display: "block",
@@ -2393,7 +2393,7 @@ href={toChartHref(
 
                         <a
                           href={toChartHref(
-                          it.dashboardHref ?? `/?symbol=${encodeURIComponent(it.symbol)}`
+                          it.dashboardHref ?? `/stock/${encodeURIComponent(it.symbol)}`
                           )}
                           style={{
                             display: "inline-flex",
