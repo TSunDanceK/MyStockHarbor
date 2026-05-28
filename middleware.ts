@@ -28,6 +28,19 @@ export function middleware(request: NextRequest) {
     );
   }
 
+  const symbolParam = url.searchParams.get("symbol");
+  const cleanSymbol = String(symbolParam || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9.-]/g, "");
+
+  if (pathname === "/" && cleanSymbol) {
+    return NextResponse.redirect(
+      `https://www.mystockharbor.com/stock/${encodeURIComponent(cleanSymbol)}`,
+      308
+    );
+  }
+
   return NextResponse.next();
 }
 
