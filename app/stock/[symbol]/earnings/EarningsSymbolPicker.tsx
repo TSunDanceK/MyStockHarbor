@@ -150,7 +150,37 @@ export default function EarningsSymbolPicker({
   }
 
   return (
-    <div ref={wrapRef} style={{ marginTop: 20, maxWidth: 660 }}>
+    <div ref={wrapRef} className="earningsSymbolPicker" style={{ marginTop: 20, maxWidth: 660 }}>
+      <style>{`
+        @media (max-width: 720px) {
+          .earningsSymbolPicker {
+            width: 100%;
+            max-width: none !important;
+          }
+
+          .earningsSymbolPickerRow {
+            display: grid !important;
+            grid-template-columns: 1fr;
+            gap: 9px !important;
+            width: 100%;
+          }
+
+          .earningsSymbolPickerInputWrap {
+            width: 100% !important;
+            max-width: none !important;
+          }
+
+          .earningsSymbolPickerInput {
+            min-height: 48px !important;
+            font-size: 16px !important;
+          }
+
+          .earningsSymbolPickerButton {
+            width: 100%;
+            min-height: 48px !important;
+          }
+        }
+      `}</style>
       <div
         style={{
           fontSize: 12,
@@ -176,6 +206,7 @@ export default function EarningsSymbolPicker({
       </div>
 
       <div
+        className="earningsSymbolPickerRow"
         style={{
           display: "flex",
           gap: 10,
@@ -183,8 +214,9 @@ export default function EarningsSymbolPicker({
           flexWrap: "wrap",
         }}
       >
-        <div style={{ position: "relative", width: 430, maxWidth: "100%" }}>
+        <div className="earningsSymbolPickerInputWrap" style={{ position: "relative", width: 430, maxWidth: "100%" }}>
           <input
+            className="earningsSymbolPickerInput"
             value={query}
             onChange={(event) => {
               setQuery(event.target.value.toUpperCase());
@@ -271,6 +303,7 @@ export default function EarningsSymbolPicker({
         </div>
 
         <button
+          className="earningsSymbolPickerButton"
           type="button"
           onClick={goToEarningsPage}
           disabled={!canGo}
