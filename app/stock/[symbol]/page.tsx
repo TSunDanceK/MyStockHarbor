@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { Metadata } from "next";
 
 import StockSymbolPageClient from "./StockSymbolPageClient";
@@ -242,270 +241,136 @@ export default async function StockPage({ params }: Props) {
         }}
       />
 
-      <section
-        className="stockSeoIntro"
-        aria-label={`${upper} stock analysis summary`}
+      <aside
+        className="stockSeoSnapshot"
+        aria-label={`${upper} cached stock snapshot`}
       >
-        <div className="stockSeoInner">
-          <div className="stockSeoCopy">
-            <p className="stockSeoEyebrow">Stock analysis dashboard</p>
-            <h1>{upper} Stock Analysis</h1>
-            <p className="stockSeoLead">
-              Review {upper} stock using chart structure, moving averages, RSI,
-              MACD, trend context, latest news links and earnings data. The live
-              dashboard below is designed for research and education, not
-              financial advice.
-            </p>
-
-            <nav
-              className="stockSeoNav"
-              aria-label={`${upper} stock page navigation`}
-            >
-              <Link href={`/stock/${upper}`}>Overview</Link>
-              <Link href={`/stock/${upper}/news`}>News</Link>
-              <Link href={`/stock/${upper}/earnings`}>Earnings</Link>
-            </nav>
-          </div>
-
-          <div
-            className="stockSeoCard"
-            aria-label={`${upper} cached trend snapshot`}
-          >
-            <div>
-              <span>Latest cached close</span>
-              <strong>{formatPrice(snapshot.latestClose)}</strong>
-              {snapshot.latestDate ? (
-                <small>Snapshot date: {snapshot.latestDate}</small>
-              ) : null}
-            </div>
-
-            <div className="stockSeoMetricGrid">
-              <div>
-                <span>1M move</span>
-                <strong>{formatPct(snapshot.oneMonthChangePct)}</strong>
-              </div>
-              <div>
-                <span>3M move</span>
-                <strong>{formatPct(snapshot.threeMonthChangePct)}</strong>
-              </div>
-              <div>
-                <span>50D avg</span>
-                <strong>{formatPrice(snapshot.ma50)}</strong>
-              </div>
-              <div>
-                <span>200D avg</span>
-                <strong>{formatPrice(snapshot.ma200)}</strong>
-              </div>
-            </div>
-
-            <p>{snapshot.trendLabel}</p>
-          </div>
+        <div>
+          <span>Latest cached close</span>
+          <strong>{formatPrice(snapshot.latestClose)}</strong>
+          {snapshot.latestDate ? <small>{snapshot.latestDate}</small> : null}
         </div>
 
-        <div className="stockSeoNote">
-          <strong>How to read this page:</strong> {snapshot.maSummary} Use the
-          overview with the linked news and earnings pages to compare price
-          action with fresh company context.
+        <div>
+          <span>1M move</span>
+          <strong>{formatPct(snapshot.oneMonthChangePct)}</strong>
         </div>
-      </section>
+
+        <div>
+          <span>3M move</span>
+          <strong>{formatPct(snapshot.threeMonthChangePct)}</strong>
+        </div>
+
+        <div>
+          <span>50D avg</span>
+          <strong>{formatPrice(snapshot.ma50)}</strong>
+        </div>
+
+        <div>
+          <span>200D avg</span>
+          <strong>{formatPrice(snapshot.ma200)}</strong>
+        </div>
+
+        <p>
+          <strong>Snapshot:</strong> {snapshot.maSummary}
+        </p>
+      </aside>
 
       <StockSymbolPageClient symbol={upper} aiAnalysis={null} />
 
       <style>{`
-        .stockSeoIntro {
-          background: #020617;
-          color: #e5e7eb;
-          padding: 34px 16px 10px;
-          border-bottom: 1px solid rgba(148, 163, 184, 0.14);
-        }
-
-        .stockSeoInner {
-          width: min(1180px, 100%);
-          margin: 0 auto;
+        .stockSeoSnapshot {
+          width: min(996px, calc(100% - 24px));
+          margin: 18px auto -18px;
+          padding: 14px;
           display: grid;
-          grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.55fr);
-          gap: 18px;
-          align-items: stretch;
-        }
-
-        .stockSeoCopy,
-        .stockSeoCard,
-        .stockSeoNote {
-          border: 1px solid rgba(148, 163, 184, 0.16);
-          background: linear-gradient(135deg, rgba(15, 23, 42, 0.88), rgba(2, 6, 23, 0.92));
-          box-shadow: 0 24px 70px rgba(0, 0, 0, 0.32);
-          border-radius: 24px;
-        }
-
-        .stockSeoCopy {
-          padding: 24px;
-        }
-
-        .stockSeoEyebrow {
-          margin: 0 0 10px;
-          color: #38bdf8;
-          font-size: 12px;
-          font-weight: 950;
-          letter-spacing: 0.14em;
-          text-transform: uppercase;
-        }
-
-        .stockSeoCopy h1 {
-          margin: 0;
-          color: #f8fafc;
-          font-size: clamp(36px, 6vw, 64px);
-          line-height: 0.98;
-          letter-spacing: -0.06em;
-        }
-
-        .stockSeoLead {
-          max-width: 760px;
-          margin: 16px 0 0;
-          color: #cbd5e1;
-          font-size: 16px;
-          line-height: 1.75;
-        }
-
-        .stockSeoNav {
-          display: flex;
-          flex-wrap: wrap;
+          grid-template-columns: repeat(5, minmax(0, 1fr));
           gap: 10px;
-          margin-top: 20px;
-        }
-
-        .stockSeoNav a {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          min-height: 40px;
-          padding: 10px 14px;
-          border-radius: 999px;
-          border: 1px solid rgba(148, 163, 184, 0.24);
-          background: rgba(15, 23, 42, 0.78);
+          align-items: stretch;
+          border: 1px solid rgba(148, 163, 184, 0.16);
+          border-radius: 18px;
+          background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(2, 6, 23, 0.96));
+          box-shadow: 0 18px 50px rgba(0, 0, 0, 0.25);
           color: #e5e7eb;
-          font-size: 13px;
-          font-weight: 900;
-          text-decoration: none;
+          position: relative;
+          z-index: 2;
         }
 
-        .stockSeoNav a:hover {
-          border-color: rgba(56, 189, 248, 0.58);
-          background: rgba(14, 165, 233, 0.12);
+        .stockSeoSnapshot div {
+          min-width: 0;
+          padding: 12px;
+          border-radius: 14px;
+          background: rgba(2, 6, 23, 0.48);
+          border: 1px solid rgba(148, 163, 184, 0.12);
         }
 
-        .stockSeoCard {
-          padding: 20px;
-        }
-
-        .stockSeoCard span,
-        .stockSeoMetricGrid span {
+        .stockSeoSnapshot span {
           display: block;
           color: #94a3b8;
-          font-size: 11px;
+          font-size: 10px;
           font-weight: 950;
           letter-spacing: 0.1em;
           text-transform: uppercase;
         }
 
-        .stockSeoCard strong {
-          display: block;
-          margin-top: 7px;
-          color: #f8fafc;
-          font-size: 28px;
-          line-height: 1.1;
-        }
-
-        .stockSeoCard small {
+        .stockSeoSnapshot strong {
           display: block;
           margin-top: 6px;
-          color: #64748b;
-          font-size: 12px;
-          font-weight: 800;
-        }
-
-        .stockSeoMetricGrid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 10px;
-          margin-top: 18px;
-        }
-
-        .stockSeoMetricGrid div {
-          padding: 12px;
-          border-radius: 16px;
-          background: rgba(2, 6, 23, 0.58);
-          border: 1px solid rgba(148, 163, 184, 0.12);
-        }
-
-        .stockSeoMetricGrid strong {
-          font-size: 18px;
-        }
-
-        .stockSeoCard p {
-          margin: 16px 0 0;
-          color: #cbd5e1;
-          font-size: 13px;
-          line-height: 1.6;
-          font-weight: 800;
-        }
-
-        .stockSeoNote {
-          width: min(1180px, 100%);
-          margin: 12px auto 0;
-          padding: 13px 16px;
-          color: #cbd5e1;
-          font-size: 13px;
-          line-height: 1.6;
-        }
-
-        .stockSeoNote strong {
           color: #f8fafc;
+          font-size: 18px;
+          line-height: 1.1;
+          overflow-wrap: anywhere;
         }
 
-        @media (max-width: 860px) {
-          .stockSeoIntro {
-            padding: 18px 10px 8px;
+        .stockSeoSnapshot small {
+          display: block;
+          margin-top: 5px;
+          color: #64748b;
+          font-size: 11px;
+          font-weight: 800;
+        }
+
+        .stockSeoSnapshot p {
+          grid-column: 1 / -1;
+          margin: 0;
+          padding: 11px 12px;
+          border-radius: 14px;
+          background: rgba(15, 23, 42, 0.58);
+          border: 1px solid rgba(148, 163, 184, 0.12);
+          color: #cbd5e1;
+          font-size: 12px;
+          line-height: 1.55;
+        }
+
+        .stockSeoSnapshot p strong {
+          display: inline;
+          margin: 0;
+          color: #f8fafc;
+          font-size: inherit;
+          line-height: inherit;
+        }
+
+        @media (max-width: 900px) {
+          .stockSeoSnapshot {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            margin: 12px auto -10px;
           }
 
-          .stockSeoInner {
+          .stockSeoSnapshot div:first-child {
+            grid-column: 1 / -1;
+          }
+        }
+
+        @media (max-width: 520px) {
+          .stockSeoSnapshot {
+            width: calc(100% - 18px);
             grid-template-columns: 1fr;
-            gap: 12px;
+            padding: 10px;
+            border-radius: 16px;
           }
 
-          .stockSeoCopy,
-          .stockSeoCard,
-          .stockSeoNote {
-            border-radius: 18px;
-          }
-
-          .stockSeoCopy,
-          .stockSeoCard {
-            padding: 15px;
-          }
-
-          .stockSeoCopy h1 {
-            font-size: clamp(32px, 11vw, 46px);
-            line-height: 1.04;
-          }
-
-          .stockSeoLead {
-            font-size: 14px;
-            line-height: 1.65;
-          }
-
-          .stockSeoNav {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 8px;
-          }
-
-          .stockSeoNav a {
-            width: 100%;
-            min-height: 44px;
-          }
-
-          .stockSeoMetricGrid {
-            grid-template-columns: 1fr;
+          .stockSeoSnapshot div {
+            padding: 11px;
           }
         }
       `}</style>
