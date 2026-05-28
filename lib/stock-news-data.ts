@@ -323,11 +323,43 @@ function isVideoOrLowQualitySource(item: NewsItem) {
   ].some((term) => combined.includes(term));
 }
 
-async function fetchNews(symbol: string, _companyName: string): Promise<NewsItem[]> {
-  const fmpNews = await fetchFmpStockNews(symbol);
+async function fetchGoogleNews(symbol: string, companyName: string): Promise<NewsItem[]> {
+  const cleanCompany = getCleanCompanyName(companyName);
+  const query = cleanCompany
+    ? `${cleanCompany} ${symbol.toUpperCase()} stock`
+    : `${symbol.toUpperCase()} stock`;
+
+  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(
+    query,
+  )}&hl=en-GB&gl=GB&ceid=GB:en`;
+
+  try {
+    const res = await fetch(url, {
+      next: { revalidate: 900 },
+      headers: {
+        "user-agent":
+          "Mozilla/5.0 (compatible; MyStockHarborBot/1.0; +https://www.mystockharbor.com)",
+      },
+    });
+
+    if (!res.ok) return [];
+
+    const xml = await res.text();
+    return parseRss(xml).filter((item) => !isVideoOrLowQualitySource(item));
+  } catch {
+    return [];
+  }
+}
+
+async function fetchNews(symbol: string, companyName: string): Promise<NewsItem[]> {
+  const [fmpNews, googleNews] = await Promise.all([
+    fetchFmpStockNews(symbol),
+    fetchGoogleNews(symbol, companyName),
+  ]);
 
   return mergeNewsPools([
     fmpNews.filter((item) => !isVideoOrLowQualitySource(item)),
+    googleNews,
   ]).slice(0, 50);
 }
 
@@ -351,13 +383,17 @@ function isEarningsNewsItem(item: NewsItem) {
   ]);
 }
 
-async function fetchEarningsNews(symbol: string, _companyName: string): Promise<NewsItem[]> {
-  const fmpNews = await fetchFmpStockNews(symbol);
+async function fetchEarningsNews(symbol: string, companyName: string): Promise<NewsItem[]> {
+  const [fmpNews, googleNews] = await Promise.all([
+    fetchFmpStockNews(symbol),
+    fetchGoogleNews(symbol, companyName),
+  ]);
 
   return mergeNewsPools([
     fmpNews
       .filter((item) => !isVideoOrLowQualitySource(item))
       .filter(isEarningsNewsItem),
+    googleNews.filter(isEarningsNewsItem),
   ]).slice(0, 30);
 }
 
@@ -410,11 +446,16 @@ function isClearlyAboutRequestedCompany(item: NewsItem, symbol: string, companyN
     return true;
   }
 
-  if (cleanedCompany && cleanedCompany.length >= 6 && text.includes(cleanedCompany)) {
+  if (cleanedCompany && cleanedCompany.length >= 5 && text.includes(cleanedCompany)) {
     return true;
   }
 
   if (companyWords.length >= 2 && companyWords.every((word) => text.includes(word))) {
+    return true;
+  }
+
+  const primaryCompanyWord = companyWords[0];
+  if (primaryCompanyWord && primaryCompanyWord.length >= 5 && text.includes(primaryCompanyWord)) {
     return true;
   }
 
