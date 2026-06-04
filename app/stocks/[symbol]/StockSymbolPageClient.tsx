@@ -3,8 +3,8 @@
 import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
 import type { AiStockAnalysis } from "@/lib/ai-stock-analysis";
-import StockPriceChart from "./StockPriceChart";
-import StockTickerJump from "./StockTickerJump";
+import StockPriceChart from "../../stock/[symbol]/StockPriceChart";
+import StockTickerJump from "../../stock/[symbol]/StockTickerJump";
 
 type Quote = {
   symbol: string;
