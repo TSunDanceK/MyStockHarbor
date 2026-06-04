@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type { AiStockAnalysis } from "@/lib/ai-stock-analysis";
 import StockPriceChart from "./StockPriceChart";
 import StockTickerJump from "./StockTickerJump";
