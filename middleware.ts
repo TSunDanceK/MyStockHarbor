@@ -14,6 +14,22 @@ export function middleware(request: NextRequest) {
   const pathname = url.pathname;
   const search = url.search;
 
+  const oldStocksMatch = pathname.match(/^\/stocks\/([^/?#]+)\/?$/i);
+
+  if (oldStocksMatch) {
+    const cleanSymbol = oldStocksMatch[1]
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9.-]/g, "");
+
+    if (cleanSymbol) {
+      return NextResponse.redirect(
+        `https://www.mystockharbor.com/stock/${encodeURIComponent(cleanSymbol)}${search}`,
+        308
+      );
+    }
+  }
+
   if (host !== "www.mystockharbor.com") {
     return NextResponse.redirect(
       `https://www.mystockharbor.com${pathname}${search}`,
