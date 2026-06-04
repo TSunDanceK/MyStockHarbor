@@ -1380,7 +1380,7 @@ if (!cancelled) setPriceLoading(false);
         <div className="analysisTopUtilityRow" style={topUtilityRowStyle}>
   <div className="analysisTopUtilityInner" style={topUtilityInnerStyle}>
     <Link
-      href={`/stock/${encodeURIComponent(symbol)}`}
+      href={`/?symbol=${encodeURIComponent(symbol)}`}
       className="analysisTopBtn"
       style={topUtilityBtnStyle("gold")}
     >
@@ -1941,7 +1941,7 @@ if (!cancelled) setPriceLoading(false);
                     }}
                   >
                     <Link
-                      href={`/stock/${encodeURIComponent(symbol)}`}
+                      href={`/?symbol=${encodeURIComponent(symbol)}`}
                       style={{
                         display: "inline-flex",
                         alignItems: "center",
