@@ -119,10 +119,15 @@ function toneDot(tone?: string) {
   return "rgba(255,255,255,0.35)";
 }
 
-function toChartHref(href: string) {
-  if (!href) return "/#chart";
-  if (href.includes("#chart")) return href;
-  return `${href}#chart`;
+function toChartHref(href: string, symbol?: string) {
+  const cleanedSymbol = String(symbol || "").trim().toUpperCase();
+  const fallback = cleanedSymbol
+    ? `/?symbol=${encodeURIComponent(cleanedSymbol)}`
+    : "/";
+  const raw = href && href.trim() ? href.trim() : "";
+  const base = raw.startsWith("/?") ? raw : fallback;
+
+  return base.includes("#chart") ? base : `${base}#chart`;
 }
 
 function getFilterLabel(key: FilterKey) {
@@ -346,9 +351,7 @@ function createEmptySignalRecord(symbol: string, item?: PickerItem): SignalRecor
     strongEarningsGrowth: false,
     preferredTimeframe: item?.timeframe,
     preferredIndicator: item?.indicator,
-    dashboardHref:
-      item?.dashboardHref ??
-      `/stock/${encodeURIComponent(cleanSymbol)}#chart`,
+    dashboardHref: toChartHref(item?.dashboardHref ?? "", cleanSymbol),
   };
 }
 
@@ -1093,9 +1096,7 @@ const res = await fetch(`/api/pickers?t=${Date.now()}`, {
       .map((record) => ({
         symbol: record.symbol,
         buyCount: getBuySignalCount(record),
-        dashboardHref: record.dashboardHref?.includes("#chart")
-          ? record.dashboardHref
-          : `${record.dashboardHref ?? `/stock/${encodeURIComponent(record.symbol)}`}#chart`,
+        dashboardHref: toChartHref(record.dashboardHref ?? "", record.symbol),
       }))
       .filter((item) => item.buyCount > 0)
       .sort((a, b) => {
@@ -1125,9 +1126,7 @@ const res = await fetch(`/api/pickers?t=${Date.now()}`, {
       .map((record) => ({
         symbol: record.symbol,
         sellCount: getSellSignalCount(record),
-        dashboardHref: record.dashboardHref?.includes("#chart")
-          ? record.dashboardHref
-          : `${record.dashboardHref ?? `/stock/${encodeURIComponent(record.symbol)}`}#chart`,
+        dashboardHref: toChartHref(record.dashboardHref ?? "", record.symbol),
       }))
       .filter((item) => item.sellCount > 0)
       .sort((a, b) => {
@@ -1972,9 +1971,7 @@ const res = await fetch(`/api/pickers?t=${Date.now()}`, {
                 {customMatches.map((item) => (
                   <a
                     key={item.symbol}
-                    href={toChartHref(
-                     item.dashboardHref ?? `/stock/${encodeURIComponent(item.symbol)}`
-                     )}
+                    href={toChartHref(item.dashboardHref ?? "", item.symbol)}
                     style={{
                       display: "block",
                       minWidth: 0,
@@ -2100,9 +2097,7 @@ const res = await fetch(`/api/pickers?t=${Date.now()}`, {
                         }}
                       >
 <a
-href={toChartHref(
-  item.dashboardHref ?? `/stock/${encodeURIComponent(item.symbol)}`
-)}
+href={toChartHref(item.dashboardHref ?? "", item.symbol)}
   onClick={(e) => e.stopPropagation()}
   style={{
     display: "inline-flex",
@@ -2316,9 +2311,7 @@ href={toChartHref(
                         }}
                       >
                         <a
-                          href={toChartHref(
-                          it.dashboardHref ?? `/stock/${encodeURIComponent(it.symbol)}`
-                           )}
+                          href={toChartHref(it.dashboardHref ?? "", it.symbol)}
                           style={{
                             display: "block",
                             minWidth: 0,
@@ -2392,9 +2385,7 @@ href={toChartHref(
                         </a>
 
                         <a
-                          href={toChartHref(
-                          it.dashboardHref ?? `/stock/${encodeURIComponent(it.symbol)}`
-                          )}
+                          href={toChartHref(it.dashboardHref ?? "", it.symbol)}
                           style={{
                             display: "inline-flex",
                             alignItems: "center",
