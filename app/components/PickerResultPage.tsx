@@ -224,8 +224,10 @@ function cleanSymbol(value: unknown) {
 }
 
 function chartHrefFor(symbol: string, href?: string) {
-  const base =
-    href && href.trim() ? href : `/stock/${encodeURIComponent(symbol)}`;
+  const fallback = `/?symbol=${encodeURIComponent(symbol)}`;
+  const raw = href && href.trim() ? href.trim() : "";
+  const base = raw.startsWith("/?") ? raw : fallback;
+
   return base.includes("#chart") ? base : `${base}#chart`;
 }
 
