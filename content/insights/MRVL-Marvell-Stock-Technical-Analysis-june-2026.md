@@ -33,7 +33,7 @@ The latest catalyst is news-driven. Jensen Huang’s Computex comments turned Ma
 
 Earnings also matter here. Marvell’s latest quarter showed record revenue, strong data-center contribution and better forward guidance, so this is not just a technical squeeze without a business backdrop.
 
-The risk is that a lot of good news has been pulled forward very quickly. This now fits better with the [hot market names right now](/hot-market-names-right-now) setup than a normal support bounce, because traders are likely chasing momentum, managing FOMO and waiting to see where the first serious dip gets bought.
+The risk is that a lot of good news has been pulled forward very quickly. This now fits better with the broader [stock pickers](https://www.mystockharbor.com/pickers) page than a normal support bounce, because traders are likely chasing momentum, managing FOMO and waiting to see where the first serious dip gets bought.
 
 ## Levels to watch
 
