@@ -958,7 +958,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   const [news, setNews] = useState<NewsPayload | null>(null);
   const [earningsSummary, setEarningsSummary] = useState<StockEarningsSummary | null>(null);
 
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const theme = "dark" as const;
   const [expanded, setExpanded] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -985,7 +985,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
       yellowBg: isDark ? "rgba(234,179,8,0.10)" : "rgba(250,204,21,0.14)",
       yellowText: isDark ? "#fde68a" : "#854d0e",
     };
-  }, [theme]);
+  }, []);
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth <= 768);
@@ -4216,29 +4216,7 @@ onKeyDown={(e) => {
             <SmallNavLink href="/pickers">Stock Pickers</SmallNavLink>
             <SmallNavLink href="/utilities">Calculators</SmallNavLink>
 
-            <button
-              type="button"
-              onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
-              className="msh-top-nav-btn"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                minHeight: 42,
-                padding: "9px 13px",
-                borderRadius: 14,
-                border: `1px solid ${COLORS.controlBorder}`,
-                background: COLORS.controlBg,
-                color: COLORS.controlFg,
-                fontWeight: 900,
-                fontSize: 14,
-                cursor: "pointer",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
-            </button>
+            <SmallNavLink href="/insights">Insights</SmallNavLink>
           </div>
         </div>
 
