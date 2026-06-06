@@ -1379,13 +1379,13 @@ if (!cancelled) setPriceLoading(false);
       <div className="wrap">
         <div className="analysisTopUtilityRow" style={topUtilityRowStyle}>
   <div className="analysisTopUtilityInner" style={topUtilityInnerStyle}>
-<a
-  href={`/?symbol=${encodeURIComponent(symbol)}`}
-  className="analysisTopBtn"
-  style={topUtilityBtnStyle("gold")}
->
-  📈 Dashboard
-</a>
+    <Link
+      href={`/?symbol=${encodeURIComponent(symbol)}`}
+      className="analysisTopBtn"
+      style={topUtilityBtnStyle("gold")}
+    >
+      📈 Dashboard
+    </Link>
 
     <Link
       href="/platforms"
@@ -1940,25 +1940,25 @@ if (!cancelled) setPriceLoading(false);
                       flexWrap: "wrap",
                     }}
                   >
-<a
-  href={`/?symbol=${encodeURIComponent(symbol)}`}
-  style={{
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "12px 16px",
-    borderRadius: 14,
-    border: "1px solid rgba(59,130,246,0.45)",
-    background:
-      "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(37,99,235,0.12))",
-    color: "#eff6ff",
-    textDecoration: "none",
-    fontWeight: 900,
-    whiteSpace: "nowrap",
-  }}
->
-  Open {symbol} in Dashboard →
-</a>
+                    <Link
+                      href={`/?symbol=${encodeURIComponent(symbol)}`}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: "12px 16px",
+                        borderRadius: 14,
+                        border: "1px solid rgba(59,130,246,0.45)",
+                        background:
+                          "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(37,99,235,0.12))",
+                        color: "#eff6ff",
+                        textDecoration: "none",
+                        fontWeight: 900,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Open {symbol} in Dashboard →
+                    </Link>
 
                     <Link
                       href={`/stock/${encodeURIComponent(symbol)}/news`}
