@@ -349,7 +349,7 @@ export default async function InsightsPage() {
               alignItems: "start",
             }}
           >
-            <div>
+            <div className="insightsPostsColumn">
               {posts.length === 0 ? (
                 <div
                   style={{
@@ -461,6 +461,7 @@ export default async function InsightsPage() {
             </div>
 
             <aside
+              className="insightsYouTubeColumn"
               style={{
                 position: "sticky",
                 top: 24,
@@ -683,6 +684,15 @@ export default async function InsightsPage() {
           @media (max-width: 980px) {
             .insightsSplit {
               grid-template-columns: 1fr !important;
+            }
+
+            .insightsYouTubeColumn {
+              order: -1;
+              position: static !important;
+            }
+
+            .insightsPostsColumn {
+              order: 1;
             }
           }
         `}</style>
