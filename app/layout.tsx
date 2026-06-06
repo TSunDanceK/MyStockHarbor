@@ -88,6 +88,45 @@ export default function RootLayout({
             `,
           }}
         />
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+              .site-footer-main-grid {
+                grid-template-columns: minmax(280px, 2fr) minmax(140px, 1fr) minmax(180px, 1fr);
+              }
+
+              .site-footer-platform-links {
+                grid-template-columns: repeat(2, minmax(120px, max-content));
+              }
+
+              @media (max-width: 720px) {
+                .site-footer {
+                  padding-left: 16px !important;
+                  padding-right: 16px !important;
+                }
+
+                .site-footer-main-grid {
+                  grid-template-columns: 1fr;
+                  gap: 18px !important;
+                }
+
+                .site-footer-platform-links {
+                  grid-template-columns: 1fr;
+                }
+              }
+
+              @media (max-width: 480px) {
+                .site-footer {
+                  padding: 20px 14px 14px !important;
+                }
+
+                .site-footer-main-grid {
+                  gap: 20px !important;
+                }
+              }
+            `,
+          }}
+        />
       </head>
 
       <body
@@ -109,6 +148,7 @@ export default function RootLayout({
           <div style={{ flex: 1 }}>{children}</div>
 
           <footer
+            className="site-footer"
             style={{
               borderTop: "1px solid rgba(255,255,255,0.12)",
               background: "#0b1220",
@@ -155,9 +195,9 @@ export default function RootLayout({
               </div>
 
               <div
+                className="site-footer-main-grid"
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "minmax(280px, 2fr) minmax(140px, 1fr) minmax(180px, 1fr)",
                   gap: "16px 28px",
                   alignItems: "start",
                 }}
@@ -180,9 +220,9 @@ export default function RootLayout({
                   </div>
 
                   <div
+                    className="site-footer-platform-links"
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "repeat(2, minmax(120px, max-content))",
                       gap: "4px 28px",
                     }}
                   >
