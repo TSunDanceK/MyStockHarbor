@@ -33,7 +33,6 @@ RULES:
     - /top-stocks-with-sell-signals
     - /bullish-bearish-divergence-stocks
     - /stocks-near-200-day-moving-average
-    - /hot-market-names-right-now
     - /stocks-down-20-from-all-time-highs
   - If none clearly fits, link to /pickers instead.
 
