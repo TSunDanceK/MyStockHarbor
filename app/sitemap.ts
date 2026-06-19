@@ -68,6 +68,13 @@ const seoGuides = [
   "/plays",
   "/plays/descending-triangles",
   "/plays/bull-flags",
+
+  // beginner setup explainer guides (real built pages, previously missing
+  // from the sitemap - found via June 2026 SEO audit)
+  "/breakout-stocks",
+  "/oversold-stocks",
+  "/bullish-divergence-stocks",
+  "/bearish-divergence-stocks",
 ];
 
 const coreMegaCaps = [
@@ -275,6 +282,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   const insightEntries: MetadataRoute.Sitemap = insightPosts.map((post) => ({
     url: toAbsoluteUrl(`/insights/${post.slug}`),
+    // Use the post's own frontmatter date instead of "now". Insight posts are
+    // frozen snapshots tied to their original publish date (see CLAUDE.md),
+    // so the sitemap should reflect that instead of claiming every post was
+    // just modified today on every build.
     lastModified: post.date ? new Date(post.date) : now,
     changeFrequency: "monthly",
     priority: 0.72,
