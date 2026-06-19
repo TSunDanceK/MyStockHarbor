@@ -1,7 +1,7 @@
 ---
-title: "IONQ Stock Reclaims $53 Resistance"
+title: "IONQ Stock Technical Analysis: Support & Resistance"
 date: "2026-05-11"
-excerpt: "IonQ has broken above $53 after strong earnings, putting that level in focus as new support to defend."
+excerpt: "IonQ technical analysis: support and resistance levels after the stock reclaimed $53, now the key level to defend."
 symbol: "IONQ"
 timeframe: "d"
 chartBars: 250

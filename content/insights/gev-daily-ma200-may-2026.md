@@ -1,7 +1,7 @@
 ---
-title: "GEV Stock Tests AI Power Trend Support"
+title: "GEV Stock Technical Analysis: 200-Day MA Support"
 date: "2026-05-04"
-excerpt: "GE Vernova remains a leadership name, but the real structural support sits near the 200-day trend zone around $680."
+excerpt: "GE Vernova technical analysis: daily 200-day moving average support near $680 as the stock extends above trend."
 symbol: "GEV"
 timeframe: "d"
 chartBars: 250
