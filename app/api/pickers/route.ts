@@ -130,6 +130,8 @@ type PickersPayload = {
   estimatedApiCalls: number;
   sections: PickerSection[];
   signalRecords: SignalRecord[];
+  degradedSymbolCount?: number;
+  degradedSymbolPct?: number;
 };
 
 type CachedPickersPayload = {
@@ -231,6 +233,14 @@ const PICKERS_REDIS_KEY = "msh:pickers:v8:macro-sr-cache";
 const PICKERS_REDIS_TTL_SECONDS = 6 * 60;
 const PICKERS_LOCK_KEY = "msh:pickers:v8:macro-sr-cache:lock";
 const PICKERS_LOCK_TTL_SECONDS = 120;
+
+// If more than this fraction of the universe fails to fetch history during a
+// build, the resulting payload is considered degraded (e.g. an ATH-breakout
+// style section can legitimately drop to zero even though real matches
+// exist, simply because the symbols that would have qualified failed to
+// fetch). In that case we prefer serving the last known-good cache instead
+// of publishing a thin payload as if it were complete.
+const DEGRADED_BUILD_FAILURE_RATIO = 0.15;
 
 const EARNINGS_REDIS_KEY_PREFIX = "msh:pickers:earnings:v1:";
 const EARNINGS_QUEUE_KEY = "msh:pickers:earnings:v1:queue";
@@ -2020,6 +2030,13 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
   const strongEarningsGrowth: PickerItem[] = [];
   const signalRecords: SignalRecord[] = [];
 
+  // Track symbols that failed to fetch usable history (empty result or a
+  // thrown error) so we can detect a degraded build instead of silently
+  // shipping a payload where sections like ATH breakouts may have lost
+  // legitimate matches purely due to upstream fetch failures.
+  let failedSymbolCount = 0;
+  const failedSymbols: string[] = [];
+
   const isDynamicUniverse = (sym: string) => dynamicUniverseSet.has(sym);
   const dynamicBoost = (sym: string) => (isDynamicUniverse(sym) ? 10 : 0);
 
@@ -2028,7 +2045,11 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
       limit(async () => {
         try {
           const pts = await fetchHistory(symbol, days);
-          if (!pts.length) return;
+          if (!pts.length) {
+            failedSymbolCount++;
+            failedSymbols.push(symbol);
+            return;
+          }
 
           const earningsRows = await readCachedFmpEarnings(symbol);
 
@@ -2450,11 +2471,30 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
             isDynamicUniverse: dynamicName,
           });
         } catch {
-          // ignore per-symbol failures
+          failedSymbolCount++;
+          failedSymbols.push(symbol);
+          // Per-symbol failures are expected at low volume (delisted tickers,
+          // transient upstream errors); only the aggregate count/ratio is
+          // used downstream to detect a systemically degraded build.
         }
       })
     )
   );
+
+  if (failedSymbolCount > 0) {
+    const ratio = universe.length > 0 ? failedSymbolCount / universe.length : 0;
+    const severity = ratio >= DEGRADED_BUILD_FAILURE_RATIO ? "warn" : "info";
+
+    // Visible in Vercel function logs. Previously these failures were fully
+    // silent, which made it impossible to tell a real "no matches" result
+    // apart from a build where matching symbols simply failed to fetch.
+    console[severity === "warn" ? "warn" : "log"](
+      `[pickers] ${failedSymbolCount}/${universe.length} symbols (${(ratio * 100).toFixed(1)}%) failed to fetch usable history this build.` +
+        (severity === "warn"
+          ? ` Exceeds degraded-build threshold (${(DEGRADED_BUILD_FAILURE_RATIO * 100).toFixed(0)}%). Sample: ${failedSymbols.slice(0, 10).join(", ")}`
+          : "")
+    );
+  }
 
   const takeTop = (arr: PickerItem[], n: number) => {
     const sorted = [...arr].sort((a, b) => (b._score ?? 0) - (a._score ?? 0));
@@ -2589,6 +2629,8 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
     estimatedApiCalls: process.env.FMP_API_KEY ? universe.length * 2 + 1 : universe.length + 1,
     sections,
     signalRecords: filteredSignalRecords,
+    degradedSymbolCount: failedSymbolCount,
+    degradedSymbolPct: universe.length > 0 ? Number(((failedSymbolCount / universe.length) * 100).toFixed(1)) : 0,
   };
 }
 
@@ -2633,6 +2675,30 @@ export async function GET(req: NextRequest) {
   try {
     const origin = originFromReq(req);
     const data = await buildPickersPayload(origin, forceRefresh);
+
+    // If this build looks systemically degraded (a large share of the
+    // universe failed to fetch), prefer the last known-good cache over
+    // publishing a thin payload that could silently zero out sections like
+    // ATH breakouts even when real matches exist. Falls through to the
+    // fresh (degraded) data only if no usable cache is available.
+    const isDegraded =
+      typeof data.degradedSymbolPct === "number" &&
+      data.degradedSymbolPct / 100 >= DEGRADED_BUILD_FAILURE_RATIO;
+
+    if (isDegraded && cached?.data && !forceRefresh) {
+      console.warn(
+        `[pickers] Build degraded (${data.degradedSymbolPct}% symbol failure) — serving last known-good cache instead.`
+      );
+
+      memo = { ts: now, data: cached.data };
+
+      return NextResponse.json(cached.data, {
+        headers: {
+          "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+          "X-Pickers-Degraded-Fallback": "true",
+        },
+      });
+    }
 
     memo = { ts: now, data };
     await writePickersCache(data);
