@@ -7,7 +7,13 @@ export function middleware(request: NextRequest) {
   const isLocalhost =
     host.includes("localhost") || host.startsWith("127.0.0.1");
 
-  if (isLocalhost) {
+  // Vercel preview deployments run on *.vercel.app hosts, not
+  // www.mystockharbor.com. Without this check, the host-redirect rule
+  // below would bounce every preview URL straight to production,
+  // making PR previews unusable.
+  const isVercelPreview = process.env.VERCEL_ENV === "preview";
+
+  if (isLocalhost || isVercelPreview) {
     return NextResponse.next();
   }
 
