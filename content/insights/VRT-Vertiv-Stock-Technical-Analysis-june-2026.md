@@ -28,7 +28,7 @@ This move is news-driven rather than purely technical. Vertiv closed its acquisi
 
 Earnings are not behind this move. Vertiv's next report isn't until July 29, so this is a name being bought on strategic positioning and sector tailwinds rather than fresh financial results. Analyst sentiment backs that read, with a Strong Buy consensus and price targets sitting above the current price.
 
-Sector context matters here too. Vertiv sits in the same AI infrastructure basket as cooling and power names that have been in focus all year, and continued strength in that group lines up with the broader [hot market names](https://www.mystockharbor.com/hot-market-names-right-now) traders are watching for momentum exposure.
+Sector context matters here too. Vertiv sits in the same AI infrastructure basket as cooling and power names that have been in focus all year, and continued strength in that group lines up with the broader [stocks with unusual volume](https://www.mystockharbor.com/stocks-with-unusual-volume) traders are watching for momentum exposure.
 
 ## Levels to watch
 
