@@ -1,7 +1,7 @@
 ---
-title: "ISRG Stock Tests 200-Week Support"
+title: "ISRG Stock Technical Analysis: Weekly 200-MA Support"
 date: "2026-05-04"
-excerpt: "Intuitive Surgical is testing major 200-week moving average support after previously bouncing from this zone toward $600."
+excerpt: "Intuitive Surgical technical analysis: weekly 200-MA support test at $445–$453 after a sharp pullback."
 symbol: "ISRG"
 timeframe: "w"
 chartBars: 250
