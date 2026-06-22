@@ -27,56 +27,6 @@ export const metadata: Metadata = {
 };
 
 
-type SiteNavItem = {
-  href: string;
-  label: string;
-  active?: boolean;
-  stockNav?: "earnings" | "analysis" | "news";
-};
-
-const SITE_NAV_LINKS: SiteNavItem[] = [
-  { href: "/", label: "Dashboard" },
-  { href: "/learn", label: "Learn", active: true },
-  { href: "/platforms", label: "Platforms" },
-  { href: "/pickers", label: "Stock Pickers" },
-  { href: "/utilities", label: "Calculators" },
-  { href: "/insights", label: "Insights" },
-  { href: "/stock/AAPL/earnings", label: "Earnings", stockNav: "earnings" },
-  { href: "/stock/AAPL", label: "Stock Analysis", stockNav: "analysis" },
-  { href: "/stock/AAPL/news", label: "News Page", stockNav: "news" },
-];
-
-function TopSiteNav() {
-  return (
-    <>
-      <nav className="msh-site-nav">
-        <Link href="/" className="msh-site-nav-logo" aria-label="MyStockHarbor home">
-          <img src="/logo.png" alt="MyStockHarbor" />
-        </Link>
-
-        <div className="msh-site-navlinks" aria-label="Primary navigation">
-          {SITE_NAV_LINKS.map((item) => (
-            <Link
-              key={item.label}
-              href={item.href}
-              data-msh-stock-nav={item.stockNav}
-              className={`msh-site-navlink${item.active ? " active" : ""}`}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </div>
-      </nav>
-
-      <script dangerouslySetInnerHTML={{ __html: stockNavHydrationScript() }} />
-    </>
-  );
-}
-
-function stockNavHydrationScript() {
-  return `(function(){try{var raw=window.localStorage&&window.localStorage.getItem("msh_last_symbol");var symbol=String(raw||"").trim().toUpperCase().replace(/[^A-Z0-9.-]/g,"");if(!symbol)symbol="AAPL";var encoded=encodeURIComponent(symbol);var links=document.querySelectorAll("[data-msh-stock-nav]");for(var i=0;i<links.length;i++){var el=links[i];var page=el.getAttribute("data-msh-stock-nav");if(page==="earnings")el.setAttribute("href","/stock/"+encoded+"/earnings");else if(page==="analysis")el.setAttribute("href","/stock/"+encoded);else if(page==="news")el.setAttribute("href","/stock/"+encoded+"/news");}}catch(e){}})();`;
-}
-
 function siteNavCss(wrapMaxWidth: number) {
   return `
     .wrap {
@@ -85,105 +35,13 @@ function siteNavCss(wrapMaxWidth: number) {
       padding: 24px;
     }
 
-    .msh-site-nav {
-      position: sticky;
-      top: 0;
-      z-index: 30;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 12px 24px;
-      background: rgba(10,15,26,0.90);
-      backdrop-filter: blur(14px);
-      border-bottom: 1px solid #1a2336;
-    }
-
-    .msh-site-nav-logo {
-      display: flex;
-      align-items: center;
-      margin-right: 4px;
-      text-decoration: none;
-      flex: 0 0 auto;
-    }
-
-    .msh-site-nav-logo img {
-      height: 38px;
-      width: auto;
-      display: block;
-    }
-
-    .msh-site-navlinks {
-      display: flex;
-      align-items: center;
-      gap: 2px;
-      margin-left: auto;
-      min-width: 0;
-    }
-
-    .msh-site-navlink {
-      color: #8a97ad;
-      font-size: 13.5px;
-      font-weight: 600;
-      text-decoration: none;
-      padding: 7px 12px;
-      border-radius: 8px;
-      transition: color .15s, background .15s, transform .15s, filter .15s;
-      white-space: nowrap;
-    }
-
-    .msh-site-navlink:hover {
-      color: #eaf0fa;
-      background: #141b2b;
-    }
-
-    .msh-site-navlink.active {
-      color: #eaf0fa;
-      background: #141b2b;
-      border: 1px solid #222c40;
-    }
-
     a:hover {
       filter: brightness(1.05);
-      transform: translateY(-1px);
     }
 
     @media (max-width: 760px) {
       .wrap {
         padding: 16px !important;
-      }
-
-      .msh-site-nav {
-        padding: 10px 12px 8px;
-        gap: 8px;
-        align-items: stretch;
-        flex-direction: column;
-      }
-
-      .msh-site-nav-logo {
-        align-self: flex-start;
-      }
-
-      .msh-site-nav-logo img {
-        height: 34px;
-      }
-
-      .msh-site-navlinks {
-        margin-left: 0;
-        overflow-x: auto;
-        gap: 4px;
-        padding-bottom: 2px;
-        scrollbar-width: none;
-        -webkit-overflow-scrolling: touch;
-      }
-
-      .msh-site-navlinks::-webkit-scrollbar {
-        display: none;
-      }
-
-      .msh-site-navlink {
-        flex: 0 0 auto;
-        font-size: 12.5px;
-        padding: 8px 10px;
       }
     }
   `;
@@ -204,8 +62,6 @@ export default function LearnPage() {
         minHeight: "100vh",
       }}
     >
-      <TopSiteNav />
-
       <div className="wrap">
         <div style={{ display: "grid", gap: 12 }}>
           <div style={{ minWidth: 0 }}>
