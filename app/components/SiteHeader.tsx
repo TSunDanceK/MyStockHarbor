@@ -87,24 +87,9 @@ export default function SiteHeader() {
         isActive: (path) => path === "/" || path === "/dashboard",
       },
       {
-        label: "Learn",
-        href: "/learn",
-        isActive: (path) => path === "/learn" || path.startsWith("/learn/"),
-      },
-      {
-        label: "Platforms",
-        href: "/platforms",
-        isActive: (path) => path === "/platforms",
-      },
-      {
-        label: "Stock Pickers",
+        label: "Pickers",
         href: "/pickers",
         isActive: (path) => path === "/pickers",
-      },
-      {
-        label: "Calculators",
-        href: "/utilities",
-        isActive: (path) => path === "/utilities",
       },
       {
         label: "Insights",
@@ -118,16 +103,31 @@ export default function SiteHeader() {
         isActive: (path) => /^\/stock\/[^/]+\/earnings$/.test(path),
       },
       {
+        label: "News",
+        href: stockHref(lastSymbol, "news"),
+        stockNav: "news",
+        isActive: (path) => /^\/stock\/[^/]+\/news$/.test(path),
+      },
+      {
         label: "Stock Analysis",
         href: stockHref(lastSymbol, "analysis"),
         stockNav: "analysis",
         isActive: (path) => /^\/stock\/[^/]+$/.test(path),
       },
       {
-        label: "News Page",
-        href: stockHref(lastSymbol, "news"),
-        stockNav: "news",
-        isActive: (path) => /^\/stock\/[^/]+\/news$/.test(path),
+        label: "Platforms",
+        href: "/platforms",
+        isActive: (path) => path === "/platforms",
+      },
+      {
+        label: "Calculators",
+        href: "/utilities",
+        isActive: (path) => path === "/utilities",
+      },
+      {
+        label: "Learn",
+        href: "/learn",
+        isActive: (path) => path === "/learn" || path.startsWith("/learn/"),
       },
     ],
     [lastSymbol]
