@@ -9,8 +9,7 @@ const DEFAULT_SYMBOL = "AAPL";
 type NavTile = {
   icon: string;
   label: string;
-  sublabel: string;
-  // href is either a static string or a function that receives the last symbol
+  sublabel: string | ((symbol: string) => string);
   href: string | ((symbol: string) => string);
   accent: string;
   bg: string;
