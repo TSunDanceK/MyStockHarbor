@@ -334,113 +334,54 @@ function smallVisitBtn(): React.CSSProperties {
   };
 }
 
-const topNavIconWrapStyle: React.CSSProperties = {
-  fontSize: 15,
-  lineHeight: 1,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
+type SiteNavItem = {
+  href: string;
+  label: string;
+  active?: boolean;
+  stockNav?: "earnings" | "analysis" | "news";
 };
 
-function topNavBtnStyle(
-  type: "dashboard" | "learn" | "pickers" | "calculators"
-): React.CSSProperties {
-  if (type === "dashboard") {
-    return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-      minHeight: 42,
-      padding: "9px 13px",
-      borderRadius: 14,
-      border: "1px solid rgba(250,204,21,0.45)",
-      background:
-        "linear-gradient(135deg, rgba(250,204,21,0.20), rgba(202,138,4,0.10))",
-      color: "#fefce8",
-      textDecoration: "none",
-      fontWeight: 900,
-      fontSize: 14,
-      whiteSpace: "nowrap",
-      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-      transition:
-        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-    };
-  }
+const SITE_NAV_LINKS: SiteNavItem[] = [
+  { href: "/", label: "Dashboard" },
+  { href: "/learn", label: "Learn" },
+  { href: "/platforms", label: "Platforms", active: true },
+  { href: "/pickers", label: "Stock Pickers" },
+  { href: "/utilities", label: "Calculators" },
+  { href: "/insights", label: "Insights" },
+  { href: "/stock/AAPL/earnings", label: "Earnings", stockNav: "earnings" },
+  { href: "/stock/AAPL", label: "Stock Analysis", stockNav: "analysis" },
+  { href: "/stock/AAPL/news", label: "News Page", stockNav: "news" },
+];
 
-  if (type === "learn") {
-    return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-      minHeight: 42,
-      padding: "9px 13px",
-      borderRadius: 14,
-      border: "1px solid rgba(59,130,246,0.45)",
-      background:
-        "linear-gradient(135deg, rgba(59,130,246,0.20), rgba(37,99,235,0.10))",
-      color: "#eff6ff",
-      textDecoration: "none",
-      fontWeight: 900,
-      fontSize: 14,
-      whiteSpace: "nowrap",
-      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-      transition:
-        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-    };
-  }
+function TopSiteNav() {
+  return (
+    <>
+      <nav className="msh-site-nav">
+        <Link href="/" className="msh-site-nav-logo" aria-label="MyStockHarbor home">
+          <img src="/logo.png" alt="MyStockHarbor" />
+        </Link>
 
-  if (type === "pickers") {
-    return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-      minHeight: 42,
-      padding: "9px 13px",
-      borderRadius: 14,
-      border: "1px solid rgba(239,68,68,0.45)",
-      background:
-        "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.10))",
-      color: "#fef2f2",
-      textDecoration: "none",
-      fontWeight: 900,
-      fontSize: 14,
-      whiteSpace: "nowrap",
-      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-      transition:
-        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-    };
-  }
+        <div className="msh-site-navlinks" aria-label="Primary navigation">
+          {SITE_NAV_LINKS.map((item) => (
+            <Link
+              key={item.label}
+              href={item.href}
+              data-msh-stock-nav={item.stockNav}
+              className={`msh-site-navlink${item.active ? " active" : ""}`}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      </nav>
 
-  return {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    minHeight: 42,
-    padding: "9px 13px",
-    borderRadius: 14,
-    border: "1px solid rgba(168,85,247,0.45)",
-    background:
-      "linear-gradient(135deg, rgba(168,85,247,0.20), rgba(139,92,246,0.10))",
-    color: "#faf5ff",
-    textDecoration: "none",
-    fontWeight: 900,
-    fontSize: 14,
-    whiteSpace: "nowrap",
-    boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-    transition:
-      "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-  };
+      <script dangerouslySetInnerHTML={{ __html: stockNavHydrationScript() }} />
+    </>
+  );
 }
 
-function topNavIcon(type: "dashboard" | "learn" | "pickers" | "calculators") {
-  if (type === "dashboard") return "📈";
-  if (type === "learn") return "📘";
-  if (type === "pickers") return "📊";
-  return "🧮";
+function stockNavHydrationScript() {
+  return `(function(){try{var raw=window.localStorage&&window.localStorage.getItem("msh_last_symbol");var symbol=String(raw||"").trim().toUpperCase().replace(/[^A-Z0-9.-]/g,"");if(!symbol)symbol="AAPL";var encoded=encodeURIComponent(symbol);var links=document.querySelectorAll("[data-msh-stock-nav]");for(var i=0;i<links.length;i++){var el=links[i];var page=el.getAttribute("data-msh-stock-nav");if(page==="earnings")el.setAttribute("href","/stock/"+encoded+"/earnings");else if(page==="analysis")el.setAttribute("href","/stock/"+encoded);else if(page==="news")el.setAttribute("href","/stock/"+encoded+"/news");}}catch(e){}})();`;
 }
 
 
@@ -580,58 +521,10 @@ export default function PlatformsClient({
         minHeight: "100vh",
       }}
     >
+      <TopSiteNav />
+
       <div className="wrap">
         <div style={{ display: "grid", gap: 14 }}>
-          <div
-            className="topNavRow"
-            style={{
-              display: "flex",
-              justifyContent: "flex-end",
-              alignItems: "flex-start",
-              gap: 10,
-              flexWrap: "wrap",
-            }}
-          >
-            <Link href="/" style={topNavBtnStyle("dashboard")}>
-              <span aria-hidden="true" style={topNavIconWrapStyle}>
-                {topNavIcon("dashboard")}
-              </span>
-              <span className="topNavText">Dashboard</span>
-            </Link>
-
-            <Link href="/pickers" style={topNavBtnStyle("pickers")}>
-              <span aria-hidden="true" style={topNavIconWrapStyle}>
-                {topNavIcon("pickers")}
-              </span>
-              <span className="topNavText">
-                <span className="topNavShowDesktop">Stock Pickers</span>
-                <span className="topNavShowMobile">Pickers</span>
-              </span>
-            </Link>
-
-            <Link
-              href="/learn"
-              style={topNavBtnStyle("learn")}
-              className="topNavIconOnlyMobile"
-            >
-              <span aria-hidden="true" style={topNavIconWrapStyle}>
-                {topNavIcon("learn")}
-              </span>
-              <span className="topNavText topNavHideOnMobile">Learn</span>
-            </Link>
-
-            <Link
-              href="/utilities"
-              style={topNavBtnStyle("calculators")}
-              className="topNavIconOnlyMobile"
-            >
-              <span aria-hidden="true" style={topNavIconWrapStyle}>
-                {topNavIcon("calculators")}
-              </span>
-              <span className="topNavText topNavHideOnMobile">Calculators</span>
-            </Link>
-          </div>
-
           <div style={{ minWidth: 0 }}>
             <div
               style={{
@@ -1454,12 +1347,66 @@ export default function PlatformsClient({
           padding: 24px;
         }
 
-        .topNavShowDesktop {
-          display: inline;
+        .msh-site-nav {
+          position: sticky;
+          top: 0;
+          z-index: 30;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 12px 24px;
+          background: rgba(10,15,26,0.90);
+          backdrop-filter: blur(14px);
+          border-bottom: 1px solid #1a2336;
         }
 
-        .topNavShowMobile {
-          display: none;
+        .msh-site-nav-logo {
+          display: flex;
+          align-items: center;
+          margin-right: 4px;
+          text-decoration: none;
+          flex: 0 0 auto;
+        }
+
+        .msh-site-nav-logo img {
+          height: 38px;
+          width: auto;
+          display: block;
+        }
+
+        .msh-site-navlinks {
+          display: flex;
+          align-items: center;
+          gap: 2px;
+          margin-left: auto;
+          min-width: 0;
+        }
+
+        .msh-site-navlink {
+          color: #8a97ad;
+          font-size: 13.5px;
+          font-weight: 600;
+          text-decoration: none;
+          padding: 7px 12px;
+          border-radius: 8px;
+          transition: color .15s, background .15s, transform .15s, filter .15s;
+          white-space: nowrap;
+        }
+
+        .msh-site-navlink:hover {
+          color: #eaf0fa;
+          background: #141b2b;
+        }
+
+        .msh-site-navlink.active {
+          color: #eaf0fa;
+          background: #141b2b;
+          border: 1px solid #222c40;
+        }
+
+        a:hover {
+          filter: brightness(1.05);
+          transform: translateY(-1px);
         }
 
         .platformMobileOnly {
@@ -1489,39 +1436,38 @@ export default function PlatformsClient({
             padding: 16px !important;
           }
 
-          .topNavRow {
-            display: grid !important;
-            grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.05fr) 60px 60px !important;
-            gap: 8px !important;
-            align-items: stretch !important;
+          .msh-site-nav {
+            padding: 10px 12px 8px;
+            gap: 8px;
+            align-items: stretch;
+            flex-direction: column;
           }
 
-          .topNavRow a {
-            width: 100% !important;
-            min-width: 0 !important;
-            min-height: 40px !important;
-            padding: 8px 10px !important;
-            font-size: 12px !important;
-            border-radius: 12px !important;
-            gap: 6px !important;
-            justify-content: center !important;
+          .msh-site-nav-logo {
+            align-self: flex-start;
           }
 
-          .topNavIconOnlyMobile {
-            padding-left: 0 !important;
-            padding-right: 0 !important;
+          .msh-site-nav-logo img {
+            height: 34px;
           }
 
-          .topNavHideOnMobile {
-            display: none !important;
+          .msh-site-navlinks {
+            margin-left: 0;
+            overflow-x: auto;
+            gap: 4px;
+            padding-bottom: 2px;
+            scrollbar-width: none;
+            -webkit-overflow-scrolling: touch;
           }
 
-          .topNavShowDesktop {
-            display: none !important;
+          .msh-site-navlinks::-webkit-scrollbar {
+            display: none;
           }
 
-          .topNavShowMobile {
-            display: inline !important;
+          .msh-site-navlink {
+            flex: 0 0 auto;
+            font-size: 12.5px;
+            padding: 8px 10px;
           }
 
           .platformHeroTitle {
