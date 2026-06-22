@@ -100,8 +100,8 @@ const FILTER_DEFS: FilterDef[] = [
   { key: "belowMA50", label: "Below MA50", tone: "yellow" },
   { key: "aboveMA200", label: "Above MA200", tone: "yellow" },
   { key: "belowMA200", label: "Below MA200", tone: "yellow" },
-{ key: "dailyMa200Proximity", label: "Near 200-Day MA (Daily)", tone: "yellow" },
-{ key: "weeklyMa200Proximity", label: "Near 200-Day MA (Weekly)", tone: "yellow" },
+  { key: "dailyMa200Proximity", label: "Near 200-Day MA (Daily)", tone: "yellow" },
+  { key: "weeklyMa200Proximity", label: "Near 200-Day MA (Weekly)", tone: "yellow" },
   { key: "bullishRsiDivergence", label: "Bullish RSI Divergence", tone: "green" },
   { key: "bearishRsiDivergence", label: "Bearish RSI Divergence", tone: "red" },
   { key: "bullishMacdDivergence", label: "Bullish MACD Divergence", tone: "green" },
@@ -145,7 +145,6 @@ function getFilterLabel(key: FilterKey) {
 
 function matchedSignalsForRecord(record: SignalRecord): FilterKey[] {
   const out: FilterKey[] = [];
-
   if (record.oversold) out.push("oversold");
   if (record.overbought) out.push("overbought");
   if (record.buyTheDip) out.push("buyTheDip");
@@ -164,37 +163,28 @@ function matchedSignalsForRecord(record: SignalRecord): FilterKey[] {
   if (record.bearishMacdDivergence) out.push("bearishMacdDivergence");
   if (record.positiveLastEarnings) out.push("positiveLastEarnings");
   if (record.strongEarningsGrowth) out.push("strongEarningsGrowth");
-
   return out;
 }
 
-function chooseCardTone(
-  record: SignalRecord,
-  matchedFilters: FilterKey[]
-): PickerTone | undefined {
+function chooseCardTone(record: SignalRecord, matchedFilters: FilterKey[]): PickerTone | undefined {
   for (const key of matchedFilters) {
     const def = FILTER_DEFS.find((f) => f.key === key);
     if (def?.tone === "green") return "green";
   }
-
   for (const key of matchedFilters) {
     const def = FILTER_DEFS.find((f) => f.key === key);
     if (def?.tone === "red") return "red";
   }
-
   for (const key of matchedFilters) {
     const def = FILTER_DEFS.find((f) => f.key === key);
     if (def?.tone === "orange") return "orange";
   }
-
   return record.tone;
 }
 
 function getBuySignalCount(record: SignalRecord) {
   if (!record.aboveMA200) return 0;
-
   let count = 0;
-
   if (record.oversold) count += 1;
   if (record.buyTheDip) count += 1;
   if (record.breakout) count += 1;
@@ -204,127 +194,49 @@ function getBuySignalCount(record: SignalRecord) {
   if (record.aboveMA200) count += 1;
   if (record.bullishRsiDivergence) count += 1;
   if (record.bullishMacdDivergence) count += 1;
-
   return count;
 }
 
 function getSellSignalCount(record: SignalRecord) {
   let count = 0;
-
   if (record.overbought) count += 1;
   if (record.belowMA50) count += 1;
   if (record.belowMA200) count += 1;
   if (record.bearishRsiDivergence) count += 1;
   if (record.bearishMacdDivergence) count += 1;
-
   return count;
 }
 
 function getHeaderHelp(title: string) {
-  if (title.includes("Buy Signals")) {
-    return "These highlight stocks showing multiple bullish technical conditions at the same time. Some may already be strong movers, so always review the chart before entering.";
-  }
-
-  if (title.includes("Sell Signals")) {
-    return "These highlight stocks showing multiple bearish technical conditions. Traders often review these for pullback risk, weaker trends, or possible short-side weakness.";
-  }
-
-  if (title.includes("Oversold")) {
-    return "These are ranked oversold setups, not just raw matches. The list leans toward stronger oversold readings, better liquidity, sharper exhaustion moves and cleaner rebound potential.";
-  }
-
-  if (title.includes("Best Trend Score")) {
-    return "These stocks have the strongest current trend structure based on price relative to MA50 and MA200, moving average alignment, and positive MACD momentum.";
-  }
-
-  if (title.includes("Positive Last Earnings")) {
-    return "These stocks rank well on the latest completed earnings report, giving preference to EPS beats, revenue beats, positive EPS and recent reports.";
-  }
-
-  if (title.includes("Strong Earnings Growth")) {
-    return "These stocks rank well on year-over-year earnings improvement, recent positive EPS consistency, revenue growth and earnings beat history.";
-  }
-
-  if (title.includes("Overbought")) {
-    return "These are ranked overbought setups, not just raw matches. The list leans toward stronger extension, better liquidity and cleaner pullback-risk profiles.";
-  }
-
-  if (title.includes("Divergence")) {
-    return "Divergence is ranked by timeframe, duration, structure quality, magnitude and context. Weekly divergences usually carry more weight than daily ones.";
-  }
-
-  if (title.includes("Macro Support") || title.includes("Resistance")) {
-    return "These stocks are trading near wider weekly support or resistance zones. The ranking favours repeated touches, distance to the zone, structure length and trading volume around that level.";
-  }
-
-  if (title.includes("All-Time Highs")) {
-    return "These are pullback setups from all-time highs, ranked to favour liquid, tradable names over weak broken charts. A stock being down more does not automatically make it better.";
-  }
-
-if (title.toLowerCase().includes("200-day")) {
-  return "These stocks are trading near the 200-day moving average, a key long-term level many traders watch for support, resistance and trend direction.";
-}
-
-  if (title.includes("Breakout")) {
-    return "Breakouts are ranked to favour newer, cleaner and more liquid breakouts over older or more stretched moves.";
-  }
-
-  if (title.includes("Hot Market Names")) {
-    return "These names come from the current dynamic universe and are also triggering meaningful technical conditions right now.";
-  }
-
+  if (title.includes("Buy Signals")) return "These highlight stocks showing multiple bullish technical conditions at the same time. Some may already be strong movers, so always review the chart before entering.";
+  if (title.includes("Sell Signals")) return "These highlight stocks showing multiple bearish technical conditions. Traders often review these for pullback risk, weaker trends, or possible short-side weakness.";
+  if (title.includes("Oversold")) return "These are ranked oversold setups, not just raw matches. The list leans toward stronger oversold readings, better liquidity, sharper exhaustion moves and cleaner rebound potential.";
+  if (title.includes("Best Trend Score")) return "These stocks have the strongest current trend structure based on price relative to MA50 and MA200, moving average alignment, and positive MACD momentum.";
+  if (title.includes("Positive Last Earnings")) return "These stocks rank well on the latest completed earnings report, giving preference to EPS beats, revenue beats, positive EPS and recent reports.";
+  if (title.includes("Strong Earnings Growth")) return "These stocks rank well on year-over-year earnings improvement, recent positive EPS consistency, revenue growth and earnings beat history.";
+  if (title.includes("Overbought")) return "These are ranked overbought setups, not just raw matches. The list leans toward stronger extension, better liquidity and cleaner pullback-risk profiles.";
+  if (title.includes("Divergence")) return "Divergence is ranked by timeframe, duration, structure quality, magnitude and context. Weekly divergences usually carry more weight than daily ones.";
+  if (title.includes("Macro Support") || title.includes("Resistance")) return "These stocks are trading near wider weekly support or resistance zones. The ranking favours repeated touches, distance to the zone, structure length and trading volume around that level.";
+  if (title.includes("All-Time Highs")) return "These are pullback setups from all-time highs, ranked to favour liquid, tradable names over weak broken charts. A stock being down more does not automatically make it better.";
+  if (title.toLowerCase().includes("200-day")) return "These stocks are trading near the 200-day moving average, a key long-term level many traders watch for support, resistance and trend direction.";
+  if (title.includes("Breakout")) return "Breakouts are ranked to favour newer, cleaner and more liquid breakouts over older or more stretched moves.";
+  if (title.includes("Hot Market Names")) return "These names come from the current dynamic universe and are also triggering meaningful technical conditions right now.";
   return "These stocks match multiple technical conditions worth reviewing on the chart.";
 }
 
 function HelpTip({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
-
   return (
     <span
       className="pickers-help-tip"
-      style={{
-        position: "relative",
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        width: 16,
-        height: 16,
-        borderRadius: "50%",
-        background: "rgba(255,255,255,0.15)",
-        color: "#fff",
-        fontSize: 11,
-        fontWeight: 900,
-        cursor: "pointer",
-        marginLeft: 2,
-        flex: "0 0 auto",
-      }}
+      style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", width: 16, height: 16, borderRadius: "50%", background: "rgba(255,255,255,0.15)", color: "#fff", fontSize: 11, fontWeight: 900, cursor: "pointer", marginLeft: 2, flex: "0 0 auto" }}
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
       onClick={() => setOpen((v) => !v)}
     >
       ?
       {open ? (
-        <span
-          style={{
-            position: "absolute",
-            top: "calc(100% + 8px)",
-            right: 0,
-            zIndex: 999,
-            width: 260,
-            maxWidth: "min(260px, 78vw)",
-            padding: "10px 12px",
-            borderRadius: 12,
-            background: "#0f172a",
-            border: "1px solid rgba(255,255,255,0.14)",
-            color: "#e5e7eb",
-            fontSize: 12,
-            lineHeight: 1.5,
-            fontWeight: 700,
-            boxShadow: "0 14px 30px rgba(0,0,0,0.35)",
-            textAlign: "left",
-            pointerEvents: "none",
-          }}
-        >
+        <span style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 999, width: 260, maxWidth: "min(260px, 78vw)", padding: "10px 12px", borderRadius: 12, background: "#0f172a", border: "1px solid rgba(255,255,255,0.14)", color: "#e5e7eb", fontSize: 12, lineHeight: 1.5, fontWeight: 700, boxShadow: "0 14px 30px rgba(0,0,0,0.35)", textAlign: "left", pointerEvents: "none" }}>
           {text}
         </span>
       ) : null}
@@ -332,38 +244,22 @@ function HelpTip({ text }: { text: string }) {
   );
 }
 
-
 function createEmptySignalRecord(symbol: string, item?: PickerItem): SignalRecord {
   const cleanSymbol = String(symbol || "").trim().toUpperCase();
-
   return {
     symbol: cleanSymbol,
     note: item?.note,
     tone: item?.tone,
-    oversold: false,
-    overbought: false,
-    buyTheDip: false,
-    breakout: false,
-    volumeSpike: false,
-    atrSpike: false,
-    aboveMA50: false,
-    belowMA50: false,
-    aboveMA200: false,
-    belowMA200: false,
-    dailyMa200Proximity: false,
-    weeklyMa200Proximity: false,
-    bullishRsiDivergence: false,
-    bearishRsiDivergence: false,
-    bullishMacdDivergence: false,
-    bearishMacdDivergence: false,
-    positiveLastEarnings: false,
-    strongEarningsGrowth: false,
+    oversold: false, overbought: false, buyTheDip: false, breakout: false,
+    volumeSpike: false, atrSpike: false, aboveMA50: false, belowMA50: false,
+    aboveMA200: false, belowMA200: false, dailyMa200Proximity: false, weeklyMa200Proximity: false,
+    bullishRsiDivergence: false, bearishRsiDivergence: false, bullishMacdDivergence: false, bearishMacdDivergence: false,
+    positiveLastEarnings: false, strongEarningsGrowth: false,
     preferredTimeframe: item?.timeframe,
     preferredIndicator: item?.indicator,
     dashboardHref: toChartHref(item?.dashboardHref ?? "", cleanSymbol),
   };
 }
-
 
 type PlayCardDef = {
   title: string;
@@ -374,75 +270,20 @@ type PlayCardDef = {
 };
 
 const PLAY_CARDS: PlayCardDef[] = [
-  {
-    title: "Ascending Triangle Plays",
-    subtitle: "Bullish compression setups with flat resistance and rising lows.",
-    href: "/plays",
-    tone: "green",
-    pattern: "ascending",
-  },
-  {
-    title: "Descending Triangle Plays",
-    subtitle: "Bearish compression setups with flat support and lower highs.",
-    href: "/plays/descending-triangles",
-    tone: "red",
-    pattern: "descending",
-  },
-  {
-    title: "Bull Flag Plays",
-    subtitle: "Momentum continuation setups after a sharp impulse and tight flag.",
-    href: "/plays/bull-flags",
-    tone: "blue",
-    pattern: "bullFlag",
-  },
-  {
-    title: "Macro Support / Resistance Plays",
-    subtitle: "Stocks trading near wider weekly support or resistance zones with repeated touches and volume-at-zone context.",
-    href: "/macro-support-resistance-stocks",
-    tone: "blue",
-    pattern: "macroSR",
-  },
+  { title: "Ascending Triangle Plays", subtitle: "Bullish compression setups with flat resistance and rising lows.", href: "/plays", tone: "green", pattern: "ascending" },
+  { title: "Descending Triangle Plays", subtitle: "Bearish compression setups with flat support and lower highs.", href: "/plays/descending-triangles", tone: "red", pattern: "descending" },
+  { title: "Bull Flag Plays", subtitle: "Momentum continuation setups after a sharp impulse and tight flag.", href: "/plays/bull-flags", tone: "blue", pattern: "bullFlag" },
+  { title: "Macro Support / Resistance Plays", subtitle: "Stocks trading near wider weekly support or resistance zones with repeated touches and volume-at-zone context.", href: "/macro-support-resistance-stocks", tone: "blue", pattern: "macroSR" },
 ];
 
 function playTone(tone: PlayCardDef["tone"]) {
-  if (tone === "green") {
-    return {
-      dot: "#22c55e",
-      border: "rgba(34,197,94,0.26)",
-      bg: "linear-gradient(180deg, rgba(8,24,18,0.92), rgba(8,13,22,0.98))",
-      line: "#22c55e",
-      accent: "#60a5fa",
-      buttonBg: "rgba(34,197,94,0.10)",
-      buttonColor: "#dcfce7",
-    };
-  }
-
-  if (tone === "red") {
-    return {
-      dot: "#ef4444",
-      border: "rgba(239,68,68,0.26)",
-      bg: "linear-gradient(180deg, rgba(32,12,18,0.92), rgba(8,13,22,0.98))",
-      line: "#ef4444",
-      accent: "#60a5fa",
-      buttonBg: "rgba(239,68,68,0.10)",
-      buttonColor: "#fecaca",
-    };
-  }
-
-  return {
-    dot: "#60a5fa",
-    border: "rgba(96,165,250,0.26)",
-    bg: "linear-gradient(180deg, rgba(10,18,36,0.94), rgba(8,13,22,0.98))",
-    line: "#60a5fa",
-    accent: "#22c55e",
-    buttonBg: "rgba(59,130,246,0.10)",
-    buttonColor: "#dbeafe",
-  };
+  if (tone === "green") return { dot: "#22c55e", border: "rgba(34,197,94,0.26)", bg: "linear-gradient(180deg, rgba(8,24,18,0.92), rgba(8,13,22,0.98))", line: "#22c55e", accent: "#60a5fa", buttonBg: "rgba(34,197,94,0.10)", buttonColor: "#dcfce7" };
+  if (tone === "red") return { dot: "#ef4444", border: "rgba(239,68,68,0.26)", bg: "linear-gradient(180deg, rgba(32,12,18,0.92), rgba(8,13,22,0.98))", line: "#ef4444", accent: "#60a5fa", buttonBg: "rgba(239,68,68,0.10)", buttonColor: "#fecaca" };
+  return { dot: "#60a5fa", border: "rgba(96,165,250,0.26)", bg: "linear-gradient(180deg, rgba(10,18,36,0.94), rgba(8,13,22,0.98))", line: "#60a5fa", accent: "#22c55e", buttonBg: "rgba(59,130,246,0.10)", buttonColor: "#dbeafe" };
 }
 
 function PlayDiagram({ pattern, tone }: { pattern: PlayCardDef["pattern"]; tone: PlayCardDef["tone"] }) {
   const colors = playTone(tone);
-
   if (pattern === "descending") {
     return (
       <svg viewBox="0 0 320 138" className="playDiagram" role="img" aria-label="Descending triangle diagram">
@@ -454,7 +295,6 @@ function PlayDiagram({ pattern, tone }: { pattern: PlayCardDef["pattern"]; tone:
       </svg>
     );
   }
-
   if (pattern === "macroSR") {
     return (
       <svg viewBox="0 0 320 138" className="playDiagram" role="img" aria-label="Macro support and resistance diagram">
@@ -466,7 +306,6 @@ function PlayDiagram({ pattern, tone }: { pattern: PlayCardDef["pattern"]; tone:
       </svg>
     );
   }
-
   if (pattern === "bullFlag") {
     return (
       <svg viewBox="0 0 320 138" className="playDiagram" role="img" aria-label="Bull flag diagram">
@@ -481,7 +320,6 @@ function PlayDiagram({ pattern, tone }: { pattern: PlayCardDef["pattern"]; tone:
       </svg>
     );
   }
-
   return (
     <svg viewBox="0 0 320 138" className="playDiagram" role="img" aria-label="Ascending triangle diagram">
       <rect x="0" y="0" width="320" height="138" rx="16" fill="rgba(2,6,23,0.72)" />
@@ -495,29 +333,14 @@ function PlayDiagram({ pattern, tone }: { pattern: PlayCardDef["pattern"]; tone:
 
 function PatternPlaysSection() {
   return (
-    <section
-      className="pattern-plays-panel"
-      style={{
-        border: "1px solid rgba(59,130,246,0.18)",
-        borderRadius: 18,
-        padding: 16,
-        background: "linear-gradient(180deg, rgba(8,13,26,0.98), rgba(6,10,18,1))",
-        boxSizing: "border-box",
-        overflow: "hidden",
-      }}
-    >
+    <section className="pattern-plays-panel" style={{ border: "1px solid rgba(59,130,246,0.18)", borderRadius: 18, padding: 16, background: "linear-gradient(180deg, rgba(8,13,26,0.98), rgba(6,10,18,1))", boxSizing: "border-box", overflow: "hidden" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
         <div>
-          <div style={{ display: "inline-flex", alignItems: "center", padding: "7px 11px", borderRadius: 999, border: "1px solid rgba(96,165,250,0.28)", background: "rgba(59,130,246,0.10)", color: "#dbeafe", fontSize: 11, fontWeight: 950, letterSpacing: "0.08em", textTransform: "uppercase" }}>
-            Chart pattern plays
-          </div>
+          <div style={{ display: "inline-flex", alignItems: "center", padding: "7px 11px", borderRadius: 999, border: "1px solid rgba(96,165,250,0.28)", background: "rgba(59,130,246,0.10)", color: "#dbeafe", fontSize: 11, fontWeight: 950, letterSpacing: "0.08em", textTransform: "uppercase" }}>Chart pattern plays</div>
           <h2 style={{ margin: "12px 0 0", fontSize: 25, lineHeight: 1.12, letterSpacing: "-0.035em" }}>Pattern setups that need the chart</h2>
-          <p style={{ margin: "8px 0 0", maxWidth: 760, color: "rgba(226,232,240,0.74)", fontSize: 14, lineHeight: 1.65 }}>
-            These are visual chart-pattern pages, so the cards below act as quick links into the full play pages rather than simple ticker lists.
-          </p>
+          <p style={{ margin: "8px 0 0", maxWidth: 760, color: "rgba(226,232,240,0.74)", fontSize: 14, lineHeight: 1.65 }}>These are visual chart-pattern pages, so the cards below act as quick links into the full play pages rather than simple ticker lists.</p>
         </div>
       </div>
-
       <div className="pattern-plays-grid">
         {PLAY_CARDS.map((play) => {
           const colors = playTone(play.tone);
@@ -531,7 +354,7 @@ function PatternPlaysSection() {
                 </div>
                 <p>{play.subtitle}</p>
                 <span className="pattern-play-button" style={{ borderColor: colors.border, background: colors.buttonBg, color: colors.buttonColor }}>
-                  {play.pattern === "macroSR" ? "Open macro S/R \u2192" : "Open plays \u2192"}
+                  {play.pattern === "macroSR" ? "Open macro S/R →" : "Open plays →"}
                 </span>
               </div>
             </a>
@@ -542,7 +365,6 @@ function PatternPlaysSection() {
   );
 }
 
-
 export default function PickersClient() {
   const SHOW_FORCE_FETCH_BUTTON = false;
 
@@ -550,7 +372,6 @@ export default function PickersClient() {
   const [signalRecords, setSignalRecords] = useState<SignalRecord[]>([]);
   const [selectedFilters, setSelectedFilters] = useState<FilterKey[]>([]);
   const [screenerOpen, setScreenerOpen] = useState(false);
-
   const [loading, setLoading] = useState(true);
   const [forceRefreshing, setForceRefreshing] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -566,13 +387,9 @@ export default function PickersClient() {
   const [earningsFetchMessage, setEarningsFetchMessage] = useState<string | null>(null);
 
   const EARNINGS_FETCH_LOCK_MS = 90 * 1000;
-
   void earningsFetchTick;
 
-  const earningsFetchRemainingSeconds = Math.max(
-    0,
-    Math.ceil((earningsFetchLockedUntil - Date.now()) / 1000)
-  );
+  const earningsFetchRemainingSeconds = Math.max(0, Math.ceil((earningsFetchLockedUntil - Date.now()) / 1000));
 
   async function handleFetchEarnings() {
     if (earningsFetchBusy || Date.now() < earningsFetchLockedUntil) return;
@@ -607,10 +424,8 @@ export default function PickersClient() {
       const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) throw new Error("Pickers API failed");
       const data = (await res.json()) as PickersPayload;
-      const safeSections = Array.isArray(data?.sections) ? data.sections : [];
-      const safeSignalRecords = Array.isArray(data?.signalRecords) ? data.signalRecords : [];
-      setSections(safeSections);
-      setSignalRecords(safeSignalRecords);
+      setSections(Array.isArray(data?.sections) ? data.sections : []);
+      setSignalRecords(Array.isArray(data?.signalRecords) ? data.signalRecords : []);
       setUpdatedAt(typeof data?.updatedAt === "string" ? data.updatedAt : null);
       setUniverseSize(typeof data?.universeSize === "number" ? data.universeSize : null);
       setDynamicUniverseCount(typeof data?.dynamicUniverseCount === "number" ? data.dynamicUniverseCount : null);
@@ -619,26 +434,12 @@ export default function PickersClient() {
       setEstimatedApiCalls(typeof data?.estimatedApiCalls === "number" ? data.estimatedApiCalls : null);
     } catch {
       setErr(force ? "Force refresh failed." : "Failed to load stock ideas.");
-      if (!force) {
-        setSections([]);
-        setSignalRecords([]);
-        setUpdatedAt(null);
-        setUniverseSize(null);
-        setDynamicUniverseCount(null);
-        setDynamicUniversePreview(null);
-        setDynamicSymbols([]);
-        setEstimatedApiCalls(null);
-      }
-    } finally {
-      setBusy(false);
-    }
+      if (!force) { setSections([]); setSignalRecords([]); setUpdatedAt(null); setUniverseSize(null); setDynamicUniverseCount(null); setDynamicUniversePreview(null); setDynamicSymbols([]); setEstimatedApiCalls(null); }
+    } finally { setBusy(false); }
   }
 
   useEffect(() => {
-    try {
-      const saved = Number(window.localStorage.getItem("msh:lastEarningsFetchUntil") || "0");
-      if (Number.isFinite(saved) && saved > Date.now()) setEarningsFetchLockedUntil(saved);
-    } catch { /* ignore */ }
+    try { const saved = Number(window.localStorage.getItem("msh:lastEarningsFetchUntil") || "0"); if (Number.isFinite(saved) && saved > Date.now()) setEarningsFetchLockedUntil(saved); } catch { /* ignore */ }
   }, []);
 
   useEffect(() => {
@@ -663,11 +464,9 @@ export default function PickersClient() {
         const res = await fetch(`/api/pickers?t=${Date.now()}`, { cache: "no-store" });
         if (!res.ok) throw new Error("Pickers API failed");
         const data = (await res.json()) as PickersPayload;
-        const safeSections = Array.isArray(data?.sections) ? data.sections : [];
-        const safeSignalRecords = Array.isArray(data?.signalRecords) ? data.signalRecords : [];
         if (!cancelled) {
-          setSections(safeSections);
-          setSignalRecords(safeSignalRecords);
+          setSections(Array.isArray(data?.sections) ? data.sections : []);
+          setSignalRecords(Array.isArray(data?.signalRecords) ? data.signalRecords : []);
           setUpdatedAt(typeof data?.updatedAt === "string" ? data.updatedAt : null);
           setUniverseSize(typeof data?.universeSize === "number" ? data.universeSize : null);
           setDynamicUniverseCount(typeof data?.dynamicUniverseCount === "number" ? data.dynamicUniverseCount : null);
@@ -676,20 +475,8 @@ export default function PickersClient() {
           setEstimatedApiCalls(typeof data?.estimatedApiCalls === "number" ? data.estimatedApiCalls : null);
         }
       } catch {
-        if (!cancelled) {
-          setErr("Failed to load stock ideas.");
-          setSections([]);
-          setSignalRecords([]);
-          setUpdatedAt(null);
-          setUniverseSize(null);
-          setDynamicUniverseCount(null);
-          setDynamicUniversePreview(null);
-          setDynamicSymbols([]);
-          setEstimatedApiCalls(null);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+        if (!cancelled) { setErr("Failed to load stock ideas."); setSections([]); setSignalRecords([]); setUpdatedAt(null); setUniverseSize(null); setDynamicUniverseCount(null); setDynamicUniversePreview(null); setDynamicSymbols([]); setEstimatedApiCalls(null); }
+      } finally { if (!cancelled) setLoading(false); }
     }
     load();
     return () => { cancelled = true; };
@@ -703,14 +490,11 @@ export default function PickersClient() {
     const strongEarningsGrowth = new Set<string>();
     for (const section of safeSections) {
       const title = String(section.title || "").toLowerCase();
-      const isPositiveLastEarnings = title.includes("positive last earnings");
-      const isStrongEarningsGrowth = title.includes("strong earnings growth");
-      if (!isPositiveLastEarnings && !isStrongEarningsGrowth) continue;
       for (const item of Array.isArray(section.items) ? section.items : []) {
         const symbol = String(item.symbol || "").trim().toUpperCase();
         if (!symbol) continue;
-        if (isPositiveLastEarnings) positiveLastEarnings.add(symbol);
-        if (isStrongEarningsGrowth) strongEarningsGrowth.add(symbol);
+        if (title.includes("positive last earnings")) positiveLastEarnings.add(symbol);
+        if (title.includes("strong earnings growth")) strongEarningsGrowth.add(symbol);
       }
     }
     return { positiveLastEarnings, strongEarningsGrowth };
@@ -721,30 +505,18 @@ export default function PickersClient() {
     for (const record of safeSignalRecords) {
       const symbol = String(record.symbol ?? "").trim().toUpperCase();
       if (!symbol) continue;
-      map.set(symbol, {
-        ...record,
-        symbol,
-        positiveLastEarnings: record.positiveLastEarnings === true || earningsSectionSymbolSets.positiveLastEarnings.has(symbol),
-        strongEarningsGrowth: record.strongEarningsGrowth === true || earningsSectionSymbolSets.strongEarningsGrowth.has(symbol),
-      });
+      map.set(symbol, { ...record, symbol, positiveLastEarnings: record.positiveLastEarnings === true || earningsSectionSymbolSets.positiveLastEarnings.has(symbol), strongEarningsGrowth: record.strongEarningsGrowth === true || earningsSectionSymbolSets.strongEarningsGrowth.has(symbol) });
     }
     for (const section of safeSections) {
       const title = String(section.title || "").toLowerCase();
-      const isPositiveLastEarnings = title.includes("positive last earnings");
-      const isStrongEarningsGrowth = title.includes("strong earnings growth");
-      if (!isPositiveLastEarnings && !isStrongEarningsGrowth) continue;
+      const isPLE = title.includes("positive last earnings");
+      const isSEG = title.includes("strong earnings growth");
+      if (!isPLE && !isSEG) continue;
       for (const item of Array.isArray(section.items) ? section.items : []) {
         const symbol = String(item.symbol || "").trim().toUpperCase();
         if (!symbol) continue;
         const existing = map.get(symbol) ?? createEmptySignalRecord(symbol, item);
-        map.set(symbol, {
-          ...existing,
-          note: existing.note ?? item.note,
-          tone: existing.tone ?? item.tone,
-          dashboardHref: existing.dashboardHref ?? item.dashboardHref,
-          positiveLastEarnings: existing.positiveLastEarnings === true || isPositiveLastEarnings,
-          strongEarningsGrowth: existing.strongEarningsGrowth === true || isStrongEarningsGrowth,
-        });
+        map.set(symbol, { ...existing, note: existing.note ?? item.note, tone: existing.tone ?? item.tone, dashboardHref: existing.dashboardHref ?? item.dashboardHref, positiveLastEarnings: existing.positiveLastEarnings === true || isPLE, strongEarningsGrowth: existing.strongEarningsGrowth === true || isSEG });
       }
     }
     return Array.from(map.values());
@@ -760,50 +532,48 @@ export default function PickersClient() {
     return map;
   }, [enrichedSignalRecords]);
 
-  const dynamicSymbolSet = useMemo(() => {
-    return new Set(dynamicSymbols.map((x) => String(x).trim().toUpperCase()).filter(Boolean));
-  }, [dynamicSymbols]);
+  const dynamicSymbolSet = useMemo(() => new Set(dynamicSymbols.map((x) => String(x).trim().toUpperCase()).filter(Boolean)), [dynamicSymbols]);
 
   const topBuySection = useMemo<PickerSection | null>(() => {
     const items = safeSignalRecords
-      .map((record) => ({ symbol: record.symbol, buyCount: getBuySignalCount(record), dashboardHref: toChartHref(record.dashboardHref ?? "", record.symbol) }))
-      .filter((item) => item.buyCount > 0)
+      .map((r) => ({ symbol: r.symbol, buyCount: getBuySignalCount(r), dashboardHref: toChartHref(r.dashboardHref ?? "", r.symbol) }))
+      .filter((i) => i.buyCount > 0)
       .sort((a, b) => b.buyCount !== a.buyCount ? b.buyCount - a.buyCount : a.symbol.localeCompare(b.symbol))
       .slice(0, 4)
-      .map((item) => ({ symbol: item.symbol, note: `${item.buyCount} buy signal${item.buyCount === 1 ? "" : "s"}`, tone: "green" as PickerTone, dashboardHref: item.dashboardHref }));
+      .map((i) => ({ symbol: i.symbol, note: `${i.buyCount} buy signal${i.buyCount === 1 ? "" : "s"}`, tone: "green" as PickerTone, dashboardHref: i.dashboardHref }));
     if (!items.length) return null;
     return { title: "Top Stocks With Buy Signals (Live Scan)", description: "Stocks showing multiple bullish technical conditions right now, ranked by how many buy signals are currently active.", items };
   }, [safeSignalRecords]);
 
   const topSellSection = useMemo<PickerSection | null>(() => {
     const items = safeSignalRecords
-      .map((record) => ({ symbol: record.symbol, sellCount: getSellSignalCount(record), dashboardHref: toChartHref(record.dashboardHref ?? "", record.symbol) }))
-      .filter((item) => item.sellCount > 0)
+      .map((r) => ({ symbol: r.symbol, sellCount: getSellSignalCount(r), dashboardHref: toChartHref(r.dashboardHref ?? "", r.symbol) }))
+      .filter((i) => i.sellCount > 0)
       .sort((a, b) => b.sellCount !== a.sellCount ? b.sellCount - a.sellCount : a.symbol.localeCompare(b.symbol))
       .slice(0, 4)
-      .map((item) => ({ symbol: item.symbol, note: `${item.sellCount} sell signal${item.sellCount === 1 ? "" : "s"}`, tone: "red" as PickerTone, dashboardHref: item.dashboardHref }));
+      .map((i) => ({ symbol: i.symbol, note: `${i.sellCount} sell signal${i.sellCount === 1 ? "" : "s"}`, tone: "red" as PickerTone, dashboardHref: i.dashboardHref }));
     if (!items.length) return null;
     return { title: "Top Stocks With Sell Signals (Bearish Setups)", description: "Stocks showing multiple bearish technical signals right now, ranked by how many sell signals are currently active.", items };
   }, [safeSignalRecords]);
 
   const displaySections = useMemo(() => {
     const out: PickerSection[] = [];
-    const ma200Section = safeSections.find((s) => s.title.toLowerCase().includes("200-day"));
-    const buyTheDipSection = safeSections.find((s) => s.title.includes("All-Time Highs"));
-    const athBreakoutSection = safeSections.find((s) => s.title.includes("All-Time High Breakout"));
-    const threeMonthBreakoutSection = safeSections.find((s) => s.title.includes("3-Month High Breakout"));
-    const oversoldSection = safeSections.find((s) => s.title.toLowerCase().includes("oversold"));
-    const macroSupportResistanceSection = safeSections.find((s) => { const t = s.title.toLowerCase(); return t.includes("macro") && t.includes("support") && t.includes("resistance"); });
-    const otherSections = safeSections.filter((s) => s !== ma200Section && s !== buyTheDipSection && s !== athBreakoutSection && s !== threeMonthBreakoutSection && s !== oversoldSection && s !== macroSupportResistanceSection && !s.title.toLowerCase().includes("hot market names"));
-    if (ma200Section) out.push(ma200Section);
+    const ma200 = safeSections.find((s) => s.title.toLowerCase().includes("200-day"));
+    const buyDip = safeSections.find((s) => s.title.includes("All-Time Highs"));
+    const athBreak = safeSections.find((s) => s.title.includes("All-Time High Breakout"));
+    const threeMonth = safeSections.find((s) => s.title.includes("3-Month High Breakout"));
+    const oversold = safeSections.find((s) => s.title.toLowerCase().includes("oversold"));
+    const macroSR = safeSections.find((s) => { const t = s.title.toLowerCase(); return t.includes("macro") && t.includes("support") && t.includes("resistance"); });
+    const others = safeSections.filter((s) => s !== ma200 && s !== buyDip && s !== athBreak && s !== threeMonth && s !== oversold && s !== macroSR && !s.title.toLowerCase().includes("hot market names"));
+    if (ma200) out.push(ma200);
     if (topBuySection) out.push(topBuySection);
-    if (buyTheDipSection) out.push(buyTheDipSection);
-    if (macroSupportResistanceSection) out.push(macroSupportResistanceSection);
-    if (athBreakoutSection) out.push(athBreakoutSection);
-    if (threeMonthBreakoutSection) out.push(threeMonthBreakoutSection);
+    if (buyDip) out.push(buyDip);
+    if (macroSR) out.push(macroSR);
+    if (athBreak) out.push(athBreak);
+    if (threeMonth) out.push(threeMonth);
     if (topSellSection) out.push(topSellSection);
-    if (oversoldSection) out.push(oversoldSection);
-    return [...out, ...otherSections];
+    if (oversold) out.push(oversold);
+    return [...out, ...others];
   }, [safeSections, topBuySection, topSellSection]);
 
   const customMode = selectedFilters.length > 0;
@@ -816,27 +586,14 @@ export default function PickersClient() {
         const matchedSignals = matchedSignalsForRecord(record).filter((key) => selectedFilters.includes(key));
         return { ...record, matchedSignals, displayTone: chooseCardTone(record, matchedSignals) };
       })
-      .sort((a, b) => {
-        const aCount = a.matchedSignals.length;
-        const bCount = b.matchedSignals.length;
-        if (bCount !== aCount) return bCount - aCount;
-        return a.symbol.localeCompare(b.symbol);
-      });
+      .sort((a, b) => { const d = b.matchedSignals.length - a.matchedSignals.length; return d !== 0 ? d : a.symbol.localeCompare(b.symbol); });
   }, [customMode, enrichedSignalRecords, selectedFilters]);
 
-  function toggleFilter(key: FilterKey) {
-    setSelectedFilters((prev) => prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key]);
-  }
-
+  function toggleFilter(key: FilterKey) { setSelectedFilters((prev) => prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key]); }
   function clearFilters() { setSelectedFilters([]); }
   function handleScreenerButton() { setScreenerOpen((prev) => !prev); }
 
-  const actionButtonStyle: React.CSSProperties = {
-    display: "inline-flex", alignItems: "center", justifyContent: "center",
-    minHeight: 44, padding: "10px 16px", borderRadius: 12,
-    fontWeight: 900, fontSize: 14, cursor: "pointer",
-    transition: "all 0.2s ease", whiteSpace: "nowrap",
-  };
+  const actionButtonStyle: React.CSSProperties = { display: "inline-flex", alignItems: "center", justifyContent: "center", minHeight: 44, padding: "10px 16px", borderRadius: 12, fontWeight: 900, fontSize: 14, cursor: "pointer", transition: "all 0.2s ease", whiteSpace: "nowrap" };
 
   return (
     <section aria-label="Live stock idea results" style={{ width: "100%", minWidth: 0 }}>
@@ -872,17 +629,15 @@ export default function PickersClient() {
 
       {loading ? (
         <div className="pickers-shell pickers-loading-card" style={{ border: "1px solid rgba(255,255,255,0.12)", borderRadius: 18, padding: 18, background: "#0b1220", boxSizing: "border-box" }}>
-          <div style={{ fontSize: 22, fontWeight: 950, letterSpacing: "-0.2px" }}>We are gathering stocks for you, please wait\u2026</div>
-          <div style={{ marginTop: 8, opacity: 0.75 }}>First load can take around 10\u201315 seconds. Cached loads are usually much faster.</div>
+          <div style={{ fontSize: 22, fontWeight: 950, letterSpacing: "-0.2px" }}>We are gathering stocks for you, please wait…</div>
+          <div style={{ marginTop: 8, opacity: 0.75 }}>First load can take around 10–15 seconds. Cached loads are usually much faster.</div>
           <div style={{ marginTop: 14, width: 420, maxWidth: "100%", height: 10, borderRadius: 999, overflow: "hidden", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.16)" }}>
             <div style={{ height: "100%", width: "35%", borderRadius: 999, background: "rgba(59,130,246,0.95)", animation: "pickersBar 1.1s linear infinite" }} />
           </div>
         </div>
       ) : null}
 
-      {err ? (
-        <div className="pickers-shell" style={{ border: "1px solid rgba(239,68,68,0.18)", borderRadius: 16, padding: 16, background: "rgba(239,68,68,0.08)", color: "#fecaca", boxSizing: "border-box" }}>{err}</div>
-      ) : null}
+      {err ? <div className="pickers-shell" style={{ border: "1px solid rgba(239,68,68,0.18)", borderRadius: 16, padding: 16, background: "rgba(239,68,68,0.08)", color: "#fecaca", boxSizing: "border-box" }}>{err}</div> : null}
 
       {!loading && !err ? (
         <section className="pickers-shell pickers-desktop-only" style={{ border: "1px solid rgba(34,197,94,0.26)", borderRadius: 18, padding: 16, background: "linear-gradient(180deg, rgba(8,18,12,0.96), rgba(8,12,22,1))", marginBottom: 18, boxSizing: "border-box", overflow: "hidden" }}>
@@ -895,12 +650,9 @@ export default function PickersClient() {
               <button type="button" onClick={handleScreenerButton} style={{ ...actionButtonStyle, border: "1px solid rgba(34,197,94,0.34)", background: "linear-gradient(180deg, rgba(20,83,45,0.98), rgba(21,128,61,0.88))", color: "#dcfce7", boxShadow: screenerOpen ? "0 0 0 1px rgba(34,197,94,0.16), 0 10px 24px rgba(22,101,52,0.18)" : "none" }}>
                 {screenerOpen ? "Hide Custom Screener" : "Custom Screener"}
               </button>
-              {customMode ? (
-                <button type="button" onClick={clearFilters} style={{ ...actionButtonStyle, border: "1px solid rgba(239,68,68,0.34)", background: "linear-gradient(180deg, rgba(127,29,29,0.98), rgba(185,28,28,0.88))", color: "#fee2e2", boxShadow: "0 10px 24px rgba(127,29,29,0.16)" }}>Clear Filters</button>
-              ) : null}
+              {customMode ? <button type="button" onClick={clearFilters} style={{ ...actionButtonStyle, border: "1px solid rgba(239,68,68,0.34)", background: "linear-gradient(180deg, rgba(127,29,29,0.98), rgba(185,28,28,0.88))", color: "#fee2e2", boxShadow: "0 10px 24px rgba(127,29,29,0.16)" }}>Clear Filters</button> : null}
             </div>
           </div>
-
           <div style={{ marginTop: screenerOpen ? 16 : 0, maxHeight: screenerOpen ? 1200 : 0, opacity: screenerOpen ? 1 : 0, overflow: "hidden", transform: screenerOpen ? "translateY(0)" : "translateY(-8px)", transition: "max-height 0.38s ease, opacity 0.24s ease, transform 0.28s ease, margin-top 0.28s ease" }}>
             <div className="pickers-filter-grid">
               {FILTER_DEFS.map((filter) => {
@@ -919,12 +671,7 @@ export default function PickersClient() {
                 <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {selectedFilters.map((filter) => {
                     const def = FILTER_DEFS.find((f) => f.key === filter);
-                    return (
-                      <span key={filter} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.06)", fontSize: 12, fontWeight: 900 }}>
-                        <span style={{ width: 8, height: 8, borderRadius: 999, background: toneDot(def?.tone) }} />
-                        {getFilterLabel(filter)}
-                      </span>
-                    );
+                    return <span key={filter} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.06)", fontSize: 12, fontWeight: 900 }}><span style={{ width: 8, height: 8, borderRadius: 999, background: toneDot(def?.tone) }} />{getFilterLabel(filter)}</span>;
                   })}
                 </div>
               </div>
@@ -964,19 +711,14 @@ export default function PickersClient() {
                         {item.note ? <div style={{ marginTop: 8, fontSize: 13, lineHeight: 1.55, opacity: 0.72, wordBreak: "break-word" }}>{item.note}</div> : null}
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flex: "0 0 auto" }}>
-                        <a href={toChartHref(item.dashboardHref ?? "", item.symbol)} onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "8px 12px", borderRadius: 10, border: "1px solid rgba(34,197,94,0.35)", background: "rgba(34,197,94,0.12)", color: "#bbf7d0", textDecoration: "none", fontSize: 12, fontWeight: 900, whiteSpace: "nowrap" }} title={`Open ${item.symbol} chart`}>Open chart \u2197</a>
-                        <a href={`/stock/${encodeURIComponent(item.symbol)}`} onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "7px 10px", borderRadius: 10, border: "1px solid rgba(59,130,246,0.24)", background: "rgba(59,130,246,0.08)", color: "#dbeafe", textDecoration: "none", fontSize: 11, fontWeight: 900, whiteSpace: "nowrap" }}>Stock page \u2197</a>
+                        <a href={toChartHref(item.dashboardHref ?? "", item.symbol)} onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "8px 12px", borderRadius: 10, border: "1px solid rgba(34,197,94,0.35)", background: "rgba(34,197,94,0.12)", color: "#bbf7d0", textDecoration: "none", fontSize: 12, fontWeight: 900, whiteSpace: "nowrap" }} title={`Open ${item.symbol} chart`}>Open chart ↗</a>
+                        <a href={`/stock/${encodeURIComponent(item.symbol)}`} onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "7px 10px", borderRadius: 10, border: "1px solid rgba(59,130,246,0.24)", background: "rgba(59,130,246,0.08)", color: "#dbeafe", textDecoration: "none", fontSize: 11, fontWeight: 900, whiteSpace: "nowrap" }}>Stock page ↗</a>
                       </div>
                     </div>
                     <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
                       {item.matchedSignals.map((signal) => {
                         const def = FILTER_DEFS.find((f) => f.key === signal);
-                        return (
-                          <span key={`${item.symbol}-${signal}`} style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "7px 9px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.05)", fontSize: 11, fontWeight: 900, minWidth: 0 }}>
-                            <span style={{ width: 7, height: 7, borderRadius: 999, background: toneDot(def?.tone), flex: "0 0 auto" }} />
-                            <span style={{ minWidth: 0 }}>{getFilterLabel(signal)}</span>
-                          </span>
-                        );
+                        return <span key={`${item.symbol}-${signal}`} style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "7px 9px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.05)", fontSize: 11, fontWeight: 900, minWidth: 0 }}><span style={{ width: 7, height: 7, borderRadius: 999, background: toneDot(def?.tone), flex: "0 0 auto" }} /><span style={{ minWidth: 0 }}>{getFilterLabel(signal)}</span></span>;
                       })}
                     </div>
                   </a>
@@ -1027,7 +769,7 @@ export default function PickersClient() {
                             </span>
                           ) : null}
                         </a>
-                        <a href={toChartHref(it.dashboardHref ?? "", it.symbol)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "8px 11px", borderRadius: 10, background: "rgba(148,163,184,0.06)", border: "1px solid rgba(148,163,184,0.18)", color: "#cbd5f5", textDecoration: "none", fontSize: 12, fontWeight: 900, whiteSpace: "nowrap", flex: "0 0 auto" }} title={`Open ${it.symbol} chart`}>Open chart \u2197</a>
+                        <a href={toChartHref(it.dashboardHref ?? "", it.symbol)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "8px 11px", borderRadius: 10, background: "rgba(148,163,184,0.06)", border: "1px solid rgba(148,163,184,0.18)", color: "#cbd5f5", textDecoration: "none", fontSize: 12, fontWeight: 900, whiteSpace: "nowrap", flex: "0 0 auto" }} title={`Open ${it.symbol} chart`}>Open chart ↗</a>
                       </div>
                     ))}
                   </div>
@@ -1035,7 +777,7 @@ export default function PickersClient() {
                   {sec.title.toLowerCase().includes("earnings") ? (
                     <div style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                       <button type="button" className="pickers-earnings-fetch-button" onClick={handleFetchEarnings} disabled={earningsFetchBusy || earningsFetchRemainingSeconds > 0} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minHeight: 38, padding: "8px 12px", borderRadius: 10, border: "1px solid rgba(34,197,94,0.30)", background: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? "rgba(34,197,94,0.07)" : "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(16,185,129,0.10))", color: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? "rgba(220,252,231,0.62)" : "#dcfce7", fontSize: 12, fontWeight: 950, cursor: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? "not-allowed" : "pointer", opacity: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? 0.76 : 1, transition: "transform 140ms ease, filter 140ms ease, opacity 140ms ease", whiteSpace: "nowrap" }}>
-                        {earningsFetchBusy ? "Fetching earnings\u2026" : earningsFetchRemainingSeconds > 0 ? `Fetch Earnings (${earningsFetchRemainingSeconds}s)` : "Fetch Earnings"}
+                        {earningsFetchBusy ? "Fetching earnings…" : earningsFetchRemainingSeconds > 0 ? `Fetch Earnings (${earningsFetchRemainingSeconds}s)` : "Fetch Earnings"}
                       </button>
                       {earningsFetchMessage ? <span style={{ flex: "1 1 180px", minWidth: 0, color: "rgba(203,213,225,0.68)", fontSize: 11, lineHeight: 1.45, textAlign: "right" }}>{earningsFetchMessage}</span> : null}
                     </div>
@@ -1044,19 +786,19 @@ export default function PickersClient() {
                   {(() => {
                     const title = sec.title.toLowerCase();
                     let seoHref = ""; let seoLabel = ""; let seoBorder = "1px solid rgba(59,130,246,0.22)"; let seoBackground = "rgba(59,130,246,0.08)"; let seoColor = "#dbeafe";
-                    if (title.includes("positive last earnings")) { seoHref = "/stocks-with-positive-last-earnings"; seoLabel = "See all positive earnings stocks \u2192"; seoBorder = "1px solid rgba(34,197,94,0.22)"; seoBackground = "rgba(34,197,94,0.08)"; seoColor = "#dcfce7"; }
-                    else if (title.includes("strong earnings growth")) { seoHref = "/stocks-with-strong-earnings-growth"; seoLabel = "See all earnings growth stocks \u2192"; seoBorder = "1px solid rgba(34,197,94,0.22)"; seoBackground = "rgba(34,197,94,0.08)"; seoColor = "#dcfce7"; }
-                    else if (title.includes("all-time high breakout")) { seoHref = "/all-time-high-breakout-stocks"; seoLabel = "See all ATH breakout stocks \u2192"; seoBorder = "1px solid rgba(251,146,60,0.22)"; seoBackground = "rgba(251,146,60,0.08)"; seoColor = "#fed7aa"; }
-                    else if (title.includes("3-month high breakout")) { seoHref = "/3-month-high-breakout-stocks"; seoLabel = "See all 3-month high breakout stocks \u2192"; seoBorder = "1px solid rgba(251,146,60,0.22)"; seoBackground = "rgba(251,146,60,0.08)"; seoColor = "#fed7aa"; }
-                    else if (title.includes("all-time highs")) { seoHref = "/stocks-down-20-from-all-time-highs"; seoLabel = "See all stocks down from all-time highs \u2192"; seoBorder = "1px solid rgba(234,179,8,0.22)"; seoBackground = "rgba(234,179,8,0.08)"; seoColor = "#fef3c7"; }
-                    else if (title.includes("macro") && title.includes("support") && title.includes("resistance")) { seoHref = "/macro-support-resistance-stocks"; seoLabel = "See all macro support and resistance stocks \u2192"; seoBorder = "1px solid rgba(96,165,250,0.24)"; seoBackground = "rgba(59,130,246,0.09)"; seoColor = "#dbeafe"; }
-                    else if (title.includes("buy signals")) { seoHref = "/top-stocks-with-buy-signals"; seoLabel = "See all buy signal stocks \u2192"; seoBorder = "1px solid rgba(34,197,94,0.22)"; seoBackground = "rgba(34,197,94,0.08)"; seoColor = "#dcfce7"; }
-                    else if (title.includes("sell signals")) { seoHref = "/top-stocks-with-sell-signals"; seoLabel = "See all sell signal stocks \u2192"; seoBorder = "1px solid rgba(239,68,68,0.22)"; seoBackground = "rgba(239,68,68,0.08)"; seoColor = "#fecaca"; }
-                    else if (title.includes("oversold")) { seoHref = "/oversold-stocks-today"; seoLabel = "See all oversold stocks today \u2192"; seoBorder = "1px solid rgba(34,197,94,0.22)"; seoBackground = "rgba(34,197,94,0.08)"; seoColor = "#dcfce7"; }
-                    else if (title.includes("overbought")) { seoHref = "/overbought-stocks-today"; seoLabel = "See all overbought stocks today \u2192"; seoBorder = "1px solid rgba(239,68,68,0.22)"; seoBackground = "rgba(239,68,68,0.08)"; seoColor = "#fecaca"; }
-                    else if (title.includes("best trend score")) { seoHref = "/best-trend-score-stocks"; seoLabel = "See all best trend score stocks \u2192"; seoBorder = "1px solid rgba(34,197,94,0.22)"; seoBackground = "rgba(34,197,94,0.08)"; seoColor = "#dcfce7"; }
-                    else if (title.includes("divergence")) { seoHref = "/bullish-bearish-divergence-stocks"; seoLabel = "See all divergence stocks \u2192"; seoBorder = "1px solid rgba(168,85,247,0.22)"; seoBackground = "rgba(168,85,247,0.08)"; seoColor = "#f3e8ff"; }
-                    else if (title.includes("200")) { seoHref = "/stocks-near-200-day-moving-average"; seoLabel = "See all stocks near 200-day MA \u2192"; }
+                    if (title.includes("positive last earnings")) { seoHref = "/stocks-with-positive-last-earnings"; seoLabel = "See all positive earnings stocks →"; seoBorder = "1px solid rgba(34,197,94,0.22)"; seoBackground = "rgba(34,197,94,0.08)"; seoColor = "#dcfce7"; }
+                    else if (title.includes("strong earnings growth")) { seoHref = "/stocks-with-strong-earnings-growth"; seoLabel = "See all earnings growth stocks →"; seoBorder = "1px solid rgba(34,197,94,0.22)"; seoBackground = "rgba(34,197,94,0.08)"; seoColor = "#dcfce7"; }
+                    else if (title.includes("all-time high breakout")) { seoHref = "/all-time-high-breakout-stocks"; seoLabel = "See all ATH breakout stocks →"; seoBorder = "1px solid rgba(251,146,60,0.22)"; seoBackground = "rgba(251,146,60,0.08)"; seoColor = "#fed7aa"; }
+                    else if (title.includes("3-month high breakout")) { seoHref = "/3-month-high-breakout-stocks"; seoLabel = "See all 3-month high breakout stocks →"; seoBorder = "1px solid rgba(251,146,60,0.22)"; seoBackground = "rgba(251,146,60,0.08)"; seoColor = "#fed7aa"; }
+                    else if (title.includes("all-time highs")) { seoHref = "/stocks-down-20-from-all-time-highs"; seoLabel = "See all stocks down from all-time highs →"; seoBorder = "1px solid rgba(234,179,8,0.22)"; seoBackground = "rgba(234,179,8,0.08)"; seoColor = "#fef3c7"; }
+                    else if (title.includes("macro") && title.includes("support") && title.includes("resistance")) { seoHref = "/macro-support-resistance-stocks"; seoLabel = "See all macro support and resistance stocks →"; seoBorder = "1px solid rgba(96,165,250,0.24)"; seoBackground = "rgba(59,130,246,0.09)"; seoColor = "#dbeafe"; }
+                    else if (title.includes("buy signals")) { seoHref = "/top-stocks-with-buy-signals"; seoLabel = "See all buy signal stocks →"; seoBorder = "1px solid rgba(34,197,94,0.22)"; seoBackground = "rgba(34,197,94,0.08)"; seoColor = "#dcfce7"; }
+                    else if (title.includes("sell signals")) { seoHref = "/top-stocks-with-sell-signals"; seoLabel = "See all sell signal stocks →"; seoBorder = "1px solid rgba(239,68,68,0.22)"; seoBackground = "rgba(239,68,68,0.08)"; seoColor = "#fecaca"; }
+                    else if (title.includes("oversold")) { seoHref = "/oversold-stocks-today"; seoLabel = "See all oversold stocks today →"; seoBorder = "1px solid rgba(34,197,94,0.22)"; seoBackground = "rgba(34,197,94,0.08)"; seoColor = "#dcfce7"; }
+                    else if (title.includes("overbought")) { seoHref = "/overbought-stocks-today"; seoLabel = "See all overbought stocks today →"; seoBorder = "1px solid rgba(239,68,68,0.22)"; seoBackground = "rgba(239,68,68,0.08)"; seoColor = "#fecaca"; }
+                    else if (title.includes("best trend score")) { seoHref = "/best-trend-score-stocks"; seoLabel = "See all best trend score stocks →"; seoBorder = "1px solid rgba(34,197,94,0.22)"; seoBackground = "rgba(34,197,94,0.08)"; seoColor = "#dcfce7"; }
+                    else if (title.includes("divergence")) { seoHref = "/bullish-bearish-divergence-stocks"; seoLabel = "See all divergence stocks →"; seoBorder = "1px solid rgba(168,85,247,0.22)"; seoBackground = "rgba(168,85,247,0.08)"; seoColor = "#f3e8ff"; }
+                    else if (title.includes("200")) { seoHref = "/stocks-near-200-day-moving-average"; seoLabel = "See all stocks near 200-day MA →"; }
                     if (!seoHref) return null;
                     return (
                       <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end", position: "relative", zIndex: 1 }}>
@@ -1073,7 +815,7 @@ export default function PickersClient() {
         {!loading && !err && SHOW_FORCE_FETCH_BUTTON ? (
           <div style={{ marginTop: 18, display: "flex", justifyContent: "center" }}>
             <button type="button" onClick={() => { void loadPickers(true); }} disabled={forceRefreshing} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minHeight: 44, padding: "10px 16px", borderRadius: 12, fontWeight: 900, fontSize: 14, cursor: forceRefreshing ? "wait" : "pointer", transition: "all 0.2s ease", whiteSpace: "nowrap", border: "1px solid rgba(59,130,246,0.28)", background: forceRefreshing ? "rgba(59,130,246,0.12)" : "rgba(59,130,246,0.08)", color: "#dbeafe", opacity: forceRefreshing ? 0.78 : 1 }}>
-              {forceRefreshing ? "Force refreshing\u2026" : "Force Refresh Pickers"}
+              {forceRefreshing ? "Force refreshing…" : "Force Refresh Pickers"}
             </button>
           </div>
         ) : null}
