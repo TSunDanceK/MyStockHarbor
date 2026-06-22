@@ -3261,16 +3261,17 @@ return (
       <SectionCard title="Market Benchmarks">
         <div style={{ fontSize: 12, color: COLORS.mutedFg, marginBottom: 12 }}>
           Updated: {bench?.updatedAt ? new Date(bench.updatedAt).toLocaleString() : "—"} •
-          Benchmarks (Stooq, free)
+          {bench?.scope ?? "Benchmarks"}
         </div>
 
         <div className="msh-bench-grid">
           {(bench?.items ?? []).map((it) => {
             const pct = typeof it.changePct === "number" ? it.changePct : null;
             const isUp = typeof pct === "number" ? pct >= 0 : null;
-            const arrow = isUp == null ? "•" : isUp ? "▲" : "▼";
+            const arrow = isUp == null ? "" : isUp ? "▲" : "▼";
             const arrowColor = isUp == null ? COLORS.mutedFg : isUp ? "#22c55e" : "#ef4444";
-            const pctText = pct == null ? "—" : `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
+            const pctText = pct == null ? null : `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
+            const priceText = typeof it.close === "number" ? `$${it.close.toFixed(2)}` : "—";
             const chartSymbol =
               (it.symbol || "").split(".")[0]?.toUpperCase() || it.symbol.toUpperCase();
 
@@ -3308,24 +3309,30 @@ return (
                     </div>
 
                     <div style={{ textAlign: "right", flex: "0 0 auto" }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "flex-end",
-                          gap: 8,
-                        }}
-                      >
-                        <span style={{ fontWeight: 950, color: arrowColor, fontSize: 14 }}>
-                          {arrow}
-                        </span>
-                        <span style={{ fontWeight: 950, color: arrowColor, fontSize: 20 }}>
-                          {pctText}
-                        </span>
+                      {/* Price — large, prominent */}
+                      <div style={{ fontWeight: 950, fontSize: 20, lineHeight: 1.1 }}>
+                        {priceText}
                       </div>
-                      <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
-                        {typeof it.close === "number" ? it.close.toFixed(2) : "—"}
-                      </div>
+                      {/* Change % — smaller, coloured, below price */}
+                      {pctText != null ? (
+                        <div
+                          style={{
+                            marginTop: 4,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "flex-end",
+                            gap: 4,
+                            fontSize: 13,
+                            fontWeight: 800,
+                            color: arrowColor,
+                          }}
+                        >
+                          {arrow && <span>{arrow}</span>}
+                          <span>{pctText}</span>
+                        </div>
+                      ) : (
+                        <div style={{ marginTop: 4, fontSize: 12, opacity: 0.5 }}>—</div>
+                      )}
                     </div>
                   </div>
 
