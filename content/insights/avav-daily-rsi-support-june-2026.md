@@ -8,7 +8,7 @@ chartBars: 150
 chartIndicators: ["RSI(14)"]
 overallBreakdown: "AVAV has collapsed roughly 60% from its 52-week high after a $1.7B Space Force contract fell apart across three separate disclosures, and is now trading near its 52-week low ahead of Q4 earnings and an investor day."
 latestNews: "A federal securities class action lawsuit was filed in the Eastern District of Virginia in June 2026, alleging AeroVironment executives misrepresented the security of the SCAR Space Force contract during a class period from June 25, 2025 to March 10, 2026. The lead plaintiff deadline is July 27, 2026."
-latestEarnings: "Q3 FY2026 results reported March 10, 2026 showed a $179 million operating loss, up from $3.1 million the prior year, primarily driven by a $151.3 million goodwill impairment tied to the SCAR stop-work order. The company guided Q4 EPS of $1.89 and full-year EPS of $3.36. Q4 earnings are expected around June 29, 2026."
+latestEarnings: "Q3 FY2026 results reported March 10, 2026 showed a non-GAAP EPS of $0.64, missing the consensus of $0.68–$0.72, on revenue of $408M that also missed estimates. On a GAAP basis the company reported a $179M operating loss, driven by a $151.3M goodwill impairment tied to the SCAR stop-work order. Q4 earnings are expected around June 23, 2026."
 investorUsefulInfo: "AeroVironment is holding an investor day in New York on July 8, 2026, which could provide a reset of forward guidance and strategic direction. The autonomous systems segment remains the growth core; a record $4.6B backlog and a $117M Army contract awarded in June are the key fundamental positives amid the headline overhang."
 ---
 
@@ -29,7 +29,7 @@ The SCAR contract loss matters beyond the direct revenue impact because it expos
 
 ## What would confirm the idea
 
-An RSI divergence forming here — where price makes a new low near $156–$170 but RSI holds above a prior trough — would be the technical signal that selling momentum is exhausting. A strong Q4 earnings beat on June 29 or a well-received investor day presentation on July 8 would provide the fundamental catalyst needed to turn the chart. Reclaiming the 50-day average in the low $180s would be the first meaningful technical confirmation that a base is forming.
+An RSI divergence forming here — where price makes a new low near $156–$170 but RSI holds above a prior trough — would be the technical signal that selling momentum is exhausting. A strong Q4 earnings beat on June 23 or a well-received investor day presentation on July 8 would provide the fundamental catalyst needed to turn the chart. Reclaiming the 50-day average in the low $180s would be the first meaningful technical confirmation that a base is forming.
 
 ## What would weaken the idea
 
@@ -38,13 +38,13 @@ A weekly close below the $156 52-week low, especially if the Q4 earnings report 
 ## Bull vs bear scenarios
 
 **Bullish scenario:**  
-Q4 earnings on June 29 confirm the $1.89 EPS guide, the July 8 investor day restores confidence in the core autonomous systems thesis and provides clarity on the Space segment rebuild, and the stock forms a double-bottom at the 52-week low that attracts technical and fundamental buyers back in.
+Q4 earnings on June 23 confirm the guided EPS, the July 8 investor day restores confidence in the core autonomous systems thesis and provides clarity on the Space segment rebuild, and the stock forms a double-bottom at the 52-week low that attracts technical and fundamental buyers back in.
 
 **Bearish scenario:**  
 Earnings disappoint, the investor day lacks specificity, and the litigation overhang continues to drive institutional selling ahead of the July 27 lead-plaintiff deadline, pushing AVAV below its 52-week low and into price discovery territory with no established support visible on the chart.
 
 ## Bottom line
 
-AVAV is a fundamentally sound autonomous systems business that has been hit by a very specific, now well-documented contract failure and the lawsuit that followed it. The stock is near its 52-week low with a pair of near-term catalysts — Q4 earnings June 29 and investor day July 8 — that could define the next move in either direction. The RSI chart is worth watching here for signs that selling exhaustion is beginning to form.
+AVAV is a fundamentally sound autonomous systems business that has been hit by a very specific, now well-documented contract failure and the lawsuit that followed it. The stock is near its 52-week low with a pair of near-term catalysts — Q4 earnings June 23 and investor day July 8 — that could define the next move in either direction. The RSI chart is worth watching here for signs that selling exhaustion is beginning to form.
 
 This is a watchlist and education piece, not financial advice. Always do your own research and manage risk carefully.
