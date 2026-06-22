@@ -83,6 +83,8 @@ const navLinkBaseStyle: React.CSSProperties = {
   transition: "color .15s, background .15s, border-color .15s",
   whiteSpace: "nowrap",
   border: "1px solid transparent",
+  background: "transparent",
+  boxShadow: "none",
   lineHeight: 1.2,
   flex: "0 0 auto",
 };
