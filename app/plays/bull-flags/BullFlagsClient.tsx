@@ -435,45 +435,7 @@ export default function BullFlagsClient() {
             Chart Pattern Plays
           </div>
 
-          <nav
-            aria-label="Primary navigation"
-            style={{
-              display: "flex",
-              justifyContent: isNarrow ? "center" : "flex-end",
-              alignItems: "center",
-              gap: isNarrow ? 8 : 10,
-              flexWrap: "wrap",
-              width: isNarrow ? "100%" : undefined,
-            }}
-          >
-            <Link href="/" style={topNavBtnStyle("dashboard")}>
-              <span aria-hidden="true" style={topNavIconWrapStyle}>
-                {topNavIcon("dashboard")}
-              </span>
-              <span>Dashboard</span>
-            </Link>
 
-            <Link href="/pickers" style={topNavBtnStyle("pickers")}>
-              <span aria-hidden="true" style={topNavIconWrapStyle}>
-                {topNavIcon("pickers")}
-              </span>
-              <span>Pickers</span>
-            </Link>
-
-            <Link href="/platforms" style={topNavBtnStyle("platforms")}>
-              <span aria-hidden="true" style={topNavIconWrapStyle}>
-                {topNavIcon("platforms")}
-              </span>
-              <span>Platforms</span>
-            </Link>
-
-            <Link href="/utilities" style={topNavBtnStyle("calculators")}>
-              <span aria-hidden="true" style={topNavIconWrapStyle}>
-                {topNavIcon("calculators")}
-              </span>
-              <span>Calculators</span>
-            </Link>
-          </nav>
         </div>
 
         <div
@@ -1157,7 +1119,7 @@ const flagEndIndex = points.length - 1;
             })
           : null}
 
-    
+
         <line
           x1={xAt(safeFlagStartIndex)}
           x2={xAt(flagEndIndex)}
