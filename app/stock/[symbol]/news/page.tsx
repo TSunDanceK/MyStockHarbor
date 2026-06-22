@@ -2664,42 +2664,6 @@ export default async function StockNewsPage({ params }: Props) {
       />
 
       <div className="newsWrap">
-        <div className="newsTopUtilityRow" style={topUtilityRowStyle}>
-          <div className="newsTopUtilityInner" style={topUtilityInnerStyle}>
-            <Link
-              href={`/stock/${encodeURIComponent(upper)}`}
-              className="newsTopBtn"
-              style={topUtilityBtnStyle("gold")}
-            >
-              📈 Dashboard
-            </Link>
-
-            <Link
-              href="/platforms"
-              className="newsTopBtn"
-              style={topUtilityBtnStyle("green")}
-            >
-              🏦 Platforms
-            </Link>
-
-            <Link
-              href="/pickers"
-              className="newsTopBtn"
-              style={topUtilityBtnStyle("red")}
-            >
-              📊 Stock Pickers
-            </Link>
-
-            <Link
-              href="/learn"
-              className="newsTopBtn"
-              style={topUtilityBtnStyle("blue")}
-            >
-              📘 Learn
-            </Link>
-          </div>
-        </div>
-
         <section className="newsHeroShell" style={heroShellStyle}>
           <div className="newsHeroLeft" style={heroLeftStyle}>
             <div style={newsDeskTagStyle}>NEWS DESK</div>
@@ -3038,24 +3002,6 @@ export default async function StockNewsPage({ params }: Props) {
             padding: 18px 16px 32px;
           }
 
-          .newsTopUtilityRow {
-            justify-content: stretch !important;
-          }
-
-          .newsTopUtilityInner {
-            width: 100%;
-            justify-content: stretch !important;
-            gap: 10px !important;
-          }
-
-          .newsTopBtn {
-            flex: 1 1 calc(50% - 5px);
-            justify-content: center !important;
-            min-height: 44px !important;
-            padding: 11px 12px !important;
-            font-size: 13px !important;
-          }
-
           .newsHeroTitle {
             font-size: 34px !important;
             line-height: 1.06 !important;
@@ -3094,17 +3040,6 @@ export default async function StockNewsPage({ params }: Props) {
         @media (max-width: 560px) {
           .newsWrap {
             padding: 14px 12px 26px;
-          }
-
-          .newsTopUtilityInner {
-            display: grid !important;
-            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-            width: 100%;
-          }
-
-          .newsTopBtn {
-            width: 100%;
-            min-width: 0;
           }
 
           .newsHeroShell {
@@ -3180,20 +3115,6 @@ export default async function StockNewsPage({ params }: Props) {
     </main>
   );
 }
-
-const topUtilityRowStyle: CSSProperties = {
-  display: "flex",
-  justifyContent: "flex-end",
-  alignItems: "center",
-  marginBottom: 18,
-};
-
-const topUtilityInnerStyle: CSSProperties = {
-  display: "flex",
-  gap: 12,
-  flexWrap: "wrap",
-  justifyContent: "flex-end",
-};
 
 const heroShellStyle: CSSProperties = {
   display: "grid",
@@ -4176,60 +4097,3 @@ function bottomActionStyle(tone: "blue" | "green" | "red"): CSSProperties {
   };
 }
 
-function topUtilityBtnStyle(
-  type: "gold" | "green" | "red" | "blue",
-): CSSProperties {
-  const base: CSSProperties = {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    minHeight: 40,
-    padding: "9px 14px",
-    borderRadius: 14,
-    textDecoration: "none",
-    fontSize: 13,
-    fontWeight: 900,
-    lineHeight: 1,
-    whiteSpace: "nowrap",
-    boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-  };
-
-  if (type === "gold") {
-    return {
-      ...base,
-      border: "1px solid rgba(250,204,21,0.34)",
-      background:
-        "linear-gradient(135deg, rgba(250,204,21,0.18), rgba(202,138,4,0.08))",
-      color: "#fef3c7",
-    };
-  }
-
-  if (type === "green") {
-    return {
-      ...base,
-      border: "1px solid rgba(34,197,94,0.30)",
-      background:
-        "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))",
-      color: "#dcfce7",
-    };
-  }
-
-  if (type === "red") {
-    return {
-      ...base,
-      border: "1px solid rgba(248,113,113,0.28)",
-      background:
-        "linear-gradient(135deg, rgba(248,113,113,0.16), rgba(185,28,28,0.08))",
-      color: "#fee2e2",
-    };
-  }
-
-  return {
-    ...base,
-    border: "1px solid rgba(59,130,246,0.30)",
-    background:
-      "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(37,99,235,0.08))",
-    color: "#dbeafe",
-  };
-}
