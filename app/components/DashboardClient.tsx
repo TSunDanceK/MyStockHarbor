@@ -199,22 +199,10 @@ const TIMEFRAMES = [{ label: "D", interval: "d" as ChartInterval, fetchBars: 260
 const PRICE_OVERLAY_OPTIONS: Overlay[] = ["MA50", "MA200", "EMA20", "VWMA(20)", "Bollinger(20,2)", "Support/Resistance"];
 const LOWER_OVERLAY_OPTIONS: Overlay[] = ["RSI(14)", "MACD(12,26,9)", "Stochastic(14,3)", "ATR(14)", "Volume"];
 function isLowerOverlay(v: Overlay) { return LOWER_OVERLAY_OPTIONS.includes(v); }
-function cleanStockNavSymbol(value: string | null | undefined) {
-  const cleaned = (value ?? "").trim().toUpperCase().replace(/[^A-Z0-9.-]/g, "");
-  return cleaned || null;
-}
 
 export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymbol?: string }) {
   const router = useRouter(), searchParams = useSearchParams();
   const [symbol, setSymbol] = useState(() => { if (typeof window === "undefined") return defaultSymbol; const s = window.localStorage.getItem("msh_last_symbol"); return s && s.trim() ? s.trim().toUpperCase() : defaultSymbol; });
-  const [stockNavSymbol, setStockNavSymbol] = useState(() => {
-    if (typeof window === "undefined") return "AAPL";
-    return cleanStockNavSymbol(window.localStorage.getItem("msh_last_symbol")) ?? "AAPL";
-  });
-  const hadStoredStockNavSymbolRef = useRef(
-    typeof window !== "undefined" && cleanStockNavSymbol(window.localStorage.getItem("msh_last_symbol")) !== null
-  );
-  const hasCheckedInitialStockNavSymbolRef = useRef(false);
   const [symbolName, setSymbolName] = useState("");
   const [activeTimeframe, setActiveTimeframe] = useState("D");
   const [visibleBars, setVisibleBars] = useState(75);
@@ -256,23 +244,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     if (indi === "MA200") { setSelectedIndicators(["MA200"]); setIndicator("MA200"); } else if (indi === "RSI(14)") { setSelectedIndicators(["RSI(14)"]); setIndicator("RSI(14)"); } else if (indi === "MACD(12,26,9)") { setSelectedIndicators(["MACD(12,26,9)"]); setIndicator("MACD(12,26,9)"); } else { setSelectedIndicators([]); setIndicator("None"); }
     setIndicatorMenuOpen(false); setWindowOffset(0);
   }, [searchParams]);
-  useEffect(() => {
-    const cleanSymbol = cleanStockNavSymbol(symbol);
-    if (!cleanSymbol) return;
-
-    const cleanDefaultSymbol = cleanStockNavSymbol(defaultSymbol) ?? "AAPL";
-    const hasUrlSymbol = Boolean(searchParams.get("symbol")?.trim());
-    const isInitialDefaultSymbol = !hasCheckedInitialStockNavSymbolRef.current && cleanSymbol === cleanDefaultSymbol;
-    const shouldSaveAsLastStock = hadStoredStockNavSymbolRef.current || hasUrlSymbol || !isInitialDefaultSymbol;
-
-    hasCheckedInitialStockNavSymbolRef.current = true;
-
-    if (!shouldSaveAsLastStock) return;
-
-    window.localStorage.setItem("msh_last_symbol", cleanSymbol);
-    setStockNavSymbol(cleanSymbol);
-    hadStoredStockNavSymbolRef.current = true;
-  }, [symbol, defaultSymbol, searchParams]);
+  useEffect(() => { if (!symbol.trim()) return; window.localStorage.setItem("msh_last_symbol", symbol.trim().toUpperCase()); }, [symbol]);
   useEffect(() => { if (!expanded) return; const k = (e: KeyboardEvent) => { if (e.key === "Escape") setExpanded(false); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [expanded]);
   useEffect(() => { function h(e: MouseEvent) { if (!indicatorMenuRef.current) return; if (!indicatorMenuRef.current.contains(e.target as Node)) setIndicatorMenuOpen(false); } document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h); }, []);
   useEffect(() => {
@@ -373,20 +345,6 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     setWindowOffset(0);
   }
   const chartIndicatorName = chartIndicatorLabel(selectedIndicators);
-  const desktopNavLinks = useMemo(() => {
-    const encodedStockNavSymbol = encodeURIComponent(stockNavSymbol);
-    return [
-      { href: "/", label: "Dashboard", active: true },
-      { href: "/learn", label: "Learn" },
-      { href: "/platforms", label: "Platforms" },
-      { href: "/pickers", label: "Stock Pickers" },
-      { href: "/utilities", label: "Calculators" },
-      { href: "/insights", label: "Insights" },
-      { href: `/stock/${encodedStockNavSymbol}/earnings`, label: "Earnings" },
-      { href: `/stock/${encodedStockNavSymbol}`, label: "Stock Analysis" },
-      { href: `/stock/${encodedStockNavSymbol}/news`, label: "News Page" },
-    ];
-  }, [stockNavSymbol]);
 
   const chartSummaryText = useMemo(() => {
     if (!customMode) {
@@ -650,13 +608,6 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     <main style={{ padding: 0, fontFamily: "system-ui, -apple-system, Arial, sans-serif", background: "#05080f", color: COLORS.pageFg, minHeight: "100vh" }}>
       <style>{`
         .msh-wrap{width:min(1240px,calc(100% - 24px));margin:0 auto;padding:0 0 40px;}
-        .msh-nav{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:8px;padding:12px 24px;background:rgba(10,15,26,0.90);backdrop-filter:blur(14px);border-bottom:1px solid #1a2336;margin:0 -12px 0;}
-        .msh-nav-logo{display:flex;align-items:center;margin-right:4px;text-decoration:none;}
-        .msh-nav-logo img{height:38px;width:auto;display:block;}
-        .msh-navlinks{display:flex;align-items:center;gap:2px;margin-left:auto;}
-        .msh-navlink{color:#8a97ad;font-size:13.5px;font-weight:600;text-decoration:none;padding:7px 12px;border-radius:8px;transition:color .15s,background .15s;}
-        .msh-navlink:hover{color:#eaf0fa;background:#141b2b;}
-        .msh-navlink.active{color:#eaf0fa;background:#141b2b;border:1px solid #222c40;}
         .msh-hero{display:flex;align-items:center;gap:18px;padding:20px 0 16px;}
         .msh-hero-lead{flex:0 0 auto;max-width:260px;}
         .msh-hero-lead h1{margin:0;font-size:18px;font-weight:800;line-height:1.2;}
@@ -675,14 +626,10 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
         .msh-news-loading-bar{width:36%;height:100%;border-radius:999px;background:linear-gradient(90deg,#2f6bff,#16c784);animation:mshLoad 1.15s ease-in-out infinite;}
         @keyframes mshLoad{0%{transform:translateX(-120%);}100%{transform:translateX(320%);}}
         @media(max-width:960px){.msh-grid{grid-template-columns:1fr;}}
-        @media(max-width:768px){.msh-nav{display:none;}.msh-hero{display:none;}.msh-wrap{width:calc(100% - 16px);padding-top:12px;}.msh-desktop-only{display:none!important;}}
+        @media(max-width:768px){.msh-hero{display:none;}.msh-wrap{width:calc(100% - 16px);padding-top:12px;}.msh-desktop-only{display:none!important;}}
         @media(min-width:769px){.msh-mobile-only{display:none!important;}}
       `}</style>
 
-      <nav className="msh-nav">
-        <Link href="/" className="msh-nav-logo"><img src="/logo.png" alt="MyStockHarbor" /></Link>
-        <div className="msh-navlinks">{desktopNavLinks.map(l => <Link key={l.href} href={l.href} className={`msh-navlink${l.active ? " active" : ""}`}>{l.label}</Link>)}</div>
-      </nav>
 
       <div className="msh-wrap">
         <div className="msh-hero">
