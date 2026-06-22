@@ -93,11 +93,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               .site-footer-main-grid {
-                grid-template-columns: minmax(280px, 2fr) minmax(140px, 1fr) minmax(180px, 1fr);
-              }
-
-              .site-footer-platform-links {
-                grid-template-columns: repeat(2, minmax(120px, max-content));
+                grid-template-columns: minmax(140px, max-content) minmax(180px, max-content);
               }
 
               @media (max-width: 720px) {
@@ -107,12 +103,8 @@ export default function RootLayout({
                 }
 
                 .site-footer-main-grid {
-                  grid-template-columns: 1fr;
+                  grid-template-columns: 1fr 1fr;
                   gap: 18px !important;
-                }
-
-                .site-footer-platform-links {
-                  grid-template-columns: 1fr;
                 }
               }
 
@@ -122,6 +114,7 @@ export default function RootLayout({
                 }
 
                 .site-footer-main-grid {
+                  grid-template-columns: 1fr;
                   gap: 20px !important;
                 }
               }
@@ -163,7 +156,7 @@ export default function RootLayout({
                 maxWidth: 1200,
                 margin: "0 auto",
                 display: "grid",
-                gap: 16,
+                gap: 24,
               }}
             >
               <div
@@ -200,55 +193,10 @@ export default function RootLayout({
                 className="site-footer-main-grid"
                 style={{
                   display: "grid",
-                  gap: "16px 28px",
+                  gap: "16px 48px",
                   alignItems: "start",
                 }}
               >
-                <div
-                  style={{
-                    display: "grid",
-                    gap: 6,
-                    alignContent: "start",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: "#e2e8f0",
-                    }}
-                  >
-                    Platforms
-                  </div>
-
-                  <div
-                    className="site-footer-platform-links"
-                    style={{
-                      display: "grid",
-                      gap: "4px 28px",
-                    }}
-                  >
-                    <Link href="/" style={footerLinkStyle}>
-                      Dashboard
-                    </Link>
-                    <Link href="/learn" style={footerLinkStyle}>
-                      Learn
-                    </Link>
-                    <Link href="/pickers" style={footerLinkStyle}>
-                      Stock Pickers
-                    </Link>
-                    <Link href="/platforms" style={footerLinkStyle}>
-                      Platforms
-                    </Link>
-                    <Link href="/insights" style={footerLinkStyle}>
-                      Insights
-                    </Link>
-                    <Link href="/utilities" style={footerLinkStyle}>
-                      Utilities
-                    </Link>
-                  </div>
-                </div>
-
                 <div
                   style={{
                     display: "grid",
