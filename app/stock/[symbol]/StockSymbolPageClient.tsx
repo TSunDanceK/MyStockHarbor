@@ -1377,42 +1377,6 @@ if (!cancelled) setPriceLoading(false);
   }}
 >
       <div className="wrap">
-        <div className="analysisTopUtilityRow" style={topUtilityRowStyle}>
-  <div className="analysisTopUtilityInner" style={topUtilityInnerStyle}>
-    <Link
-      href={`/?symbol=${encodeURIComponent(symbol)}`}
-      className="analysisTopBtn"
-      style={topUtilityBtnStyle("gold")}
-    >
-      📈 Dashboard
-    </Link>
-
-    <Link
-      href="/platforms"
-      className="analysisTopBtn"
-      style={topUtilityBtnStyle("green")}
-    >
-      🏦 Platforms
-    </Link>
-
-    <Link
-      href="/pickers"
-      className="analysisTopBtn"
-      style={topUtilityBtnStyle("red")}
-    >
-      📊 Stock Pickers
-    </Link>
-
-    <Link
-      href="/learn"
-      className="analysisTopBtn"
-      style={topUtilityBtnStyle("blue")}
-    >
-      📘 Learn
-    </Link>
-  </div>
-</div>
-
         <section
           style={{
             border: "1px solid rgba(59,130,246,0.24)",
@@ -2464,43 +2428,13 @@ if (!cancelled) setPriceLoading(false);
           }
         }
 
-        @media (max-width: 820px) {
-          .analysisTopUtilityRow {
-            justify-content: stretch !important;
-          }
-
-          .analysisTopUtilityInner {
-            width: 100%;
-            justify-content: stretch !important;
-            gap: 10px !important;
-          }
-
-          .analysisTopBtn {
-            flex: 1 1 calc(50% - 5px);
-            justify-content: center !important;
-            min-height: 44px !important;
-            padding: 11px 12px !important;
-            font-size: 13px !important;
-          }
-        }
 
         @media (max-width: 560px) {
-          .analysisTopUtilityInner {
-            display: grid !important;
-            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-            width: 100%;
-          }
-
           .stockAnalysisMiniGrid,
           .stockMetricMatrix,
           .earningsMetricGrid {
   grid-template-columns: 1fr !important;
 }
-
-          .analysisTopBtn {
-            width: 100%;
-            min-width: 0;
-          }
         }
       `}</style>
     </main>
@@ -2613,13 +2547,6 @@ const metricHeaderStyle: React.CSSProperties = {
   gap: 12,
 };
 
-const topUtilityRowStyle: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "flex-end",
-  alignItems: "center",
-  marginBottom: 18,
-};
-
 function featuredMetricCardStyle(tone: "green" | "yellow" | "red"): React.CSSProperties {
   return {
     border:
@@ -2689,13 +2616,6 @@ const miniMetricSubStyle: React.CSSProperties = {
   opacity: 0.72,
 };
 
-const topUtilityInnerStyle: React.CSSProperties = {
-  display: "flex",
-  gap: 12,
-  flexWrap: "wrap",
-  justifyContent: "flex-end",
-};
-
 function pillStyle(tone: "green" | "red" | "yellow"): React.CSSProperties {
   if (tone === "green") {
     return {
@@ -2744,64 +2664,6 @@ function pillStyle(tone: "green" | "red" | "yellow"): React.CSSProperties {
     fontWeight: 950,
     textTransform: "uppercase",
     letterSpacing: "0.06em",
-  };
-}
-
-function topUtilityBtnStyle(
-  type: "gold" | "green" | "red" | "blue"
-): React.CSSProperties {
-  const base: React.CSSProperties = {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    minHeight: 40,
-    padding: "9px 14px",
-    borderRadius: 14,
-    textDecoration: "none",
-    fontSize: 13,
-    fontWeight: 900,
-    lineHeight: 1,
-    whiteSpace: "nowrap",
-    boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-  };
-
-  if (type === "gold") {
-    return {
-      ...base,
-      border: "1px solid rgba(250,204,21,0.34)",
-      background:
-        "linear-gradient(135deg, rgba(250,204,21,0.18), rgba(202,138,4,0.08))",
-      color: "#fef3c7",
-    };
-  }
-
-  if (type === "green") {
-    return {
-      ...base,
-      border: "1px solid rgba(34,197,94,0.30)",
-      background:
-        "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))",
-      color: "#dcfce7",
-    };
-  }
-
-  if (type === "red") {
-    return {
-      ...base,
-      border: "1px solid rgba(248,113,113,0.28)",
-      background:
-        "linear-gradient(135deg, rgba(248,113,113,0.16), rgba(185,28,28,0.08))",
-      color: "#fee2e2",
-    };
-  }
-
-  return {
-    ...base,
-    border: "1px solid rgba(59,130,246,0.30)",
-    background:
-      "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(37,99,235,0.08))",
-    color: "#dbeafe",
   };
 }
 
