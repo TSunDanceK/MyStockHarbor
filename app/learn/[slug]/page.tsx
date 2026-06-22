@@ -8,105 +8,167 @@ type Props = {
   params: { slug: string };
 };
 
-function topNavBtnStyle(
-  type: "dashboard" | "platforms" | "pickers" | "calculators"
-): React.CSSProperties {
-  if (type === "dashboard") {
-    return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-      minHeight: 42,
-      padding: "9px 13px",
-      borderRadius: 14,
-      border: "1px solid rgba(250,204,21,0.45)",
-      background:
-        "linear-gradient(135deg, rgba(250,204,21,0.20), rgba(202,138,4,0.10))",
-      color: "#fefce8",
-      textDecoration: "none",
-      fontWeight: 900,
-      fontSize: 14,
-      whiteSpace: "nowrap",
-      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-      transition:
-        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-    };
-  }
 
-  if (type === "platforms") {
-    return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-      minHeight: 42,
-      padding: "9px 13px",
-      borderRadius: 14,
-      border: "1px solid rgba(34,197,94,0.45)",
-      background:
-        "linear-gradient(135deg, rgba(34,197,94,0.20), rgba(16,185,129,0.10))",
-      color: "#f0fdf4",
-      textDecoration: "none",
-      fontWeight: 900,
-      fontSize: 14,
-      whiteSpace: "nowrap",
-      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-      transition:
-        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-    };
-  }
+type SiteNavItem = {
+  href: string;
+  label: string;
+  active?: boolean;
+  stockNav?: "earnings" | "analysis" | "news";
+};
 
-  if (type === "pickers") {
-    return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-      minHeight: 42,
-      padding: "9px 13px",
-      borderRadius: 14,
-      border: "1px solid rgba(239,68,68,0.45)",
-      background:
-        "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.10))",
-      color: "#fef2f2",
-      textDecoration: "none",
-      fontWeight: 900,
-      fontSize: 14,
-      whiteSpace: "nowrap",
-      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-      transition:
-        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-    };
-  }
+const SITE_NAV_LINKS: SiteNavItem[] = [
+  { href: "/", label: "Dashboard" },
+  { href: "/learn", label: "Learn", active: true },
+  { href: "/platforms", label: "Platforms" },
+  { href: "/pickers", label: "Stock Pickers" },
+  { href: "/utilities", label: "Calculators" },
+  { href: "/insights", label: "Insights" },
+  { href: "/stock/AAPL/earnings", label: "Earnings", stockNav: "earnings" },
+  { href: "/stock/AAPL", label: "Stock Analysis", stockNav: "analysis" },
+  { href: "/stock/AAPL/news", label: "News Page", stockNav: "news" },
+];
 
-  return {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    minHeight: 42,
-    padding: "9px 13px",
-    borderRadius: 14,
-    border: "1px solid rgba(168,85,247,0.45)",
-    background:
-      "linear-gradient(135deg, rgba(168,85,247,0.20), rgba(139,92,246,0.10))",
-    color: "#faf5ff",
-    textDecoration: "none",
-    fontWeight: 900,
-    fontSize: 14,
-    whiteSpace: "nowrap",
-    boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-    transition:
-      "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-  };
+function TopSiteNav() {
+  return (
+    <>
+      <nav className="msh-site-nav">
+        <Link href="/" className="msh-site-nav-logo" aria-label="MyStockHarbor home">
+          <img src="/logo.png" alt="MyStockHarbor" />
+        </Link>
+
+        <div className="msh-site-navlinks" aria-label="Primary navigation">
+          {SITE_NAV_LINKS.map((item) => (
+            <Link
+              key={item.label}
+              href={item.href}
+              data-msh-stock-nav={item.stockNav}
+              className={`msh-site-navlink${item.active ? " active" : ""}`}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      </nav>
+
+      <script dangerouslySetInnerHTML={{ __html: stockNavHydrationScript() }} />
+    </>
+  );
 }
 
-function topNavIcon(type: "dashboard" | "platforms" | "pickers" | "calculators") {
-  if (type === "dashboard") return "📈";
-  if (type === "platforms") return "🏦";
-  if (type === "pickers") return "📊";
-  return "🧮";
+function stockNavHydrationScript() {
+  return `(function(){try{var raw=window.localStorage&&window.localStorage.getItem("msh_last_symbol");var symbol=String(raw||"").trim().toUpperCase().replace(/[^A-Z0-9.-]/g,"");if(!symbol)symbol="AAPL";var encoded=encodeURIComponent(symbol);var links=document.querySelectorAll("[data-msh-stock-nav]");for(var i=0;i<links.length;i++){var el=links[i];var page=el.getAttribute("data-msh-stock-nav");if(page==="earnings")el.setAttribute("href","/stock/"+encoded+"/earnings");else if(page==="analysis")el.setAttribute("href","/stock/"+encoded);else if(page==="news")el.setAttribute("href","/stock/"+encoded+"/news");}}catch(e){}})();`;
+}
+
+function siteNavCss(wrapMaxWidth: number) {
+  return `
+    .wrap {
+      max-width: ${wrapMaxWidth}px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .msh-site-nav {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      background: rgba(10,15,26,0.90);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid #1a2336;
+    }
+
+    .msh-site-nav-logo {
+      display: flex;
+      align-items: center;
+      margin-right: 4px;
+      text-decoration: none;
+      flex: 0 0 auto;
+    }
+
+    .msh-site-nav-logo img {
+      height: 38px;
+      width: auto;
+      display: block;
+    }
+
+    .msh-site-navlinks {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      margin-left: auto;
+      min-width: 0;
+    }
+
+    .msh-site-navlink {
+      color: #8a97ad;
+      font-size: 13.5px;
+      font-weight: 600;
+      text-decoration: none;
+      padding: 7px 12px;
+      border-radius: 8px;
+      transition: color .15s, background .15s, transform .15s, filter .15s;
+      white-space: nowrap;
+    }
+
+    .msh-site-navlink:hover {
+      color: #eaf0fa;
+      background: #141b2b;
+    }
+
+    .msh-site-navlink.active {
+      color: #eaf0fa;
+      background: #141b2b;
+      border: 1px solid #222c40;
+    }
+
+    a:hover {
+      filter: brightness(1.05);
+      transform: translateY(-1px);
+    }
+
+    @media (max-width: 760px) {
+      .wrap {
+        padding: 16px !important;
+      }
+
+      .msh-site-nav {
+        padding: 10px 12px 8px;
+        gap: 8px;
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .msh-site-nav-logo {
+        align-self: flex-start;
+      }
+
+      .msh-site-nav-logo img {
+        height: 34px;
+      }
+
+      .msh-site-navlinks {
+        margin-left: 0;
+        overflow-x: auto;
+        gap: 4px;
+        padding-bottom: 2px;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .msh-site-navlinks::-webkit-scrollbar {
+        display: none;
+      }
+
+      .msh-site-navlink {
+        flex: 0 0 auto;
+        font-size: 12.5px;
+        padding: 8px 10px;
+      }
+    }
+  `;
 }
 
 function TipBox(props: { title: string; children: React.ReactNode }) {
@@ -342,6 +404,8 @@ export default async function LessonPage({ params }: Props) {
           minHeight: "100vh",
         }}
       >
+        <TopSiteNav />
+
         <div className="wrap">
           <h1 style={{ marginTop: 0 }}>Lesson not found</h1>
           <p style={{ opacity: 0.7 }}>Slug received: {slug || "(empty)"}</p>
@@ -353,24 +417,7 @@ export default async function LessonPage({ params }: Props) {
           </div>
         </div>
 
-<style>{`
-  .wrap {
-    max-width: 920px;
-    margin: 0 auto;
-    padding: 24px;
-  }
-
-  a:hover {
-    filter: brightness(1.05);
-    transform: translateY(-1px);
-  }
-
-  @media (max-width: 760px) {
-    .wrap {
-      padding: 16px !important;
-    }
-  }
-`}</style>
+<style>{siteNavCss(920)}</style>
       </main>
     );
   }
@@ -385,96 +432,10 @@ export default async function LessonPage({ params }: Props) {
         minHeight: "100vh",
       }}
     >
+      <TopSiteNav />
+
       <div className="wrap">
         <div style={{ display: "grid", gap: 12 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "flex-start",
-              justifyContent: "space-between",
-              gap: 16,
-              flexWrap: "nowrap",
-            }}
-          >
-            <div style={{ minWidth: 0 }} />
-
-            <div
-              style={{
-                display: "flex",
-                gap: 10,
-                flexWrap: "wrap",
-                justifyContent: "flex-end",
-                alignItems: "flex-start",
-                flex: "0 0 auto",
-                marginLeft: "auto",
-              }}
-            >
-              <Link href="/" style={topNavBtnStyle("dashboard")}>
-                <span
-                  aria-hidden="true"
-                  style={{
-                    fontSize: 15,
-                    lineHeight: 1,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {topNavIcon("dashboard")}
-                </span>
-                <span>Dashboard</span>
-              </Link>
-
-              <Link href="/platforms" style={topNavBtnStyle("platforms")}>
-                <span
-                  aria-hidden="true"
-                  style={{
-                    fontSize: 15,
-                    lineHeight: 1,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {topNavIcon("platforms")}
-                </span>
-                <span>Platforms</span>
-              </Link>
-
-              <Link href="/pickers" style={topNavBtnStyle("pickers")}>
-                <span
-                  aria-hidden="true"
-                  style={{
-                    fontSize: 15,
-                    lineHeight: 1,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {topNavIcon("pickers")}
-                </span>
-                <span>Stock Pickers</span>
-              </Link>
-
-              <Link href="/utilities" style={topNavBtnStyle("calculators")}>
-                <span
-                  aria-hidden="true"
-                  style={{
-                    fontSize: 15,
-                    lineHeight: 1,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {topNavIcon("calculators")}
-                </span>
-                <span>Calculators</span>
-              </Link>
-            </div>
-          </div>
-
           <div
             style={{
               fontSize: 12,
@@ -684,24 +645,7 @@ export default async function LessonPage({ params }: Props) {
         )}
       </div>
 
-<style>{`
-  .wrap {
-    max-width: 920px;
-    margin: 0 auto;
-    padding: 24px;
-  }
-
-  a:hover {
-    filter: brightness(1.05);
-    transform: translateY(-1px);
-  }
-
-  @media (max-width: 760px) {
-    .wrap {
-      padding: 16px !important;
-    }
-  }
-`}</style>
+<style>{siteNavCss(920)}</style>
     </main>
   );
 }
