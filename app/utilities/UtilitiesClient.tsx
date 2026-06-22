@@ -3,162 +3,6 @@
 import Link from "next/link";
 import React, { useMemo, useState } from "react";
 
-type SiteNavItem = {
-  href: string;
-  label: string;
-  active?: boolean;
-  stockNav?: "earnings" | "analysis" | "news";
-};
-
-function cleanStockNavSymbol(value: string | null | undefined) {
-  const cleaned = (value ?? "")
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9.-]/g, "");
-
-  return cleaned || "AAPL";
-}
-
-function getStoredStockNavSymbol() {
-  if (typeof window === "undefined") return "AAPL";
-
-  try {
-    return cleanStockNavSymbol(window.localStorage.getItem("msh_last_symbol"));
-  } catch {
-    return "AAPL";
-  }
-}
-
-function TopSiteNav() {
-  const [stockNavSymbol, setStockNavSymbol] = useState("AAPL");
-
-  React.useEffect(() => {
-    const updateStockNavSymbol = () => {
-      setStockNavSymbol(getStoredStockNavSymbol());
-    };
-
-    updateStockNavSymbol();
-
-    window.addEventListener("storage", updateStockNavSymbol);
-    window.addEventListener("focus", updateStockNavSymbol);
-
-    return () => {
-      window.removeEventListener("storage", updateStockNavSymbol);
-      window.removeEventListener("focus", updateStockNavSymbol);
-    };
-  }, []);
-
-  const encodedStockNavSymbol = encodeURIComponent(stockNavSymbol);
-
-  const siteNavLinks: SiteNavItem[] = [
-    { href: "/", label: "Dashboard" },
-    { href: "/learn", label: "Learn" },
-    { href: "/platforms", label: "Platforms" },
-    { href: "/pickers", label: "Stock Pickers" },
-    { href: "/utilities", label: "Calculators", active: true },
-    { href: "/insights", label: "Insights" },
-    {
-      href: `/stock/${encodedStockNavSymbol}/earnings`,
-      label: "Earnings",
-      stockNav: "earnings",
-    },
-    {
-      href: `/stock/${encodedStockNavSymbol}`,
-      label: "Stock Analysis",
-      stockNav: "analysis",
-    },
-    {
-      href: `/stock/${encodedStockNavSymbol}/news`,
-      label: "News Page",
-      stockNav: "news",
-    },
-  ];
-
-  const navStyle: React.CSSProperties = {
-    position: "sticky",
-    top: 0,
-    zIndex: 30,
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    padding: "12px 24px",
-    background: "rgba(10, 15, 26, 0.94)",
-    backdropFilter: "blur(14px)",
-    borderBottom: "1px solid #1a2336",
-    boxSizing: "border-box",
-    width: "100%",
-    minWidth: 0,
-  };
-
-  const logoLinkStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    flex: "0 0 auto",
-    textDecoration: "none",
-  };
-
-  const logoImageStyle: React.CSSProperties = {
-    display: "block",
-    height: 38,
-    width: "auto",
-    maxWidth: 150,
-    objectFit: "contain",
-  };
-
-  const navLinksStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    gap: 4,
-    marginLeft: "auto",
-    minWidth: 0,
-    overflowX: "auto",
-    overflowY: "hidden",
-    whiteSpace: "nowrap",
-    scrollbarWidth: "none",
-    WebkitOverflowScrolling: "touch",
-  };
-
-  const navLinkStyle = (active?: boolean): React.CSSProperties => ({
-    flex: "0 0 auto",
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    color: active ? "#eaf0fa" : "#8a97ad",
-    background: active ? "#141b2b" : "transparent",
-    border: active ? "1px solid #222c40" : "1px solid transparent",
-    borderRadius: 8,
-    padding: "7px 12px",
-    fontSize: 13.5,
-    fontWeight: 700,
-    lineHeight: 1,
-    textDecoration: "none",
-    boxSizing: "border-box",
-  });
-
-  return (
-    <nav style={navStyle}>
-      <Link href="/" style={logoLinkStyle} aria-label="MyStockHarbor home">
-        <img src="/logo.png" alt="MyStockHarbor" style={logoImageStyle} />
-      </Link>
-
-      <div style={navLinksStyle} aria-label="Primary navigation">
-        {siteNavLinks.map((item) => (
-          <Link
-            key={item.label}
-            href={item.href}
-            data-msh-stock-nav={item.stockNav}
-            style={navLinkStyle(item.active)}
-          >
-            {item.label}
-          </Link>
-        ))}
-      </div>
-    </nav>
-  );
-}
-
 function HelpTip({ text }: { text: string }) {
   const [open, setOpen] = React.useState(false);
 
@@ -647,8 +491,6 @@ export default function UtilitiesClientPage() {
         minHeight: "100vh",
       }}
     >
-      <TopSiteNav />
-
       <div className="wrap">
         <div style={{ display: "grid", gap: 14 }}>
           <div style={{ minWidth: 0 }}>
@@ -1023,128 +865,128 @@ export default function UtilitiesClientPage() {
           </section>
         </div>
 
-<section style={infoSectionStyle()}>
-  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-    <div style={utilityIconStyle("blue")}>📘</div>
-    <div>
-      <div style={sectionEyebrowStyle("blue")}>Learn next</div>
-      <h2 style={{ margin: "6px 0 0", fontSize: 24, lineHeight: 1.2 }}>
-        Related risk management guides
-      </h2>
-    </div>
-  </div>
+        <section style={infoSectionStyle()}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={utilityIconStyle("blue")}>📘</div>
+            <div>
+              <div style={sectionEyebrowStyle("blue")}>Learn next</div>
+              <h2 style={{ margin: "6px 0 0", fontSize: 24, lineHeight: 1.2 }}>
+                Related risk management guides
+              </h2>
+            </div>
+          </div>
 
-  <div
-    style={{
-      marginTop: 14,
-      display: "grid",
-      gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-      gap: 12,
-    }}
-  >
-    <Link href="/position-sizing-guide" style={guideCardStyle()}>
-      <div style={{ fontWeight: 900, fontSize: 16 }}>
-        Position Sizing Guide
-      </div>
-      <div
-        style={{
-          marginTop: 6,
-          opacity: 0.76,
-          lineHeight: 1.55,
-          fontSize: 13,
-        }}
-      >
-        Learn how traders calculate the correct trade size based on risk
-        and stop loss distance.
-      </div>
-    </Link>
+          <div
+            style={{
+              marginTop: 14,
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: 12,
+            }}
+          >
+            <Link href="/position-sizing-guide" style={guideCardStyle()}>
+              <div style={{ fontWeight: 900, fontSize: 16 }}>
+                Position Sizing Guide
+              </div>
+              <div
+                style={{
+                  marginTop: 6,
+                  opacity: 0.76,
+                  lineHeight: 1.55,
+                  fontSize: 13,
+                }}
+              >
+                Learn how traders calculate the correct trade size based on risk
+                and stop loss distance.
+              </div>
+            </Link>
 
-    <Link href="/stop-loss-strategy" style={guideCardStyle()}>
-      <div style={{ fontWeight: 900, fontSize: 16 }}>
-        Stop Loss Strategy
-      </div>
-      <div
-        style={{
-          marginTop: 6,
-          opacity: 0.76,
-          lineHeight: 1.55,
-          fontSize: 13,
-        }}
-      >
-        Understand how stop losses help control downside risk and protect
-        trading capital.
-      </div>
-    </Link>
+            <Link href="/stop-loss-strategy" style={guideCardStyle()}>
+              <div style={{ fontWeight: 900, fontSize: 16 }}>
+                Stop Loss Strategy
+              </div>
+              <div
+                style={{
+                  marginTop: 6,
+                  opacity: 0.76,
+                  lineHeight: 1.55,
+                  fontSize: 13,
+                }}
+              >
+                Understand how stop losses help control downside risk and protect
+                trading capital.
+              </div>
+            </Link>
 
-    <Link href="/trading-risk-management" style={guideCardStyle()}>
-      <div style={{ fontWeight: 900, fontSize: 16 }}>
-        Trading Risk Management
-      </div>
-      <div
-        style={{
-          marginTop: 6,
-          opacity: 0.76,
-          lineHeight: 1.55,
-          fontSize: 13,
-        }}
-      >
-        Explore the core principles traders use to control losses and
-        manage overall portfolio risk.
-      </div>
-    </Link>
+            <Link href="/trading-risk-management" style={guideCardStyle()}>
+              <div style={{ fontWeight: 900, fontSize: 16 }}>
+                Trading Risk Management
+              </div>
+              <div
+                style={{
+                  marginTop: 6,
+                  opacity: 0.76,
+                  lineHeight: 1.55,
+                  fontSize: 13,
+                }}
+              >
+                Explore the core principles traders use to control losses and
+                manage overall portfolio risk.
+              </div>
+            </Link>
 
-    <Link href="/risk-reward-ratio" style={guideCardStyle()}>
-      <div style={{ fontWeight: 900, fontSize: 16 }}>
-        Risk Reward Ratio
-      </div>
-      <div
-        style={{
-          marginTop: 6,
-          opacity: 0.76,
-          lineHeight: 1.55,
-          fontSize: 13,
-        }}
-      >
-        Learn how traders compare potential upside and downside before
-        entering a trade.
-      </div>
-    </Link>
+            <Link href="/risk-reward-ratio" style={guideCardStyle()}>
+              <div style={{ fontWeight: 900, fontSize: 16 }}>
+                Risk Reward Ratio
+              </div>
+              <div
+                style={{
+                  marginTop: 6,
+                  opacity: 0.76,
+                  lineHeight: 1.55,
+                  fontSize: 13,
+                }}
+              >
+                Learn how traders compare potential upside and downside before
+                entering a trade.
+              </div>
+            </Link>
 
-    <Link href="/margin-trading-explained" style={guideCardStyle()}>
-      <div style={{ fontWeight: 900, fontSize: 16 }}>
-        Margin Trading Explained
-      </div>
-      <div
-        style={{
-          marginTop: 6,
-          opacity: 0.76,
-          lineHeight: 1.55,
-          fontSize: 13,
-        }}
-      >
-        Understand how leverage works and why liquidation risk matters
-        when trading on margin.
-      </div>
-    </Link>
+            <Link href="/margin-trading-explained" style={guideCardStyle()}>
+              <div style={{ fontWeight: 900, fontSize: 16 }}>
+                Margin Trading Explained
+              </div>
+              <div
+                style={{
+                  marginTop: 6,
+                  opacity: 0.76,
+                  lineHeight: 1.55,
+                  fontSize: 13,
+                }}
+              >
+                Understand how leverage works and why liquidation risk matters
+                when trading on margin.
+              </div>
+            </Link>
 
-    <Link href="/pickers" style={guideCardStyle()}>
-      <div style={{ fontWeight: 900, fontSize: 16 }}>
-        Find Stock Ideas
-      </div>
-      <div
-        style={{
-          marginTop: 6,
-          opacity: 0.76,
-          lineHeight: 1.55,
-          fontSize: 13,
-        }}
-      >
-        Use the stock pickers to find setups, then return here to plan
-        trade size and risk.
-      </div>
-    </Link>
-  </div>
-</section>
+            <Link href="/pickers" style={guideCardStyle()}>
+              <div style={{ fontWeight: 900, fontSize: 16 }}>
+                Find Stock Ideas
+              </div>
+              <div
+                style={{
+                  marginTop: 6,
+                  opacity: 0.76,
+                  lineHeight: 1.55,
+                  fontSize: 13,
+                }}
+              >
+                Use the stock pickers to find setups, then return here to plan
+                trade size and risk.
+              </div>
+            </Link>
+          </div>
+        </section>
 
         <section style={infoSectionStyle()}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -1192,176 +1034,85 @@ export default function UtilitiesClientPage() {
         </section>
       </div>
 
-<style jsx>{`
-  .wrap {
-    max-width: 1180px;
-    margin: 0 auto;
-    padding: 24px;
-  }
+      <style jsx>{`
+        .wrap {
+          max-width: 1180px;
+          margin: 0 auto;
+          padding: 24px;
+        }
 
-  .grid2 {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-  }
+        .grid2 {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 16px;
+        }
 
-  .calcFieldGrid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-  }
+        .calcFieldGrid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+        }
 
-  .calcResultGrid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-  }
+        .calcResultGrid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+        }
 
-  .msh-site-nav {
-    position: sticky;
-    top: 0;
-    z-index: 30;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 24px;
-    background: rgba(10,15,26,0.90);
-    backdrop-filter: blur(14px);
-    border-bottom: 1px solid #1a2336;
-  }
+        a:hover {
+          filter: brightness(1.05);
+          transform: translateY(-1px);
+        }
 
-  .msh-site-nav-logo {
-    display: flex;
-    align-items: center;
-    margin-right: 4px;
-    text-decoration: none;
-    flex: 0 0 auto;
-  }
+        @media (max-width: 900px) {
+          .grid2 {
+            grid-template-columns: 1fr !important;
+          }
+        }
 
-  .msh-site-nav-logo img {
-    height: 38px;
-    width: auto;
-    display: block;
-  }
+        @media (max-width: 760px) {
+          .wrap {
+            padding: 16px !important;
+          }
 
-  .msh-site-navlinks {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    margin-left: auto;
-    min-width: 0;
-  }
+          .mobileHideIntroSection {
+            display: none !important;
+          }
 
-  .msh-site-navlink {
-    color: #8a97ad;
-    font-size: 13.5px;
-    font-weight: 600;
-    text-decoration: none;
-    padding: 7px 12px;
-    border-radius: 8px;
-    transition: color .15s, background .15s, transform .15s, filter .15s;
-    white-space: nowrap;
-  }
+          .calcFieldGrid,
+          .calcResultGrid {
+            grid-template-columns: 1fr 1fr !important;
+            gap: 10px !important;
+          }
 
-  .msh-site-navlink:hover {
-    color: #eaf0fa;
-    background: #141b2b;
-  }
+          .mobileCompactResultCard {
+            padding: 12px !important;
+            border-radius: 12px !important;
+            min-width: 0 !important;
+          }
 
-  .msh-site-navlink.active {
-    color: #eaf0fa;
-    background: #141b2b;
-    border: 1px solid #222c40;
-  }
+          .mobileCompactResultLabel {
+            font-size: 11px !important;
+            gap: 2px !important;
+            line-height: 1.2 !important;
+            flex-wrap: nowrap !important;
+            min-width: 0 !important;
+          }
 
-  a:hover {
-    filter: brightness(1.05);
-    transform: translateY(-1px);
-  }
+          .mobileCompactResultText {
+            min-width: 0 !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            white-space: nowrap !important;
+          }
 
-  @media (max-width: 900px) {
-    .grid2 {
-      grid-template-columns: 1fr !important;
-    }
-  }
-
-  @media (max-width: 760px) {
-    .wrap {
-      padding: 16px !important;
-    }
-
-    .msh-site-nav {
-      padding: 10px 12px 8px;
-      gap: 8px;
-      align-items: stretch;
-      flex-direction: column;
-    }
-
-    .msh-site-nav-logo {
-      align-self: flex-start;
-    }
-
-    .msh-site-nav-logo img {
-      height: 34px;
-    }
-
-    .msh-site-navlinks {
-      margin-left: 0;
-      overflow-x: auto;
-      gap: 4px;
-      padding-bottom: 2px;
-      scrollbar-width: none;
-      -webkit-overflow-scrolling: touch;
-    }
-
-    .msh-site-navlinks::-webkit-scrollbar {
-      display: none;
-    }
-
-    .msh-site-navlink {
-      flex: 0 0 auto;
-      font-size: 12.5px;
-      padding: 8px 10px;
-    }
-
-    .mobileHideIntroSection {
-      display: none !important;
-    }
-
-    .calcFieldGrid,
-    .calcResultGrid {
-      grid-template-columns: 1fr 1fr !important;
-      gap: 10px !important;
-    }
-
-    .mobileCompactResultCard {
-      padding: 12px !important;
-      border-radius: 12px !important;
-      min-width: 0 !important;
-    }
-
-    .mobileCompactResultLabel {
-      font-size: 11px !important;
-      gap: 2px !important;
-      line-height: 1.2 !important;
-      flex-wrap: nowrap !important;
-      min-width: 0 !important;
-    }
-
-    .mobileCompactResultText {
-      min-width: 0 !important;
-      overflow: hidden !important;
-      text-overflow: ellipsis !important;
-      white-space: nowrap !important;
-    }
-
-    .mobileCompactResultValue {
-      font-size: 18px !important;
-      line-height: 1.15 !important;
-      margin-top: 5px !important;
-    }
-  }
-`}</style>
+          .mobileCompactResultValue {
+            font-size: 18px !important;
+            line-height: 1.15 !important;
+            margin-top: 5px !important;
+          }
+        }
+      `}</style>
     </main>
   );
 }
