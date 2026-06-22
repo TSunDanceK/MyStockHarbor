@@ -4,11 +4,14 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+const DEFAULT_SYMBOL = "AAPL";
+
 type NavTile = {
   icon: string;
   label: string;
   sublabel: string;
-  href: string;
+  // href is either a static string or a function that receives the last symbol
+  href: string | ((symbol: string) => string);
   accent: string;
   bg: string;
 };
@@ -41,16 +44,16 @@ const TILES: NavTile[] = [
   {
     icon: "📊",
     label: "Stock Analysis",
-    sublabel: "Deep-dive any ticker",
-    href: "/dashboard",
+    sublabel: (symbol: string) => `Viewing ${symbol}`,
+    href: (symbol: string) => `/stock/${encodeURIComponent(symbol)}`,
     accent: "rgba(34,197,94,0.50)",
     bg: "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(16,185,129,0.08))",
   },
   {
     icon: "📅",
     label: "Earnings",
-    sublabel: "Latest earnings results",
-    href: "/dashboard",
+    sublabel: (symbol: string) => `${symbol} earnings`,
+    href: (symbol: string) => `/stock/${encodeURIComponent(symbol)}/earnings`,
     accent: "rgba(251,146,60,0.50)",
     bg: "linear-gradient(135deg, rgba(251,146,60,0.18), rgba(234,88,12,0.08))",
   },
@@ -85,6 +88,18 @@ export default function MobileHomePage() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<{ symbol: string; name: string; exchange: string }[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
+
+  // Last viewed symbol from localStorage, falls back to AAPL for fresh visitors
+  const [lastSymbol, setLastSymbol] = useState(DEFAULT_SYMBOL);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("msh_last_symbol");
+      if (saved && saved.trim()) setLastSymbol(saved.trim().toUpperCase());
+    } catch {
+      // localStorage unavailable (private browsing edge cases) — keep default
+    }
+  }, []);
 
   useEffect(() => {
     const q = query.trim();
@@ -135,7 +150,6 @@ export default function MobileHomePage() {
           style={{ height: 52, width: "auto", display: "block", marginBottom: 10 }}
         />
 
-        {/* H1 — matches page metadata title for SEO */}
         <h1
           style={{
             margin: 0,
@@ -245,42 +259,47 @@ export default function MobileHomePage() {
           gap: 12,
         }}
       >
-        {TILES.map((tile) => (
-          <Link
-            key={tile.label}
-            href={tile.href}
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 8,
-              padding: "16px 14px",
-              borderRadius: 18,
-              border: `1px solid ${tile.accent}`,
-              background: tile.bg,
-              textDecoration: "none",
-              color: "#f1f5f9",
-              boxShadow: `0 4px 20px ${tile.accent.replace("0.5", "0.12")}`,
-              transition: "transform 120ms ease, filter 120ms ease",
-              WebkitTapHighlightColor: "transparent",
-            }}
-          >
-            <span style={{ fontSize: 28, lineHeight: 1 }}>{tile.icon}</span>
-            <div>
-              <div style={{ fontWeight: 950, fontSize: 15, lineHeight: 1.15 }}>{tile.label}</div>
-              <div
-                style={{
-                  marginTop: 3,
-                  fontSize: 12,
-                  opacity: 0.65,
-                  fontWeight: 700,
-                  lineHeight: 1.4,
-                }}
-              >
-                {tile.sublabel}
+        {TILES.map((tile) => {
+          const resolvedHref = typeof tile.href === "function" ? tile.href(lastSymbol) : tile.href;
+          const resolvedSublabel = typeof tile.sublabel === "function" ? tile.sublabel(lastSymbol) : tile.sublabel;
+
+          return (
+            <Link
+              key={tile.label}
+              href={resolvedHref}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+                padding: "16px 14px",
+                borderRadius: 18,
+                border: `1px solid ${tile.accent}`,
+                background: tile.bg,
+                textDecoration: "none",
+                color: "#f1f5f9",
+                boxShadow: `0 4px 20px ${tile.accent.replace("0.5", "0.12")}`,
+                transition: "transform 120ms ease, filter 120ms ease",
+                WebkitTapHighlightColor: "transparent",
+              }}
+            >
+              <span style={{ fontSize: 28, lineHeight: 1 }}>{tile.icon}</span>
+              <div>
+                <div style={{ fontWeight: 950, fontSize: 15, lineHeight: 1.15 }}>{tile.label}</div>
+                <div
+                  style={{
+                    marginTop: 3,
+                    fontSize: 12,
+                    opacity: 0.65,
+                    fontWeight: 700,
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {resolvedSublabel}
+                </div>
               </div>
-            </div>
-          </Link>
-        ))}
+            </Link>
+          );
+        })}
       </div>
 
       {/* ── Footer links ── */}
