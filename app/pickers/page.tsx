@@ -8,8 +8,7 @@ const pickersJsonLd = {
   "@type": "CollectionPage",
   name: "Stock Pickers",
   url: "https://www.mystockharbor.com/pickers",
-  description:
-    "Browse screened stock ideas including oversold stocks, overbought stocks, breakout setups, stocks near the 200-day moving average, divergence setups, unusual volume stocks, and pullback setups.",
+  description: "Browse screened stock ideas including oversold stocks, overbought stocks, breakout setups, stocks near the 200-day moving average, divergence setups, unusual volume stocks, and pullback setups.",
   mainEntity: {
     "@type": "ItemList",
     itemListElement: [
@@ -40,6 +39,26 @@ const supportCardStyle: React.CSSProperties = { border: "1px solid rgba(255,255,
 const smallLinkTextStyle: React.CSSProperties = { marginTop: 8, fontSize: 13, opacity: 0.72, lineHeight: 1.6 };
 const midCardTextStyle: React.CSSProperties = { marginTop: 8, fontSize: 14, opacity: 0.74, lineHeight: 1.6 };
 
+// All setups shown as a simple 2-col bullet list in the hero right panel
+const SETUP_LINKS: { label: string; href: string }[] = [
+  { label: "Ascending Triangle Plays", href: "/plays" },
+  { label: "Descending Triangle Plays", href: "/plays/descending-triangles" },
+  { label: "Bull Flag Plays", href: "/plays/bull-flags" },
+  { label: "Macro Support / Resistance Plays", href: "/macro-support-resistance-stocks" },
+  { label: "Top Stocks With Buy Signals", href: "/top-stocks-with-buy-signals" },
+  { label: "Stocks Down 20% From All-Time Highs", href: "/stocks-down-20-from-all-time-highs" },
+  { label: "All-Time High Breakout Stocks", href: "/all-time-high-breakout-stocks" },
+  { label: "3-Month High Breakout Stocks", href: "/3-month-high-breakout-stocks" },
+  { label: "Top Stocks With Sell Signals", href: "/top-stocks-with-sell-signals" },
+  { label: "Oversold Stocks Today", href: "/oversold-stocks-today" },
+  { label: "Overbought Stocks Today", href: "/overbought-stocks-today" },
+  { label: "Best Trend Score Stocks", href: "/best-trend-score-stocks" },
+  { label: "MA200 Proximity", href: "/stocks-near-200-day-moving-average" },
+  { label: "Bullish & Bearish Divergence", href: "/bullish-bearish-divergence-stocks" },
+  { label: "Stocks With Positive Last Earnings", href: "/stocks-with-positive-last-earnings" },
+  { label: "Stocks With Strong Earnings Growth", href: "/stocks-with-strong-earnings-growth" },
+];
+
 export default function PickersPage() {
   return (
     <main style={{ padding: 0, fontFamily: "system-ui, Arial", background: "#06080d", color: "#f1f5f9", minHeight: "100vh" }}>
@@ -51,66 +70,53 @@ export default function PickersPage() {
           {/* ── Hero row ── */}
           <div className="heroGrid">
 
-            {/* Left: heading + description (always visible) */}
-            <section className="heroPanel" style={{ border: "1px solid rgba(59,130,246,0.20)", borderRadius: 22, padding: 18, background: "linear-gradient(135deg, rgba(10,16,32,0.98), rgba(7,11,22,0.98))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 14px 34px rgba(0,0,0,0.30)", minWidth: 0, width: "100%", boxSizing: "border-box", overflow: "hidden" }}>
+            {/* Left: heading + description */}
+            <section className="heroPanel" style={{ border: "1px solid rgba(59,130,246,0.18)", borderRadius: 22, padding: 18, background: "linear-gradient(135deg, rgba(10,16,32,0.98), rgba(7,11,22,0.98))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), 0 14px 34px rgba(0,0,0,0.28)", minWidth: 0, width: "100%", boxSizing: "border-box", overflow: "hidden" }}>
               <div className="pickersHeroPills" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", minWidth: 0 }}>
-                <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 999, border: "1px solid rgba(59,130,246,0.32)", background: "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(37,99,235,0.08))", fontSize: 12, fontWeight: 950, letterSpacing: "0.08em", textTransform: "uppercase", color: "#dbeafe", maxWidth: "100%", boxSizing: "border-box" }}>
-                  STOCK PICKERS
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 11px", borderRadius: 999, border: "1px solid rgba(59,130,246,0.28)", background: "rgba(59,130,246,0.10)", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#93c5fd", maxWidth: "100%", boxSizing: "border-box" }}>
+                  Stock Pickers
                 </div>
                 <BookmarkPromptButton compact />
               </div>
 
-              <h1 className="pickersHeroTitle" style={{ margin: "14px 0 0 0", fontSize: 44, lineHeight: 1.04, letterSpacing: "-0.05em" }}>
-                Stock Pickers & Technical Setup Ideas
+              <h1 className="pickersHeroTitle" style={{ margin: "14px 0 0 0", fontSize: 38, lineHeight: 1.06, letterSpacing: "-0.04em", fontWeight: 800 }}>
+                Stock Pickers &amp; Technical Setup Ideas
               </h1>
 
-              <p className="pickersHeroText" style={{ marginTop: 12, fontSize: 17, lineHeight: 1.65, opacity: 0.84, maxWidth: 700 }}>
-                Browse screened stock ideas across oversold conditions, breakouts, divergence setups, 200-day moving average tests, pullback setups and other chart-based trading ideas.
+              <p className="pickersHeroText" style={{ marginTop: 10, fontSize: 16, lineHeight: 1.65, opacity: 0.76, maxWidth: 620 }}>
+                Screened stock ideas across oversold conditions, breakouts, divergence, 200-day MA tests, pullbacks and more. Starting points for chart analysis — not buy or sell recommendations.
               </p>
 
-              {/* Mini stats — desktop only */}
-              <div className="heroMiniStats pickers-desktop-only" style={{ marginTop: 18, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, maxWidth: 560, minWidth: 0 }}>
-                <MiniStat label="Results" value="Screened Market Setups" tint="green" />
-                <MiniStat label="Use Case" value="Find Trade Ideas Faster" tint="amber" />
-              </div>
-
               {/* Scroll cue — desktop only */}
-              <div className="scrollCueBox pickers-desktop-only" style={{ marginTop: 16, borderRadius: 18, border: "1px dashed rgba(96,165,250,0.40)", background: "linear-gradient(180deg, rgba(30,64,175,0.14), rgba(15,23,42,0.12))", padding: "16px 18px", display: "grid", placeItems: "center", textAlign: "center", minHeight: 90, minWidth: 0, boxSizing: "border-box", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 0 0 1px rgba(59,130,246,0.06), 0 0 28px rgba(37,99,235,0.16)" }}>
-                <div className="scrollCueText" style={{ fontSize: 14, fontWeight: 950, letterSpacing: "0.08em", color: "#dbeafe", textTransform: "uppercase", textShadow: "0 0 18px rgba(96,165,250,0.20)" }}>
-                  Scroll down for today's screened stock setups
-                </div>
-                <div className="scrollCueArrows" style={{ marginTop: 8, fontSize: 24, lineHeight: 1, color: "#60a5fa", letterSpacing: "0.28em", fontWeight: 900 }}>↓ ↓ ↓</div>
+              <div className="scrollCueBox pickers-desktop-only" style={{ marginTop: 16, borderRadius: 14, border: "1px solid rgba(96,165,250,0.22)", background: "rgba(30,64,175,0.08)", padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ fontSize: 18, lineHeight: 1, color: "#60a5fa" }}>↓</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(219,234,254,0.75)" }}>Scroll for today's screened setups</div>
               </div>
             </section>
 
-            {/* Right: signal cards — desktop only */}
-            <section className="heroPanel mobile-hide-screened-setups" style={{ border: "1px solid rgba(59,130,246,0.20)", borderRadius: 22, padding: 18, background: "linear-gradient(180deg, rgba(8,14,28,0.98), rgba(6,10,18,0.98))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 14px 34px rgba(0,0,0,0.28)", minWidth: 0, width: "100%", boxSizing: "border-box", overflow: "hidden" }}>
-              <div style={{ display: "inline-flex", alignItems: "center", padding: "7px 12px", borderRadius: 999, background: "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))", border: "1px solid rgba(59,130,246,0.32)", color: "#dbeafe", fontWeight: 950, letterSpacing: "0.08em", fontSize: 12, maxWidth: "100%", boxSizing: "border-box" }}>
-                REAL SCREENED SETUPS
-              </div>
-              <div className="heroSignalStack" style={{ marginTop: 14, display: "grid", gap: 10, minWidth: 0 }}>
-                <SignalCard title="Oversold Rebound Signals" text="Screened for stretched downside conditions that may be worth reviewing for rebound potential." tint="green" />
-                <SignalCard title="Near 200-Day MA Setups" text="Filtered to highlight stocks trading close to the 200-day moving average, a key long-term level traders watch." tint="red" />
-                <SignalCard title="Divergence Setups" text="Filtered to surface charts where price and momentum may be starting to disagree." tint="amber" />
-                <SignalCard title="Pullback Setups" text="Screened for controlled weakness or retracements that may still fit a stronger chart." tint="teal" />
-                <SignalCard title="Breakout Setups" text="Filtered to highlight strength, resistance pressure or momentum expansion worth checking." tint="blue" />
+            {/* Right: clean 2-col bullet list of all setups — desktop only */}
+            <section className="heroPanel mobile-hide-screened-setups" style={{ border: "1px solid rgba(255,255,255,0.10)", borderRadius: 22, padding: "18px 20px", background: "rgba(10,14,24,0.96)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), 0 14px 34px rgba(0,0,0,0.28)", minWidth: 0, width: "100%", boxSizing: "border-box", overflow: "hidden" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "rgba(148,163,184,0.70)", marginBottom: 14 }}>All screened setups on this page</div>
+              <div className="hero-bullet-grid">
+                {SETUP_LINKS.map((s) => (
+                  <Link key={s.href} href={s.href} style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", color: "#cbd5e1", fontSize: 13, fontWeight: 500, lineHeight: 1.35, padding: "4px 0", transition: "color 120ms ease" }} className="hero-bullet-item">
+                    <span style={{ width: 4, height: 4, borderRadius: 999, background: "rgba(148,163,184,0.50)", flex: "0 0 auto" }} />
+                    {s.label}
+                  </Link>
+                ))}
               </div>
             </section>
           </div>
         </div>
 
         {/* ── Main screened results panel ── */}
-        <section style={{ marginTop: 24, width: "100%", borderRadius: 22, border: "1px solid rgba(59,130,246,0.35)", background: "linear-gradient(180deg, rgba(6,12,24,1), rgba(4,8,16,1))", boxShadow: "0 0 0 1px rgba(59,130,246,0.15), 0 24px 60px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06)", overflow: "hidden", position: "relative", boxSizing: "border-box" }}>
-          <div style={{ position: "absolute", inset: 0, pointerEvents: "none", borderRadius: 22, boxShadow: "0 0 40px rgba(59,130,246,0.18)" }} />
-          <div style={{ padding: 18, borderBottom: "1px solid rgba(255,255,255,0.08)", background: "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(15,23,42,0.28))", boxSizing: "border-box" }}>
-            <div style={{ display: "inline-flex", alignItems: "center", padding: "7px 12px", borderRadius: 999, background: "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))", border: "1px solid rgba(59,130,246,0.32)", color: "#dbeafe", fontWeight: 950, letterSpacing: "0.08em", fontSize: 12, maxWidth: "100%", boxSizing: "border-box" }}>
-              DATA-DRIVEN SCREENED RESULTS
-            </div>
-            <h2 style={{ margin: "14px 0 0 0", fontSize: 28, lineHeight: 1.12, letterSpacing: "-0.03em" }}>Screened setups across the market</h2>
-            <p className="pickers-mobile-hide" style={{ margin: "8px 0 0 0", fontSize: 14, lineHeight: 1.65, opacity: 0.76, maxWidth: 760 }}>
-              These screened results are designed to help you find charts worth reviewing faster. They are starting points for analysis, not buy or sell recommendations.
+        <section style={{ marginTop: 24, width: "100%", borderRadius: 18, border: "1px solid rgba(255,255,255,0.10)", background: "#08101e", overflow: "hidden", position: "relative", boxSizing: "border-box" }}>
+          <div style={{ padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}>
+            <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.65)", marginBottom: 8 }}>Screened Results</div>
+            <h2 style={{ margin: "0 0 6px", fontSize: 24, lineHeight: 1.12, letterSpacing: "-0.025em", fontWeight: 700 }}>Screened setups across the market</h2>
+            <p className="pickers-mobile-hide" style={{ margin: 0, fontSize: 14, lineHeight: 1.6, opacity: 0.62, maxWidth: 720 }}>
+              These lists are filtered and ranked to surface cleaner, more relevant setups first. Starting points for chart review — not financial advice.
             </p>
-            <p style={{ margin: "10px 0 0 0", lineHeight: 1.65, opacity: 0.68, maxWidth: 820, fontSize: 13 }}>The latest update time appears beneath the live results.</p>
           </div>
           <div style={{ padding: 18, boxSizing: "border-box" }}>
             <PickersClient />
@@ -118,96 +124,76 @@ export default function PickersPage() {
         </section>
 
         {/* ── Learn more ── */}
-        <section style={{ marginTop: 22, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 20, padding: 20, background: "linear-gradient(180deg, rgba(9,13,20,0.92), rgba(7,10,16,0.96))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)", boxSizing: "border-box", width: "100%" }}>
-          <div style={{ display: "inline-flex", alignItems: "center", padding: "7px 12px", borderRadius: 999, background: "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(37,99,235,0.08))", border: "1px solid rgba(59,130,246,0.26)", color: "#dbeafe", fontWeight: 950, letterSpacing: "0.08em", fontSize: 12, maxWidth: "100%", boxSizing: "border-box" }}>
-            LEARN MORE
-          </div>
-          <h2 style={{ margin: "14px 0 0 0", fontSize: 24, lineHeight: 1.15, letterSpacing: "-0.03em" }}>Learn the setups, indicators and scanning methods behind these ideas</h2>
-          <p style={{ margin: "10px 0 0", lineHeight: 1.7, opacity: 0.74, maxWidth: 860 }}>Start with the Trading Setups Hub, Indicators Hub or Stock Scanners Hub.</p>
+        <section style={{ marginTop: 22, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: 20, background: "rgba(9,13,20,0.92)", boxSizing: "border-box", width: "100%" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.65)", marginBottom: 10 }}>Learn more</div>
+          <h2 style={{ margin: "0 0 8px", fontSize: 22, lineHeight: 1.15, letterSpacing: "-0.025em", fontWeight: 700 }}>Learn the setups and indicators behind these ideas</h2>
+          <p style={{ margin: "0 0 0", lineHeight: 1.65, opacity: 0.68, maxWidth: 760, fontSize: 14 }}>Start with the Trading Setups Hub, Indicators Hub or Stock Scanners Hub.</p>
           <div style={bundleGridStyle}>
-            <Link href="/trading-setups" style={{ ...compactLinkStyle, border: "1px solid rgba(239,68,68,0.20)", background: "linear-gradient(135deg, rgba(239,68,68,0.08), rgba(127,29,29,0.04))" }}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>Trading Setups Hub</div>
-              <div style={smallLinkTextStyle}>Explore the main hub for breakouts, oversold setups, pullbacks and divergence ideas.</div>
+            <Link href="/trading-setups" style={{ ...compactLinkStyle, border: "1px solid rgba(239,68,68,0.18)", background: "rgba(239,68,68,0.05)" }}>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>Trading Setups Hub</div>
+              <div style={smallLinkTextStyle}>Breakouts, oversold setups, pullbacks and divergence.</div>
             </Link>
-            <Link href="/stock-indicators" style={{ ...compactLinkStyle, border: "1px solid rgba(34,197,94,0.20)", background: "linear-gradient(135deg, rgba(34,197,94,0.08), rgba(16,185,129,0.04))" }}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>Indicators Hub</div>
-              <div style={smallLinkTextStyle}>Understand RSI, MACD, unusual volume and moving average signals used when reviewing stock charts.</div>
+            <Link href="/stock-indicators" style={{ ...compactLinkStyle, border: "1px solid rgba(34,197,94,0.18)", background: "rgba(34,197,94,0.05)" }}>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>Indicators Hub</div>
+              <div style={smallLinkTextStyle}>RSI, MACD, volume and moving average signals explained.</div>
             </Link>
-            <Link href="/stock-scanners" style={{ ...compactLinkStyle, border: "1px solid rgba(168,85,247,0.20)", background: "linear-gradient(135deg, rgba(168,85,247,0.08), rgba(139,92,246,0.04))" }}>
-              <div style={{ fontSize: 17, fontWeight: 950 }}>Stock Scanners Hub</div>
-              <div style={smallLinkTextStyle}>Learn how traders scan for stock ideas, compare tools and turn market noise into clearer charts to review.</div>
+            <Link href="/stock-scanners" style={{ ...compactLinkStyle, border: "1px solid rgba(168,85,247,0.18)", background: "rgba(168,85,247,0.05)" }}>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>Stock Scanners Hub</div>
+              <div style={smallLinkTextStyle}>How traders scan for ideas and compare tools.</div>
             </Link>
           </div>
         </section>
 
         {/* ── Support cards ── */}
         <section style={{ marginTop: 22, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, width: "100%", boxSizing: "border-box" }}>
-          <Link href="/" style={{ ...supportCardStyle, border: "1px solid rgba(250,204,21,0.22)", background: "linear-gradient(180deg, rgba(24,20,8,0.92), rgba(14,11,5,0.96))" }}>
+          <Link href="/" style={{ ...supportCardStyle, border: "1px solid rgba(250,204,21,0.18)", background: "rgba(24,20,8,0.60)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span aria-hidden="true" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 10, border: "1px solid rgba(250,204,21,0.30)", background: "linear-gradient(135deg, rgba(250,204,21,0.18), rgba(202,138,4,0.08))", fontSize: 14, flex: "0 0 auto" }}>📈</span>
-              <div style={{ fontSize: 18, fontWeight: 950, color: "#fefce8" }}>Open the full dashboard</div>
+              <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 8, border: "1px solid rgba(250,204,21,0.24)", background: "rgba(250,204,21,0.08)", fontSize: 14, flex: "0 0 auto" }}>📈</span>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "#fefce8" }}>Open the dashboard</div>
             </div>
-            <div style={midCardTextStyle}>Review price structure, overlays and indicators for any symbol you find on this page.</div>
+            <div style={midCardTextStyle}>Review price structure, overlays and indicators for any symbol on this page.</div>
           </Link>
-          <Link href="/learn" style={{ ...supportCardStyle, border: "1px solid rgba(59,130,246,0.22)", background: "linear-gradient(180deg, rgba(8,16,30,0.92), rgba(6,10,20,0.96))" }}>
+          <Link href="/learn" style={{ ...supportCardStyle, border: "1px solid rgba(59,130,246,0.18)", background: "rgba(8,16,30,0.60)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span aria-hidden="true" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 10, border: "1px solid rgba(59,130,246,0.30)", background: "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.08))", fontSize: 14, flex: "0 0 auto" }}>📘</span>
-              <div style={{ fontSize: 18, fontWeight: 950, color: "#eff6ff" }}>Visit the Learn hub</div>
+              <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 8, border: "1px solid rgba(59,130,246,0.24)", background: "rgba(59,130,246,0.08)", fontSize: 14, flex: "0 0 auto" }}>📘</span>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "#eff6ff" }}>Visit the Learn hub</div>
             </div>
-            <div style={midCardTextStyle}>Explore the main education hub for chart concepts, setups and beginner-friendly guides.</div>
+            <div style={midCardTextStyle}>Chart concepts, setups and beginner-friendly guides.</div>
           </Link>
-          <Link href="/platforms" style={{ ...supportCardStyle, border: "1px solid rgba(34,197,94,0.22)", background: "linear-gradient(180deg, rgba(8,20,16,0.92), rgba(6,12,10,0.96))" }}>
+          <Link href="/platforms" style={{ ...supportCardStyle, border: "1px solid rgba(34,197,94,0.18)", background: "rgba(8,20,16,0.60)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span aria-hidden="true" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 10, border: "1px solid rgba(34,197,94,0.30)", background: "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(16,185,129,0.08))", fontSize: 14, flex: "0 0 auto" }}>🏦</span>
-              <div style={{ fontSize: 18, fontWeight: 950, color: "#f0fdf4" }}>Compare trading platforms</div>
+              <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 8, border: "1px solid rgba(34,197,94,0.24)", background: "rgba(34,197,94,0.08)", fontSize: 14, flex: "0 0 auto" }}>🏦</span>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "#f0fdf4" }}>Compare platforms</div>
             </div>
-            <div style={midCardTextStyle}>Review charting and broker platform options after narrowing down your ideas.</div>
+            <div style={midCardTextStyle}>Review charting and broker options after narrowing down your ideas.</div>
           </Link>
         </section>
 
         {/* ── FAQ ── */}
-        <section style={{ marginTop: 22, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 20, padding: 20, background: "linear-gradient(180deg, rgba(9,13,20,0.92), rgba(7,10,16,0.96))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)", boxSizing: "border-box", width: "100%" }}>
-          <div style={{ display: "inline-flex", alignItems: "center", padding: "7px 12px", borderRadius: 999, background: "linear-gradient(135deg, rgba(250,204,21,0.16), rgba(202,138,4,0.08))", border: "1px solid rgba(250,204,21,0.26)", color: "#fef3c7", fontWeight: 950, letterSpacing: "0.08em", fontSize: 12, maxWidth: "100%", boxSizing: "border-box" }}>FAQ</div>
-          <h2 style={{ margin: "14px 0 0 0", fontSize: 24, lineHeight: 1.15, letterSpacing: "-0.03em" }}>Frequently asked questions</h2>
-          <div style={{ marginTop: 16, display: "grid", gap: 16 }}>
-            <div><h3 style={{ margin: 0, fontSize: 17 }}>Is this a stock screener?</h3><p style={{ margin: "8px 0 0", lineHeight: 1.7, opacity: 0.76 }}>Yes. It works like a stock idea screener built around technical setups such as oversold conditions, divergence, pullback setups and breakouts.</p></div>
-            <div><h3 style={{ margin: 0, fontSize: 17 }}>Are these buy or sell recommendations?</h3><p style={{ margin: "8px 0 0", lineHeight: 1.7, opacity: 0.76 }}>No. These are idea filters only. They help you narrow down charts to review, but they are not personal financial advice.</p></div>
-            <div><h3 style={{ margin: 0, fontSize: 17 }}>Why are some stocks ranked higher than others?</h3><p style={{ margin: "8px 0 0", lineHeight: 1.7, opacity: 0.76 }}>The lists are filtered and ranked to surface cleaner, more relevant setups first.</p></div>
-            <div><h3 style={{ margin: 0, fontSize: 17 }}>What should I do after clicking a stock?</h3><p style={{ margin: "8px 0 0", lineHeight: 1.7, opacity: 0.76 }}>Open it in the dashboard, review the chart structure, check key indicators and confirm whether the setup still makes sense.</p></div>
+        <section style={{ marginTop: 22, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: 20, background: "rgba(9,13,20,0.92)", boxSizing: "border-box", width: "100%" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.65)", marginBottom: 10 }}>FAQ</div>
+          <h2 style={{ margin: "0 0 14px", fontSize: 22, lineHeight: 1.15, letterSpacing: "-0.025em", fontWeight: 700 }}>Frequently asked questions</h2>
+          <div style={{ display: "grid", gap: 14 }}>
+            <div><h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Is this a stock screener?</h3><p style={{ margin: "6px 0 0", lineHeight: 1.7, opacity: 0.72, fontSize: 14 }}>Yes. It works like a stock idea screener built around technical setups such as oversold conditions, divergence, pullback setups and breakouts.</p></div>
+            <div><h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Are these buy or sell recommendations?</h3><p style={{ margin: "6px 0 0", lineHeight: 1.7, opacity: 0.72, fontSize: 14 }}>No. These are idea filters only. They help you narrow down charts to review, but they are not personal financial advice.</p></div>
+            <div><h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Why are some stocks ranked higher than others?</h3><p style={{ margin: "6px 0 0", lineHeight: 1.7, opacity: 0.72, fontSize: 14 }}>The lists are filtered and ranked to surface cleaner, more relevant setups first. Higher-ranked results are usually the first charts worth reviewing.</p></div>
+            <div><h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>What should I do after clicking a stock?</h3><p style={{ margin: "6px 0 0", lineHeight: 1.7, opacity: 0.72, fontSize: 14 }}>Open it in the dashboard, review the chart structure, check key indicators and confirm whether the setup still makes sense before acting.</p></div>
           </div>
         </section>
       </div>
 
       <style>{`
-        .wrap {
-          max-width: 1240px;
-          margin: 0 auto;
-          padding: 28px 20px 40px;
-          box-sizing: border-box;
-        }
+        .wrap { max-width: 1240px; margin: 0 auto; padding: 28px 20px 40px; box-sizing: border-box; }
 
-        /* ── Hero grid ── */
-        .heroGrid {
-          display: grid;
-          grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.95fr);
-          gap: 16px;
-          align-items: stretch;
-          min-width: 0;
-          width: 100%;
-        }
+        .heroGrid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); gap: 14px; align-items: stretch; min-width: 0; width: 100%; }
+
+        .hero-bullet-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 16px; }
+        .hero-bullet-item:hover { color: #e2e8f0 !important; }
 
         a:hover { filter: brightness(1.05); transform: translateY(-1px); }
 
-        /* ── Scroll cue animations ── */
-        .scrollCueBox { animation: scrollCueGlow 1.9s ease-in-out infinite; }
-        .scrollCueText { animation: scrollCueTextPulse 1.9s ease-in-out infinite; }
-        .scrollCueArrows { animation: scrollCueBounce 1.2s ease-in-out infinite; }
+        .scrollCueBox { transition: opacity 0.3s ease; }
 
-        @keyframes scrollCueGlow { 0%,100%{transform:translateY(0);box-shadow:inset 0 1px 0 rgba(255,255,255,0.05),0 0 0 1px rgba(59,130,246,0.06),0 0 18px rgba(37,99,235,0.12);}50%{transform:translateY(-2px);box-shadow:inset 0 1px 0 rgba(255,255,255,0.05),0 0 0 1px rgba(96,165,250,0.10),0 0 34px rgba(59,130,246,0.22);} }
-        @keyframes scrollCueTextPulse { 0%,100%{opacity:0.9;letter-spacing:0.08em;}50%{opacity:1;letter-spacing:0.11em;} }
-        @keyframes scrollCueBounce { 0%,100%{transform:translateY(0);opacity:0.75;}50%{transform:translateY(6px);opacity:1;} }
-
-        /* ── nav styles (shared site header) ── */
         .msh-site-nav { position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:8px;padding:12px 24px;background:rgba(10,15,26,0.90);backdrop-filter:blur(14px);border-bottom:1px solid #1a2336; }
         .msh-site-nav-logo { display:flex;align-items:center;margin-right:4px;text-decoration:none;flex:0 0 auto; }
         .msh-site-nav-logo img { height:38px;width:auto;display:block; }
@@ -216,11 +202,9 @@ export default function PickersPage() {
         .msh-site-navlink:hover { color:#eaf0fa;background:#141b2b; }
         .msh-site-navlink.active { color:#eaf0fa;background:#141b2b;border:1px solid #222c40; }
 
-        /* ── desktop-only helper ── */
         .pickers-desktop-only { display: block; }
 
-        /* ── Responsive ── */
-        @media (max-width: 980px) {
+        @media (max-width: 1000px) {
           .heroGrid { grid-template-columns: 1fr !important; }
         }
 
@@ -230,17 +214,13 @@ export default function PickersPage() {
 
         @media (max-width: 640px) {
           .wrap { padding-left: 12px !important; padding-right: 12px !important; }
-
-          /* Compact hero on mobile: hide scroll cue, mini stats, right signal panel */
           .pickers-desktop-only { display: none !important; }
           .mobile-hide-screened-setups { display: none !important; }
           .pickers-mobile-hide { display: none !important; }
-
-          .heroPanel { padding: 14px !important; border-radius: 18px !important; }
-          .pickersHeroTitle { font-size: 28px !important; line-height: 1.08 !important; letter-spacing: -0.04em !important; }
-          .pickersHeroText { font-size: 14px !important; line-height: 1.6 !important; margin-top: 8px !important; }
+          .heroPanel { padding: 14px !important; border-radius: 16px !important; }
+          .pickersHeroTitle { font-size: 26px !important; line-height: 1.08 !important; }
+          .pickersHeroText { font-size: 14px !important; margin-top: 8px !important; }
           .pickersHeroPills { align-items: stretch !important; }
-
           .msh-site-nav { padding: 10px 12px 8px; gap: 8px; align-items: stretch; flex-direction: column; }
           .msh-site-nav-logo { align-self: flex-start; }
           .msh-site-nav-logo img { height: 34px; }
@@ -251,7 +231,7 @@ export default function PickersPage() {
 
         @media (max-width: 420px) {
           .wrap { padding-left: 10px !important; padding-right: 10px !important; }
-          .pickersHeroTitle { font-size: 24px !important; }
+          .pickersHeroTitle { font-size: 22px !important; }
           .heroPanel { padding: 12px !important; }
         }
       `}</style>
@@ -261,26 +241,12 @@ export default function PickersPage() {
 
 function MiniStat({ label, value, tint }: { label: string; value: string; tint: "green" | "amber" }) {
   const styles = tint === "green"
-    ? { border: "1px solid rgba(34,197,94,0.24)", background: "linear-gradient(180deg, rgba(9,18,16,0.94), rgba(7,12,11,0.98))", labelColor: "#bbf7d0" }
-    : { border: "1px solid rgba(234,179,8,0.24)", background: "linear-gradient(180deg, rgba(18,16,10,0.94), rgba(12,10,7,0.98))", labelColor: "#fde68a" };
+    ? { border: "1px solid rgba(34,197,94,0.24)", background: "rgba(9,18,16,0.94)", labelColor: "#bbf7d0" }
+    : { border: "1px solid rgba(234,179,8,0.24)", background: "rgba(18,16,10,0.94)", labelColor: "#fde68a" };
   return (
-    <div style={{ border: styles.border, background: styles.background, borderRadius: 16, padding: 14, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)", minWidth: 0, boxSizing: "border-box" }}>
-      <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", color: styles.labelColor }}>{label}</div>
-      <div style={{ marginTop: 6, fontSize: 16, fontWeight: 900, lineHeight: 1.35 }}>{value}</div>
-    </div>
-  );
-}
-
-function SignalCard({ title, text, tint }: { title: string; text: string; tint: "green" | "red" | "amber" | "teal" | "blue" }) {
-  const styles = tint === "green" ? { border: "1px solid rgba(34,197,94,0.35)", background: "linear-gradient(180deg, rgba(6,78,59,0.30), rgba(6,46,33,0.48))", titleColor: "#ecfdf5", textColor: "rgba(236,253,245,0.84)" }
-    : tint === "red" ? { border: "1px solid rgba(239,68,68,0.35)", background: "linear-gradient(180deg, rgba(127,29,29,0.28), rgba(69,10,10,0.48))", titleColor: "#fef2f2", textColor: "rgba(254,242,242,0.84)" }
-    : tint === "amber" ? { border: "1px solid rgba(234,179,8,0.34)", background: "linear-gradient(180deg, rgba(113,63,18,0.28), rgba(66,32,6,0.46))", titleColor: "#fefce8", textColor: "rgba(254,252,232,0.84)" }
-    : tint === "teal" ? { border: "1px solid rgba(20,184,166,0.34)", background: "linear-gradient(180deg, rgba(17,94,89,0.28), rgba(4,47,46,0.46))", titleColor: "#ecfeff", textColor: "rgba(236,254,255,0.84)" }
-    : { border: "1px solid rgba(59,130,246,0.35)", background: "linear-gradient(180deg, rgba(30,64,175,0.28), rgba(17,37,84,0.48))", titleColor: "#eff6ff", textColor: "rgba(239,246,255,0.84)" };
-  return (
-    <div style={{ border: styles.border, background: styles.background, borderRadius: 16, padding: "14px 16px", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)", minWidth: 0, boxSizing: "border-box" }}>
-      <div style={{ fontWeight: 900, fontSize: 15, color: styles.titleColor }}>{title}</div>
-      <div style={{ marginTop: 6, fontSize: 13, lineHeight: 1.55, color: styles.textColor }}>{text}</div>
+    <div style={{ border: styles.border, background: styles.background, borderRadius: 14, padding: 14, minWidth: 0, boxSizing: "border-box" }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: styles.labelColor }}>{label}</div>
+      <div style={{ marginTop: 6, fontSize: 15, fontWeight: 700, lineHeight: 1.35 }}>{value}</div>
     </div>
   );
 }
