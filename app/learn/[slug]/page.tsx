@@ -19,6 +19,7 @@ function siteNavCss(wrapMaxWidth: number) {
 
     a:hover {
       filter: brightness(1.05);
+      transform: translateY(-1px);
     }
 
     @media (max-width: 760px) {
@@ -27,6 +28,218 @@ function siteNavCss(wrapMaxWidth: number) {
       }
     }
   `;
+}
+function TipBox(props: { title: string; children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        marginTop: 14,
+        borderRadius: 16,
+        border: "1px solid rgba(59,130,246,0.35)",
+        background: "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(16,185,129,0.10))",
+        padding: 14,
+      }}
+    >
+      <div style={{ fontWeight: 950, marginBottom: 6 }}>{props.title}</div>
+      <div style={{ opacity: 0.85, lineHeight: 1.55 }}>{props.children}</div>
+    </div>
+  );
+}
+
+function LessonImages(props: { slug: string; which: 1 | 2 | 3 }) {
+  const { slug, which } = props;
+  const src = `/learn/${slug}/${String(which).padStart(2, "0")}.png`;
+
+  return (
+    <figure
+      style={{
+        margin: "14px 0 0",
+        borderRadius: 16,
+        border: "1px solid rgba(255,255,255,0.14)",
+        background: "#06080d",
+        overflow: "hidden",
+      }}
+    >
+      <img
+        src={src}
+        alt={`Lesson diagram ${which}`}
+        style={{
+          width: "100%",
+          height: "auto",
+          display: "block",
+          opacity: 1,
+          filter: "none",
+          mixBlendMode: "normal",
+        }}
+      />
+    </figure>
+  );
+}
+
+function nextLessonTopStyle(): React.CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "10px 14px",
+    borderRadius: 14,
+    border: "1px solid rgba(250,204,21,0.52)",
+    background:
+      "linear-gradient(135deg, rgba(250,204,21,0.28), rgba(202,138,4,0.18))",
+    color: "#fff7d6",
+    textDecoration: "none",
+    fontWeight: 950,
+    fontSize: 13,
+    letterSpacing: "0.04em",
+    textTransform: "uppercase",
+    boxShadow:
+      "0 10px 24px rgba(0,0,0,0.26), inset 0 1px 0 rgba(255,255,255,0.10)",
+    whiteSpace: "nowrap",
+  };
+}
+
+function nextLessonBottomStyle(): React.CSSProperties {
+  return {
+    display: "block",
+    width: "100%",
+    textAlign: "center",
+    padding: "18px 20px",
+    borderRadius: 18,
+    border: "1px solid rgba(250,204,21,0.56)",
+    background:
+      "linear-gradient(135deg, rgba(250,204,21,0.28), rgba(202,138,4,0.16))",
+    color: "#fff8dc",
+    textDecoration: "none",
+    fontWeight: 950,
+    fontSize: 16,
+    letterSpacing: "0.05em",
+    boxShadow:
+      "0 14px 34px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.10)",
+  };
+}
+
+function relatedSetupsForSlug(slug: string) {
+  const s = String(slug || "").trim().toLowerCase();
+
+  if (s === "rsi") {
+    return [
+      {
+        href: "/oversold-stocks-today",
+        title: "Oversold Stocks Today",
+        text: "Review live stocks currently screening as oversold and compare RSI extremes on real charts.",
+      },
+      {
+        href: "/overbought-stocks-today",
+        title: "Overbought Stocks Today",
+        text: "Explore stocks screening as overbought and see how stretched momentum looks in practice.",
+      },
+      {
+        href: "/bullish-bearish-divergence-stocks",
+        title: "Bullish & Bearish Divergence Stocks",
+        text: "Review live divergence setups where RSI or MACD may be disagreeing with price.",
+      },
+    ];
+  }
+
+  if (s === "macd") {
+    return [
+      {
+        href: "/bullish-bearish-divergence-stocks",
+        title: "Bullish & Bearish Divergence Stocks",
+        text: "Review live divergence setups where MACD or RSI may be showing momentum disagreement.",
+      },
+      {
+        href: "/best-trend-score-stocks",
+        title: "Best Trend Score Stocks",
+        text: "Explore stocks showing stronger trend structure and momentum alignment.",
+      },
+    ];
+  }
+
+  if (s === "moving-averages") {
+    return [
+      {
+        href: "/stocks-near-200-day-moving-average",
+        title: "Stocks Near 200-Day Moving Average",
+        text: "Review live stocks currently testing a key long-term moving average level.",
+      },
+      {
+        href: "/best-trend-score-stocks",
+        title: "Best Trend Score Stocks",
+        text: "Compare moving average structure with stocks currently showing strong trend alignment.",
+      },
+    ];
+  }
+
+  if (s === "how-to-identify-stock-trends") {
+    return [
+      {
+        href: "/best-trend-score-stocks",
+        title: "Best Trend Score Stocks",
+        text: "Review live stocks showing stronger trend structure, leadership and momentum.",
+      },
+      {
+        href: "/all-time-high-breakout-stocks",
+        title: "All-Time High Breakout Stocks",
+        text: "Explore stocks pushing into fresh highs where strong trend continuation can matter.",
+      },
+      {
+        href: "/top-stocks-with-buy-signals",
+        title: "Top Stocks With Buy Signals",
+        text: "Compare strong trends with stocks currently showing broader bullish signal alignment.",
+      },
+    ];
+  }
+
+  if (s === "support-and-resistance") {
+    return [
+      {
+        href: "/stocks-near-200-day-moving-average",
+        title: "Stocks Near 200-Day Moving Average",
+        text: "Review stocks trading around a widely watched long-term support or resistance area.",
+      },
+      {
+        href: "/all-time-high-breakout-stocks",
+        title: "All-Time High Breakout Stocks",
+        text: "Explore charts where resistance is being broken and momentum is expanding.",
+      },
+    ];
+  }
+
+  if (s === "rsi-divergence" || s === "macd-divergence") {
+    return [
+      {
+        href: "/bullish-bearish-divergence-stocks",
+        title: "Bullish & Bearish Divergence Stocks",
+        text: "Review live divergence setups currently being flagged across the market.",
+      },
+      {
+        href: "/oversold-stocks-today",
+        title: "Oversold Stocks Today",
+        text: "Compare bullish divergence with oversold charts that may be approaching exhaustion.",
+      },
+      {
+        href: "/overbought-stocks-today",
+        title: "Overbought Stocks Today",
+        text: "Compare bearish divergence with overextended charts that may be vulnerable to pullback.",
+      },
+    ];
+  }
+
+  return [];
+}
+
+function relatedSetupCard(): React.CSSProperties {
+  return {
+    border: "1px solid rgba(255,255,255,0.14)",
+    borderRadius: 14,
+    padding: 14,
+    background: "rgba(255,255,255,0.06)",
+    color: "#f1f5f9",
+    textDecoration: "none",
+    display: "block",
+    transition: "transform 120ms ease, background 120ms ease",
+  };
 }
 
 export default async function LessonPage({ params }: Props) {
@@ -49,7 +262,7 @@ export default async function LessonPage({ params }: Props) {
           minHeight: "100vh",
         }}
       >
-          <div className="wrap">
+        <div className="wrap">
           <h1 style={{ marginTop: 0 }}>Lesson not found</h1>
           <p style={{ opacity: 0.7 }}>Slug received: {slug || "(empty)"}</p>
 
