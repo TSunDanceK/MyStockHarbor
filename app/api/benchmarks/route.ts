@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
-export const revalidate = 300;
+export const dynamic = "force-dynamic"; // always fresh, no ISR cache
 
 type BenchItem = {
   key: string;
@@ -21,7 +21,9 @@ type BenchPayload = {
   items: BenchItem[];
 };
 
-const CACHE_MS = 5 * 60_000; // 5 min
+// In-process cache: avoids hammering FMP on every render but still
+// refreshes every 5 min (survives across requests on the same lambda instance)
+const CACHE_MS = 5 * 60_000;
 let cache: { at: number; payload: BenchPayload } | null = null;
 
 function toNum(x: unknown): number | null {
@@ -30,30 +32,31 @@ function toNum(x: unknown): number | null {
 }
 
 const BENCH_DEFS = [
-  { key: "spy", label: "S&P 500 (via SPY)", symbol: "SPY" },
-  { key: "ndx", label: "Nasdaq 100 (via QQQ)", symbol: "QQQ" },
-  { key: "dia", label: "Dow Jones (via DIA)", symbol: "DIA" },
-  { key: "iwm", label: "Russell 2000 (via IWM)", symbol: "IWM" },
+  { key: "spy", label: "S&P 500 (via SPY)",      symbol: "SPY" },
+  { key: "ndx", label: "Nasdaq 100 (via QQQ)",   symbol: "QQQ" },
+  { key: "dia", label: "Dow Jones (via DIA)",     symbol: "DIA" },
+  { key: "iwm", label: "Russell 2000 (via IWM)",  symbol: "IWM" },
 ] as const;
 
 export async function GET() {
+  // Return in-process cached payload if still fresh
   if (cache && Date.now() - cache.at < CACHE_MS) {
     return NextResponse.json(cache.payload, {
-      headers: {
-        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
-      },
+      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
     });
   }
 
   const apiKey = process.env.FMP_API_KEY;
 
   if (!apiKey) {
-    const payload: BenchPayload = {
-      updatedAt: new Date().toISOString(),
-      scope: "Benchmarks (FMP)",
-      items: [],
-    };
-    return NextResponse.json(payload, { status: 500 });
+    return NextResponse.json(
+      {
+        updatedAt: new Date().toISOString(),
+        scope: "Benchmarks (FMP)",
+        items: [],
+      } satisfies BenchPayload,
+      { status: 500 }
+    );
   }
 
   try {
@@ -63,7 +66,7 @@ export async function GET() {
     )}&apikey=${encodeURIComponent(apiKey)}`;
 
     const res = await fetch(url, {
-      next: { revalidate: 300 },
+      cache: "no-store",
       headers: { accept: "application/json" },
     });
 
@@ -72,7 +75,6 @@ export async function GET() {
     const json = (await res.json()) as any[];
     const rows = Array.isArray(json) ? json : [];
 
-    // Index by symbol for easy lookup
     const bySymbol = new Map<string, any>(
       rows.map((r) => [String(r?.symbol ?? "").toUpperCase(), r])
     );
@@ -83,21 +85,15 @@ export async function GET() {
 
     const items: BenchItem[] = BENCH_DEFS.map((d) => {
       const r = bySymbol.get(d.symbol.toUpperCase());
-
-      const close = toNum(r?.price);
-      const prevClose = toNum(r?.previousClose);
-      // FMP provides changesPercentage as a ready-made day-change %
-      const changePct = toNum(r?.changesPercentage);
-
       return {
         key: d.key,
         label: d.label,
         symbol: d.symbol,
         date: r ? dateStr : null,
         time: r ? timeStr : null,
-        close,
-        prevClose,
-        changePct,
+        close: toNum(r?.price),
+        prevClose: toNum(r?.previousClose),
+        changePct: toNum(r?.changesPercentage),
       };
     });
 
@@ -110,21 +106,18 @@ export async function GET() {
     cache = { at: Date.now(), payload };
 
     return NextResponse.json(payload, {
-      headers: {
-        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
-      },
+      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
     });
   } catch {
-    const payload: BenchPayload = {
-      updatedAt: new Date().toISOString(),
-      scope: "Benchmarks (FMP)",
-      items: [],
-    };
-
-    return NextResponse.json(payload, {
-      headers: {
-        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
-      },
-    });
+    return NextResponse.json(
+      {
+        updatedAt: new Date().toISOString(),
+        scope: "Benchmarks (FMP)",
+        items: [],
+      } satisfies BenchPayload,
+      {
+        headers: { "Cache-Control": "no-store" },
+      }
+    );
   }
 }
