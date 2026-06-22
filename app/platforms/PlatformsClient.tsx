@@ -334,57 +334,6 @@ function smallVisitBtn(): React.CSSProperties {
   };
 }
 
-type SiteNavItem = {
-  href: string;
-  label: string;
-  active?: boolean;
-  stockNav?: "earnings" | "analysis" | "news";
-};
-
-const SITE_NAV_LINKS: SiteNavItem[] = [
-  { href: "/", label: "Dashboard" },
-  { href: "/learn", label: "Learn" },
-  { href: "/platforms", label: "Platforms", active: true },
-  { href: "/pickers", label: "Stock Pickers" },
-  { href: "/utilities", label: "Calculators" },
-  { href: "/insights", label: "Insights" },
-  { href: "/stock/AAPL/earnings", label: "Earnings", stockNav: "earnings" },
-  { href: "/stock/AAPL", label: "Stock Analysis", stockNav: "analysis" },
-  { href: "/stock/AAPL/news", label: "News Page", stockNav: "news" },
-];
-
-function TopSiteNav() {
-  return (
-    <>
-      <nav className="msh-site-nav">
-        <Link href="/" className="msh-site-nav-logo" aria-label="MyStockHarbor home">
-          <img src="/logo.png" alt="MyStockHarbor" />
-        </Link>
-
-        <div className="msh-site-navlinks" aria-label="Primary navigation">
-          {SITE_NAV_LINKS.map((item) => (
-            <Link
-              key={item.label}
-              href={item.href}
-              data-msh-stock-nav={item.stockNav}
-              className={`msh-site-navlink${item.active ? " active" : ""}`}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </div>
-      </nav>
-
-      <script dangerouslySetInnerHTML={{ __html: stockNavHydrationScript() }} />
-    </>
-  );
-}
-
-function stockNavHydrationScript() {
-  return `(function(){try{var raw=window.localStorage&&window.localStorage.getItem("msh_last_symbol");var symbol=String(raw||"").trim().toUpperCase().replace(/[^A-Z0-9.-]/g,"");if(!symbol)symbol="AAPL";var encoded=encodeURIComponent(symbol);var links=document.querySelectorAll("[data-msh-stock-nav]");for(var i=0;i<links.length;i++){var el=links[i];var page=el.getAttribute("data-msh-stock-nav");if(page==="earnings")el.setAttribute("href","/stock/"+encoded+"/earnings");else if(page==="analysis")el.setAttribute("href","/stock/"+encoded);else if(page==="news")el.setAttribute("href","/stock/"+encoded+"/news");}}catch(e){}})();`;
-}
-
-
 function platformTheme(type: "green" | "blue" | "purple" | "yellow" | "red") {
   if (type === "green") {
     return {
@@ -521,8 +470,6 @@ export default function PlatformsClient({
         minHeight: "100vh",
       }}
     >
-      <TopSiteNav />
-
       <div className="wrap">
         <div style={{ display: "grid", gap: 14 }}>
           <div style={{ minWidth: 0 }}>
