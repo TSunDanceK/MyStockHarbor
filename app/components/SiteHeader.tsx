@@ -87,6 +87,7 @@ const navLinkBaseStyle: React.CSSProperties = {
   boxShadow: "none",
   lineHeight: 1.2,
   flex: "0 0 auto",
+  outline: "none", // Explicitly strip inline outline
 };
 
 const activeNavLinkStyle: React.CSSProperties = {
@@ -171,9 +172,14 @@ export default function SiteHeader() {
       <style>{`
         .mshGlobalHeaderNav::-webkit-scrollbar { display: none; }
         
-        /* Prevent persistent focus outlines remaining after a user clicks a button */
-        .mshGlobalHeaderLink:focus {
-          outline: none;
+        /* Aggressively strip browser focus rings */
+        .mshGlobalHeaderLink {
+          -webkit-tap-highlight-color: transparent;
+        }
+        .mshGlobalHeaderLink:focus,
+        .mshGlobalHeaderLink:active,
+        .mshGlobalHeaderLink:focus-visible {
+          outline: none !important;
         }
 
         @media (max-width: 720px) {
@@ -224,6 +230,7 @@ export default function SiteHeader() {
             alignItems: "center",
             textDecoration: "none",
             flex: "0 0 auto",
+            outline: "none",
           }}
         >
           <img
