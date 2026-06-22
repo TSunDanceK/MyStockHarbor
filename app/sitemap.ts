@@ -6,6 +6,7 @@ const baseUrl = "https://www.mystockharbor.com";
 
 const mainPages = [
   { path: "", changeFrequency: "daily" as const, priority: 1 },
+  { path: "/dashboard", changeFrequency: "daily" as const, priority: 0.95 },
   { path: "/learn", changeFrequency: "weekly" as const, priority: 0.9 },
   { path: "/pickers", changeFrequency: "daily" as const, priority: 0.9 },
   { path: "/utilities", changeFrequency: "weekly" as const, priority: 0.7 },
@@ -250,8 +251,6 @@ const etfs = [
   "HYG",
 ];
 
-
-
 const priorityStocks = Array.from(
   new Set([...coreMegaCaps, ...retailInterestStocks, ...recognizableMidCaps])
 );
@@ -291,7 +290,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.72,
   }));
 
-    const learnEntries: MetadataRoute.Sitemap = LESSONS.map((lesson) => ({
+  const learnEntries: MetadataRoute.Sitemap = LESSONS.map((lesson) => ({
     url: toAbsoluteUrl(`/learn/${encodeURIComponent(lesson.slug)}`),
     lastModified: now,
     changeFrequency: "monthly",
