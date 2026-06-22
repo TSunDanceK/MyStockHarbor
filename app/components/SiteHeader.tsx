@@ -73,30 +73,6 @@ function normalisePathname(pathname: string | null) {
   return withoutTrailingSlash || "/";
 }
 
-const navLinkBaseStyle: React.CSSProperties = {
-  color: "#8a97ad",
-  fontSize: 13.5,
-  fontWeight: 700,
-  textDecoration: "none",
-  padding: "7px 12px",
-  borderRadius: 8,
-  transition: "color .15s, background .15s, border-color .15s",
-  whiteSpace: "nowrap",
-  border: "1px solid transparent",
-  background: "transparent",
-  boxShadow: "none",
-  lineHeight: 1.2,
-  flex: "0 0 auto",
-  outline: "none", // Explicitly strip inline outline
-};
-
-const activeNavLinkStyle: React.CSSProperties = {
-  color: "#eaf0fa",
-  background: "#141b2b",
-  borderColor: "#222c40",
-  boxShadow: "0 0 0 1px rgba(255,255,255,0.02) inset",
-};
-
 export default function SiteHeader() {
   const pathname = usePathname();
   const router = useRouter();
@@ -172,14 +148,46 @@ export default function SiteHeader() {
       <style>{`
         .mshGlobalHeaderNav::-webkit-scrollbar { display: none; }
         
-        /* Aggressively strip browser focus rings */
+        /* Base Link Styles */
         .mshGlobalHeaderLink {
+          color: #8a97ad;
+          font-size: 13.5px;
+          font-weight: 700;
+          text-decoration: none;
+          padding: 7px 12px;
+          border-radius: 8px;
+          transition: color .15s, background .15s, border-color .15s, box-shadow .15s;
+          white-space: nowrap;
+          border: 1px solid transparent !important;
+          background: transparent;
+          box-shadow: none !important;
+          line-height: 1.2;
+          flex: 0 0 auto;
+          outline: none !important;
           -webkit-tap-highlight-color: transparent;
         }
-        .mshGlobalHeaderLink:focus,
-        .mshGlobalHeaderLink:active,
-        .mshGlobalHeaderLink:focus-visible {
+
+        /* Active Path Styles */
+        .mshGlobalHeaderLink.is-active {
+          color: #eaf0fa !important;
+          background: #141b2b !important;
+          border-color: #222c40 !important;
+          box-shadow: 0 0 0 1px rgba(255,255,255,0.02) inset !important;
+        }
+
+        /* Hover Effect (Optional, for better UX) */
+        .mshGlobalHeaderLink:hover:not(.is-active) {
+          color: #eaf0fa;
+        }
+
+        /* Aggressively Strip Focus Rings on Inactive Elements */
+        .mshGlobalHeaderLink:not(.is-active):focus,
+        .mshGlobalHeaderLink:not(.is-active):active,
+        .mshGlobalHeaderLink:not(.is-active):focus-visible {
           outline: none !important;
+          box-shadow: none !important;
+          border-color: transparent !important;
+          background: transparent !important;
         }
 
         @media (max-width: 720px) {
@@ -267,9 +275,11 @@ export default function SiteHeader() {
               <Link
                 key={item.label}
                 href={href}
-                className="mshGlobalHeaderLink"
-                style={active ? { ...navLinkBaseStyle, ...activeNavLinkStyle } : navLinkBaseStyle}
+                className={`mshGlobalHeaderLink ${active ? "is-active" : ""}`}
                 onClick={(event) => {
+                  // Force the browser to drop the element focus
+                  event.currentTarget.blur();
+
                   if (!item.stockNav) return;
 
                   event.preventDefault();
