@@ -1451,12 +1451,6 @@ export default async function StockEarningsPage({ params }: Props) {
       `}</style>
 
       <div className="earningsWrap">
-        <nav className="topLinks" aria-label="Stock earnings navigation">
-          <Link href={`/stock/${encodeURIComponent(clean)}`}>Stock Page →</Link>
-          <Link href={`/stock/${encodeURIComponent(clean)}/news`}>News Page →</Link>
-          <Link className="green" href="/pickers">Stock Pickers →</Link>
-        </nav>
-
         <section className="hero">
           <div>
             <div className="eyebrow">Earnings desk</div>
