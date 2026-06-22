@@ -170,6 +170,11 @@ export default function SiteHeader() {
     >
       <style>{`
         .mshGlobalHeaderNav::-webkit-scrollbar { display: none; }
+        
+        /* Prevent persistent focus outlines remaining after a user clicks a button */
+        .mshGlobalHeaderLink:focus {
+          outline: none;
+        }
 
         @media (max-width: 720px) {
           .mshGlobalHeaderInner {
