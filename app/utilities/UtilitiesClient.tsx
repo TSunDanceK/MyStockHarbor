@@ -3,6 +3,198 @@
 import Link from "next/link";
 import React, { useMemo, useState } from "react";
 
+type SiteNavItem = {
+  href: string;
+  label: string;
+  active?: boolean;
+  stockNav?: "earnings" | "analysis" | "news";
+};
+
+function cleanStockNavSymbol(value: string | null | undefined) {
+  const cleaned = (value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9.-]/g, "");
+
+  return cleaned || "AAPL";
+}
+
+function getStoredStockNavSymbol() {
+  if (typeof window === "undefined") return "AAPL";
+
+  try {
+    return cleanStockNavSymbol(window.localStorage.getItem("msh_last_symbol"));
+  } catch {
+    return "AAPL";
+  }
+}
+
+function TopSiteNav() {
+  const [stockNavSymbol, setStockNavSymbol] = useState("AAPL");
+
+  React.useEffect(() => {
+    const updateStockNavSymbol = () => {
+      setStockNavSymbol(getStoredStockNavSymbol());
+    };
+
+    updateStockNavSymbol();
+
+    window.addEventListener("storage", updateStockNavSymbol);
+    window.addEventListener("focus", updateStockNavSymbol);
+
+    return () => {
+      window.removeEventListener("storage", updateStockNavSymbol);
+      window.removeEventListener("focus", updateStockNavSymbol);
+    };
+  }, []);
+
+  const encodedStockNavSymbol = encodeURIComponent(stockNavSymbol);
+
+  const siteNavLinks: SiteNavItem[] = [
+    { href: "/", label: "Dashboard" },
+    { href: "/learn", label: "Learn" },
+    { href: "/platforms", label: "Platforms" },
+    { href: "/pickers", label: "Stock Pickers" },
+    { href: "/utilities", label: "Calculators", active: true },
+    { href: "/insights", label: "Insights" },
+    {
+      href: `/stock/${encodedStockNavSymbol}/earnings`,
+      label: "Earnings",
+      stockNav: "earnings",
+    },
+    {
+      href: `/stock/${encodedStockNavSymbol}`,
+      label: "Stock Analysis",
+      stockNav: "analysis",
+    },
+    {
+      href: `/stock/${encodedStockNavSymbol}/news`,
+      label: "News Page",
+      stockNav: "news",
+    },
+  ];
+
+  return (
+    <>
+      <nav className="msh-site-nav">
+        <Link href="/" className="msh-site-nav-logo" aria-label="MyStockHarbor home">
+          <img src="/logo.png" alt="MyStockHarbor" />
+        </Link>
+
+        <div className="msh-site-navlinks" aria-label="Primary navigation">
+          {siteNavLinks.map((item) => (
+            <Link
+              key={item.label}
+              href={item.href}
+              data-msh-stock-nav={item.stockNav}
+              className={`msh-site-navlink${item.active ? " active" : ""}`}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      </nav>
+
+      <style jsx>{`
+        .msh-site-nav {
+          position: sticky;
+          top: 0;
+          z-index: 30;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 12px 24px;
+          background: rgba(10,15,26,0.90);
+          backdrop-filter: blur(14px);
+          border-bottom: 1px solid #1a2336;
+        }
+
+        .msh-site-nav-logo {
+          display: flex;
+          align-items: center;
+          margin-right: 4px;
+          text-decoration: none;
+          flex: 0 0 auto;
+        }
+
+        .msh-site-nav-logo img {
+          height: 38px;
+          width: auto;
+          display: block;
+        }
+
+        .msh-site-navlinks {
+          display: flex;
+          align-items: center;
+          gap: 2px;
+          margin-left: auto;
+          min-width: 0;
+        }
+
+        .msh-site-navlink {
+          color: #8a97ad;
+          font-size: 13.5px;
+          font-weight: 600;
+          text-decoration: none;
+          padding: 7px 12px;
+          border-radius: 8px;
+          transition: color .15s, background .15s, transform .15s, filter .15s;
+          white-space: nowrap;
+        }
+
+        .msh-site-navlink:hover {
+          color: #eaf0fa;
+          background: #141b2b;
+          filter: brightness(1.05);
+          transform: translateY(-1px);
+        }
+
+        .msh-site-navlink.active {
+          color: #eaf0fa;
+          background: #141b2b;
+          border: 1px solid #222c40;
+        }
+
+        @media (max-width: 760px) {
+          .msh-site-nav {
+            padding: 10px 12px 8px;
+            gap: 8px;
+            align-items: stretch;
+            flex-direction: column;
+          }
+
+          .msh-site-nav-logo {
+            align-self: flex-start;
+          }
+
+          .msh-site-nav-logo img {
+            height: 34px;
+          }
+
+          .msh-site-navlinks {
+            margin-left: 0;
+            overflow-x: auto;
+            gap: 4px;
+            padding-bottom: 2px;
+            scrollbar-width: none;
+            -webkit-overflow-scrolling: touch;
+          }
+
+          .msh-site-navlinks::-webkit-scrollbar {
+            display: none;
+          }
+
+          .msh-site-navlink {
+            flex: 0 0 auto;
+            font-size: 12.5px;
+            padding: 8px 10px;
+          }
+        }
+      `}</style>
+    </>
+  );
+}
+
 function HelpTip({ text }: { text: string }) {
   const [open, setOpen] = React.useState(false);
 
@@ -56,133 +248,6 @@ function HelpTip({ text }: { text: string }) {
       )}
     </span>
   );
-}
-
-function topNavBtnStyle(
-  type: "learn" | "pickers" | "dashboard" | "platforms" | "utilities"
-): React.CSSProperties {
-  if (type === "dashboard") {
-    return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-      minHeight: 42,
-      padding: "9px 13px",
-      borderRadius: 14,
-      border: "1px solid rgba(250,204,21,0.45)",
-      background:
-        "linear-gradient(135deg, rgba(250,204,21,0.20), rgba(202,138,4,0.10))",
-      color: "#fefce8",
-      textDecoration: "none",
-      fontWeight: 900,
-      fontSize: 14,
-      whiteSpace: "nowrap",
-      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-      transition:
-        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-    };
-  }
-
-  if (type === "pickers") {
-    return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-      minHeight: 42,
-      padding: "9px 13px",
-      borderRadius: 14,
-      border: "1px solid rgba(239,68,68,0.45)",
-      background:
-        "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.10))",
-      color: "#fef2f2",
-      textDecoration: "none",
-      fontWeight: 900,
-      fontSize: 14,
-      whiteSpace: "nowrap",
-      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-      transition:
-        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-    };
-  }
-
-  if (type === "platforms") {
-    return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-      minHeight: 42,
-      padding: "9px 13px",
-      borderRadius: 14,
-      border: "1px solid rgba(34,197,94,0.45)",
-      background:
-        "linear-gradient(135deg, rgba(34,197,94,0.20), rgba(16,185,129,0.10))",
-      color: "#f0fdf4",
-      textDecoration: "none",
-      fontWeight: 900,
-      fontSize: 14,
-      whiteSpace: "nowrap",
-      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-      transition:
-        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-    };
-  }
-
-  if (type === "utilities") {
-    return {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-      minHeight: 42,
-      padding: "9px 13px",
-      borderRadius: 14,
-      border: "1px solid rgba(168,85,247,0.48)",
-      background:
-        "linear-gradient(135deg, rgba(168,85,247,0.22), rgba(91,33,182,0.12))",
-      color: "#faf5ff",
-      textDecoration: "none",
-      fontWeight: 900,
-      fontSize: 14,
-      whiteSpace: "nowrap",
-      boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-      transition:
-        "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-    };
-  }
-
-  return {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    minHeight: 42,
-    padding: "9px 13px",
-    borderRadius: 14,
-    border: "1px solid rgba(59,130,246,0.45)",
-    background:
-      "linear-gradient(135deg, rgba(59,130,246,0.20), rgba(37,99,235,0.10))",
-    color: "#f1f5f9",
-    textDecoration: "none",
-    fontWeight: 900,
-    fontSize: 14,
-    whiteSpace: "nowrap",
-    boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-    transition:
-      "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-  };
-}
-
-function topNavIcon(
-  type: "learn" | "pickers" | "dashboard" | "platforms" | "utilities"
-) {
-  if (type === "learn") return "📘";
-  if (type === "pickers") return "📊";
-  if (type === "dashboard") return "📈";
-  if (type === "utilities") return "🧮";
-  return "🏦";
 }
 
 function calculatorPanelStyle(): React.CSSProperties {
@@ -618,92 +683,10 @@ export default function UtilitiesClientPage() {
         minHeight: "100vh",
       }}
     >
+      <TopSiteNav />
+
       <div className="wrap">
         <div style={{ display: "grid", gap: 14 }}>
-          <div className="topNavRow">
-            <Link
-              href="/"
-              style={topNavBtnStyle("dashboard")}
-              className="topNavBtn mobileIconOnly dashboardIconOnlyBtn"
-              aria-label="Dashboard"
-            >
-              <span
-                aria-hidden="true"
-                style={{
-                  fontSize: 15,
-                  lineHeight: 1,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {topNavIcon("dashboard")}
-              </span>
-              <span className="topNavLabel dashboardLabel">Dashboard</span>
-            </Link>
-
-            <Link
-              href="/platforms"
-              style={topNavBtnStyle("platforms")}
-              className="topNavBtn mobileTextBtn"
-            >
-              <span
-                aria-hidden="true"
-                style={{
-                  fontSize: 15,
-                  lineHeight: 1,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {topNavIcon("platforms")}
-              </span>
-              <span className="topNavLabel">Platforms</span>
-            </Link>
-
-            <Link
-              href="/pickers"
-              style={topNavBtnStyle("pickers")}
-              className="topNavBtn mobileTextBtn"
-            >
-              <span
-                aria-hidden="true"
-                style={{
-                  fontSize: 15,
-                  lineHeight: 1,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {topNavIcon("pickers")}
-              </span>
-              <span className="topNavLabel">Pickers</span>
-            </Link>
-
-            <Link
-              href="/learn"
-              style={topNavBtnStyle("learn")}
-              className="topNavBtn mobileIconOnly learnIconOnlyBtn"
-              aria-label="Learn"
-            >
-              <span
-                aria-hidden="true"
-                style={{
-                  fontSize: 15,
-                  lineHeight: 1,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {topNavIcon("learn")}
-              </span>
-              <span className="topNavLabel learnLabel">Learn</span>
-            </Link>
-          </div>
-
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 800 }}>
               TRADING UTILITIES
@@ -1270,21 +1253,61 @@ export default function UtilitiesClientPage() {
     gap: 12px;
   }
 
-  .topNavRow {
+  .msh-site-nav {
+    position: sticky;
+    top: 0;
+    z-index: 30;
     display: flex;
-    justify-content: flex-end;
-    align-items: flex-start;
-    gap: 10px;
-    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    background: rgba(10,15,26,0.90);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid #1a2336;
   }
 
-  .topNavBtn {
+  .msh-site-nav-logo {
+    display: flex;
+    align-items: center;
+    margin-right: 4px;
+    text-decoration: none;
     flex: 0 0 auto;
   }
 
-  .topNavLabel {
-    display: inline-flex;
+  .msh-site-nav-logo img {
+    height: 38px;
+    width: auto;
+    display: block;
+  }
+
+  .msh-site-navlinks {
+    display: flex;
     align-items: center;
+    gap: 2px;
+    margin-left: auto;
+    min-width: 0;
+  }
+
+  .msh-site-navlink {
+    color: #8a97ad;
+    font-size: 13.5px;
+    font-weight: 600;
+    text-decoration: none;
+    padding: 7px 12px;
+    border-radius: 8px;
+    transition: color .15s, background .15s, transform .15s, filter .15s;
+    white-space: nowrap;
+  }
+
+  .msh-site-navlink:hover {
+    color: #eaf0fa;
+    background: #141b2b;
+  }
+
+  .msh-site-navlink.active {
+    color: #eaf0fa;
+    background: #141b2b;
+    border: 1px solid #222c40;
   }
 
   a:hover {
@@ -1303,41 +1326,38 @@ export default function UtilitiesClientPage() {
       padding: 16px !important;
     }
 
-    .topNavRow {
-      justify-content: stretch !important;
-      align-items: stretch !important;
-      gap: 8px !important;
-      flex-wrap: nowrap !important;
+    .msh-site-nav {
+      padding: 10px 12px 8px;
+      gap: 8px;
+      align-items: stretch;
+      flex-direction: column;
     }
 
-    .topNavBtn {
-      min-width: 0 !important;
-      min-height: 40px !important;
-      padding: 9px 10px !important;
-      border-radius: 12px !important;
-      font-size: 13px !important;
-      gap: 6px !important;
-      flex: 1 1 0 !important;
+    .msh-site-nav-logo {
+      align-self: flex-start;
     }
 
-    .mobileIconOnly,
-    .dashboardIconOnlyBtn,
-    .learnIconOnlyBtn {
-      padding-left: 0 !important;
-      padding-right: 0 !important;
+    .msh-site-nav-logo img {
+      height: 34px;
     }
 
-    .dashboardLabel,
-    .learnLabel {
-      display: none !important;
+    .msh-site-navlinks {
+      margin-left: 0;
+      overflow-x: auto;
+      gap: 4px;
+      padding-bottom: 2px;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
     }
 
-    .mobileTextBtn {
-      justify-content: center !important;
+    .msh-site-navlinks::-webkit-scrollbar {
+      display: none;
     }
 
-    .mobileTextBtn :global(span[aria-hidden="true"]) {
-      display: none !important;
+    .msh-site-navlink {
+      flex: 0 0 auto;
+      font-size: 12.5px;
+      padding: 8px 10px;
     }
 
     .mobileHideIntroSection {
