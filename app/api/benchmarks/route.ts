@@ -4,15 +4,6 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const revalidate = 300;
 
-type StooqRow = {
-  symbol?: string;
-  date?: string;
-  time?: string;
-  open?: string;
-  close?: string;
-  previous_close?: string;
-};
-
 type BenchItem = {
   key: string;
   label: string;
@@ -34,31 +25,16 @@ const CACHE_MS = 5 * 60_000; // 5 min
 let cache: { at: number; payload: BenchPayload } | null = null;
 
 function toNum(x: unknown): number | null {
-  const n = typeof x === "string" ? Number(x) : typeof x === "number" ? x : NaN;
+  const n = typeof x === "number" ? x : typeof x === "string" ? Number(x) : NaN;
   return Number.isFinite(n) ? n : null;
 }
 
-async function fetchStooqQuote(symbol: string): Promise<StooqRow | null> {
-  /**
-   * Stooq JSON quote endpoint
-   * Fields:
-   * s = symbol, d = date, t = time, o = open, c = close
-   * (previous_close sometimes exists; if not, we'll fallback to open)
-   */
-  const url = `https://stooq.com/q/l/?s=${encodeURIComponent(symbol)}&f=sd2t2oc&h&e=json`;
-
-  const res = await fetch(url, {
-    next: { revalidate: 300 },
-  });
-
-  if (!res.ok) return null;
-
-  const json = (await res.json()) as any;
-  const row = Array.isArray(json?.symbols) ? json.symbols[0] : null;
-  if (!row || typeof row !== "object") return null;
-
-  return row as StooqRow;
-}
+const BENCH_DEFS = [
+  { key: "spy", label: "S&P 500 (via SPY)", symbol: "SPY" },
+  { key: "ndx", label: "Nasdaq 100 (via QQQ)", symbol: "QQQ" },
+  { key: "dia", label: "Dow Jones (via DIA)", symbol: "DIA" },
+  { key: "iwm", label: "Russell 2000 (via IWM)", symbol: "IWM" },
+] as const;
 
 export async function GET() {
   if (cache && Date.now() - cache.at < CACHE_MS) {
@@ -69,46 +45,65 @@ export async function GET() {
     });
   }
 
-  const defs = [
-    { key: "spy", label: "S&P 500 (via SPY)", symbol: "spy.us" },
-    { key: "ndx", label: "Nasdaq 100", symbol: "qqq.us" },
-    { key: "dia", label: "Dow Jones (via DIA)", symbol: "dia.us" },
-    { key: "iwm", label: "Russell 2000 (via IWM)", symbol: "iwm.us" },
-  ] as const;
+  const apiKey = process.env.FMP_API_KEY;
+
+  if (!apiKey) {
+    const payload: BenchPayload = {
+      updatedAt: new Date().toISOString(),
+      scope: "Benchmarks (FMP)",
+      items: [],
+    };
+    return NextResponse.json(payload, { status: 500 });
+  }
 
   try {
-    const rows = await Promise.all(defs.map((d) => fetchStooqQuote(d.symbol)));
+    const symbols = BENCH_DEFS.map((d) => d.symbol).join(",");
+    const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(
+      symbols
+    )}&apikey=${encodeURIComponent(apiKey)}`;
 
-    const items: BenchItem[] = defs.map((d, i) => {
-      const r = rows[i];
+    const res = await fetch(url, {
+      next: { revalidate: 300 },
+      headers: { accept: "application/json" },
+    });
 
-      const close = toNum(r?.close);
-      const prev = toNum((r as any)?.previous_close);
-      const open = toNum((r as any)?.open);
+    if (!res.ok) throw new Error(`FMP benchmarks failed: ${res.status}`);
 
-      // If Stooq doesn't give previous_close, use open as a best-effort daily-move proxy
-      const base = prev ?? open ?? null;
+    const json = (await res.json()) as any[];
+    const rows = Array.isArray(json) ? json : [];
 
-      const changePct =
-        close != null && base != null && base !== 0
-          ? ((close - base) / base) * 100
-          : null;
+    // Index by symbol for easy lookup
+    const bySymbol = new Map<string, any>(
+      rows.map((r) => [String(r?.symbol ?? "").toUpperCase(), r])
+    );
+
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10);
+    const timeStr = now.toISOString().slice(11, 19);
+
+    const items: BenchItem[] = BENCH_DEFS.map((d) => {
+      const r = bySymbol.get(d.symbol.toUpperCase());
+
+      const close = toNum(r?.price);
+      const prevClose = toNum(r?.previousClose);
+      // FMP provides changesPercentage as a ready-made day-change %
+      const changePct = toNum(r?.changesPercentage);
 
       return {
         key: d.key,
         label: d.label,
         symbol: d.symbol,
-        date: typeof r?.date === "string" ? r.date : null,
-        time: typeof r?.time === "string" ? r.time : null,
+        date: r ? dateStr : null,
+        time: r ? timeStr : null,
         close,
-        prevClose: base,
+        prevClose,
         changePct,
       };
     });
 
     const payload: BenchPayload = {
-      updatedAt: new Date().toISOString(),
-      scope: "Benchmarks (Stooq, free)",
+      updatedAt: now.toISOString(),
+      scope: "Benchmarks (FMP)",
       items,
     };
 
@@ -122,7 +117,7 @@ export async function GET() {
   } catch {
     const payload: BenchPayload = {
       updatedAt: new Date().toISOString(),
-      scope: "Benchmarks (Stooq, free)",
+      scope: "Benchmarks (FMP)",
       items: [],
     };
 
