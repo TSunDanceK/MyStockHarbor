@@ -489,7 +489,11 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
               <button type="button" onClick={() => setIndicatorMenuOpen(v => !v)} style={{ width: "100%", padding: "10px 13px", borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, fontSize: 13, textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer" }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedIndicators.length ? chartIndicatorName : "Indicator · Overview"}</span><span>▾</span></button>
               {indicatorMenuOpen ? <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 40, width: isMobile ? "100%" : 300, maxHeight: 380, borderRadius: 14, border: `1px solid ${COLORS.border}`, background: COLORS.cardBg, boxShadow: "0 18px 34px rgba(0,0,0,0.40)", overflowY: "auto" }}>
                 <button type="button" onClick={clearIndicatorSelection} style={{ width: "100%", padding: "11px 13px", border: "none", borderBottom: `1px solid ${COLORS.border}`, background: COLORS.controlBg, color: COLORS.cardFg, textAlign: "left", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>Clear all · Overview</button>
-                {[{ title: "Price overlays", opts: PRICE_OVERLAY_OPTIONS }, { title: "Lower indicator (1 max)", opts: LOWER_OVERLAY_OPTIONS }].map(group => <div key={group.title}><div style={{ padding: "9px 13px 7px", fontSize: 10, fontWeight: 700, color: COLORS.mutedFg, textTransform: "uppercase", letterSpacing: "0.04em", borderTop: `1px solid ${COLORS.border}` }}>{group.title}</div>{group.opts.map(opt => <label key={opt} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 13px", borderTop: `1px solid ${COLORS.borderSoft}`, cursor: "pointer", fontWeight: 700, fontSize: 13 }}><input type="checkbox" checked={selectedIndicators.includes(opt)} onChange={() => toggleIndicatorSelection(opt)} /><span>{opt}</span></label>)}</div>)}
+                {[{ title: "Price overlays", opts: PRICE_OVERLAY_OPTIONS }, { title: "Lower indicator (1 max)", opts: LOWER_OVERLAY_OPTIONS }].map(group => <div key={group.title}><div style={{ padding: "9px 13px 7px", fontSize: 10, fontWeight: 700, color: COLORS.mutedFg, textTransform: "uppercase", letterSpacing: "0.04em", borderTop: `1px solid ${COLORS.border}` }}>{group.title}</div>{group.opts.map(opt => (
+                  <label key={opt} onMouseDown={e => { e.stopPropagation(); e.preventDefault(); toggleIndicatorSelection(opt); }} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 13px", borderTop: `1px solid ${COLORS.borderSoft}`, cursor: "pointer", fontWeight: 700, fontSize: 13 }}>
+                    <input type="checkbox" readOnly checked={selectedIndicators.includes(opt)} /><span>{opt}</span>
+                  </label>
+                ))}</div>)}
               </div> : null}
             </div>
             <div style={{ display: "flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3 }}>{(["line", "candles"] as const).map(type => <button key={type} type="button" onClick={() => setChartType(type)} style={{ border: "none", borderRadius: 7, padding: "7px 12px", background: chartType === type ? "rgba(47,107,255,0.28)" : "transparent", color: chartType === type ? "#dbeafe" : COLORS.mutedFg, fontWeight: 700, fontSize: 12, cursor: "pointer", boxShadow: chartType === type ? "inset 0 0 0 1px rgba(96,165,250,0.36)" : "none" }}>{type === "line" ? "Line" : "Candles"}</button>)}</div>
@@ -509,7 +513,6 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
 
   function BenchmarksPanel() {
     const items = bench?.items ?? [];
-    /* shared card renderer — reused for both mobile and desktop */
     const BenchCard = ({ it }: { it: BenchItem }) => {
       const pct = typeof it.changePct === "number" ? it.changePct : null;
       const isUp = typeof pct === "number" ? pct >= 0 : null;
@@ -532,12 +535,10 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
       <SectionCard title="Market Benchmarks">
         <div style={{ fontSize: 11, color: COLORS.mutedFg2, marginBottom: 12, fontWeight: 600 }}>Updated: {bench?.updatedAt ? new Date(bench.updatedAt).toLocaleString() : "—"} · {bench?.scope ?? "Benchmarks"}</div>
         {isMobile ? (
-          /* ── Mobile: horizontal swipe strip ── */
           <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch", scrollbarWidth: "none" } as React.CSSProperties}>
             {items.map(it => <BenchCard key={it.key} it={it} />)}
           </div>
         ) : (
-          /* ── Desktop: 4-col grid ── */
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
             {items.map(it => <BenchCard key={it.key} it={it} />)}
           </div>
