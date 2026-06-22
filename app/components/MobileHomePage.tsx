@@ -9,8 +9,8 @@ type NavTile = {
   label: string;
   sublabel: string;
   href: string;
-  accent: string; // CSS colour for the glow / border
-  bg: string;     // gradient background
+  accent: string;
+  bg: string;
 };
 
 const TILES: NavTile[] = [
@@ -86,7 +86,6 @@ export default function MobileHomePage() {
   const [results, setResults] = useState<{ symbol: string; name: string; exchange: string }[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
 
-  // Debounced symbol search
   useEffect(() => {
     const q = query.trim();
     if (!q) { setResults([]); return; }
@@ -135,17 +134,44 @@ export default function MobileHomePage() {
           alt="MyStockHarbor"
           style={{ height: 52, width: "auto", display: "block", marginBottom: 10 }}
         />
-        <div style={{ fontSize: 22, fontWeight: 950, lineHeight: 1.1, letterSpacing: "-0.02em" }}>
-          Your Stock Research Hub
-        </div>
-        <div style={{ marginTop: 5, fontSize: 13, color: "rgba(241,245,249,0.65)", fontWeight: 700 }}>
+
+        {/* H1 — matches page metadata title for SEO */}
+        <h1
+          style={{
+            margin: 0,
+            fontSize: 22,
+            fontWeight: 950,
+            lineHeight: 1.1,
+            letterSpacing: "-0.02em",
+          }}
+        >
+          Stock Analysis Tools, Stock Pickers &amp; Market Insights
+        </h1>
+
+        <p
+          style={{
+            margin: "5px 0 0",
+            fontSize: 13,
+            color: "rgba(241,245,249,0.65)",
+            fontWeight: 700,
+          }}
+        >
           Charts · Pickers · Insights · Education
-        </div>
+        </p>
       </div>
 
       {/* ── Quick Stock Search ── */}
       <div style={{ padding: "16px 16px 0", position: "relative" }}>
-        <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 6, opacity: 0.7, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+        <div
+          style={{
+            fontSize: 12,
+            fontWeight: 900,
+            marginBottom: 6,
+            opacity: 0.7,
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+          }}
+        >
           Quick Stock Search
         </div>
         <input
@@ -201,7 +227,9 @@ export default function MobileHomePage() {
                 }}
               >
                 <div style={{ fontWeight: 900, fontSize: 14 }}>{r.symbol}</div>
-                <div style={{ fontSize: 12, opacity: 0.65 }}>{r.name}{r.exchange ? ` · ${r.exchange}` : ""}</div>
+                <div style={{ fontSize: 12, opacity: 0.65 }}>
+                  {r.name}{r.exchange ? ` · ${r.exchange}` : ""}
+                </div>
               </button>
             ))}
           </div>
@@ -239,7 +267,15 @@ export default function MobileHomePage() {
             <span style={{ fontSize: 28, lineHeight: 1 }}>{tile.icon}</span>
             <div>
               <div style={{ fontWeight: 950, fontSize: 15, lineHeight: 1.15 }}>{tile.label}</div>
-              <div style={{ marginTop: 3, fontSize: 12, opacity: 0.65, fontWeight: 700, lineHeight: 1.4 }}>
+              <div
+                style={{
+                  marginTop: 3,
+                  fontSize: 12,
+                  opacity: 0.65,
+                  fontWeight: 700,
+                  lineHeight: 1.4,
+                }}
+              >
                 {tile.sublabel}
               </div>
             </div>
@@ -266,7 +302,11 @@ export default function MobileHomePage() {
           { label: "Risk Disclaimer", href: "/risk-disclaimer" },
           { label: "Privacy Policy", href: "/privacy-policy" },
         ].map((l) => (
-          <Link key={l.href} href={l.href} style={{ color: "inherit", textDecoration: "none" }}>
+          <Link
+            key={l.href}
+            href={l.href}
+            style={{ color: "inherit", textDecoration: "none" }}
+          >
             {l.label}
           </Link>
         ))}
