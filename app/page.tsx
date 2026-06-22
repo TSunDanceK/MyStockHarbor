@@ -126,12 +126,16 @@ export default function Page() {
       <Suspense
         fallback={
           <div style={{ padding: 40, fontFamily: "system-ui, Arial" }}>
-            Loading dashboard…
+            Loading…
           </div>
         }
       >
-        <DashboardClient />
+        <HomePageRouter />
       </Suspense>
     </>
   );
 }
+
+// Client component that picks mobile landing page vs full dashboard
+// Import is dynamic so the mobile page doesn't bloat the desktop bundle
+import HomePageRouter from "./components/HomePageRouter";
