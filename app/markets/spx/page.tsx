@@ -1,6 +1,5 @@
 import type React from "react";
 import type { Metadata } from "next";
-import Link from "next/link";
 import AffiliateLink from "../../components/AffiliateLink";
 import SPXChartClient from "./SPXChartClient";
 import { getDailyHistory } from "@/lib/server/historyCache";
@@ -203,73 +202,6 @@ function thermometerFillStyle(score: number): React.CSSProperties {
   };
 }
 
-const topNavIconWrapStyle: React.CSSProperties = {
-  fontSize: 15,
-  lineHeight: 1,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-};
-
-function topNavBtnStyle(
-  type: "dashboard" | "learn" | "pickers" | "platforms"
-): React.CSSProperties {
-  const base: React.CSSProperties = {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    minHeight: 42,
-    padding: "9px 13px",
-    borderRadius: 14,
-    textDecoration: "none",
-    fontWeight: 900,
-    fontSize: 14,
-    whiteSpace: "nowrap",
-    boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-    transition:
-      "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-  };
-
-  if (type === "dashboard") {
-    return {
-      ...base,
-      border: "1px solid rgba(250,204,21,0.45)",
-      background:
-        "linear-gradient(135deg, rgba(250,204,21,0.20), rgba(202,138,4,0.10))",
-      color: "#fefce8",
-    };
-  }
-
-  if (type === "learn") {
-    return {
-      ...base,
-      border: "1px solid rgba(59,130,246,0.45)",
-      background:
-        "linear-gradient(135deg, rgba(59,130,246,0.20), rgba(37,99,235,0.10))",
-      color: "#eff6ff",
-    };
-  }
-
-  if (type === "pickers") {
-    return {
-      ...base,
-      border: "1px solid rgba(239,68,68,0.45)",
-      background:
-        "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.10))",
-      color: "#fef2f2",
-    };
-  }
-
-  return {
-    ...base,
-    border: "1px solid rgba(168,85,247,0.45)",
-    background:
-      "linear-gradient(135deg, rgba(168,85,247,0.20), rgba(139,92,246,0.10))",
-    color: "#faf5ff",
-  };
-}
-
 const overviewCardHeaderStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
@@ -399,13 +331,6 @@ function sectionEyebrowStyle(type: "green" | "red" | "blue" | "yellow"): React.C
   };
 }
 
-function topNavIcon(type: "dashboard" | "learn" | "pickers" | "platforms") {
-  if (type === "dashboard") return "📈";
-  if (type === "learn") return "📘";
-  if (type === "pickers") return "📊";
-  return "🏦";
-}
-
 export default async function SPXPage() {
   const spxChartPoints = await getSpxChartPoints();
   const marketAnalysis = await getSpxMarketAnalysis();
@@ -441,55 +366,7 @@ export default async function SPXPage() {
       >
         <div style={{ display: "grid", gap: 14 }}>
           <div style={{ display: "grid", gap: 14 }}>
-            <div
-              className="topNavRow"
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                alignItems: "flex-start",
-                gap: 10,
-                flexWrap: "wrap",
-              }}
-            >
-              <Link href="/" style={topNavBtnStyle("dashboard")}>
-                <span aria-hidden="true" style={topNavIconWrapStyle}>
-                  {topNavIcon("dashboard")}
-                </span>
-                <span className="topNavText">Dashboard</span>
-              </Link>
 
-              <Link href="/pickers" style={topNavBtnStyle("pickers")}>
-                <span aria-hidden="true" style={topNavIconWrapStyle}>
-                  {topNavIcon("pickers")}
-                </span>
-                <span className="topNavText">
-                  <span className="topNavShowDesktop">Stock Pickers</span>
-                  <span className="topNavShowMobile">Pickers</span>
-                </span>
-              </Link>
-
-              <Link
-                href="/learn"
-                style={topNavBtnStyle("learn")}
-                className="topNavIconOnlyMobile"
-              >
-                <span aria-hidden="true" style={topNavIconWrapStyle}>
-                  {topNavIcon("learn")}
-                </span>
-                <span className="topNavText topNavHideOnMobile">Learn</span>
-              </Link>
-
-              <Link
-                href="/platforms"
-                style={topNavBtnStyle("platforms")}
-                className="topNavIconOnlyMobile"
-              >
-                <span aria-hidden="true" style={topNavIconWrapStyle}>
-                  {topNavIcon("platforms")}
-                </span>
-                <span className="topNavText topNavHideOnMobile">Platforms</span>
-              </Link>
-            </div>
 
             <div style={{ fontSize: 12, opacity: 0.72, fontWeight: 900 }}>
               MARKET ANALYSIS
@@ -646,7 +523,7 @@ export default async function SPXPage() {
                     }}
                   />
 
-                
+
                 </div>
 
                 <div>
