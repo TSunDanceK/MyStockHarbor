@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import DashboardClient from "./components/DashboardClient";
+import HomePageRouter from "./components/HomePageRouter";
 
 export const metadata: Metadata = {
   title: "Stock Analysis Tools, Stock Pickers & Market Insights | MyStockHarbor",
@@ -135,7 +135,3 @@ export default function Page() {
     </>
   );
 }
-
-// Client component that picks mobile landing page vs full dashboard
-// Import is dynamic so the mobile page doesn't bloat the desktop bundle
-import HomePageRouter from "./components/HomePageRouter";
