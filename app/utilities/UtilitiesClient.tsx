@@ -74,124 +74,88 @@ function TopSiteNav() {
     },
   ];
 
+  const navStyle: React.CSSProperties = {
+    position: "sticky",
+    top: 0,
+    zIndex: 30,
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "12px 24px",
+    background: "rgba(10, 15, 26, 0.94)",
+    backdropFilter: "blur(14px)",
+    borderBottom: "1px solid #1a2336",
+    boxSizing: "border-box",
+    width: "100%",
+    minWidth: 0,
+  };
+
+  const logoLinkStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flex: "0 0 auto",
+    textDecoration: "none",
+  };
+
+  const logoImageStyle: React.CSSProperties = {
+    display: "block",
+    height: 38,
+    width: "auto",
+    maxWidth: 150,
+    objectFit: "contain",
+  };
+
+  const navLinksStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 4,
+    marginLeft: "auto",
+    minWidth: 0,
+    overflowX: "auto",
+    overflowY: "hidden",
+    whiteSpace: "nowrap",
+    scrollbarWidth: "none",
+    WebkitOverflowScrolling: "touch",
+  };
+
+  const navLinkStyle = (active?: boolean): React.CSSProperties => ({
+    flex: "0 0 auto",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: active ? "#eaf0fa" : "#8a97ad",
+    background: active ? "#141b2b" : "transparent",
+    border: active ? "1px solid #222c40" : "1px solid transparent",
+    borderRadius: 8,
+    padding: "7px 12px",
+    fontSize: 13.5,
+    fontWeight: 700,
+    lineHeight: 1,
+    textDecoration: "none",
+    boxSizing: "border-box",
+  });
+
   return (
-    <>
-      <nav className="msh-site-nav">
-        <Link href="/" className="msh-site-nav-logo" aria-label="MyStockHarbor home">
-          <img src="/logo.png" alt="MyStockHarbor" />
-        </Link>
+    <nav style={navStyle}>
+      <Link href="/" style={logoLinkStyle} aria-label="MyStockHarbor home">
+        <img src="/logo.png" alt="MyStockHarbor" style={logoImageStyle} />
+      </Link>
 
-        <div className="msh-site-navlinks" aria-label="Primary navigation">
-          {siteNavLinks.map((item) => (
-            <Link
-              key={item.label}
-              href={item.href}
-              data-msh-stock-nav={item.stockNav}
-              className={`msh-site-navlink${item.active ? " active" : ""}`}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </div>
-      </nav>
-
-      <style jsx>{`
-        .msh-site-nav {
-          position: sticky;
-          top: 0;
-          z-index: 30;
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 12px 24px;
-          background: rgba(10,15,26,0.90);
-          backdrop-filter: blur(14px);
-          border-bottom: 1px solid #1a2336;
-        }
-
-        .msh-site-nav-logo {
-          display: flex;
-          align-items: center;
-          margin-right: 4px;
-          text-decoration: none;
-          flex: 0 0 auto;
-        }
-
-        .msh-site-nav-logo img {
-          height: 38px;
-          width: auto;
-          display: block;
-        }
-
-        .msh-site-navlinks {
-          display: flex;
-          align-items: center;
-          gap: 2px;
-          margin-left: auto;
-          min-width: 0;
-        }
-
-        .msh-site-navlink {
-          color: #8a97ad;
-          font-size: 13.5px;
-          font-weight: 600;
-          text-decoration: none;
-          padding: 7px 12px;
-          border-radius: 8px;
-          transition: color .15s, background .15s, transform .15s, filter .15s;
-          white-space: nowrap;
-        }
-
-        .msh-site-navlink:hover {
-          color: #eaf0fa;
-          background: #141b2b;
-          filter: brightness(1.05);
-          transform: translateY(-1px);
-        }
-
-        .msh-site-navlink.active {
-          color: #eaf0fa;
-          background: #141b2b;
-          border: 1px solid #222c40;
-        }
-
-        @media (max-width: 760px) {
-          .msh-site-nav {
-            padding: 10px 12px 8px;
-            gap: 8px;
-            align-items: stretch;
-            flex-direction: column;
-          }
-
-          .msh-site-nav-logo {
-            align-self: flex-start;
-          }
-
-          .msh-site-nav-logo img {
-            height: 34px;
-          }
-
-          .msh-site-navlinks {
-            margin-left: 0;
-            overflow-x: auto;
-            gap: 4px;
-            padding-bottom: 2px;
-            scrollbar-width: none;
-            -webkit-overflow-scrolling: touch;
-          }
-
-          .msh-site-navlinks::-webkit-scrollbar {
-            display: none;
-          }
-
-          .msh-site-navlink {
-            flex: 0 0 auto;
-            font-size: 12.5px;
-            padding: 8px 10px;
-          }
-        }
-      `}</style>
-    </>
+      <div style={navLinksStyle} aria-label="Primary navigation">
+        {siteNavLinks.map((item) => (
+          <Link
+            key={item.label}
+            href={item.href}
+            data-msh-stock-nav={item.stockNav}
+            style={navLinkStyle(item.active)}
+          >
+            {item.label}
+          </Link>
+        ))}
+      </div>
+    </nav>
   );
 }
 
