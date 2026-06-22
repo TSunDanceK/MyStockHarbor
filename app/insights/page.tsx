@@ -185,33 +185,6 @@ export default async function InsightsPage() {
             DAILY STOCK BLOG
           </div>
 
-          <Link
-            href="/"
-            style={{
-              position: "fixed",
-              top: 16,
-              right: 16,
-              zIndex: 1000,
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: "10px 14px",
-              borderRadius: 12,
-              border: "1px solid rgba(239,68,68,0.45)",
-              background:
-                "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.14))",
-              color: "#fee2e2",
-              textDecoration: "none",
-              fontWeight: 900,
-              fontSize: 13,
-              boxShadow: "0 10px 24px rgba(0,0,0,0.34)",
-              transition: "all 140ms ease",
-              whiteSpace: "nowrap",
-              backdropFilter: "blur(8px)",
-            }}
-          >
-            ← Back
-          </Link>
 
           <h1
             style={{
