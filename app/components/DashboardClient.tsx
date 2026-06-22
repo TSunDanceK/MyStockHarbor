@@ -199,10 +199,22 @@ const TIMEFRAMES = [{ label: "D", interval: "d" as ChartInterval, fetchBars: 260
 const PRICE_OVERLAY_OPTIONS: Overlay[] = ["MA50", "MA200", "EMA20", "VWMA(20)", "Bollinger(20,2)", "Support/Resistance"];
 const LOWER_OVERLAY_OPTIONS: Overlay[] = ["RSI(14)", "MACD(12,26,9)", "Stochastic(14,3)", "ATR(14)", "Volume"];
 function isLowerOverlay(v: Overlay) { return LOWER_OVERLAY_OPTIONS.includes(v); }
+function cleanStockNavSymbol(value: string | null | undefined) {
+  const cleaned = (value ?? "").trim().toUpperCase().replace(/[^A-Z0-9.-]/g, "");
+  return cleaned || null;
+}
 
 export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymbol?: string }) {
   const router = useRouter(), searchParams = useSearchParams();
   const [symbol, setSymbol] = useState(() => { if (typeof window === "undefined") return defaultSymbol; const s = window.localStorage.getItem("msh_last_symbol"); return s && s.trim() ? s.trim().toUpperCase() : defaultSymbol; });
+  const [stockNavSymbol, setStockNavSymbol] = useState(() => {
+    if (typeof window === "undefined") return "AAPL";
+    return cleanStockNavSymbol(window.localStorage.getItem("msh_last_symbol")) ?? "AAPL";
+  });
+  const hadStoredStockNavSymbolRef = useRef(
+    typeof window !== "undefined" && cleanStockNavSymbol(window.localStorage.getItem("msh_last_symbol")) !== null
+  );
+  const hasCheckedInitialStockNavSymbolRef = useRef(false);
   const [symbolName, setSymbolName] = useState("");
   const [activeTimeframe, setActiveTimeframe] = useState("D");
   const [visibleBars, setVisibleBars] = useState(75);
@@ -244,7 +256,23 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     if (indi === "MA200") { setSelectedIndicators(["MA200"]); setIndicator("MA200"); } else if (indi === "RSI(14)") { setSelectedIndicators(["RSI(14)"]); setIndicator("RSI(14)"); } else if (indi === "MACD(12,26,9)") { setSelectedIndicators(["MACD(12,26,9)"]); setIndicator("MACD(12,26,9)"); } else { setSelectedIndicators([]); setIndicator("None"); }
     setIndicatorMenuOpen(false); setWindowOffset(0);
   }, [searchParams]);
-  useEffect(() => { if (!symbol.trim()) return; window.localStorage.setItem("msh_last_symbol", symbol.trim().toUpperCase()); }, [symbol]);
+  useEffect(() => {
+    const cleanSymbol = cleanStockNavSymbol(symbol);
+    if (!cleanSymbol) return;
+
+    const cleanDefaultSymbol = cleanStockNavSymbol(defaultSymbol) ?? "AAPL";
+    const hasUrlSymbol = Boolean(searchParams.get("symbol")?.trim());
+    const isInitialDefaultSymbol = !hasCheckedInitialStockNavSymbolRef.current && cleanSymbol === cleanDefaultSymbol;
+    const shouldSaveAsLastStock = hadStoredStockNavSymbolRef.current || hasUrlSymbol || !isInitialDefaultSymbol;
+
+    hasCheckedInitialStockNavSymbolRef.current = true;
+
+    if (!shouldSaveAsLastStock) return;
+
+    window.localStorage.setItem("msh_last_symbol", cleanSymbol);
+    setStockNavSymbol(cleanSymbol);
+    hadStoredStockNavSymbolRef.current = true;
+  }, [symbol, defaultSymbol, searchParams]);
   useEffect(() => { if (!expanded) return; const k = (e: KeyboardEvent) => { if (e.key === "Escape") setExpanded(false); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [expanded]);
   useEffect(() => { function h(e: MouseEvent) { if (!indicatorMenuRef.current) return; if (!indicatorMenuRef.current.contains(e.target as Node)) setIndicatorMenuOpen(false); } document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h); }, []);
   useEffect(() => {
@@ -345,6 +373,20 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     setWindowOffset(0);
   }
   const chartIndicatorName = chartIndicatorLabel(selectedIndicators);
+  const desktopNavLinks = useMemo(() => {
+    const encodedStockNavSymbol = encodeURIComponent(stockNavSymbol);
+    return [
+      { href: "/", label: "Dashboard", active: true },
+      { href: "/learn", label: "Learn" },
+      { href: "/platforms", label: "Platforms" },
+      { href: "/pickers", label: "Stock Pickers" },
+      { href: "/utilities", label: "Calculators" },
+      { href: "/insights", label: "Insights" },
+      { href: `/stock/${encodedStockNavSymbol}/earnings`, label: "Earnings" },
+      { href: `/stock/${encodedStockNavSymbol}`, label: "Stock Analysis" },
+      { href: `/stock/${encodedStockNavSymbol}/news`, label: "News Page" },
+    ];
+  }, [stockNavSymbol]);
 
   const chartSummaryText = useMemo(() => {
     if (!customMode) {
@@ -639,7 +681,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
 
       <nav className="msh-nav">
         <Link href="/" className="msh-nav-logo"><img src="/logo.png" alt="MyStockHarbor" /></Link>
-        <div className="msh-navlinks">{[{ href: "/", label: "Dashboard", active: true }, { href: "/learn", label: "Learn" }, { href: "/platforms", label: "Platforms" }, { href: "/pickers", label: "Stock Pickers" }, { href: "/utilities", label: "Calculators" }, { href: "/insights", label: "Insights" }].map(l => <Link key={l.href} href={l.href} className={`msh-navlink${l.active ? " active" : ""}`}>{l.label}</Link>)}</div>
+        <div className="msh-navlinks">{desktopNavLinks.map(l => <Link key={l.href} href={l.href} className={`msh-navlink${l.active ? " active" : ""}`}>{l.label}</Link>)}</div>
       </nav>
 
       <div className="msh-wrap">
