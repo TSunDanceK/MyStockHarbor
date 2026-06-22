@@ -777,15 +777,16 @@ function buildStretchScore(args: {
     if (pct <= -0.02) {
       oversold++;
       details.push({ name: "VWMA dist", state: "oversold" });
-} else if (pct >= 0.02) {
-  overbought++;
-  details.push({ name: "VWMA dist", state: "overbought" });
-} else {
+    } else if (pct >= 0.02) {
+      overbought++;
+      details.push({ name: "VWMA dist", state: "overbought" });
+    } else {
       details.push({ name: "VWMA dist", state: "neutral" });
     }
-} else {
-  details.push({ name: "VWMA dist", state: "na" });
-}
+  } else {
+    details.push({ name: "VWMA dist", state: "na" });
+  }
+
   if (typeof lastClose === "number" && typeof ema20 === "number" && ema20 > 0) {
     const pct = (lastClose - ema20) / ema20;
     if (pct <= -0.05) {
@@ -890,7 +891,7 @@ const PRICE_OVERLAY_OPTIONS: Overlay[] = [
   "MA50",
   "MA200",
   "EMA20",
-   "VWMA(20)",
+  "VWMA(20)",
   "Bollinger(20,2)",
   "Support/Resistance",
 ];
@@ -924,17 +925,14 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   const [visibleBars, setVisibleBars] = useState(75);
   const [windowOffset, setWindowOffset] = useState(0);
   const [chartInterval, setChartInterval] = useState<ChartInterval>("d");
+
   useEffect(() => {
-  if (symbolName.trim()) return;
-
-  const fallback = PRESET_TICKERS.find(
-    (x) => x.symbol.toUpperCase() === symbol.toUpperCase()
-  );
-
-  if (fallback?.name) {
-    setSymbolName(fallback.name);
-  }
-}, [symbol, symbolName]);
+    if (symbolName.trim()) return;
+    const fallback = PRESET_TICKERS.find(
+      (x) => x.symbol.toUpperCase() === symbol.toUpperCase()
+    );
+    if (fallback?.name) setSymbolName(fallback.name);
+  }, [symbol, symbolName]);
 
   const [indicator, setIndicator] = useState<Overlay>("None");
   const [selectedIndicators, setSelectedIndicators] = useState<Overlay[]>([]);
@@ -971,19 +969,32 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     const isDark = theme === "dark";
     return {
       isDark,
-      pageBg: isDark ? "#06080d" : "#f6f7fb",
-      pageFg: isDark ? "#f1f5f9" : "#0b1220",
-      mutedFg: isDark ? "rgba(241,245,249,0.70)" : "rgba(11,18,32,0.65)",
-      cardBg: isDark ? "#0b1220" : "#ffffff",
-      cardFg: isDark ? "#f1f5f9" : "#0b1220",
-      border: isDark ? "rgba(255,255,255,0.14)" : "rgba(11,18,32,0.14)",
-      controlBg: isDark ? "rgba(255,255,255,0.06)" : "rgba(11,18,32,0.04)",
-      controlBgSolid: isDark ? "#0f172a" : "#ffffff",
-      controlBorder: isDark ? "rgba(255,255,255,0.18)" : "rgba(11,18,32,0.18)",
-      controlFg: isDark ? "#f1f5f9" : "#0b1220",
-      yellowBorder: isDark ? "rgba(234,179,8,0.38)" : "rgba(202,138,4,0.35)",
-      yellowBg: isDark ? "rgba(234,179,8,0.10)" : "rgba(250,204,21,0.14)",
-      yellowText: isDark ? "#fde68a" : "#854d0e",
+      pageBg: "#0a0f1a",
+      pageFg: "#eaf0fa",
+      mutedFg: "#8a97ad",
+      mutedFg2: "#5f6b80",
+      cardBg: "#141b2b",
+      cardFg: "#eaf0fa",
+      cardBg2: "#0f1624",
+      border: "#222c40",
+      borderSoft: "#1a2336",
+      controlBg: "#0f1624",
+      controlBgSolid: "#0f1624",
+      controlBorder: "#222c40",
+      controlFg: "#eaf0fa",
+      blue: "#2f6bff",
+      blueSoft: "#13213f",
+      blueBorder: "#27406f",
+      green: "#16c784",
+      greenSoft: "#0f2a23",
+      greenBorder: "#1c4a3c",
+      amber: "#f5a524",
+      amberSoft: "#2c2310",
+      amberBorder: "#3a2f10",
+      red: "#f04444",
+      yellowBorder: "rgba(234,179,8,0.38)",
+      yellowBg: "rgba(234,179,8,0.10)",
+      yellowText: "#fde68a",
     };
   }, []);
 
@@ -1058,48 +1069,33 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
         setIndicatorMenuOpen(false);
       }
     }
-
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-useEffect(() => {
-  const preset = PRESET_TICKERS.find((t) => t.symbol === symbol);
-  if (preset) {
-    setSymbolName(preset.name);
-    return;
-  }
-
-  let cancelled = false;
-
-  async function resolve() {
-    try {
-      const res = await fetch(`/api/symbols?q=${encodeURIComponent(symbol)}`);
-      if (!res.ok) throw new Error("symbols lookup failed");
-
-      const data = (await res.json()) as { results?: SymbolResult[] };
-      const rows = Array.isArray(data.results) ? data.results : [];
-      const exact = rows.find(
-        (r) => (r.symbol ?? "").toUpperCase() === symbol.toUpperCase()
-      );
-
-      if (!cancelled && exact?.name) {
-        setSymbolName(exact.name);
-      }
-    } catch {
-      // Keep any name already supplied by the search dropdown.
+  useEffect(() => {
+    const preset = PRESET_TICKERS.find((t) => t.symbol === symbol);
+    if (preset) {
+      setSymbolName(preset.name);
+      return;
     }
-  }
-
-  resolve();
-  return () => {
-    cancelled = true;
-  };
-}, [symbol]);
+    let cancelled = false;
+    async function resolve() {
+      try {
+        const res = await fetch(`/api/symbols?q=${encodeURIComponent(symbol)}`);
+        if (!res.ok) throw new Error("symbols lookup failed");
+        const data = (await res.json()) as { results?: SymbolResult[] };
+        const rows = Array.isArray(data.results) ? data.results : [];
+        const exact = rows.find((r) => (r.symbol ?? "").toUpperCase() === symbol.toUpperCase());
+        if (!cancelled && exact?.name) setSymbolName(exact.name);
+      } catch {}
+    }
+    resolve();
+    return () => { cancelled = true; };
+  }, [symbol]);
 
   useEffect(() => {
     let cancelled = false;
-
     async function load() {
       const cacheKey = `${symbol}:${activeTimeframe}:${selectedTimeframe.fetchBars}:${selectedTimeframe.interval}`;
       const cacheHit = symbolCache[cacheKey];
@@ -1110,28 +1106,19 @@ useEffect(() => {
         setLoading(false);
         return;
       }
-
       setLoading(true);
       setErr(null);
-
       try {
-     const historyDays = selectedTimeframe.fetchBars;
-
-const [qRes, hRes] = await Promise.all([
-  fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`),
-  fetch(
-    `/api/history?symbol=${encodeURIComponent(symbol)}&days=${historyDays}&interval=${chartInterval}`
-  ),
-]);
-
+        const historyDays = selectedTimeframe.fetchBars;
+        const [qRes, hRes] = await Promise.all([
+          fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`),
+          fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=${historyDays}&interval=${chartInterval}`),
+        ]);
         if (!qRes.ok) throw new Error("Quote fetch failed");
         if (!hRes.ok) throw new Error("History fetch failed");
-
         const q = (await qRes.json()) as Quote;
         const h = (await hRes.json()) as { points: any[] };
-
         if (cancelled) return;
-
         const ptsRaw = Array.isArray(h.points) ? h.points : [];
         const pts: Point[] = ptsRaw
           .map((p: any) => ({
@@ -1143,17 +1130,9 @@ const [qRes, hRes] = await Promise.all([
             volume: p?.volume == null ? undefined : Number(p.volume),
           }))
           .filter((p) => p.date && Number.isFinite(p.close));
-
         setQuote(q);
         setHistoryAll(pts);
-
-        setSymbolCache((prev) => ({
-          ...prev,
-          [cacheKey]: {
-            quote: q,
-            history: pts,
-          },
-        }));
+        setSymbolCache((prev) => ({ ...prev, [cacheKey]: { quote: q, history: pts } }));
       } catch {
         if (cancelled) return;
         setErr("Failed to load data (try another ticker).");
@@ -1163,168 +1142,103 @@ const [qRes, hRes] = await Promise.all([
         if (!cancelled) setLoading(false);
       }
     }
-
     load();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [symbol, activeTimeframe, selectedTimeframe, chartInterval, symbolCache]);
 
   useEffect(() => {
     let cancelled = false;
     const q = query.trim();
-
-    if (!q) {
-      setResults([]);
-      return;
-    }
-
+    if (!q) { setResults([]); return; }
     const t = setTimeout(async () => {
       try {
         const res = await fetch(`/api/symbols?q=${encodeURIComponent(q)}`);
         const data = (await res.json()) as { results: SymbolResult[] };
         if (cancelled) return;
         const rows = Array.isArray(data.results) ? data.results : [];
-const cleanedQuery = q.toUpperCase();
-
-const sortedRows = [...rows].sort((a, b) => {
-  const aSymbol = a.symbol.toUpperCase();
-  const bSymbol = b.symbol.toUpperCase();
-
-  if (aSymbol === cleanedQuery && bSymbol !== cleanedQuery) return -1;
-  if (bSymbol === cleanedQuery && aSymbol !== cleanedQuery) return 1;
-
-  if (aSymbol.startsWith(cleanedQuery) && !bSymbol.startsWith(cleanedQuery)) return -1;
-  if (bSymbol.startsWith(cleanedQuery) && !aSymbol.startsWith(cleanedQuery)) return 1;
-
-  return aSymbol.localeCompare(bSymbol);
-});
-
-setResults(sortedRows);
+        const cleanedQuery = q.toUpperCase();
+        const sortedRows = [...rows].sort((a, b) => {
+          const aS = a.symbol.toUpperCase();
+          const bS = b.symbol.toUpperCase();
+          if (aS === cleanedQuery && bS !== cleanedQuery) return -1;
+          if (bS === cleanedQuery && aS !== cleanedQuery) return 1;
+          if (aS.startsWith(cleanedQuery) && !bS.startsWith(cleanedQuery)) return -1;
+          if (bS.startsWith(cleanedQuery) && !aS.startsWith(cleanedQuery)) return 1;
+          return aS.localeCompare(bS);
+        });
+        setResults(sortedRows);
       } catch {
         if (cancelled) return;
         setResults([]);
       }
     }, 250);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
+    return () => { cancelled = true; clearTimeout(t); };
   }, [query]);
 
   useEffect(() => {
     let cancelled = false;
-
     async function loadBench() {
       try {
         const res = await fetch("/api/benchmarks");
         if (!res.ok) throw new Error("Benchmarks API failed");
-
         const raw = (await res.json()) as any;
-
         const safe: BenchPayload = {
           updatedAt: typeof raw?.updatedAt === "string" ? raw.updatedAt : new Date().toISOString(),
           scope: typeof raw?.scope === "string" ? raw.scope : "Benchmarks",
           items: Array.isArray(raw?.items) ? raw.items : [],
         };
-
         if (!cancelled) setBench(safe);
       } catch {
-        if (!cancelled) {
-          setBench({
-            updatedAt: new Date().toISOString(),
-            scope: "Benchmarks",
-            items: [],
-          });
-        }
+        if (!cancelled) setBench({ updatedAt: new Date().toISOString(), scope: "Benchmarks", items: [] });
       }
     }
-
     loadBench();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
-  
-useEffect(() => {
-  const hash = typeof window !== "undefined" ? window.location.hash : "";
-  if (hash !== "#chart") return;
-  if (!historyAll.length) return;
 
-  const t = window.setTimeout(() => {
-    chartSectionRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
-
-    // trigger highlight
-    setHighlightChart(true);
-
-    // remove highlight after short delay
-    setTimeout(() => setHighlightChart(false), 1200);
-  }, 80);
-
-  return () => window.clearTimeout(t);
-}, [historyAll, symbol]);
-
+  useEffect(() => {
+    const hash = typeof window !== "undefined" ? window.location.hash : "";
+    if (hash !== "#chart") return;
+    if (!historyAll.length) return;
+    const t = window.setTimeout(() => {
+      chartSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      setHighlightChart(true);
+      setTimeout(() => setHighlightChart(false), 1200);
+    }, 80);
+    return () => window.clearTimeout(t);
+  }, [historyAll, symbol]);
 
   useEffect(() => {
     let cancelled = false;
-
     async function loadNews() {
       try {
         const res = await fetch(`/api/internal-news?symbol=${encodeURIComponent(symbol)}`);
-
         if (!res.ok) throw new Error("Internal news API failed");
-
         const data = (await res.json()) as NewsPayload;
-
-        if (!cancelled) {
-          setNews(data);
-        }
+        if (!cancelled) setNews(data);
       } catch {
-        if (!cancelled) {
-          setNews(null);
-        }
+        if (!cancelled) setNews(null);
       }
     }
-
     loadNews();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [symbol]);
 
   useEffect(() => {
     let cancelled = false;
-
     async function loadEarningsSummary() {
       setEarningsSummary(null);
-
       try {
-        const res = await fetch(`/api/stock-earnings/${encodeURIComponent(symbol)}`, {
-          cache: "no-store",
-        });
-
+        const res = await fetch(`/api/stock-earnings/${encodeURIComponent(symbol)}`, { cache: "no-store" });
         if (!res.ok) throw new Error("Stock earnings API failed");
-
         const data = (await res.json()) as StockEarningsSummary;
-
-        if (!cancelled) {
-          setEarningsSummary(data);
-        }
+        if (!cancelled) setEarningsSummary(data);
       } catch {
-        if (!cancelled) {
-          setEarningsSummary(null);
-        }
+        if (!cancelled) setEarningsSummary(null);
       }
     }
-
     loadEarningsSummary();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [symbol]);
 
   const totalPoints = historyAll.length;
@@ -1333,139 +1247,56 @@ useEffect(() => {
   const offset = Math.min(Math.max(windowOffset, 0), maxOffset);
 
   const { displayStart, displayEnd, displayedHistory } = useMemo(() => {
-    if (!historyAll.length) {
-      return {
-        displayStart: 0,
-        displayEnd: 0,
-        displayedHistory: [] as Point[],
-      };
-    }
-
+    if (!historyAll.length) return { displayStart: 0, displayEnd: 0, displayedHistory: [] as Point[] };
     const end = totalPoints - offset;
     const start = Math.max(0, end - win);
     const slice = historyAll.slice(start, end);
-
-    if (slice.length >= 2) {
-      return {
-        displayStart: start,
-        displayEnd: end,
-        displayedHistory: slice,
-      };
-    }
-
-    return {
-      displayStart: Math.max(totalPoints - 2, 0),
-      displayEnd: totalPoints,
-      displayedHistory: historyAll.slice(-2),
-    };
+    if (slice.length >= 2) return { displayStart: start, displayEnd: end, displayedHistory: slice };
+    return { displayStart: Math.max(totalPoints - 2, 0), displayEnd: totalPoints, displayedHistory: historyAll.slice(-2) };
   }, [historyAll, totalPoints, offset, win]);
 
   const closesAll = useMemo(() => historyAll.map((p) => p.close), [historyAll]);
-
   const ma50Full = useMemo(() => movingAverage(closesAll, 50), [closesAll]);
   const ma200Full = useMemo(() => movingAverage(closesAll, 200), [closesAll]);
   const ema20Full = useMemo(() => ema(closesAll, 20), [closesAll]);
   const bbFull = useMemo(() => bollinger(closesAll, 20, 2), [closesAll]);
   const rsi14Full = useMemo(() => rsiWilder(closesAll, 14), [closesAll]);
   const macdFull = useMemo(() => macd(closesAll, 12, 26, 9), [closesAll]);
-  const vwma20Full = useMemo(
-    () => vwma(historyAll.map((p) => p.close), historyAll.map((p) => p.volume), 20),
-    [historyAll]
-  );
+  const vwma20Full = useMemo(() => vwma(historyAll.map((p) => p.close), historyAll.map((p) => p.volume), 20), [historyAll]);
   const stochFull = useMemo(() => stochastic(historyAll, 14, 3), [historyAll]);
   const atr14Full = useMemo(() => atr(historyAll, 14), [historyAll]);
 
-  const ma50 = useMemo(
-    () => ma50Full.slice(displayStart, displayEnd),
-    [ma50Full, displayStart, displayEnd]
-  );
-  const ma200 = useMemo(
-    () => ma200Full.slice(displayStart, displayEnd),
-    [ma200Full, displayStart, displayEnd]
-  );
-  const ema20Arr = useMemo(
-    () => ema20Full.slice(displayStart, displayEnd),
-    [ema20Full, displayStart, displayEnd]
-  );
-  const bollUpper = useMemo(
-    () => bbFull.upper.slice(displayStart, displayEnd),
-    [bbFull, displayStart, displayEnd]
-  );
-  const bollMid = useMemo(
-    () => bbFull.mid.slice(displayStart, displayEnd),
-    [bbFull, displayStart, displayEnd]
-  );
-  const bollLower = useMemo(
-    () => bbFull.lower.slice(displayStart, displayEnd),
-    [bbFull, displayStart, displayEnd]
-  );
-  const rsi14Arr = useMemo(
-    () => rsi14Full.slice(displayStart, displayEnd),
-    [rsi14Full, displayStart, displayEnd]
-  );
-  const macdLine = useMemo(
-    () => macdFull.line.slice(displayStart, displayEnd),
-    [macdFull, displayStart, displayEnd]
-  );
-  const macdSignal = useMemo(
-    () => macdFull.signal.slice(displayStart, displayEnd),
-    [macdFull, displayStart, displayEnd]
-  );
-  const macdHist = useMemo(
-    () => macdFull.hist.slice(displayStart, displayEnd),
-    [macdFull, displayStart, displayEnd]
-  );
-  const vwma20Arr = useMemo(
-    () => vwma20Full.slice(displayStart, displayEnd),
-    [vwma20Full, displayStart, displayEnd]
-  );
-  const stochK = useMemo(
-    () => stochFull.k.slice(displayStart, displayEnd),
-    [stochFull, displayStart, displayEnd]
-  );
-  const stochD = useMemo(
-    () => stochFull.d.slice(displayStart, displayEnd),
-    [stochFull, displayStart, displayEnd]
-  );
-  const atr14Arr = useMemo(
-    () => atr14Full.slice(displayStart, displayEnd),
-    [atr14Full, displayStart, displayEnd]
-  );
+  const ma50 = useMemo(() => ma50Full.slice(displayStart, displayEnd), [ma50Full, displayStart, displayEnd]);
+  const ma200 = useMemo(() => ma200Full.slice(displayStart, displayEnd), [ma200Full, displayStart, displayEnd]);
+  const ema20Arr = useMemo(() => ema20Full.slice(displayStart, displayEnd), [ema20Full, displayStart, displayEnd]);
+  const bollUpper = useMemo(() => bbFull.upper.slice(displayStart, displayEnd), [bbFull, displayStart, displayEnd]);
+  const bollMid = useMemo(() => bbFull.mid.slice(displayStart, displayEnd), [bbFull, displayStart, displayEnd]);
+  const bollLower = useMemo(() => bbFull.lower.slice(displayStart, displayEnd), [bbFull, displayStart, displayEnd]);
+  const rsi14Arr = useMemo(() => rsi14Full.slice(displayStart, displayEnd), [rsi14Full, displayStart, displayEnd]);
+  const macdLine = useMemo(() => macdFull.line.slice(displayStart, displayEnd), [macdFull, displayStart, displayEnd]);
+  const macdSignal = useMemo(() => macdFull.signal.slice(displayStart, displayEnd), [macdFull, displayStart, displayEnd]);
+  const macdHist = useMemo(() => macdFull.hist.slice(displayStart, displayEnd), [macdFull, displayStart, displayEnd]);
+  const vwma20Arr = useMemo(() => vwma20Full.slice(displayStart, displayEnd), [vwma20Full, displayStart, displayEnd]);
+  const stochK = useMemo(() => stochFull.k.slice(displayStart, displayEnd), [stochFull, displayStart, displayEnd]);
+  const stochD = useMemo(() => stochFull.d.slice(displayStart, displayEnd), [stochFull, displayStart, displayEnd]);
+  const atr14Arr = useMemo(() => atr14Full.slice(displayStart, displayEnd), [atr14Full, displayStart, displayEnd]);
 
-  const volumeFull = useMemo(
-    () =>
-      historyAll.map((p) =>
-        typeof p.volume === "number" && Number.isFinite(p.volume) ? p.volume : null
-      ),
-    [historyAll]
-  );
+  const volumeFull = useMemo(() => historyAll.map((p) => typeof p.volume === "number" && Number.isFinite(p.volume) ? p.volume : null), [historyAll]);
   const volSma20Full = useMemo(() => smaNullable(volumeFull, 20), [volumeFull]);
-  const volumeArr = useMemo(
-    () => volumeFull.slice(displayStart, displayEnd),
-    [volumeFull, displayStart, displayEnd]
-  );
-  const volSma20Arr = useMemo(
-    () => volSma20Full.slice(displayStart, displayEnd),
-    [volSma20Full, displayStart, displayEnd]
-  );
+  const volumeArr = useMemo(() => volumeFull.slice(displayStart, displayEnd), [volumeFull, displayStart, displayEnd]);
+  const volSma20Arr = useMemo(() => volSma20Full.slice(displayStart, displayEnd), [volSma20Full, displayStart, displayEnd]);
   const atrSma20Full = useMemo(() => smaNullable(atr14Full, 20), [atr14Full]);
-  const atrSma20Arr = useMemo(
-    () => atrSma20Full.slice(displayStart, displayEnd),
-    [atrSma20Full, displayStart, displayEnd]
-  );
+  const atrSma20Arr = useMemo(() => atrSma20Full.slice(displayStart, displayEnd), [atrSma20Full, displayStart, displayEnd]);
 
   const lastClose = displayedHistory.length ? displayedHistory[displayedHistory.length - 1].close : null;
-  const supportResistanceZones = useMemo(
-    () => computeMacroSupportResistanceZones(historyAll, lastClose),
-    [historyAll, lastClose]
-  );
+  const supportResistanceZones = useMemo(() => computeMacroSupportResistanceZones(historyAll, lastClose), [historyAll, lastClose]);
   const lastMA50 = lastNum(ma50);
   const lastMA200 = lastNum(ma200);
 
   const ma50Pct = formatPctFromBase(lastClose, typeof lastMA50 === "number" ? lastMA50 : null);
   const ma200Pct = formatPctFromBase(lastClose, typeof lastMA200 === "number" ? lastMA200 : null);
   const ema20Pct = formatPctFromBase(lastClose, lastNum(ema20Arr));
-   const vwma20Pct = formatPctFromBase(lastClose, lastNum(vwma20Arr));
+  const vwma20Pct = formatPctFromBase(lastClose, lastNum(vwma20Arr));
   const bbUpperLast = lastNum(bollUpper);
   const bbLowerLast = lastNum(bollLower);
   const rsiLast = lastNum(rsi14Arr);
@@ -1476,61 +1307,41 @@ useEffect(() => {
   const volumeLast = lastNum(volumeArr);
   const volumeSmaLast = lastNum(volSma20Arr);
 
-  const trendScore = useMemo(
-    () =>
-      buildTrendScore({
-        lastClose,
-        ma50: typeof lastMA50 === "number" ? lastMA50 : null,
-        ma200: typeof lastMA200 === "number" ? lastMA200 : null,
-        macdHist: lastNum(macdHist),
-      }),
-    [lastClose, lastMA50, lastMA200, macdHist]
-  );
+  const trendScore = useMemo(() => buildTrendScore({
+    lastClose,
+    ma50: typeof lastMA50 === "number" ? lastMA50 : null,
+    ma200: typeof lastMA200 === "number" ? lastMA200 : null,
+    macdHist: lastNum(macdHist),
+  }), [lastClose, lastMA50, lastMA200, macdHist]);
 
-  const stretchScore = useMemo(
-    () =>
-      buildStretchScore({
-        lastClose,
-        rsi14: lastNum(rsi14Arr),
-        stochK: lastNum(stochK),
-        bollUpper: lastNum(bollUpper),
-        bollLower: lastNum(bollLower),
-        ema20: lastNum(ema20Arr),
-         vwap: lastNum(vwma20Arr),
-        ma50: typeof lastMA50 === "number" ? lastMA50 : null,
-      }),
-        [lastClose, rsi14Arr, stochK, bollUpper, bollLower, ema20Arr, vwma20Arr, lastMA50]
-  );
+  const stretchScore = useMemo(() => buildStretchScore({
+    lastClose,
+    rsi14: lastNum(rsi14Arr),
+    stochK: lastNum(stochK),
+    bollUpper: lastNum(bollUpper),
+    bollLower: lastNum(bollLower),
+    ema20: lastNum(ema20Arr),
+    vwap: lastNum(vwma20Arr),
+    ma50: typeof lastMA50 === "number" ? lastMA50 : null,
+  }), [lastClose, rsi14Arr, stochK, bollUpper, bollLower, ema20Arr, vwma20Arr, lastMA50]);
 
   const divergence = useMemo(() => {
     const div = detectDivergenceFromHistory(historyAll, {
-      lookbackBars: 60,
-      leftRight: 2,
-      minPriceSwingPct: 1.2,
-      minRsiSwing: 4,
-      macdStdMult: 0.35,
+      lookbackBars: 60, leftRight: 2, minPriceSwingPct: 1.2, minRsiSwing: 4, macdStdMult: 0.35,
     });
-
-    return {
-      div,
-      rsi: divStateForIndicator(div, "rsi"),
-      macd: divStateForIndicator(div, "macd"),
-    };
+    return { div, rsi: divStateForIndicator(div, "rsi"), macd: divStateForIndicator(div, "macd") };
   }, [historyAll]);
 
   const overviewMeta = useMemo(() => {
     const toneInfo = compositeToneFromCounts(stretchScore.overbought, stretchScore.oversold, 0);
     const toneColor = toneToColor(toneInfo.tone, COLORS.isDark);
-
     const ma50v = typeof lastMA50 === "number" ? lastMA50 : null;
     const ma200v = typeof lastMA200 === "number" ? lastMA200 : null;
-
     let trend = "Range / Mixed";
     if (typeof lastClose === "number" && typeof ma50v === "number" && typeof ma200v === "number") {
       if (lastClose > ma50v && ma50v > ma200v) trend = "Uptrend";
       else if (lastClose < ma50v && ma50v < ma200v) trend = "Downtrend";
     }
-
     const atrv = lastNum(atr14Arr);
     const atrSma = lastNum(atrSma20Arr);
     let vol = "Normal";
@@ -1539,7 +1350,6 @@ useEffect(() => {
       if (ratio >= 1.5) vol = "Elevated";
       else if (ratio <= 0.85) vol = "Quiet";
     }
-
     return { toneColor, toneTag: toneInfo.tag, trend, vol };
   }, [stretchScore, COLORS.isDark, lastClose, lastMA50, lastMA200, atr14Arr, atrSma20Arr]);
 
@@ -1550,20 +1360,19 @@ useEffect(() => {
     return values.join(", ");
   }
 
-function chooseSymbol(s: string, name?: string) {
-  const cleaned = s.trim().toUpperCase();
-  if (!cleaned) return;
-
-  setSymbol(cleaned);
-  setSymbolName(name?.trim() ? name.trim() : "");
-  setQuery(cleaned);
-  setResults([]);
-  setOpen(false);
-  setActiveTimeframe("D");
-  setSelectedIndicators([]);
-  setIndicator("None");
-  setWindowOffset(0);
-}
+  function chooseSymbol(s: string, name?: string) {
+    const cleaned = s.trim().toUpperCase();
+    if (!cleaned) return;
+    setSymbol(cleaned);
+    setSymbolName(name?.trim() ? name.trim() : "");
+    setQuery(cleaned);
+    setResults([]);
+    setOpen(false);
+    setActiveTimeframe("D");
+    setSelectedIndicators([]);
+    setIndicator("None");
+    setWindowOffset(0);
+  }
 
   function clearIndicatorSelection() {
     setSelectedIndicators([]);
@@ -1580,27 +1389,18 @@ function chooseSymbol(s: string, name?: string) {
   }
 
   function toggleIndicatorSelection(next: Overlay) {
-    if (next === "None") {
-      clearIndicatorSelection();
-      return;
-    }
-
+    if (next === "None") { clearIndicatorSelection(); return; }
     setSelectedIndicators((prev) => {
       const alreadyOn = prev.includes(next);
       let nextValues: Overlay[];
-
       if (isLowerOverlay(next)) {
-        nextValues = alreadyOn
-          ? prev.filter((v) => v !== next)
-          : [...prev.filter((v) => !isLowerOverlay(v)), next];
+        nextValues = alreadyOn ? prev.filter((v) => v !== next) : [...prev.filter((v) => !isLowerOverlay(v)), next];
       } else {
         nextValues = alreadyOn ? prev.filter((v) => v !== next) : [...prev, next];
       }
-
       setIndicator(getNextFocusedIndicator(nextValues));
       return nextValues;
     });
-
     setWindowOffset(0);
   }
 
@@ -1609,545 +1409,142 @@ function chooseSymbol(s: string, name?: string) {
   const chartSummaryText = useMemo(() => {
     if (!customMode) {
       let trendText = "mixed structure";
-
-      if (
-        typeof lastClose === "number" &&
-        typeof lastMA50 === "number" &&
-        typeof lastMA200 === "number"
-      ) {
-        if (lastClose > lastMA50 && lastMA50 > lastMA200) {
-          trendText = "stronger bullish structure";
-        } else if (lastClose < lastMA50 && lastMA50 < lastMA200) {
-          trendText = "weaker bearish structure";
-        } else if (lastClose > lastMA50) {
-          trendText = "mildly constructive structure";
-        } else if (lastClose < lastMA50) {
-          trendText = "softer short-term structure";
-        }
+      if (typeof lastClose === "number" && typeof lastMA50 === "number" && typeof lastMA200 === "number") {
+        if (lastClose > lastMA50 && lastMA50 > lastMA200) trendText = "stronger bullish structure";
+        else if (lastClose < lastMA50 && lastMA50 < lastMA200) trendText = "weaker bearish structure";
+        else if (lastClose > lastMA50) trendText = "mildly constructive structure";
+        else if (lastClose < lastMA50) trendText = "softer short-term structure";
       }
-
       let stretchText = "limited stretch signals";
-      if (stretchScore.overbought >= 3) {
-        stretchText = "several overbought-style stretch signals";
-      } else if (stretchScore.oversold >= 3) {
-        stretchText = "several oversold-style stretch signals";
-      } else if (stretchScore.flagged >= 2) {
-        stretchText = "some mixed stretch signals";
-      }
-
+      if (stretchScore.overbought >= 3) stretchText = "several overbought-style stretch signals";
+      else if (stretchScore.oversold >= 3) stretchText = "several oversold-style stretch signals";
+      else if (stretchScore.flagged >= 2) stretchText = "some mixed stretch signals";
       let momentumText = "";
       if (typeof rsiLast === "number") {
         if (rsiLast >= 70) momentumText = ` RSI is ${rsiLast.toFixed(1)} and overbought.`;
         else if (rsiLast <= 30) momentumText = ` RSI is ${rsiLast.toFixed(1)} and oversold.`;
         else momentumText = ` RSI is ${rsiLast.toFixed(1)} and neutral.`;
       }
-
       let divergenceText = "";
-      if (divergence.rsi === "bullish" || divergence.macd === "bullish") {
-        divergenceText = " Bullish divergence is present.";
-      } else if (divergence.rsi === "bearish" || divergence.macd === "bearish") {
-        divergenceText = " Bearish divergence is present.";
-      }
-
+      if (divergence.rsi === "bullish" || divergence.macd === "bullish") divergenceText = " Bullish divergence is present.";
+      else if (divergence.rsi === "bearish" || divergence.macd === "bearish") divergenceText = " Bearish divergence is present.";
       return `${symbol} is showing ${trendText} with ${stretchText}.${momentumText}${divergenceText}`;
     }
-
     const parts: string[] = [];
-
     selectedIndicators.forEach((ind) => {
-      if (ind === "MA50") {
-        parts.push(
-          ma50Pct == null
-            ? "MA50 needs more data."
-            : `Price is ${ma50Pct >= 0 ? `${ma50Pct.toFixed(1)}% above` : `${Math.abs(ma50Pct).toFixed(1)}% below`} MA50.`
-        );
-      }
-
-      if (ind === "MA200") {
-        parts.push(
-          ma200Pct == null
-            ? "MA200 needs more data."
-            : `Price is ${ma200Pct >= 0 ? `${ma200Pct.toFixed(1)}% above` : `${Math.abs(ma200Pct).toFixed(1)}% below`} MA200.`
-        );
-      }
-
-      if (ind === "EMA20") {
-        parts.push(
-          ema20Pct == null
-            ? "EMA20 needs more data."
-            : `Price is ${ema20Pct >= 0 ? `${ema20Pct.toFixed(1)}% above` : `${Math.abs(ema20Pct).toFixed(1)}% below`} EMA20.`
-        );
-      }
-
-      if (ind === "VWMA(20)") {
-        parts.push(
-          vwma20Pct == null
-            ? "VWMA(20) needs more data."
-            : `Price is ${vwma20Pct >= 0 ? `${vwma20Pct.toFixed(1)}% above` : `${Math.abs(vwma20Pct).toFixed(1)}% below`} VWMA(20).`
-        );
-      }
-
+      if (ind === "MA50") parts.push(ma50Pct == null ? "MA50 needs more data." : `Price is ${ma50Pct >= 0 ? `${ma50Pct.toFixed(1)}% above` : `${Math.abs(ma50Pct).toFixed(1)}% below`} MA50.`);
+      if (ind === "MA200") parts.push(ma200Pct == null ? "MA200 needs more data." : `Price is ${ma200Pct >= 0 ? `${ma200Pct.toFixed(1)}% above` : `${Math.abs(ma200Pct).toFixed(1)}% below`} MA200.`);
+      if (ind === "EMA20") parts.push(ema20Pct == null ? "EMA20 needs more data." : `Price is ${ema20Pct >= 0 ? `${ema20Pct.toFixed(1)}% above` : `${Math.abs(ema20Pct).toFixed(1)}% below`} EMA20.`);
+      if (ind === "VWMA(20)") parts.push(vwma20Pct == null ? "VWMA(20) needs more data." : `Price is ${vwma20Pct >= 0 ? `${vwma20Pct.toFixed(1)}% above` : `${Math.abs(vwma20Pct).toFixed(1)}% below`} VWMA(20).`);
       if (ind === "Bollinger(20,2)") {
-        if (
-          typeof lastClose === "number" &&
-          typeof bbUpperLast === "number" &&
-          typeof bbLowerLast === "number"
-        ) {
+        if (typeof lastClose === "number" && typeof bbUpperLast === "number" && typeof bbLowerLast === "number") {
           if (lastClose > bbUpperLast) parts.push("Price is above the upper Bollinger Band.");
           else if (lastClose < bbLowerLast) parts.push("Price is below the lower Bollinger Band.");
           else parts.push("Price is trading inside the Bollinger Bands.");
-        } else {
-          parts.push("Bollinger Bands need more data.");
-        }
+        } else parts.push("Bollinger Bands need more data.");
       }
-
       if (ind === "RSI(14)") {
         if (typeof rsiLast === "number") {
           if (rsiLast >= 70) parts.push(`RSI is ${rsiLast.toFixed(1)} and overbought.`);
           else if (rsiLast <= 30) parts.push(`RSI is ${rsiLast.toFixed(1)} and oversold.`);
           else parts.push(`RSI is ${rsiLast.toFixed(1)} and neutral.`);
-        } else {
-          parts.push("RSI needs more data.");
-        }
+        } else parts.push("RSI needs more data.");
       }
-
       if (ind === "MACD(12,26,9)") {
         if (typeof macdHistLast === "number") {
           if (macdHistLast > 0) parts.push("MACD momentum is bullish.");
           else if (macdHistLast < 0) parts.push("MACD momentum is bearish.");
           else parts.push("MACD momentum is flat.");
-        } else {
-          parts.push("MACD needs more data.");
-        }
+        } else parts.push("MACD needs more data.");
       }
-
       if (ind === "Stochastic(14,3)") {
         if (typeof stochLast === "number") {
           if (stochLast >= 80) parts.push(`Stochastic is ${stochLast.toFixed(1)} and overbought.`);
           else if (stochLast <= 20) parts.push(`Stochastic is ${stochLast.toFixed(1)} and oversold.`);
           else parts.push(`Stochastic is ${stochLast.toFixed(1)} and neutral.`);
-        } else {
-          parts.push("Stochastic needs more data.");
-        }
+        } else parts.push("Stochastic needs more data.");
       }
-
       if (ind === "ATR(14)") {
-        if (typeof atrLast === "number" && typeof atrSmaLast === "number" && atrSmaLast > 0) {
-          const ratio = atrLast / atrSmaLast;
-          parts.push(`ATR is running at ${ratio.toFixed(2)}× its 20-day average.`);
-        } else {
-          parts.push("ATR needs more data.");
-        }
+        if (typeof atrLast === "number" && typeof atrSmaLast === "number" && atrSmaLast > 0) parts.push(`ATR is running at ${(atrLast / atrSmaLast).toFixed(2)}× its 20-day average.`);
+        else parts.push("ATR needs more data.");
       }
-
       if (ind === "Volume") {
-        if (
-          typeof volumeLast === "number" &&
-          typeof volumeSmaLast === "number" &&
-          volumeSmaLast > 0
-        ) {
-          const ratio = volumeLast / volumeSmaLast;
-          parts.push(`Volume is running at ${ratio.toFixed(2)}× its 20-day average.`);
-        } else {
-          parts.push("Volume needs more data.");
-        }
+        if (typeof volumeLast === "number" && typeof volumeSmaLast === "number" && volumeSmaLast > 0) parts.push(`Volume is running at ${(volumeLast / volumeSmaLast).toFixed(2)}× its 20-day average.`);
+        else parts.push("Volume needs more data.");
       }
     });
-
-    return parts.length
-      ? parts.join(" ")
-      : "Custom indicator view is active.";
-  }, [
-    customMode,
-    symbol,
-    selectedIndicators,
-    lastClose,
-    lastMA50,
-    lastMA200,
-    ma50Pct,
-    ma200Pct,
-    ema20Pct,
-    vwma20Pct,
-    bbUpperLast,
-    bbLowerLast,
-    rsiLast,
-    stochLast,
-    macdHistLast,
-    atrLast,
-    atrSmaLast,
-    volumeLast,
-    volumeSmaLast,
-    stretchScore,
-    divergence,
-  ]);
+    return parts.length ? parts.join(" ") : "Custom indicator view is active.";
+  }, [customMode, symbol, selectedIndicators, lastClose, lastMA50, lastMA200, ma50Pct, ma200Pct, ema20Pct, vwma20Pct, bbUpperLast, bbLowerLast, rsiLast, stochLast, macdHistLast, atrLast, atrSmaLast, volumeLast, volumeSmaLast, stretchScore, divergence]);
 
   const selectedBreakdownRows = useMemo(() => {
     const rows: { label: string; tone: OverviewItem["tone"]; value: string }[] = [];
-
     selectedIndicators.forEach((ind) => {
-      if (ind === "MA50") {
-        rows.push({
-          label: "MA50 Distance",
-          tone:
-            typeof ma50Pct === "number"
-              ? Math.abs(ma50Pct) >= 5
-                ? "red"
-                : Math.abs(ma50Pct) >= 2
-                ? "orange"
-                : "yellow"
-              : "muted",
-          value: ma50Pct == null ? "—" : `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}%`,
-        });
-      }
-
-      if (ind === "MA200") {
-        rows.push({
-          label: "MA200 Distance",
-          tone:
-            typeof ma200Pct === "number"
-              ? Math.abs(ma200Pct) >= 10
-                ? "red"
-                : Math.abs(ma200Pct) >= 4
-                ? "orange"
-                : "yellow"
-              : "muted",
-          value: ma200Pct == null ? "—" : `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}%`,
-        });
-      }
-
-      if (ind === "EMA20") {
-        rows.push({
-          label: "EMA20 Distance",
-          tone:
-            typeof ema20Pct === "number"
-              ? Math.abs(ema20Pct) >= 5
-                ? "red"
-                : Math.abs(ema20Pct) >= 2
-                ? "orange"
-                : "yellow"
-              : "muted",
-          value: ema20Pct == null ? "—" : `${ema20Pct >= 0 ? "+" : ""}${ema20Pct.toFixed(2)}%`,
-        });
-      }
-
-      if (ind === "VWMA(20)") {
-        rows.push({
-          label: "VWMA(20) Distance",
-          tone:
-            typeof vwma20Pct === "number"
-              ? Math.abs(vwma20Pct) >= 5
-                ? "red"
-                : Math.abs(vwma20Pct) >= 2
-                ? "orange"
-                : "yellow"
-              : "muted",
-          value: vwma20Pct == null ? "—" : `${vwma20Pct >= 0 ? "+" : ""}${vwma20Pct.toFixed(2)}%`,
-        });
-      }
-
+      if (ind === "MA50") rows.push({ label: "MA50 Distance", tone: typeof ma50Pct === "number" ? Math.abs(ma50Pct) >= 5 ? "red" : Math.abs(ma50Pct) >= 2 ? "orange" : "yellow" : "muted", value: ma50Pct == null ? "—" : `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}%` });
+      if (ind === "MA200") rows.push({ label: "MA200 Distance", tone: typeof ma200Pct === "number" ? Math.abs(ma200Pct) >= 10 ? "red" : Math.abs(ma200Pct) >= 4 ? "orange" : "yellow" : "muted", value: ma200Pct == null ? "—" : `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}%` });
+      if (ind === "EMA20") rows.push({ label: "EMA20 Distance", tone: typeof ema20Pct === "number" ? Math.abs(ema20Pct) >= 5 ? "red" : Math.abs(ema20Pct) >= 2 ? "orange" : "yellow" : "muted", value: ema20Pct == null ? "—" : `${ema20Pct >= 0 ? "+" : ""}${ema20Pct.toFixed(2)}%` });
+      if (ind === "VWMA(20)") rows.push({ label: "VWMA(20) Distance", tone: typeof vwma20Pct === "number" ? Math.abs(vwma20Pct) >= 5 ? "red" : Math.abs(vwma20Pct) >= 2 ? "orange" : "yellow" : "muted", value: vwma20Pct == null ? "—" : `${vwma20Pct >= 0 ? "+" : ""}${vwma20Pct.toFixed(2)}%` });
       if (ind === "Bollinger(20,2)") {
-        let value = "—";
-        let tone: OverviewItem["tone"] = "muted";
-
-        if (
-          typeof lastClose === "number" &&
-          typeof bbUpperLast === "number" &&
-          typeof bbLowerLast === "number"
-        ) {
-          if (lastClose > bbUpperLast) {
-            value = "Above upper band";
-            tone = "red";
-          } else if (lastClose < bbLowerLast) {
-            value = "Below lower band";
-            tone = "green";
-          } else {
-            value = "Inside bands";
-            tone = "yellow";
-          }
+        let value = "—"; let tone: OverviewItem["tone"] = "muted";
+        if (typeof lastClose === "number" && typeof bbUpperLast === "number" && typeof bbLowerLast === "number") {
+          if (lastClose > bbUpperLast) { value = "Above upper band"; tone = "red"; }
+          else if (lastClose < bbLowerLast) { value = "Below lower band"; tone = "green"; }
+          else { value = "Inside bands"; tone = "yellow"; }
         }
-
-        rows.push({
-          label: "Bollinger",
-          tone,
-          value,
-        });
+        rows.push({ label: "Bollinger", tone, value });
       }
-
- if (ind === "RSI(14)") {
-        rows.push({
-          label: "RSI",
-          tone:
-            typeof rsiLast === "number"
-              ? rsiLast >= 70
-                ? "red"
-                : rsiLast <= 30
-                ? "green"
-                : "yellow"
-              : "muted",
-          value: typeof rsiLast === "number" ? rsiLast.toFixed(2) : "—",
-        });
-
-        if (divergence.rsi !== "none") {
-          rows.push({
-            label: "RSI Div",
-            tone: divergenceTone(divergence.rsi),
-            value: divergenceLabel(divergence.rsi),
-          });
-        }
+      if (ind === "RSI(14)") {
+        rows.push({ label: "RSI", tone: typeof rsiLast === "number" ? rsiLast >= 70 ? "red" : rsiLast <= 30 ? "green" : "yellow" : "muted", value: typeof rsiLast === "number" ? rsiLast.toFixed(2) : "—" });
+        if (divergence.rsi !== "none") rows.push({ label: "RSI Div", tone: divergenceTone(divergence.rsi), value: divergenceLabel(divergence.rsi) });
       }
-
       if (ind === "MACD(12,26,9)") {
-        rows.push({
-          label: "MACD Hist",
-          tone:
-            typeof macdHistLast === "number"
-              ? macdHistLast > 0
-                ? "green"
-                : macdHistLast < 0
-                ? "red"
-                : "yellow"
-              : "muted",
-          value: typeof macdHistLast === "number" ? macdHistLast.toFixed(4) : "—",
-        });
-
-        if (divergence.macd !== "none") {
-          rows.push({
-            label: "MACD Div",
-            tone: divergenceTone(divergence.macd),
-            value: divergenceLabel(divergence.macd),
-          });
-        }
+        rows.push({ label: "MACD Hist", tone: typeof macdHistLast === "number" ? macdHistLast > 0 ? "green" : macdHistLast < 0 ? "red" : "yellow" : "muted", value: typeof macdHistLast === "number" ? macdHistLast.toFixed(4) : "—" });
+        if (divergence.macd !== "none") rows.push({ label: "MACD Div", tone: divergenceTone(divergence.macd), value: divergenceLabel(divergence.macd) });
       }
-
-      if (ind === "Stochastic(14,3)") {
-        rows.push({
-          label: "Stoch",
-          tone:
-            typeof stochLast === "number"
-              ? stochLast >= 80
-                ? "red"
-                : stochLast <= 20
-                ? "green"
-                : "yellow"
-              : "muted",
-          value: typeof stochLast === "number" ? stochLast.toFixed(2) : "—",
-        });
-      }
-
+      if (ind === "Stochastic(14,3)") rows.push({ label: "Stoch", tone: typeof stochLast === "number" ? stochLast >= 80 ? "red" : stochLast <= 20 ? "green" : "yellow" : "muted", value: typeof stochLast === "number" ? stochLast.toFixed(2) : "—" });
       if (ind === "ATR(14)") {
-        const ratio =
-          typeof atrLast === "number" && typeof atrSmaLast === "number" && atrSmaLast > 0
-            ? atrLast / atrSmaLast
-            : null;
-
-        rows.push({
-          label: "ATR Ratio",
-          tone: ratio == null ? "muted" : ratio >= 1.5 ? "orange" : "yellow",
-          value: ratio == null ? "—" : `${ratio.toFixed(2)}×`,
-        });
+        const ratio = typeof atrLast === "number" && typeof atrSmaLast === "number" && atrSmaLast > 0 ? atrLast / atrSmaLast : null;
+        rows.push({ label: "ATR Ratio", tone: ratio == null ? "muted" : ratio >= 1.5 ? "orange" : "yellow", value: ratio == null ? "—" : `${ratio.toFixed(2)}×` });
       }
-
       if (ind === "Volume") {
-        const ratio =
-          typeof volumeLast === "number" &&
-          typeof volumeSmaLast === "number" &&
-          volumeSmaLast > 0
-            ? volumeLast / volumeSmaLast
-            : null;
-
-        rows.push({
-          label: "Volume Ratio",
-          tone: ratio == null ? "muted" : ratio >= 1.8 ? "orange" : "yellow",
-          value: ratio == null ? "—" : `${ratio.toFixed(2)}×`,
-        });
+        const ratio = typeof volumeLast === "number" && typeof volumeSmaLast === "number" && volumeSmaLast > 0 ? volumeLast / volumeSmaLast : null;
+        rows.push({ label: "Volume Ratio", tone: ratio == null ? "muted" : ratio >= 1.8 ? "orange" : "yellow", value: ratio == null ? "—" : `${ratio.toFixed(2)}×` });
       }
     });
-
     return rows;
-  }, [
-    selectedIndicators,
-    ma50Pct,
-    ma200Pct,
-    ema20Pct,
-    vwma20Pct,
-    lastClose,
-    bbUpperLast,
-    bbLowerLast,
-    rsiLast,
-    stochLast,
-    macdHistLast,
-    atrLast,
-    atrSmaLast,
-    volumeLast,
-    volumeSmaLast,
-    divergence,
-  ]);
+  }, [selectedIndicators, ma50Pct, ma200Pct, ema20Pct, vwma20Pct, lastClose, bbUpperLast, bbLowerLast, rsiLast, stochLast, macdHistLast, atrLast, atrSmaLast, volumeLast, volumeSmaLast, divergence]);
 
   const overviewItems = useMemo<OverviewItem[]>(() => {
     const items: OverviewItem[] = [];
     let order = 0;
     const push = (it: Omit<OverviewItem, "order">) => items.push({ ...it, order: order++ });
-
-     const vwap = lastNum(vwma20Arr);
+    const vwap = lastNum(vwma20Arr);
     if (typeof lastClose === "number" && typeof vwap === "number" && vwap > 0) {
       const pct = ((lastClose - vwap) / vwap) * 100;
-      push({
-        key: "vwap",
-        label: "VWMA(20)",
-        tone: pct >= 2 || pct <= -2 ? (Math.abs(pct) >= 5 ? "red" : "orange") : "yellow",
-        valueText: `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`,
-        severity: Math.abs(pct),
-      });
-    } else {
-      push({ key: "vwap", label: "VWMA(20)", tone: "muted", valueText: "—", severity: 0 });
-    }
-
-    if (typeof macdHistLast === "number") {
-      push({
-        key: "macd",
-        label: "MACD",
-        tone: macdHistLast > 0 ? "green" : macdHistLast < 0 ? "red" : "yellow",
-        valueText: macdHistLast > 0 ? "Bullish" : macdHistLast < 0 ? "Bearish" : "Flat",
-        severity: Math.abs(macdHistLast),
-      });
-    } else {
-      push({ key: "macd", label: "MACD", tone: "muted", valueText: "—", severity: 0 });
-    }
-
-    if (typeof rsiLast === "number") {
-      push({
-        key: "rsi",
-        label: "RSI",
-        tone: rsiLast >= 70 ? "red" : rsiLast <= 30 ? "green" : "yellow",
-        valueText: rsiLast >= 70 ? "Overbought" : rsiLast <= 30 ? "Oversold" : "Neutral",
-        severity: rsiLast >= 70 ? rsiLast - 70 : rsiLast <= 30 ? 30 - rsiLast : 0,
-      });
-    } else {
-      push({ key: "rsi", label: "RSI", tone: "muted", valueText: "—", severity: 0 });
-    }
-
-    if (typeof stochLast === "number") {
-      push({
-        key: "stoch",
-        label: "Stoch",
-        tone: stochLast >= 80 ? "red" : stochLast <= 20 ? "green" : "yellow",
-        valueText: stochLast >= 80 ? "Overbought" : stochLast <= 20 ? "Oversold" : "Neutral",
-        severity: stochLast >= 80 ? stochLast - 80 : stochLast <= 20 ? 20 - stochLast : 0,
-      });
-    } else {
-      push({ key: "stoch", label: "Stoch", tone: "muted", valueText: "—", severity: 0 });
-    }
-
-    if (typeof ma200Pct === "number") {
-      push({
-        key: "ma200",
-        label: "MA200",
-        tone: Math.abs(ma200Pct) >= 5 ? "red" : Math.abs(ma200Pct) >= 2 ? "orange" : "yellow",
-        valueText: `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}%`,
-        severity: Math.abs(ma200Pct),
-      });
-    } else {
-      push({ key: "ma200", label: "MA200", tone: "muted", valueText: "—", severity: 0 });
-    }
-
-    if (
-      typeof volumeLast === "number" &&
-      typeof volumeSmaLast === "number" &&
-      volumeSmaLast > 0
-    ) {
+      push({ key: "vwap", label: "VWMA(20)", tone: pct >= 2 || pct <= -2 ? (Math.abs(pct) >= 5 ? "red" : "orange") : "yellow", valueText: `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`, severity: Math.abs(pct) });
+    } else push({ key: "vwap", label: "VWMA(20)", tone: "muted", valueText: "—", severity: 0 });
+    if (typeof macdHistLast === "number") push({ key: "macd", label: "MACD", tone: macdHistLast > 0 ? "green" : macdHistLast < 0 ? "red" : "yellow", valueText: macdHistLast > 0 ? "Bullish" : macdHistLast < 0 ? "Bearish" : "Flat", severity: Math.abs(macdHistLast) });
+    else push({ key: "macd", label: "MACD", tone: "muted", valueText: "—", severity: 0 });
+    if (typeof rsiLast === "number") push({ key: "rsi", label: "RSI", tone: rsiLast >= 70 ? "red" : rsiLast <= 30 ? "green" : "yellow", valueText: rsiLast >= 70 ? "Overbought" : rsiLast <= 30 ? "Oversold" : "Neutral", severity: rsiLast >= 70 ? rsiLast - 70 : rsiLast <= 30 ? 30 - rsiLast : 0 });
+    else push({ key: "rsi", label: "RSI", tone: "muted", valueText: "—", severity: 0 });
+    if (typeof stochLast === "number") push({ key: "stoch", label: "Stoch", tone: stochLast >= 80 ? "red" : stochLast <= 20 ? "green" : "yellow", valueText: stochLast >= 80 ? "Overbought" : stochLast <= 20 ? "Oversold" : "Neutral", severity: stochLast >= 80 ? stochLast - 80 : stochLast <= 20 ? 20 - stochLast : 0 });
+    else push({ key: "stoch", label: "Stoch", tone: "muted", valueText: "—", severity: 0 });
+    if (typeof ma200Pct === "number") push({ key: "ma200", label: "MA200", tone: Math.abs(ma200Pct) >= 5 ? "red" : Math.abs(ma200Pct) >= 2 ? "orange" : "yellow", valueText: `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}%`, severity: Math.abs(ma200Pct) });
+    else push({ key: "ma200", label: "MA200", tone: "muted", valueText: "—", severity: 0 });
+    if (typeof volumeLast === "number" && typeof volumeSmaLast === "number" && volumeSmaLast > 0) {
       const ratio = volumeLast / volumeSmaLast;
-      push({
-        key: "vol",
-        label: "Volume",
-        tone: ratio >= 1.8 ? "orange" : "yellow",
-        valueText: ratio >= 1.8 ? `Spike ${ratio.toFixed(2)}×` : `Normal ${ratio.toFixed(2)}×`,
-        severity: Math.max(0, ratio - 1),
-      });
-    } else {
-      push({ key: "vol", label: "Volume", tone: "muted", valueText: "—", severity: 0 });
-    }
-
+      push({ key: "vol", label: "Volume", tone: ratio >= 1.8 ? "orange" : "yellow", valueText: ratio >= 1.8 ? `Spike ${ratio.toFixed(2)}×` : `Normal ${ratio.toFixed(2)}×`, severity: Math.max(0, ratio - 1) });
+    } else push({ key: "vol", label: "Volume", tone: "muted", valueText: "—", severity: 0 });
     if (typeof atrLast === "number" && typeof atrSmaLast === "number" && atrSmaLast > 0) {
       const ratio = atrLast / atrSmaLast;
-      push({
-        key: "atr",
-        label: "ATR",
-        tone: ratio >= 1.5 ? "orange" : "yellow",
-        valueText: ratio >= 1.5 ? `Spike ${ratio.toFixed(2)}×` : `Normal ${ratio.toFixed(2)}×`,
-        severity: Math.max(0, ratio - 1),
-      });
-    } else {
-      push({ key: "atr", label: "ATR", tone: "muted", valueText: "—", severity: 0 });
-    }
-
+      push({ key: "atr", label: "ATR", tone: ratio >= 1.5 ? "orange" : "yellow", valueText: ratio >= 1.5 ? `Spike ${ratio.toFixed(2)}×` : `Normal ${ratio.toFixed(2)}×`, severity: Math.max(0, ratio - 1) });
+    } else push({ key: "atr", label: "ATR", tone: "muted", valueText: "—", severity: 0 });
     if (earningsSummary?.hasStructuredData && earningsSummary.tone) {
-      push({
-        key: "earnings",
-        label: "Earnings",
-        tone:
-          earningsSummary.tone === "green"
-            ? "green"
-            : earningsSummary.tone === "red"
-              ? "red"
-              : "yellow",
-        valueText: earningsSummary.toneLabel ?? "Neutral",
-        severity:
-          earningsSummary.tone === "red"
-            ? 0.35
-            : earningsSummary.tone === "green"
-              ? 0.25
-              : 0.1,
-      });
-    } else {
-      push({
-        key: "earnings",
-        label: "Earnings",
-        tone: "muted",
-        valueText: "—",
-        severity: 0,
-      });
-    }
-
-    if (divergence.rsi !== "none") {
-      push({
-        key: "div_rsi",
-        label: "RSI Div",
-        tone: divergenceTone(divergence.rsi),
-        valueText: divergenceLabel(divergence.rsi),
-        severity: 100,
-      });
-    }
-
-    if (divergence.macd !== "none") {
-      push({
-        key: "div_macd",
-        label: "MACD Div",
-        tone: divergenceTone(divergence.macd),
-        valueText: divergenceLabel(divergence.macd),
-        severity: 100,
-      });
-    }
-
-    return items.sort((a, b) => {
-      if (b.severity !== a.severity) return b.severity - a.severity;
-      const tr = toneRank(b.tone) - toneRank(a.tone);
-      if (tr !== 0) return tr;
-      return a.order - b.order;
-    });
-  }, [
-    lastClose,
-    vwma20Arr,
-    macdHistLast,
-    rsiLast,
-    stochLast,
-    ma200Pct,
-    volumeLast,
-    volumeSmaLast,
-    atrLast,
-    atrSmaLast,
-    divergence,
-    earningsSummary,
-  ]);
+      push({ key: "earnings", label: "Earnings", tone: earningsSummary.tone === "green" ? "green" : earningsSummary.tone === "red" ? "red" : "yellow", valueText: earningsSummary.toneLabel ?? "Neutral", severity: earningsSummary.tone === "red" ? 0.35 : earningsSummary.tone === "green" ? 0.25 : 0.1 });
+    } else push({ key: "earnings", label: "Earnings", tone: "muted", valueText: "—", severity: 0 });
+    if (divergence.rsi !== "none") push({ key: "div_rsi", label: "RSI Div", tone: divergenceTone(divergence.rsi), valueText: divergenceLabel(divergence.rsi), severity: 100 });
+    if (divergence.macd !== "none") push({ key: "div_macd", label: "MACD Div", tone: divergenceTone(divergence.macd), valueText: divergenceLabel(divergence.macd), severity: 100 });
+    return items.sort((a, b) => { if (b.severity !== a.severity) return b.severity - a.severity; const tr = toneRank(b.tone) - toneRank(a.tone); if (tr !== 0) return tr; return a.order - b.order; });
+  }, [lastClose, vwma20Arr, macdHistLast, rsiLast, stochLast, ma200Pct, volumeLast, volumeSmaLast, atrLast, atrSmaLast, divergence, earningsSummary]);
 
   function chipToneColor(tone: OverviewItem["tone"]) {
     return toneToColor(tone, COLORS.isDark);
@@ -2155,130 +1552,20 @@ function chooseSymbol(s: string, name?: string) {
 
   function HelpTip(props: { text: string; isDark: boolean }) {
     const [openTip, setOpenTip] = useState(false);
-
     return (
       <span
-        style={{
-          position: "relative",
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          width: 18,
-          height: 18,
-          borderRadius: "50%",
-          background: props.isDark ? "rgba(255,255,255,0.15)" : "rgba(11,18,32,0.12)",
-          color: props.isDark ? "#fff" : "#0b1220",
-          fontSize: 11,
-          fontWeight: 900,
-          cursor: "pointer",
-          marginLeft: 6,
-          flex: "0 0 auto",
-          zIndex: 6,
-        }}
+        style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", width: 18, height: 18, borderRadius: "50%", background: "rgba(255,255,255,0.12)", color: "#fff", fontSize: 11, fontWeight: 900, cursor: "pointer", marginLeft: 6, flex: "0 0 auto", zIndex: 6 }}
         onMouseEnter={() => setOpenTip(true)}
         onMouseLeave={() => setOpenTip(false)}
         onClick={() => setOpenTip((v) => !v)}
       >
         ?
         {openTip ? (
-          <div
-            style={{
-              position: "absolute",
-              top: "calc(100% + 10px)",
-              right: 0,
-              width: 260,
-              maxWidth: "min(260px, calc(100vw - 32px))",
-              padding: 12,
-              borderRadius: 12,
-              backgroundColor: props.isDark ? "#0f172a" : "#ffffff",
-              border: props.isDark
-                ? "1px solid rgba(255,255,255,0.14)"
-                : "1px solid rgba(11,18,32,0.14)",
-              color: props.isDark ? "#f1f5f9" : "#0b1220",
-              fontSize: 12,
-              lineHeight: 1.5,
-              fontWeight: 600,
-              zIndex: 80,
-              boxShadow: "0 10px 24px rgba(0,0,0,0.28)",
-              pointerEvents: "none",
-              whiteSpace: "normal",
-            }}
-          >
+          <div style={{ position: "absolute", top: "calc(100% + 10px)", right: 0, width: 260, maxWidth: "min(260px, calc(100vw - 32px))", padding: 12, borderRadius: 12, backgroundColor: "#0f172a", border: "1px solid rgba(255,255,255,0.14)", color: "#f1f5f9", fontSize: 12, lineHeight: 1.5, fontWeight: 600, zIndex: 80, boxShadow: "0 10px 24px rgba(0,0,0,0.28)", pointerEvents: "none", whiteSpace: "normal" }}>
             {props.text}
           </div>
         ) : null}
       </span>
-    );
-  }
-
-  function SmallNavLink(props: { href: string; children: React.ReactNode }) {
-    const isLearn = props.href === "/learn";
-    const isPlatforms = props.href === "/platforms";
-    const isPickers = props.href === "/pickers";
-    const isUtilities = props.href === "/utilities";
-
-    const icon = isLearn ? "📘" : isPlatforms ? "🏦" : isPickers ? "📊" : isUtilities ? "🧮" : "→";
-
-    const bg = isLearn
-      ? "linear-gradient(135deg, rgba(59,130,246,0.20), rgba(37,99,235,0.10))"
-      : isPlatforms
-      ? "linear-gradient(135deg, rgba(34,197,94,0.20), rgba(16,185,129,0.10))"
-      : isPickers
-      ? "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.10))"
-      : isUtilities
-      ? "linear-gradient(135deg, rgba(168,85,247,0.20), rgba(139,92,246,0.10))"
-      : COLORS.controlBg;
-
-    const border = isLearn
-      ? "rgba(59,130,246,0.45)"
-      : isPlatforms
-      ? "rgba(34,197,94,0.45)"
-      : isPickers
-      ? "rgba(239,68,68,0.45)"
-      : isUtilities
-      ? "rgba(168,85,247,0.45)"
-      : COLORS.controlBorder;
-
-    return (
-      <Link
-        href={props.href}
-        className="msh-top-nav-btn"
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 8,
-          minHeight: 42,
-          padding: "9px 13px",
-          borderRadius: 14,
-          border: `1px solid ${border}`,
-          background: bg,
-          color: isPickers ? "#fef2f2" : COLORS.controlFg,
-          textDecoration: "none",
-          fontWeight: 900,
-          fontSize: 14,
-          whiteSpace: "nowrap",
-          boxShadow: COLORS.isDark
-            ? "0 8px 18px rgba(0,0,0,0.20)"
-            : "0 8px 18px rgba(0,0,0,0.06)",
-          transition:
-            "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, filter 120ms ease",
-        }}
-      >
-        <span
-          aria-hidden="true"
-          style={{
-            fontSize: 15,
-            lineHeight: 1,
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          {icon}
-        </span>
-        <span>{props.children}</span>
-      </Link>
     );
   }
 
@@ -2287,74 +1574,22 @@ function chooseSymbol(s: string, name?: string) {
       <button
         type="button"
         onClick={props.onClick}
-        style={{
-          padding: isMobile ? "8px 10px" : "10px 12px",
-          borderRadius: 12,
-          border: `1px solid ${
-            props.active ? "rgba(96,165,250,0.95)" : COLORS.controlBorder
-          }`,
-          background: props.active
-            ? COLORS.isDark
-              ? "linear-gradient(135deg, rgba(37,99,235,0.32), rgba(59,130,246,0.18))"
-              : "linear-gradient(135deg, rgba(37,99,235,0.16), rgba(59,130,246,0.10))"
-            : COLORS.controlBg,
-          color: props.active ? "#ffffff" : COLORS.controlFg,
-          fontWeight: 900,
-          fontSize: isMobile ? 13 : 14,
-          cursor: "pointer",
-          minWidth: isMobile ? 48 : 54,
-          boxShadow: props.active
-            ? COLORS.isDark
-              ? "0 0 0 1px rgba(96,165,250,0.18) inset, 0 8px 18px rgba(37,99,235,0.22)"
-              : "0 0 0 1px rgba(96,165,250,0.12) inset, 0 8px 18px rgba(37,99,235,0.10)"
-            : "none",
-        }}
+        style={{ padding: isMobile ? "8px 14px" : "9px 18px", borderRadius: 9, border: `1px solid ${props.active ? COLORS.blue : COLORS.controlBorder}`, background: props.active ? COLORS.blue : COLORS.controlBg, color: props.active ? "#fff" : COLORS.mutedFg, fontWeight: 800, fontSize: 13, cursor: "pointer", minWidth: isMobile ? 44 : 50, letterSpacing: "0.02em" }}
       >
         {props.label}
       </button>
     );
   }
 
-  function SectionCard(props: {
-    title?: string;
-    right?: React.ReactNode;
-    children: React.ReactNode;
-    style?: React.CSSProperties;
-    bodyStyle?: React.CSSProperties;
-    allowOverflow?: boolean;
-  }) {
+  function SectionCard(props: { title?: string; right?: React.ReactNode; children: React.ReactNode; style?: React.CSSProperties; bodyStyle?: React.CSSProperties; allowOverflow?: boolean; }) {
     return (
-      <section
-        style={{
-          border: `1px solid ${COLORS.border}`,
-          borderRadius: 18,
-          background: COLORS.cardBg,
-          color: COLORS.cardFg,
-          boxShadow: COLORS.isDark
-            ? "0 14px 34px rgba(0,0,0,0.28)"
-            : "0 14px 34px rgba(0,0,0,0.08)",
-          overflow: props.allowOverflow ? "visible" : "hidden",
-          minWidth: 0,
-          ...props.style,
-        }}
-      >
+      <section style={{ border: `1px solid ${COLORS.border}`, borderRadius: 16, background: COLORS.cardBg, color: COLORS.cardFg, overflow: props.allowOverflow ? "visible" : "hidden", minWidth: 0, ...props.style }}>
         {props.title || props.right ? (
-          <div
-            style={{
-              padding: "14px 16px",
-              borderBottom: `1px solid ${COLORS.border}`,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-              flexWrap: "wrap",
-            }}
-          >
-            <div style={{ fontWeight: 900, fontSize: 15 }}>{props.title}</div>
+          <div style={{ padding: "13px 16px", borderBottom: `1px solid ${COLORS.borderSoft}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <div style={{ fontWeight: 800, fontSize: 14, color: COLORS.mutedFg, letterSpacing: "0.01em" }}>{props.title}</div>
             {props.right}
           </div>
         ) : null}
-
         <div style={{ padding: 16, ...props.bodyStyle }}>{props.children}</div>
       </section>
     );
@@ -2363,478 +1598,108 @@ function chooseSymbol(s: string, name?: string) {
   function BreakdownHelpButton() {
     return (
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <HelpTip
-          text={
-            customMode
-              ? "This breakdown is showing the indicators you currently selected on the chart."
-              : "Breakdown shows the main dashboard indicators including trend, momentum, stretch, volatility and divergence clues."
-          }
-          isDark={COLORS.isDark}
-        />
-
-        <Link
-          href="/learn"
-          style={{
-            color: COLORS.isDark ? "#93c5fd" : "#2563eb",
-            textDecoration: "none",
-            fontWeight: 800,
-            fontSize: 12,
-            whiteSpace: "nowrap",
-          }}
-        >
-          Learn more →
-        </Link>
+        <HelpTip text={customMode ? "This breakdown is showing the indicators you currently selected on the chart." : "Breakdown shows the main dashboard indicators including trend, momentum, stretch, volatility and divergence clues."} isDark={COLORS.isDark} />
+        <Link href="/learn" style={{ color: "#9cc0ff", textDecoration: "none", fontWeight: 800, fontSize: 12 }}>Learn more →</Link>
       </div>
     );
   }
 
-function ChartToolbar() {
-  return (
-    <div
-      style={{
-        display: "flex",
-        gap: isMobile ? 6 : 8,
-        alignItems: "center",
-        flexWrap: "nowrap",
-        overflowX: "auto",
-      }}
-    >
-        <button
-          onClick={() =>
-            setWindowOffset((o) => Math.min(maxOffset, o + Math.max(1, Math.floor(win * 0.2))))
-          }
-          disabled={offset >= maxOffset}
-          title="Pan left (older)"
-          style={{
-padding: isMobile ? "6px 8px" : "8px 10px",
-borderRadius: isMobile ? 8 : 10,
-            border: `1px solid ${COLORS.controlBorder}`,
-            background: COLORS.controlBg,
-            color: COLORS.controlFg,
-            cursor: offset >= maxOffset ? "not-allowed" : "pointer",
-            opacity: offset >= maxOffset ? 0.45 : 1,
-            fontWeight: 900,
-            lineHeight: 1,
-          }}
-        >
-          ←
-        </button>
-
-        <button
-          onClick={() =>
-            setWindowOffset((o) => Math.max(0, o - Math.max(1, Math.floor(win * 0.2))))
-          }
-          disabled={offset <= 0}
-          title="Pan right (newer)"
-          style={{
-padding: isMobile ? "6px 8px" : "8px 10px",
-borderRadius: isMobile ? 8 : 10,
-            border: `1px solid ${COLORS.controlBorder}`,
-            background: COLORS.controlBg,
-            color: COLORS.controlFg,
-            cursor: offset <= 0 ? "not-allowed" : "pointer",
-            opacity: offset <= 0 ? 0.45 : 1,
-            fontWeight: 900,
-            lineHeight: 1,
-          }}
-        >
-          →
-        </button>
-
-        <button
-          onClick={() => {
-            setVisibleBars((d) => Math.max(2, Math.floor(d * 0.8)));
-            setWindowOffset(0);
-          }}
-          title="Zoom in"
-          style={{
-padding: isMobile ? "6px 8px" : "8px 10px",
-borderRadius: isMobile ? 8 : 10,
-            border: `1px solid ${COLORS.controlBorder}`,
-            background: COLORS.controlBg,
-            color: COLORS.controlFg,
-            cursor: "pointer",
-            fontWeight: 900,
-            lineHeight: 1,
-          }}
-        >
-          +
-        </button>
-
-        <button
-          onClick={() => {
-            setVisibleBars((d) => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25)));
-            setWindowOffset(0);
-          }}
-          title="Zoom out"
-          style={{
-padding: isMobile ? "6px 8px" : "8px 10px",
-borderRadius: isMobile ? 8 : 10,
-            border: `1px solid ${COLORS.controlBorder}`,
-            background: COLORS.controlBg,
-            color: COLORS.controlFg,
-            cursor: "pointer",
-            fontWeight: 900,
-            lineHeight: 1,
-          }}
-        >
-          −
-        </button>
-
-<div
-  style={{
-    padding: isMobile ? "6px 8px" : "8px 10px",
-    borderRadius: isMobile ? 8 : 10,
-    border: `1px solid ${COLORS.controlBorder}`,
-    background: COLORS.controlBg,
-    color: COLORS.mutedFg,
-    fontSize: isMobile ? 11 : 12,
-    fontWeight: 800,
-    whiteSpace: "nowrap",
-  }}
->
-  {Math.min(win, totalPoints)} bars
-</div>
-
-        <button
-          onClick={() => {
-            setVisibleBars(Math.max(totalPoints, 2));
-            setWindowOffset(0);
-          }}
-          title="Show full chart"
-          style={{
-padding: isMobile ? "6px 8px" : "8px 10px",
-borderRadius: isMobile ? 8 : 10,
-            border: `1px solid ${COLORS.controlBorder}`,
-            background: COLORS.controlBg,
-            color: COLORS.controlFg,
-            cursor: "pointer",
-            fontWeight: 900,
-            lineHeight: 1,
-          }}
-        >
-       MAX
-        </button>
-
-        <button
-          onClick={() => setExpanded(true)}
-          title="Expand chart"
-          style={{
-padding: isMobile ? "6px 8px" : "8px 10px",
-borderRadius: isMobile ? 8 : 10,
-            border: `1px solid ${COLORS.controlBorder}`,
-            background: COLORS.controlBg,
-            color: COLORS.controlFg,
-            cursor: "pointer",
-            fontWeight: 900,
-            lineHeight: 1,
-          }}
-        >
-          ⤢
-        </button>
-      </div>
-    );
-  }
-
-    function MobileStockAnalysisCard() {
+  function ChartToolbar() {
     return (
-      <SectionCard title="Stock Analysis">
-        <div style={{ display: "grid", gap: 14 }}>
-          <div
-            style={{
-              border: `1px solid ${COLORS.border}`,
-              borderRadius: 16,
-              padding: 14,
-              background: COLORS.controlBg,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 22,
-                fontWeight: 950,
-                lineHeight: 1.1,
-              }}
-            >
-              {symbol} Stock Analysis
-            </div>
-
-            <div
-              style={{
-                marginTop: 14,
-                display: "grid",
-                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                gap: 10,
-              }}
-            >
-              <div
-                style={{
-                  border: `1px solid ${COLORS.border}`,
-                  borderRadius: 14,
-                  padding: 12,
-                  background: COLORS.cardBg,
-                  minWidth: 0,
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 900,
-                    letterSpacing: "0.04em",
-                    textTransform: "uppercase",
-                    color: COLORS.mutedFg,
-                  }}
-                >
-                  Last price
-                </div>
-                <div style={{ marginTop: 6, fontSize: 22, fontWeight: 950 }}>
-                  {quote?.price != null ? `$${quote.price.toFixed(2)}` : "—"}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  border: `1px solid ${COLORS.border}`,
-                  borderRadius: 14,
-                  padding: 12,
-                  background: COLORS.cardBg,
-                  minWidth: 0,
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 900,
-                    letterSpacing: "0.04em",
-                    textTransform: "uppercase",
-                    color: COLORS.mutedFg,
-                  }}
-                >
-                  Trend
-                </div>
-                <div
-                  style={{
-                    marginTop: 6,
-                    fontSize: 18,
-                    fontWeight: 900,
-                    lineHeight: 1.15,
-                  }}
-                >
-                  {overviewMeta.trend}
-                </div>
-              </div>
-            </div>
-          </div>
+      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "nowrap" }}>
+        {[
+          { label: "←", title: "Pan left", onClick: () => setWindowOffset((o) => Math.min(maxOffset, o + Math.max(1, Math.floor(win * 0.2)))), disabled: offset >= maxOffset },
+          { label: "→", title: "Pan right", onClick: () => setWindowOffset((o) => Math.max(0, o - Math.max(1, Math.floor(win * 0.2)))), disabled: offset <= 0 },
+          { label: "+", title: "Zoom in", onClick: () => { setVisibleBars((d) => Math.max(2, Math.floor(d * 0.8))); setWindowOffset(0); }, disabled: false },
+          { label: "−", title: "Zoom out", onClick: () => { setVisibleBars((d) => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25))); setWindowOffset(0); }, disabled: false },
+        ].map((btn) => (
+          <button key={btn.label} onClick={btn.onClick} disabled={btn.disabled} title={btn.title}
+            style={{ padding: "7px 10px", borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: btn.disabled ? COLORS.mutedFg2 : COLORS.controlFg, cursor: btn.disabled ? "not-allowed" : "pointer", opacity: btn.disabled ? 0.45 : 1, fontWeight: 800, lineHeight: 1, fontSize: 14 }}
+          >{btn.label}</button>
+        ))}
+        <div style={{ padding: "7px 10px", borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.mutedFg, fontSize: 11, fontWeight: 800, whiteSpace: "nowrap" }}>
+          {Math.min(win, totalPoints)} bars
         </div>
-      </SectionCard>
+        <button onClick={() => { setVisibleBars(Math.max(totalPoints, 2)); setWindowOffset(0); }} title="Show full chart"
+          style={{ padding: "7px 10px", borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, cursor: "pointer", fontWeight: 800, fontSize: 11 }}>MAX</button>
+        <button onClick={() => setExpanded(true)} title="Expand chart"
+          style={{ padding: "7px 10px", borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, cursor: "pointer", fontWeight: 800, fontSize: 14 }}>⤢</button>
+      </div>
     );
   }
 
   function OverviewPanel() {
     const trendColor = toneToColor(trendToneFromScore(trendScore), COLORS.isDark);
-    const stretchTone = compositeToneFromCounts(
-      stretchScore.overbought,
-      stretchScore.oversold,
-      0
-    ).tone;
+    const stretchTone = compositeToneFromCounts(stretchScore.overbought, stretchScore.oversold, 0).tone;
     const stretchColor = toneToColor(stretchTone, COLORS.isDark);
 
-return (
-  <SectionCard
-    title={`${symbol} Overview`}
-    allowOverflow
-    right={
-      <Link
-        href={`/stock/${encodeURIComponent(symbol)}`}
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "8px 12px",
-          borderRadius: 10,
-          border: "1px solid rgba(250,204,21,0.45)",
-          background:
-            "linear-gradient(135deg, rgba(250,204,21,0.22), rgba(202,138,4,0.12))",
-          color: "#fef3c7",
-          textDecoration: "none",
-          fontWeight: 800,
-          fontSize: 12,
-          whiteSpace: "nowrap",
-        }}
+    return (
+      <SectionCard
+        title={`${symbol} Overview`}
+        allowOverflow
+        right={
+          <Link href={`/stock/${encodeURIComponent(symbol)}`}
+            style={{ display: "inline-flex", alignItems: "center", padding: "6px 11px", borderRadius: 9, border: `1px solid ${COLORS.amberBorder}`, background: COLORS.amberSoft, color: COLORS.amber, textDecoration: "none", fontWeight: 700, fontSize: 11, whiteSpace: "nowrap" }}>
+            Company Overview →
+          </Link>
+        }
       >
-        Company Overview →
-      </Link>
-    }
-  >
-        <div style={{ display: "grid", gap: 14 }}>
-          <div
-            className="msh-overview-head"
-            style={{
-              display: "grid",
-              gridTemplateColumns: "minmax(0, 1fr) auto",
-              gap: 12,
-              alignItems: "center",
-            }}
-          >
+        <div style={{ display: "grid", gap: 12 }}>
+          {/* Ticker + Price */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 950, lineHeight: 1.1 }}>
-                {symbol}
-              </div>
-
-              <div style={{ marginTop: 4, color: COLORS.mutedFg, fontWeight: 700 }}>
-               {symbolName || "Name unavailable"}
-              </div>
-
-
+              <div style={{ fontSize: isMobile ? 24 : 28, fontWeight: 800, lineHeight: 1, letterSpacing: "-0.02em" }}>{symbol}</div>
+              <div style={{ marginTop: 4, fontSize: 12, color: COLORS.mutedFg, fontWeight: 600 }}>{symbolName || "Name unavailable"}</div>
             </div>
-
-            <div style={{ textAlign: "right", minWidth: 0 }}>
-              <div
-                style={{
-                  fontSize: 12,
-                  color: COLORS.mutedFg,
-                  fontWeight: 900,
-                  letterSpacing: "0.04em",
-                  textTransform: "uppercase",
-                }}
-              >
-                Last price
-              </div>
-              <div
-                style={{
-                  fontSize: isMobile ? 22 : 28,
-                  fontWeight: 950,
-                  lineHeight: 1.05,
-                }}
-              >
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>Last price</div>
+              <div style={{ fontSize: isMobile ? 22 : 28, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.05 }}>
                 {quote?.price != null ? `$${quote.price.toFixed(2)}` : "—"}
               </div>
             </div>
           </div>
 
-          <div className="msh-score-grid">
-                       <div
-              style={{
-                border: `1px solid ${COLORS.border}`,
-                borderRadius: 16,
-                padding: isMobile ? 12 : 16,
-                background: COLORS.controlBg,
-                minWidth: 0,
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 900 }}>
-                <span style={{ color: trendColor }}>●</span>
-                <span>{isMobile ? "Trend" : "Trend Score"}</span>
-                <HelpTip
-                  text="Trend score checks price vs MA50/MA200 and MACD histogram direction."
-                  isDark={COLORS.isDark}
-                />
+          {/* Trend + Stretch scores */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {[
+              { label: "Trend Score", color: trendColor, score: trendScore.passed, total: trendScore.total, flagged: trendScore.passed, helpText: "Trend score checks price vs MA50/MA200 and MACD histogram direction." },
+              { label: "Stretch Score", color: stretchColor, score: stretchScore.flagged, total: stretchScore.total, flagged: stretchScore.flagged, helpText: "Stretch score checks RSI, Stoch, Bollinger, VWMA(20), EMA20 and MA50 extension." },
+            ].map((s) => (
+              <div key={s.label} style={{ background: COLORS.cardBg2, border: `1px solid ${COLORS.borderSoft}`, borderRadius: 12, padding: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 700, color: COLORS.mutedFg }}>
+                  <span style={{ color: s.color }}>●</span>{s.label}
+                  <HelpTip text={s.helpText} isDark={COLORS.isDark} />
+                </div>
+                <div style={{ marginTop: 5, fontSize: 20, fontWeight: 800, color: s.color }}>{s.score}/{s.total}</div>
+                {renderFlagsMeter({ flagged: s.flagged, total: s.total, color: s.color, isDark: COLORS.isDark })}
               </div>
-
-              <div
-                style={{
-                  marginTop: isMobile ? 6 : 8,
-                  fontSize: isMobile ? 18 : 20,
-                  fontWeight: 950,
-                  color: trendColor,
-                }}
-              >
-                {trendScore.passed}/{trendScore.total}
-              </div>
-
-              {renderFlagsMeter({
-                flagged: trendScore.passed,
-                total: trendScore.total,
-                color: trendColor,
-                isDark: COLORS.isDark,
-              })}
-            </div>
-                       <div
-              style={{
-                border: `1px solid ${COLORS.border}`,
-                borderRadius: 16,
-                padding: isMobile ? 12 : 16,
-                background: COLORS.controlBg,
-                minWidth: 0,
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 900 }}>
-                <span style={{ color: stretchColor }}>●</span>
-                <span>{isMobile ? "Stretch" : "Stretch Score"}</span>
-                <HelpTip
-                 text="Stretch score checks RSI, Stoch, Bollinger, VWMA(20), EMA20 and MA50 extension."
-                  isDark={COLORS.isDark}
-                />
-              </div>
-
-              <div
-                style={{
-                  marginTop: isMobile ? 6 : 8,
-                  fontSize: isMobile ? 18 : 20,
-                  fontWeight: 950,
-                  color: stretchColor,
-                }}
-              >
-                {stretchScore.flagged}/{stretchScore.total}
-              </div>
-
-              {renderFlagsMeter({
-                flagged: stretchScore.flagged,
-                total: stretchScore.total,
-                color: stretchColor,
-                isDark: COLORS.isDark,
-              })}
-            </div>
+            ))}
           </div>
 
-          <div
-            style={{
-              border: `1px solid ${COLORS.border}`,
-              borderRadius: 14,
-              padding: 14,
-              background: COLORS.controlBg,
-              fontWeight: 800,
-              lineHeight: 1.45,
-            }}
-          >
-            Regime: {overviewMeta.trend} • Volatility: {overviewMeta.vol} • Bias:{" "}
-            <span style={{ color: overviewMeta.toneColor }}>{overviewMeta.toneTag}</span>
+          {/* Regime tags */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {[
+              { label: `Regime: ${overviewMeta.trend}` },
+              { label: `Volatility: ${overviewMeta.vol}` },
+              { label: overviewMeta.toneTag, highlight: true },
+            ].map((t) => (
+              <span key={t.label} style={{ fontSize: 11.5, fontWeight: 600, padding: "4px 9px", borderRadius: 7, background: t.highlight ? COLORS.amberSoft : COLORS.cardBg2, border: `1px solid ${t.highlight ? COLORS.amberBorder : COLORS.borderSoft}`, color: t.highlight ? COLORS.amber : COLORS.mutedFg }}>
+                {t.label}
+              </span>
+            ))}
           </div>
 
-          <div
-            style={{
-              border: customMode ? `1px solid ${COLORS.yellowBorder}` : `1px solid ${COLORS.border}`,
-              borderRadius: 14,
-              padding: 12,
-              background: customMode ? COLORS.yellowBg : COLORS.controlBg,
-              lineHeight: 1.55,
-              color: customMode ? COLORS.yellowText : COLORS.mutedFg,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 900,
-                letterSpacing: "0.05em",
-                textTransform: "uppercase",
-                color: customMode ? COLORS.yellowText : COLORS.cardFg,
-                marginBottom: 6,
-              }}
-            >
+          {/* Summary */}
+          <div style={{ background: customMode ? COLORS.amberSoft : COLORS.cardBg2, border: `1px solid ${customMode ? COLORS.amberBorder : COLORS.borderSoft}`, borderRadius: 12, padding: 12, fontSize: 13, lineHeight: 1.55, color: customMode ? COLORS.amber : COLORS.mutedFg }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: customMode ? COLORS.amber : COLORS.cardFg, marginBottom: 5 }}>
               {customMode ? "Selected Indicator Summary" : "Chart Summary"}
             </div>
             {chartSummaryText}
           </div>
 
-          <div
-            style={{
-              paddingTop: 12,
-              borderTop: `1px solid ${COLORS.border}`,
-              fontSize: 12,
-              color: COLORS.mutedFg,
-              fontWeight: 700,
-            }}
-          >
-            As of {quote?.date ?? "—"} {quote?.time ?? ""} • Source: {quote?.source ?? "stooq.com"}
+          {/* Source */}
+          <div style={{ paddingTop: 10, borderTop: `1px solid ${COLORS.borderSoft}`, fontSize: 11, color: COLORS.mutedFg2, fontWeight: 600 }}>
+            As of {quote?.date ?? "—"} {quote?.time ?? ""} · Source: {quote?.source ?? "stooq.com"}
           </div>
         </div>
       </SectionCard>
@@ -2843,76 +1708,24 @@ return (
 
   function BreakdownPanel() {
     return (
-      <SectionCard
-        title={customMode ? "Selected Indicators" : "Breakdown"}
-        right={<BreakdownHelpButton />}
-        allowOverflow
-      >
-        <div className="msh-breakdown-grid">
+      <SectionCard title={customMode ? "Selected Indicators" : "Breakdown"} right={<BreakdownHelpButton />} allowOverflow>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           {(customMode ? selectedBreakdownRows : overviewItems).map((item: any) => (
-            <div
-              key={customMode ? item.label : item.key}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 10,
-                alignItems: "center",
-                padding: "8px 10px",
-                border: `1px solid ${COLORS.border}`,
-                borderRadius: 12,
-                background: COLORS.controlBg,
-                minWidth: 0,
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                <span
-                  style={{
-                    width: 9,
-                    height: 9,
-                    borderRadius: 999,
-                    background: chipToneColor(item.tone),
-                    flex: "0 0 auto",
-                  }}
-                />
-                <span style={{ fontWeight: 900, fontSize: 14, minWidth: 0 }}>{item.label}</span>
+            <div key={customMode ? item.label : item.key}
+              style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", padding: "8px 10px", border: `1px solid ${COLORS.borderSoft}`, borderRadius: 10, background: COLORS.cardBg2 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: chipToneColor(item.tone), flex: "0 0 auto" }} />
+                <span style={{ fontWeight: 700, fontSize: 13 }}>{item.label}</span>
               </div>
-
-              <div
-                style={{
-                  color: COLORS.mutedFg,
-                  fontWeight: 800,
-                  textAlign: "right",
-                  fontSize: 13,
-                  whiteSpace: "nowrap",
-                  marginLeft: 8,
-                }}
-              >
+              <div style={{ color: COLORS.mutedFg, fontWeight: 700, fontSize: 12, whiteSpace: "nowrap" }}>
                 {customMode ? item.value : item.valueText}
               </div>
             </div>
           ))}
         </div>
-
         {customMode ? (
-          <button
-            type="button"
-            onClick={clearIndicatorSelection}
-            style={{
-              marginTop: 14,
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: "9px 12px",
-              borderRadius: 12,
-              border: `1px solid ${COLORS.controlBorder}`,
-              background: COLORS.controlBg,
-              color: COLORS.controlFg,
-              fontWeight: 900,
-              fontSize: 13,
-              cursor: "pointer",
-              width: "fit-content",
-            }}
-          >
+          <button type="button" onClick={clearIndicatorSelection}
+            style={{ marginTop: 12, padding: "8px 12px", borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
             ← Back to Overview
           </button>
         ) : null}
@@ -2922,333 +1735,82 @@ return (
 
   function ChartPanel() {
     return (
-      <div
-        id="chart"
-        ref={chartSectionRef}
-        style={{ scrollMarginTop: isMobile ? 12 : 24 }}
-      >
-        <SectionCard
-          title=""
-          right={null}
-          bodyStyle={{ padding: 0 }}
-          style={{
-            minHeight: isMobile ? "auto" : 0,
-            transition: "box-shadow 0.4s ease, transform 0.4s ease",
-            boxShadow: highlightChart
-              ? "0 0 0 2px rgba(59,130,246,0.35), 0 10px 30px rgba(59,130,246,0.25)"
-              : undefined,
-          }}
-        >
-          <div style={{ padding: 16, borderBottom: `1px solid ${COLORS.border}` }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-                flexWrap: "wrap",
-              }}
-            >
-              <div style={{ fontWeight: 900, fontSize: 15 }}>Price ({chartIndicatorName})</div>
+      <div id="chart" ref={chartSectionRef} style={{ scrollMarginTop: 24 }}>
+        <SectionCard title="" right={null} bodyStyle={{ padding: 0 }}
+          style={{ transition: "box-shadow 0.4s ease", boxShadow: highlightChart ? "0 0 0 2px rgba(47,107,255,0.4), 0 10px 30px rgba(47,107,255,0.2)" : undefined }}>
 
-              <div className="msh-timeframes">
+          {/* Chart header */}
+          <div style={{ padding: "13px 16px", borderBottom: `1px solid ${COLORS.borderSoft}` }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>
+                Price · {chartIndicatorName}
+              </div>
+              <div style={{ display: "flex", gap: 4 }}>
                 {TIMEFRAMES.map((t) => (
-                  <TimeframeButton
-                    key={t.label}
-                    label={t.label}
-                    active={activeTimeframe === t.label}
-                    onClick={() => {
-                      setActiveTimeframe(t.label);
-                    }}
-                  />
+                  <TimeframeButton key={t.label} label={t.label} active={activeTimeframe === t.label} onClick={() => setActiveTimeframe(t.label)} />
                 ))}
               </div>
             </div>
 
-            <div className="msh-chart-head-row" style={{ marginTop: 14 }}>
-              <div style={{ minWidth: 0, position: "relative" }} ref={indicatorMenuRef}>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: COLORS.mutedFg,
-                    fontWeight: 900,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.04em",
-                  }}
-                >
-                  Indicator
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setIndicatorMenuOpen((v) => !v)}
-                  style={{
-                    marginTop: 6,
-                    width: "100%",
-                    padding: "12px 14px",
-                    borderRadius: 14,
-                    border: `1px solid ${COLORS.controlBorder}`,
-                    background: COLORS.controlBgSolid,
-                    color: COLORS.controlFg,
-                    fontWeight: 900,
-                    fontSize: 16,
-                    textAlign: "left",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 12,
-                    cursor: "pointer",
-                  }}
-                >
-                  <span
-                    style={{
-                      minWidth: 0,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {selectedIndicators.length ? chartIndicatorName : "Overview"}
+            {/* Controls row */}
+            <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+              {/* Indicator picker */}
+              <div style={{ position: "relative", flex: 1, minWidth: 160 }} ref={indicatorMenuRef}>
+                <button type="button" onClick={() => setIndicatorMenuOpen((v) => !v)}
+                  style={{ width: "100%", padding: "10px 13px", borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, fontSize: 13, textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer" }}>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {selectedIndicators.length ? chartIndicatorName : "Indicator · Overview"}
                   </span>
-                  <span aria-hidden="true">▾</span>
+                  <span>▾</span>
                 </button>
-
                 {indicatorMenuOpen ? (
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "calc(100% + 8px)",
-                      left: 0,
-                      zIndex: 40,
-                      width: isMobile ? "100%" : 320,
-                      maxHeight: isMobile ? 320 : 420,
-                      borderRadius: 16,
-                      border: `1px solid ${COLORS.border}`,
-                      background: COLORS.cardBg,
-                      boxShadow: COLORS.isDark
-                        ? "0 18px 34px rgba(0,0,0,0.40)"
-                        : "0 18px 34px rgba(0,0,0,0.12)",
-                      overflowY: "auto",
-                      overflowX: "hidden",
-                      WebkitOverflowScrolling: "touch",
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={clearIndicatorSelection}
-                      style={{
-                        width: "100%",
-                        padding: "12px 14px",
-                        border: "none",
-                        borderBottom: `1px solid ${COLORS.border}`,
-                        background: COLORS.controlBg,
-                        color: COLORS.cardFg,
-                        textAlign: "left",
-                        fontWeight: 900,
-                        cursor: "pointer",
-                      }}
-                    >
-                      Clear all / Overview
+                  <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 40, width: isMobile ? "100%" : 300, maxHeight: 380, borderRadius: 14, border: `1px solid ${COLORS.border}`, background: COLORS.cardBg, boxShadow: "0 18px 34px rgba(0,0,0,0.40)", overflowY: "auto" }}>
+                    <button type="button" onClick={clearIndicatorSelection}
+                      style={{ width: "100%", padding: "11px 13px", border: "none", borderBottom: `1px solid ${COLORS.border}`, background: COLORS.controlBg, color: COLORS.cardFg, textAlign: "left", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>
+                      Clear all · Overview
                     </button>
-
-                    <div
-                      style={{
-                        padding: "10px 14px 8px",
-                        fontSize: 11,
-                        fontWeight: 900,
-                        color: COLORS.mutedFg,
-                        textTransform: "uppercase",
-                        letterSpacing: "0.04em",
-                      }}
-                    >
-                      Price overlays
-                    </div>
-
-                    {PRICE_OVERLAY_OPTIONS.map((opt) => {
-                      const checked = selectedIndicators.includes(opt);
-                      return (
-                        <label
-                          key={opt}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 10,
-                            padding: "10px 14px",
-                            borderTop: `1px solid ${COLORS.border}`,
-                            cursor: "pointer",
-                            fontWeight: 800,
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleIndicatorSelection(opt)}
-                          />
-                          <span>{opt}</span>
-                        </label>
-                      );
-                    })}
-
-                    <div
-                      style={{
-                        padding: "10px 14px 8px",
-                        fontSize: 11,
-                        fontWeight: 900,
-                        color: COLORS.mutedFg,
-                        textTransform: "uppercase",
-                        letterSpacing: "0.04em",
-                        borderTop: `1px solid ${COLORS.border}`,
-                      }}
-                    >
-                      Lower indicator (1 max)
-                    </div>
-
-                    {LOWER_OVERLAY_OPTIONS.map((opt) => {
-                      const checked = selectedIndicators.includes(opt);
-                      return (
-                        <label
-                          key={opt}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 10,
-                            padding: "10px 14px",
-                            borderTop: `1px solid ${COLORS.border}`,
-                            cursor: "pointer",
-                            fontWeight: 800,
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleIndicatorSelection(opt)}
-                          />
-                          <span>{opt}</span>
-                        </label>
-                      );
-                    })}
+                    {[{ title: "Price overlays", opts: PRICE_OVERLAY_OPTIONS }, { title: "Lower indicator (1 max)", opts: LOWER_OVERLAY_OPTIONS }].map((group) => (
+                      <div key={group.title}>
+                        <div style={{ padding: "9px 13px 7px", fontSize: 10, fontWeight: 700, color: COLORS.mutedFg, textTransform: "uppercase", letterSpacing: "0.04em", borderTop: `1px solid ${COLORS.border}` }}>{group.title}</div>
+                        {group.opts.map((opt) => (
+                          <label key={opt} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 13px", borderTop: `1px solid ${COLORS.borderSoft}`, cursor: "pointer", fontWeight: 700, fontSize: 13 }}>
+                            <input type="checkbox" checked={selectedIndicators.includes(opt)} onChange={() => toggleIndicatorSelection(opt)} />
+                            <span>{opt}</span>
+                          </label>
+                        ))}
+                      </div>
+                    ))}
                   </div>
                 ) : null}
               </div>
 
-              <div style={{ minWidth: isMobile ? "100%" : 180 }}>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: COLORS.mutedFg,
-                    fontWeight: 900,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.04em",
-                  }}
-                >
-                  Chart style
-                </div>
-
-                <div
-                  style={{
-                    marginTop: 6,
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    border: `1px solid ${COLORS.controlBorder}`,
-                    background: COLORS.controlBgSolid,
-                    borderRadius: 14,
-                    padding: 4,
-                    gap: 4,
-                  }}
-                >
-                  {(["line", "candles"] as const).map((type) => {
-                    const active = chartType === type;
-
-                    return (
-                      <button
-                        key={type}
-                        type="button"
-                        onClick={() => setChartType(type)}
-                        aria-pressed={active}
-                        style={{
-                          border: "none",
-                          borderRadius: 10,
-                          padding: "9px 10px",
-                          background: active
-                            ? "rgba(59,130,246,0.28)"
-                            : "transparent",
-                          color: active ? "#dbeafe" : COLORS.controlFg,
-                          fontWeight: 950,
-                          cursor: "pointer",
-                          boxShadow: active
-                            ? "inset 0 0 0 1px rgba(96,165,250,0.36)"
-                            : "none",
-                        }}
-                      >
-                        {type === "line" ? "Line" : "Candles"}
-                      </button>
-                    );
-                  })}
-                </div>
+              {/* Line / Candles toggle */}
+              <div style={{ display: "flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3 }}>
+                {(["line", "candles"] as const).map((type) => (
+                  <button key={type} type="button" onClick={() => setChartType(type)}
+                    style={{ border: "none", borderRadius: 7, padding: "7px 12px", background: chartType === type ? "rgba(47,107,255,0.28)" : "transparent", color: chartType === type ? "#dbeafe" : COLORS.mutedFg, fontWeight: 700, fontSize: 12, cursor: "pointer", boxShadow: chartType === type ? "inset 0 0 0 1px rgba(96,165,250,0.36)" : "none" }}>
+                    {type === "line" ? "Line" : "Candles"}
+                  </button>
+                ))}
               </div>
 
               <ChartToolbar />
             </div>
           </div>
 
+          {/* Chart itself */}
           <div style={{ padding: 16 }}>
             <PriceChart
-              symbol={symbol}
-              data={displayedHistory}
-              ma50={ma50}
-              ma200={ma200}
-              overlay={indicator}
-              selectedIndicators={selectedIndicators}
-              chartType={chartType}
-              supportResistanceZones={supportResistanceZones}
-              bollUpper={bollUpper}
-              bollMid={bollMid}
-              bollLower={bollLower}
-              ema20={ema20Arr}
-              vwma20={vwma20Arr}
-              rsi14={rsi14Arr}
-              macdLine={macdLine}
-              macdSignal={macdSignal}
-              macdHist={macdHist}
-              stochK={stochK}
-              stochD={stochD}
-              atr14={atr14Arr}
-              volume={volumeArr}
-              divergence={divergence.div}
-              height={isMobile ? 340 : 430}
+              symbol={symbol} data={displayedHistory} ma50={ma50} ma200={ma200} overlay={indicator}
+              selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones}
+              bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr}
+              rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist}
+              stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div}
+              height={isMobile ? 320 : 430}
             />
-
-            <div
-              style={{
-                marginTop: 12,
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: 12,
-                flexWrap: "wrap",
-                fontSize: 13,
-                fontWeight: 700,
-                color: COLORS.mutedFg,
-              }}
-            >
-              <div>
-                {displayedHistory.length
-                  ? `From ${displayedHistory[0].date} → ${displayedHistory[displayedHistory.length - 1].date}`
-                  : "No chart data"}
-              </div>
-
-              <Link
-                href="/platforms"
-                style={{
-                  fontSize: 12,
-                  color: COLORS.isDark ? "#93c5fd" : "#2563eb",
-                  textDecoration: "none",
-                  fontWeight: 800,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Compare platforms →
-              </Link>
+            <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", fontSize: 12, fontWeight: 600, color: COLORS.mutedFg2 }}>
+              <div>{displayedHistory.length ? `${displayedHistory[0].date} → ${displayedHistory[displayedHistory.length - 1].date}` : "No chart data"}</div>
+              <Link href="/platforms" style={{ fontSize: 12, color: "#9cc0ff", textDecoration: "none", fontWeight: 700 }}>Compare platforms →</Link>
             </div>
           </div>
         </SectionCard>
@@ -3259,87 +1821,29 @@ return (
   function BenchmarksPanel() {
     return (
       <SectionCard title="Market Benchmarks">
-        <div style={{ fontSize: 12, color: COLORS.mutedFg, marginBottom: 12 }}>
-          Updated: {bench?.updatedAt ? new Date(bench.updatedAt).toLocaleString() : "—"} •
-          {bench?.scope ?? "Benchmarks"}
+        <div style={{ fontSize: 11, color: COLORS.mutedFg2, marginBottom: 12, fontWeight: 600 }}>
+          Updated: {bench?.updatedAt ? new Date(bench.updatedAt).toLocaleString() : "—"} · {bench?.scope ?? "Benchmarks"}
         </div>
-
-        <div className="msh-bench-grid">
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 12 }}>
           {(bench?.items ?? []).map((it) => {
             const pct = typeof it.changePct === "number" ? it.changePct : null;
             const isUp = typeof pct === "number" ? pct >= 0 : null;
-            const arrow = isUp == null ? "" : isUp ? "▲" : "▼";
-            const arrowColor = isUp == null ? COLORS.mutedFg : isUp ? "#22c55e" : "#ef4444";
+            const arrowColor = isUp == null ? COLORS.mutedFg : isUp ? COLORS.green : COLORS.red;
             const pctText = pct == null ? null : `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
             const priceText = typeof it.close === "number" ? `$${it.close.toFixed(2)}` : "—";
-            const chartSymbol =
-              (it.symbol || "").split(".")[0]?.toUpperCase() || it.symbol.toUpperCase();
-
+            const chartSymbol = (it.symbol || "").split(".")[0]?.toUpperCase() || it.symbol.toUpperCase();
             return (
-              <button
-                key={it.key}
-                type="button"
-                onClick={() => chooseSymbol(chartSymbol)}
-                title={`Open ${chartSymbol} on chart`}
-                style={{
-                  border: `1px solid ${COLORS.border}`,
-                  borderRadius: 16,
-                  padding: 14,
-                  background: COLORS.controlBg,
-                  color: COLORS.cardFg,
-                  textAlign: "left",
-                  width: "100%",
-                  cursor: "pointer",
-                }}
-              >
-                <div style={{ display: "grid", gap: 10 }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 12,
-                      alignItems: "flex-start",
-                    }}
-                  >
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 950, fontSize: 16, lineHeight: 1.1 }}>
-                        {it.label}
-                      </div>
-                      <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>{it.symbol}</div>
-                    </div>
-
-                    <div style={{ textAlign: "right", flex: "0 0 auto" }}>
-                      {/* Price — large, prominent */}
-                      <div style={{ fontWeight: 950, fontSize: 20, lineHeight: 1.1 }}>
-                        {priceText}
-                      </div>
-                      {/* Change % — smaller, coloured, below price */}
-                      {pctText != null ? (
-                        <div
-                          style={{
-                            marginTop: 4,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "flex-end",
-                            gap: 4,
-                            fontSize: 13,
-                            fontWeight: 800,
-                            color: arrowColor,
-                          }}
-                        >
-                          {arrow && <span>{arrow}</span>}
-                          <span>{pctText}</span>
-                        </div>
-                      ) : (
-                        <div style={{ marginTop: 4, fontSize: 12, opacity: 0.5 }}>—</div>
-                      )}
-                    </div>
+              <button key={it.key} type="button" onClick={() => chooseSymbol(chartSymbol)}
+                style={{ border: `1px solid ${COLORS.border}`, borderRadius: 13, padding: "13px 14px", background: COLORS.cardBg2, color: COLORS.cardFg, textAlign: "left", width: "100%", cursor: "pointer" }}>
+                <div style={{ fontWeight: 800, fontSize: 14 }}>{it.label}</div>
+                <div style={{ fontSize: 10, color: COLORS.mutedFg2, fontWeight: 700, marginTop: 2 }}>{it.symbol}</div>
+                <div style={{ fontSize: 20, fontWeight: 800, marginTop: 9, fontVariantNumeric: "tabular-nums" }}>{priceText}</div>
+                {pctText != null ? (
+                  <div style={{ marginTop: 3, fontSize: 12, fontWeight: 700, color: arrowColor }}>
+                    {isUp ? "▲" : "▼"} {pctText}
                   </div>
-
-                  <div style={{ fontSize: 12, opacity: 0.7 }}>
-                    {it.date && it.time ? `As of ${it.date} ${it.time}` : "Timestamp unavailable"}
-                  </div>
-                </div>
+                ) : <div style={{ marginTop: 3, fontSize: 11, opacity: 0.5 }}>—</div>}
+                <div style={{ marginTop: 8, fontSize: 11, opacity: 0.6 }}>{it.date && it.time ? `${it.date} ${it.time}` : "—"}</div>
               </button>
             );
           })}
@@ -3350,513 +1854,111 @@ return (
 
   function NewsPanel() {
     return (
-      <SectionCard title={news ? `Latest Headlines on ${news.symbol}` : "Latest Headlines"}>
+      <SectionCard title={news ? `Latest Headlines · ${news.symbol}` : "Latest Headlines"}>
         {news ? (
-          <div style={{ display: "grid", gap: 16 }}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                gap: 12,
-                flexWrap: "wrap",
-              }}
-            >
+          <div style={{ display: "grid", gap: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
               <div style={{ minWidth: 0 }}>
-                <div
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 900,
-                    letterSpacing: 1.1,
-                    opacity: 0.7,
-                    textTransform: "uppercase",
-                  }}
-                >
-                  MyStockHarbor Briefing
-                </div>
-
-                <div
-                  style={{
-                    marginTop: 6,
-                    fontSize: isMobile ? 20 : 22,
-                    fontWeight: 950,
-                    lineHeight: 1.1,
-                  }}
-                >
-                  Latest headlines on {news.symbol}
-                </div>
-
-                <div
-                  style={{
-                    marginTop: 8,
-                    fontSize: isMobile ? 13 : 14,
-                    lineHeight: 1.6,
-                    opacity: 0.78,
-                  }}
-                >
-                  {news.companyName ? `${news.companyName} · ` : ""}
-                  {news.newsScoreLabel} news tone · {news.trend}
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>MyStockHarbor Briefing</div>
+                <div style={{ marginTop: 5, fontSize: isMobile ? 18 : 20, fontWeight: 800, lineHeight: 1.1 }}>Latest headlines on {news.symbol}</div>
+                <div style={{ marginTop: 6, fontSize: 13, color: COLORS.mutedFg }}>
+                  {news.companyName ? `${news.companyName} · ` : ""}{news.newsScoreLabel} tone · {news.trend}
                 </div>
               </div>
-
-              <Link
-                href={news.ctaHref}
-                style={{
-                  textDecoration: "none",
-                  padding: "11px 14px",
-                  borderRadius: 12,
-                  border: `1px solid ${COLORS.yellowBorder}`,
-                  background: COLORS.yellowBg,
-                  color: COLORS.yellowText,
-                  fontWeight: 900,
-                  whiteSpace: "nowrap",
-                  width: isMobile ? "100%" : "auto",
-                  textAlign: "center",
-                }}
-              >
+              <Link href={news.ctaHref}
+                style={{ textDecoration: "none", padding: "10px 13px", borderRadius: 10, border: `1px solid ${COLORS.amberBorder}`, background: COLORS.amberSoft, color: COLORS.amber, fontWeight: 700, fontSize: 12, whiteSpace: "nowrap" }}>
                 Open full {news.symbol} news page
               </Link>
             </div>
-
             {news.isInvalidTicker ? (
-              <div
-                style={{
-                  padding: 14,
-                  borderRadius: 14,
-                  border: "1px solid rgba(239,68,68,0.35)",
-                  background: "rgba(127,29,29,0.18)",
-                  color: "#fecaca",
-                  lineHeight: 1.7,
-                }}
-              >
-                This ticker does not have enough usable market data yet, so the internal news briefing
-                is showing fallback coverage only.
+              <div style={{ padding: 12, borderRadius: 12, border: "1px solid rgba(240,68,68,0.35)", background: "rgba(127,29,29,0.18)", color: "#fecaca", fontSize: 13, lineHeight: 1.6 }}>
+                This ticker does not have enough usable market data yet.
               </div>
             ) : null}
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: isMobile
-                  ? "1fr"
-                  : news.cards.length >= 3
-                  ? "repeat(3, minmax(0, 1fr))"
-                  : "repeat(2, minmax(0, 1fr))",
-                gap: 14,
-              }}
-            >
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : news.cards.length >= 3 ? "repeat(3, 1fr)" : "repeat(2, 1fr)", gap: 12 }}>
               {news.cards.map((item, idx) => (
-                <div
-                  key={`${item.title}-${idx}`}
-                  style={{
-                    padding: isMobile ? 12 : 14,
-                    borderRadius: 16,
-                    border: `1px solid ${COLORS.border}`,
-                    background: COLORS.controlBg,
-                    display: "grid",
-                    gap: 10,
-                    alignContent: "start",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 900,
-                        letterSpacing: 0.8,
-                        opacity: 0.72,
-                        textTransform: "uppercase",
-                      }}
-                    >
-                      {item.source ?? "Publisher"}
-                    </div>
-
-                    <div style={{ fontSize: 11, opacity: 0.62, whiteSpace: "nowrap" }}>
-                      {item.pubDate ? new Date(item.pubDate).toLocaleDateString() : "Recent"}
-                    </div>
+                <div key={`${item.title}-${idx}`}
+                  style={{ padding: 13, borderRadius: 13, border: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg2, display: "grid", gap: 9, alignContent: "start" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: COLORS.mutedFg2, textTransform: "uppercase" }}>{item.source ?? "Publisher"}</div>
+                    <div style={{ fontSize: 10, color: COLORS.mutedFg2 }}>{item.pubDate ? new Date(item.pubDate).toLocaleDateString() : "Recent"}</div>
                   </div>
-
-                  <div
-                    style={{
-                      fontWeight: 900,
-                      lineHeight: 1.45,
-                      fontSize: isMobile ? 15 : 16,
-                    }}
-                  >
-                    {item.title}
-                  </div>
-
-                  <div
-                    style={{
-                      fontSize: isMobile ? 13 : 14,
-                      lineHeight: 1.7,
-                      opacity: 0.86,
-                    }}
-                  >
-                    {item.summary}
-                  </div>
-
-                  <div
-                    style={{
-                      padding: 10,
-                      borderRadius: 12,
-                      background: "rgba(255,255,255,0.035)",
-                      border: `1px solid ${COLORS.border}`,
-                      fontSize: 13,
-                      lineHeight: 1.6,
-                      opacity: 0.92,
-                    }}
-                  >
-                    <span style={{ fontWeight: 900 }}>Why this matters:</span> {item.whyItMatters}
+                  <div style={{ fontWeight: 800, lineHeight: 1.4, fontSize: 14 }}>{item.title}</div>
+                  <div style={{ fontSize: 13, lineHeight: 1.6, color: COLORS.mutedFg }}>{item.summary}</div>
+                  <div style={{ padding: 9, borderRadius: 10, background: "rgba(255,255,255,0.03)", border: `1px solid ${COLORS.borderSoft}`, fontSize: 12, lineHeight: 1.55 }}>
+                    <span style={{ fontWeight: 800 }}>Why this matters:</span> {item.whyItMatters}
                   </div>
                 </div>
               ))}
             </div>
-
-            {!news.cards.length ? (
-              <div style={{ opacity: 0.7 }}>No headline cards are available for this ticker yet.</div>
-            ) : null}
+            {!news.cards.length ? <div style={{ opacity: 0.7, fontSize: 13 }}>No headline cards available for this ticker yet.</div> : null}
           </div>
         ) : (
-          <div
-            style={{
-              display: "grid",
-              gap: 14,
-            }}
-          >
-            <div
-              style={{
-                height: 12,
-                borderRadius: 999,
-                overflow: "hidden",
-                background: "rgba(255,255,255,0.08)",
-                border: `1px solid ${COLORS.border}`,
-              }}
-            >
+          <div style={{ display: "grid", gap: 12 }}>
+            <div style={{ height: 10, borderRadius: 999, overflow: "hidden", background: "rgba(255,255,255,0.06)", border: `1px solid ${COLORS.borderSoft}` }}>
               <div className="msh-news-loading-bar" />
             </div>
-
-            <div style={{ fontSize: 14, lineHeight: 1.6, opacity: 0.76 }}>
-              Building your latest headline briefing for this ticker...
-            </div>
+            <div style={{ fontSize: 13, color: COLORS.mutedFg }}>Building your latest headline briefing for this ticker…</div>
           </div>
         )}
       </SectionCard>
     );
   }
 
-    function InsightsPanel() {
+  function InsightsPanel() {
     return (
-      <SectionCard title="Latest Market Insights">
-        <div style={{ display: "grid", gap: 14 }}>
-          <div
-            style={{
-              border: `1px solid ${COLORS.border}`,
-              borderRadius: 16,
-              padding: 16,
-              background: COLORS.controlBg,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 900,
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-                color: COLORS.mutedFg,
-              }}
-            >
-              Fresh content
-            </div>
-
-            <div
-              style={{
-                marginTop: 8,
-                fontSize: isMobile ? 20 : 22,
-                fontWeight: 950,
-                lineHeight: 1.15,
-              }}
-            >
-              Read the latest stock market insights and trade ideas
-            </div>
-
-            <div
-              style={{
-                marginTop: 8,
-                fontSize: 14,
-                lineHeight: 1.65,
-                color: COLORS.mutedFg,
-                maxWidth: 760,
-              }}
-            >
-              Explore chart-based market insights, trade ideas, technical analysis
-              write-ups and stock breakdowns from MyStockHarbor (My Stock Harbor). 
-            </div>
-
-            <div
-              style={{
-                marginTop: 14,
-                display: "flex",
-                gap: 10,
-                flexWrap: "wrap",
-                alignItems: "center",
-              }}
-            >
-              <Link
-                href="/insights"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: "12px 16px",
-                  borderRadius: 14,
-                  border: "1px solid rgba(59,130,246,0.32)",
-                  background:
-                    "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
-                  color: "#eff6ff",
-                  textDecoration: "none",
-                  fontWeight: 900,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Open Insights →
-              </Link>
-
-              <Link
-                href="/pickers"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: "12px 16px",
-                  borderRadius: 14,
-                  border: "1px solid rgba(34,197,94,0.28)",
-                  background:
-                    "linear-gradient(135deg, rgba(34,197,94,0.14), rgba(16,185,129,0.08))",
-                  color: "#dcfce7",
-                  textDecoration: "none",
-                  fontWeight: 900,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Scan Stock Pickers →
-              </Link>
-            </div>
+      <SectionCard>
+        <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: COLORS.green }}>Fresh content</div>
+            <div style={{ marginTop: 7, fontSize: isMobile ? 18 : 20, fontWeight: 800, lineHeight: 1.15 }}>Read the latest stock market insights & trade ideas</div>
+            <div style={{ marginTop: 6, fontSize: 13, color: COLORS.mutedFg, lineHeight: 1.55 }}>Chart-based market insights, technical analysis write-ups and stock breakdowns from MyStockHarbor.</div>
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", flex: "0 0 auto" }}>
+            <Link href="/insights"
+              style={{ display: "inline-flex", alignItems: "center", padding: "12px 18px", borderRadius: 12, border: `1px solid ${COLORS.blueBorder}`, background: COLORS.blueSoft, color: "#eff6ff", textDecoration: "none", fontWeight: 800, fontSize: 14 }}>
+              Open Insights →
+            </Link>
+            <Link href="/pickers"
+              style={{ display: "inline-flex", alignItems: "center", padding: "12px 18px", borderRadius: 12, border: `1px solid ${COLORS.greenBorder}`, background: COLORS.greenSoft, color: "#dcfce7", textDecoration: "none", fontWeight: 800, fontSize: 14 }}>
+              Stock Pickers →
+            </Link>
           </div>
         </div>
       </SectionCard>
     );
   }
 
-    function MobileHero() {
+  function MobileHero() {
     return (
-      <section
-        style={{
-          marginBottom: 14,
-          border: `1px solid ${COLORS.border}`,
-          borderRadius: 20,
-          background: COLORS.cardBg,
-          color: COLORS.cardFg,
-          boxShadow: COLORS.isDark
-            ? "0 14px 34px rgba(0,0,0,0.28)"
-            : "0 14px 34px rgba(0,0,0,0.08)",
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            padding: "16px 14px 14px",
-            background: COLORS.isDark
-              ? "linear-gradient(180deg, rgba(37,99,235,0.16), rgba(11,18,32,0.00))"
-              : "linear-gradient(180deg, rgba(37,99,235,0.08), rgba(255,255,255,0.00))",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              marginBottom: 12,
-            }}
-          >
-            <Link
-              href="/"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                textDecoration: "none",
-                flex: "0 0 auto",
-              }}
-            >
-              <img
-                src="/logo.png"
-                alt="MyStockHarbor"
-                style={{
-                  height: 54,
-                  width: "auto",
-                  objectFit: "contain",
-                  display: "block",
-                }}
-              />
+      <section style={{ marginBottom: 14, border: `1px solid ${COLORS.border}`, borderRadius: 18, background: COLORS.cardBg, overflow: "hidden" }}>
+        <div style={{ padding: "16px 14px 14px", background: "linear-gradient(180deg, rgba(47,107,255,0.14), rgba(10,15,26,0))" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+            <Link href="/" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none", flex: "0 0 auto" }}>
+              <img src="/logo.png" alt="MyStockHarbor" style={{ height: 48, width: "auto", objectFit: "contain", display: "block" }} />
             </Link>
-
-            <div style={{ minWidth: 0 }}>
-              <div
-                style={{
-                  fontSize: 13,
-                  fontWeight: 800,
-                  color: COLORS.mutedFg,
-                  lineHeight: 1.35,
-                }}
-              >
-                Educational stock dashboard and market research tools.
-              </div>
-            </div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: COLORS.mutedFg, lineHeight: 1.35 }}>Educational stock dashboard and market research tools.</div>
           </div>
-
-          <div
-            style={{
-              margin: 0,
-              fontWeight: 950,
-              fontSize: 28,
-              lineHeight: 1.05,
-              letterSpacing: "-0.03em",
-            }}
-          >
-            Stock Analysis Tools, Stock Pickers & Market Insights
-          </div>
-
-          <div
-            style={{
-              marginTop: 8,
-              color: COLORS.mutedFg,
-              fontSize: 14,
-              fontWeight: 700,
-              lineHeight: 1.55,
-            }}
-          >
-            Scan the market for ideas, or search any stock to open its full analysis page and latest news.
-          </div>
-
-          <button
-            type="button"
-            onClick={() => router.push("/pickers")}
-            className="msh-stock-picker-cta msh-mobile-hero-cta"
-            style={{
-              width: "100%",
-              marginTop: 16,
-              padding: "16px 16px",
-              borderRadius: 18,
-              border: `1px solid rgba(59,130,246,0.52)`,
-              background: COLORS.isDark
-                ? "linear-gradient(135deg, rgba(37,99,235,0.34), rgba(16,185,129,0.18))"
-                : "linear-gradient(135deg, rgba(37,99,235,0.18), rgba(16,185,129,0.10))",
-              color: COLORS.controlFg,
-              fontWeight: 950,
-              fontSize: 18,
-              cursor: "pointer",
-              textAlign: "left",
-              transition: "transform 120ms ease, filter 120ms ease, border-color 120ms ease",
-              boxShadow: COLORS.isDark
-                ? "0 16px 32px rgba(37,99,235,0.22)"
-                : "0 12px 24px rgba(37,99,235,0.12)",
-            }}
-          >
-            <span
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-                width: "100%",
-              }}
-            >
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 20 }} aria-hidden="true">
-                  🔎
-                </span>
-                <span>Scan for Stock Ideas</span>
-              </span>
-
-              <span
-                className="msh-stock-picker-cta-arrow"
-                aria-hidden="true"
-                style={{ fontSize: 20, lineHeight: 1 }}
-              >
-                →
-              </span>
-            </span>
+          <div style={{ fontWeight: 800, fontSize: 26, lineHeight: 1.05, letterSpacing: "-0.02em" }}>Stock Analysis Tools, Stock Pickers & Market Insights</div>
+          <div style={{ marginTop: 7, color: COLORS.mutedFg, fontSize: 13, fontWeight: 600, lineHeight: 1.5 }}>Scan the market for ideas, or search any stock to open its full analysis page.</div>
+          <button type="button" onClick={() => router.push("/pickers")}
+            style={{ width: "100%", marginTop: 14, padding: "14px 16px", borderRadius: 14, border: `1px solid rgba(47,107,255,0.5)`, background: "linear-gradient(135deg, rgba(47,107,255,0.28), rgba(22,199,132,0.14))", color: COLORS.controlFg, fontWeight: 800, fontSize: 16, cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 9 }}><span>🔎</span><span>Scan for Stock Ideas</span></span>
+            <span>→</span>
           </button>
-
-          <div style={{ marginTop: 14 }}>
-            <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 6 }}>Search Any Stock</div>
-
-            <input
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setOpen(true);
-              }}
-              onFocus={() => setOpen(true)}
-onKeyDown={(e) => {
-  if (e.key === "Enter") {
-    e.preventDefault();
-
-    const first = results[0];
-    if (!first?.symbol) return;
-
-    chooseSymbol(first.symbol, first.name);
-  }
-}}
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.mutedFg2, marginBottom: 6 }}>Search Any Stock</div>
+            <input value={query} onChange={(e) => { setQuery(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); const first = results[0]; if (!first?.symbol) return; chooseSymbol(first.symbol, first.name); } }}
               placeholder="🔎 Search ticker or company"
-              style={{
-                width: "100%",
-                padding: "14px 16px",
-                borderRadius: 16,
-                border: `1px solid ${COLORS.controlBorder}`,
-                background: COLORS.controlBgSolid,
-                color: COLORS.controlFg,
-                outline: "none",
-                fontSize: 15,
-                fontWeight: 700,
-              }}
-            />
-
+              style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, outline: "none", fontSize: 15, fontWeight: 700 }} />
             {open && results.length > 0 ? (
-              <div
-                style={{
-                  position: "relative",
-                  marginTop: 8,
-                  zIndex: 20,
-                  border: `1px solid ${COLORS.border}`,
-                  borderRadius: 16,
-                  background: COLORS.cardBg,
-                  boxShadow: COLORS.isDark
-                    ? "0 18px 34px rgba(0,0,0,0.40)"
-                    : "0 18px 34px rgba(0,0,0,0.12)",
-                  overflow: "hidden",
-                }}
-              >
+              <div style={{ position: "relative", marginTop: 7, zIndex: 20, border: `1px solid ${COLORS.border}`, borderRadius: 13, background: COLORS.cardBg, boxShadow: "0 14px 28px rgba(0,0,0,0.4)", overflow: "hidden" }}>
                 {results.slice(0, 8).map((r) => (
-                  <button
-                    key={`${r.symbol}-${r.exchange}`}
-                    type="button"
-                    onClick={() => chooseSymbol(r.symbol, r.name)}
-                    style={{
-                      width: "100%",
-                      textAlign: "left",
-                      padding: "12px 14px",
-                      border: "none",
-                      borderBottom: `1px solid ${COLORS.border}`,
-                      background: COLORS.cardBg,
-                      color: COLORS.cardFg,
-                      cursor: "pointer",
-                    }}
-                  >
-                    <div style={{ fontWeight: 900 }}>{r.symbol}</div>
-                    <div style={{ fontSize: 13, color: COLORS.mutedFg }}>
-                      {r.name} {r.exchange ? `• ${r.exchange}` : ""}
-                    </div>
+                  <button key={`${r.symbol}-${r.exchange}`} type="button" onClick={() => chooseSymbol(r.symbol, r.name)}
+                    style={{ width: "100%", textAlign: "left", padding: "11px 13px", border: "none", borderBottom: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg, color: COLORS.cardFg, cursor: "pointer" }}>
+                    <div style={{ fontWeight: 800 }}>{r.symbol}</div>
+                    <div style={{ fontSize: 12, color: COLORS.mutedFg }}>{r.name}{r.exchange ? ` · ${r.exchange}` : ""}</div>
                   </button>
                 ))}
               </div>
@@ -3866,640 +1968,193 @@ onKeyDown={(e) => {
       </section>
     );
   }
-  
+
+  /* ========================= MAIN RENDER ========================= */
   return (
-    <main
-      style={{
-        padding: 0,
-        fontFamily: "system-ui, Arial",
-        background: COLORS.pageBg,
-        color: COLORS.pageFg,
-        minHeight: "100vh",
-      }}
-    >
-
+    <main style={{ padding: 0, fontFamily: "system-ui, -apple-system, Arial, sans-serif", background: "#05080f", color: COLORS.pageFg, minHeight: "100vh" }}>
       <style>{`
-        .msh-page-wrap {
-          width: min(1480px, calc(100% - 24px));
-          margin: 0 auto;
-          padding: 18px 0 28px;
+        .msh-wrap { width: min(1240px, calc(100% - 24px)); margin: 0 auto; padding: 0 0 40px; }
+
+        /* ── NAV ── */
+        .msh-nav {
+          position: sticky; top: 0; z-index: 30;
+          display: flex; align-items: center; gap: 8px;
+          padding: 12px 24px;
+          background: rgba(10,15,26,0.90); backdrop-filter: blur(14px);
+          border-bottom: 1px solid #1a2336;
+          margin: 0 -12px 0;
         }
-
-.msh-topbar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas:
-    "logo nav"
-    "title title";
-  column-gap: 18px;
-  row-gap: 12px;
-  margin-bottom: 18px;
-  align-items: start;
-}
-
-.msh-top-left {
-  grid-area: logo;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-width: 0;
-}
-
-.msh-top-heading-block {
-  grid-area: title;
-  min-width: 0;
-}
-
-.msh-desktop-nav-row {
-  grid-area: nav;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 0;
-  flex: 0 0 auto;
-}
-
-@media (max-width: 1180px) {
-  .msh-topbar {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "logo"
-      "nav"
-      "title";
-  }
-
-  .msh-desktop-nav-row {
-    justify-content: flex-start;
-  }
-}
-
-        .msh-top-nav-btn:hover {
-          transform: translateY(-1px);
-          filter: brightness(1.05);
+        .msh-nav-logo { display: flex; align-items: center; margin-right: 4px; text-decoration: none; }
+        .msh-nav-logo img { height: 38px; width: auto; display: block; }
+        .msh-navlinks { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+        .msh-navlink {
+          color: #8a97ad; font-size: 13.5px; font-weight: 600; text-decoration: none;
+          padding: 7px 12px; border-radius: 8px; transition: color .15s, background .15s;
         }
+        .msh-navlink:hover { color: #eaf0fa; background: #141b2b; }
+        .msh-navlink.active { color: #eaf0fa; background: #141b2b; border: 1px solid #222c40; }
 
-        .msh-stock-picker-cta:hover {
-          transform: translateY(-1px);
-          filter: brightness(1.04);
+        /* ── HERO ROW ── */
+        .msh-hero {
+          display: flex; align-items: center; gap: 18px;
+          padding: 20px 0 16px;
         }
-
-        .msh-stock-picker-cta-arrow {
-          display: inline-block;
-          transition: transform 140ms ease;
+        .msh-hero-lead { flex: 0 0 auto; max-width: 260px; }
+        .msh-hero-lead h1 { margin: 0; font-size: 18px; font-weight: 800; line-height: 1.2; letter-spacing: -0.01em; }
+        .msh-hero-lead p { margin: 4px 0 0; font-size: 12px; color: #8a97ad; }
+        .msh-hero-actions { flex: 1; display: flex; gap: 10px; }
+        .msh-searchbox {
+          flex: 1; display: flex; align-items: center; gap: 10px;
+          background: #141b2b; border: 1px solid #222c40; border-radius: 12px;
+          padding: 0 13px; height: 48px; transition: border-color .15s;
         }
-
-        .msh-stock-picker-cta:hover .msh-stock-picker-cta-arrow {
-          transform: translateX(4px);
+        .msh-searchbox:focus-within { border-color: #2f6bff; }
+        .msh-searchbox input { flex: 1; background: none; border: none; outline: none; color: #eaf0fa; font-size: 15px; font-weight: 700; }
+        .msh-searchbox input::placeholder { color: #5f6b80; font-weight: 500; }
+        .msh-searchbox .msh-go { background: #2f6bff; color: #fff; border: none; height: 32px; padding: 0 16px; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer; }
+        .msh-scanbtn {
+          flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+          height: 48px; padding: 0 18px; border-radius: 12px;
+          background: #13213f; border: 1px solid #27406f; color: #9cc0ff;
+          font-weight: 700; font-size: 13.5px; cursor: pointer; white-space: nowrap;
+          transition: background .15s;
         }
+        .msh-scanbtn:hover { background: #16294d; }
 
-        .msh-toolbar-grid {
-          display: grid;
-          grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.9fr);
-          gap: 14px;
-          align-items: end;
-          margin-bottom: 18px;
-        }
+        /* ── TWO-COL GRID ── */
+        .msh-grid { display: grid; grid-template-columns: 360px 1fr; gap: 16px; align-items: start; }
+        .msh-col { display: flex; flex-direction: column; gap: 16px; }
+        .msh-lower { display: grid; gap: 16px; margin-top: 16px; }
 
-        .msh-main-grid {
-          display: grid;
-          grid-template-columns: minmax(320px, 430px) minmax(0, 1fr);
-          gap: 18px;
-          align-items: start;
-        }
-
-        .msh-left-stack {
-          display: grid;
-          gap: 18px;
-        }
-
-        .msh-lower-grid {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 18px;
-          margin-top: 18px;
-        }
-
-        .msh-chart-head-row {
-          display: flex;
-          justify-content: space-between;
-          gap: 14px;
-          align-items: flex-end;
-          flex-wrap: wrap;
-        }
-
-        .msh-timeframes {
-          display: flex;
-          gap: 8px;
-          flex-wrap: wrap;
-          justify-content: flex-end;
-        }
-
-        .msh-score-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 14px;
-        }
-
-        .msh-breakdown-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 10px;
-        }
-
-        .msh-bench-grid {
-          display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 14px;
-        }
-
-        .msh-news-sections {
-          display: grid;
-          gap: 18px;
-        }
-
+        /* ── NEWS LOADING ── */
         .msh-news-loading-bar {
-          width: 36%;
-          height: 100%;
-          border-radius: 999px;
-          background: linear-gradient(
-            90deg,
-            rgba(59,130,246,0.92),
-            rgba(34,197,94,0.88)
-          );
-          box-shadow: 0 0 22px rgba(59,130,246,0.22);
-          animation: mshNewsLoad 1.15s ease-in-out infinite;
+          width: 36%; height: 100%; border-radius: 999px;
+          background: linear-gradient(90deg, #2f6bff, #16c784);
+          animation: mshLoad 1.15s ease-in-out infinite;
         }
+        @keyframes mshLoad { 0% { transform: translateX(-120%); } 100% { transform: translateX(320%); } }
 
-        @keyframes mshNewsLoad {
-          0% {
-            transform: translateX(-120%);
-          }
-          100% {
-            transform: translateX(320%);
-          }
+        /* ── MOBILE ── */
+        @media (max-width: 960px) {
+          .msh-grid { grid-template-columns: 1fr; }
         }
-
-        .msh-mobile-nav {
-          display: none;
-        }
-
-        @media (min-width: 761px) {
-          .msh-top-nav-btn {
-            min-height: 48px !important;
-            padding: 12px 18px !important;
-            font-size: 16px !important;
-            gap: 10px !important;
-          }
-        }
-
-        @media (max-width: 1180px) {
-          .msh-bench-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-        }
-
-        @media (max-width: 980px) {
-          .msh-main-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .msh-mobile-primary {
-            order: 1;
-          }
-
-          .msh-mobile-secondary {
-            order: 2;
-          }
-
-          .msh-score-grid,
-          .msh-breakdown-grid,
-          .msh-bench-grid,
-          .msh-news-section-grid {
-            grid-template-columns: 1fr;
-          }
-        }
-
         @media (max-width: 768px) {
-          .msh-page-wrap {
-            width: min(100%, calc(100% - 16px));
-            padding-top: 12px;
-          }
-
-          .msh-topbar {
-            display: none;
-          }
-
-          .msh-desktop-nav-row {
-            display: none;
-          }
-
-          .msh-mobile-nav {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 8px;
-            margin-bottom: 14px;
-            width: 100%;
-          }
-
-          .msh-mobile-nav .msh-top-nav-btn {
-            width: 100%;
-            min-width: 0;
-            justify-content: center !important;
-          }
-
-          .msh-top-nav-btn {
-            min-height: 38px !important;
-            padding: 7px 10px !important;
-            font-size: 13px !important;
-            gap: 6px !important;
-            border-radius: 12px !important;
-          }
-
-          .msh-mobile-hero-cta:hover {
-            transform: translateY(-1px);
-            filter: brightness(1.03);
-          }
-
-          .msh-toolbar-grid {
-            display: none;
-          }
-
-          .msh-score-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-
-          .msh-bench-grid,
-          .msh-breakdown-grid,
-          .msh-news-section-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .msh-news-section-title {
-            text-align: left;
-          }
-
-          .msh-chart-head-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 10px;
-            flex-wrap: wrap;
-          }
-
-          .msh-chart-head-row > div:first-child {
-            width: 100%;
-          }
-
-          .msh-timeframes {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 6px;
-            width: 100%;
-          }
-          .msh-timeframes > * {
-            width: 100%;
-            padding: 6px 0;
-            font-size: 12px;
-          }
+          .msh-nav { display: none; }
+          .msh-hero { display: none; }
+          .msh-wrap { width: calc(100% - 16px); padding-top: 12px; }
+        }
+        @media (min-width: 769px) {
+          .msh-mobile-only { display: none !important; }
         }
       `}</style>
 
-      <div className="msh-page-wrap">
-<div className="msh-topbar">
-  <div className="msh-top-left">
-    <Link
-      href="/"
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        textDecoration: "none",
-        flex: "0 0 auto",
-        marginRight: 8,
-      }}
-    >
-      <img
-        src="/logo.png"
-        alt="MyStockHarbor"
-        style={{
-          height: 78,
-          width: "auto",
-          objectFit: "contain",
-          display: "block",
-        }}
-      />
-    </Link>
-  </div>
-
-  <div className="msh-top-heading-block">
-    <h1
-      style={{
-        margin: 0,
-        fontWeight: 950,
-        fontSize: 28,
-        lineHeight: 1.05,
-        letterSpacing: "-0.03em",
-      }}
-    >
-      Stock Analysis Tools, Stock Pickers & Market Insights
-    </h1>
-
-    <div
-      style={{
-        marginTop: 6,
-        color: COLORS.mutedFg,
-        fontSize: 13,
-        fontWeight: 700,
-      }}
-    >
-      Learn charts. Discover stocks. Trade smarter.
-    </div>
-  </div>
-
-  <div className="msh-desktop-nav-row">
-            <SmallNavLink href="/learn">Learn</SmallNavLink>
-            <SmallNavLink href="/platforms">Platforms</SmallNavLink>
-            <SmallNavLink href="/pickers">Stock Pickers</SmallNavLink>
-            <SmallNavLink href="/utilities">Calculators</SmallNavLink>
-
-            <SmallNavLink href="/insights">Insights</SmallNavLink>
-          </div>
+      {/* ── STICKY NAV (desktop) ── */}
+      <nav className="msh-nav">
+        <Link href="/" className="msh-nav-logo">
+          <img src="/logo.png" alt="MyStockHarbor" />
+        </Link>
+        <div className="msh-navlinks">
+          {[
+            { href: "/", label: "Dashboard", active: true },
+            { href: "/learn", label: "Learn" },
+            { href: "/platforms", label: "Platforms" },
+            { href: "/pickers", label: "Stock Pickers" },
+            { href: "/utilities", label: "Calculators" },
+            { href: "/insights", label: "Insights" },
+          ].map((l) => (
+            <Link key={l.href} href={l.href} className={`msh-navlink${l.active ? " active" : ""}`}>{l.label}</Link>
+          ))}
         </div>
+      </nav>
 
-        <div className="msh-mobile-nav">
-          <SmallNavLink href="/learn">Learn</SmallNavLink>
-          <SmallNavLink href="/platforms">Platforms</SmallNavLink>
-          <SmallNavLink href="/utilities">Calculators</SmallNavLink>
-        </div>
+      <div className="msh-wrap">
 
-        {isMobile ? MobileHero() : null}
-
-        <div className="msh-toolbar-grid">
-          <div style={{ position: "relative", minWidth: 0 }}>
-            <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 6 }}>Search Any Stock</div>
-
-            <input
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setOpen(true);
-              }}
-              onFocus={() => setOpen(true)}
-onKeyDown={(e) => {
-  if (e.key === "Enter") {
-    e.preventDefault();
-
-    const first = results[0];
-    if (!first?.symbol) return;
-
-    chooseSymbol(first.symbol, first.name);
-  }
-}}
-              placeholder="🔎 Search ANY ticker or company"
-              style={{
-                width: "100%",
-                padding: "14px 16px",
-                borderRadius: 16,
-                border: `1px solid ${COLORS.controlBorder}`,
-                background: COLORS.controlBgSolid,
-                color: COLORS.controlFg,
-                outline: "none",
-                fontSize: 15,
-                fontWeight: 700,
-              }}
-            />
-
-            {open && results.length > 0 ? (
-              <div
-                style={{
-                  position: "absolute",
-                  top: "calc(100% + 8px)",
-                  left: 0,
-                  right: 0,
-                  zIndex: 20,
-                  border: `1px solid ${COLORS.border}`,
-                  borderRadius: 16,
-                  background: COLORS.cardBg,
-                  boxShadow: COLORS.isDark
-                    ? "0 18px 34px rgba(0,0,0,0.40)"
-                    : "0 18px 34px rgba(0,0,0,0.12)",
-                  overflow: "hidden",
-                }}
-              >
-                {results.slice(0, 8).map((r) => (
-                  <button
-                    key={`${r.symbol}-${r.exchange}`}
-                    type="button"
-                    onClick={() => chooseSymbol(r.symbol, r.name)}
-                    style={{
-                      width: "100%",
-                      textAlign: "left",
-                      padding: "12px 14px",
-                      border: "none",
-                      borderBottom: `1px solid ${COLORS.border}`,
-                      background: COLORS.cardBg,
-                      color: COLORS.cardFg,
-                      cursor: "pointer",
-                    }}
-                  >
-                    <div style={{ fontWeight: 900 }}>{r.symbol}</div>
-                    <div style={{ fontSize: 13, color: COLORS.mutedFg }}>
-                      {r.name} {r.exchange ? `• ${r.exchange}` : ""}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            ) : null}
+        {/* ── HERO ROW (desktop) ── */}
+        <div className="msh-hero">
+          <div className="msh-hero-lead">
+            <h1>Analyze any stock</h1>
+            <p>Search a ticker for its full breakdown, or scan for fresh ideas.</p>
           </div>
-
-          <div>
-            <div style={{ fontSize: 12, fontWeight: 900, marginBottom: 6 }}>Stock Pickers</div>
-
-            <button
-              type="button"
-              onClick={() => router.push("/pickers")}
-              className="msh-stock-picker-cta"
-              style={{
-                width: "100%",
-                padding: "14px 16px",
-                borderRadius: 16,
-                border: `1px solid rgba(59,130,246,0.45)`,
-                background: COLORS.isDark
-                  ? "linear-gradient(135deg, rgba(37,99,235,0.26), rgba(29,78,216,0.16))"
-                  : "linear-gradient(135deg, rgba(37,99,235,0.14), rgba(29,78,216,0.08))",
-                color: COLORS.controlFg,
-                fontWeight: 950,
-                fontSize: 15,
-                cursor: "pointer",
-                textAlign: "left",
-                transition: "transform 120ms ease, filter 120ms ease, border-color 120ms ease",
-              }}
-            >
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                <span>🔎 Scan for Stock Ideas</span>
-                <span className="msh-stock-picker-cta-arrow" aria-hidden="true">
-                  →
-                </span>
-              </span>
+          <div className="msh-hero-actions">
+            <div className="msh-searchbox" style={{ position: "relative" }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8a97ad" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+              <input value={query}
+                onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+                onFocus={() => setOpen(true)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); const first = results[0]; if (first?.symbol) chooseSymbol(first.symbol, first.name); } }}
+                placeholder="Search ANY ticker or company…" />
+              <button className="msh-go" onClick={() => { if (results[0]) chooseSymbol(results[0].symbol, results[0].name); }}>Go</button>
+              {open && results.length > 0 ? (
+                <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, right: 0, zIndex: 30, border: `1px solid ${COLORS.border}`, borderRadius: 13, background: COLORS.cardBg, boxShadow: "0 14px 28px rgba(0,0,0,0.4)", overflow: "hidden" }}>
+                  {results.slice(0, 8).map((r) => (
+                    <button key={`${r.symbol}-${r.exchange}`} type="button" onClick={() => chooseSymbol(r.symbol, r.name)}
+                      style={{ width: "100%", textAlign: "left", padding: "10px 13px", border: "none", borderBottom: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg, color: COLORS.cardFg, cursor: "pointer" }}>
+                      <div style={{ fontWeight: 800, fontSize: 13 }}>{r.symbol}</div>
+                      <div style={{ fontSize: 12, color: COLORS.mutedFg }}>{r.name}{r.exchange ? ` · ${r.exchange}` : ""}</div>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <button className="msh-scanbtn" onClick={() => router.push("/pickers")}>
+              🔎 Scan for stock ideas
             </button>
           </div>
         </div>
 
+        {/* ── MOBILE HERO ── */}
+        <div className="msh-mobile-only">{isMobile ? MobileHero() : null}</div>
+
         {err ? (
-          <div
-            style={{
-              marginBottom: 16,
-              padding: 14,
-              borderRadius: 14,
-              border: `1px solid rgba(239,68,68,0.35)`,
-              background: COLORS.isDark ? "rgba(127,29,29,0.28)" : "rgba(254,226,226,0.75)",
-              color: COLORS.cardFg,
-              fontWeight: 800,
-            }}
-          >
-            {err}
+          <div style={{ marginBottom: 14, padding: 12, borderRadius: 12, border: "1px solid rgba(240,68,68,0.35)", background: "rgba(127,29,29,0.24)", fontWeight: 700, fontSize: 13 }}>{err}</div>
+        ) : null}
+
+        {/* ── MAIN TWO-COL GRID ── */}
+        <div className="msh-grid">
+          {/* LEFT: Overview + Breakdown */}
+          <div className="msh-col">
+            <OverviewPanel />
+            <BreakdownPanel />
           </div>
-        ) : null}
-
-        {isMobile ? (
-          <>
-            <div className="msh-lower-grid" style={{ marginTop: 0 }}>
-              <MobileStockAnalysisCard />
-            </div>
-
-            <div className="msh-lower-grid">
-              <ChartPanel />
-            </div>
-
-            <div className="msh-lower-grid">
-              <OverviewPanel />
-              <BreakdownPanel />
-            </div>
-
-            <div className="msh-lower-grid">
-              <NewsPanel />
-            </div>
-
-            <div className="msh-lower-grid">
-              <BenchmarksPanel />
-            </div>
-
-            <div className="msh-lower-grid">
-              <InsightsPanel />
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="msh-main-grid">
-              <div className="msh-left-stack msh-mobile-secondary">
-                <OverviewPanel />
-                <BreakdownPanel />
-              </div>
-
-              <div className="msh-mobile-primary">
-                <ChartPanel />
-              </div>
-            </div>
-
-            <div className="msh-lower-grid">
-              <BenchmarksPanel />
-              <NewsPanel />
-              <InsightsPanel />
-            </div>
-          </>
-        )}
-
-        {expanded ? (
-          <div
-            onClick={() => setExpanded(false)}
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(0,0,0,0.75)",
-              zIndex: 100,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: 18,
-            }}
-          >
-            <div
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                width: "min(1280px, 100%)",
-                maxHeight: "92vh",
-                overflow: "auto",
-                borderRadius: 20,
-                border: `1px solid ${COLORS.border}`,
-                background: COLORS.cardBg,
-                boxShadow: "0 24px 60px rgba(0,0,0,0.45)",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  alignItems: "center",
-                  padding: "14px 16px",
-                  borderBottom: `1px solid ${COLORS.border}`,
-                }}
-              >
-                <div style={{ fontWeight: 900 }}>Expanded Chart ({chartIndicatorName})</div>
-
-                <button
-                  type="button"
-                  onClick={() => setExpanded(false)}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 10,
-                    border: `1px solid ${COLORS.controlBorder}`,
-                    background: COLORS.controlBg,
-                    color: COLORS.controlFg,
-                    fontWeight: 900,
-                    cursor: "pointer",
-                  }}
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div style={{ padding: 16 }}>
-                <PriceChart
-                  symbol={symbol}
-                  data={displayedHistory}
-                  ma50={ma50}
-                  ma200={ma200}
-                  overlay={indicator}
-                  selectedIndicators={selectedIndicators}
-                  chartType={chartType}
-                  supportResistanceZones={supportResistanceZones}
-                  bollUpper={bollUpper}
-                  bollMid={bollMid}
-                  bollLower={bollLower}
-                  ema20={ema20Arr}
-                  vwma20={vwma20Arr}
-                  rsi14={rsi14Arr}
-                  macdLine={macdLine}
-                  macdSignal={macdSignal}
-                  macdHist={macdHist}
-                  stochK={stochK}
-                  stochD={stochD}
-                  atr14={atr14Arr}
-                  volume={volumeArr}
-                  divergence={divergence.div}
-                  height={isMobile ? 280 : 520}
-                />
-              </div>
-            </div>
+          {/* RIGHT: Chart */}
+          <div className="msh-col">
+            <ChartPanel />
           </div>
-        ) : null}
+        </div>
 
-        {loading ? (
-          <div style={{ marginTop: 14, fontSize: 13, opacity: 0.7 }}>Loading chart data…</div>
-        ) : null}
+        {/* ── LOWER SECTIONS ── */}
+        <div className="msh-lower">
+          <BenchmarksPanel />
+          <NewsPanel />
+          <InsightsPanel />
+        </div>
+
       </div>
+
+      {/* ── EXPANDED CHART MODAL ── */}
+      {expanded ? (
+        <div onClick={() => setExpanded(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 18 }}>
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ width: "min(1280px, 100%)", maxHeight: "92vh", overflow: "auto", borderRadius: 18, border: `1px solid ${COLORS.border}`, background: COLORS.cardBg, boxShadow: "0 24px 60px rgba(0,0,0,0.45)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 16px", borderBottom: `1px solid ${COLORS.border}` }}>
+              <div style={{ fontWeight: 800, fontSize: 14 }}>Expanded Chart ({chartIndicatorName})</div>
+              <button type="button" onClick={() => setExpanded(false)}
+                style={{ padding: "7px 10px", borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, cursor: "pointer" }}>✕</button>
+            </div>
+            <div style={{ padding: 16 }}>
+              <PriceChart symbol={symbol} data={displayedHistory} ma50={ma50} ma200={ma200} overlay={indicator}
+                selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones}
+                bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr}
+                rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist}
+                stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div}
+                height={isMobile ? 280 : 520} />
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {loading ? <div style={{ position: "fixed", bottom: 20, right: 20, fontSize: 12, color: COLORS.mutedFg, background: COLORS.cardBg, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "8px 12px", fontWeight: 700 }}>Loading chart data…</div> : null}
     </main>
   );
 }
