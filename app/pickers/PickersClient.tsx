@@ -463,7 +463,6 @@ export default function PickersClient() {
     <section aria-label="Live stock idea results" style={{ width: "100%", minWidth: 0 }}>
       <style>{`
   @keyframes pickersBar { 0%{transform:translateX(-60%);opacity:0.55;} 50%{transform:translateX(140%);opacity:0.95;} 100%{transform:translateX(320%);opacity:0.55;} }
-  @keyframes pickersShimmer { 0%{transform:translateX(-120%);} 70%,100%{transform:translateX(140%);} }
   .pickers-loading-bar { height:100%;width:35%;border-radius:999px;background:rgba(59,130,246,0.90);animation:pickersBar 1.1s linear infinite; }
   .pickers-shell { width:100%;min-width:0; }
   .pickers-sections-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start; }
@@ -474,8 +473,8 @@ export default function PickersClient() {
   .picker-row-note { font-size:11px;color:rgba(148,163,184,0.65);font-weight:400;margin-left:2px; }
   .picker-row-link { font-size:11px;font-weight:600;color:rgba(148,163,184,0.55);text-decoration:none;white-space:nowrap;flex:0 0 auto;transition:color 120ms ease; }
   .picker-row-link:hover { color:#93c5fd !important; }
-  /* See all — uniform green button with grey box */
-  .pickers-see-all { display:inline-flex;align-items:center;padding:4px 10px;border-radius:7px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);font-size:11px;font-weight:600;color:#4ade80;text-decoration:none;transition:color 120ms ease,background 120ms ease; }
+  /* See all — green button, always visible including mobile */
+  .pickers-see-all { display:inline-flex !important;align-items:center;padding:4px 10px;border-radius:7px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);font-size:11px;font-weight:600;color:#4ade80;text-decoration:none;transition:color 120ms ease,background 120ms ease; }
   .pickers-see-all:hover { background:rgba(255,255,255,0.07);color:#86efac !important;filter:none !important;transform:none !important; }
   .pattern-plays-grid { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px; }
   .pattern-play-card:hover { transform:translateY(-2px);filter:brightness(1.08); }
@@ -502,6 +501,8 @@ export default function PickersClient() {
     .pickers-help-tip { width:18px !important;height:18px !important;font-size:10px !important; }
     .pickers-section-title-text { font-size:13px !important; }
     .picker-row-note { display:none; }
+    /* Explicitly keep See All visible and full-width on mobile */
+    .pickers-see-all { display:inline-flex !important;width:100%;justify-content:center;padding:6px 10px;font-size:12px; }
   }
   @media (max-width: 400px) {
     .pickers-sections-grid { grid-template-columns:minmax(0,1fr) !important; }
@@ -651,7 +652,7 @@ export default function PickersClient() {
                     else if (title.includes("200")) seoHref = "/stocks-near-200-day-moving-average";
                     if (!seoHref) return null;
                     return (
-                      <div style={{ marginTop: 8, textAlign: "right" }}>
+                      <div style={{ marginTop: 8, textAlign: "center" }}>
                         <a href={seoHref} className="pickers-see-all">See all →</a>
                       </div>
                     );
