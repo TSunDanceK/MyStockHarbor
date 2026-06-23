@@ -30,3 +30,14 @@ export function getVideoContent(youtubeId: string): VideoContent | null {
     return null;
   }
 }
+
+// Returns all YouTube video IDs that have a content file in content/videos/
+// Used by the sitemap to register video pages for indexing.
+export function getAllVideoIds(): string[] {
+  if (!fs.existsSync(videosDirectory)) return [];
+
+  return fs
+    .readdirSync(videosDirectory)
+    .filter((file) => file.endsWith(".md") && file !== ".gitkeep")
+    .map((file) => file.replace(/\.md$/, ""));
+}
