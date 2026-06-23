@@ -158,8 +158,7 @@ export default function LearnPage() {
             EDUCATION
           </div>
           <div style={{ marginTop: 4, fontSize: 13, opacity: 0.6, lineHeight: 1.5 }}>
-            Lessons and written guides. These explain concepts — they don&apos;t open live
-            stock lists.
+            Lessons and written guides explaining the concepts used across MyStockHarbor.
           </div>
         </div>
 
@@ -271,72 +270,6 @@ export default function LearnPage() {
             </div>
           </section>
         </div>
-
-        {/* ============================================================
-            LIVE SCREENERS — these open live stock lists, not lessons.
-            ============================================================ */}
-        <div style={{ marginTop: 30, marginBottom: 4 }}>
-          <div
-            style={{
-              fontSize: 13,
-              fontWeight: 950,
-              letterSpacing: "0.14em",
-              color: "rgba(94,212,199,0.95)",
-            }}
-          >
-            LIVE SCREENERS
-          </div>
-          <div style={{ marginTop: 4, fontSize: 13, opacity: 0.6, lineHeight: 1.5 }}>
-            These open a live list of stocks matching the setup — a tool, not a lesson.
-          </div>
-        </div>
-
-        <div style={{ marginTop: 14 }}>
-          <section
-            style={{
-              border: "1px solid rgba(94,212,199,0.26)",
-              borderRadius: 18,
-              padding: 18,
-              background: "linear-gradient(180deg, rgba(8,20,19,0.96), rgba(6,13,12,0.98))",
-              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-            }}
-          >
-            <div style={screenerSectionLabel()}>SCREENERS</div>
-
-            <div style={eduGrid()}>
-              <ScreenerCard
-                href="/oversold-stocks-today"
-                title="Oversold Stocks"
-                desc="Live list of stocks showing stretched downside moves."
-              />
-              <ScreenerCard
-                href="/overbought-stocks-today"
-                title="Overbought Stocks"
-                desc="Live list of stocks that may be stretched to the upside."
-              />
-              <ScreenerCard
-                href="/all-time-high-breakout-stocks"
-                title="Breakout Stocks"
-                desc="Live list of stocks breaking to new highs on momentum."
-              />
-              <ScreenerCard
-                href="/bullish-bearish-divergence-stocks"
-                title="Bullish & Bearish Divergence"
-                desc="Live list of stocks where momentum is diverging from price."
-              />
-              <ScreenerCard
-                href="/best-trend-score-stocks"
-                title="Best Trend Score Stocks"
-                desc="Live list of stocks with stronger trend structure and leadership."
-              />
-              <ScreenerCard
-                href="/stocks-near-200-day-moving-average"
-                title="Stocks Near 200-Day MA"
-                desc="Live list of stocks testing a widely watched long-term level."
-              />
-            </div>
-          </section>
-        </div>
       </div>
 
       <style>{siteNavCss(980)}</style>
@@ -444,64 +377,6 @@ function Section(props: {
   );
 }
 
-function ScreenerCard(props: { href: string; title: string; desc: string }) {
-  const { href, title, desc } = props;
-  return (
-    <Link
-      href={href}
-      style={{
-        border: "1px solid rgba(94,212,199,0.30)",
-        borderRadius: 14,
-        padding: 14,
-        background:
-          "linear-gradient(135deg, rgba(94,212,199,0.10), rgba(59,130,246,0.06))",
-        color: "#f1f5f9",
-        textDecoration: "none",
-        display: "flex",
-        flexDirection: "column",
-        minHeight: 132,
-        transition: "transform 120ms ease, background 120ms ease, border-color 120ms ease",
-      }}
-    >
-      <div
-        style={{
-          display: "inline-flex",
-          alignSelf: "flex-start",
-          alignItems: "center",
-          padding: "3px 8px",
-          borderRadius: 999,
-          background: "rgba(94,212,199,0.16)",
-          border: "1px solid rgba(94,212,199,0.40)",
-          color: "#bdf3ec",
-          fontWeight: 900,
-          letterSpacing: "0.08em",
-          fontSize: 10,
-          marginBottom: 10,
-        }}
-      >
-        SCREENER
-      </div>
-
-      <div style={{ fontWeight: 900, fontSize: 16 }}>{title}</div>
-      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
-        {desc}
-      </div>
-
-      <div
-        style={{
-          marginTop: "auto",
-          paddingTop: 10,
-          fontSize: 13,
-          fontWeight: 800,
-          color: "#7fe3d8",
-        }}
-      >
-        Open live list →
-      </div>
-    </Link>
-  );
-}
-
 function learnGuideCard(): React.CSSProperties {
   return {
     border: "1px solid rgba(255,255,255,0.14)",
@@ -524,21 +399,6 @@ function eduLabel(): React.CSSProperties {
     background: "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(16,185,129,0.10))",
     border: "1px solid rgba(34,197,94,0.34)",
     color: "#dcfce7",
-    fontWeight: 950,
-    letterSpacing: "0.08em",
-    fontSize: 12,
-  };
-}
-
-function screenerSectionLabel(): React.CSSProperties {
-  return {
-    display: "inline-flex",
-    alignItems: "center",
-    padding: "7px 12px",
-    borderRadius: 999,
-    background: "linear-gradient(135deg, rgba(94,212,199,0.18), rgba(59,130,246,0.10))",
-    border: "1px solid rgba(94,212,199,0.36)",
-    color: "#cdf5ef",
     fontWeight: 950,
     letterSpacing: "0.08em",
     fontSize: 12,
