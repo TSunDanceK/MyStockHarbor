@@ -72,14 +72,15 @@ function toneDot(tone?: string) {
   if (tone === "orange") return "#fb923c";
   if (tone === "red") return "#ef4444";
   if (tone === "blue") return "#60a5fa";
-  return "rgba(255,255,255,0.35)";
+  return "rgba(255,255,255,0.30)";
 }
 
 function toChartHref(href: string, symbol?: string) {
   const cleanedSymbol = String(symbol || "").trim().toUpperCase();
   const fallback = cleanedSymbol ? `/dashboard?symbol=${encodeURIComponent(cleanedSymbol)}` : "/dashboard";
   const raw = href && href.trim() ? href.trim() : "";
-  const normalised = raw.startsWith("/?symbol=") ? raw.replace("/?symbol=", "/dashboard?symbol=") : raw.startsWith("/?") ? raw.replace("/?", "/dashboard?") : raw;
+  const normalised = raw.startsWith("/?symbol=") ? raw.replace("/?symbol=", "/dashboard?symbol=") : raw.startsWith("/?")
+    ? raw.replace("/?" , "/dashboard?") : raw;
   const base = normalised.startsWith("/dashboard") ? normalised : fallback;
   return base.includes("#chart") ? base : `${base}#chart`;
 }
@@ -133,28 +134,27 @@ function getSellSignalCount(record: SignalRecord) {
 }
 
 function getHeaderHelp(title: string) {
-  if (title.includes("Buy Signals")) return "These highlight stocks showing multiple bullish technical conditions at the same time. Some may already be strong movers, so always review the chart before entering.";
-  if (title.includes("Sell Signals")) return "These highlight stocks showing multiple bearish technical conditions. Traders often review these for pullback risk, weaker trends, or possible short-side weakness.";
-  if (title.includes("Oversold")) return "These are ranked oversold setups. The list leans toward stronger oversold readings, better liquidity, sharper exhaustion moves and cleaner rebound potential.";
-  if (title.includes("Best Trend Score")) return "These stocks have the strongest current trend structure based on price relative to MA50 and MA200, moving average alignment, and positive MACD momentum.";
-  if (title.includes("Positive Last Earnings")) return "These stocks rank well on the latest completed earnings report, giving preference to EPS beats, revenue beats, positive EPS and recent reports.";
-  if (title.includes("Strong Earnings Growth")) return "These stocks rank well on year-over-year earnings improvement, recent positive EPS consistency, revenue growth and earnings beat history.";
-  if (title.includes("Overbought")) return "These are ranked overbought setups. The list leans toward stronger extension, better liquidity and cleaner pullback-risk profiles.";
-  if (title.includes("Divergence")) return "Divergence is ranked by timeframe, duration, structure quality, magnitude and context. Weekly divergences usually carry more weight than daily ones.";
-  if (title.includes("Macro Support") || title.includes("Resistance")) return "These stocks are trading near wider weekly support or resistance zones. The ranking favours repeated touches, distance to the zone, structure length and trading volume around that level.";
-  if (title.includes("All-Time Highs")) return "These are pullback setups from all-time highs, ranked to favour liquid, tradable names over weak broken charts.";
-  if (title.toLowerCase().includes("200-day")) return "These stocks are trading near the 200-day moving average, a key long-term level many traders watch for support, resistance and trend direction.";
-  if (title.includes("Breakout")) return "Breakouts are ranked to favour newer, cleaner and more liquid breakouts over older or more stretched moves.";
-  if (title.includes("Hot Market Names")) return "These names come from the current dynamic universe and are also triggering meaningful technical conditions right now.";
-  return "These stocks match multiple technical conditions worth reviewing on the chart.";
+  if (title.includes("Buy Signals")) return "Stocks showing multiple bullish technical conditions at the same time, ranked by signal count.";
+  if (title.includes("Sell Signals")) return "Stocks showing multiple bearish technical conditions, ranked by signal count. Review charts for pullback risk or trend weakness.";
+  if (title.includes("Oversold")) return "Ranked oversold setups favouring stronger oversold readings, better liquidity and cleaner rebound potential.";
+  if (title.includes("Best Trend Score")) return "Stocks with strong trend structure: price above MA50/MA200, correct MA alignment, positive MACD momentum.";
+  if (title.includes("Positive Last Earnings")) return "Ranked by the most recent earnings report — EPS beats, revenue beats and positive EPS carry more weight.";
+  if (title.includes("Strong Earnings Growth")) return "Ranked by year-over-year earnings improvement, recent positive EPS consistency and revenue growth.";
+  if (title.includes("Overbought")) return "Ranked overbought setups favouring stronger extension and cleaner pullback-risk profiles.";
+  if (title.includes("Divergence")) return "Ranked by timeframe, duration and structure quality. Weekly divergences usually carry more weight than daily ones.";
+  if (title.includes("Macro Support") || title.includes("Resistance")) return "Stocks near wider weekly support or resistance zones, ranked by touch count, distance and structure length.";
+  if (title.includes("All-Time Highs")) return "Pullback setups from all-time highs, ranked to favour liquid, tradable names over broken charts.";
+  if (title.toLowerCase().includes("200-day")) return "Stocks near the 200-day moving average — a key long-term level traders watch for support, resistance and trend direction.";
+  if (title.includes("Breakout")) return "Ranked to favour newer, cleaner and more liquid breakouts over older or more stretched moves.";
+  return "Stocks matching multiple technical conditions worth reviewing on the chart.";
 }
 
 function HelpTip({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <span className="pickers-help-tip" style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", width: 16, height: 16, borderRadius: "50%", background: "rgba(255,255,255,0.15)", color: "#fff", fontSize: 11, fontWeight: 900, cursor: "pointer", marginLeft: 2, flex: "0 0 auto" }} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)} onClick={() => setOpen((v) => !v)}>
+    <span className="pickers-help-tip" style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", width: 15, height: 15, borderRadius: "50%", background: "rgba(255,255,255,0.10)", color: "rgba(255,255,255,0.60)", fontSize: 10, fontWeight: 700, cursor: "pointer", marginLeft: 4, flex: "0 0 auto" }} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)} onClick={() => setOpen((v) => !v)}>
       ?
-      {open ? <span style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 999, width: 260, maxWidth: "min(260px, 78vw)", padding: "10px 12px", borderRadius: 12, background: "#0f172a", border: "1px solid rgba(255,255,255,0.14)", color: "#e5e7eb", fontSize: 12, lineHeight: 1.5, fontWeight: 700, boxShadow: "0 14px 30px rgba(0,0,0,0.35)", textAlign: "left", pointerEvents: "none" }}>{text}</span> : null}
+      {open ? <span style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, zIndex: 999, width: 240, maxWidth: "min(240px, 76vw)", padding: "10px 12px", borderRadius: 10, background: "#0f172a", border: "1px solid rgba(255,255,255,0.12)", color: "#cbd5e1", fontSize: 12, lineHeight: 1.5, fontWeight: 500, boxShadow: "0 14px 30px rgba(0,0,0,0.35)", textAlign: "left", pointerEvents: "none" }}>{text}</span> : null}
     </span>
   );
 }
@@ -173,62 +173,71 @@ function createEmptySignalRecord(symbol: string, item?: PickerItem): SignalRecor
   };
 }
 
-type PlayCardDef = { title: string; subtitle: string; href: string; tone: "green" | "red" | "blue"; pattern: "ascending" | "descending" | "bullFlag" | "macroSR"; };
+type PlayCardDef = { title: string; href: string; tone: "green" | "red" | "blue"; pattern: "ascending" | "descending" | "bullFlag" | "macroSR"; };
 
 const PLAY_CARDS: PlayCardDef[] = [
-  { title: "Ascending Triangle Plays", subtitle: "Bullish compression setups with flat resistance and rising lows.", href: "/plays", tone: "green", pattern: "ascending" },
-  { title: "Descending Triangle Plays", subtitle: "Bearish compression setups with flat support and lower highs.", href: "/plays/descending-triangles", tone: "red", pattern: "descending" },
-  { title: "Bull Flag Plays", subtitle: "Momentum continuation setups after a sharp impulse and tight flag.", href: "/plays/bull-flags", tone: "blue", pattern: "bullFlag" },
-  { title: "Macro Support / Resistance Plays", subtitle: "Stocks trading near wider weekly support or resistance zones with repeated touches and volume-at-zone context.", href: "/macro-support-resistance-stocks", tone: "blue", pattern: "macroSR" },
+  { title: "Ascending Triangle Plays", href: "/plays", tone: "green", pattern: "ascending" },
+  { title: "Descending Triangle Plays", href: "/plays/descending-triangles", tone: "red", pattern: "descending" },
+  { title: "Bull Flag Plays", href: "/plays/bull-flags", tone: "blue", pattern: "bullFlag" },
+  { title: "Macro Support / Resistance Plays", href: "/macro-support-resistance-stocks", tone: "blue", pattern: "macroSR" },
 ];
 
 function playTone(tone: PlayCardDef["tone"]) {
-  if (tone === "green") return { dot: "#22c55e", border: "rgba(34,197,94,0.26)", bg: "linear-gradient(180deg, rgba(8,24,18,0.92), rgba(8,13,22,0.98))", line: "#22c55e", accent: "#60a5fa", buttonBg: "rgba(34,197,94,0.10)", buttonColor: "#dcfce7" };
-  if (tone === "red") return { dot: "#ef4444", border: "rgba(239,68,68,0.26)", bg: "linear-gradient(180deg, rgba(32,12,18,0.92), rgba(8,13,22,0.98))", line: "#ef4444", accent: "#60a5fa", buttonBg: "rgba(239,68,68,0.10)", buttonColor: "#fecaca" };
-  return { dot: "#60a5fa", border: "rgba(96,165,250,0.26)", bg: "linear-gradient(180deg, rgba(10,18,36,0.94), rgba(8,13,22,0.98))", line: "#60a5fa", accent: "#22c55e", buttonBg: "rgba(59,130,246,0.10)", buttonColor: "#dbeafe" };
+  if (tone === "green") return { dot: "#22c55e", border: "rgba(34,197,94,0.20)", bg: "rgba(8,24,18,0.60)", line: "#22c55e", accent: "#60a5fa", color: "#bbf7d0" };
+  if (tone === "red") return { dot: "#ef4444", border: "rgba(239,68,68,0.20)", bg: "rgba(32,12,18,0.60)", line: "#ef4444", accent: "#60a5fa", color: "#fecaca" };
+  return { dot: "#60a5fa", border: "rgba(96,165,250,0.20)", bg: "rgba(10,18,36,0.60)", line: "#60a5fa", accent: "#22c55e", color: "#dbeafe" };
 }
 
 function PlayDiagram({ pattern, tone }: { pattern: PlayCardDef["pattern"]; tone: PlayCardDef["tone"] }) {
-  const colors = playTone(tone);
+  const c = playTone(tone);
   if (pattern === "descending") return (
-    <svg viewBox="0 0 320 138" className="playDiagram" role="img" aria-label="Descending triangle diagram"><rect x="0" y="0" width="320" height="138" rx="16" fill="rgba(2,6,23,0.72)" /><path d="M42 108 H282" stroke={colors.line} strokeWidth="3" strokeDasharray="7 7" strokeLinecap="round" /><path d="M44 38 L282 108" stroke={colors.accent} strokeWidth="3" strokeLinecap="round" /><path d="M46 44 L74 108 L104 56 L132 108 L162 72 L190 108 L220 88 L250 108 L278 105" stroke="rgba(226,232,240,0.80)" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" /><path d="M52 126 V114 M86 126 V115 M120 126 V112 M154 126 V115 M188 126 V112 M222 126 V115 M256 126 V113 M290 126 V116" stroke="rgba(59,130,246,0.30)" strokeWidth="5" strokeLinecap="round" /></svg>
+    <svg viewBox="0 0 280 100" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Descending triangle">
+      <path d="M20 80 H260" stroke={c.line} strokeWidth="2" strokeDasharray="6 5" strokeLinecap="round" />
+      <path d="M22 28 L260 80" stroke={c.accent} strokeWidth="2" strokeLinecap="round" opacity="0.7" />
+      <path d="M24 34 L52 80 L82 44 L110 80 L140 56 L168 80 L198 68 L226 80 L256 77" stroke="rgba(226,232,240,0.70)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
   if (pattern === "macroSR") return (
-    <svg viewBox="0 0 320 138" className="playDiagram" role="img" aria-label="Macro support and resistance diagram"><rect x="0" y="0" width="320" height="138" rx="16" fill="rgba(2,6,23,0.72)" /><path d="M36 36 H284" stroke="#ef4444" strokeWidth="4" strokeDasharray="8 7" strokeLinecap="round" /><path d="M36 102 H284" stroke="#22c55e" strokeWidth="4" strokeDasharray="8 7" strokeLinecap="round" /><path d="M44 91 L72 64 L100 96 L130 72 L160 39 L190 76 L220 101 L250 73 L278 50" stroke="rgba(226,232,240,0.82)" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" /><path d="M52 126 V113 M86 126 V104 M120 126 V111 M154 126 V91 M188 126 V101 M222 126 V113 M256 126 V98 M290 126 V86" stroke="rgba(59,130,246,0.30)" strokeWidth="5" strokeLinecap="round" /></svg>
+    <svg viewBox="0 0 280 100" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Macro support resistance">
+      <path d="M20 24 H260" stroke="#ef4444" strokeWidth="2" strokeDasharray="6 5" strokeLinecap="round" opacity="0.8" />
+      <path d="M20 76 H260" stroke="#22c55e" strokeWidth="2" strokeDasharray="6 5" strokeLinecap="round" opacity="0.8" />
+      <path d="M24 67 L54 46 L82 70 L112 52 L142 27 L170 56 L198 75 L226 53 L256 36" stroke="rgba(226,232,240,0.70)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
   if (pattern === "bullFlag") return (
-    <svg viewBox="0 0 320 138" className="playDiagram" role="img" aria-label="Bull flag diagram"><rect x="0" y="0" width="320" height="138" rx="16" fill="rgba(2,6,23,0.72)" /><path d="M34 108 L62 96 L84 73 L104 36" stroke="#22c55e" strokeWidth="5" fill="none" strokeLinecap="round" strokeLinejoin="round" /><path d="M106 36 L144 52 L184 46 L222 61 L262 54" stroke="rgba(226,232,240,0.80)" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" /><path d="M108 34 L272 53" stroke={colors.line} strokeWidth="3" strokeDasharray="7 7" strokeLinecap="round" /><path d="M102 66 L266 85" stroke={colors.line} strokeWidth="3" strokeDasharray="7 7" strokeLinecap="round" /><path d="M262 54 L292 36" stroke="#22c55e" strokeWidth="4" strokeLinecap="round" /><path d="M292 36 L276 37 M292 36 L286 51" stroke="#22c55e" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" /><path d="M42 126 V112 M76 126 V101 M110 126 V84 M144 126 V103 M178 126 V97 M212 126 V106 M246 126 V100 M280 126 V94" stroke="rgba(59,130,246,0.30)" strokeWidth="5" strokeLinecap="round" /></svg>
+    <svg viewBox="0 0 280 100" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Bull flag">
+      <path d="M20 82 L44 72 L62 54 L78 24" stroke="#22c55e" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M80 24 L116 38 L152 32 L190 45 L228 38" stroke="rgba(226,232,240,0.70)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M82 22 L238 40" stroke={c.line} strokeWidth="1.5" strokeDasharray="5 5" strokeLinecap="round" opacity="0.6" />
+      <path d="M76 50 L232 68" stroke={c.line} strokeWidth="1.5" strokeDasharray="5 5" strokeLinecap="round" opacity="0.6" />
+      <path d="M228 38 L256 22" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" />
+    </svg>
   );
   return (
-    <svg viewBox="0 0 320 138" className="playDiagram" role="img" aria-label="Ascending triangle diagram"><rect x="0" y="0" width="320" height="138" rx="16" fill="rgba(2,6,23,0.72)" /><path d="M42 36 H282" stroke={colors.line} strokeWidth="3" strokeDasharray="7 7" strokeLinecap="round" /><path d="M44 108 L282 36" stroke={colors.accent} strokeWidth="3" strokeLinecap="round" /><path d="M46 94 L76 36 L106 84 L136 36 L166 72 L196 36 L226 58 L256 36 L282 38" stroke="rgba(226,232,240,0.80)" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" /><path d="M52 126 V114 M86 126 V105 M120 126 V112 M154 126 V99 M188 126 V108 M222 126 V92 M256 126 V100 M290 126 V84" stroke="rgba(59,130,246,0.30)" strokeWidth="5" strokeLinecap="round" /></svg>
+    <svg viewBox="0 0 280 100" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Ascending triangle">
+      <path d="M20 24 H260" stroke={c.line} strokeWidth="2" strokeDasharray="6 5" strokeLinecap="round" />
+      <path d="M22 80 L260 24" stroke={c.accent} strokeWidth="2" strokeLinecap="round" opacity="0.7" />
+      <path d="M24 68 L54 24 L84 62 L114 24 L144 50 L174 24 L204 42 L234 24 L260 26" stroke="rgba(226,232,240,0.70)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
 function PatternPlaysSection() {
   return (
-    <section className="pattern-plays-panel" style={{ border: "1px solid rgba(59,130,246,0.18)", borderRadius: 18, padding: 16, background: "linear-gradient(180deg, rgba(8,13,26,0.98), rgba(6,10,18,1))", boxSizing: "border-box", overflow: "hidden" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
-        <div>
-          <div style={{ display: "inline-flex", alignItems: "center", padding: "7px 11px", borderRadius: 999, border: "1px solid rgba(96,165,250,0.28)", background: "rgba(59,130,246,0.10)", color: "#dbeafe", fontSize: 11, fontWeight: 950, letterSpacing: "0.08em", textTransform: "uppercase" }}>Chart pattern plays</div>
-          <h2 style={{ margin: "12px 0 0", fontSize: 22, lineHeight: 1.12, letterSpacing: "-0.03em" }}>Pattern setups that need the chart</h2>
-          <p className="pickers-section-description" style={{ margin: "8px 0 0", maxWidth: 760, color: "rgba(226,232,240,0.74)", fontSize: 14, lineHeight: 1.65 }}>These are visual chart-pattern pages — the cards below link into the full play pages rather than simple ticker lists.</p>
-        </div>
+    <section style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 16, boxSizing: "border-box" }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
+        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em", color: "rgba(226,232,240,0.90)" }}>Chart Pattern Plays</h2>
+        <p style={{ margin: 0, fontSize: 12, opacity: 0.55, lineHeight: 1.5 }}>Visual chart-pattern pages — click through to the full play lists.</p>
       </div>
       <div className="pattern-plays-grid">
         {PLAY_CARDS.map((play) => {
-          const colors = playTone(play.tone);
+          const c = playTone(play.tone);
           return (
-            <a key={play.href} href={play.href} className="pattern-play-card" style={{ border: `1px solid ${colors.border}`, background: colors.bg, color: "#f8fafc" }}>
+            <a key={play.href} href={play.href} style={{ display: "grid", gap: 8, padding: 12, borderRadius: 12, border: `1px solid ${c.border}`, background: c.bg, textDecoration: "none", color: "#f1f5f9", transition: "transform 140ms ease, filter 140ms ease", boxSizing: "border-box" }} className="pattern-play-card">
               <PlayDiagram pattern={play.pattern} tone={play.tone} />
-              <div className="pattern-play-copy">
-                <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                  <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: 999, background: colors.dot, boxShadow: `0 0 14px ${colors.dot}66`, flex: "0 0 auto" }} />
-                  <h3>{play.title}</h3>
-                </div>
-                <p>{play.subtitle}</p>
-                <span className="pattern-play-button" style={{ borderColor: colors.border, background: colors.buttonBg, color: colors.buttonColor }}>
-                  {play.pattern === "macroSR" ? "Open macro S/R →" : "Open plays →"}
-                </span>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+                <span style={{ width: 7, height: 7, borderRadius: 999, background: c.dot, flex: "0 0 auto" }} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: c.color, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{play.title}</span>
               </div>
             </a>
           );
@@ -274,7 +283,7 @@ export default function PickersClient() {
       const checked = typeof data?.checked === "number" ? data.checked : 0;
       const deferred = typeof data?.deferredCount === "number" ? data.deferredCount : 0;
       const failed = typeof data?.failedCount === "number" ? data.failedCount : 0;
-      setEarningsFetchMessage(`Earnings warm-up checked ${checked} symbols, fetched ${fetched}, deferred ${deferred}, failed ${failed}.`);
+      setEarningsFetchMessage(`Checked ${checked}, fetched ${fetched}, deferred ${deferred}, failed ${failed}.`);
       const lockUntil = Date.now() + EARNINGS_FETCH_LOCK_MS;
       setEarningsFetchLockedUntil(lockUntil);
       try { window.localStorage.setItem("msh:lastEarningsFetchUntil", String(lockUntil)); } catch { /* ignore */ }
@@ -402,7 +411,7 @@ export default function PickersClient() {
       .slice(0, 4)
       .map((i) => ({ symbol: i.symbol, note: `${i.buyCount} buy signal${i.buyCount === 1 ? "" : "s"}`, tone: "green" as PickerTone, dashboardHref: i.dashboardHref }));
     if (!items.length) return null;
-    return { title: "Top Stocks With Buy Signals (Live Scan)", description: "Stocks showing multiple bullish technical conditions right now, ranked by how many buy signals are currently active.", items };
+    return { title: "Top Stocks With Buy Signals (Live Scan)", items };
   }, [safeSignalRecords]);
 
   const topSellSection = useMemo<PickerSection | null>(() => {
@@ -413,7 +422,7 @@ export default function PickersClient() {
       .slice(0, 4)
       .map((i) => ({ symbol: i.symbol, note: `${i.sellCount} sell signal${i.sellCount === 1 ? "" : "s"}`, tone: "red" as PickerTone, dashboardHref: i.dashboardHref }));
     if (!items.length) return null;
-    return { title: "Top Stocks With Sell Signals (Bearish Setups)", description: "Stocks showing multiple bearish technical signals right now, ranked by how many sell signals are currently active.", items };
+    return { title: "Top Stocks With Sell Signals (Bearish Setups)", items };
   }, [safeSignalRecords]);
 
   const displaySections = useMemo(() => {
@@ -453,180 +462,142 @@ export default function PickersClient() {
   return (
     <section aria-label="Live stock idea results" style={{ width: "100%", minWidth: 0 }}>
       <style>{`
-  @keyframes pickersBar { 0% { transform: translateX(-60%); opacity: 0.55; } 50% { transform: translateX(140%); opacity: 0.95; } 100% { transform: translateX(320%); opacity: 0.55; } }
-  @keyframes pickersPulseCard { 0%, 100% { box-shadow: 0 0 0 1px rgba(255,255,255,0.08) inset, 0 10px 30px rgba(59,130,246,0.10); filter: brightness(1); } 50% { box-shadow: 0 0 0 1px rgba(255,255,255,0.14) inset, 0 14px 40px rgba(59,130,246,0.22); filter: brightness(1.08); } }
-  @keyframes pickersShimmer { 0% { transform: translateX(-120%); } 70%, 100% { transform: translateX(140%); } }
-  .pickers-loading-card { position: relative; overflow: hidden; animation: pickersPulseCard 2.6s ease-in-out infinite; }
-  .pickers-loading-card::after { content: ""; position: absolute; inset: 0; background: linear-gradient(120deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.18) 50%, rgba(255,255,255,0) 100%); transform: translateX(-120%); animation: pickersShimmer 3.2s ease-in-out infinite; pointer-events: none; }
-  .pickers-more-link { position: relative; overflow: hidden; isolation: isolate; box-shadow: 0 0 0 1px rgba(255,255,255,0.03) inset, 0 10px 24px rgba(0,0,0,0.18); }
-  .pickers-more-link::after { content: ""; position: absolute; inset: -2px; z-index: -1; background: linear-gradient(120deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.34) 46%, rgba(255,255,255,0) 72%); transform: translateX(-130%); animation: pickersShimmer 3.8s ease-in-out infinite; pointer-events: none; }
-  .pickers-more-link:hover { filter: brightness(1.12); transform: translateY(-1px); }
+  @keyframes pickersBar { 0%{transform:translateX(-60%);opacity:0.55;} 50%{transform:translateX(140%);opacity:0.95;} 100%{transform:translateX(320%);opacity:0.55;} }
+  @keyframes pickersShimmer { 0%{transform:translateX(-120%);} 70%,100%{transform:translateX(140%);} }
+  .pickers-loading-bar { height:100%;width:35%;border-radius:999px;background:rgba(59,130,246,0.90);animation:pickersBar 1.1s linear infinite; }
 
-  /* ── Shell / layout ── */
-  .pickers-shell { width: 100%; min-width: 0; }
+  .pickers-shell { width:100%;min-width:0; }
 
-  /* ── Sections grid: 3 cols on wide, 2 on mid, 1 on mobile ── */
-  .pickers-sections-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: start; }
+  /* Sections: 3 col wide, 2 mid, 2 mobile */
+  .pickers-sections-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start; }
 
-  /* ── Each section's card grid: 2 cols always, tighter on mobile ── */
-  .pickers-section-results-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  /* Stock rows inside each section — no box, clean list */
+  .picker-row { display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.06); }
+  .picker-row:last-child { border-bottom:none; }
+  .picker-row-left { display:flex;align-items:center;gap:8px;min-width:0;flex:1; }
+  .picker-row-ticker { font-size:14px;font-weight:700;color:#e2e8f0;letter-spacing:0.01em; }
+  .picker-row-note { font-size:11px;color:rgba(148,163,184,0.65);font-weight:400;margin-left:2px; }
+  .picker-row-link { font-size:11px;font-weight:600;color:rgba(148,163,184,0.55);text-decoration:none;white-space:nowrap;flex:0 0 auto;transition:color 120ms ease; }
+  .picker-row-link:hover { color:#93c5fd !important; }
 
-  /* ── Pattern plays: 4 across on wide ── */
-  .pattern-plays-grid { margin-top: 16px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-  .pattern-play-card { display: grid; grid-template-rows: auto 1fr; gap: 10px; padding: 12px; border-radius: 16px; text-decoration: none; min-width: 0; box-sizing: border-box; box-shadow: inset 0 1px 0 rgba(255,255,255,0.035); transition: transform 150ms ease, filter 150ms ease, border-color 150ms ease; }
-  .pattern-play-card:hover { transform: translateY(-2px); filter: brightness(1.08); }
-  .playDiagram { width: 100%; display: block; border-radius: 14px; border: 1px solid rgba(255,255,255,0.08); background: rgba(2,6,23,0.64); }
-  .pattern-play-copy h3 { margin: 0; font-size: 15px; line-height: 1.2; letter-spacing: -0.025em; }
-  .pattern-play-copy p { margin: 6px 0 0; color: rgba(226,232,240,0.72); font-size: 12px; line-height: 1.5; }
-  .pattern-play-button { margin-top: 10px; min-height: 32px; padding: 6px 10px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; border: 1px solid; font-size: 11px; font-weight: 950; }
+  /* Pattern plays: 4 wide, 2 mid/mobile */
+  .pattern-plays-grid { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px; }
+  .pattern-play-card:hover { transform:translateY(-2px);filter:brightness(1.08); }
 
-  /* ── Screener filter grid: compact, 3 cols ── */
-  .pickers-filter-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  /* Screener filter grid */
+  .pickers-filter-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px; }
 
-  /* ── Custom results grid ── */
-  .pickers-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  /* Custom results */
+  .pickers-card-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px; }
 
-  .pickers-section-title { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
-  .pickers-section-title-text { min-width: 0; line-height: 1.22; }
-  .pickers-earnings-fetch-button:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
+  .pickers-section-title { display:flex;align-items:center;gap:6px;flex-wrap:nowrap; }
+  .pickers-section-title-text { min-width:0;line-height:1.22;font-size:14px;font-weight:700; }
+  .pickers-screener-panel { display:block; }
+  .pickers-earnings-fetch-button:hover:not(:disabled) { filter:brightness(1.08);transform:translateY(-1px); }
+  .pickers-more-link:hover { filter:brightness(1.12);transform:translateY(-1px); }
 
-  /* ── Screener panel — desktop only ── */
-  .pickers-screener-panel { display: block; }
-
-  /* ── Responsive breakpoints ── */
   @media (max-width: 1100px) {
-    .pickers-sections-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .pattern-plays-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .pickers-filter-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .pickers-sections-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .pattern-plays-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .pickers-filter-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
   }
 
   @media (max-width: 820px) {
-    .pickers-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .pickers-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .pickers-filter-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .pickers-card-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
   }
 
   @media (max-width: 640px) {
-    /* Screener hidden on mobile */
-    .pickers-screener-panel { display: none !important; }
-    /* Sections: 2-col */
-    .pickers-sections-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 10px; }
-    /* Pattern plays: 2-col */
-    .pattern-plays-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 10px; }
-    /* Each section results: 1-col on mobile (cards are wide enough with 2-col section grid) */
-    .pickers-section-results-grid { grid-template-columns: minmax(0, 1fr) !important; gap: 6px; }
-    /* Hide descriptions and notes to save space */
-    .pickers-section-description { display: none; }
-    .pickers-item-note { display: none !important; }
-    .pickers-item-note.pickers-item-note-show-mobile { display: inline !important; }
-    .pickers-help-tip { width: 20px !important; height: 20px !important; font-size: 12px !important; margin-left: 0 !important; flex: 0 0 20px !important; }
-    .pickers-note-desktop { display: none; }
-    .pickers-note-mobile { display: inline; }
-    /* Section title smaller */
-    .pickers-section-title-text { font-size: 15px !important; }
+    .pickers-screener-panel { display:none !important; }
+    .pickers-sections-grid { grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:8px; }
+    .pattern-plays-grid { grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:8px; }
+    .pickers-section-description { display:none; }
+    .pickers-help-tip { width:18px !important;height:18px !important;font-size:10px !important; }
+    .pickers-section-title-text { font-size:13px !important; }
+    .picker-row-note { display:none; }
   }
 
   @media (max-width: 400px) {
-    /* Very small: go 1-col sections */
-    .pickers-sections-grid { grid-template-columns: minmax(0, 1fr) !important; }
-    .pattern-plays-grid { grid-template-columns: minmax(0, 1fr) !important; }
+    .pickers-sections-grid { grid-template-columns:minmax(0,1fr) !important; }
+    .pattern-plays-grid { grid-template-columns:minmax(0,1fr) !important; }
   }
 `}</style>
 
       {loading ? (
-        <div className="pickers-shell pickers-loading-card" style={{ border: "1px solid rgba(255,255,255,0.12)", borderRadius: 18, padding: 18, background: "#0b1220", boxSizing: "border-box" }}>
-          <div style={{ fontSize: 22, fontWeight: 950, letterSpacing: "-0.2px" }}>We are gathering stocks for you, please wait…</div>
-          <div style={{ marginTop: 8, opacity: 0.75 }}>First load can take around 10–15 seconds. Cached loads are usually much faster.</div>
-          <div style={{ marginTop: 14, width: 420, maxWidth: "100%", height: 10, borderRadius: 999, overflow: "hidden", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.16)" }}>
-            <div style={{ height: "100%", width: "35%", borderRadius: 999, background: "rgba(59,130,246,0.95)", animation: "pickersBar 1.1s linear infinite" }} />
+        <div style={{ border: "1px solid rgba(255,255,255,0.10)", borderRadius: 14, padding: 18, background: "#0b1220", boxSizing: "border-box" }}>
+          <div style={{ fontSize: 18, fontWeight: 700 }}>Gathering stocks, please wait…</div>
+          <div style={{ marginTop: 6, fontSize: 13, opacity: 0.65 }}>First load can take 10–15 seconds. Cached loads are faster.</div>
+          <div style={{ marginTop: 14, width: 360, maxWidth: "100%", height: 6, borderRadius: 999, overflow: "hidden", background: "rgba(255,255,255,0.07)" }}>
+            <div className="pickers-loading-bar" />
           </div>
         </div>
       ) : null}
 
-      {err ? <div className="pickers-shell" style={{ border: "1px solid rgba(239,68,68,0.18)", borderRadius: 16, padding: 16, background: "rgba(239,68,68,0.08)", color: "#fecaca", boxSizing: "border-box" }}>{err}</div> : null}
+      {err ? <div style={{ border: "1px solid rgba(239,68,68,0.18)", borderRadius: 12, padding: 14, background: "rgba(239,68,68,0.06)", color: "#fecaca", fontSize: 14 }}>{err}</div> : null}
 
-      {/* ── Screener panel — desktop only, compact ── */}
+      {/* ── Screener panel — desktop only ── */}
       {!loading && !err ? (
-        <section className="pickers-screener-panel" style={{ border: "1px solid rgba(34,197,94,0.26)", borderRadius: 16, padding: "14px 16px", background: "linear-gradient(180deg, rgba(8,18,12,0.96), rgba(8,12,22,1))", marginBottom: 16, boxSizing: "border-box", overflow: "hidden" }}>
+        <section className="pickers-screener-panel" style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "12px 14px", background: "rgba(255,255,255,0.02)", marginBottom: 14, boxSizing: "border-box" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
             <div style={{ minWidth: 0 }}>
-              <h3 style={{ margin: 0, fontSize: 18, lineHeight: 1.1, letterSpacing: "-0.02em" }}>Custom Screener</h3>
-              <p style={{ margin: "4px 0 0 0", fontSize: 13, lineHeight: 1.5, opacity: 0.76, maxWidth: 600 }}>Choose multiple technical conditions — only stocks matching all selected filters will show.</p>
+              <span style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Custom Screener</span>
+              <span style={{ fontSize: 13, opacity: 0.55, marginLeft: 10 }}>Select conditions — only stocks matching all will show.</span>
             </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", flex: "0 0 auto" }}>
-              <button type="button" onClick={handleScreenerButton} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minHeight: 38, padding: "8px 14px", borderRadius: 10, fontWeight: 900, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap", border: "1px solid rgba(34,197,94,0.34)", background: screenerOpen ? "linear-gradient(180deg, rgba(20,83,45,0.98), rgba(21,128,61,0.88))" : "rgba(34,197,94,0.10)", color: "#dcfce7" }}>
-                {screenerOpen ? "Hide Filters" : "Open Filters"}
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flex: "0 0 auto" }}>
+              <button type="button" onClick={handleScreenerButton} style={{ display: "inline-flex", alignItems: "center", minHeight: 32, padding: "6px 12px", borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap", border: "1px solid rgba(34,197,94,0.28)", background: screenerOpen ? "rgba(34,197,94,0.14)" : "rgba(34,197,94,0.06)", color: "#86efac" }}>
+                {screenerOpen ? "Hide" : "Open Filters"}
               </button>
-              {customMode ? <button type="button" onClick={clearFilters} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minHeight: 38, padding: "8px 14px", borderRadius: 10, fontWeight: 900, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap", border: "1px solid rgba(239,68,68,0.34)", background: "linear-gradient(180deg, rgba(127,29,29,0.98), rgba(185,28,28,0.88))", color: "#fee2e2" }}>Clear ({selectedFilters.length})</button> : null}
+              {customMode ? <button type="button" onClick={clearFilters} style={{ display: "inline-flex", alignItems: "center", minHeight: 32, padding: "6px 12px", borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap", border: "1px solid rgba(239,68,68,0.28)", background: "rgba(239,68,68,0.06)", color: "#fca5a5" }}>Clear ({selectedFilters.length})</button> : null}
             </div>
           </div>
-
-          <div style={{ marginTop: screenerOpen ? 12 : 0, maxHeight: screenerOpen ? 1200 : 0, opacity: screenerOpen ? 1 : 0, overflow: "hidden", transform: screenerOpen ? "translateY(0)" : "translateY(-6px)", transition: "max-height 0.35s ease, opacity 0.22s ease, transform 0.26s ease, margin-top 0.26s ease" }}>
+          <div style={{ marginTop: screenerOpen ? 10 : 0, maxHeight: screenerOpen ? 1200 : 0, opacity: screenerOpen ? 1 : 0, overflow: "hidden", transition: "max-height 0.30s ease, opacity 0.18s ease, margin-top 0.20s ease" }}>
             <div className="pickers-filter-grid">
               {FILTER_DEFS.map((filter) => {
                 const active = selectedFilters.includes(filter.key);
                 return (
-                  <button key={filter.key} type="button" onClick={() => toggleFilter(filter.key)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 11px", minWidth: 0, borderRadius: 12, border: active ? `1px solid ${toneDot(filter.tone)}` : "1px solid rgba(255,255,255,0.12)", background: active ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.03)", color: "#f1f5f9", textAlign: "left", fontWeight: 850, fontSize: 13, cursor: "pointer", boxSizing: "border-box" }}>
-                    <span style={{ width: 8, height: 8, borderRadius: 999, background: toneDot(filter.tone), flex: "0 0 auto" }} />
+                  <button key={filter.key} type="button" onClick={() => toggleFilter(filter.key)} style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 10px", borderRadius: 9, border: active ? `1px solid ${toneDot(filter.tone)}` : "1px solid rgba(255,255,255,0.09)", background: active ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.02)", color: "#e2e8f0", textAlign: "left", fontWeight: active ? 700 : 500, fontSize: 12, cursor: "pointer", boxSizing: "border-box" }}>
+                    <span style={{ width: 7, height: 7, borderRadius: 999, background: toneDot(filter.tone), flex: "0 0 auto" }} />
                     <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{filter.label}</span>
                   </button>
                 );
               })}
             </div>
-            {customMode ? (
-              <div style={{ marginTop: 12, padding: 12, borderRadius: 12, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", boxSizing: "border-box" }}>
-                <div style={{ fontSize: 11, opacity: 0.7, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>Active filters</div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {selectedFilters.map((filter) => {
-                    const def = FILTER_DEFS.find((f) => f.key === filter);
-                    return <span key={filter} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 9px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.06)", fontSize: 12, fontWeight: 900 }}><span style={{ width: 7, height: 7, borderRadius: 999, background: toneDot(def?.tone) }} />{getFilterLabel(filter)}</span>;
-                  })}
-                </div>
-              </div>
-            ) : null}
           </div>
         </section>
       ) : null}
 
-      <div className="pickers-shell" style={{ marginTop: loading || err ? 20 : 0, display: "grid", gap: 14, boxSizing: "border-box" }}>
+      <div className="pickers-shell" style={{ marginTop: loading || err ? 16 : 0, display: "grid", gap: 12, boxSizing: "border-box" }}>
         {!loading && !err && !customMode ? <PatternPlaysSection /> : null}
 
         {customMode ? (
-          <section style={{ border: "1px solid rgba(255,255,255,0.14)", borderRadius: 16, padding: 16, background: "#0b1220", boxSizing: "border-box", overflow: "hidden" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline", flexWrap: "wrap" }}>
-              <div style={{ minWidth: 0 }}>
-                <h2 style={{ margin: 0, fontSize: 22, fontWeight: 950, letterSpacing: "-0.02em" }}>Custom Screener Results</h2>
-                <p style={{ margin: "8px 0 0", fontSize: 14, opacity: 0.72, lineHeight: 1.6 }}>Showing only stocks matching all selected filters.</p>
-              </div>
-              <div style={{ fontSize: 12, opacity: 0.7 }}>{customMatches.length} {customMatches.length === 1 ? "match" : "matches"}</div>
+          <section style={{ border: "1px solid rgba(255,255,255,0.10)", borderRadius: 12, padding: 14, background: "#0b1220", boxSizing: "border-box" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline", flexWrap: "wrap", marginBottom: 12 }}>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em" }}>Custom Screener Results</h2>
+              <div style={{ fontSize: 12, opacity: 0.55 }}>{customMatches.length} {customMatches.length === 1 ? "match" : "matches"}</div>
             </div>
             {customMatches.length ? (
-              <div className="pickers-card-grid" style={{ marginTop: 14 }}>
+              <div className="pickers-card-grid">
                 {customMatches.map((item) => (
-                  <a key={item.symbol} href={toChartHref(item.dashboardHref ?? "", item.symbol)} style={{ display: "block", minWidth: 0, textDecoration: "none", color: "#f1f5f9", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 16, padding: 14, background: "rgba(255,255,255,0.04)", boxSizing: "border-box" }} title={`View ${item.symbol} chart`}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                          <span style={{ width: 10, height: 10, borderRadius: 999, background: toneDot(item.displayTone), boxShadow: "0 0 0 3px rgba(255,255,255,0.04)", flex: "0 0 auto" }} />
-                          <div style={{ fontSize: 20, fontWeight: 950, minWidth: 0 }}>{item.symbol}</div>
-                        </div>
-                        {item.note ? <div style={{ marginTop: 8, fontSize: 13, lineHeight: 1.55, opacity: 0.72, wordBreak: "break-word" }}>{item.note}</div> : null}
+                  <a key={item.symbol} href={toChartHref(item.dashboardHref ?? "", item.symbol)} style={{ display: "block", textDecoration: "none", color: "#f1f5f9", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 10, padding: 12, background: "rgba(255,255,255,0.03)", boxSizing: "border-box" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: 999, background: toneDot(item.displayTone), flex: "0 0 auto" }} />
+                        <span style={{ fontSize: 16, fontWeight: 700 }}>{item.symbol}</span>
+                        {item.note ? <span style={{ fontSize: 11, opacity: 0.55 }}>{item.note}</span> : null}
                       </div>
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flex: "0 0 auto" }}>
-                        <a href={toChartHref(item.dashboardHref ?? "", item.symbol)} onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "8px 12px", borderRadius: 10, border: "1px solid rgba(34,197,94,0.35)", background: "rgba(34,197,94,0.12)", color: "#bbf7d0", textDecoration: "none", fontSize: 12, fontWeight: 900, whiteSpace: "nowrap" }}>Open chart ↗</a>
-                        <a href={`/stock/${encodeURIComponent(item.symbol)}`} onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "7px 10px", borderRadius: 10, border: "1px solid rgba(59,130,246,0.24)", background: "rgba(59,130,246,0.08)", color: "#dbeafe", textDecoration: "none", fontSize: 11, fontWeight: 900, whiteSpace: "nowrap" }}>Stock page ↗</a>
-                      </div>
+                      <a href={toChartHref(item.dashboardHref ?? "", item.symbol)} onClick={(e) => e.stopPropagation()} style={{ fontSize: 11, fontWeight: 600, color: "rgba(148,163,184,0.55)", textDecoration: "none" }}>Chart ↗</a>
                     </div>
-                    <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
                       {item.matchedSignals.map((signal) => {
                         const def = FILTER_DEFS.find((f) => f.key === signal);
-                        return <span key={`${item.symbol}-${signal}`} style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "7px 9px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.05)", fontSize: 11, fontWeight: 900, minWidth: 0 }}><span style={{ width: 7, height: 7, borderRadius: 999, background: toneDot(def?.tone), flex: "0 0 auto" }} /><span style={{ minWidth: 0 }}>{getFilterLabel(signal)}</span></span>;
+                        return <span key={`${item.symbol}-${signal}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 8px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.09)", background: "rgba(255,255,255,0.04)", fontSize: 11, fontWeight: 500 }}><span style={{ width: 6, height: 6, borderRadius: 999, background: toneDot(def?.tone), flex: "0 0 auto" }} />{getFilterLabel(signal)}</span>;
                       })}
                     </div>
                   </a>
                 ))}
               </div>
             ) : (
-              <div style={{ marginTop: 14, border: "1px solid rgba(255,255,255,0.10)", borderRadius: 14, padding: 16, background: "rgba(255,255,255,0.04)", lineHeight: 1.6, opacity: 0.82, boxSizing: "border-box" }}>No stocks currently match all selected filters. Try removing one condition or using a broader setup.</div>
+              <div style={{ fontSize: 14, opacity: 0.65, padding: "10px 0" }}>No stocks currently match all selected filters. Try removing one condition.</div>
             )}
           </section>
         ) : (
@@ -643,67 +614,63 @@ export default function PickersClient() {
                 : [];
 
               return (
-                <section key={sec.title} style={{ border: "1px solid rgba(255,255,255,0.14)", borderRadius: 14, padding: 14, background: "#0b1220", boxSizing: "border-box", overflow: "visible" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <h2 className="pickers-section-title" style={{ margin: 0, fontSize: 17, fontWeight: 950, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 6, flexWrap: "nowrap" }}>
-                        <span className="pickers-section-title-text">{sec.title}</span>
-                        <HelpTip text={getHeaderHelp(sec.title)} />
-                      </h2>
-                      {sec.description ? <p className="pickers-section-description" style={{ margin: "5px 0 0", fontSize: 12, opacity: 0.68, lineHeight: 1.5 }}>{sec.description}</p> : null}
-                    </div>
-                    <div style={{ fontSize: 11, opacity: 0.6, flex: "0 0 auto" }}>{typeof sec.foundCount === "number" ? `${sec.foundCount} found` : items.length ? `${items.length}` : "—"}</div>
+                <section key={sec.title} style={{ borderRadius: 12, padding: "12px 14px", background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.08)", boxSizing: "border-box" }}>
+                  {/* Section header */}
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 6, alignItems: "center", marginBottom: 8 }}>
+                    <h2 className="pickers-section-title" style={{ margin: 0, display: "flex", alignItems: "center", gap: 5, flexWrap: "nowrap", flex: 1, minWidth: 0 }}>
+                      <span className="pickers-section-title-text">{sec.title}</span>
+                      <HelpTip text={getHeaderHelp(sec.title)} />
+                    </h2>
+                    <span style={{ fontSize: 10, opacity: 0.40, flex: "0 0 auto" }}>{typeof sec.foundCount === "number" ? sec.foundCount : items.length}</span>
                   </div>
 
-                  <div className="pickers-section-results-grid" style={{ marginTop: 10 }}>
+                  {/* Stock rows — clean list, no individual boxes */}
+                  <div>
                     {items.map((it) => (
-                      <div key={it.symbol} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", alignItems: "center", gap: 8, border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: "9px 10px", background: "rgba(255,255,255,0.04)", boxSizing: "border-box" }}>
-                        <a href={toChartHref(it.dashboardHref ?? "", it.symbol)} style={{ display: "block", minWidth: 0, maxWidth: "100%", color: "#f1f5f9", textDecoration: "none", fontWeight: 900, overflow: "hidden" }} title={it.note ?? "Open in dashboard"}>
-                          <span style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
-                            <span style={{ width: 8, height: 8, borderRadius: 999, background: toneDot(it.tone), boxShadow: "0 0 0 3px rgba(255,255,255,0.04)", flex: "0 0 auto" }} />
-                            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 15 }}>{it.symbol}</span>
-                          </span>
-                          {it.note ? (
-                            <span className={`pickers-item-note${/MA200/i.test(it.note) ? " pickers-item-note-show-mobile" : ""}`} style={{ display: "block", marginTop: 3, paddingLeft: 15, fontSize: 11, lineHeight: 1.3, opacity: 0.65, fontWeight: 750, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                              <span className="pickers-note-desktop">{it.note}</span>
-                              <span className="pickers-note-mobile">{/Weekly/i.test(it.note) ? "Weekly" : /Daily/i.test(it.note) ? "Daily" : it.note}</span>
-                            </span>
-                          ) : null}
-                        </a>
-                        <a href={toChartHref(it.dashboardHref ?? "", it.symbol)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "6px 9px", borderRadius: 9, background: "rgba(148,163,184,0.06)", border: "1px solid rgba(148,163,184,0.16)", color: "#cbd5f5", textDecoration: "none", fontSize: 11, fontWeight: 900, whiteSpace: "nowrap", flex: "0 0 auto" }}>Chart ↗</a>
+                      <div key={it.symbol} className="picker-row">
+                        <div className="picker-row-left">
+                          <span style={{ width: 6, height: 6, borderRadius: 999, background: toneDot(it.tone), flex: "0 0 auto" }} />
+                          <a href={toChartHref(it.dashboardHref ?? "", it.symbol)} className="picker-row-ticker" style={{ textDecoration: "none" }}>
+                            {it.symbol}
+                          </a>
+                          {it.note ? <span className="picker-row-note">{it.note}</span> : null}
+                        </div>
+                        <a href={toChartHref(it.dashboardHref ?? "", it.symbol)} className="picker-row-link">Chart ↗</a>
                       </div>
                     ))}
                   </div>
 
+                  {/* Earnings fetch button */}
                   {sec.title.toLowerCase().includes("earnings") ? (
-                    <div style={{ marginTop: 10, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                      <button type="button" className="pickers-earnings-fetch-button" onClick={handleFetchEarnings} disabled={earningsFetchBusy || earningsFetchRemainingSeconds > 0} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minHeight: 34, padding: "6px 11px", borderRadius: 9, border: "1px solid rgba(34,197,94,0.30)", background: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? "rgba(34,197,94,0.07)" : "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(16,185,129,0.10))", color: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? "rgba(220,252,231,0.62)" : "#dcfce7", fontSize: 12, fontWeight: 950, cursor: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? "not-allowed" : "pointer", opacity: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? 0.76 : 1, transition: "transform 140ms ease, filter 140ms ease, opacity 140ms ease", whiteSpace: "nowrap" }}>
+                    <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <button type="button" className="pickers-earnings-fetch-button" onClick={handleFetchEarnings} disabled={earningsFetchBusy || earningsFetchRemainingSeconds > 0} style={{ display: "inline-flex", alignItems: "center", minHeight: 28, padding: "4px 10px", borderRadius: 7, border: "1px solid rgba(34,197,94,0.24)", background: "rgba(34,197,94,0.06)", color: "rgba(134,239,172,0.80)", fontSize: 11, fontWeight: 600, cursor: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? "not-allowed" : "pointer", opacity: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? 0.65 : 1, whiteSpace: "nowrap" }}>
                         {earningsFetchBusy ? "Fetching…" : earningsFetchRemainingSeconds > 0 ? `Fetch (${earningsFetchRemainingSeconds}s)` : "Fetch Earnings"}
                       </button>
-                      {earningsFetchMessage ? <span style={{ flex: "1 1 180px", minWidth: 0, color: "rgba(203,213,225,0.68)", fontSize: 11, lineHeight: 1.45, textAlign: "right" }}>{earningsFetchMessage}</span> : null}
+                      {earningsFetchMessage ? <span style={{ fontSize: 11, opacity: 0.55, lineHeight: 1.4 }}>{earningsFetchMessage}</span> : null}
                     </div>
                   ) : null}
 
+                  {/* See all link */}
                   {(() => {
                     const title = sec.title.toLowerCase();
-                    let seoHref = ""; let seoLabel = ""; let seoBorder = "1px solid rgba(59,130,246,0.22)"; let seoBackground = "rgba(59,130,246,0.08)"; let seoColor = "#dbeafe";
-                    if (title.includes("positive last earnings")) { seoHref = "/stocks-with-positive-last-earnings"; seoLabel = "See all →"; seoBorder = "1px solid rgba(34,197,94,0.22)"; seoBackground = "rgba(34,197,94,0.08)"; seoColor = "#dcfce7"; }
-                    else if (title.includes("strong earnings growth")) { seoHref = "/stocks-with-strong-earnings-growth"; seoLabel = "See all →"; seoBorder = "1px solid rgba(34,197,94,0.22)"; seoBackground = "rgba(34,197,94,0.08)"; seoColor = "#dcfce7"; }
-                    else if (title.includes("all-time high breakout")) { seoHref = "/all-time-high-breakout-stocks"; seoLabel = "See all →"; seoBorder = "1px solid rgba(251,146,60,0.22)"; seoBackground = "rgba(251,146,60,0.08)"; seoColor = "#fed7aa"; }
-                    else if (title.includes("3-month high breakout")) { seoHref = "/3-month-high-breakout-stocks"; seoLabel = "See all →"; seoBorder = "1px solid rgba(251,146,60,0.22)"; seoBackground = "rgba(251,146,60,0.08)"; seoColor = "#fed7aa"; }
-                    else if (title.includes("all-time highs")) { seoHref = "/stocks-down-20-from-all-time-highs"; seoLabel = "See all →"; seoBorder = "1px solid rgba(234,179,8,0.22)"; seoBackground = "rgba(234,179,8,0.08)"; seoColor = "#fef3c7"; }
-                    else if (title.includes("macro") && title.includes("support") && title.includes("resistance")) { seoHref = "/macro-support-resistance-stocks"; seoLabel = "See all →"; seoBorder = "1px solid rgba(96,165,250,0.24)"; seoBackground = "rgba(59,130,246,0.09)"; seoColor = "#dbeafe"; }
-                    else if (title.includes("buy signals")) { seoHref = "/top-stocks-with-buy-signals"; seoLabel = "See all →"; seoBorder = "1px solid rgba(34,197,94,0.22)"; seoBackground = "rgba(34,197,94,0.08)"; seoColor = "#dcfce7"; }
-                    else if (title.includes("sell signals")) { seoHref = "/top-stocks-with-sell-signals"; seoLabel = "See all →"; seoBorder = "1px solid rgba(239,68,68,0.22)"; seoBackground = "rgba(239,68,68,0.08)"; seoColor = "#fecaca"; }
-                    else if (title.includes("oversold")) { seoHref = "/oversold-stocks-today"; seoLabel = "See all →"; seoBorder = "1px solid rgba(34,197,94,0.22)"; seoBackground = "rgba(34,197,94,0.08)"; seoColor = "#dcfce7"; }
-                    else if (title.includes("overbought")) { seoHref = "/overbought-stocks-today"; seoLabel = "See all →"; seoBorder = "1px solid rgba(239,68,68,0.22)"; seoBackground = "rgba(239,68,68,0.08)"; seoColor = "#fecaca"; }
-                    else if (title.includes("best trend score")) { seoHref = "/best-trend-score-stocks"; seoLabel = "See all →"; seoBorder = "1px solid rgba(34,197,94,0.22)"; seoBackground = "rgba(34,197,94,0.08)"; seoColor = "#dcfce7"; }
-                    else if (title.includes("divergence")) { seoHref = "/bullish-bearish-divergence-stocks"; seoLabel = "See all →"; seoBorder = "1px solid rgba(168,85,247,0.22)"; seoBackground = "rgba(168,85,247,0.08)"; seoColor = "#f3e8ff"; }
-                    else if (title.includes("200")) { seoHref = "/stocks-near-200-day-moving-average"; seoLabel = "See all →"; }
+                    let seoHref = ""; let seoColor = "rgba(148,163,184,0.50)";
+                    if (title.includes("positive last earnings")) { seoHref = "/stocks-with-positive-last-earnings"; }
+                    else if (title.includes("strong earnings growth")) { seoHref = "/stocks-with-strong-earnings-growth"; }
+                    else if (title.includes("all-time high breakout")) { seoHref = "/all-time-high-breakout-stocks"; }
+                    else if (title.includes("3-month high breakout")) { seoHref = "/3-month-high-breakout-stocks"; }
+                    else if (title.includes("all-time highs")) { seoHref = "/stocks-down-20-from-all-time-highs"; }
+                    else if (title.includes("macro") && title.includes("support") && title.includes("resistance")) { seoHref = "/macro-support-resistance-stocks"; }
+                    else if (title.includes("buy signals")) { seoHref = "/top-stocks-with-buy-signals"; seoColor = "rgba(134,239,172,0.55)"; }
+                    else if (title.includes("sell signals")) { seoHref = "/top-stocks-with-sell-signals"; seoColor = "rgba(252,165,165,0.55)"; }
+                    else if (title.includes("oversold")) { seoHref = "/oversold-stocks-today"; seoColor = "rgba(134,239,172,0.55)"; }
+                    else if (title.includes("overbought")) { seoHref = "/overbought-stocks-today"; seoColor = "rgba(252,165,165,0.55)"; }
+                    else if (title.includes("best trend score")) { seoHref = "/best-trend-score-stocks"; }
+                    else if (title.includes("divergence")) { seoHref = "/bullish-bearish-divergence-stocks"; }
+                    else if (title.includes("200")) { seoHref = "/stocks-near-200-day-moving-average"; }
                     if (!seoHref) return null;
                     return (
-                      <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
-                        <a href={seoHref} className="pickers-more-link" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "6px 11px", borderRadius: 9, border: seoBorder, background: seoBackground, color: seoColor, textDecoration: "none", fontSize: 11, fontWeight: 900, whiteSpace: "nowrap" }}>{seoLabel}</a>
+                      <div style={{ marginTop: 8, textAlign: "right" }}>
+                        <a href={seoHref} className="pickers-more-link" style={{ fontSize: 11, fontWeight: 600, color: seoColor, textDecoration: "none" }}>See all →</a>
                       </div>
                     );
                   })()}
@@ -714,19 +681,17 @@ export default function PickersClient() {
         )}
 
         {!loading && !err && SHOW_FORCE_FETCH_BUTTON ? (
-          <div style={{ marginTop: 18, display: "flex", justifyContent: "center" }}>
-            <button type="button" onClick={() => { void loadPickers(true); }} disabled={forceRefreshing} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minHeight: 44, padding: "10px 16px", borderRadius: 12, fontWeight: 900, fontSize: 14, cursor: forceRefreshing ? "wait" : "pointer", transition: "all 0.2s ease", whiteSpace: "nowrap", border: "1px solid rgba(59,130,246,0.28)", background: forceRefreshing ? "rgba(59,130,246,0.12)" : "rgba(59,130,246,0.08)", color: "#dbeafe", opacity: forceRefreshing ? 0.78 : 1 }}>
-              {forceRefreshing ? "Force refreshing…" : "Force Refresh Pickers"}
+          <div style={{ marginTop: 14, display: "flex", justifyContent: "center" }}>
+            <button type="button" onClick={() => { void loadPickers(true); }} disabled={forceRefreshing} style={{ minHeight: 38, padding: "8px 14px", borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: forceRefreshing ? "wait" : "pointer", border: "1px solid rgba(59,130,246,0.24)", background: "rgba(59,130,246,0.06)", color: "#93c5fd", opacity: forceRefreshing ? 0.70 : 1 }}>
+              {forceRefreshing ? "Refreshing…" : "Force Refresh"}
             </button>
           </div>
         ) : null}
 
-        {!loading && !err && (updatedAt || universeSize || dynamicUniverseCount || estimatedApiCalls) ? (
-          <div style={{ marginTop: 6, paddingTop: 4, fontSize: 10, lineHeight: 1.55, opacity: 0.34, textAlign: "right", letterSpacing: "0.01em", userSelect: "none" }}>
+        {!loading && !err && (updatedAt || universeSize) ? (
+          <div style={{ marginTop: 4, fontSize: 10, lineHeight: 1.5, opacity: 0.28, textAlign: "right", userSelect: "none" }}>
             {updatedAt ? <div>{new Date(updatedAt).toLocaleString()}</div> : null}
             {universeSize != null ? <div>Universe: {universeSize}</div> : null}
-            {dynamicUniverseCount != null ? <div>Dynamic: {dynamicUniverseCount}</div> : null}
-            {estimatedApiCalls != null ? <div>Estimated: {estimatedApiCalls}</div> : null}
           </div>
         ) : null}
       </div>
