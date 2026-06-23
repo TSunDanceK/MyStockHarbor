@@ -482,33 +482,52 @@ export default async function InsightsPage() {
 
                 {featuredVideo ? (
                   <div style={{ marginTop: 14 }}>
-                    <div
-                      style={{
-                        position: "relative",
-                        width: "100%",
-                        paddingTop: "56.25%",
-                        borderRadius: 16,
-                        overflow: "hidden",
-                        border: "1px solid rgba(255,255,255,0.10)",
-                        background: "#000",
-                      }}
+                    <Link
+                      href={`/insights/videos/${featuredVideo.id}`}
+                      style={{ display: "block", textDecoration: "none", color: "inherit" }}
                     >
-                      <iframe
-                        src={featuredVideo.embedUrl}
-                        title={featuredVideo.title}
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                        allowFullScreen
-                        loading="lazy"
-                        referrerPolicy="strict-origin-when-cross-origin"
+                      <div
                         style={{
-                          position: "absolute",
-                          inset: 0,
+                          position: "relative",
                           width: "100%",
-                          height: "100%",
-                          border: 0,
+                          paddingTop: "56.25%",
+                          borderRadius: 16,
+                          overflow: "hidden",
+                          border: "1px solid rgba(255,255,255,0.10)",
+                          background: "#000",
                         }}
-                      />
-                    </div>
+                      >
+                        {featuredVideo.thumbnailUrl ? (
+                          <img
+                            src={featuredVideo.thumbnailUrl}
+                            alt={featuredVideo.title}
+                            style={{
+                              position: "absolute",
+                              inset: 0,
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "cover",
+                            }}
+                          />
+                        ) : null}
+                        {/* Play overlay */}
+                        <div style={{
+                          position: "absolute", inset: 0,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          background: "rgba(0,0,0,0.35)",
+                        }}>
+                          <div style={{
+                            width: 52, height: 52, borderRadius: "50%",
+                            background: "rgba(239,68,68,0.85)",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                          }}>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+                              <path d="M8 5v14l11-7z"/>
+                            </svg>
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
 
                     <div
                       style={{
@@ -557,11 +576,9 @@ export default async function InsightsPage() {
                     }}
                   >
                     {secondaryVideos.map((video) => (
-                      <a
+                      <Link
                         key={video.id}
-                        href={video.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        href={`/insights/videos/${video.id}`}
                         style={{
                           display: "grid",
                           gridTemplateColumns: "116px minmax(0, 1fr)",
@@ -619,7 +636,7 @@ export default async function InsightsPage() {
                             {formatVideoDate(video.publishedAt)}
                           </div>
                         </div>
-                      </a>
+                      </Link>
                     ))}
                   </div>
                 ) : null}
