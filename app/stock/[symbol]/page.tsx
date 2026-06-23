@@ -1,25 +1,95 @@
+// app/stock/[symbol]/page.tsx
 import type { Metadata } from "next";
-
+import { getDailyHistory } from "@/lib/server/historyCache";
+import { getAiStockAnalysis } from "@/lib/ai-stock-analysis";
+import {
+  computeIndicatorSeed,
+  buildSeoTitle,
+  buildSeoDescription,
+  type IndicatorSeed,
+  type Point,
+} from "@/lib/indicators";
 import StockSymbolPageClient from "./StockSymbolPageClient";
-
 
 type Props = {
   params: Promise<{ symbol: string }>;
 };
 
+// ── Server-side data fetching ────────────────────────────────────────────────
+
+async function fetchQuotePrice(
+  symbol: string
+): Promise<{ price: number | null; date: string | null }> {
+  const apiKey = process.env.FMP_API_KEY;
+  if (!apiKey) return { price: null, date: null };
+  try {
+    const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(
+      symbol
+    )}&apikey=${encodeURIComponent(apiKey)}`;
+    const res = await fetch(url, {
+      next: { revalidate: 900 },
+      headers: { accept: "application/json" },
+    });
+    if (!res.ok) return { price: null, date: null };
+    const json = await res.json();
+    const row = Array.isArray(json) ? json[0] : json;
+    const price =
+      typeof row?.price === "number" && Number.isFinite(row.price)
+        ? (row.price as number)
+        : null;
+    return { price, date: new Date().toISOString().slice(0, 10) };
+  } catch {
+    return { price: null, date: null };
+  }
+}
+
+async function fetchCompanyName(symbol: string): Promise<string> {
+  try {
+    const url = new URL(
+      `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mystockharbor.com"}/api/symbols`
+    );
+    url.searchParams.set("q", symbol);
+    const res = await fetch(url.toString(), { next: { revalidate: 3600 } });
+    if (!res.ok) return "";
+    const data = await res.json();
+    const exact = (
+      (data?.results ?? []) as Array<{ symbol?: string; name?: string }>
+    ).find((r) => (r.symbol ?? "").toUpperCase() === symbol.toUpperCase());
+    return exact?.name ?? "";
+  } catch {
+    return "";
+  }
+}
+
+// ── Metadata (dynamic, data-driven) ─────────────────────────────────────────
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { symbol } = await params;
   const upper = symbol.toUpperCase();
 
+  // Run history + quote in parallel; we only need these for meta generation.
+  const [rawHistory, { price, date }] = await Promise.all([
+    getDailyHistory(upper).catch(() => []),
+    fetchQuotePrice(upper),
+  ]);
+
+  const points: Point[] = (rawHistory as Point[]).filter(
+    (p) => p.date && Number.isFinite(p.close)
+  );
+
+  const seed = computeIndicatorSeed(points, "", price, date);
+  const title = buildSeoTitle(upper, seed);
+  const description = buildSeoDescription(upper, seed);
+
   return {
-    title: `${upper} Stock Analysis: Chart, RSI, MACD & Macro Support | MyStockHarbor`,
-    description: `View ${upper} stock analysis with chart context, RSI, MACD, moving averages, macro support levels and trade context from MyStockHarbor.`,
+    title,
+    description,
     alternates: {
       canonical: `https://www.mystockharbor.com/stock/${upper}`,
     },
     openGraph: {
       title: `${upper} Stock Analysis | MyStockHarbor`,
-      description: `Company overview, AI outlook, trade context, RSI, MACD, moving averages and macro support analysis for ${upper}.`,
+      description,
       url: `https://www.mystockharbor.com/stock/${upper}`,
       siteName: "MyStockHarbor",
       type: "article",
@@ -35,16 +105,42 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     twitter: {
       card: "summary_large_image",
       title: `${upper} Stock Analysis | MyStockHarbor`,
-      description: `Company overview, AI outlook, trade context, RSI, MACD, moving averages and macro support summary for ${upper}.`,
+      description,
       images: ["https://www.mystockharbor.com/og-image-v2.png"],
     },
   };
 }
 
+// ── Page (SSR seed + AI analysis both resolved server-side) ─────────────────
 
 export default async function StockPage({ params }: Props) {
   const { symbol } = await params;
   const upper = symbol.toUpperCase();
+
+  // Fetch everything in parallel — none of these block each other.
+  const [rawHistory, { price, date }, companyName, aiAnalysis] =
+    await Promise.all([
+      getDailyHistory(upper).catch(() => [] as Point[]),
+      fetchQuotePrice(upper),
+      fetchCompanyName(upper),
+      getAiStockAnalysis(upper).catch(() => null),
+    ]);
+
+  const points: Point[] = (rawHistory as Point[]).filter(
+    (p) => p.date && Number.isFinite(p.close)
+  );
+
+  // Compute indicators once on the server; pass as seed so the client
+  // renders real content immediately rather than showing "Loading…".
+  const seed: IndicatorSeed = computeIndicatorSeed(
+    points,
+    companyName,
+    price,
+    date
+  );
+
+  const seoTitle = buildSeoTitle(upper, seed);
+  const seoDescription = buildSeoDescription(upper, seed);
 
   return (
     <>
@@ -77,8 +173,8 @@ export default async function StockPage({ params }: Props) {
                 "@type": "WebPage",
                 "@id": `https://www.mystockharbor.com/stock/${upper}#webpage`,
                 url: `https://www.mystockharbor.com/stock/${upper}`,
-                name: `${upper} Stock Analysis | MyStockHarbor`,
-                description: `View ${upper} stock analysis with company overview, AI outlook, trade context, RSI, MACD, moving averages, macro support levels and chart-based insights from MyStockHarbor.`,
+                name: seoTitle,
+                description: seoDescription,
                 isPartOf: {
                   "@id": "https://www.mystockharbor.com/#website",
                 },
@@ -99,7 +195,7 @@ export default async function StockPage({ params }: Props) {
                   "@id": "https://www.mystockharbor.com/#organization",
                 },
                 url: `https://www.mystockharbor.com/stock/${upper}`,
-                description: `${upper} stock analysis with AI business overview, outlook scores, trade context, RSI, MACD, moving averages and macro support context.`,
+                description: seoDescription,
               },
               {
                 "@type": "BreadcrumbList",
@@ -124,8 +220,11 @@ export default async function StockPage({ params }: Props) {
         }}
       />
 
-<StockSymbolPageClient symbol={upper} aiAnalysis={null} />
+      <StockSymbolPageClient
+        symbol={upper}
+        aiAnalysis={aiAnalysis}
+        seed={seed}
+      />
     </>
   );
 }
-
