@@ -145,7 +145,7 @@ export default async function VideoPage({ params }: Props) {
                   <div dangerouslySetInnerHTML={{ __html: contentHtml }} />
                 </article>
               ) : (
-                <div style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.025)", padding: "18px 22px", marginBottom: 24, opacity: 0.6, fontSize: 14, lineHeight: 1.6 }}>Written analysis coming soon — watch the video above for the full breakdown.</div>
+                <div style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.025)", padding: "18px 22px", marginBottom: 24, opacity: 0.6, fontSize: 18, lineHeight: 1.8 }}>Written analysis coming soon — watch the video above for the full breakdown.</div>
               )}
 
               {/* Datasheet — only rendered when the image path is set, no placeholder */}
@@ -156,7 +156,7 @@ export default async function VideoPage({ params }: Props) {
                 </div>
               )}
 
-              <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)", padding: "12px 16px", fontSize: 12, opacity: 0.5, lineHeight: 1.6, marginBottom: 24 }}>
+              <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)", padding: "12px 16px", fontSize: 13, opacity: 0.5, lineHeight: 1.6, marginBottom: 24 }}>
                 This page is for educational purposes only and does not constitute financial advice. Always do your own research before making any investment decisions.
               </div>
 
@@ -203,35 +203,35 @@ export default async function VideoPage({ params }: Props) {
 
         <style>{`
           .video-article {
-            font-size: 15px;
-            line-height: 1.75;
+            font-size: 18px;
+            line-height: 1.8;
             color: #cbd5e1;
           }
           .video-article h2 {
-            font-size: 20px;
+            font-size: 24px;
             font-weight: 800;
             color: #f1f5f9;
-            margin: 32px 0 12px;
+            margin: 36px 0 14px;
             letter-spacing: -0.3px;
             line-height: 1.25;
-            padding-bottom: 8px;
+            padding-bottom: 10px;
             border-bottom: 1px solid rgba(255,255,255,0.08);
           }
           .video-article h2:first-child { margin-top: 0; }
           .video-article p {
-            margin: 0 0 16px;
-            line-height: 1.8;
+            margin: 0 0 20px;
+            line-height: 1.85;
           }
           .video-article p:last-child { margin-bottom: 0; }
           .video-article ul {
-            margin: 0 0 16px;
+            margin: 0 0 20px;
             padding: 0;
             list-style: none;
           }
           .video-article ul li {
             position: relative;
-            padding: 10px 0 10px 20px;
-            line-height: 1.7;
+            padding: 12px 0 12px 24px;
+            line-height: 1.75;
             border-bottom: 1px solid rgba(255,255,255,0.05);
           }
           .video-article ul li:last-child { border-bottom: none; padding-bottom: 0; }
@@ -239,12 +239,11 @@ export default async function VideoPage({ params }: Props) {
             content: '';
             position: absolute;
             left: 0;
-            top: 19px;
-            width: 6px;
-            height: 6px;
+            top: 22px;
+            width: 7px;
+            height: 7px;
             border-radius: 50%;
             background: rgba(59,130,246,0.8);
-            flex-shrink: 0;
           }
           .video-article strong {
             font-weight: 800;
