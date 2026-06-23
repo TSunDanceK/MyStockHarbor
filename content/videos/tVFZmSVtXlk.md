@@ -1,14 +1,14 @@
 ---
 ticker: IFX
-datasheetImage:
-statLabel1: Q2 FY26 revenue
-statValue1: €3.81B
-statLabel2: Order backlog
-statValue2: ~€21B
-statLabel3: AI revenue FY26
-statValue3: €1.5B guided
-statLabel4: AI revenue FY27
-statValue4: €2.5B target
+datasheetImage: /images/datasheets/ifx-june-2026.png
+statLabel1: Market cap
+statValue1: ~€106.6B
+statLabel2: Q2 FY26 revenue
+statValue2: €3.81B +6%
+statLabel3: AI revenue FY26→27
+statValue3: €1.5B → €2.5B
+statLabel4: FY26 guidance
+statValue4: >€16B
 ---
 
 ## The thesis
@@ -19,11 +19,12 @@ The market writes Infineon off as a German automotive chipmaker and moves on. Th
 
 ## Key numbers
 
-- **Q2 FY26 revenue:** €3.81B — 6% sequential growth, with advanced AI demand offsetting cyclical headwinds elsewhere
-- **Order backlog:** ~€21B — continuing to grow last quarter even during a cautious broader semiconductor cycle; reflects locked-in infrastructure supply, not speculative demand
-- **AI-specific revenue guidance:** €1.5B this fiscal year, climbing to €2.5B by 2027 — before the 800V architecture reaches full commercial scale
-- **Capital reallocation:** €500M shifted from automotive high-voltage to AI data center power investment — management actively fast-tracking capital to the highest-growth segment
-- **GaN efficiency:** High-frequency Gallium Nitride switches running at near 1 million cycles per second, achieving above 98% efficiency per stage
+- **Market cap:** ~€106.6B — among Europe's largest chipmakers, priced for a strong AI-driven recovery
+- **Q2 FY26 revenue:** €3.81B, +6% sequential — sixth straight quarter of sequential growth as AI and auto demand both firmed up
+- **Segment margin:** 17.1% in Q2 — climbed from 14.5% the prior quarter as higher-value AI power volumes scale
+- **AI data center power revenue:** €1.5B guided for FY26, climbing to €2.5B by FY27 — supply-limited, not demand-capped
+- **Full-year FY26 guidance:** >€16B revenue — raised twice this year, from moderate to significant year-on-year growth
+- **Free cash flow guidance:** ~€1.25B — raised from €1.0B even as €2.7B is being poured into new AI power capacity
 
 ## The setup
 
@@ -33,9 +34,9 @@ Infineon's moat is its multi-material approach: Silicon, Silicon Carbide (SiC), 
 
 ## Risk factors
 
-- **Automotive segment drag:** The high-voltage automotive business is facing margin pressure from the broader EV slowdown. Management is reallocating capital away from it, but it remains a near-term earnings headwind while the transition plays out.
-- **Cyclical semiconductor exposure:** The broader semiconductor cycle is cautious. Despite the AI tailwind, Infineon is not immune to end-market softness in industrial and consumer segments.
-- **European currency and macro risk:** IFX trades in euros and is exposed to European macro conditions, energy costs, and potential regulatory headwinds that US-listed peers don't face to the same degree.
+- **Auto high-voltage and China exposure:** E-mobility pricing pressure and a China slowdown have already triggered one analyst downgrade. The automotive high-voltage segment faces near-term margin pressure while the EV cycle works through its reset.
+- **Valuation multiple:** P/E TTM of ~94x reflects trailing earnings still depressed from the recent downcycle. Any growth disappointment at this multiple gets punished hard.
+- **Cyclical semiconductor exposure:** Despite the AI tailwind, Infineon is not immune to end-market softness in industrial and consumer segments across the broader cycle.
 
 ## What to watch
 
