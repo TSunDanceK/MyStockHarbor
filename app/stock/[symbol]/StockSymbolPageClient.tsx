@@ -698,7 +698,7 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis }: StockSymbo
             {companyName ? <p style={{ margin: "3px 0 0", fontSize: 15, opacity: 0.60, fontWeight: 400 }}>{companyName}</p> : null}
           </div>
 
-          {/* Stats grid — 2-col on mobile, horizontal strip on desktop */}
+          {/* Stats grid */}
           {!priceLoading && !err ? (
             <div className="stock-header-stats" style={{ marginTop: 16 }}>
               <div className="stock-stat-cell">
@@ -772,7 +772,7 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis }: StockSymbo
               <StockPriceChart symbol={symbol} data={history.slice(-240)} ma50={ma50.slice(-240)} ma200={ma200.slice(-240)} height={360} />
             </section>
 
-            {/* ── Technical indicators as bullet rows ─────────────── */}
+            {/* ── Technical indicators ─────────────────────────────── */}
             <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
               <div style={sectionLabelStyle}>Technical Indicators</div>
               <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>Key levels &amp; signals</h2>
@@ -943,7 +943,7 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis }: StockSymbo
         .stock-wrap { max-width: 1240px; margin: 0 auto; padding: 0 20px; box-sizing: border-box; }
 
         /* ── Header stats ─────────────────────────────────────────── */
-        /* Desktop: horizontal flex row with dividers */
+        /* Desktop: horizontal flex row — metric cells narrower, earnings cell wider */
         .stock-header-stats {
           display: flex;
           align-items: stretch;
@@ -953,7 +953,7 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis }: StockSymbo
           overflow: hidden;
         }
         .stock-stat-cell {
-          flex: 1 1 0;
+          flex: 0.7 1 0;
           padding: 12px 14px;
           border-right: 1px solid rgba(255,255,255,0.07);
           min-width: 0;
@@ -962,8 +962,8 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis }: StockSymbo
         .stock-stat-label { font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; opacity: 0.55; }
         .stock-stat-value { font-size: 22px; font-weight: 800; letter-spacing: -0.03em; margin-top: 4px; line-height: 1; }
         .stock-stat-sub { font-size: 11px; opacity: 0.48; margin-top: 3px; }
-        /* Earnings cell spans full width of its column */
-        .stock-earnings-cell { flex: 0 0 auto; min-width: 160px; }
+        /* Earnings cell: wider flex share so score, bar and labels have room */
+        .stock-earnings-cell { flex: 2.2 1 0 !important; min-width: 180px; }
 
         /* Mobile: 2-col grid, no horizontal scroll */
         @media (max-width: 640px) {
@@ -973,6 +973,7 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis }: StockSymbo
             border-radius: 10px;
           }
           .stock-stat-cell {
+            flex: unset !important;
             border-right: none !important;
             border-bottom: 1px solid rgba(255,255,255,0.07);
           }
@@ -983,12 +984,34 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis }: StockSymbo
         }
 
         /* ── Indicator rows ───────────────────────────────────────── */
-        .indicator-rows { display: grid; gap: 0; }
-        .indicator-row { display: flex; align-items: center; gap: 14px; padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+        /* Desktop: 2-column grid to reduce vertical scroll */
+        .indicator-rows {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 0 32px;
+        }
+        .indicator-row {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          padding: 11px 0;
+          border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
         .indicator-row:last-child { border-bottom: none; }
+        /* On desktop with 6 items (3 per col), also remove border from item 4 (last in col 1) */
+        .indicator-row:nth-child(3) { border-bottom: none; }
+
+        /* Mobile: back to single column */
+        @media (max-width: 640px) {
+          .indicator-rows { grid-template-columns: 1fr !important; }
+          .indicator-row:nth-child(3) { border-bottom: 1px solid rgba(255,255,255,0.06); }
+          .indicator-row:last-child { border-bottom: none; }
+          .indicator-row { flex-direction: column; align-items: flex-start; gap: 3px; }
+        }
 
         /* ── Grids ────────────────────────────────────────────────── */
         .factor-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+        /* Desktop: 3-col earnings grid */
         .earningsMetricGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; }
         .earningsDotGrid { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
         .yearlyEarningsGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
@@ -1006,9 +1029,9 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis }: StockSymbo
 
         @media (max-width: 640px) {
           .stock-wrap { padding: 0 14px; }
-          .earningsMetricGrid { grid-template-columns: 1fr !important; }
+          /* Mobile: earnings snapshot in 2 columns instead of 1 */
+          .earningsMetricGrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
           .explore-grid { grid-template-columns: 1fr !important; }
-          .indicator-row { flex-direction: column; align-items: flex-start; gap: 3px; }
         }
       `}</style>
     </main>
