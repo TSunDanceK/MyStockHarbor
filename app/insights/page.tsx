@@ -63,7 +63,8 @@ function formatVideoDate(value: string) {
 
 export default async function InsightsPage() {
   const posts = getAllPosts();
-  const videos = await getLatestYouTubeVideos(7);
+  // 20 videos — grows automatically as new ones are uploaded to YouTube
+  const videos = await getLatestYouTubeVideos(20);
 
   const insightsJsonLd = {
     "@context": "https://schema.org",
@@ -251,7 +252,7 @@ export default async function InsightsPage() {
               )}
             </div>
 
-            {/* RIGHT — YouTube videos, all uniform cards */}
+            {/* RIGHT — YouTube video list, scrollable panel */}
             <aside className="insightsYouTubeColumn" style={{ position: "sticky", top: 24, display: "grid", gap: 16 }}>
               <section style={panelCardStyle()}>
                 <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900, letterSpacing: "0.05em", textTransform: "uppercase", color: "#fecaca" }}>
@@ -264,47 +265,50 @@ export default async function InsightsPage() {
                   Watch the latest market narratives, stock stories, and bigger-picture analysis on YouTube.
                 </p>
 
-                {videos.length === 0 ? (
-                  <div style={{ marginTop: 14, borderRadius: 16, border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.03)", padding: 16, opacity: 0.78, lineHeight: 1.7 }}>
-                    Latest videos could not be loaded right now.
-                  </div>
-                ) : (
-                  <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
-                    {videos.map((video) => (
-                      <Link
-                        key={video.id}
-                        href={`/insights/videos/${video.id}`}
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "116px minmax(0, 1fr)",
-                          gap: 12,
-                          textDecoration: "none",
-                          color: "#f1f5f9",
-                          borderRadius: 14,
-                          border: "1px solid rgba(255,255,255,0.08)",
-                          background: "rgba(255,255,255,0.03)",
-                          padding: 10,
-                        }}
-                      >
-                        <div style={{ width: "100%", aspectRatio: "16 / 9", borderRadius: 10, overflow: "hidden", background: "#0b1220" }}>
-                          {video.thumbnailUrl ? (
-                            <img
-                              src={video.thumbnailUrl}
-                              alt={video.title}
-                              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                            />
-                          ) : null}
-                        </div>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontWeight: 900, lineHeight: 1.45 }}>{video.title}</div>
-                          <div style={{ marginTop: 8, fontSize: 12, opacity: 0.66, fontWeight: 700 }}>
-                            {formatVideoDate(video.publishedAt)}
+                {/* Scrollable video list — max height keeps the panel from dominating the page */}
+                <div style={{ marginTop: 14, maxHeight: "70vh", overflowY: "auto", paddingRight: 2 }}>
+                  {videos.length === 0 ? (
+                    <div style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.03)", padding: 16, opacity: 0.78, lineHeight: 1.7 }}>
+                      Latest videos could not be loaded right now.
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 12 }}>
+                      {videos.map((video) => (
+                        <Link
+                          key={video.id}
+                          href={`/insights/videos/${video.id}`}
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "116px minmax(0, 1fr)",
+                            gap: 12,
+                            textDecoration: "none",
+                            color: "#f1f5f9",
+                            borderRadius: 14,
+                            border: "1px solid rgba(255,255,255,0.08)",
+                            background: "rgba(255,255,255,0.03)",
+                            padding: 10,
+                          }}
+                        >
+                          <div style={{ width: "100%", aspectRatio: "16 / 9", borderRadius: 10, overflow: "hidden", background: "#0b1220" }}>
+                            {video.thumbnailUrl ? (
+                              <img
+                                src={video.thumbnailUrl}
+                                alt={video.title}
+                                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                              />
+                            ) : null}
                           </div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                )}
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 14, fontWeight: 900, lineHeight: 1.45 }}>{video.title}</div>
+                            <div style={{ marginTop: 8, fontSize: 12, opacity: 0.66, fontWeight: 700 }}>
+                              {formatVideoDate(video.publishedAt)}
+                            </div>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                 <a
                   href={YOUTUBE_CHANNEL_URL}
