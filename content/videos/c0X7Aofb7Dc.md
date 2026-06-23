@@ -1,13 +1,13 @@
 ---
 datasheetImage: /images/datasheets/humanoid-robots-june-2026.png
 statLabel1: Actuator cost share
-statValue1: ~50% of BOM
+statValue1: "~50% of BOM"
 statLabel2: Modules per robot
-statValue2: 28–40
+statValue2: 28-40
 statLabel3: Nabtesco market share
-statValue3: >60% (Asia)
+statValue3: ">60% (Asia)"
 statLabel4: Heat loss per robot
-statValue4: ~90%
+statValue4: "~90%"
 ---
 
 ## The thesis
