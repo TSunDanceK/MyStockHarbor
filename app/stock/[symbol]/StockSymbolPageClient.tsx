@@ -503,18 +503,18 @@ function earningsScaleSummary(earnings: StockEarningsData | null, loading: boole
 function EarningsReadScale({ earnings, loading }: { earnings: StockEarningsData | null; loading: boolean }) {
   const score = earningsReadScore(earnings, loading), tone = earningsScoreTone(score), markerLeft = `${typeof score === "number" ? score : 50}%`;
   return (
-    <div style={{ marginTop: 10 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-        <div style={{ fontSize: 22, lineHeight: 1 }} aria-hidden="true">⚖️</div>
-        <div style={{ fontSize: 26, lineHeight: 1, fontWeight: 950, letterSpacing: "-0.06em", color: toneColor(tone), whiteSpace: "nowrap" }}>{typeof score === "number" ? `${score}/100` : "—"}</div>
+    <div style={{ marginTop: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <span style={{ fontSize: 18, lineHeight: 1 }} aria-hidden="true">⚖️</span>
+        <span style={{ fontSize: 20, lineHeight: 1, fontWeight: 800, color: toneColor(tone) }}>{typeof score === "number" ? `${score}/100` : "—"}</span>
       </div>
-      <div aria-hidden="true" style={{ position: "relative", marginTop: 12, height: 10, borderRadius: 999, background: "linear-gradient(90deg, rgba(239,68,68,0.95), rgba(250,204,21,0.95), rgba(34,197,94,0.95))", boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.14)" }}>
-        <span style={{ position: "absolute", top: "50%", left: markerLeft, width: 18, height: 18, borderRadius: 999, background: "#f8fafc", border: `3px solid ${toneColor(tone)}`, transform: "translate(-50%, -50%)", boxShadow: "0 8px 18px rgba(0,0,0,0.32)" }} />
+      <div aria-hidden="true" style={{ position: "relative", marginTop: 8, height: 8, borderRadius: 999, background: "linear-gradient(90deg, rgba(239,68,68,0.90), rgba(250,204,21,0.90), rgba(34,197,94,0.90))" }}>
+        <span style={{ position: "absolute", top: "50%", left: markerLeft, width: 14, height: 14, borderRadius: 999, background: "#f8fafc", border: `2px solid ${toneColor(tone)}`, transform: "translate(-50%, -50%)" }} />
       </div>
-      <div style={{ marginTop: 9, display: "flex", justifyContent: "space-between", gap: 8, fontSize: 10, fontWeight: 900, letterSpacing: "0.05em", textTransform: "uppercase", color: "rgba(226,232,240,0.58)" }}>
+      <div style={{ marginTop: 6, display: "flex", justifyContent: "space-between", fontSize: 9, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "rgba(226,232,240,0.50)" }}>
         <span>Weak</span><span>Mixed</span><span>Strong</span>
       </div>
-      <div style={{ marginTop: 8, ...miniMetricSubStyle }}>{earningsScaleSummary(earnings, loading)}</div>
+      <div style={{ marginTop: 4, fontSize: 11, opacity: 0.60, lineHeight: 1.4 }}>{earningsScaleSummary(earnings, loading)}</div>
     </div>
   );
 }
@@ -685,77 +685,68 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis }: StockSymbo
       <div className="stock-wrap">
 
         {/* ── Page header ─────────────────────────────────────────── */}
-        <header style={{ paddingTop: 28, paddingBottom: 20, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+        <header style={{ paddingTop: 24, paddingBottom: 20, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
             <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Stock Analysis</span>
             <span style={{ fontSize: 11, color: "rgba(148,163,184,0.30)" }}>·</span>
             <Link href="/pickers" style={{ fontSize: 11, fontWeight: 600, color: "rgba(148,163,184,0.55)", textDecoration: "none" }}>← Pickers</Link>
           </div>
 
-          <div style={{ marginTop: 12, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
-            <div style={{ minWidth: 0 }}>
-              <h1 style={{ margin: 0, fontSize: 32, lineHeight: 1.1, fontWeight: 800, letterSpacing: "-0.04em" }}>{symbol}</h1>
-              {companyName ? <p style={{ margin: "4px 0 0", fontSize: 16, opacity: 0.65, fontWeight: 400 }}>{companyName}</p> : null}
-              <p style={{ margin: "8px 0 0", fontSize: 14, lineHeight: 1.6, opacity: 0.60, maxWidth: 620 }}>
-                Review price trend, moving averages, momentum and earnings balance in one cleaner stock read.
-              </p>
-            </div>
-
-            {/* Key stats strip */}
-            {!priceLoading && !err ? (
-              <div className="stock-header-stats">
-                <div style={headerStatStyle}>
-                  <div style={miniLabelStyle}>Price</div>
-                  <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", marginTop: 4 }}>{typeof quote?.price === "number" ? `$${quote.price.toFixed(2)}` : "—"}</div>
-                  <div style={{ fontSize: 11, opacity: 0.50, marginTop: 3 }}>{quote?.date ?? "—"} {quote?.time ?? ""}</div>
-                </div>
-                <div style={headerStatStyle}>
-                  <div style={miniLabelStyle}>Trend score</div>
-                  <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", marginTop: 4, color: toneColor(trendTone) }}>{trendScore.passed}/{trendScore.total}</div>
-                  <div style={{ fontSize: 11, opacity: 0.55, marginTop: 3 }}>Core trend checks</div>
-                </div>
-                <div style={headerStatStyle}>
-                  <div style={miniLabelStyle}>Regime</div>
-                  <div style={{ fontSize: 18, fontWeight: 700, marginTop: 6, color: toneColor(trendTone) }}>{trend}</div>
-                  <div style={{ fontSize: 11, opacity: 0.50, marginTop: 3 }}>Overall chart structure</div>
-                </div>
-                <div style={headerStatStyle}>
-                  <div style={miniLabelStyle}>RSI (14)</div>
-                  <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", marginTop: 4, color: toneColor(rsiTone(typeof lastRsi === "number" ? lastRsi : null)) }}>{typeof lastRsi === "number" ? lastRsi.toFixed(1) : "—"}</div>
-                  <div style={{ fontSize: 11, opacity: 0.50, marginTop: 3 }}>{typeof lastRsi === "number" ? (lastRsi >= 70 ? "Overbought" : lastRsi <= 30 ? "Oversold" : "Neutral") : "—"}</div>
-                </div>
-                {!valuationLoading && valuation ? (
-                  <div style={headerStatStyle}>
-                    <div style={miniLabelStyle}>P/E</div>
-                    <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", marginTop: 4 }}>{formatValuationMultiple(valuation.peRatio)}</div>
-                    <div style={{ fontSize: 11, opacity: 0.50, marginTop: 3 }}>P/S {formatValuationMultiple(valuation.priceToSalesRatio)}</div>
-                  </div>
-                ) : null}
-                <Link href={`/stock/${encodeURIComponent(symbol)}/earnings`} style={{ ...headerStatStyle, textDecoration: "none", color: "inherit", border: "1px solid rgba(34,197,94,0.20)", background: "rgba(34,197,94,0.04)", borderRadius: 12 }}>
-                  <div style={miniLabelStyle}>Earnings read</div>
-                  <EarningsReadScale earnings={earnings} loading={earningsLoading} />
-                </Link>
-              </div>
-            ) : null}
+          {/* Symbol + name */}
+          <div style={{ marginTop: 10 }}>
+            <h1 style={{ margin: 0, fontSize: 28, lineHeight: 1.1, fontWeight: 800, letterSpacing: "-0.04em" }}>{symbol}</h1>
+            {companyName ? <p style={{ margin: "3px 0 0", fontSize: 15, opacity: 0.60, fontWeight: 400 }}>{companyName}</p> : null}
           </div>
 
-          {/* Trend checks row */}
+          {/* Stats grid — 2-col on mobile, horizontal strip on desktop */}
           {!priceLoading && !err ? (
-            <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+            <div className="stock-header-stats" style={{ marginTop: 16 }}>
+              <div className="stock-stat-cell">
+                <div className="stock-stat-label">Price</div>
+                <div className="stock-stat-value">{typeof quote?.price === "number" ? `$${quote.price.toFixed(2)}` : "—"}</div>
+                <div className="stock-stat-sub">{quote?.date ?? "—"}</div>
+              </div>
+              <div className="stock-stat-cell">
+                <div className="stock-stat-label">Trend score</div>
+                <div className="stock-stat-value" style={{ color: toneColor(trendTone) }}>{trendScore.passed}/{trendScore.total}</div>
+                <div className="stock-stat-sub">{trend}</div>
+              </div>
+              <div className="stock-stat-cell">
+                <div className="stock-stat-label">RSI (14)</div>
+                <div className="stock-stat-value" style={{ color: toneColor(rsiTone(typeof lastRsi === "number" ? lastRsi : null)) }}>{typeof lastRsi === "number" ? lastRsi.toFixed(1) : "—"}</div>
+                <div className="stock-stat-sub">{typeof lastRsi === "number" ? (lastRsi >= 70 ? "Overbought" : lastRsi <= 30 ? "Oversold" : "Neutral") : "—"}</div>
+              </div>
+              {!valuationLoading && valuation ? (
+                <div className="stock-stat-cell">
+                  <div className="stock-stat-label">P/E</div>
+                  <div className="stock-stat-value">{formatValuationMultiple(valuation.peRatio)}</div>
+                  <div className="stock-stat-sub">P/S {formatValuationMultiple(valuation.priceToSalesRatio)}</div>
+                </div>
+              ) : null}
+              <Link href={`/stock/${encodeURIComponent(symbol)}/earnings`} className="stock-stat-cell stock-earnings-cell" style={{ textDecoration: "none", color: "inherit", border: "1px solid rgba(34,197,94,0.18)", borderRadius: 10, background: "rgba(34,197,94,0.03)" }}>
+                <div className="stock-stat-label">Earnings read</div>
+                <EarningsReadScale earnings={earnings} loading={earningsLoading} />
+              </Link>
+            </div>
+          ) : null}
+
+          {/* Trend checks */}
+          {!priceLoading && !err ? (
+            <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
               {[
                 { label: "Price above MA50", pass: lastClose !== null && lastMA50 !== null && lastClose > lastMA50 },
                 { label: "Price above MA200", pass: lastClose !== null && lastMA200 !== null && lastClose > lastMA200 },
                 { label: "MA50 above MA200", pass: lastMA50 !== null && lastMA200 !== null && lastMA50 > lastMA200 },
               ].map((check) => (
-                <span key={check.label} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: check.pass ? "#86efac" : "rgba(248,113,113,0.80)" }}>
-                  <span style={{ fontSize: 12, fontWeight: 900 }}>{check.pass ? "✓" : "✕"}</span>
+                <span key={check.label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: check.pass ? "#86efac" : "rgba(248,113,113,0.80)" }}>
+                  <span style={{ fontWeight: 900 }}>{check.pass ? "✓" : "✕"}</span>
                   {check.label}
                 </span>
               ))}
             </div>
           ) : null}
 
-          <div style={{ marginTop: 16, maxWidth: 460 }}>
+          <div style={{ marginTop: 14, maxWidth: 460 }}>
             <StockTickerJump currentSymbol={symbol} />
           </div>
         </header>
@@ -784,76 +775,44 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis }: StockSymbo
             {/* ── Technical indicators as bullet rows ─────────────── */}
             <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
               <div style={sectionLabelStyle}>Technical Indicators</div>
-              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
-                <h2 style={sectionHeadingStyle}>Key levels & signals</h2>
-              </div>
+              <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>Key levels &amp; signals</h2>
               <div className="indicator-rows">
                 {[
-                  {
-                    label: "MA50",
-                    value: typeof lastMA50 === "number" ? `$${lastMA50.toFixed(2)}` : "—",
-                    sub: typeof ma50Pct === "number" ? `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}% vs price` : "Distance unavailable",
-                    tone: metricToneFromPct(ma50Pct),
-                  },
-                  {
-                    label: "MA200",
-                    value: typeof lastMA200 === "number" ? `$${lastMA200.toFixed(2)}` : "—",
-                    sub: typeof ma200Pct === "number" ? `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}% vs price` : "Distance unavailable",
-                    tone: metricToneFromPct(ma200Pct),
-                  },
-                  {
-                    label: "RSI (14)",
-                    value: typeof lastRsi === "number" ? lastRsi.toFixed(1) : "—",
-                    sub: typeof lastRsi === "number" ? (lastRsi >= 70 ? "Overbought zone" : lastRsi <= 30 ? "Oversold zone" : "Neutral zone") : "Momentum unavailable",
-                    tone: rsiTone(typeof lastRsi === "number" ? lastRsi : null),
-                  },
-                  {
-                    label: "MACD Signal",
-                    value: macdSignal?.label ?? "—",
-                    sub: macdSignal?.meta ?? "Momentum unavailable",
-                    tone: macdSignal?.tone ?? "yellow" as "green" | "yellow" | "red",
-                  },
-                  {
-                    label: "Macro Support",
-                    value: macroSupport ? `$${macroSupport.lower.toFixed(2)}–$${macroSupport.upper.toFixed(2)}` : "Not identified",
-                    sub: macroSupport ? `${macroSupport.distancePct.toFixed(1)}% below price · ${macroSupport.touches} touches` : "No repeated weekly support zone found",
-                    tone: supportTone(macroSupport?.distancePct ?? null),
-                  },
-                  {
-                    label: "Support Quality",
-                    value: macroSupport ? `${macroSupport.touches} touches` : "—",
-                    sub: macroSupport?.volumeRatio != null ? `${macroSupport.volumeRatio.toFixed(1)}× zone volume` : "Volume data unavailable",
-                    tone: supportQualityTone(macroSupport),
-                  },
+                  { label: "MA50", value: typeof lastMA50 === "number" ? `$${lastMA50.toFixed(2)}` : "—", sub: typeof ma50Pct === "number" ? `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}% vs price` : "Distance unavailable", tone: metricToneFromPct(ma50Pct) },
+                  { label: "MA200", value: typeof lastMA200 === "number" ? `$${lastMA200.toFixed(2)}` : "—", sub: typeof ma200Pct === "number" ? `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}% vs price` : "Distance unavailable", tone: metricToneFromPct(ma200Pct) },
+                  { label: "RSI (14)", value: typeof lastRsi === "number" ? lastRsi.toFixed(1) : "—", sub: typeof lastRsi === "number" ? (lastRsi >= 70 ? "Overbought zone" : lastRsi <= 30 ? "Oversold zone" : "Neutral zone") : "Momentum unavailable", tone: rsiTone(typeof lastRsi === "number" ? lastRsi : null) },
+                  { label: "MACD Signal", value: macdSignal?.label ?? "—", sub: macdSignal?.meta ?? "Momentum unavailable", tone: macdSignal?.tone ?? "yellow" as "green" | "yellow" | "red" },
+                  { label: "Macro Support", value: macroSupport ? `$${macroSupport.lower.toFixed(2)}–$${macroSupport.upper.toFixed(2)}` : "Not identified", sub: macroSupport ? `${macroSupport.distancePct.toFixed(1)}% below price · ${macroSupport.touches} touches` : "No repeated weekly support zone found", tone: supportTone(macroSupport?.distancePct ?? null) },
+                  { label: "Support Quality", value: macroSupport ? `${macroSupport.touches} touches` : "—", sub: macroSupport?.volumeRatio != null ? `${macroSupport.volumeRatio.toFixed(1)}× zone volume` : "Volume data unavailable", tone: supportQualityTone(macroSupport) },
                 ].map((row) => (
                   <div key={row.label} className="indicator-row">
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 120, flex: "0 0 auto" }}>
-                      <span style={{ width: 8, height: 8, borderRadius: 999, background: toneColor(row.tone), boxShadow: `0 0 6px ${toneColor(row.tone)}66`, flex: "0 0 auto" }} />
-                      <span style={{ fontSize: 13, fontWeight: 700, color: "rgba(226,232,240,0.80)" }}>{row.label}</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 110, flex: "0 0 auto" }}>
+                      <span style={{ width: 7, height: 7, borderRadius: 999, background: toneColor(row.tone), boxShadow: `0 0 5px ${toneColor(row.tone)}66`, flex: "0 0 auto" }} />
+                      <span style={{ fontSize: 13, fontWeight: 700, color: "rgba(226,232,240,0.75)" }}>{row.label}</span>
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ fontSize: 16, fontWeight: 800, color: toneColor(row.tone) }}>{row.value}</span>
-                      <span style={{ fontSize: 12, opacity: 0.55, marginLeft: 10 }}>{row.sub}</span>
+                      <span style={{ fontSize: 15, fontWeight: 800, color: toneColor(row.tone) }}>{row.value}</span>
+                      <span style={{ fontSize: 12, opacity: 0.50, marginLeft: 8 }}>{row.sub}</span>
                     </div>
                   </div>
                 ))}
               </div>
             </section>
 
-            {/* ── Trend / Momentum / Watch summaries ──────────────── */}
+            {/* ── Chart summaries ──────────────────────────────────── */}
             <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
               <div style={sectionLabelStyle}>Chart Summary</div>
-              <div style={{ display: "grid", gap: 0 }}>
+              <div>
                 {[
                   { heading: `Trend summary for ${symbol}`, text: longSummary.trendParagraph, dot: trendTone },
                   { heading: "Momentum and stretch context", text: longSummary.momentumParagraph, dot: rsiTone(typeof lastRsi === "number" ? lastRsi : null) },
                   { heading: "What traders may watch next", text: longSummary.structureParagraph, dot: "yellow" as const },
                 ].map((item, i) => (
-                  <div key={i} style={{ padding: "18px 0", borderBottom: i < 2 ? "1px solid rgba(255,255,255,0.07)" : "none", display: "flex", gap: 14, alignItems: "flex-start" }}>
-                    <span style={{ width: 8, height: 8, borderRadius: 999, background: toneColor(item.dot), marginTop: 7, flex: "0 0 auto", boxShadow: `0 0 6px ${toneColor(item.dot)}66` }} />
+                  <div key={i} style={{ padding: "18px 0", borderBottom: i < 2 ? "1px solid rgba(255,255,255,0.07)" : "none", display: "flex", gap: 12, alignItems: "flex-start" }}>
+                    <span style={{ width: 7, height: 7, borderRadius: 999, background: toneColor(item.dot), marginTop: 6, flex: "0 0 auto", boxShadow: `0 0 5px ${toneColor(item.dot)}66` }} />
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>{item.heading}</div>
-                      <p style={{ margin: 0, fontSize: 14, lineHeight: 1.75, opacity: 0.78 }}>{item.text}</p>
+                      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 5 }}>{item.heading}</div>
+                      <p style={{ margin: 0, fontSize: 14, lineHeight: 1.75, opacity: 0.75 }}>{item.text}</p>
                     </div>
                   </div>
                 ))}
@@ -869,37 +828,33 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis }: StockSymbo
                     <h2 style={sectionHeadingStyle}>Company snapshot &amp; outlook for {symbol}</h2>
                     <p style={{ margin: "6px 0 0", fontSize: 14, lineHeight: 1.6, opacity: 0.60, maxWidth: 680 }}>Review a broader business snapshot, outlook summary, and key points investors may want to watch.</p>
                   </div>
-                  <div style={{ display: "flex", gap: 10, flex: "0 0 auto", flexWrap: "wrap" }}>
-                    <div style={scoreChipStyle(scoreTone(aiAnalysis.fundamentalsScore))}>
-                      <span style={{ opacity: 0.65, fontWeight: 500, fontSize: 11 }}>Fundamentals</span>
-                      <span style={{ fontSize: 20, fontWeight: 800, color: toneColor(scoreTone(aiAnalysis.fundamentalsScore)) }}>{aiAnalysis.fundamentalsScore}/100</span>
-                      <span style={{ fontSize: 11, opacity: 0.55 }}>{scoreBandLabel(aiAnalysis.fundamentalsScore)}</span>
-                      <button type="button" onClick={(e) => { e.stopPropagation(); setOpenScoreHelp(openScoreHelp === "fundamentals" ? null : "fundamentals"); }} style={scoreHelpButtonStyle}>?</button>
-                      {openScoreHelp === "fundamentals" ? <div onClick={(e) => e.stopPropagation()} style={scoreHelpInlineBoxStyle}>{scoreExplainText("fundamentals", aiAnalysis.fundamentalsScore)}</div> : null}
-                    </div>
-                    <div style={scoreChipStyle(scoreTone(aiAnalysis.futurePotentialScore))}>
-                      <span style={{ opacity: 0.65, fontWeight: 500, fontSize: 11 }}>Future potential</span>
-                      <span style={{ fontSize: 20, fontWeight: 800, color: toneColor(scoreTone(aiAnalysis.futurePotentialScore)) }}>{aiAnalysis.futurePotentialScore}/100</span>
-                      <span style={{ fontSize: 11, opacity: 0.55 }}>{scoreBandLabel(aiAnalysis.futurePotentialScore)}</span>
-                      <button type="button" onClick={(e) => { e.stopPropagation(); setOpenScoreHelp(openScoreHelp === "future" ? null : "future"); }} style={scoreHelpButtonStyle}>?</button>
-                      {openScoreHelp === "future" ? <div onClick={(e) => e.stopPropagation()} style={scoreHelpInlineBoxStyle}>{scoreExplainText("future", aiAnalysis.futurePotentialScore)}</div> : null}
-                    </div>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    {[
+                      { key: "fundamentals" as const, label: "Fundamentals", score: aiAnalysis.fundamentalsScore },
+                      { key: "future" as const, label: "Future potential", score: aiAnalysis.futurePotentialScore },
+                    ].map((s) => (
+                      <div key={s.key} style={scoreChipStyle(scoreTone(s.score))}>
+                        <span style={{ opacity: 0.60, fontWeight: 500, fontSize: 11 }}>{s.label}</span>
+                        <span style={{ fontSize: 20, fontWeight: 800, color: toneColor(scoreTone(s.score)) }}>{s.score}/100</span>
+                        <span style={{ fontSize: 11, opacity: 0.50 }}>{scoreBandLabel(s.score)}</span>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); setOpenScoreHelp(openScoreHelp === s.key ? null : s.key); }} style={scoreHelpButtonStyle}>?</button>
+                        {openScoreHelp === s.key ? <div onClick={(e) => e.stopPropagation()} style={scoreHelpInlineBoxStyle}>{scoreExplainText(s.key, s.score)}</div> : null}
+                      </div>
+                    ))}
                   </div>
                 </div>
 
-                <div style={{ display: "grid", gap: 20 }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6, opacity: 0.70 }}>What this company broadly does</div>
-                    <p style={{ margin: 0, fontSize: 14, lineHeight: 1.75, opacity: 0.82 }}>{aiAnalysis.businessSummary}</p>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6, opacity: 0.70 }}>Fundamentals read</div>
-                    <p style={{ margin: 0, fontSize: 14, lineHeight: 1.75, opacity: 0.82 }}>{aiAnalysis.fundamentalsSummary}</p>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6, opacity: 0.70 }}>Future potential</div>
-                    <p style={{ margin: 0, fontSize: 14, lineHeight: 1.75, opacity: 0.82 }}>{aiAnalysis.futurePotentialSummary}</p>
-                  </div>
+                <div style={{ display: "grid", gap: 18 }}>
+                  {[
+                    { label: "What this company broadly does", text: aiAnalysis.businessSummary },
+                    { label: "Fundamentals read", text: aiAnalysis.fundamentalsSummary },
+                    { label: "Future potential", text: aiAnalysis.futurePotentialSummary },
+                  ].map((item) => (
+                    <div key={item.label}>
+                      <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 5, opacity: 0.65, textTransform: "uppercase", letterSpacing: "0.04em" }}>{item.label}</div>
+                      <p style={{ margin: 0, fontSize: 14, lineHeight: 1.75, opacity: 0.82 }}>{item.text}</p>
+                    </div>
+                  ))}
                 </div>
 
                 <div className="factor-grid" style={{ marginTop: 20 }}>
@@ -909,20 +864,20 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis }: StockSymbo
                     { label: "What to watch", dot: "#eab308", items: aiAnalysis.watchPoints },
                   ].map((col) => (
                     <div key={col.label}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
-                        <span style={{ width: 7, height: 7, borderRadius: 999, background: col.dot, boxShadow: `0 0 6px ${col.dot}88`, flex: "0 0 auto" }} />
-                        <span style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", opacity: 0.65 }}>{col.label}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: 999, background: col.dot, flex: "0 0 auto" }} />
+                        <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", opacity: 0.60 }}>{col.label}</span>
                       </div>
                       <div style={{ display: "grid", gap: 8 }}>
                         {col.items.map((item) => (
-                          <div key={item} style={{ fontSize: 13, lineHeight: 1.65, opacity: 0.82, paddingLeft: 15, borderLeft: `2px solid ${col.dot}44` }}>{item}</div>
+                          <div key={item} style={{ fontSize: 13, lineHeight: 1.65, opacity: 0.80, paddingLeft: 12, borderLeft: `2px solid ${col.dot}44` }}>{item}</div>
                         ))}
                       </div>
                     </div>
                   ))}
                 </div>
 
-                <div style={{ marginTop: 12, fontSize: 11, opacity: 0.40 }}>Summary last updated: {formatAiUpdatedLabel(aiAnalysis.generatedAt)}</div>
+                <div style={{ marginTop: 10, fontSize: 11, opacity: 0.35 }}>Summary last updated: {formatAiUpdatedLabel(aiAnalysis.generatedAt)}</div>
               </section>
             ) : null}
 
@@ -934,9 +889,9 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis }: StockSymbo
               <div style={sectionLabelStyle}>Learn More</div>
               <h2 style={{ ...sectionHeadingStyle, marginBottom: 14 }}>Learn the indicators behind this page</h2>
               <div className="learn-grid">
-                <Link href="/learn/moving-averages" style={learnRowStyle}><span style={learnDotStyle("blue")} /><div><div style={{ fontWeight: 700, fontSize: 14 }}>Moving Averages</div><div style={{ fontSize: 13, opacity: 0.60, marginTop: 2 }}>How traders use MA50 and MA200 to judge medium and long-term structure.</div></div></Link>
-                <Link href="/learn/rsi" style={learnRowStyle}><span style={learnDotStyle("green")} /><div><div style={{ fontWeight: 700, fontSize: 14 }}>RSI Guide</div><div style={{ fontSize: 13, opacity: 0.60, marginTop: 2 }}>How RSI highlights momentum, overbought and oversold conditions.</div></div></Link>
-                <Link href="/learn/macd" style={learnRowStyle}><span style={learnDotStyle("red")} /><div><div style={{ fontWeight: 700, fontSize: 14 }}>MACD Guide</div><div style={{ fontSize: 13, opacity: 0.60, marginTop: 2 }}>How MACD helps read momentum strength and weakening trend behaviour.</div></div></Link>
+                <Link href="/learn/moving-averages" style={learnRowStyle}><span style={learnDotStyle("blue")} /><div><div style={{ fontWeight: 700, fontSize: 14 }}>Moving Averages</div><div style={{ fontSize: 13, opacity: 0.55, marginTop: 2 }}>How traders use MA50 and MA200 to judge medium and long-term structure.</div></div></Link>
+                <Link href="/learn/rsi" style={learnRowStyle}><span style={learnDotStyle("green")} /><div><div style={{ fontWeight: 700, fontSize: 14 }}>RSI Guide</div><div style={{ fontSize: 13, opacity: 0.55, marginTop: 2 }}>How RSI highlights momentum, overbought and oversold conditions.</div></div></Link>
+                <Link href="/learn/macd" style={learnRowStyle}><span style={learnDotStyle("red")} /><div><div style={{ fontWeight: 700, fontSize: 14 }}>MACD Guide</div><div style={{ fontSize: 13, opacity: 0.55, marginTop: 2 }}>How MACD helps read momentum strength and weakening trend behaviour.</div></div></Link>
               </div>
             </section>
 
@@ -952,10 +907,10 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis }: StockSymbo
                   { href: "/stocks-near-200-day-moving-average", label: "Near 200-Day MA", sub: "Long-term level tests", dot: "#eab308" },
                 ].map((item) => (
                   <Link key={item.href} href={item.href} style={exploreCardStyle}>
-                    <span style={{ width: 8, height: 8, borderRadius: 999, background: item.dot, flex: "0 0 auto", boxShadow: `0 0 8px ${item.dot}66` }} />
+                    <span style={{ width: 7, height: 7, borderRadius: 999, background: item.dot, flex: "0 0 auto" }} />
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14 }}>{item.label}</div>
-                      <div style={{ fontSize: 12, opacity: 0.55, marginTop: 2 }}>{item.sub}</div>
+                      <div style={{ fontWeight: 700, fontSize: 13 }}>{item.label}</div>
+                      <div style={{ fontSize: 12, opacity: 0.50, marginTop: 2 }}>{item.sub}</div>
                     </div>
                   </Link>
                 ))}
@@ -966,15 +921,15 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis }: StockSymbo
             <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24, paddingBottom: 40 }}>
               <div style={sectionLabelStyle}>FAQ</div>
               <h2 style={{ ...sectionHeadingStyle, marginBottom: 18 }}>Common questions about {symbol}</h2>
-              <div style={{ display: "grid", gap: 18 }}>
+              <div style={{ display: "grid", gap: 16 }}>
                 {[
                   { q: "Is this page a buy or sell recommendation?", a: "No. This page is designed to help you review chart structure, momentum and technical context more quickly, but it is not personal financial advice." },
                   { q: "Why can a stock look bullish and overbought at the same time?", a: "Strong trending stocks can still become stretched in the short term. That is why trend traders and dip buyers can read the same chart differently." },
                   { q: "What should I do next after reading this page?", a: "Open the full dashboard, review the chart in more detail, compare indicators, and decide whether the setup still makes sense within your own process." },
                 ].map((item) => (
                   <div key={item.q}>
-                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{item.q}</h3>
-                    <p style={{ margin: "6px 0 0", fontSize: 14, lineHeight: 1.7, opacity: 0.68 }}>{item.a}</p>
+                    <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>{item.q}</h3>
+                    <p style={{ margin: "5px 0 0", fontSize: 13, lineHeight: 1.7, opacity: 0.65 }}>{item.a}</p>
                   </div>
                 ))}
               </div>
@@ -985,28 +940,59 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis }: StockSymbo
       </div>
 
       <style>{`
-        .stock-wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px; box-sizing: border-box; }
+        .stock-wrap { max-width: 1240px; margin: 0 auto; padding: 0 20px; box-sizing: border-box; }
 
-        /* Header stats strip */
-        .stock-header-stats { display: flex; gap: 2px; flex-wrap: wrap; align-items: stretch; }
+        /* ── Header stats ─────────────────────────────────────────── */
+        /* Desktop: horizontal flex row with dividers */
+        .stock-header-stats {
+          display: flex;
+          align-items: stretch;
+          gap: 0;
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 12px;
+          overflow: hidden;
+        }
+        .stock-stat-cell {
+          flex: 1 1 0;
+          padding: 12px 14px;
+          border-right: 1px solid rgba(255,255,255,0.07);
+          min-width: 0;
+        }
+        .stock-stat-cell:last-child { border-right: none; }
+        .stock-stat-label { font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; opacity: 0.55; }
+        .stock-stat-value { font-size: 22px; font-weight: 800; letter-spacing: -0.03em; margin-top: 4px; line-height: 1; }
+        .stock-stat-sub { font-size: 11px; opacity: 0.48; margin-top: 3px; }
+        /* Earnings cell spans full width of its column */
+        .stock-earnings-cell { flex: 0 0 auto; min-width: 160px; }
 
-        /* Indicator rows */
+        /* Mobile: 2-col grid, no horizontal scroll */
+        @media (max-width: 640px) {
+          .stock-header-stats {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            border-radius: 10px;
+          }
+          .stock-stat-cell {
+            border-right: none !important;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+          }
+          /* Remove bottom border from last two cells */
+          .stock-stat-cell:nth-last-child(-n+2) { border-bottom: none; }
+          .stock-stat-value { font-size: 18px !important; }
+          .stock-earnings-cell { grid-column: 1 / -1; border-bottom: none !important; }
+        }
+
+        /* ── Indicator rows ───────────────────────────────────────── */
         .indicator-rows { display: grid; gap: 0; }
-        .indicator-row { display: flex; align-items: center; gap: 16; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+        .indicator-row { display: flex; align-items: center; gap: 14px; padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
         .indicator-row:last-child { border-bottom: none; }
 
-        /* Factor grid */
+        /* ── Grids ────────────────────────────────────────────────── */
         .factor-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
-
-        /* Earnings metric grid */
         .earningsMetricGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; }
         .earningsDotGrid { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-        .yearlyEarningsGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
-
-        /* Learn grid */
+        .yearlyEarningsGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
         .learn-grid { display: grid; gap: 0; }
-
-        /* Explore grid */
         .explore-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 
         a:hover { filter: brightness(1.06); transform: translateY(-1px); }
@@ -1019,10 +1005,10 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis }: StockSymbo
         }
 
         @media (max-width: 640px) {
-          .stock-header-stats { flex-direction: column; gap: 12px; }
+          .stock-wrap { padding: 0 14px; }
           .earningsMetricGrid { grid-template-columns: 1fr !important; }
           .explore-grid { grid-template-columns: 1fr !important; }
-          .indicator-row { flex-direction: column; align-items: flex-start; gap: 4px; }
+          .indicator-row { flex-direction: column; align-items: flex-start; gap: 3px; }
         }
       `}</style>
     </main>
@@ -1030,30 +1016,27 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis }: StockSymbo
 }
 
 // ── Style helpers ────────────────────────────────────────────────────────────
-const headerStatStyle: React.CSSProperties = { padding: "12px 16px", borderRight: "1px solid rgba(255,255,255,0.07)", minWidth: 90 };
-
 function chartLinkStyle(tone: "blue" | "red" | "green"): React.CSSProperties {
-  const map = { blue: { border: "rgba(59,130,246,0.30)", bg: "rgba(59,130,246,0.08)", color: "#bfdbfe" }, red: { border: "rgba(239,68,68,0.30)", bg: "rgba(239,68,68,0.08)", color: "#fecaca" }, green: { border: "rgba(34,197,94,0.30)", bg: "rgba(34,197,94,0.08)", color: "#bbf7d0" } };
+  const map = { blue: { border: "rgba(59,130,246,0.28)", bg: "rgba(59,130,246,0.07)", color: "#bfdbfe" }, red: { border: "rgba(239,68,68,0.28)", bg: "rgba(239,68,68,0.07)", color: "#fecaca" }, green: { border: "rgba(34,197,94,0.28)", bg: "rgba(34,197,94,0.07)", color: "#bbf7d0" } };
   const s = map[tone];
-  return { display: "inline-flex", alignItems: "center", padding: "8px 13px", borderRadius: 10, border: `1px solid ${s.border}`, background: s.bg, color: s.color, textDecoration: "none", fontWeight: 700, fontSize: 13, whiteSpace: "nowrap" };
+  return { display: "inline-flex", alignItems: "center", padding: "7px 12px", borderRadius: 9, border: `1px solid ${s.border}`, background: s.bg, color: s.color, textDecoration: "none", fontWeight: 700, fontSize: 13, whiteSpace: "nowrap" };
 }
 
 function scoreChipStyle(tone: "green" | "yellow" | "red"): React.CSSProperties {
-  return { display: "flex", flexDirection: "column", gap: 2, padding: "12px 14px", borderRadius: 12, border: `1px solid ${tone === "green" ? "rgba(34,197,94,0.20)" : tone === "red" ? "rgba(239,68,68,0.20)" : "rgba(250,204,21,0.20)"}`, background: tone === "green" ? "rgba(34,197,94,0.05)" : tone === "red" ? "rgba(239,68,68,0.05)" : "rgba(250,204,21,0.05)", position: "relative", minWidth: 120 };
+  return { display: "flex", flexDirection: "column", gap: 2, padding: "10px 12px", borderRadius: 10, border: `1px solid ${tone === "green" ? "rgba(34,197,94,0.18)" : tone === "red" ? "rgba(239,68,68,0.18)" : "rgba(250,204,21,0.18)"}`, background: tone === "green" ? "rgba(34,197,94,0.04)" : tone === "red" ? "rgba(239,68,68,0.04)" : "rgba(250,204,21,0.04)", position: "relative", minWidth: 110 };
 }
 
-const scoreHelpButtonStyle: React.CSSProperties = { position: "absolute", top: 10, right: 10, width: 16, height: 16, borderRadius: 999, border: "1px solid rgba(255,255,255,0.20)", background: "rgba(15,23,42,0.90)", color: "#e2e8f0", fontSize: 11, fontWeight: 900, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 };
+const scoreHelpButtonStyle: React.CSSProperties = { position: "absolute", top: 8, right: 8, width: 15, height: 15, borderRadius: 999, border: "1px solid rgba(255,255,255,0.18)", background: "rgba(15,23,42,0.90)", color: "#e2e8f0", fontSize: 10, fontWeight: 900, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 };
 
-const scoreHelpInlineBoxStyle: React.CSSProperties = { position: "absolute", top: "100%", right: 0, zIndex: 20, marginTop: 8, padding: 12, borderRadius: 12, border: "1px solid rgba(148,163,184,0.30)", background: "#020617", color: "#f8fafc", fontSize: 12, lineHeight: 1.6, fontWeight: 500, boxShadow: "0 16px 40px rgba(0,0,0,0.65)", width: 260, maxWidth: "min(260px, 80vw)" };
+const scoreHelpInlineBoxStyle: React.CSSProperties = { position: "absolute", top: "100%", right: 0, zIndex: 20, marginTop: 8, padding: 12, borderRadius: 10, border: "1px solid rgba(148,163,184,0.25)", background: "#020617", color: "#f8fafc", fontSize: 12, lineHeight: 1.6, fontWeight: 500, boxShadow: "0 16px 40px rgba(0,0,0,0.65)", width: 240, maxWidth: "min(240px, 80vw)" };
 
 function learnDotStyle(tone: "blue" | "green" | "red"): React.CSSProperties {
   const c = tone === "blue" ? "#60a5fa" : tone === "green" ? "#22c55e" : "#ef4444";
-  return { width: 8, height: 8, borderRadius: 999, background: c, flex: "0 0 auto", marginTop: 5, boxShadow: `0 0 6px ${c}66` };
+  return { width: 7, height: 7, borderRadius: 999, background: c, flex: "0 0 auto", marginTop: 5 };
 }
 
-const learnRowStyle: React.CSSProperties = { display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 0", borderBottom: "1px solid rgba(255,255,255,0.07)", textDecoration: "none", color: "#f1f5f9", transition: "opacity 120ms ease" };
+const learnRowStyle: React.CSSProperties = { display: "flex", alignItems: "flex-start", gap: 10, padding: "11px 0", borderBottom: "1px solid rgba(255,255,255,0.07)", textDecoration: "none", color: "#f1f5f9" };
 
-const exploreCardStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.025)", textDecoration: "none", color: "#f1f5f9", transition: "transform 120ms ease, filter 120ms ease" };
+const exploreCardStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: 10, padding: "11px 13px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)", textDecoration: "none", color: "#f1f5f9" };
 
-// Keep unused exports referenced to avoid TS errors on legacy imports
 export type { EarningsPeriodSummary, EarningsYearSummary };
