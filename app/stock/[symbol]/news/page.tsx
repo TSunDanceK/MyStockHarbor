@@ -27,14 +27,6 @@ type Quote = {
   source: string;
 };
 
-type Point = {
-  date: string;
-  close: number;
-  high?: number;
-  low?: number;
-  volume?: number;
-};
-
 type NewsItem = {
   title: string;
   link: string;
@@ -1772,10 +1764,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const seed = computeIndicatorSeed(points, "", price, date);
 
-  // Build a news-specific title and description using the indicator seed.
   const priceStr =
-    seed.lastClose != null ? ` — Price $${seed.lastClose.toFixed(2)}` : "";
-  const trendStr = seed.trendLabel ? `, ${seed.trendLabel}` : "";
+    seed.lastClose != null ? ` \u2014 Price $${seed.lastClose.toFixed(2)}` : "";
+  const trendStr = seed.trend ? `, ${seed.trend}` : "";
 
   const title = `${upper} Stock News${priceStr} | MyStockHarbor`;
   const description = `Latest ${upper} stock news with beginner-friendly summaries${trendStr}. Headline sentiment score, earnings context and chart analysis on MyStockHarbor.`;
