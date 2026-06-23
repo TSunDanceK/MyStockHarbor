@@ -26,7 +26,7 @@ function PostCard({ post }: { post: BlogPost }) {
         display: "flex",
         alignItems: "center",
         gap: 16,
-        padding: "14px 18px",
+        padding: "15px 18px",
         borderRadius: 12,
         border: "1px solid rgba(255,255,255,0.08)",
         background: "rgba(255,255,255,0.03)",
@@ -34,25 +34,14 @@ function PostCard({ post }: { post: BlogPost }) {
         color: "#f1f5f9",
       }}
     >
-      {/* Ticker col — no box, just bold text + accent line + date */}
-      <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, minWidth: 52 }}>
+      {/* Ticker col */}
+      <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 58 }}>
         {post.symbol ? (
-          <div style={{
-            fontSize: 13,
-            fontWeight: 900,
-            color: "#93c5fd",
-            letterSpacing: "0.04em",
-            lineHeight: 1,
-          }}>
+          <div style={{ fontSize: 16, fontWeight: 900, color: "#93c5fd", letterSpacing: "0.04em", lineHeight: 1 }}>
             {post.symbol}
           </div>
         ) : null}
-        <div style={{
-          width: 28,
-          height: 1.5,
-          background: "rgba(59,130,246,0.45)",
-          borderRadius: 2,
-        }} />
+        <div style={{ width: 32, height: 2, background: "rgba(59,130,246,0.45)", borderRadius: 2 }} />
         <div style={{ fontSize: 11, opacity: 0.45, fontWeight: 600, whiteSpace: "nowrap" }}>
           {post.date}
         </div>
@@ -61,7 +50,7 @@ function PostCard({ post }: { post: BlogPost }) {
       {/* Content col */}
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{
-          fontSize: 16,
+          fontSize: 18,
           fontWeight: 700,
           lineHeight: 1.35,
           display: "-webkit-box",
@@ -73,8 +62,8 @@ function PostCard({ post }: { post: BlogPost }) {
         </div>
         {post.excerpt && (
           <div style={{
-            marginTop: 4,
-            fontSize: 13,
+            marginTop: 5,
+            fontSize: 14,
             opacity: 0.55,
             lineHeight: 1.45,
             display: "-webkit-box",
@@ -87,7 +76,7 @@ function PostCard({ post }: { post: BlogPost }) {
         )}
       </div>
 
-      <div style={{ flexShrink: 0, fontSize: 18, opacity: 0.3 }}>›</div>
+      <div style={{ flexShrink: 0, fontSize: 20, opacity: 0.3 }}>›</div>
     </Link>
   );
 }
@@ -159,15 +148,14 @@ export default function InsightsPageClient({ posts, videos }: Props) {
           </div>
         </section>
 
-        {/* ── MOBILE: tab switcher (hidden on desktop) ── */}
+        {/* ── MOBILE: tab switcher ── */}
         <div className="mobileTabs" style={{ marginTop: 20, display: "none" }}>
           <div style={{ display: "flex", borderRadius: 12, overflow: "hidden", border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.03)" }}>
             <button
               onClick={() => setMobileTab("insights")}
               style={{
                 flex: 1, padding: "12px 0", border: "none", cursor: "pointer",
-                fontSize: 14, fontWeight: 800, fontFamily: "system-ui, Arial",
-                borderRadius: 0,
+                fontSize: 14, fontWeight: 800, fontFamily: "system-ui, Arial", borderRadius: 0,
                 background: mobileTab === "insights" ? "rgba(59,130,246,0.18)" : "transparent",
                 color: mobileTab === "insights" ? "#93c5fd" : "rgba(241,245,249,0.55)",
                 borderRight: "1px solid rgba(255,255,255,0.10)",
@@ -180,8 +168,7 @@ export default function InsightsPageClient({ posts, videos }: Props) {
               onClick={() => setMobileTab("videos")}
               style={{
                 flex: 1, padding: "12px 0", border: "none", cursor: "pointer",
-                fontSize: 14, fontWeight: 800, fontFamily: "system-ui, Arial",
-                borderRadius: 0,
+                fontSize: 14, fontWeight: 800, fontFamily: "system-ui, Arial", borderRadius: 0,
                 background: mobileTab === "videos" ? "rgba(239,68,68,0.15)" : "transparent",
                 color: mobileTab === "videos" ? "#fca5a5" : "rgba(241,245,249,0.55)",
                 transition: "background 0.15s, color 0.15s",
@@ -191,7 +178,6 @@ export default function InsightsPageClient({ posts, videos }: Props) {
             </button>
           </div>
 
-          {/* Mobile: insights tab content */}
           {mobileTab === "insights" && (
             <div style={{ marginTop: 14, display: "grid", gap: 8 }}>
               {posts.length === 0 ? (
@@ -202,7 +188,6 @@ export default function InsightsPageClient({ posts, videos }: Props) {
             </div>
           )}
 
-          {/* Mobile: videos tab content */}
           {mobileTab === "videos" && (
             <div style={{ marginTop: 14 }}>
               <div style={{ display: "grid", gap: 8 }}>
@@ -217,10 +202,8 @@ export default function InsightsPageClient({ posts, videos }: Props) {
           )}
         </div>
 
-        {/* ── DESKTOP: two-column layout (hidden on mobile) ── */}
+        {/* ── DESKTOP: two-column layout ── */}
         <section className="desktopLayout" style={{ marginTop: 24, display: "grid", gridTemplateColumns: "minmax(0, 1.4fr) minmax(300px, 1fr)", gap: 22, alignItems: "start" }}>
-
-          {/* LEFT — insight posts */}
           <div>
             <div style={{ fontSize: 11, opacity: 0.55, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 12 }}>Latest insights</div>
             {posts.length === 0 ? (
@@ -232,7 +215,6 @@ export default function InsightsPageClient({ posts, videos }: Props) {
             )}
           </div>
 
-          {/* RIGHT — YouTube videos */}
           <aside className="desktopVideos" style={{ position: "sticky", top: 24 }}>
             <div style={{ fontSize: 11, opacity: 0.55, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 12, color: "#fecaca" }}>Watch on YouTube</div>
             <div style={{ maxHeight: "80vh", overflowY: "auto", display: "grid", gap: 8, scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.15) transparent", touchAction: "pan-y" }}>
