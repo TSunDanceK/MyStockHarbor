@@ -763,10 +763,10 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis }: StockSymbo
               <div style={sectionLabelStyle}>Chart View</div>
               <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
                 <h2 style={sectionHeadingStyle}>{symbol} with MA50 and MA200</h2>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <Link href={`/?symbol=${encodeURIComponent(symbol)}`} style={chartLinkStyle("blue")}>Open in Dashboard →</Link>
-                  <Link href={`/stock/${encodeURIComponent(symbol)}/news`} style={chartLinkStyle("red")}>Latest News →</Link>
-                  <a href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`} target="_blank" rel="noopener noreferrer sponsored nofollow" style={chartLinkStyle("green")}>TradingView ↗</a>
+                <div style={{ display: "flex", gap: 6, flexWrap: "nowrap", alignItems: "center", maxWidth: "100%" }}>
+                  <Link href={`/?symbol=${encodeURIComponent(symbol)}`} style={chartLinkStyle("blue")}>Dashboard</Link>
+                  <Link href={`/stock/${encodeURIComponent(symbol)}/news`} style={chartLinkStyle("red")}>News</Link>
+                  <a href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`} target="_blank" rel="noopener noreferrer sponsored nofollow" style={chartLinkStyle("green")}>TradingView</a>
                 </div>
               </div>
               <StockPriceChart symbol={symbol} data={history.slice(-240)} ma50={ma50.slice(-240)} ma200={ma200.slice(-240)} height={360} />
@@ -1019,7 +1019,7 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis }: StockSymbo
 function chartLinkStyle(tone: "blue" | "red" | "green"): React.CSSProperties {
   const map = { blue: { border: "rgba(59,130,246,0.28)", bg: "rgba(59,130,246,0.07)", color: "#bfdbfe" }, red: { border: "rgba(239,68,68,0.28)", bg: "rgba(239,68,68,0.07)", color: "#fecaca" }, green: { border: "rgba(34,197,94,0.28)", bg: "rgba(34,197,94,0.07)", color: "#bbf7d0" } };
   const s = map[tone];
-  return { display: "inline-flex", alignItems: "center", padding: "7px 12px", borderRadius: 9, border: `1px solid ${s.border}`, background: s.bg, color: s.color, textDecoration: "none", fontWeight: 700, fontSize: 13, whiteSpace: "nowrap" };
+  return { display: "inline-flex", alignItems: "center", padding: "7px 10px", borderRadius: 9, border: `1px solid ${s.border}`, background: s.bg, color: s.color, textDecoration: "none", fontWeight: 700, fontSize: 12, whiteSpace: "nowrap" };
 }
 
 function scoreChipStyle(tone: "green" | "yellow" | "red"): React.CSSProperties {
