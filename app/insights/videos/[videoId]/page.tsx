@@ -26,13 +26,13 @@ function formatDateShort(value: string) {
 }
 
 function fmtPct(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) return "\u2014";
+  if (value === null || !Number.isFinite(value)) return "—";
   const sign = value >= 0 ? "+" : "";
   return `${sign}${value.toFixed(1)}%`;
 }
 
 function fmtPrice(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) return "\u2014";
+  if (value === null || !Number.isFinite(value)) return "—";
   return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
@@ -84,14 +84,13 @@ export default async function VideoPage({ params }: Props) {
 
   const statItems = stockData ? [
     { label: "Price", value: fmtPrice(stockData.price) },
-    { label: "Market cap", value: stockData.marketCap ?? "\u2014" },
+    { label: "Market cap", value: stockData.marketCap ?? "—" },
     { label: "vs MA50", value: fmtPct(stockData.ma50Pct) },
     { label: "vs MA200", value: fmtPct(stockData.ma200Pct) },
     ...(stockData.peRatio ? [{ label: "P/E (TTM)", value: stockData.peRatio.toFixed(1) }] : []),
     ...(stockData.trend ? [{ label: "Trend", value: stockData.trend }] : []),
   ] : null;
 
-  // 6 visible cards: each card = (360px wide * 9/16 aspect) + title row ~50px + gap 8px ≈ 260px
   const CARD_H = 260;
   const MAX_VISIBLE = 6;
 
@@ -105,7 +104,7 @@ export default async function VideoPage({ params }: Props) {
           {/* Breadcrumb */}
           <div style={{ fontSize: 13, opacity: 0.6, marginBottom: 20 }}>
             <Link href="/insights" style={{ color: "inherit", textDecoration: "none" }}>Insights</Link>
-            <span style={{ margin: "0 8px" }}>\u203a</span>
+            <span style={{ margin: "0 8px" }}>›</span>
             <span>Video</span>
           </div>
 
@@ -132,13 +131,13 @@ export default async function VideoPage({ params }: Props) {
                   ))}
                 </div>
               )}
-              {stockData && <p style={{ fontSize: 11, opacity: 0.38, marginBottom: 16, fontStyle: "italic" }}>Price and market cap update live \u2014 figures will differ from those in the video.</p>}
+              {stockData && <p style={{ fontSize: 11, opacity: 0.38, marginBottom: 16, fontStyle: "italic" }}>Price and market cap update live — figures will differ from those in the video.</p>}
 
               <div style={{ position: "relative", width: "100%", paddingTop: "56.25%", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.10)", background: "#000", marginBottom: 10 }}>
                 <iframe src={embedUrl} title={video.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen loading="lazy" referrerPolicy="strict-origin-when-cross-origin" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }} />
               </div>
               <div style={{ marginBottom: 28, textAlign: "right" }}>
-                <a href={video.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#fca5a5", textDecoration: "none", fontWeight: 700, opacity: 0.85 }}>Watch on YouTube \u2197</a>
+                <a href={video.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#fca5a5", textDecoration: "none", fontWeight: 700, opacity: 0.85 }}>Watch on YouTube ↗</a>
               </div>
 
               {contentHtml ? (
@@ -146,7 +145,7 @@ export default async function VideoPage({ params }: Props) {
                   <div dangerouslySetInnerHTML={{ __html: contentHtml }} style={{ color: "#e2e8f0" }} />
                 </article>
               ) : (
-                <div style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.025)", padding: "18px 22px", marginBottom: 24, opacity: 0.6, fontSize: 14, lineHeight: 1.6 }}>Written analysis coming soon \u2014 watch the video above for the full breakdown.</div>
+                <div style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.025)", padding: "18px 22px", marginBottom: 24, opacity: 0.6, fontSize: 14, lineHeight: 1.6 }}>Written analysis coming soon — watch the video above for the full breakdown.</div>
               )}
 
               {videoContent?.datasheetImage ? (
@@ -155,22 +154,20 @@ export default async function VideoPage({ params }: Props) {
                   <img src={videoContent.datasheetImage} alt={`${ticker ?? ""} investor datasheet`} style={{ width: "100%", borderRadius: 12, border: "1px solid rgba(255,255,255,0.10)" }} />
                 </div>
               ) : (
-                <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)", padding: "12px 16px", marginBottom: 24, opacity: 0.5, fontSize: 13 }}>Investor datasheet \u2014 coming soon</div>
+                <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)", padding: "12px 16px", marginBottom: 24, opacity: 0.5, fontSize: 13 }}>Investor datasheet — coming soon</div>
               )}
 
               <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)", padding: "12px 16px", fontSize: 12, opacity: 0.5, lineHeight: 1.6, marginBottom: 24 }}>
                 This page is for educational purposes only and does not constitute financial advice. Always do your own research before making any investment decisions.
               </div>
 
-              <Link href="/insights" style={{ display: "inline-flex", alignItems: "center", padding: "10px 16px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.05)", color: "#f1f5f9", textDecoration: "none", fontSize: 13, fontWeight: 700 }}>\u2190 Back to Insights</Link>
+              <Link href="/insights" style={{ display: "inline-flex", alignItems: "center", padding: "10px 16px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.05)", color: "#f1f5f9", textDecoration: "none", fontSize: 13, fontWeight: 700 }}>← Back to Insights</Link>
             </div>
 
-            {/* RIGHT: sticky sidebar — scroll-trapped inner list */}
+            {/* RIGHT: sticky sidebar */}
             <aside className="videoSidebar" style={{ position: "sticky", top: 24 }}>
               <div style={{ fontSize: 11, opacity: 0.55, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 12 }}>More videos</div>
 
-              {/* touch-action: pan-y tells mobile browsers this container scrolls vertically,
-                  resolving the scroll-trap ambiguity on touch devices */}
               <div
                 className="videoSidebarList"
                 style={{
@@ -200,13 +197,12 @@ export default async function VideoPage({ params }: Props) {
                 )}
               </div>
 
-              <a href="https://www.youtube.com/@MyStockHarbor" target="_blank" rel="noopener noreferrer" style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "center", padding: "9px 12px", borderRadius: 10, border: "1px solid rgba(239,68,68,0.35)", background: "rgba(239,68,68,0.08)", color: "#fecaca", textDecoration: "none", fontWeight: 800, fontSize: 12 }}>Visit YouTube Channel \u2197</a>
+              <a href="https://www.youtube.com/@MyStockHarbor" target="_blank" rel="noopener noreferrer" style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "center", padding: "9px 12px", borderRadius: 10, border: "1px solid rgba(239,68,68,0.35)", background: "rgba(239,68,68,0.08)", color: "#fecaca", textDecoration: "none", fontWeight: 800, fontSize: 12 }}>Visit YouTube Channel ↗</a>
             </aside>
           </div>
         </div>
 
         <style>{`
-          /* Mobile: single column, sidebar below content, no scroll traps */
           @media (max-width: 960px) {
             .videoPageLayout { grid-template-columns: 1fr !important; }
             .videoSidebar { position: static !important; order: 1; }
