@@ -60,6 +60,7 @@ Examples:
 - AVAV video made in June 2026 → `avav-june-2026.png`
 - IFX video made in June 2026 → `ifx-june-2026.png`
 - NVDA video made in September 2026 → `nvda-september-2026.png`
+- Multi-stock sector video → use a descriptive slug e.g. `humanoid-robots-june-2026.png`
 
 **Why naming matters at generation time:**
 The `datasheetImage` path in the markdown frontmatter references this exact filename.
@@ -115,6 +116,12 @@ It represents the data as it stood at the time of recording.
 - Populate the stat fields using numbers from the script only
 - Add a note in the commit message: "datasheet not yet uploaded — stats from script"
 
+**Multi-stock / sector videos with no single ticker:**
+- Omit the `ticker` field entirely
+- No live FMP data strip will show — that's expected
+- The 4 manual stat fields will still render above the embed
+- A datasheet is optional for these videos — if the content works without one, leave it out
+
 ---
 
 ## Output file format
@@ -140,24 +147,44 @@ statValue4: [value]
 
 ### Frontmatter fields
 
-**ticker** (required)
+**ticker** (optional)
 - The stock ticker the video is primarily about
 - Uppercase, no $ prefix: `AVAV` not `$AVAV`
-- If the video covers multiple stocks with no single primary, use the most prominent one
-- If the video is truly non-ticker (e.g. a pure macro overview), omit the ticker field entirely
+- Omit entirely for multi-stock or sector videos — do not leave blank, just remove the line
 
 **datasheetImage** (conditional — see Datasheet rules above)
 
 **statLabel1–4 / statValue1–4** (required — fill all 4 pairs)
 - These populate the stats strip shown ABOVE the video embed
 - Values MUST come from the datasheet or the script — not from web research
-- Market cap always goes in slot 1
+- Market cap always goes in slot 1 for single-ticker videos
 - Slots 2–4: use the figures the video actually focused on — revenue, earnings, backlog,
   guidance, EPS, ARR, growth rate, or whatever the script treats as most relevant
 - Values must be concise: `$8.71B` not `$8,710,000,000`
 - Labels must be short: `Q3 revenue` not `Q3 FY2026 quarterly revenue figure`
 - These are FROZEN — they reflect the story the video tells at the time it was made.
   Never update them to current figures when editing an existing file.
+
+**YAML quoting rules (CRITICAL — prevents frontmatter parse errors):**
+Any stat value containing special YAML characters MUST be wrapped in double quotes:
+- `>` (greater-than) — e.g. `statValue3: ">60% (Asia)"` not `statValue3: >60% (Asia)`
+- `~` (tilde) — e.g. `statValue1: "~50% of BOM"` not `statValue1: ~50% of BOM`
+- `:` (colon) — e.g. `statValue4: "1.5B → 2.5B"`
+- `-` at start of value — e.g. `statValue2: "-34%"` not `statValue2: -34%`
+If these are not quoted, `gray-matter` will fail to parse the frontmatter and dump
+the entire raw file contents as body text on the page — a hard-to-spot bug.
+
+Example of correctly quoted stats:
+```
+statLabel1: Actuator cost share
+statValue1: "~50% of BOM"
+statLabel2: Modules per robot
+statValue2: 28-40
+statLabel3: Nabtesco market share
+statValue3: ">60% (Asia)"
+statLabel4: Heat loss per robot
+statValue4: "~90%"
+```
 
 Example stats taken from a datasheet (defense company):
 ```
@@ -168,19 +195,7 @@ statValue2: $408M
 statLabel3: Backlog
 statValue3: $1.1B
 statLabel4: FY26 guide
-statValue4: $1.85–1.95B
-```
-
-Example stats taken from a script (SaaS company):
-```
-statLabel1: Market cap
-statValue1: $24B
-statLabel2: ARR
-statValue2: $3.2B
-statLabel3: YoY growth
-statValue3: +24%
-statLabel4: NRR
-statValue4: 118%
+statValue4: $1.85-1.95B
 ```
 
 ---
@@ -282,6 +297,12 @@ If the datasheet image is not yet uploaded, add: `(datasheet pending)`
 
 ## Lessons learned
 
+- **Quote YAML stat values containing special characters.** Values with `>`, `~`, `:`, or
+  a leading `-` must be wrapped in double quotes or `gray-matter` will fail to parse the
+  frontmatter, dumping the entire raw file as body text on the page. Always quote: `">60%"`,
+  `"~50% of BOM"`, `"~90%"`. Safe without quotes: plain numbers, dollar amounts, strings
+  that start with a letter.
+
 - **Name the datasheet correctly at generation time.** Use `[ticker-lowercase]-[month]-[year].png`
   when you export the image — before uploading. This matches the path in the markdown frontmatter
   exactly and avoids a rename step. Example: `avav-june-2026.png`, `ifx-june-2026.png`.
@@ -307,3 +328,7 @@ If the datasheet image is not yet uploaded, add: `(datasheet pending)`
 - **Ticker is uppercase, no $ prefix.** `AVAV` not `$AVAV` or `avav`.
 
 - **Keep stat values concise.** `$1.1B` not `$1,100,000,000`. `+143%` not `up 143 percent`.
+
+- **Multi-stock videos: omit ticker, skip datasheet if it doesn't add value.** The page
+  renders cleanly with just the 4 manual stat fields and written analysis. Don't force a
+  datasheet onto every video — only include one when it genuinely adds investor value.
