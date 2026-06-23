@@ -135,7 +135,7 @@ function getSellSignalCount(record: SignalRecord) {
 
 function getHeaderHelp(title: string) {
   if (title.includes("Buy Signals")) return "Stocks showing multiple bullish technical conditions at the same time, ranked by signal count.";
-  if (title.includes("Sell Signals")) return "Stocks showing multiple bearish technical conditions, ranked by signal count. Review charts for pullback risk or trend weakness.";
+  if (title.includes("Sell Signals")) return "Stocks showing multiple bearish technical conditions, ranked by signal count.";
   if (title.includes("Oversold")) return "Ranked oversold setups favouring stronger oversold readings, better liquidity and cleaner rebound potential.";
   if (title.includes("Best Trend Score")) return "Stocks with strong trend structure: price above MA50/MA200, correct MA alignment, positive MACD momentum.";
   if (title.includes("Positive Last Earnings")) return "Ranked by the most recent earnings report — EPS beats, revenue beats and positive EPS carry more weight.";
@@ -465,13 +465,8 @@ export default function PickersClient() {
   @keyframes pickersBar { 0%{transform:translateX(-60%);opacity:0.55;} 50%{transform:translateX(140%);opacity:0.95;} 100%{transform:translateX(320%);opacity:0.55;} }
   @keyframes pickersShimmer { 0%{transform:translateX(-120%);} 70%,100%{transform:translateX(140%);} }
   .pickers-loading-bar { height:100%;width:35%;border-radius:999px;background:rgba(59,130,246,0.90);animation:pickersBar 1.1s linear infinite; }
-
   .pickers-shell { width:100%;min-width:0; }
-
-  /* Sections: 3 col wide, 2 mid, 2 mobile */
   .pickers-sections-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start; }
-
-  /* Stock rows inside each section — no box, clean list */
   .picker-row { display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.06); }
   .picker-row:last-child { border-bottom:none; }
   .picker-row-left { display:flex;align-items:center;gap:8px;min-width:0;flex:1; }
@@ -479,34 +474,26 @@ export default function PickersClient() {
   .picker-row-note { font-size:11px;color:rgba(148,163,184,0.65);font-weight:400;margin-left:2px; }
   .picker-row-link { font-size:11px;font-weight:600;color:rgba(148,163,184,0.55);text-decoration:none;white-space:nowrap;flex:0 0 auto;transition:color 120ms ease; }
   .picker-row-link:hover { color:#93c5fd !important; }
-
-  /* Pattern plays: 4 wide, 2 mid/mobile */
+  /* See all — uniform green button with grey box */
+  .pickers-see-all { display:inline-flex;align-items:center;padding:4px 10px;border-radius:7px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);font-size:11px;font-weight:600;color:#4ade80;text-decoration:none;transition:color 120ms ease,background 120ms ease; }
+  .pickers-see-all:hover { background:rgba(255,255,255,0.07);color:#86efac !important;filter:none !important;transform:none !important; }
   .pattern-plays-grid { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px; }
   .pattern-play-card:hover { transform:translateY(-2px);filter:brightness(1.08); }
-
-  /* Screener filter grid */
   .pickers-filter-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px; }
-
-  /* Custom results */
   .pickers-card-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px; }
-
   .pickers-section-title { display:flex;align-items:center;gap:6px;flex-wrap:nowrap; }
   .pickers-section-title-text { min-width:0;line-height:1.22;font-size:14px;font-weight:700; }
   .pickers-screener-panel { display:block; }
   .pickers-earnings-fetch-button:hover:not(:disabled) { filter:brightness(1.08);transform:translateY(-1px); }
-  .pickers-more-link:hover { filter:brightness(1.12);transform:translateY(-1px); }
-
   @media (max-width: 1100px) {
     .pickers-sections-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
     .pattern-plays-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
     .pickers-filter-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
   }
-
   @media (max-width: 820px) {
     .pickers-filter-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
     .pickers-card-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
   }
-
   @media (max-width: 640px) {
     .pickers-screener-panel { display:none !important; }
     .pickers-sections-grid { grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:8px; }
@@ -516,7 +503,6 @@ export default function PickersClient() {
     .pickers-section-title-text { font-size:13px !important; }
     .picker-row-note { display:none; }
   }
-
   @media (max-width: 400px) {
     .pickers-sections-grid { grid-template-columns:minmax(0,1fr) !important; }
     .pattern-plays-grid { grid-template-columns:minmax(0,1fr) !important; }
@@ -535,13 +521,13 @@ export default function PickersClient() {
 
       {err ? <div style={{ border: "1px solid rgba(239,68,68,0.18)", borderRadius: 12, padding: 14, background: "rgba(239,68,68,0.06)", color: "#fecaca", fontSize: 14 }}>{err}</div> : null}
 
-      {/* ── Screener panel — desktop only ── */}
+      {/* Screener panel — desktop only */}
       {!loading && !err ? (
-        <section className="pickers-screener-panel" style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "12px 14px", background: "rgba(255,255,255,0.02)", marginBottom: 14, boxSizing: "border-box" }}>
+        <section className="pickers-screener-panel" style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "12px 16px", background: "rgba(255,255,255,0.02)", marginBottom: 14, boxSizing: "border-box" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-            <div style={{ minWidth: 0 }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Custom Screener</span>
-              <span style={{ fontSize: 13, opacity: 0.55, marginLeft: 10 }}>Select conditions — only stocks matching all will show.</span>
+            <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: "#e2e8f0" }}>Custom Screener</span>
+              <span style={{ fontSize: 14, color: "rgba(148,163,184,0.75)", fontWeight: 400 }}>Select conditions — only stocks matching all will show.</span>
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flex: "0 0 auto" }}>
               <button type="button" onClick={handleScreenerButton} style={{ display: "inline-flex", alignItems: "center", minHeight: 32, padding: "6px 12px", borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap", border: "1px solid rgba(34,197,94,0.28)", background: screenerOpen ? "rgba(34,197,94,0.14)" : "rgba(34,197,94,0.06)", color: "#86efac" }}>
@@ -615,7 +601,6 @@ export default function PickersClient() {
 
               return (
                 <section key={sec.title} style={{ borderRadius: 12, padding: "12px 14px", background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.08)", boxSizing: "border-box" }}>
-                  {/* Section header */}
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 6, alignItems: "center", marginBottom: 8 }}>
                     <h2 className="pickers-section-title" style={{ margin: 0, display: "flex", alignItems: "center", gap: 5, flexWrap: "nowrap", flex: 1, minWidth: 0 }}>
                       <span className="pickers-section-title-text">{sec.title}</span>
@@ -624,7 +609,6 @@ export default function PickersClient() {
                     <span style={{ fontSize: 10, opacity: 0.40, flex: "0 0 auto" }}>{typeof sec.foundCount === "number" ? sec.foundCount : items.length}</span>
                   </div>
 
-                  {/* Stock rows — clean list, no individual boxes */}
                   <div>
                     {items.map((it) => (
                       <div key={it.symbol} className="picker-row">
@@ -640,7 +624,6 @@ export default function PickersClient() {
                     ))}
                   </div>
 
-                  {/* Earnings fetch button */}
                   {sec.title.toLowerCase().includes("earnings") ? (
                     <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       <button type="button" className="pickers-earnings-fetch-button" onClick={handleFetchEarnings} disabled={earningsFetchBusy || earningsFetchRemainingSeconds > 0} style={{ display: "inline-flex", alignItems: "center", minHeight: 28, padding: "4px 10px", borderRadius: 7, border: "1px solid rgba(34,197,94,0.24)", background: "rgba(34,197,94,0.06)", color: "rgba(134,239,172,0.80)", fontSize: 11, fontWeight: 600, cursor: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? "not-allowed" : "pointer", opacity: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? 0.65 : 1, whiteSpace: "nowrap" }}>
@@ -650,27 +633,26 @@ export default function PickersClient() {
                     </div>
                   ) : null}
 
-                  {/* See all link */}
                   {(() => {
                     const title = sec.title.toLowerCase();
-                    let seoHref = ""; let seoColor = "rgba(148,163,184,0.50)";
-                    if (title.includes("positive last earnings")) { seoHref = "/stocks-with-positive-last-earnings"; }
-                    else if (title.includes("strong earnings growth")) { seoHref = "/stocks-with-strong-earnings-growth"; }
-                    else if (title.includes("all-time high breakout")) { seoHref = "/all-time-high-breakout-stocks"; }
-                    else if (title.includes("3-month high breakout")) { seoHref = "/3-month-high-breakout-stocks"; }
-                    else if (title.includes("all-time highs")) { seoHref = "/stocks-down-20-from-all-time-highs"; }
-                    else if (title.includes("macro") && title.includes("support") && title.includes("resistance")) { seoHref = "/macro-support-resistance-stocks"; }
-                    else if (title.includes("buy signals")) { seoHref = "/top-stocks-with-buy-signals"; seoColor = "rgba(134,239,172,0.55)"; }
-                    else if (title.includes("sell signals")) { seoHref = "/top-stocks-with-sell-signals"; seoColor = "rgba(252,165,165,0.55)"; }
-                    else if (title.includes("oversold")) { seoHref = "/oversold-stocks-today"; seoColor = "rgba(134,239,172,0.55)"; }
-                    else if (title.includes("overbought")) { seoHref = "/overbought-stocks-today"; seoColor = "rgba(252,165,165,0.55)"; }
-                    else if (title.includes("best trend score")) { seoHref = "/best-trend-score-stocks"; }
-                    else if (title.includes("divergence")) { seoHref = "/bullish-bearish-divergence-stocks"; }
-                    else if (title.includes("200")) { seoHref = "/stocks-near-200-day-moving-average"; }
+                    let seoHref = "";
+                    if (title.includes("positive last earnings")) seoHref = "/stocks-with-positive-last-earnings";
+                    else if (title.includes("strong earnings growth")) seoHref = "/stocks-with-strong-earnings-growth";
+                    else if (title.includes("all-time high breakout")) seoHref = "/all-time-high-breakout-stocks";
+                    else if (title.includes("3-month high breakout")) seoHref = "/3-month-high-breakout-stocks";
+                    else if (title.includes("all-time highs")) seoHref = "/stocks-down-20-from-all-time-highs";
+                    else if (title.includes("macro") && title.includes("support") && title.includes("resistance")) seoHref = "/macro-support-resistance-stocks";
+                    else if (title.includes("buy signals")) seoHref = "/top-stocks-with-buy-signals";
+                    else if (title.includes("sell signals")) seoHref = "/top-stocks-with-sell-signals";
+                    else if (title.includes("oversold")) seoHref = "/oversold-stocks-today";
+                    else if (title.includes("overbought")) seoHref = "/overbought-stocks-today";
+                    else if (title.includes("best trend score")) seoHref = "/best-trend-score-stocks";
+                    else if (title.includes("divergence")) seoHref = "/bullish-bearish-divergence-stocks";
+                    else if (title.includes("200")) seoHref = "/stocks-near-200-day-moving-average";
                     if (!seoHref) return null;
                     return (
                       <div style={{ marginTop: 8, textAlign: "right" }}>
-                        <a href={seoHref} className="pickers-more-link" style={{ fontSize: 11, fontWeight: 600, color: seoColor, textDecoration: "none" }}>See all →</a>
+                        <a href={seoHref} className="pickers-see-all">See all →</a>
                       </div>
                     );
                   })()}
