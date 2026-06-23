@@ -143,82 +143,32 @@ export default function LearnPage() {
           </div>
         </div>
 
-        <div style={{ marginTop: 22, display: "grid", gap: 18 }}>
+        {/* ============================================================
+            EDUCATION — lessons and guides (everything below teaches).
+            ============================================================ */}
+        <div style={{ marginTop: 28, marginBottom: 4 }}>
+          <div
+            style={{
+              fontSize: 13,
+              fontWeight: 950,
+              letterSpacing: "0.14em",
+              color: "rgba(148,163,184,0.85)",
+            }}
+          >
+            EDUCATION
+          </div>
+          <div style={{ marginTop: 4, fontSize: 13, opacity: 0.6, lineHeight: 1.5 }}>
+            Lessons and written guides. These explain concepts — they don&apos;t open live
+            stock lists.
+          </div>
+        </div>
+
+        <div style={{ marginTop: 14, display: "grid", gap: 18 }}>
           <Section title="BASICS" items={basics} />
           <Section title="INDICATORS" items={indicators} />
           <Section title="DIVERGENCIES" items={divergencies} />
-          <section
-  style={{
-    border: "1px solid rgba(34,197,94,0.22)",
-    borderRadius: 18,
-    padding: 18,
-    background: "linear-gradient(180deg, rgba(9,18,16,0.96), rgba(7,12,11,0.98))",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-  }}
->
-  <div
-    style={{
-      display: "inline-flex",
-      alignItems: "center",
-      padding: "7px 12px",
-      borderRadius: 999,
-      background:
-        "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(16,185,129,0.10))",
-      border: "1px solid rgba(34,197,94,0.34)",
-      color: "#dcfce7",
-      fontWeight: 950,
-      letterSpacing: "0.08em",
-      fontSize: 12,
-    }}
-  >
-    RISK MANAGEMENT
-  </div>
 
-  <div
-    style={{
-      marginTop: 14,
-      display: "grid",
-      gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-      gap: 12,
-    }}
-  >
-    <Link href="/position-sizing-guide" style={learnGuideCard()}>
-      <div style={{ fontWeight: 900, fontSize: 16 }}>Position Sizing Guide</div>
-      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
-        Learn how traders size positions based on stop loss distance and account risk.
-      </div>
-    </Link>
-
-    <Link href="/stop-loss-strategy" style={learnGuideCard()}>
-      <div style={{ fontWeight: 900, fontSize: 16 }}>Stop Loss Strategy</div>
-      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
-        Understand how stop losses help limit downside and improve trade discipline.
-      </div>
-    </Link>
-
-    <Link href="/trading-risk-management" style={learnGuideCard()}>
-      <div style={{ fontWeight: 900, fontSize: 16 }}>Trading Risk Management</div>
-      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
-        Explore the core principles traders use to protect capital and manage losses.
-      </div>
-    </Link>
-
-    <Link href="/risk-reward-ratio" style={learnGuideCard()}>
-      <div style={{ fontWeight: 900, fontSize: 16 }}>Risk Reward Ratio</div>
-      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
-        Learn how traders compare potential reward against possible downside before entering.
-      </div>
-    </Link>
-
-    <Link href="/margin-trading-explained" style={learnGuideCard()}>
-      <div style={{ fontWeight: 900, fontSize: 16 }}>Margin Trading Explained</div>
-      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
-        Understand leverage, liquidation risk and why margin needs careful control.
-      </div>
-    </Link>
-  </div>
-</section>
-
+          {/* ---- In-depth guides (standalone education routes) ---- */}
           <section
             style={{
               border: "1px solid rgba(34,197,94,0.22)",
@@ -228,37 +178,13 @@ export default function LearnPage() {
               boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
             }}
           >
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                padding: "7px 12px",
-                borderRadius: 999,
-                background:
-                  "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(16,185,129,0.10))",
-                border: "1px solid rgba(34,197,94,0.34)",
-                color: "#dcfce7",
-                fontWeight: 950,
-                letterSpacing: "0.08em",
-                fontSize: 12,
-              }}
-            >
-              EXTRA GUIDES
-            </div>
+            <div style={eduLabel()}>IN-DEPTH GUIDES</div>
 
-            <div
-              style={{
-                marginTop: 14,
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-                gap: 12,
-              }}
-            >
+            <div style={eduGrid()}>
               <Link href="/how-to-read-stock-charts" style={learnGuideCard()}>
                 <div style={{ fontWeight: 900, fontSize: 16 }}>How to Read Stock Charts</div>
-                <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
-                  A beginner-friendly guide to trend, support, resistance, and chart
-                  context.
+                <div style={guideSub()}>
+                  A beginner-friendly guide to trend, support, resistance, and chart context.
                 </div>
               </Link>
 
@@ -266,144 +192,148 @@ export default function LearnPage() {
                 <div style={{ fontWeight: 900, fontSize: 16 }}>
                   Best Stock Indicators for Beginners
                 </div>
-                <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
+                <div style={guideSub()}>
                   Learn which indicators matter most when you are just starting out.
                 </div>
               </Link>
 
-              <Link href="/how-to-identify-stock-trends" style={learnGuideCard()}>
+              <Link href="/learn/how-to-identify-stock-trends" style={learnGuideCard()}>
                 <div style={{ fontWeight: 900, fontSize: 16 }}>How to Identify Stock Trends</div>
-                <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
+                <div style={guideSub()}>
                   Learn how to recognise uptrends, downtrends, and sideways markets.
                 </div>
               </Link>
-            </div>
-          </section>
 
-          <section
-            style={{
-              border: "1px solid rgba(239,68,68,0.24)",
-              borderRadius: 18,
-              padding: 18,
-              background: "linear-gradient(180deg, rgba(24,12,12,0.96), rgba(14,7,7,0.98))",
-              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-            }}
-          >
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                padding: "7px 12px",
-                borderRadius: 999,
-                background:
-                  "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.12))",
-                border: "1px solid rgba(239,68,68,0.36)",
-                color: "#fee2e2",
-                fontWeight: 950,
-                letterSpacing: "0.08em",
-                fontSize: 12,
-              }}
-            >
-              TRADING SETUPS
-            </div>
-
-            <div
-              style={{
-                marginTop: 14,
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-                gap: 12,
-              }}
-            >
-              <Link
-                href="/trading-setups"
-                style={{
-                  ...learnGuideCard(),
-                  border: "1px solid rgba(239,68,68,0.30)",
-                  background:
-                    "linear-gradient(135deg, rgba(239,68,68,0.14), rgba(127,29,29,0.08))",
-                }}
-              >
+              <Link href="/trading-setups" style={learnGuideCard()}>
                 <div style={{ fontWeight: 900, fontSize: 16 }}>Trading Setups Hub</div>
-                <div style={{ marginTop: 6, fontSize: 13, opacity: 0.78, lineHeight: 1.5 }}>
-                  Explore the full hub for breakouts, oversold stocks, buy-the-dip setups
-                  and bullish or bearish divergence.
+                <div style={guideSub()}>
+                  An overview of common setups — breakouts, oversold moves, dips and
+                  divergence — and how traders think about each.
                 </div>
               </Link>
 
               <Link href="/stock-market-setups" style={learnGuideCard()}>
                 <div style={{ fontWeight: 900, fontSize: 16 }}>Stock Market Setups</div>
-                <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
-                  Overview of common trading setups including dips, breakouts and
-                  divergences.
+                <div style={guideSub()}>
+                  Overview of common trading setups including dips, breakouts and divergences.
+                </div>
+              </Link>
+            </div>
+          </section>
+
+          {/* ---- Risk management (standalone education routes) ---- */}
+          <section
+            style={{
+              border: "1px solid rgba(34,197,94,0.22)",
+              borderRadius: 18,
+              padding: 18,
+              background: "linear-gradient(180deg, rgba(9,18,16,0.96), rgba(7,12,11,0.98))",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+            }}
+          >
+            <div style={eduLabel()}>RISK MANAGEMENT</div>
+
+            <div style={eduGrid()}>
+              <Link href="/position-sizing-guide" style={learnGuideCard()}>
+                <div style={{ fontWeight: 900, fontSize: 16 }}>Position Sizing Guide</div>
+                <div style={guideSub()}>
+                  Learn how traders size positions based on stop loss distance and account risk.
                 </div>
               </Link>
 
-              <Link href="/oversold-stocks-today" style={learnGuideCard()}>
-                <div style={{ fontWeight: 900, fontSize: 16 }}>Oversold Stocks</div>
-                <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
-                  Learn how traders identify stretched downside moves.
+              <Link href="/stop-loss-strategy" style={learnGuideCard()}>
+                <div style={{ fontWeight: 900, fontSize: 16 }}>Stop Loss Strategy</div>
+                <div style={guideSub()}>
+                  Understand how stop losses help limit downside and improve trade discipline.
                 </div>
               </Link>
 
-             <Link href="/overbought-stocks-today" style={learnGuideCard()}>
-                <div style={{ fontWeight: 900, fontSize: 16 }}>Overbought Stocks</div>
-                <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
-                  Understand when stocks may be stretched to the upside.
+              <Link href="/trading-risk-management" style={learnGuideCard()}>
+                <div style={{ fontWeight: 900, fontSize: 16 }}>Trading Risk Management</div>
+                <div style={guideSub()}>
+                  Explore the core principles traders use to protect capital and manage losses.
                 </div>
               </Link>
 
-              <Link href="/all-time-high-breakout-stocks" style={learnGuideCard()}>
-                <div style={{ fontWeight: 900, fontSize: 16 }}>Breakout Stocks</div>
-                <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
-                  Learn how traders identify strong momentum breakouts.
+              <Link href="/risk-reward-ratio" style={learnGuideCard()}>
+                <div style={{ fontWeight: 900, fontSize: 16 }}>Risk Reward Ratio</div>
+                <div style={guideSub()}>
+                  Learn how traders compare potential reward against possible downside before entering.
                 </div>
               </Link>
 
-              <Link href="/buy-the-dip-stocks" style={learnGuideCard()}>
-                <div style={{ fontWeight: 900, fontSize: 16 }}>Buy The Dip Stocks</div>
-                <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
-                  Explore pullback opportunities within strong trends.
+              <Link href="/margin-trading-explained" style={learnGuideCard()}>
+                <div style={{ fontWeight: 900, fontSize: 16 }}>Margin Trading Explained</div>
+                <div style={guideSub()}>
+                  Understand leverage, liquidation risk and why margin needs careful control.
                 </div>
               </Link>
+            </div>
+          </section>
+        </div>
 
-              <Link href="/stocks-down-from-highs" style={learnGuideCard()}>
-                <div style={{ fontWeight: 900, fontSize: 16 }}>Stocks Down From Highs</div>
-                <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
-                  Review stocks that have pulled back significantly from recent highs.
-                </div>
-              </Link>
+        {/* ============================================================
+            LIVE SCREENERS — these open live stock lists, not lessons.
+            ============================================================ */}
+        <div style={{ marginTop: 30, marginBottom: 4 }}>
+          <div
+            style={{
+              fontSize: 13,
+              fontWeight: 950,
+              letterSpacing: "0.14em",
+              color: "rgba(94,212,199,0.95)",
+            }}
+          >
+            LIVE SCREENERS
+          </div>
+          <div style={{ marginTop: 4, fontSize: 13, opacity: 0.6, lineHeight: 1.5 }}>
+            These open a live list of stocks matching the setup — a tool, not a lesson.
+          </div>
+        </div>
 
-              <Link href="/bullish-bearish-divergence-stocks" style={learnGuideCard()}>
-                <div style={{ fontWeight: 900, fontSize: 16 }}>Bullish Divergence</div>
-                <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
-                  Learn how divergence can signal weakening downside momentum.
-                </div>
-              </Link>
+        <div style={{ marginTop: 14 }}>
+          <section
+            style={{
+              border: "1px solid rgba(94,212,199,0.26)",
+              borderRadius: 18,
+              padding: 18,
+              background: "linear-gradient(180deg, rgba(8,20,19,0.96), rgba(6,13,12,0.98))",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+            }}
+          >
+            <div style={screenerSectionLabel()}>SCREENERS</div>
 
-              <Link href="/bullish-bearish-divergence-stocks" style={learnGuideCard()}>
-                <div style={{ fontWeight: 900, fontSize: 16 }}>Bearish Divergence</div>
-                <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
-                  Understand when momentum may be weakening in rising stocks.
-                </div>
-              </Link>
-
-              <Link href="/best-trend-score-stocks" style={learnGuideCard()}>
-              <div style={{ fontWeight: 900, fontSize: 16 }}>Best Trend Score Stocks</div>
-              <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
-               Review stocks showing stronger trend structure, momentum and leadership.
-               </div>
-             </Link>
-
-              <Link href="/stocks-near-200-day-moving-average" style={learnGuideCard()}>
-              <div style={{ fontWeight: 900, fontSize: 16 }}>
-               Stocks Near 200-Day Moving Average
-              </div>
-             <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
-             Explore stocks testing a widely watched long-term trend level.
-             </div>
-             </Link>
-              
+            <div style={eduGrid()}>
+              <ScreenerCard
+                href="/oversold-stocks-today"
+                title="Oversold Stocks"
+                desc="Live list of stocks showing stretched downside moves."
+              />
+              <ScreenerCard
+                href="/overbought-stocks-today"
+                title="Overbought Stocks"
+                desc="Live list of stocks that may be stretched to the upside."
+              />
+              <ScreenerCard
+                href="/all-time-high-breakout-stocks"
+                title="Breakout Stocks"
+                desc="Live list of stocks breaking to new highs on momentum."
+              />
+              <ScreenerCard
+                href="/bullish-bearish-divergence-stocks"
+                title="Bullish & Bearish Divergence"
+                desc="Live list of stocks where momentum is diverging from price."
+              />
+              <ScreenerCard
+                href="/best-trend-score-stocks"
+                title="Best Trend Score Stocks"
+                desc="Live list of stocks with stronger trend structure and leadership."
+              />
+              <ScreenerCard
+                href="/stocks-near-200-day-moving-average"
+                title="Stocks Near 200-Day MA"
+                desc="Live list of stocks testing a widely watched long-term level."
+              />
             </div>
           </section>
         </div>
@@ -514,6 +444,64 @@ function Section(props: {
   );
 }
 
+function ScreenerCard(props: { href: string; title: string; desc: string }) {
+  const { href, title, desc } = props;
+  return (
+    <Link
+      href={href}
+      style={{
+        border: "1px solid rgba(94,212,199,0.30)",
+        borderRadius: 14,
+        padding: 14,
+        background:
+          "linear-gradient(135deg, rgba(94,212,199,0.10), rgba(59,130,246,0.06))",
+        color: "#f1f5f9",
+        textDecoration: "none",
+        display: "flex",
+        flexDirection: "column",
+        minHeight: 132,
+        transition: "transform 120ms ease, background 120ms ease, border-color 120ms ease",
+      }}
+    >
+      <div
+        style={{
+          display: "inline-flex",
+          alignSelf: "flex-start",
+          alignItems: "center",
+          padding: "3px 8px",
+          borderRadius: 999,
+          background: "rgba(94,212,199,0.16)",
+          border: "1px solid rgba(94,212,199,0.40)",
+          color: "#bdf3ec",
+          fontWeight: 900,
+          letterSpacing: "0.08em",
+          fontSize: 10,
+          marginBottom: 10,
+        }}
+      >
+        SCREENER
+      </div>
+
+      <div style={{ fontWeight: 900, fontSize: 16 }}>{title}</div>
+      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
+        {desc}
+      </div>
+
+      <div
+        style={{
+          marginTop: "auto",
+          paddingTop: 10,
+          fontSize: 13,
+          fontWeight: 800,
+          color: "#7fe3d8",
+        }}
+      >
+        Open live list →
+      </div>
+    </Link>
+  );
+}
+
 function learnGuideCard(): React.CSSProperties {
   return {
     border: "1px solid rgba(255,255,255,0.14)",
@@ -525,4 +513,47 @@ function learnGuideCard(): React.CSSProperties {
     display: "block",
     transition: "transform 120ms ease, background 120ms ease",
   };
+}
+
+function eduLabel(): React.CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "7px 12px",
+    borderRadius: 999,
+    background: "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(16,185,129,0.10))",
+    border: "1px solid rgba(34,197,94,0.34)",
+    color: "#dcfce7",
+    fontWeight: 950,
+    letterSpacing: "0.08em",
+    fontSize: 12,
+  };
+}
+
+function screenerSectionLabel(): React.CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "7px 12px",
+    borderRadius: 999,
+    background: "linear-gradient(135deg, rgba(94,212,199,0.18), rgba(59,130,246,0.10))",
+    border: "1px solid rgba(94,212,199,0.36)",
+    color: "#cdf5ef",
+    fontWeight: 950,
+    letterSpacing: "0.08em",
+    fontSize: 12,
+  };
+}
+
+function eduGrid(): React.CSSProperties {
+  return {
+    marginTop: 14,
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+    gap: 12,
+  };
+}
+
+function guideSub(): React.CSSProperties {
+  return { marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 };
 }
