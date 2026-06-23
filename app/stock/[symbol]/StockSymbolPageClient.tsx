@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { AiStockAnalysis } from "@/lib/ai-stock-analysis";
+import type { IndicatorSeed } from "@/lib/indicators";
 import StockPriceChart from "./StockPriceChart";
 import StockTickerJump from "./StockTickerJump";
 
@@ -84,6 +85,9 @@ type SymbolResult = {
 type StockSymbolPageClientProps = {
   symbol: string;
   aiAnalysis: AiStockAnalysis | null;
+  // Optional seed from the server component — used as initial state so the
+  // first paint shows real values instead of loading spinners/dashes.
+  seed?: IndicatorSeed | null;
 };
 
 function movingAverage(values: number[], window: number): (number | null)[] {
@@ -601,10 +605,16 @@ const miniMetricSubStyle: React.CSSProperties = { marginTop: 6, fontSize: 13, li
 const articleTextStyle: React.CSSProperties = { margin: "10px 0 0 0", fontSize: 15, lineHeight: 1.8, opacity: 0.85 };
 
 // ── Main component ──────────────────────────────────────────────────────────
-export default function StockSymbolPageClient({ symbol, aiAnalysis }: StockSymbolPageClientProps) {
-  const [quote, setQuote] = useState<Quote | null>(null);
+export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: StockSymbolPageClientProps) {
+  // Seed from the server component pre-populates company name and quote so
+  // the first server-rendered HTML shows real text instead of blank dashes.
+  const [quote, setQuote] = useState<Quote | null>(
+    seed?.price != null
+      ? { symbol, price: seed.price, date: seed.priceDate, time: null, source: "ssr" }
+      : null
+  );
   const [history, setHistory] = useState<Point[]>([]);
-  const [companyName, setCompanyName] = useState("");
+  const [companyName, setCompanyName] = useState(seed?.companyName ?? "");
   const [priceLoading, setPriceLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [earnings, setEarnings] = useState<StockEarningsData | null>(null);
