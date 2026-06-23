@@ -148,13 +148,12 @@ export default async function VideoPage({ params }: Props) {
                 <div style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.025)", padding: "18px 22px", marginBottom: 24, opacity: 0.6, fontSize: 14, lineHeight: 1.6 }}>Written analysis coming soon — watch the video above for the full breakdown.</div>
               )}
 
-              {videoContent?.datasheetImage ? (
+              {/* Datasheet — only rendered when the image path is set, no placeholder */}
+              {videoContent?.datasheetImage && (
                 <div style={{ marginBottom: 24 }}>
                   <div style={{ fontSize: 11, opacity: 0.55, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>Investor datasheet</div>
                   <img src={videoContent.datasheetImage} alt={`${ticker ?? ""} investor datasheet`} style={{ width: "100%", borderRadius: 12, border: "1px solid rgba(255,255,255,0.10)" }} />
                 </div>
-              ) : (
-                <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)", padding: "12px 16px", marginBottom: 24, opacity: 0.5, fontSize: 13 }}>Investor datasheet — coming soon</div>
               )}
 
               <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)", padding: "12px 16px", fontSize: 12, opacity: 0.5, lineHeight: 1.6, marginBottom: 24 }}>
