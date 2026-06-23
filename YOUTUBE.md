@@ -33,7 +33,7 @@ The YouTube video ID is the 11-character string in the YouTube URL:
 
 ## How to trigger this workflow
 
-**MANDATORY trigger format — always provide all three:**
+**MANDATORY trigger format — always provide all four:**
 
 > Generate the YouTube video content file for MyStockHarbor
 > YouTube ID: [youtubeId]
@@ -48,6 +48,28 @@ Do not proceed without them — ask for them if not provided.
 video, what framing you used, what numbers you chose to highlight, or which datasheet
 figures were current at recording time. Only the script and datasheet can provide that.
 A content file written from research alone will contradict your video and undermine trust.
+
+---
+
+## Datasheet image naming (CRITICAL)
+
+**Name the datasheet file correctly when you generate it** — before uploading to the repo.
+The correct format is: `[ticker-lowercase]-[month]-[year].png`
+
+Examples:
+- AVAV video made in June 2026 → `avav-june-2026.png`
+- IFX video made in June 2026 → `ifx-june-2026.png`
+- NVDA video made in September 2026 → `nvda-september-2026.png`
+
+**Why naming matters at generation time:**
+The `datasheetImage` path in the markdown frontmatter references this exact filename.
+If the file is uploaded with a different name, the page renders a broken image instead
+of the datasheet. Naming it correctly when generating saves a rename step later and
+eliminates the risk of path mismatches.
+
+**If you have already uploaded with a different name:**
+Either rename the file in the repo, or update the `datasheetImage` field in the markdown
+to match whatever filename was actually used.
 
 ---
 
@@ -102,7 +124,7 @@ Every video content file MUST follow this exact structure:
 ```
 ---
 ticker: TICKER
-datasheetImage: /images/datasheets/[ticker]-[month]-[year].png
+datasheetImage: /images/datasheets/[ticker-lowercase]-[month]-[year].png
 statLabel1: [label]
 statValue1: [value]
 statLabel2: [label]
@@ -260,6 +282,10 @@ If the datasheet image is not yet uploaded, add: `(datasheet pending)`
 
 ## Lessons learned
 
+- **Name the datasheet correctly at generation time.** Use `[ticker-lowercase]-[month]-[year].png`
+  when you export the image — before uploading. This matches the path in the markdown frontmatter
+  exactly and avoids a rename step. Example: `avav-june-2026.png`, `ifx-june-2026.png`.
+
 - **Script is the source of truth, always.** A content file built from web research alone
   will contradict the video and confuse viewers who watched it first. Always require the script.
 
@@ -269,7 +295,7 @@ If the datasheet image is not yet uploaded, add: `(datasheet pending)`
 
 - **Match the datasheet to the video, not to the date.** If multiple datasheets exist for
   the same ticker (e.g. two AVAV videos six months apart), use the one generated alongside
-  the specific script being processed. The filename convention `[ticker]-[month]-[year].png`
+  the specific script being processed. The filename convention `[ticker-lowercase]-[month]-[year].png`
   exists precisely to prevent mixing them up.
 
 - **Do not invent the datasheetImage path.** Only add it once the file is confirmed present
