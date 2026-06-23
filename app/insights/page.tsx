@@ -120,7 +120,7 @@ export default async function InsightsPage() {
           {/* Two-column split */}
           <section className="insightsSplit" style={{ marginTop: 24, display: "grid", gridTemplateColumns: "minmax(0, 1.4fr) minmax(300px, 1fr)", gap: 22, alignItems: "start" }}>
 
-            {/* LEFT — insight posts, compact + scrollable */}
+            {/* LEFT — insight posts with title + 1-line excerpt */}
             <div className="insightsPostsColumn">
               <div style={{ fontSize: 11, opacity: 0.55, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 12 }}>Latest insights</div>
               {posts.length === 0 ? (
@@ -136,26 +136,35 @@ export default async function InsightsPage() {
                       href={`/insights/${post.slug}`}
                       style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", textDecoration: "none", color: "#f1f5f9" }}
                     >
-                      {/* Left: ticker pill + date stacked */}
+                      {/* Left: ticker + date */}
                       <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 54 }}>
                         {post.symbol ? (
                           <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "4px 8px", borderRadius: 8, background: "rgba(59,130,246,0.16)", border: "1px solid rgba(59,130,246,0.28)", fontSize: 11, fontWeight: 900, color: "#dbeafe", whiteSpace: "nowrap" }}>{post.symbol}</div>
                         ) : null}
                         <div style={{ fontSize: 10, opacity: 0.5, fontWeight: 600, whiteSpace: "nowrap" }}>{post.date}</div>
                       </div>
-                      {/* Right: title only — tightly cropped to 2 lines */}
+
+                      {/* Centre: title (2 lines) + excerpt (1 line) */}
                       <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.35, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{post.title}</div>
+                        <div style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.35, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                          {post.title}
+                        </div>
+                        {post.excerpt && (
+                          <div style={{ marginTop: 3, fontSize: 12, opacity: 0.52, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                            {post.excerpt}
+                          </div>
+                        )}
                       </div>
+
                       {/* Arrow */}
-                      <div style={{ flexShrink: 0, fontSize: 16, opacity: 0.4 }}>›</div>
+                      <div style={{ flexShrink: 0, fontSize: 16, opacity: 0.35 }}>›</div>
                     </Link>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* RIGHT — YouTube videos, full-width thumbnails + scrollable */}
+            {/* RIGHT — YouTube videos */}
             <aside className="insightsYouTubeColumn" style={{ position: "sticky", top: 24 }}>
               <div style={{ fontSize: 11, opacity: 0.55, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 12, color: "#fecaca" }}>Watch on YouTube</div>
               <div
@@ -190,11 +199,9 @@ export default async function InsightsPage() {
         </div>
 
         <style>{`
-          /* Desktop: both columns sticky with independent scroll */
           @media (min-width: 981px) {
             .insightsYouTubeColumn { position: sticky; top: 24px; }
           }
-          /* Mobile: single column, videos first then posts, no scroll traps */
           @media (max-width: 980px) {
             .insightsSplit { grid-template-columns: 1fr !important; }
             .insightsYouTubeColumn { order: -1; position: static !important; }
