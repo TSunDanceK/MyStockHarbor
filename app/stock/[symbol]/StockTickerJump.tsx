@@ -235,6 +235,7 @@ if (!exactStillSelected) {
         </div>
 
         <button
+          className="stockTickerJumpNewsButton"
           type="button"
           onClick={goToStockPage}
           disabled={!canGo}
@@ -253,6 +254,14 @@ if (!exactStillSelected) {
           News Page →
         </button>
       </div>
+
+      <style>{`
+        @media (max-width: 640px) {
+          .stockTickerJumpNewsButton {
+            display: none !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
