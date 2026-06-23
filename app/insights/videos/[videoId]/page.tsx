@@ -141,8 +141,8 @@ export default async function VideoPage({ params }: Props) {
               </div>
 
               {contentHtml ? (
-                <article style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.04)", padding: "22px 26px", marginBottom: 24, lineHeight: 1.75, fontSize: 15 }}>
-                  <div dangerouslySetInnerHTML={{ __html: contentHtml }} style={{ color: "#e2e8f0" }} />
+                <article className="video-article" style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.04)", padding: "28px 30px", marginBottom: 24 }}>
+                  <div dangerouslySetInnerHTML={{ __html: contentHtml }} />
                 </article>
               ) : (
                 <div style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.025)", padding: "18px 22px", marginBottom: 24, opacity: 0.6, fontSize: 14, lineHeight: 1.6 }}>Written analysis coming soon — watch the video above for the full breakdown.</div>
@@ -202,6 +202,54 @@ export default async function VideoPage({ params }: Props) {
         </div>
 
         <style>{`
+          .video-article {
+            font-size: 15px;
+            line-height: 1.75;
+            color: #cbd5e1;
+          }
+          .video-article h2 {
+            font-size: 20px;
+            font-weight: 800;
+            color: #f1f5f9;
+            margin: 32px 0 12px;
+            letter-spacing: -0.3px;
+            line-height: 1.25;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+          }
+          .video-article h2:first-child { margin-top: 0; }
+          .video-article p {
+            margin: 0 0 16px;
+            line-height: 1.8;
+          }
+          .video-article p:last-child { margin-bottom: 0; }
+          .video-article ul {
+            margin: 0 0 16px;
+            padding: 0;
+            list-style: none;
+          }
+          .video-article ul li {
+            position: relative;
+            padding: 10px 0 10px 20px;
+            line-height: 1.7;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+          }
+          .video-article ul li:last-child { border-bottom: none; padding-bottom: 0; }
+          .video-article ul li::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 19px;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: rgba(59,130,246,0.8);
+            flex-shrink: 0;
+          }
+          .video-article strong {
+            font-weight: 800;
+            color: #f1f5f9;
+          }
           @media (max-width: 960px) {
             .videoPageLayout { grid-template-columns: 1fr !important; }
             .videoSidebar { position: static !important; order: 1; }
