@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getLatestYouTubeVideos, getYouTubeVideoById } from "@/lib/youtube";
+import { getYouTubeVideoById } from "@/lib/youtube";
 import { getVideoContent } from "@/lib/videoContent";
 import { getVideoStockData } from "@/lib/videoStockData";
 import { remark } from "remark";
@@ -85,6 +85,9 @@ export default async function VideoPage({ params }: Props) {
       : Promise.resolve(null),
   ]);
 
+  // vq=hd720 is a hint to YouTube to prefer 720p — not guaranteed but helps on faster connections
+  const embedUrl = `${video.embedUrl}?vq=hd720&rel=0`;
+
   const videoJsonLd = {
     "@context": "https://schema.org",
     "@type": "VideoObject",
@@ -100,6 +103,17 @@ export default async function VideoPage({ params }: Props) {
       url: "https://www.mystockharbor.com",
     },
   };
+
+  const statItems = stockData
+    ? [
+        { label: "Price", value: fmtPrice(stockData.price) },
+        { label: "Market cap", value: stockData.marketCap ?? "—" },
+        { label: "vs MA50", value: fmtPct(stockData.ma50Pct) },
+        { label: "vs MA200", value: fmtPct(stockData.ma200Pct) },
+        ...(stockData.peRatio ? [{ label: "P/E (TTM)", value: stockData.peRatio.toFixed(1) }] : []),
+        ...(stockData.trend ? [{ label: "Trend", value: stockData.trend }] : []),
+      ]
+    : null;
 
   return (
     <>
@@ -125,7 +139,7 @@ export default async function VideoPage({ params }: Props) {
             <span>Video</span>
           </div>
 
-          {/* Ticker + date chips */}
+          {/* Ticker + sector + date chips */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
             {ticker && (
               <span style={{
@@ -152,25 +166,61 @@ export default async function VideoPage({ params }: Props) {
           </div>
 
           {/* Title */}
-          <h1 style={{ margin: "0 0 8px", fontSize: 30, fontWeight: 900, lineHeight: 1.2, letterSpacing: "-0.3px" }}>
+          <h1 style={{ margin: "0 0 6px", fontSize: 30, fontWeight: 900, lineHeight: 1.2, letterSpacing: "-0.3px" }}>
             {video.title}
           </h1>
 
           {stockData?.companyName && (
-            <p style={{ margin: "0 0 24px", opacity: 0.7, fontSize: 15 }}>
+            <p style={{ margin: "0 0 20px", opacity: 0.7, fontSize: 15 }}>
               {stockData.companyName}
             </p>
           )}
 
-          {/* YouTube embed */}
+          {/* ── STATS STRIP — above the embed so visitors see key numbers immediately ── */}
+          {statItems && (
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+              gap: 10,
+              marginBottom: 20,
+            }}>
+              {statItems.map(({ label, value }) => (
+                <div
+                  key={label}
+                  style={{
+                    borderRadius: 14,
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    background: "rgba(255,255,255,0.04)",
+                    padding: "12px 16px",
+                  }}
+                >
+                  <div style={{ fontSize: 11, opacity: 0.6, fontWeight: 700, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                    {label}
+                  </div>
+                  <div style={{ fontSize: 18, fontWeight: 900, letterSpacing: "-0.2px" }}>
+                    {value}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Live data note — only when we have stock data */}
+          {stockData && (
+            <p style={{ fontSize: 12, opacity: 0.4, marginBottom: 20, fontStyle: "italic" }}>
+              Price and market cap update live — figures will differ from those in the video.
+            </p>
+          )}
+
+          {/* ── YOUTUBE EMBED ── */}
           <div style={{
             position: "relative", width: "100%", paddingTop: "56.25%",
             borderRadius: 16, overflow: "hidden",
             border: "1px solid rgba(255,255,255,0.10)",
-            background: "#000", marginBottom: 24,
+            background: "#000", marginBottom: 12,
           }}>
             <iframe
-              src={video.embedUrl}
+              src={embedUrl}
               title={video.title}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen
@@ -181,59 +231,18 @@ export default async function VideoPage({ params }: Props) {
           </div>
 
           {/* Watch on YouTube link */}
-          <div style={{ marginBottom: 28, textAlign: "right" }}>
+          <div style={{ marginBottom: 32, textAlign: "right" }}>
             <a
               href={video.url}
               target="_blank"
               rel="noopener noreferrer"
-              style={{
-                fontSize: 13, color: "#fca5a5", textDecoration: "none", fontWeight: 700,
-                opacity: 0.85,
-              }}
+              style={{ fontSize: 13, color: "#fca5a5", textDecoration: "none", fontWeight: 700, opacity: 0.85 }}
             >
               Watch on YouTube ↗
             </a>
           </div>
 
-          {/* Live stats strip — only shown if we have a ticker */}
-          {stockData && (
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
-              gap: 10, marginBottom: 28,
-            }}>
-              {[
-                { label: "Price", value: fmtPrice(stockData.price) },
-                { label: "Market cap", value: stockData.marketCap ?? "—" },
-                { label: "vs MA50", value: fmtPct(stockData.ma50Pct) },
-                { label: "vs MA200", value: fmtPct(stockData.ma200Pct) },
-                ...(stockData.peRatio ? [{ label: "P/E (TTM)", value: stockData.peRatio.toFixed(1) }] : []),
-                ...(stockData.trend ? [{ label: "Trend", value: stockData.trend }] : []),
-              ].map(({ label, value }) => (
-                <div
-                  key={label}
-                  style={{
-                    borderRadius: 14,
-                    border: "1px solid rgba(255,255,255,0.10)",
-                    background: "rgba(255,255,255,0.04)",
-                    padding: "12px 16px",
-                  }}
-                >
-                  <div style={{ fontSize: 11, opacity: 0.6, fontWeight: 700, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
-                  <div style={{ fontSize: 18, fontWeight: 900, letterSpacing: "-0.2px" }}>{value}</div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Live data note */}
-          {stockData && (
-            <p style={{ fontSize: 12, opacity: 0.45, marginBottom: 28, fontStyle: "italic" }}>
-              Price and market cap are live — they update with the market and will differ from figures in the video.
-            </p>
-          )}
-
-          {/* Written analysis — if markdown exists */}
+          {/* ── WRITTEN ANALYSIS ── */}
           {contentHtml ? (
             <article
               style={{
@@ -258,7 +267,7 @@ export default async function VideoPage({ params }: Props) {
               background: "rgba(255,255,255,0.025)",
               padding: "20px 24px",
               marginBottom: 28,
-              opacity: 0.65,
+              opacity: 0.6,
               fontSize: 14,
               lineHeight: 1.6,
             }}>
@@ -266,8 +275,8 @@ export default async function VideoPage({ params }: Props) {
             </div>
           )}
 
-          {/* Datasheet — if image path exists */}
-          {videoContent?.datasheetImage && (
+          {/* ── DATASHEET ── */}
+          {videoContent?.datasheetImage ? (
             <div style={{ marginBottom: 28 }}>
               <div style={{ fontSize: 11, opacity: 0.55, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>
                 Investor datasheet
@@ -278,10 +287,7 @@ export default async function VideoPage({ params }: Props) {
                 style={{ width: "100%", borderRadius: 14, border: "1px solid rgba(255,255,255,0.10)" }}
               />
             </div>
-          )}
-
-          {/* No datasheet placeholder */}
-          {!videoContent?.datasheetImage && (
+          ) : (
             <div style={{
               borderRadius: 14,
               border: "1px solid rgba(255,255,255,0.07)",
@@ -295,14 +301,14 @@ export default async function VideoPage({ params }: Props) {
             </div>
           )}
 
-          {/* Disclaimer */}
+          {/* ── DISCLAIMER ── */}
           <div style={{
             borderRadius: 14,
             border: "1px solid rgba(255,255,255,0.07)",
             background: "rgba(255,255,255,0.02)",
             padding: "14px 18px",
             fontSize: 12,
-            opacity: 0.55,
+            opacity: 0.5,
             lineHeight: 1.6,
             marginBottom: 28,
           }}>
