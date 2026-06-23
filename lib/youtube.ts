@@ -109,10 +109,13 @@ export async function getLatestYouTubeVideos(limit = 3): Promise<YouTubeVideo[]>
       return [];
     }
 
+    // YouTube playlist API supports up to 50 results per request
+    const clampedLimit = Math.max(1, Math.min(limit, 50));
+
     const playlistRes = await fetch(
       `${YOUTUBE_API_BASE}/playlistItems?part=snippet,contentDetails&playlistId=${encodeURIComponent(
         uploadsPlaylistId
-      )}&maxResults=${Math.max(1, Math.min(limit, 10))}&key=${encodeURIComponent(apiKey)}`,
+      )}&maxResults=${clampedLimit}&key=${encodeURIComponent(apiKey)}`,
       {
         next: { revalidate: 60 * 60 * 12 },
       }
