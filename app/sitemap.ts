@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { getAllPosts } from "@/lib/blog";
+import { getAllVideoIds } from "@/lib/videoContent";
 import { LESSONS } from "@/app/learn/lessons";
 
 const baseUrl = "https://www.mystockharbor.com";
@@ -79,176 +80,34 @@ const seoGuides = [
 ];
 
 const coreMegaCaps = [
-  "AAPL",
-  "MSFT",
-  "NVDA",
-  "AMZN",
-  "META",
-  "GOOGL",
-  "TSLA",
-  "BRK.B",
-  "AVGO",
-  "LLY",
-  "JPM",
-  "V",
-  "MA",
-  "COST",
-  "UNH",
-  "HD",
-  "PG",
-  "XOM",
-  "CVX",
-  "MRK",
-  "ABBV",
-  "PEP",
-  "KO",
-  "WMT",
-  "T",
-  "VZ",
-  "ORCL",
-  "CRM",
-  "ADBE",
-  "CSCO",
-  "INTC",
-  "AMD",
-  "QCOM",
-  "TXN",
-  "MCD",
-  "SBUX",
-  "PYPL",
-  "BAC",
-  "WFC",
-  "TGT",
+  "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "TSLA", "BRK.B", "AVGO",
+  "LLY", "JPM", "V", "MA", "COST", "UNH", "HD", "PG", "XOM", "CVX", "MRK",
+  "ABBV", "PEP", "KO", "WMT", "T", "VZ", "ORCL", "CRM", "ADBE", "CSCO",
+  "INTC", "AMD", "QCOM", "TXN", "MCD", "SBUX", "PYPL", "BAC", "WFC", "TGT",
   "DIS",
 ];
 
 const retailInterestStocks = [
-  "PLTR",
-  "SOFI",
-  "RIVN",
-  "LCID",
-  "NIO",
-  "HOOD",
-  "COIN",
-  "DKNG",
-  "AFRM",
-  "UPST",
-  "ROKU",
-  "SNAP",
-  "PINS",
-  "U",
-  "SHOP",
-  "SQ",
-  "RDDT",
-  "MSTR",
-  "MARA",
-  "RIOT",
-  "HIMS",
-  "CAVA",
-  "DUOL",
-  "CELH",
-  "ARM",
-  "SMCI",
-  "PATH",
-  "CVNA",
-  "CHWY",
-  "ETSY",
+  "PLTR", "SOFI", "RIVN", "LCID", "NIO", "HOOD", "COIN", "DKNG", "AFRM",
+  "UPST", "ROKU", "SNAP", "PINS", "U", "SHOP", "SQ", "RDDT", "MSTR", "MARA",
+  "RIOT", "HIMS", "CAVA", "DUOL", "CELH", "ARM", "SMCI", "PATH", "CVNA",
+  "CHWY", "ETSY",
 ];
 
 const recognizableMidCaps = [
-  "F",
-  "GM",
-  "UBER",
-  "LYFT",
-  "ABNB",
-  "NET",
-  "CRWD",
-  "PANW",
-  "SNOW",
-  "ZS",
-  "DDOG",
-  "OKTA",
-  "DOCU",
-  "MDB",
-  "TWLO",
-  "HUBS",
-  "ESTC",
-  "TEAM",
-  "ZM",
-  "BILL",
-  "TTD",
-  "INTU",
-  "NOW",
-  "ADSK",
-  "ANET",
-  "MU",
-  "KLAC",
-  "LRCX",
-  "AMAT",
-  "ON",
-  "MRVL",
-  "DELL",
-  "HPQ",
-  "CSX",
-  "UAL",
-  "DAL",
-  "AAL",
-  "CCL",
-  "RCL",
-  "MAR",
-  "HLT",
-  "CMG",
-  "NKE",
-  "LOW",
-  "CAT",
-  "DE",
-  "GE",
-  "BA",
-  "RTX",
-  "PFE",
-  "BMY",
-  "GILD",
-  "AMGN",
-  "ISRG",
-  "BKNG",
-  "MELI",
-  "EBAY",
-  "WDAY",
+  "F", "GM", "UBER", "LYFT", "ABNB", "NET", "CRWD", "PANW", "SNOW", "ZS",
+  "DDOG", "OKTA", "DOCU", "MDB", "TWLO", "HUBS", "ESTC", "TEAM", "ZM", "BILL",
+  "TTD", "INTU", "NOW", "ADSK", "ANET", "MU", "KLAC", "LRCX", "AMAT", "ON",
+  "MRVL", "DELL", "HPQ", "CSX", "UAL", "DAL", "AAL", "CCL", "RCL", "MAR",
+  "HLT", "CMG", "NKE", "LOW", "CAT", "DE", "GE", "BA", "RTX", "PFE", "BMY",
+  "GILD", "AMGN", "ISRG", "BKNG", "MELI", "EBAY", "WDAY",
 ];
 
 const etfs = [
-  "SPY",
-  "QQQ",
-  "DIA",
-  "IWM",
-  "VTI",
-  "VOO",
-  "ARKK",
-  "XLF",
-  "XLE",
-  "XLK",
-  "XLP",
-  "XLY",
-  "XLV",
-  "XLRE",
-  "XLI",
-  "XLC",
-  "XLB",
-  "XLU",
-  "SMH",
-  "SOXX",
-  "IBIT",
-  "HODL",
-  "ARKW",
-  "VUG",
-  "SCHD",
-  "DGRO",
-  "JEPI",
-  "JEPQ",
-  "GLD",
-  "SLV",
-  "TLT",
-  "HYG",
+  "SPY", "QQQ", "DIA", "IWM", "VTI", "VOO", "ARKK", "XLF", "XLE", "XLK",
+  "XLP", "XLY", "XLV", "XLRE", "XLI", "XLC", "XLB", "XLU", "SMH", "SOXX",
+  "IBIT", "HODL", "ARKW", "VUG", "SCHD", "DGRO", "JEPI", "JEPQ", "GLD",
+  "SLV", "TLT", "HYG",
 ];
 
 const priorityStocks = Array.from(
@@ -264,6 +123,7 @@ function toAbsoluteUrl(path: string) {
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
   const insightPosts = getAllPosts();
+  const videoIds = getAllVideoIds();
 
   const mainPageEntries: MetadataRoute.Sitemap = mainPages.map((page) => ({
     url: toAbsoluteUrl(page.path),
@@ -281,13 +141,18 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   const insightEntries: MetadataRoute.Sitemap = insightPosts.map((post) => ({
     url: toAbsoluteUrl(`/insights/${post.slug}`),
-    // Use the post's own frontmatter date instead of "now". Insight posts are
-    // frozen snapshots tied to their original publish date (see CLAUDE.md),
-    // so the sitemap should reflect that instead of claiming every post was
-    // just modified today on every build.
     lastModified: post.date ? new Date(post.date) : now,
     changeFrequency: "monthly",
     priority: 0.72,
+  }));
+
+  // Video pages — only pages with a content file are submitted to Google.
+  // Auto-updates as new content/videos/*.md files are added.
+  const videoEntries: MetadataRoute.Sitemap = videoIds.map((id) => ({
+    url: toAbsoluteUrl(`/insights/videos/${id}`),
+    lastModified: now,
+    changeFrequency: "monthly" as const,
+    priority: 0.75,
   }));
 
   const learnEntries: MetadataRoute.Sitemap = LESSONS.map((lesson) => ({
@@ -332,15 +197,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.69,
   }));
 
-  // ETFs do not have company earnings in the same way operating companies do,
-  // so do not push ETF earnings URLs into the sitemap.
-  // Those pages can still exist if visited, but they should not be advertised to Google
-  // as important indexable pages.
-
   const entries: MetadataRoute.Sitemap = [
     ...mainPageEntries,
     ...seoGuideEntries,
     ...insightEntries,
+    ...videoEntries,
     ...learnEntries,
     ...stockEntries,
     ...stockNewsEntries,
@@ -350,18 +211,15 @@ export default function sitemap(): MetadataRoute.Sitemap {
   ];
 
   // Safety guard: only return clean canonical www HTTPS URLs once.
-  // This prevents accidental duplicate sitemap entries if a symbol appears in multiple lists.
   const seen = new Set<string>();
 
   return entries.filter((entry) => {
     if (!entry.url.startsWith(`${baseUrl}/`) && entry.url !== baseUrl) {
       return false;
     }
-
     if (seen.has(entry.url)) {
       return false;
     }
-
     seen.add(entry.url);
     return true;
   });
