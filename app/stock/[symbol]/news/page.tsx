@@ -7,6 +7,11 @@ import {
   getStockNewsBaseData,
   getStockNewsAiData,
 } from "@/lib/stock-news-data";
+import { getDailyHistory } from "@/lib/server/historyCache";
+import {
+  computeIndicatorSeed,
+  type Point,
+} from "@/lib/indicators";
 
 export const runtime = "nodejs";
 
@@ -412,11 +417,11 @@ function trendLabel(
 function formatMoney(value: number | null) {
   return typeof value === "number" && Number.isFinite(value)
     ? `$${value.toFixed(2)}`
-    : "—";
+    : "\u2014";
 }
 
 function formatPercent(value: number | null, digits = 1) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  if (typeof value !== "number" || !Number.isFinite(value)) return "\u2014";
   return `${value > 0 ? "+" : ""}${value.toFixed(digits)}%`;
 }
 
@@ -433,7 +438,7 @@ function formatDate(value: string | null) {
 }
 
 function formatLargeMoney(value: number | null) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  if (typeof value !== "number" || !Number.isFinite(value)) return "\u2014";
 
   const abs = Math.abs(value);
   const sign = value < 0 ? "-" : "";
@@ -448,7 +453,7 @@ function formatLargeMoney(value: number | null) {
 }
 
 function formatPlainDate(value: string | null) {
-  if (!value) return "—";
+  if (!value) return "\u2014";
   const date = new Date(`${value}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) return value;
 
@@ -1700,7 +1705,7 @@ function getArticleSnippet(item: NewsItem, symbol: string) {
   const text = item.description?.replace(/\s+/g, " ").trim();
 
   if (text && text.length >= 40) {
-    return text.length > 520 ? `${text.slice(0, 520).trim()}…` : text;
+    return text.length > 520 ? `${text.slice(0, 520).trim()}\u2026` : text;
   }
 
   return `${item.title} is one of the latest ${symbol} headlines from ${compactSource(
@@ -1724,27 +1729,83 @@ function structuredNews(
   }));
 }
 
+// ── Metadata (dynamic, data-driven) ─────────────────────────────────────────
+
+async function fetchQuoteForMeta(
+  symbol: string
+): Promise<{ price: number | null; date: string | null }> {
+  const apiKey = process.env.FMP_API_KEY;
+  if (!apiKey) return { price: null, date: null };
+  try {
+    const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(
+      symbol
+    )}&apikey=${encodeURIComponent(apiKey)}`;
+    const res = await fetch(url, {
+      next: { revalidate: 900 },
+      headers: { accept: "application/json" },
+    });
+    if (!res.ok) return { price: null, date: null };
+    const json = await res.json();
+    const row = Array.isArray(json) ? json[0] : json;
+    const price =
+      typeof row?.price === "number" && Number.isFinite(row.price)
+        ? (row.price as number)
+        : null;
+    return { price, date: new Date().toISOString().slice(0, 10) };
+  } catch {
+    return { price: null, date: null };
+  }
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { symbol } = await params;
   const upper = symbol.toUpperCase();
 
+  const [rawHistory, { price, date }] = await Promise.all([
+    getDailyHistory(upper).catch(() => []),
+    fetchQuoteForMeta(upper),
+  ]);
+
+  const points: Point[] = (rawHistory as Point[]).filter(
+    (p) => p.date && Number.isFinite(p.close)
+  );
+
+  const seed = computeIndicatorSeed(points, "", price, date);
+
+  // Build a news-specific title and description using the indicator seed.
+  const priceStr =
+    seed.lastClose != null ? ` — Price $${seed.lastClose.toFixed(2)}` : "";
+  const trendStr = seed.trendLabel ? `, ${seed.trendLabel}` : "";
+
+  const title = `${upper} Stock News${priceStr} | MyStockHarbor`;
+  const description = `Latest ${upper} stock news with beginner-friendly summaries${trendStr}. Headline sentiment score, earnings context and chart analysis on MyStockHarbor.`;
+
   return {
-    title: `${upper} Stock News, Summary & Analysis | MyStockHarbor`,
-    description: `Read ${upper} stock news with beginner-friendly summaries, headline tone, earnings context and technical analysis on MyStockHarbor.`,
+    title,
+    description,
     alternates: {
       canonical: `https://www.mystockharbor.com/stock/${upper}/news`,
     },
     openGraph: {
       title: `${upper} Stock News & Analysis | MyStockHarbor`,
-      description: `Latest ${upper} stock news with beginner-friendly summaries, earnings context and chart-based analysis.`,
+      description,
       url: `https://www.mystockharbor.com/stock/${upper}/news`,
       siteName: "MyStockHarbor",
       type: "article",
+      images: [
+        {
+          url: "https://www.mystockharbor.com/og-image-v2.png",
+          width: 1200,
+          height: 630,
+          alt: "MyStockHarbor stock news dashboard",
+        },
+      ],
     },
     twitter: {
       card: "summary_large_image",
       title: `${upper} Stock News & Analysis | MyStockHarbor`,
-      description: `Latest ${upper} stock headlines with simple summaries and chart context.`,
+      description,
+      images: ["https://www.mystockharbor.com/og-image-v2.png"],
     },
   };
 }
@@ -1769,7 +1830,7 @@ async function DetailedNewsAiSection({
   return (
     <section style={editorialCardStyle}>
       <div style={sectionEyebrowStyle}>Latest briefing</div>
-      <h2 style={sectionTitleStyle}>What’s happening with {symbol}</h2>
+      <h2 style={sectionTitleStyle}>What's happening with {symbol}</h2>
 
       <div style={{ display: "grid", gap: 14, marginTop: 16 }}>
         {detailedNews.length ? (
@@ -1829,7 +1890,7 @@ async function DetailedNewsAiSection({
                     rel="noopener noreferrer"
                     style={readArticleLinkStyle}
                   >
-                    Read full article ↗
+                    Read full article \u2197
                   </a>
                 </div>
               </article>
@@ -1879,7 +1940,7 @@ async function DetailedNewsAiSection({
                   rel="noopener noreferrer"
                   style={compactMutedLinkStyle}
                 >
-                  Read ↗
+                  Read \u2197
                 </a>
               </article>
             ))}
@@ -2065,7 +2126,7 @@ function DetailedNewsFallback({
   return (
     <section style={editorialCardStyle}>
       <div style={sectionEyebrowStyle}>Latest briefing</div>
-      <h2 style={sectionTitleStyle}>What’s happening with {symbol}</h2>
+      <h2 style={sectionTitleStyle}>What's happening with {symbol}</h2>
 
       <div style={{ display: "grid", gap: 14, marginTop: 16 }}>
         {detailedNews.length ? (
@@ -2115,7 +2176,7 @@ function DetailedNewsFallback({
                   rel="noopener noreferrer"
                   style={readArticleLinkStyle}
                 >
-                  Read full article ↗
+                  Read full article \u2197
                 </a>
               </div>
             </article>
@@ -2164,7 +2225,7 @@ function DetailedNewsFallback({
                   rel="noopener noreferrer"
                   style={compactMutedLinkStyle}
                 >
-                  Read ↗
+                  Read \u2197
                 </a>
               </article>
             ))}
@@ -2395,7 +2456,7 @@ function LatestEarningsCard({
       boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035)",
     }}
   >
-    See full report →
+    See full report \u2192
   </Link>
 </div>
 
@@ -2450,7 +2511,7 @@ function EarningsMetric({
     <div style={earningsMetricStyle(tone)}>
       <div style={earningsMiniLabelStyle}>{label}</div>
       <div style={earningsMetricValueStyle}>{value}</div>
-      {meta && meta !== "—" ? (
+      {meta && meta !== "\u2014" ? (
         <div style={earningsMetricMetaStyle(tone)}>{meta}</div>
       ) : null}
     </div>
@@ -2704,7 +2765,7 @@ export default async function StockNewsPage({ params }: Props) {
                 className="newsHeroBtn"
                 style={heroPrimaryCtaStyle}
               >
-                OPEN ON TRADINGVIEW ↗
+                OPEN ON TRADINGVIEW \u2197
               </a>
 
               <Link
@@ -2912,7 +2973,7 @@ export default async function StockNewsPage({ params }: Props) {
               rel="noopener noreferrer sponsored nofollow"
               style={bottomActionStyle("green")}
             >
-              OPEN ON TRADINGVIEW ↗
+              OPEN ON TRADINGVIEW \u2197
             </a>
 
             <Link href="/platforms" style={bottomActionStyle("red")}>
@@ -4096,4 +4157,3 @@ function bottomActionStyle(tone: "blue" | "green" | "red"): CSSProperties {
     color: "#fee2e2",
   };
 }
-

@@ -2,6 +2,11 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 import EarningsSymbolPicker from "./EarningsSymbolPicker";
+import { getDailyHistory } from "@/lib/server/historyCache";
+import {
+  computeIndicatorSeed,
+  type Point,
+} from "@/lib/indicators";
 
 export const dynamic = "force-dynamic";
 
@@ -99,7 +104,7 @@ function formatDate(value?: string | null) {
 }
 
 function formatMoney(value: number | null | undefined, compact = false) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  if (typeof value !== "number" || !Number.isFinite(value)) return "\u2014";
 
   const abs = Math.abs(value);
 
@@ -113,7 +118,7 @@ function formatMoney(value: number | null | undefined, compact = false) {
 }
 
 function formatPercent(value: number | null | undefined, digits = 1) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  if (typeof value !== "number" || !Number.isFinite(value)) return "\u2014";
   return `${value >= 0 ? "+" : ""}${value.toFixed(digits)}%`;
 }
 
@@ -133,7 +138,7 @@ function calcGrowth(current: number | null, previous: number | null) {
 }
 
 function quarterLabel(date?: string | null) {
-  if (!date) return "—";
+  if (!date) return "\u2014";
 
   const dt = new Date(`${date}T00:00:00Z`);
   if (Number.isNaN(dt.getTime())) return date;
@@ -161,7 +166,7 @@ function fiscalLabelFromStatement(row?: FmpIncomeStatementRow | null) {
 }
 
 function displayQuarterLabel(row?: FmpEarningsRow | null) {
-  if (!row) return "—";
+  if (!row) return "\u2014";
   return row.fiscalLabel || quarterLabel(row.date);
 }
 
@@ -296,15 +301,15 @@ function getMetricHelp(label: string) {
   }
 
   if (label === "Revenue") {
-    return "Revenue is the company’s sales for the quarter before expenses are removed.";
+    return "Revenue is the company's sales for the quarter before expenses are removed.";
   }
 
   if (label === "YoY EPS growth") {
-    return "Year-over-year EPS growth compares this quarter’s FMP EPS with the same quarter last year.";
+    return "Year-over-year EPS growth compares this quarter's FMP EPS with the same quarter last year.";
   }
 
   if (label === "YoY revenue growth") {
-    return "Year-over-year revenue growth compares this quarter’s revenue with the same quarter last year.";
+    return "Year-over-year revenue growth compares this quarter's revenue with the same quarter last year.";
   }
 
   return "This metric helps investors judge whether the latest earnings report was stronger, weaker, or broadly in line with expectations.";
@@ -551,9 +556,6 @@ async function getEarningsData(symbol: string) {
           matchingIncome?.date?.slice(0, 4) ||
           row.date?.slice(0, 4),
         periodEndDate: matchingIncome?.date,
-        // Prefer FMP's earnings EPS first because this is usually the market-facing
-        // adjusted/non-GAAP EPS used in earnings headlines. Income-statement EPS is
-        // GAAP/basic/diluted and is only a fallback.
         epsActual:
           row.epsActual ??
           matchingCalendar?.epsActual ??
@@ -685,27 +687,83 @@ function metricCardStyle(tone: EarningsTone | "default" = "default") {
   };
 }
 
+// ── Metadata (dynamic, data-driven) ─────────────────────────────────────────
+
+async function fetchQuoteForMeta(
+  symbol: string
+): Promise<{ price: number | null; date: string | null }> {
+  const apiKey = process.env.FMP_API_KEY;
+  if (!apiKey) return { price: null, date: null };
+  try {
+    const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(
+      symbol
+    )}&apikey=${encodeURIComponent(apiKey)}`;
+    const res = await fetch(url, {
+      next: { revalidate: 900 },
+      headers: { accept: "application/json" },
+    });
+    if (!res.ok) return { price: null, date: null };
+    const json = await res.json();
+    const row = Array.isArray(json) ? json[0] : json;
+    const price =
+      typeof row?.price === "number" && Number.isFinite(row.price)
+        ? (row.price as number)
+        : null;
+    return { price, date: new Date().toISOString().slice(0, 10) };
+  } catch {
+    return { price: null, date: null };
+  }
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { symbol } = await params;
   const clean = cleanSymbol(symbol);
 
+  const [rawHistory, { price, date }] = await Promise.all([
+    getDailyHistory(clean).catch(() => []),
+    fetchQuoteForMeta(clean),
+  ]);
+
+  const points: Point[] = (rawHistory as Point[]).filter(
+    (p) => p.date && Number.isFinite(p.close)
+  );
+
+  const seed = computeIndicatorSeed(points, "", price, date);
+
+  // Build an earnings-specific title and description using the indicator seed.
+  const priceStr =
+    seed.lastClose != null ? ` — Price $${seed.lastClose.toFixed(2)}` : "";
+  const trendStr = seed.trendLabel ? `, ${seed.trendLabel}` : "";
+
+  const title = `${clean} Earnings, EPS & Revenue${priceStr} | MyStockHarbor`;
+  const description = `Review ${clean} stock earnings, EPS surprise, revenue surprise${trendStr} and a simple earnings score. Historical trend and yearly breakdown on MyStockHarbor.`;
+
   return {
-    title: `${clean} Stock Earnings, EPS, Revenue & Earnings Score | MyStockHarbor`,
-    description: `Review ${clean} stock earnings, EPS estimates, revenue surprises, recent earnings trend and a simple earnings score from MyStockHarbor.`,
+    title,
+    description,
     alternates: {
       canonical: `https://www.mystockharbor.com/stock/${clean}/earnings`,
     },
     openGraph: {
-      title: `${clean} Stock Earnings & Earnings Score | MyStockHarbor`,
-      description: `Review ${clean} stock earnings, EPS, revenue surprises and recent earnings trend.`,
+      title: `${clean} Earnings & Earnings Score | MyStockHarbor`,
+      description,
       url: `https://www.mystockharbor.com/stock/${clean}/earnings`,
       siteName: "MyStockHarbor",
-      type: "website",
+      type: "article",
+      images: [
+        {
+          url: "https://www.mystockharbor.com/og-image-v2.png",
+          width: 1200,
+          height: 630,
+          alt: "MyStockHarbor earnings dashboard",
+        },
+      ],
     },
     twitter: {
       card: "summary_large_image",
-      title: `${clean} Stock Earnings & Earnings Score | MyStockHarbor`,
-      description: `Review ${clean} stock earnings, EPS, revenue surprises and recent earnings trend.`,
+      title: `${clean} Earnings & Earnings Score | MyStockHarbor`,
+      description,
+      images: ["https://www.mystockharbor.com/og-image-v2.png"],
     },
   };
 }
@@ -1712,18 +1770,18 @@ export default async function StockEarningsPage({ params }: Props) {
 
               <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
                 <Link className="actionLink" href={`/stock/${encodeURIComponent(clean)}`}>
-                  Open {clean} stock page →
+                  Open {clean} stock page \u2192
                 </Link>
 
                 <Link
                   className="actionLink green"
                   href={`/stock/${encodeURIComponent(clean)}/news`}
                 >
-                  Read {clean} news →
+                  Read {clean} news \u2192
                 </Link>
 
                 <Link className="actionLink" href="/pickers">
-                  Open stock pickers →
+                  Open stock pickers \u2192
                 </Link>
               </div>
             </section>
