@@ -72,7 +72,7 @@ export default function RootLayout({
   };
 
   return (
-    <html lang="en">
+    <html lang="en-GB">
       <head>
         <script
           async
@@ -93,7 +93,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               .site-footer-main-grid {
-                grid-template-columns: minmax(140px, max-content) minmax(180px, max-content);
+                grid-template-columns: minmax(140px, max-content) minmax(180px, max-content) minmax(180px, max-content);
               }
 
               @media (max-width: 720px) {
@@ -253,6 +253,45 @@ export default function RootLayout({
                     </Link>
                   </div>
                 </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 6,
+                    alignContent: "start",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: "#e2e8f0",
+                    }}
+                  >
+                    Learn
+                  </div>
+
+                  <div style={{ display: "grid", gap: 4 }}>
+                    <Link href="/what-is-rsi-indicator" style={footerLinkStyle}>
+                      What Is RSI?
+                    </Link>
+                    <Link href="/what-is-macd-indicator" style={footerLinkStyle}>
+                      What Is MACD?
+                    </Link>
+                    <Link href="/how-to-read-stock-charts" style={footerLinkStyle}>
+                      How To Read Charts
+                    </Link>
+                    <Link href="/best-free-stock-screener" style={footerLinkStyle}>
+                      Free Stock Screener
+                    </Link>
+                    <Link href="/markets/spx" style={footerLinkStyle}>
+                      S&amp;P 500 Analysis
+                    </Link>
+                    <Link href="/best-trading-platform-for-beginners" style={footerLinkStyle}>
+                      Best Trading Platforms
+                    </Link>
+                  </div>
+                </div>
               </div>
 
               <div
@@ -303,6 +342,18 @@ export default function RootLayout({
                     style={footerSmallLinkStyle}
                   >
                     Bearish Divergence Stocks
+                  </Link>
+                  <Link
+                    href="/stocks-above-200-day-moving-average"
+                    style={footerSmallLinkStyle}
+                  >
+                    Stocks Above 200 MA
+                  </Link>
+                  <Link
+                    href="/stocks-with-unusual-volume"
+                    style={footerSmallLinkStyle}
+                  >
+                    Unusual Volume Stocks
                   </Link>
                 </div>
               </div>
