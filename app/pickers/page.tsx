@@ -173,10 +173,10 @@ export default function PickersPage() {
 
       <style>{`
         .wrap { max-width: 1240px; margin: 0 auto; padding: 28px 20px 40px; box-sizing: border-box; }
-        /* Left panel narrower, right panel wider to fit 3-col bullet list */
-        .heroGrid { display: grid; grid-template-columns: minmax(0, 0.65fr) minmax(0, 1.35fr); gap: 14px; align-items: stretch; min-width: 0; width: 100%; }
-        /* 3 columns for the setup link list */
-        .hero-bullet-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px 12px; }
+        /* Narrower left hero, wider right for 3-col bullet list */
+        .heroGrid { display: grid; grid-template-columns: minmax(0, 0.55fr) minmax(0, 1.45fr); gap: 14px; align-items: stretch; min-width: 0; width: 100%; }
+        /* 3 tight columns for the setup links */
+        .hero-bullet-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px 10px; }
         .hero-bullet-item:hover { color: #e2e8f0 !important; }
         a:hover { filter: brightness(1.05); transform: translateY(-1px); }
         .msh-site-nav { position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:8px;padding:12px 24px;background:rgba(10,15,26,0.90);backdrop-filter:blur(14px);border-bottom:1px solid #1a2336; }
