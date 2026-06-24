@@ -80,7 +80,7 @@ function toChartHref(href: string, symbol?: string) {
   const fallback = cleanedSymbol ? `/dashboard?symbol=${encodeURIComponent(cleanedSymbol)}` : "/dashboard";
   const raw = href && href.trim() ? href.trim() : "";
   const normalised = raw.startsWith("/?symbol=") ? raw.replace("/?symbol=", "/dashboard?symbol=") : raw.startsWith("/?")
-    ? raw.replace("/?" , "/dashboard?") : raw;
+    ? raw.replace("/?", "/dashboard?") : raw;
   const base = normalised.startsWith("/dashboard") ? normalised : fallback;
   return base.includes("#chart") ? base : `${base}#chart`;
 }
@@ -190,36 +190,70 @@ function playTone(tone: PlayCardDef["tone"]) {
 
 function PlayDiagram({ pattern, tone }: { pattern: PlayCardDef["pattern"]; tone: PlayCardDef["tone"] }) {
   const c = playTone(tone);
+
+  // ── Ascending triangle ──────────────────────────────────────────────────
+  // Flat resistance top, rising support base, price coiling toward breakout
+  if (pattern === "ascending") return (
+    <svg viewBox="0 0 280 110" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Ascending triangle">
+      {/* Flat resistance line */}
+      <path d="M20 28 H260" stroke={c.line} strokeWidth="2" strokeDasharray="6 4" strokeLinecap="round" opacity="0.85" />
+      {/* Rising support trendline */}
+      <path d="M20 88 L260 28" stroke={c.accent} strokeWidth="1.5" strokeLinecap="round" opacity="0.55" />
+      {/* Price action: higher lows, touching resistance repeatedly */}
+      <path d="M22 86 L50 28 L72 62 L100 28 L122 50 L150 28 L172 42 L200 28 L222 35 L250 28" stroke="rgba(226,232,240,0.75)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Breakout arrow hint */}
+      <path d="M250 28 L268 14" stroke={c.line} strokeWidth="2.5" strokeLinecap="round" opacity="0.90" />
+    </svg>
+  );
+
+  // ── Descending triangle ─────────────────────────────────────────────────
+  // Flat support base, declining resistance top, price coiling downward
   if (pattern === "descending") return (
-    <svg viewBox="0 0 280 100" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Descending triangle">
-      <path d="M20 80 H260" stroke={c.line} strokeWidth="2" strokeDasharray="6 5" strokeLinecap="round" />
-      <path d="M22 28 L260 80" stroke={c.accent} strokeWidth="2" strokeLinecap="round" opacity="0.7" />
-      <path d="M24 34 L52 80 L82 44 L110 80 L140 56 L168 80 L198 68 L226 80 L256 77" stroke="rgba(226,232,240,0.70)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    <svg viewBox="0 0 280 110" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Descending triangle">
+      {/* Flat support line */}
+      <path d="M20 82 H260" stroke={c.line} strokeWidth="2" strokeDasharray="6 4" strokeLinecap="round" opacity="0.85" />
+      {/* Declining resistance trendline */}
+      <path d="M20 24 L260 82" stroke={c.accent} strokeWidth="1.5" strokeLinecap="round" opacity="0.55" />
+      {/* Price action: lower highs, holding support */}
+      <path d="M22 26 L50 82 L72 54 L100 82 L122 62 L150 82 L172 70 L200 82 L222 77 L250 82" stroke="rgba(226,232,240,0.75)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Breakdown arrow hint */}
+      <path d="M250 82 L268 96" stroke={c.line} strokeWidth="2.5" strokeLinecap="round" opacity="0.90" />
     </svg>
   );
-  if (pattern === "macroSR") return (
-    <svg viewBox="0 0 280 100" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Macro support resistance">
-      <path d="M20 24 H260" stroke="#ef4444" strokeWidth="2" strokeDasharray="6 5" strokeLinecap="round" opacity="0.8" />
-      <path d="M20 76 H260" stroke="#22c55e" strokeWidth="2" strokeDasharray="6 5" strokeLinecap="round" opacity="0.8" />
-      <path d="M24 67 L54 46 L82 70 L112 52 L142 27 L170 56 L198 75 L226 53 L256 36" stroke="rgba(226,232,240,0.70)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+
+  // ── Bull flag ───────────────────────────────────────────────────────────
+  // Strong pole up, tight sideways/down consolidation channel, breakout
   if (pattern === "bullFlag") return (
-    <svg viewBox="0 0 280 100" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Bull flag">
-      <path d="M20 82 L44 72 L62 54 L78 24" stroke="#22c55e" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M80 24 L116 38 L152 32 L190 45 L228 38" stroke="rgba(226,232,240,0.70)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M82 22 L238 40" stroke={c.line} strokeWidth="1.5" strokeDasharray="5 5" strokeLinecap="round" opacity="0.6" />
-      <path d="M76 50 L232 68" stroke={c.line} strokeWidth="1.5" strokeDasharray="5 5" strokeLinecap="round" opacity="0.6" />
-      <path d="M228 38 L256 22" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" />
+    <svg viewBox="0 0 280 110" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Bull flag">
+      {/* Flag pole — strong green rally */}
+      <path d="M30 95 L55 78 L68 58 L78 30" stroke="#22c55e" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Flag channel upper boundary (slight down slope) */}
+      <path d="M78 30 L180 44" stroke="rgba(226,232,240,0.45)" strokeWidth="1.5" strokeDasharray="5 4" strokeLinecap="round" />
+      {/* Flag channel lower boundary */}
+      <path d="M78 48 L180 62" stroke="rgba(226,232,240,0.45)" strokeWidth="1.5" strokeDasharray="5 4" strokeLinecap="round" />
+      {/* Consolidation price action inside flag */}
+      <path d="M80 32 L108 46 L136 38 L164 52 L180 44" stroke="rgba(226,232,240,0.70)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Breakout — green surge resuming the trend */}
+      <path d="M180 44 L210 28 L240 16" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Breakout arrow */}
+      <path d="M240 16 L258 8" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" opacity="0.85" />
     </svg>
   );
-  return (
-    <svg viewBox="0 0 280 100" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Ascending triangle">
-      <path d="M20 24 H260" stroke={c.line} strokeWidth="2" strokeDasharray="6 5" strokeLinecap="round" />
-      <path d="M22 80 L260 24" stroke={c.accent} strokeWidth="2" strokeLinecap="round" opacity="0.7" />
-      <path d="M24 68 L54 24 L84 62 L114 24 L144 50 L174 24 L204 42 L234 24 L260 26" stroke="rgba(226,232,240,0.70)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+
+  // ── Macro support / resistance ──────────────────────────────────────────
+  // Price oscillating between clear horizontal support and resistance zones
+  if (pattern === "macroSR") return (
+    <svg viewBox="0 0 280 110" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Macro support resistance">
+      {/* Resistance zone (top) */}
+      <path d="M20 22 H260" stroke="#ef4444" strokeWidth="2" strokeDasharray="6 4" strokeLinecap="round" opacity="0.80" />
+      {/* Support zone (bottom) */}
+      <path d="M20 78 H260" stroke="#22c55e" strokeWidth="2" strokeDasharray="6 4" strokeLinecap="round" opacity="0.80" />
+      {/* Price bouncing between zones */}
+      <path d="M22 72 L50 26 L80 72 L110 26 L140 68 L168 26 L196 72 L224 28 L252 72" stroke="rgba(226,232,240,0.72)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
+
+  return null;
 }
 
 function PatternPlaysSection() {
@@ -248,19 +282,11 @@ function PatternPlaysSection() {
 }
 
 // ── Ticker row ───────────────────────────────────────────────────────────────
-// Line 1: TICKER (large bold)  ·  Company Name (truncated, hover for full)
-// Line 2: note/signal text     (truncated, hover for full) — hidden mobile
-// Both lines strictly one line each — no wrapping anywhere.
 function PickerRowContent({ symbol, note, companyName }: { symbol: string; note?: string; companyName?: string }) {
   const fullLine1 = companyName ? `${symbol} · ${companyName}` : symbol;
-  const fullLine2 = note ?? "";
   return (
     <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0, overflow: "hidden" }}>
-      {/* Line 1: TICKER · Company Name — both on one line, company truncates */}
-      <span
-        title={companyName ? fullLine1 : undefined}
-        style={{ display: "flex", alignItems: "baseline", minWidth: 0, overflow: "hidden" }}
-      >
+      <span title={companyName ? fullLine1 : undefined} style={{ display: "flex", alignItems: "baseline", minWidth: 0, overflow: "hidden" }}>
         <span className="picker-row-ticker">{symbol}</span>
         {companyName ? (
           <>
@@ -269,15 +295,7 @@ function PickerRowContent({ symbol, note, companyName }: { symbol: string; note?
           </>
         ) : null}
       </span>
-      {/* Line 2: note — strictly one line, hover reveals full text */}
-      {note ? (
-        <span
-          className="picker-row-note"
-          title={fullLine2}
-        >
-          {note}
-        </span>
-      ) : null}
+      {note ? <span className="picker-row-note" title={note}>{note}</span> : null}
     </span>
   );
 }
@@ -394,7 +412,11 @@ export default function PickersClient() {
   }, []);
 
   // ── Fetch company names ─────────────────────────────────────────────────────
-  // Exact match first, then first result fallback (handles DAY, K, AES, FOXA etc.)
+  // The /api/symbols route calls FMP's profile endpoint first (fetchFmpExactSymbol),
+  // which returns the authoritative company name even for tickers the Nasdaq
+  // directory filters out (FOXA, HSY, QS etc. get stripped as "Class A" / preferred).
+  // Strategy: exact symbol match → if none, only fall back to results[0] when
+  // that result's symbol also starts with our query (prevents wild mismatches).
   useEffect(() => {
     if (!sections.length) return;
     let cancelled = false;
@@ -417,8 +439,15 @@ export default function PickersClient() {
             if (!res.ok) return;
             const data = (await res.json()) as { results?: { symbol: string; name: string }[] };
             const results = data.results ?? [];
+            // 1. Exact match (FMP profile hit comes back first in the API route)
             const exact = results.find((r) => (r.symbol ?? "").trim().toUpperCase() === sym);
-            const match = exact ?? results[0] ?? null;
+            // 2. Safe fallback: only use results[0] if its symbol starts with our query
+            //    This prevents a ticker like FOXA (filtered by Nasdaq parser) from
+            //    getting a completely unrelated company name as a fallback
+            const fallback = !exact && results[0] && (results[0].symbol ?? "").trim().toUpperCase().startsWith(sym)
+              ? results[0]
+              : null;
+            const match = exact ?? fallback;
             if (match?.name) batchMap.set(sym, match.name);
           } catch { /* ignore */ }
         }));
@@ -507,10 +536,8 @@ export default function PickersClient() {
     const macroSR     = safeSections.find((s) => { const t = s.title.toLowerCase(); return t.includes("macro") && t.includes("support") && t.includes("resistance"); });
     const earningsGrowth = safeSections.find((s) => s.title.toLowerCase().includes("strong earnings growth"));
     const divergence  = safeSections.find((s) => s.title.toLowerCase().includes("divergence"));
-    // Remaining sections not explicitly placed
     const placed = new Set([ma200, buyDip, athBreak, threeMonth, oversold, macroSR, earningsGrowth, divergence].filter(Boolean));
     const others = safeSections.filter((s) => !placed.has(s) && !s.title.toLowerCase().includes("hot market names"));
-
     if (ma200) out.push(ma200);
     if (topBuySection) out.push(topBuySection);
     if (buyDip) out.push(buyDip);
@@ -519,7 +546,6 @@ export default function PickersClient() {
     if (threeMonth) out.push(threeMonth);
     if (topSellSection) out.push(topSellSection);
     if (oversold) out.push(oversold);
-    // Earnings Growth and Divergence placed adjacent
     if (earningsGrowth) out.push(earningsGrowth);
     if (divergence) out.push(divergence);
     return [...out, ...others];
@@ -546,52 +572,19 @@ export default function PickersClient() {
   .pickers-loading-bar { height:100%;width:35%;border-radius:999px;background:rgba(59,130,246,0.90);animation:pickersBar 1.1s linear infinite; }
   .pickers-shell { width:100%;min-width:0; }
   .pickers-sections-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start; }
-
-  /* ── Picker row ─────────────────────────────────────────────── */
   .picker-row { display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.06); }
   .picker-row:last-child { border-bottom:none; }
   .picker-row-left { display:flex;align-items:center;gap:10px;min-width:0;flex:1;overflow:hidden; }
-
-  /* Ticker — larger, takes the visual weight of both lines */
   .picker-row-ticker { font-size:16px;font-weight:700;color:#e2e8f0;letter-spacing:0.01em;flex:0 0 auto;line-height:1.2; }
-
-  /* Separator between ticker and company name */
   .picker-name-sep { font-size:11px;color:rgba(148,163,184,0.28);flex:0 0 auto;user-select:none; }
-
-  /* Company name — strictly one line, truncates with ellipsis, hover reveals full */
-  .picker-row-company {
-    font-size:11px;
-    color:rgba(148,163,184,0.55);
-    font-weight:400;
-    white-space:nowrap;
-    overflow:hidden;
-    text-overflow:ellipsis;
-    min-width:0;
-    flex:1;
-  }
-
-  /* Note/signal line — strictly one line, truncates, hover reveals full */
-  .picker-row-note {
-    font-size:11px;
-    color:rgba(148,163,184,0.58);
-    font-weight:400;
-    white-space:nowrap;
-    overflow:hidden;
-    text-overflow:ellipsis;
-    display:block;
-  }
-
+  .picker-row-company { font-size:11px;color:rgba(148,163,184,0.55);font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1; }
+  .picker-row-note { font-size:11px;color:rgba(148,163,184,0.58);font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block; }
   .picker-row-link { font-size:11px;font-weight:600;color:rgba(148,163,184,0.55);text-decoration:none;white-space:nowrap;flex:0 0 auto;transition:color 120ms ease; }
   .picker-row-link:hover { color:#93c5fd !important; }
-
-  /* See all */
   .pickers-see-all { display:inline-flex !important;align-items:center;padding:4px 10px;border-radius:7px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);font-size:11px;font-weight:600;color:#4ade80;text-decoration:none;transition:color 120ms ease,background 120ms ease;white-space:nowrap; }
   .pickers-see-all:hover { background:rgba(255,255,255,0.07);color:#86efac !important;filter:none !important;transform:none !important; }
-
-  /* Section footer: fetch button + see all on same line */
   .pickers-section-footer { display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;flex-wrap:nowrap; }
   .pickers-section-footer-left { display:flex;align-items:center;gap:8px;flex:1;min-width:0; }
-
   .pattern-plays-grid { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px; }
   .pattern-play-card:hover { transform:translateY(-2px);filter:brightness(1.08); }
   .pickers-filter-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px; }
@@ -600,7 +593,6 @@ export default function PickersClient() {
   .pickers-section-title-text { min-width:0;line-height:1.22;font-size:14px;font-weight:700; }
   .pickers-screener-panel { display:block; }
   .pickers-earnings-fetch-button:hover:not(:disabled) { filter:brightness(1.08);transform:translateY(-1px); }
-
   @media (max-width: 1100px) {
     .pickers-sections-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
     .pattern-plays-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
@@ -752,11 +744,7 @@ export default function PickersClient() {
                         <div className="picker-row-left">
                           <span style={{ width: 6, height: 6, borderRadius: 999, background: toneDot(it.tone), flex: "0 0 auto" }} />
                           <a href={toChartHref(it.dashboardHref ?? "", it.symbol)} style={{ textDecoration: "none", minWidth: 0, flex: 1, overflow: "hidden" }}>
-                            <PickerRowContent
-                              symbol={it.symbol}
-                              note={it.note}
-                              companyName={companyNames.get(it.symbol)}
-                            />
+                            <PickerRowContent symbol={it.symbol} note={it.note} companyName={companyNames.get(it.symbol)} />
                           </a>
                         </div>
                         <a href={toChartHref(it.dashboardHref ?? "", it.symbol)} className="picker-row-link">Chart ↗</a>
