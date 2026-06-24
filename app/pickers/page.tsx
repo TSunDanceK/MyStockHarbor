@@ -67,7 +67,7 @@ export default function PickersPage() {
         <div style={{ display: "grid", gap: 14 }}>
           <div className="heroGrid">
 
-            {/* Left panel — compact header + description */}
+            {/* Left panel */}
             <section className="heroPanel" style={{ border: "1px solid rgba(59,130,246,0.18)", borderRadius: 22, padding: 18, background: "linear-gradient(135deg, rgba(10,16,32,0.98), rgba(7,11,22,0.98))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), 0 14px 34px rgba(0,0,0,0.28)", minWidth: 0, width: "100%", boxSizing: "border-box", overflow: "hidden" }}>
               <div className="pickersHeroPills" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", minWidth: 0 }}>
                 <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 11px", borderRadius: 999, border: "1px solid rgba(59,130,246,0.28)", background: "rgba(59,130,246,0.10)", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#93c5fd", maxWidth: "100%", boxSizing: "border-box" }}>
@@ -79,11 +79,11 @@ export default function PickersPage() {
                 Stock Pickers &amp; Technical Setup Ideas
               </h1>
               <p className="pickersHeroText" style={{ marginTop: 8, fontSize: 14, lineHeight: 1.6, opacity: 0.72, maxWidth: 480 }}>
-                Screened ideas across oversold, breakouts, divergence, 200-day MA tests and more. Starting points for chart analysis — not buy or sell recommendations.
+                Screened ideas across oversold, breakouts, divergence, 200-day MA tests and more. Starting points for chart analysis \u2014 not buy or sell recommendations.
               </p>
             </section>
 
-            {/* Right panel — 3-col bullet list — desktop only */}
+            {/* Right panel \u2014 3-col bullet list \u2014 desktop only */}
             <section className="heroPanel mobile-hide-screened-setups" style={{ border: "1px solid rgba(255,255,255,0.10)", borderRadius: 22, padding: "18px 20px", background: "rgba(10,14,24,0.96)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), 0 14px 34px rgba(0,0,0,0.28)", minWidth: 0, width: "100%", boxSizing: "border-box", overflow: "hidden" }}>
               <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "rgba(148,163,184,0.70)", marginBottom: 12 }}>All screened setups on this page</div>
               <div className="hero-bullet-grid">
@@ -104,7 +104,7 @@ export default function PickersPage() {
             <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.65)", marginBottom: 8 }}>Screened Results</div>
             <h2 style={{ margin: "0 0 6px", fontSize: 24, lineHeight: 1.12, letterSpacing: "-0.025em", fontWeight: 700 }}>Screened setups across the market</h2>
             <p className="pickers-mobile-hide" style={{ margin: 0, fontSize: 14, lineHeight: 1.6, opacity: 0.62, maxWidth: 720 }}>
-              These lists are filtered and ranked to surface cleaner, more relevant setups first. Starting points for chart review — not financial advice.
+              These lists are filtered and ranked to surface cleaner, more relevant setups first. Starting points for chart review \u2014 not financial advice.
             </p>
           </div>
           <div style={{ padding: 18, boxSizing: "border-box" }}>
@@ -137,21 +137,21 @@ export default function PickersPage() {
         <section style={{ marginTop: 22, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, width: "100%", boxSizing: "border-box" }}>
           <Link href="/" style={{ ...supportCardStyle, border: "1px solid rgba(250,204,21,0.18)", background: "rgba(24,20,8,0.60)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 8, border: "1px solid rgba(250,204,21,0.24)", background: "rgba(250,204,21,0.08)", fontSize: 14, flex: "0 0 auto" }}>📈</span>
+              <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 8, border: "1px solid rgba(250,204,21,0.24)", background: "rgba(250,204,21,0.08)", fontSize: 14, flex: "0 0 auto" }}>\ud83d\udcc8</span>
               <div style={{ fontSize: 16, fontWeight: 700, color: "#fefce8" }}>Open the dashboard</div>
             </div>
             <div style={midCardTextStyle}>Review price structure, overlays and indicators for any symbol on this page.</div>
           </Link>
           <Link href="/learn" style={{ ...supportCardStyle, border: "1px solid rgba(59,130,246,0.18)", background: "rgba(8,16,30,0.60)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 8, border: "1px solid rgba(59,130,246,0.24)", background: "rgba(59,130,246,0.08)", fontSize: 14, flex: "0 0 auto" }}>📘</span>
+              <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 8, border: "1px solid rgba(59,130,246,0.24)", background: "rgba(59,130,246,0.08)", fontSize: 14, flex: "0 0 auto" }}>\ud83d\udcd8</span>
               <div style={{ fontSize: 16, fontWeight: 700, color: "#eff6ff" }}>Visit the Learn hub</div>
             </div>
             <div style={midCardTextStyle}>Chart concepts, setups and beginner-friendly guides.</div>
           </Link>
           <Link href="/platforms" style={{ ...supportCardStyle, border: "1px solid rgba(34,197,94,0.18)", background: "rgba(8,20,16,0.60)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 8, border: "1px solid rgba(34,197,94,0.24)", background: "rgba(34,197,94,0.08)", fontSize: 14, flex: "0 0 auto" }}>🏦</span>
+              <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 8, border: "1px solid rgba(34,197,94,0.24)", background: "rgba(34,197,94,0.08)", fontSize: 14, flex: "0 0 auto" }}>\ud83c\udfe6</span>
               <div style={{ fontSize: 16, fontWeight: 700, color: "#f0fdf4" }}>Compare platforms</div>
             </div>
             <div style={midCardTextStyle}>Review charting and broker options after narrowing down your ideas.</div>
@@ -173,9 +173,9 @@ export default function PickersPage() {
 
       <style>{`
         .wrap { max-width: 1240px; margin: 0 auto; padding: 28px 20px 40px; box-sizing: border-box; }
-        /* Narrower left hero, wider right for 3-col bullet list */
-        .heroGrid { display: grid; grid-template-columns: minmax(0, 0.55fr) minmax(0, 1.45fr); gap: 14px; align-items: stretch; min-width: 0; width: 100%; }
-        /* 3 tight columns for the setup links */
+        /* Left wider (title), right narrower (bullet list still fits 3 cols) */
+        .heroGrid { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 14px; align-items: stretch; min-width: 0; width: 100%; }
+        /* 3 tight columns */
         .hero-bullet-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px 10px; }
         .hero-bullet-item:hover { color: #e2e8f0 !important; }
         a:hover { filter: brightness(1.05); transform: translateY(-1px); }
