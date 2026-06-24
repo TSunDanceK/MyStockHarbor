@@ -19,6 +19,11 @@ const mainPages = [
   { path: "/risk-disclaimer", changeFrequency: "monthly" as const, priority: 0.4 },
 ];
 
+const marketPages = [
+  // Market overview / analysis pages
+  "/markets/spx",
+];
+
 const seoGuides = [
   "/how-to-read-stock-charts",
   "/best-stock-indicators-for-beginners",
@@ -50,6 +55,9 @@ const seoGuides = [
   "/risk-reward-ratio",
   "/margin-trading-explained",
   "/trading-risk-management",
+  "/best-trading-platform-for-beginners",
+  "/stocks-above-200-day-moving-average",
+  "/macro-support-resistance-stocks",
 
   // live setup / picker SEO pages
   "/oversold-stocks-today",
@@ -132,6 +140,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: page.priority,
   }));
 
+  const marketPageEntries: MetadataRoute.Sitemap = marketPages.map((path) => ({
+    url: toAbsoluteUrl(path),
+    lastModified: now,
+    changeFrequency: "daily" as const,
+    priority: 0.88,
+  }));
+
   const seoGuideEntries: MetadataRoute.Sitemap = seoGuides.map((path) => ({
     url: toAbsoluteUrl(path),
     lastModified: now,
@@ -199,6 +214,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   const entries: MetadataRoute.Sitemap = [
     ...mainPageEntries,
+    ...marketPageEntries,
     ...seoGuideEntries,
     ...insightEntries,
     ...videoEntries,
