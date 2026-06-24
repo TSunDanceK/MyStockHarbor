@@ -138,13 +138,13 @@ function getHeaderHelp(title: string) {
   if (title.includes("Sell Signals")) return "Stocks showing multiple bearish technical conditions, ranked by signal count.";
   if (title.includes("Oversold")) return "Ranked oversold setups favouring stronger oversold readings, better liquidity and cleaner rebound potential.";
   if (title.includes("Best Trend Score")) return "Stocks with strong trend structure: price above MA50/MA200, correct MA alignment, positive MACD momentum.";
-  if (title.includes("Positive Last Earnings")) return "Ranked by the most recent earnings report — EPS beats, revenue beats and positive EPS carry more weight.";
+  if (title.includes("Positive Last Earnings")) return "Ranked by the most recent earnings report \u2014 EPS beats, revenue beats and positive EPS carry more weight.";
   if (title.includes("Strong Earnings Growth")) return "Ranked by year-over-year earnings improvement, recent positive EPS consistency and revenue growth.";
   if (title.includes("Overbought")) return "Ranked overbought setups favouring stronger extension and cleaner pullback-risk profiles.";
   if (title.includes("Divergence")) return "Ranked by timeframe, duration and structure quality. Weekly divergences usually carry more weight than daily ones.";
   if (title.includes("Macro Support") || title.includes("Resistance")) return "Stocks near wider weekly support or resistance zones, ranked by touch count, distance and structure length.";
   if (title.includes("All-Time Highs")) return "Pullback setups from all-time highs, ranked to favour liquid, tradable names over broken charts.";
-  if (title.toLowerCase().includes("200-day")) return "Stocks near the 200-day moving average — a key long-term level traders watch for support, resistance and trend direction.";
+  if (title.toLowerCase().includes("200-day")) return "Stocks near the 200-day moving average \u2014 a key long-term level traders watch for support, resistance and trend direction.";
   if (title.includes("Breakout")) return "Ranked to favour newer, cleaner and more liquid breakouts over older or more stretched moves.";
   return "Stocks matching multiple technical conditions worth reviewing on the chart.";
 }
@@ -191,64 +191,44 @@ function playTone(tone: PlayCardDef["tone"]) {
 function PlayDiagram({ pattern, tone }: { pattern: PlayCardDef["pattern"]; tone: PlayCardDef["tone"] }) {
   const c = playTone(tone);
 
-  // ── Ascending triangle ──────────────────────────────────────────────────
-  // Flat resistance top, rising support base, price coiling toward breakout
   if (pattern === "ascending") return (
     <svg viewBox="0 0 280 110" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Ascending triangle">
-      {/* Flat resistance line */}
       <path d="M20 28 H260" stroke={c.line} strokeWidth="2" strokeDasharray="6 4" strokeLinecap="round" opacity="0.85" />
-      {/* Rising support trendline */}
       <path d="M20 88 L260 28" stroke={c.accent} strokeWidth="1.5" strokeLinecap="round" opacity="0.55" />
-      {/* Price action: higher lows, touching resistance repeatedly */}
       <path d="M22 86 L50 28 L72 62 L100 28 L122 50 L150 28 L172 42 L200 28 L222 35 L250 28" stroke="rgba(226,232,240,0.75)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      {/* Breakout arrow hint */}
       <path d="M250 28 L268 14" stroke={c.line} strokeWidth="2.5" strokeLinecap="round" opacity="0.90" />
     </svg>
   );
 
-  // ── Descending triangle ─────────────────────────────────────────────────
-  // Flat support base, declining resistance top, price coiling downward
   if (pattern === "descending") return (
     <svg viewBox="0 0 280 110" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Descending triangle">
-      {/* Flat support line */}
       <path d="M20 82 H260" stroke={c.line} strokeWidth="2" strokeDasharray="6 4" strokeLinecap="round" opacity="0.85" />
-      {/* Declining resistance trendline */}
       <path d="M20 24 L260 82" stroke={c.accent} strokeWidth="1.5" strokeLinecap="round" opacity="0.55" />
-      {/* Price action: lower highs, holding support */}
       <path d="M22 26 L50 82 L72 54 L100 82 L122 62 L150 82 L172 70 L200 82 L222 77 L250 82" stroke="rgba(226,232,240,0.75)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      {/* Breakdown arrow hint */}
       <path d="M250 82 L268 96" stroke={c.line} strokeWidth="2.5" strokeLinecap="round" opacity="0.90" />
     </svg>
   );
 
-  // ── Bull flag ───────────────────────────────────────────────────────────
-  // Strong pole up, tight sideways/down consolidation channel, breakout
+  // Bull flag: compact proportions so pole + flag + breakout are all visible
+  // without any segment feeling too long. Pole x=20-80, flag x=80-180, breakout x=180-220.
   if (pattern === "bullFlag") return (
-    <svg viewBox="0 0 280 110" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Bull flag">
-      {/* Flag pole — strong green rally */}
-      <path d="M30 95 L55 78 L68 58 L78 30" stroke="#22c55e" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      {/* Flag channel upper boundary (slight down slope) */}
-      <path d="M78 30 L180 44" stroke="rgba(226,232,240,0.45)" strokeWidth="1.5" strokeDasharray="5 4" strokeLinecap="round" />
-      {/* Flag channel lower boundary */}
-      <path d="M78 48 L180 62" stroke="rgba(226,232,240,0.45)" strokeWidth="1.5" strokeDasharray="5 4" strokeLinecap="round" />
-      {/* Consolidation price action inside flag */}
-      <path d="M80 32 L108 46 L136 38 L164 52 L180 44" stroke="rgba(226,232,240,0.70)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      {/* Breakout — green surge resuming the trend */}
-      <path d="M180 44 L210 28 L240 16" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-      {/* Breakout arrow */}
-      <path d="M240 16 L258 8" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" opacity="0.85" />
+    <svg viewBox="0 0 240 110" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Bull flag">
+      {/* Pole */}
+      <path d="M28 96 L48 78 L62 58 L76 30" stroke="#22c55e" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Flag channel boundaries */}
+      <path d="M76 30 L168 44" stroke="rgba(226,232,240,0.40)" strokeWidth="1.5" strokeDasharray="5 4" strokeLinecap="round" />
+      <path d="M76 50 L168 62" stroke="rgba(226,232,240,0.40)" strokeWidth="1.5" strokeDasharray="5 4" strokeLinecap="round" />
+      {/* Consolidation inside flag */}
+      <path d="M78 33 L104 47 L130 40 L156 52 L168 45" stroke="rgba(226,232,240,0.70)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Breakout — ends at x=218 so nothing clips */}
+      <path d="M168 45 L192 28 L218 14" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 
-  // ── Macro support / resistance ──────────────────────────────────────────
-  // Price oscillating between clear horizontal support and resistance zones
   if (pattern === "macroSR") return (
     <svg viewBox="0 0 280 110" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Macro support resistance">
-      {/* Resistance zone (top) */}
       <path d="M20 22 H260" stroke="#ef4444" strokeWidth="2" strokeDasharray="6 4" strokeLinecap="round" opacity="0.80" />
-      {/* Support zone (bottom) */}
       <path d="M20 78 H260" stroke="#22c55e" strokeWidth="2" strokeDasharray="6 4" strokeLinecap="round" opacity="0.80" />
-      {/* Price bouncing between zones */}
       <path d="M22 72 L50 26 L80 72 L110 26 L140 68 L168 26 L196 72 L224 28 L252 72" stroke="rgba(226,232,240,0.72)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
@@ -261,7 +241,7 @@ function PatternPlaysSection() {
     <section style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 16, boxSizing: "border-box" }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
         <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em", color: "rgba(226,232,240,0.90)" }}>Chart Pattern Plays</h2>
-        <p style={{ margin: 0, fontSize: 12, opacity: 0.55, lineHeight: 1.5 }}>Visual chart-pattern pages — click through to the full play lists.</p>
+        <p style={{ margin: 0, fontSize: 12, opacity: 0.55, lineHeight: 1.5 }}>Visual chart-pattern pages \u2014 click through to the full play lists.</p>
       </div>
       <div className="pattern-plays-grid">
         {PLAY_CARDS.map((play) => {
@@ -281,16 +261,15 @@ function PatternPlaysSection() {
   );
 }
 
-// ── Ticker row ───────────────────────────────────────────────────────────────
 function PickerRowContent({ symbol, note, companyName }: { symbol: string; note?: string; companyName?: string }) {
-  const fullLine1 = companyName ? `${symbol} · ${companyName}` : symbol;
+  const fullLine1 = companyName ? `${symbol} \u00b7 ${companyName}` : symbol;
   return (
     <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0, overflow: "hidden" }}>
       <span title={companyName ? fullLine1 : undefined} style={{ display: "flex", alignItems: "baseline", minWidth: 0, overflow: "hidden" }}>
         <span className="picker-row-ticker">{symbol}</span>
         {companyName ? (
           <>
-            <span className="picker-name-sep">&nbsp;·&nbsp;</span>
+            <span className="picker-name-sep">&nbsp;\u00b7&nbsp;</span>
             <span className="picker-row-company">{companyName}</span>
           </>
         ) : null}
@@ -411,12 +390,6 @@ export default function PickersClient() {
     return () => { cancelled = true; };
   }, []);
 
-  // ── Fetch company names ─────────────────────────────────────────────────────
-  // The /api/symbols route calls FMP's profile endpoint first (fetchFmpExactSymbol),
-  // which returns the authoritative company name even for tickers the Nasdaq
-  // directory filters out (FOXA, HSY, QS etc. get stripped as "Class A" / preferred).
-  // Strategy: exact symbol match → if none, only fall back to results[0] when
-  // that result's symbol also starts with our query (prevents wild mismatches).
   useEffect(() => {
     if (!sections.length) return;
     let cancelled = false;
@@ -439,11 +412,7 @@ export default function PickersClient() {
             if (!res.ok) return;
             const data = (await res.json()) as { results?: { symbol: string; name: string }[] };
             const results = data.results ?? [];
-            // 1. Exact match (FMP profile hit comes back first in the API route)
             const exact = results.find((r) => (r.symbol ?? "").trim().toUpperCase() === sym);
-            // 2. Safe fallback: only use results[0] if its symbol starts with our query
-            //    This prevents a ticker like FOXA (filtered by Nasdaq parser) from
-            //    getting a completely unrelated company name as a fallback
             const fallback = !exact && results[0] && (results[0].symbol ?? "").trim().toUpperCase().startsWith(sym)
               ? results[0]
               : null;
@@ -622,8 +591,8 @@ export default function PickersClient() {
 
       {loading ? (
         <div style={{ border: "1px solid rgba(255,255,255,0.10)", borderRadius: 14, padding: 18, background: "#0b1220", boxSizing: "border-box" }}>
-          <div style={{ fontSize: 18, fontWeight: 700 }}>Gathering stocks, please wait…</div>
-          <div style={{ marginTop: 6, fontSize: 13, opacity: 0.65 }}>First load can take 10–15 seconds. Cached loads are faster.</div>
+          <div style={{ fontSize: 18, fontWeight: 700 }}>Gathering stocks, please wait\u2026</div>
+          <div style={{ marginTop: 6, fontSize: 13, opacity: 0.65 }}>First load can take 10\u201315 seconds. Cached loads are faster.</div>
           <div style={{ marginTop: 14, width: 360, maxWidth: "100%", height: 6, borderRadius: 999, overflow: "hidden", background: "rgba(255,255,255,0.07)" }}>
             <div className="pickers-loading-bar" />
           </div>
@@ -637,7 +606,7 @@ export default function PickersClient() {
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
             <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: "#e2e8f0" }}>Custom Screener</span>
-              <span style={{ fontSize: 14, color: "rgba(148,163,184,0.75)", fontWeight: 400 }}>Select conditions — only stocks matching all will show.</span>
+              <span style={{ fontSize: 14, color: "rgba(148,163,184,0.75)", fontWeight: 400 }}>Select conditions \u2014 only stocks matching all will show.</span>
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flex: "0 0 auto" }}>
               <button type="button" onClick={handleScreenerButton} style={{ display: "inline-flex", alignItems: "center", minHeight: 32, padding: "6px 12px", borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap", border: "1px solid rgba(34,197,94,0.28)", background: screenerOpen ? "rgba(34,197,94,0.14)" : "rgba(34,197,94,0.06)", color: "#86efac" }}>
@@ -681,7 +650,7 @@ export default function PickersClient() {
                         <span style={{ fontSize: 16, fontWeight: 700 }}>{item.symbol}</span>
                         {item.note ? <span style={{ fontSize: 11, opacity: 0.55 }}>{item.note}</span> : null}
                       </div>
-                      <a href={toChartHref(item.dashboardHref ?? "", item.symbol)} onClick={(e) => e.stopPropagation()} style={{ fontSize: 11, fontWeight: 600, color: "rgba(148,163,184,0.55)", textDecoration: "none" }}>Chart ↗</a>
+                      <a href={toChartHref(item.dashboardHref ?? "", item.symbol)} onClick={(e) => e.stopPropagation()} style={{ fontSize: 11, fontWeight: 600, color: "rgba(148,163,184,0.55)", textDecoration: "none" }}>Chart \u2197</a>
                     </div>
                     <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
                       {item.matchedSignals.map((signal) => {
@@ -747,7 +716,7 @@ export default function PickersClient() {
                             <PickerRowContent symbol={it.symbol} note={it.note} companyName={companyNames.get(it.symbol)} />
                           </a>
                         </div>
-                        <a href={toChartHref(it.dashboardHref ?? "", it.symbol)} className="picker-row-link">Chart ↗</a>
+                        <a href={toChartHref(it.dashboardHref ?? "", it.symbol)} className="picker-row-link">Chart \u2197</a>
                       </div>
                     ))}
                   </div>
@@ -758,13 +727,13 @@ export default function PickersClient() {
                         {isEarnings ? (
                           <>
                             <button type="button" className="pickers-earnings-fetch-button" onClick={handleFetchEarnings} disabled={earningsFetchBusy || earningsFetchRemainingSeconds > 0} style={{ display: "inline-flex", alignItems: "center", minHeight: 28, padding: "4px 10px", borderRadius: 7, border: "1px solid rgba(34,197,94,0.24)", background: "rgba(34,197,94,0.06)", color: "rgba(134,239,172,0.80)", fontSize: 11, fontWeight: 600, cursor: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? "not-allowed" : "pointer", opacity: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? 0.65 : 1, whiteSpace: "nowrap", flex: "0 0 auto" }}>
-                              {earningsFetchBusy ? "Fetching…" : earningsFetchRemainingSeconds > 0 ? `Fetch (${earningsFetchRemainingSeconds}s)` : "Fetch Earnings"}
+                              {earningsFetchBusy ? "Fetching\u2026" : earningsFetchRemainingSeconds > 0 ? `Fetch (${earningsFetchRemainingSeconds}s)` : "Fetch Earnings"}
                             </button>
                             {earningsFetchMessage ? <span style={{ fontSize: 11, opacity: 0.55, lineHeight: 1.4, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{earningsFetchMessage}</span> : null}
                           </>
                         ) : null}
                       </div>
-                      {seoHref ? <a href={seoHref} className="pickers-see-all">See all →</a> : null}
+                      {seoHref ? <a href={seoHref} className="pickers-see-all">See all \u2192</a> : null}
                     </div>
                   ) : null}
                 </section>
@@ -776,7 +745,7 @@ export default function PickersClient() {
         {!loading && !err && SHOW_FORCE_FETCH_BUTTON ? (
           <div style={{ marginTop: 14, display: "flex", justifyContent: "center" }}>
             <button type="button" onClick={() => { void loadPickers(true); }} disabled={forceRefreshing} style={{ minHeight: 38, padding: "8px 14px", borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: forceRefreshing ? "wait" : "pointer", border: "1px solid rgba(59,130,246,0.24)", background: "rgba(59,130,246,0.06)", color: "#93c5fd", opacity: forceRefreshing ? 0.70 : 1 }}>
-              {forceRefreshing ? "Refreshing…" : "Force Refresh"}
+              {forceRefreshing ? "Refreshing\u2026" : "Force Refresh"}
             </button>
           </div>
         ) : null}
