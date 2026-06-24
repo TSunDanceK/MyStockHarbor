@@ -28,10 +28,22 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const post = getPostBySlug(slug);
 
     const title = `${post.title} | MyStockHarbor`;
+
+    // Use excerpt if present; otherwise derive a meaningful fallback from the
+    // post title rather than a generic "Latest insight…" placeholder.
     const description =
-      post.excerpt || "Latest stock market insight from MyStockHarbor.";
+      post.excerpt ||
+      (post.symbol
+        ? `Technical analysis and market insight on ${post.symbol} from MyStockHarbor.`
+        : "Stock market analysis and technical insight from MyStockHarbor.");
+
     const url = `https://www.mystockharbor.com/insights/${slug}`;
     const image = "https://www.mystockharbor.com/og-image-v2.png";
+
+    // ISO date string for article OG tags — falls back to today if post has no date.
+    const publishedTime = post.date
+      ? new Date(post.date).toISOString()
+      : new Date().toISOString();
 
     return {
       title,
@@ -58,6 +70,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         ],
         locale: "en_GB",
         type: "article",
+        publishedTime,
+        modifiedTime: publishedTime,
+        authors: ["https://www.mystockharbor.com"],
+        section: "Stock Market Insights",
+        tags: post.symbol
+          ? [post.symbol, "stock analysis", "technical analysis"]
+          : ["stock analysis", "technical analysis", "market insights"],
       },
       twitter: {
         card: "summary_large_image",
@@ -126,6 +145,10 @@ export default async function InsightPostPage({ params }: Props) {
     ? `https://www.mystockharbor.com/stock/${post.symbol.toUpperCase()}`
     : null;
 
+  const publishedTime = post.date
+    ? new Date(post.date).toISOString()
+    : new Date().toISOString();
+
   const insightJsonLd = {
     "@context": "https://schema.org",
     "@graph": [
@@ -134,8 +157,8 @@ export default async function InsightPostPage({ params }: Props) {
         "@id": `${insightUrl}#article`,
         headline: post.title,
         description: post.excerpt,
-        datePublished: post.date,
-        dateModified: post.date,
+        datePublished: publishedTime,
+        dateModified: publishedTime,
         mainEntityOfPage: {
           "@type": "WebPage",
           "@id": `${insightUrl}#webpage`,
@@ -145,6 +168,7 @@ export default async function InsightPostPage({ params }: Props) {
           "@type": "Organization",
           "@id": "https://www.mystockharbor.com/#organization",
           name: "MyStockHarbor",
+          url: "https://www.mystockharbor.com",
         },
         publisher: {
           "@type": "Organization",
