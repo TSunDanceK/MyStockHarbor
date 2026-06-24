@@ -67,7 +67,7 @@ export default function PickersPage() {
         <div style={{ display: "grid", gap: 14 }}>
           <div className="heroGrid">
 
-            {/* Left panel */}
+            {/* Left panel — compact header + description */}
             <section className="heroPanel" style={{ border: "1px solid rgba(59,130,246,0.18)", borderRadius: 22, padding: 18, background: "linear-gradient(135deg, rgba(10,16,32,0.98), rgba(7,11,22,0.98))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), 0 14px 34px rgba(0,0,0,0.28)", minWidth: 0, width: "100%", boxSizing: "border-box", overflow: "hidden" }}>
               <div className="pickersHeroPills" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", minWidth: 0 }}>
                 <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 11px", borderRadius: 999, border: "1px solid rgba(59,130,246,0.28)", background: "rgba(59,130,246,0.10)", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#93c5fd", maxWidth: "100%", boxSizing: "border-box" }}>
@@ -75,22 +75,20 @@ export default function PickersPage() {
                 </div>
                 <BookmarkPromptButton compact />
               </div>
-              <h1 className="pickersHeroTitle" style={{ margin: "14px 0 0 0", fontSize: 38, lineHeight: 1.06, letterSpacing: "-0.04em", fontWeight: 800 }}>
+              <h1 className="pickersHeroTitle" style={{ margin: "12px 0 0 0", fontSize: 30, lineHeight: 1.08, letterSpacing: "-0.035em", fontWeight: 800 }}>
                 Stock Pickers &amp; Technical Setup Ideas
               </h1>
-              <p className="pickersHeroText" style={{ marginTop: 10, fontSize: 16, lineHeight: 1.65, opacity: 0.76, maxWidth: 620 }}>
-                Screened stock ideas across oversold conditions, breakouts, divergence, 200-day MA tests, pullbacks and more. Starting points for chart analysis — not buy or sell recommendations.
+              <p className="pickersHeroText" style={{ marginTop: 8, fontSize: 14, lineHeight: 1.6, opacity: 0.72, maxWidth: 480 }}>
+                Screened ideas across oversold, breakouts, divergence, 200-day MA tests and more. Starting points for chart analysis — not buy or sell recommendations.
               </p>
-              {/* No scroll cue box */}
             </section>
 
-            {/* Right: 2-col bullet list — desktop only */}
+            {/* Right panel — 3-col bullet list — desktop only */}
             <section className="heroPanel mobile-hide-screened-setups" style={{ border: "1px solid rgba(255,255,255,0.10)", borderRadius: 22, padding: "18px 20px", background: "rgba(10,14,24,0.96)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), 0 14px 34px rgba(0,0,0,0.28)", minWidth: 0, width: "100%", boxSizing: "border-box", overflow: "hidden" }}>
-              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "rgba(148,163,184,0.70)", marginBottom: 14 }}>All screened setups on this page</div>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "rgba(148,163,184,0.70)", marginBottom: 12 }}>All screened setups on this page</div>
               <div className="hero-bullet-grid">
                 {SETUP_LINKS.map((s) => (
-                  <Link key={s.href} href={s.href} className="hero-bullet-item" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", color: "#cbd5e1", fontSize: 13, fontWeight: 500, lineHeight: 1.35, padding: "4px 0", transition: "color 120ms ease" }}>
-                    {/* Green glowing bullet */}
+                  <Link key={s.href} href={s.href} className="hero-bullet-item" style={{ display: "flex", alignItems: "center", gap: 7, textDecoration: "none", color: "#cbd5e1", fontSize: 12, fontWeight: 500, lineHeight: 1.3, padding: "3px 0", transition: "color 120ms ease" }}>
                     <span style={{ width: 5, height: 5, borderRadius: 999, background: "#22c55e", boxShadow: "0 0 6px rgba(34,197,94,0.70)", flex: "0 0 auto" }} />
                     {s.label}
                   </Link>
@@ -175,8 +173,10 @@ export default function PickersPage() {
 
       <style>{`
         .wrap { max-width: 1240px; margin: 0 auto; padding: 28px 20px 40px; box-sizing: border-box; }
-        .heroGrid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); gap: 14px; align-items: stretch; min-width: 0; width: 100%; }
-        .hero-bullet-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 16px; }
+        /* Left panel narrower, right panel wider to fit 3-col bullet list */
+        .heroGrid { display: grid; grid-template-columns: minmax(0, 0.65fr) minmax(0, 1.35fr); gap: 14px; align-items: stretch; min-width: 0; width: 100%; }
+        /* 3 columns for the setup link list */
+        .hero-bullet-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px 12px; }
         .hero-bullet-item:hover { color: #e2e8f0 !important; }
         a:hover { filter: brightness(1.05); transform: translateY(-1px); }
         .msh-site-nav { position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:8px;padding:12px 24px;background:rgba(10,15,26,0.90);backdrop-filter:blur(14px);border-bottom:1px solid #1a2336; }
@@ -187,7 +187,10 @@ export default function PickersPage() {
         .msh-site-navlink:hover { color:#eaf0fa;background:#141b2b; }
         .msh-site-navlink.active { color:#eaf0fa;background:#141b2b;border:1px solid #222c40; }
         .pickers-desktop-only { display: block; }
-        @media (max-width: 1000px) { .heroGrid { grid-template-columns: 1fr !important; } }
+        @media (max-width: 1000px) {
+          .heroGrid { grid-template-columns: 1fr !important; }
+          .hero-bullet-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+        }
         @media (max-width: 900px) { .wrap { padding: 18px 16px 34px !important; } }
         @media (max-width: 640px) {
           .wrap { padding-left: 12px !important; padding-right: 12px !important; }
@@ -195,7 +198,7 @@ export default function PickersPage() {
           .mobile-hide-screened-setups { display: none !important; }
           .pickers-mobile-hide { display: none !important; }
           .heroPanel { padding: 14px !important; border-radius: 16px !important; }
-          .pickersHeroTitle { font-size: 26px !important; line-height: 1.08 !important; }
+          .pickersHeroTitle { font-size: 24px !important; line-height: 1.08 !important; }
           .pickersHeroText { font-size: 14px !important; margin-top: 8px !important; }
           .pickersHeroPills { align-items: stretch !important; }
           .msh-site-nav { padding: 10px 12px 8px; gap: 8px; align-items: stretch; flex-direction: column; }
@@ -207,7 +210,7 @@ export default function PickersPage() {
         }
         @media (max-width: 420px) {
           .wrap { padding-left: 10px !important; padding-right: 10px !important; }
-          .pickersHeroTitle { font-size: 22px !important; }
+          .pickersHeroTitle { font-size: 20px !important; }
           .heroPanel { padding: 12px !important; }
         }
       `}</style>
