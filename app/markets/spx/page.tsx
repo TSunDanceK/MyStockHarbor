@@ -428,10 +428,7 @@ export default async function SPXPage() {
                   opacity: 0.92,
                 }}
               >
-                The S&amp;P 500 has started to worry investors as short-term price action
-                weakens. On the daily chart, fear rises quickly when key moving averages start
-                getting tested. But when you zoom out to the weekly chart, the structure can look
-                very different.
+                The S&amp;P 500 hit a fresh all-time high of 7,620 on June 2, 2026, and is now pulling back slightly from that peak. Sentiment is firmly in Extreme Greed territory — but a hawkish Fed surprise and narrowing breadth beneath the surface are worth watching carefully.
               </div>
 
               <div
@@ -638,8 +635,7 @@ export default async function SPXPage() {
 
   <div>
     <strong style={{ color: "#4ade80", letterSpacing: "0.02em" }}>SIMPLE VIEW:</strong>{" "}
-    short-term fear is rising, but the bigger question is whether the higher-timeframe
-    structure has actually broken down. That is why the weekly chart matters here.
+    the SPX is near all-time highs and sentiment is greedy — but a hawkish Fed, tech selling, and weak market breadth are creating a wobble beneath the surface. The weekly structure is still very much intact.
   </div>
 </div>
           </section>
@@ -762,6 +758,23 @@ export default async function SPXPage() {
             }}
             className="spxTopGrid"
           >
+            <div style={insightCardStyle("yellow")}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={insightIconStyle("yellow")}>📈</div>
+                <div>
+                  <div style={{ ...statLabelStyle(), color: "#fde68a", opacity: 1 }}>
+                    Near all-time high
+                  </div>
+                  <div style={{ marginTop: 5, fontSize: 21, fontWeight: 950 }}>
+                    Greed is elevated
+                  </div>
+                </div>
+              </div>
+              <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
+                The SPX hit 7,620 on June 2 — a fresh ATH. Sentiment is firmly in Extreme Greed, which historically raises the bar for new buyers.
+              </div>
+            </div>
+
             <div style={insightCardStyle("red")}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
 <div style={insightIconStyle("red")}>
@@ -779,16 +792,15 @@ export default async function SPXPage() {
 </div>
                 <div>
                   <div style={{ ...statLabelStyle(), color: "#fca5a5", opacity: 1 }}>
-                    Daily chart
+                    Under the surface
                   </div>
                   <div style={{ marginTop: 5, fontSize: 21, fontWeight: 950 }}>
-                    Fear rises faster
+                    Breadth is thinning
                   </div>
                 </div>
               </div>
               <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                On lower timeframes, weakness feels more dramatic. That is why many investors
-                become nervous when the SPX starts losing short-term support.
+                Fewer than half of S&amp;P 500 members are above their own 200-day MA. The index is being held up by a shrinking group of large-cap names.
               </div>
             </div>
 
@@ -800,31 +812,12 @@ export default async function SPXPage() {
                     Weekly chart
                   </div>
                   <div style={{ marginTop: 5, fontSize: 21, fontWeight: 950 }}>
-                    Structure still matters more
+                    Structure still intact
                   </div>
                 </div>
               </div>
               <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                When you zoom out, the market can still look like it is going through a normal
-                correction rather than a confirmed long-term breakdown.
-              </div>
-            </div>
-
-            <div style={insightCardStyle("yellow")}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={insightIconStyle("yellow")}>📏</div>
-                <div>
-                  <div style={{ ...statLabelStyle(), color: "#fde68a", opacity: 1 }}>
-                    Big picture
-                  </div>
-                  <div style={{ marginTop: 5, fontSize: 21, fontWeight: 950 }}>
-                    This market was stretched
-                  </div>
-                </div>
-              </div>
-              <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                After a strong run led by major technology names and AI enthusiasm, a cooling phase
-                was always a realistic possibility.
+                The weekly MA50 sits near 6,840 — well below current price. Until that level is seriously threatened, the longer-term uptrend remains in place.
               </div>
             </div>
           </section>
@@ -843,7 +836,7 @@ export default async function SPXPage() {
             </div>
 
             <h2 style={{ margin: "10px 0 0", fontSize: 30, letterSpacing: "-0.4px" }}>
-              What’s actually happening in the market right now?
+              What's actually happening in the market right now?
             </h2>
 
             <div
@@ -858,43 +851,33 @@ export default async function SPXPage() {
               }}
             >
               <p style={{ margin: 0 }}>
-                Right now, markets are getting more fearful because the S&amp;P 500 is starting to
-                look weaker on the <strong>daily timeframe</strong>. When price loses momentum and
-                approaches major moving averages on lower timeframes, sentiment usually deteriorates
-                quickly.
+                The S&amp;P 500 is in a strong 2026 uptrend, driven by AI infrastructure spending, resilient corporate earnings, and a risk-on backdrop. Goldman Sachs raised its year-end SPX target to 8,000 in May, citing 24% projected EPS growth. The index set a fresh all-time high of <strong>7,620 on June 2</strong> before pulling back roughly 3–4% to the current ~7,365 level.
               </p>
 
               <p style={{ margin: 0 }}>
-                However, the <strong>weekly chart</strong> paints a calmer picture. If this were a
-                standard stock rather than the main US index, many traders would likely describe this
-                as a <strong>healthy correction</strong> rather than a reason to panic.
+                That pullback has a clear catalyst: the <strong>June FOMC meeting</strong> delivered a hawkish surprise. New Fed Chair Kevin Warsh held rates at 3.50–3.75% as expected, but dot plots showed 9 officials projecting potential hikes, with 6 of those pencilling in two or more 25bp increases this year. That rattled markets and pushed 2-year yields higher.
               </p>
 
               <div
                 style={{
                   borderRadius: 16,
-                  border: "1px solid rgba(34,197,94,0.24)",
+                  border: "1px solid rgba(239,68,68,0.24)",
                   background:
-                    "linear-gradient(135deg, rgba(34,197,94,0.10), rgba(8,18,30,0.82))",
+                    "linear-gradient(135deg, rgba(239,68,68,0.10), rgba(8,18,30,0.82))",
                   padding: 16,
                   display: "flex",
                   gap: 12,
                   alignItems: "flex-start",
                 }}
               >
-                <div style={overviewIconStyle("green")}>✅</div>
+                <div style={overviewIconStyle("red")}>⚠️</div>
                 <div style={{ lineHeight: 1.65 }}>
-                  <strong style={{ color: "#86efac" }}>Key point:</strong> this is not just about
-                  fear. It is also about the market cooling after a period where price had moved too
-                  far, too fast.
+                  <strong style={{ color: "#fca5a5" }}>Watch the breadth:</strong> even as the index held near ATHs, major tech names sold off sharply — Alphabet fell 5%, NVDA 3%, TSLA 5%, AMD 5.5%. Less than half of S&amp;P 500 members are currently trading above their own 200-day moving average. When the index rises but most stocks don't, that divergence tends to resolve with the index catching down.
                 </div>
               </div>
 
               <p style={{ margin: 0 }}>
-                The reason is simple: the SPX had become very extended after a long run higher. Much
-                of that strength was concentrated in major companies, especially those lifted by the
-                recent <strong>AI-driven rally</strong>. When markets get stretched too far above
-                long-term averages, pullbacks become more likely because price needs room to reset.
+                The <strong>weekly chart</strong>, however, puts this in context. Price remains comfortably above the weekly MA50 (~6,840) and well above the weekly MA200 (~5,400). By any longer-term measure, this is still a bull market, and the current pullback looks more like consolidation after a strong run than the start of something more serious.
               </p>
             </div>
           </section>
@@ -921,7 +904,7 @@ export default async function SPXPage() {
               </div>
 
               <h2 style={{ margin: "10px 0 0", fontSize: 30, letterSpacing: "-0.4px" }}>
-                Why the weekly chart matters more here
+                Why the weekly chart still matters more
               </h2>
 
               <div
@@ -935,29 +918,19 @@ export default async function SPXPage() {
                 }}
               >
                 <p style={{ margin: 0 }}>
-                  The weekly timeframe helps remove some of the noise that causes investors to
-                  overreact. A move that looks aggressive on the daily chart can appear much more
-                  controlled on the weekly chart.
+                  The weekly MA50 at ~6,840 is more than 500 points below current price. The weekly MA200 at ~5,400 is over 1,900 points away. Neither is being remotely tested — which means the long-term trend structure is firmly bullish.
                 </p>
 
                 <p style={{ margin: 0 }}>
-                  Historically, the S&amp;P 500 has often respected major higher-timeframe moving
-                  averages. That does not mean support must always hold, but it does mean context
-                  matters.
+                  Short-term wobbles around the daily MA50 (~7,316) are normal and expected after a strong run. The daily RSI has cooled from overbought levels, which is healthy rather than alarming.
                 </p>
 
                 <p style={{ margin: 0 }}>
-                  If price is simply correcting back toward a long-term moving average after an
-                  overstretched rally, that is very different from a true structural collapse.
+                  The real question is not whether this pullback is happening — it clearly is. The question is whether it's a routine reset after the June ATH, or the beginning of a more sustained move lower driven by the Fed's hawkish shift and softening breadth.
                 </p>
 
                 <p style={{ margin: 0 }}>
-                  That is why many investors are asking the real question now:
-                  <strong>
-                    {" "}
-                    is this a normal correction and potential opportunity, or the start of something
-                    worse?
-                  </strong>
+                  <strong>Until the weekly MA50 is under pressure, the trend gets the benefit of the doubt.</strong>
                 </p>
               </div>
             </div>
@@ -979,10 +952,10 @@ export default async function SPXPage() {
 
               <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
                 {[
-                  ["⚠️", "Short-term", "fear is rising"],
-                  ["🔎", "Bigger picture", "weekly structure matters more"],
-                  ["📏", "Main idea", "stretched markets often need to reset"],
-                  ["🟡", "Current stance", "on the weekly timeframe, we are not scared yet"],
+                  ["📈", "ATH", "7,620 hit on June 2, 2026"],
+                  ["⚠️", "Risk", "hawkish Fed + narrowing breadth"],
+                  ["🔎", "Weekly structure", "still bullish — MA50 far below price"],
+                  ["🟡", "Current stance", "pullback looks normal until proven otherwise"],
                 ].map(([icon, label, text]) => (
                   <div
                     key={label}
@@ -1045,9 +1018,7 @@ export default async function SPXPage() {
                 maxWidth: 920,
               }}
             >
-              This weekly chart helps show why the bigger picture matters more than short-term fear.
-              If the SPX is simply pulling back into higher-timeframe support after an overstretched
-              rally, that is a very different setup from a full structural breakdown.
+              The weekly chart shows a market well above both major moving averages after a strong 2026 recovery from the April lows. The current dip from the June 2 ATH looks modest in this context — price is consolidating near recent highs, not breaking down.
             </div>
 
             <div style={{ marginTop: 18 }}>
@@ -1097,22 +1068,22 @@ export default async function SPXPage() {
                     </span>
                   </div>
                   <div style={{ ...statLabelStyle(), color: "#f87171", opacity: 1 }}>
-                    Risk increasing
+                    Signs the pullback is deepening
                   </div>
                 </div>
 
                 <ul style={{ margin: "12px 0 0", paddingLeft: 18, display: "grid", gap: 8 }}>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Clear loss of major higher-timeframe support
+                    SPX loses the daily MA50 (~7,316) on a closing basis
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Weak reactions around long-term moving averages
+                    Market breadth continues deteriorating — fewer stocks participating
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    A broader breakdown in weekly structure
+                    Further hawkish Fed signals or a hotter-than-expected inflation print
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Momentum continuing to deteriorate rather than stabilising
+                    Weekly close below 7,000 — the key institutional support zone
                   </li>
                 </ul>
               </div>
@@ -1121,22 +1092,22 @@ export default async function SPXPage() {
                 <div style={overviewCardHeaderStyle}>
                   <div style={overviewIconStyle("green")}>↗</div>
                   <div style={{ ...statLabelStyle(), color: "#4ade80", opacity: 1 }}>
-                    Normal correction
+                    Signs the bull run resumes
                   </div>
                 </div>
 
                 <ul style={{ margin: "12px 0 0", paddingLeft: 18, display: "grid", gap: 8 }}>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Higher-timeframe support still attracting buyers
+                    Price reclaims and holds above 7,450–7,500 resistance
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Price holding key weekly moving averages
+                    Breadth improves — more members trading above their 200 DMA
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Weekly trend structure remaining broadly intact
+                    Tech names stabilise and rejoin the rally
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Fear easing as price starts stabilising
+                    Soft inflation data or Fed language shift eases rate-hike fears
                   </li>
                 </ul>
               </div>
@@ -1157,7 +1128,7 @@ export default async function SPXPage() {
             </div>
 
             <h2 style={{ margin: "10px 0 0", fontSize: 30, letterSpacing: "-0.4px" }}>
-              So is this a buying opportunity or the start of a bigger downfall?
+              So is this a buying opportunity or a reason to be cautious?
             </h2>
 
             <div
@@ -1172,8 +1143,7 @@ export default async function SPXPage() {
               }}
             >
               <p style={{ margin: 0 }}>
-                That is the question everyone is asking. As Warren Buffett’s famous line reminds
-                people, periods of fear often create interest in adding to positions.
+                The honest answer depends on timeframe. The weekly trend is clearly bullish — the SPX is well above its major moving averages, AI-driven earnings growth is real, and Goldman Sachs is targeting 8,000 by year-end. None of that has changed.
               </p>
 
               <div
@@ -1190,18 +1160,12 @@ export default async function SPXPage() {
               >
                 <div style={overviewIconStyle("blue")}>🧭</div>
                 <div style={{ lineHeight: 1.65 }}>
-                  <strong style={{ color: "#93c5fd" }}>Structure matters:</strong> the answer does
-                  not come from emotion. If the weekly chart continues to look like a standard
-                  pullback into support, many investors will see that as a healthier reset than the
-                  headlines suggest.
+                  <strong style={{ color: "#93c5fd" }}>The nuance:</strong> Extreme Greed readings at cycle highs historically compress future returns. When sentiment is this stretched, it doesn't take much — a hot CPI print, an escalation in the Middle East, a further hawkish Fed signal — to trigger a sharper correction. The setup rewards patience over aggression right now.
                 </div>
               </div>
 
               <p style={{ margin: 0 }}>
-                If the higher-timeframe structure starts failing more decisively, then the risk of a
-                deeper move increases. For now, the more balanced view is that the market is{" "}
-                <strong>correcting after becoming overstretched</strong>, not automatically
-                collapsing.
+                The SPX at ~7,365 is still only ~3% off its all-time high. That is not a crisis. But the combination of a hawkish Fed surprise, thin breadth, and Extreme Greed sentiment means the <strong>risk-reward for chasing new highs immediately is less compelling</strong> than it was a month ago. Watching for a cleaner re-entry — either a breadth improvement or a pullback to the daily MA50 — makes more sense than forcing a trade at current levels.
               </p>
             </div>
           </section>
@@ -1234,9 +1198,7 @@ export default async function SPXPage() {
                 fontSize: 16,
               }}
             >
-              Use <strong>TradingView</strong> if you want to study the SPX properly and judge the
-              weekly structure for yourself. Use <strong>eToro</strong> if you want a simpler route
-              into investing after you have done your research.
+              Use <strong>TradingView</strong> to study the SPX weekly chart yourself — look at where price sits relative to the MA50 and MA200, and check whether breadth is improving or deteriorating. Use <strong>eToro</strong> if you want a simpler route into the market once you've done that work.
             </div>
 
             <div
