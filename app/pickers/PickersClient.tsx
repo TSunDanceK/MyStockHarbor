@@ -247,6 +247,31 @@ function PatternPlaysSection() {
   );
 }
 
+// ── Company name row component ───────────────────────────────────────────────
+// Desktop: TICKER bold on line 1, company name + note below in small text
+// Mobile:  TICKER – Company Name on one line (note hidden via CSS)
+function PickerRowContent({ symbol, note, companyName }: { symbol: string; note?: string; companyName?: string }) {
+  return (
+    <>
+      {/* Desktop layout: stacked */}
+      <span className="picker-name-desktop">
+        <span className="picker-row-ticker">{symbol}</span>
+        {companyName ? (
+          <span className="picker-row-company">{companyName}</span>
+        ) : null}
+        {note ? <span className="picker-row-note">{note}</span> : null}
+      </span>
+      {/* Mobile layout: single line */}
+      <span className="picker-name-mobile">
+        <span className="picker-row-ticker">{symbol}</span>
+        {companyName ? (
+          <span className="picker-row-company-mobile"> – {companyName}</span>
+        ) : null}
+      </span>
+    </>
+  );
+}
+
 export default function PickersClient() {
   const SHOW_FORCE_FETCH_BUTTON = false;
 
@@ -267,6 +292,9 @@ export default function PickersClient() {
   const [earningsFetchLockedUntil, setEarningsFetchLockedUntil] = useState(0);
   const [earningsFetchTick, setEarningsFetchTick] = useState(0);
   const [earningsFetchMessage, setEarningsFetchMessage] = useState<string | null>(null);
+
+  // ── Company name map ────────────────────────────────────────────────────────
+  const [companyNames, setCompanyNames] = useState<Map<string, string>>(new Map());
 
   const EARNINGS_FETCH_LOCK_MS = 90 * 1000;
   void earningsFetchTick;
@@ -356,6 +384,51 @@ export default function PickersClient() {
     load();
     return () => { cancelled = true; };
   }, []);
+
+  // ── Fetch company names once we have sections ──────────────────────────────
+  // Collect every unique symbol visible in the cards (max 4 per section),
+  // then hit /api/symbols once per symbol. Fire-and-forget, non-blocking.
+  useEffect(() => {
+    if (!sections.length) return;
+    let cancelled = false;
+
+    const uniqueSymbols = Array.from(
+      new Set(
+        sections.flatMap((sec) =>
+          (Array.isArray(sec.items) ? sec.items.slice(0, 4) : []).map((it) =>
+            String(it.symbol ?? "").trim().toUpperCase()
+          )
+        ).filter(Boolean)
+      )
+    );
+
+    async function fetchNames() {
+      const map = new Map<string, string>();
+      // Batch in groups of 5 to avoid hammering the endpoint
+      const BATCH = 5;
+      for (let i = 0; i < uniqueSymbols.length; i += BATCH) {
+        if (cancelled) return;
+        const batch = uniqueSymbols.slice(i, i + BATCH);
+        await Promise.all(
+          batch.map(async (sym) => {
+            try {
+              const res = await fetch(`/api/symbols?q=${encodeURIComponent(sym)}`, { cache: "force-cache" });
+              if (!res.ok) return;
+              const data = (await res.json()) as { results?: { symbol: string; name: string }[] };
+              const exact = (data.results ?? []).find(
+                (r) => (r.symbol ?? "").toUpperCase() === sym
+              );
+              if (exact?.name) map.set(sym, exact.name);
+            } catch { /* ignore individual failures */ }
+          })
+        );
+        if (!cancelled) setCompanyNames((prev) => new Map([...prev, ...map]));
+      }
+    }
+
+    void fetchNames();
+    return () => { cancelled = true; };
+  }, [sections]);
 
   const safeSections = useMemo(() => Array.isArray(sections) ? sections : [], [sections]);
   const safeSignalRecords = useMemo(() => Array.isArray(signalRecords) ? signalRecords : [], [signalRecords]);
@@ -469,7 +542,7 @@ export default function PickersClient() {
   .picker-row { display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.06); }
   .picker-row:last-child { border-bottom:none; }
   .picker-row-left { display:flex;align-items:center;gap:8px;min-width:0;flex:1; }
-  .picker-row-ticker { font-size:14px;font-weight:700;color:#e2e8f0;letter-spacing:0.01em; }
+  .picker-row-ticker { font-size:14px;font-weight:700;color:#e2e8f0;letter-spacing:0.01em;flex:0 0 auto; }
   .picker-row-note { font-size:11px;color:rgba(148,163,184,0.65);font-weight:400;margin-left:2px; }
   .picker-row-link { font-size:11px;font-weight:600;color:rgba(148,163,184,0.55);text-decoration:none;white-space:nowrap;flex:0 0 auto;transition:color 120ms ease; }
   .picker-row-link:hover { color:#93c5fd !important; }
@@ -484,6 +557,37 @@ export default function PickersClient() {
   .pickers-section-title-text { min-width:0;line-height:1.22;font-size:14px;font-weight:700; }
   .pickers-screener-panel { display:block; }
   .pickers-earnings-fetch-button:hover:not(:disabled) { filter:brightness(1.08);transform:translateY(-1px); }
+
+  /* ── Company name layout ───────────────────────────────── */
+  /* Desktop: ticker on its own line, company + note below */
+  .picker-name-desktop { display:flex;flex-direction:column;gap:1px;min-width:0; }
+  .picker-name-mobile { display:none; }
+  .picker-row-company {
+    font-size:11px;
+    color:rgba(148,163,184,0.60);
+    font-weight:400;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    max-width:160px;
+  }
+  /* Mobile: single-line compact layout */
+  @media (max-width: 640px) {
+    .picker-name-desktop { display:none !important; }
+    .picker-name-mobile { display:flex !important; align-items:baseline; gap:0; min-width:0; overflow:hidden; }
+    .picker-row-company-mobile {
+      font-size:11px;
+      color:rgba(148,163,184,0.55);
+      font-weight:400;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      min-width:0;
+      flex:1;
+    }
+    .picker-row-note { display:none; }
+  }
+
   @media (max-width: 1100px) {
     .pickers-sections-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
     .pattern-plays-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
@@ -500,7 +604,6 @@ export default function PickersClient() {
     .pickers-section-description { display:none; }
     .pickers-help-tip { width:18px !important;height:18px !important;font-size:10px !important; }
     .pickers-section-title-text { font-size:13px !important; }
-    .picker-row-note { display:none; }
     /* Explicitly keep See All visible and full-width on mobile */
     .pickers-see-all { display:inline-flex !important;width:100%;justify-content:center;padding:6px 10px;font-size:12px; }
   }
@@ -615,10 +718,13 @@ export default function PickersClient() {
                       <div key={it.symbol} className="picker-row">
                         <div className="picker-row-left">
                           <span style={{ width: 6, height: 6, borderRadius: 999, background: toneDot(it.tone), flex: "0 0 auto" }} />
-                          <a href={toChartHref(it.dashboardHref ?? "", it.symbol)} className="picker-row-ticker" style={{ textDecoration: "none" }}>
-                            {it.symbol}
+                          <a href={toChartHref(it.dashboardHref ?? "", it.symbol)} style={{ textDecoration: "none", minWidth: 0, flex: 1 }}>
+                            <PickerRowContent
+                              symbol={it.symbol}
+                              note={it.note}
+                              companyName={companyNames.get(it.symbol)}
+                            />
                           </a>
-                          {it.note ? <span className="picker-row-note">{it.note}</span> : null}
                         </div>
                         <a href={toChartHref(it.dashboardHref ?? "", it.symbol)} className="picker-row-link">Chart ↗</a>
                       </div>
