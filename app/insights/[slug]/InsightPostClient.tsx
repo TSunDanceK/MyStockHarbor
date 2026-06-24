@@ -574,8 +574,8 @@ export default function InsightPostClient({
     post.timeframe === "d"
       ? snapshot?.weeklyMA200Pct ?? null
       : null;
-  
-    const maSpreadPct =
+
+  const maSpreadPct =
     typeof lastMA50 === "number" && typeof lastMA200 === "number" && lastMA200 !== 0
       ? ((lastMA50 - lastMA200) / lastMA200) * 100
       : null;
@@ -592,7 +592,7 @@ export default function InsightPostClient({
       ? `Snapshot from ${post.date}`
       : "Archived snapshot";
 
-    const overallBreakdown =
+  const overallBreakdown =
     post.overallBreakdown ||
     post.excerpt ||
     "This insight is focused on the current chart structure and the key decision point for traders.";
@@ -791,9 +791,9 @@ export default function InsightPostClient({
                     }}
                   >
                     Snapshot date:{" "}
-{snapshot?.snapshotDate
-  ? formatPostDate(snapshot.snapshotDate)
-  : snapshotDateText}
+                    {snapshot?.snapshotDate
+                      ? formatPostDate(snapshot.snapshotDate)
+                      : snapshotDateText}
                   </div>
 
                   <div
@@ -975,7 +975,7 @@ export default function InsightPostClient({
                 <ul className="insightSideList">
                   <li>Start with the key level from the article.</li>
                   <li>Wait for price behaviour to confirm demand or supply.</li>
-                  <li>Compare the frozen snapshot with today’s live chart.</li>
+                  <li>Compare the frozen snapshot with today's live chart.</li>
                 </ul>
               </section>
 
@@ -1011,30 +1011,8 @@ export default function InsightPostClient({
                 </div>
                 <p className="insightSideText">{investorUsefulInfo}</p>
               </section>
-
-              {symbol ? (
-                <section className="insightSideCard insightSideActionCard">
-                  <div className="insightSideHeader">
-                    <span className="sideIcon sideIconBlue">↗</span>
-                    <div>
-                      <div style={miniLabelStyle}>Next step</div>
-                      <h2 className="insightSideTitle">Current context</h2>
-                    </div>
-                  </div>
-                  <div className="insightSideActionGrid">
-                    <Link href={`/stock/${symbol}`} style={ctaStyle("blue")}>
-                      Open {symbol} stock page
-                    </Link>
-
-                    <Link href={`/stock/${symbol}/news`} style={ctaStyle("green")}>
-                      Read latest {symbol} news
-                    </Link>
-                  </div>
-                </section>
-              ) : null}
             </aside>
           </section>
-
         </section>
 
         {symbol ? (
@@ -1048,11 +1026,11 @@ export default function InsightPostClient({
 
             <div className="insightResearchActions">
               <Link href={`/stock/${symbol}`} style={bottomActionStyle("blue")}>
-                Stock page
+                {symbol} stock page
               </Link>
 
               <Link href={`/stock/${symbol}/news`} style={bottomActionStyle("green")}>
-                Latest news
+                Latest {symbol} news
               </Link>
             </div>
           </section>
@@ -1365,10 +1343,6 @@ export default function InsightPostClient({
           border-color: rgba(34,197,94,0.26);
         }
 
-        .insightSideActionCard {
-          border-color: rgba(34,197,94,0.18);
-        }
-
         .insightSideTitle {
           margin: 8px 0 0;
           font-size: 21px;
@@ -1403,12 +1377,6 @@ export default function InsightPostClient({
 
         .insightSideList li::marker {
           color: #60a5fa;
-        }
-
-        .insightSideActionGrid {
-          margin-top: 14px;
-          display: grid;
-          gap: 10px;
         }
 
         .insightMobileOnly {
@@ -1590,222 +1558,7 @@ export default function InsightPostClient({
             grid-template-columns: 1fr !important;
           }
 
-          .insightTopNav {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 14px;
-          margin-bottom: 16px;
-        }
-
-        .insightQuietBack,
-        .insightTopNavLinks a {
-          color: rgba(226,232,240,0.82);
-          text-decoration: none;
-          font-weight: 850;
-          font-size: 13px;
-        }
-
-        .insightTopNavLinks {
-          display: flex;
-          gap: 12px;
-          flex-wrap: wrap;
-          justify-content: flex-end;
-        }
-
-        .insightHeroShell {
-          border: 1px solid rgba(59,130,246,0.22);
-          border-radius: 28px;
-          padding: 22px;
-          background: linear-gradient(135deg, rgba(15,23,42,0.98), rgba(6,10,18,0.98));
-          box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 18px 38px rgba(0,0,0,0.26);
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) 360px;
-          gap: 22px;
-          align-items: stretch;
-        }
-
-        .insightHeroMain {
-          min-width: 0;
-        }
-
-        .insightHeroTitle {
-          margin: 0;
-          max-width: 820px;
-          font-size: 43px;
-          line-height: 1.04;
-          letter-spacing: -0.06em;
-        }
-
-        .insightHeroText {
-          margin: 12px 0 0;
-          max-width: 760px;
-          color: rgba(226,232,240,0.80);
-          font-size: 16px;
-          line-height: 1.68;
-        }
-
-        .insightHeroPills {
-          display: flex;
-          align-items: center;
-          gap: 9px;
-          flex-wrap: wrap;
-          margin-bottom: 16px;
-        }
-
-        .symbolPill,
-        .riskPill,
-        .timeframePill,
-        .datePill {
-          display: inline-flex;
-          align-items: center;
-          min-height: 27px;
-          padding: 6px 10px;
-          border-radius: 999px;
-          font-size: 11px;
-          font-weight: 950;
-          letter-spacing: 0.06em;
-          text-transform: uppercase;
-          border: 1px solid rgba(255,255,255,0.10);
-          background: rgba(255,255,255,0.045);
-          color: rgba(226,232,240,0.90);
-        }
-
-        .symbolPill {
-          border-color: rgba(59,130,246,0.34);
-          background: rgba(59,130,246,0.14);
-          color: #dbeafe;
-        }
-
-        .riskPill {
-          border-color: rgba(248,113,113,0.28);
-          background: rgba(127,29,29,0.16);
-          color: #fecaca;
-        }
-
-        .timeframePill {
-          border-color: rgba(147,197,253,0.22);
-          color: #bfdbfe;
-        }
-
-        .datePill {
-          color: rgba(203,213,225,0.78);
-        }
-
-        .simpleViewCard {
-          margin-top: 18px;
-          display: grid;
-          grid-template-columns: auto minmax(0, 1fr);
-          gap: 12px;
-          align-items: start;
-          max-width: 760px;
-          border: 1px solid rgba(34,197,94,0.22);
-          border-radius: 18px;
-          padding: 14px;
-          background: linear-gradient(135deg, rgba(34,197,94,0.10), rgba(15,23,42,0.74));
-          color: rgba(241,245,249,0.86);
-          line-height: 1.62;
-          font-size: 14px;
-        }
-
-        .simpleViewCard strong {
-          color: #f8fafc;
-        }
-
-        .simpleViewIcon,
-        .scoreIcon,
-        .sideIcon {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 30px;
-          height: 30px;
-          border-radius: 999px;
-          background: rgba(34,197,94,0.14);
-          border: 1px solid rgba(34,197,94,0.24);
-          flex: 0 0 auto;
-        }
-
-        .insightHeroSide {
-          display: grid;
-          gap: 12px;
-          min-width: 0;
-        }
-
-        .heroScoreCard,
-        .heroMiniCard {
-          border: 1px solid rgba(255,255,255,0.10);
-          border-radius: 20px;
-          background: linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.022));
-          box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
-        }
-
-        .heroScoreCard {
-          padding: 18px;
-          border-color: rgba(248,113,113,0.24);
-          background: linear-gradient(135deg, rgba(127,29,29,0.20), rgba(15,23,42,0.88));
-        }
-
-        .scoreTopRow {
-          display: flex;
-          justify-content: space-between;
-          align-items: start;
-          gap: 14px;
-        }
-
-        .scoreValue {
-          margin-top: 8px;
-          color: #f87171;
-          font-size: 35px;
-          line-height: 1;
-          font-weight: 950;
-          letter-spacing: -0.06em;
-        }
-
-        .heroScoreCard p {
-          margin: 12px 0 0;
-          color: rgba(241,245,249,0.74);
-          line-height: 1.58;
-          font-size: 13px;
-        }
-
-        .heroMiniGrid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 12px;
-        }
-
-        .heroMiniCard {
-          padding: 14px;
-        }
-
-        .heroMiniCard strong {
-          display: block;
-          margin-top: 8px;
-          font-size: 24px;
-          line-height: 1;
-          color: #f8fafc;
-          letter-spacing: -0.04em;
-        }
-
-        .heroMiniCard span {
-          display: block;
-          margin-top: 7px;
-          color: rgba(203,213,225,0.72);
-          font-size: 12px;
-          line-height: 1.35;
-        }
-
-        .insightShell {
-          margin-top: 18px;
-          border: 1px solid rgba(59,130,246,0.20);
-          border-radius: 24px;
-          padding: 18px;
-          background: linear-gradient(180deg, rgba(8,14,28,0.94), rgba(6,10,18,0.98));
-          box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
-        }
-
-        .insightSummaryGrid {
+          .insightSummaryGrid {
             grid-template-columns: 1fr !important;
           }
 
@@ -2253,6 +2006,7 @@ const smallStatMetaStyle: React.CSSProperties = {
   opacity: 0.72,
   lineHeight: 1.45,
 };
+
 function insightSidebarCardStyle(
   tint: "blue" | "gold" | "green" | "purple"
 ): React.CSSProperties {
