@@ -247,14 +247,20 @@ function PatternPlaysSection() {
   );
 }
 
-// ── Ticker row content ───────────────────────────────────────────────────────
-// Line 1: TICKER  ·  Company Name  (inline, company truncates)
-// Line 2: note (signal info) — hidden on mobile via CSS
+// ── Ticker row ───────────────────────────────────────────────────────────────
+// Line 1: TICKER (large bold)  ·  Company Name (truncated, hover for full)
+// Line 2: note/signal text     (truncated, hover for full) — hidden mobile
+// Both lines strictly one line each — no wrapping anywhere.
 function PickerRowContent({ symbol, note, companyName }: { symbol: string; note?: string; companyName?: string }) {
+  const fullLine1 = companyName ? `${symbol} · ${companyName}` : symbol;
+  const fullLine2 = note ?? "";
   return (
-    <span style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
-      {/* Line 1: ticker + company name inline */}
-      <span style={{ display: "flex", alignItems: "baseline", minWidth: 0, overflow: "hidden" }}>
+    <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0, overflow: "hidden" }}>
+      {/* Line 1: TICKER · Company Name — both on one line, company truncates */}
+      <span
+        title={companyName ? fullLine1 : undefined}
+        style={{ display: "flex", alignItems: "baseline", minWidth: 0, overflow: "hidden" }}
+      >
         <span className="picker-row-ticker">{symbol}</span>
         {companyName ? (
           <>
@@ -263,8 +269,15 @@ function PickerRowContent({ symbol, note, companyName }: { symbol: string; note?
           </>
         ) : null}
       </span>
-      {/* Line 2: note — hidden on mobile */}
-      {note ? <span className="picker-row-note">{note}</span> : null}
+      {/* Line 2: note — strictly one line, hover reveals full text */}
+      {note ? (
+        <span
+          className="picker-row-note"
+          title={fullLine2}
+        >
+          {note}
+        </span>
+      ) : null}
     </span>
   );
 }
@@ -289,8 +302,6 @@ export default function PickersClient() {
   const [earningsFetchLockedUntil, setEarningsFetchLockedUntil] = useState(0);
   const [earningsFetchTick, setEarningsFetchTick] = useState(0);
   const [earningsFetchMessage, setEarningsFetchMessage] = useState<string | null>(null);
-
-  // ── Company name map ────────────────────────────────────────────────────────
   const [companyNames, setCompanyNames] = useState<Map<string, string>>(new Map());
 
   const EARNINGS_FETCH_LOCK_MS = 90 * 1000;
@@ -382,52 +393,38 @@ export default function PickersClient() {
     return () => { cancelled = true; };
   }, []);
 
-  // ── Fetch company names once sections load ──────────────────────────────────
-  // Batches in groups of 5. Tries exact symbol match first; falls back to the
-  // first result from the API for single-letter or common tickers (DAY, K, Q,
-  // AES etc.) where the symbols endpoint returns a best-guess first entry.
+  // ── Fetch company names ─────────────────────────────────────────────────────
+  // Exact match first, then first result fallback (handles DAY, K, AES, FOXA etc.)
   useEffect(() => {
     if (!sections.length) return;
     let cancelled = false;
-
-    const uniqueSymbols = Array.from(
-      new Set(
-        sections.flatMap((sec) =>
-          (Array.isArray(sec.items) ? sec.items.slice(0, 4) : []).map((it) =>
-            String(it.symbol ?? "").trim().toUpperCase()
-          )
-        ).filter(Boolean)
-      )
-    );
-
+    const uniqueSymbols = Array.from(new Set(
+      sections.flatMap((sec) =>
+        (Array.isArray(sec.items) ? sec.items.slice(0, 4) : []).map((it) =>
+          String(it.symbol ?? "").trim().toUpperCase()
+        )
+      ).filter(Boolean)
+    ));
     async function fetchNames() {
       const BATCH = 5;
       for (let i = 0; i < uniqueSymbols.length; i += BATCH) {
         if (cancelled) return;
         const batch = uniqueSymbols.slice(i, i + BATCH);
         const batchMap = new Map<string, string>();
-        await Promise.all(
-          batch.map(async (sym) => {
-            try {
-              const res = await fetch(`/api/symbols?q=${encodeURIComponent(sym)}`, { cache: "force-cache" });
-              if (!res.ok) return;
-              const data = (await res.json()) as { results?: { symbol: string; name: string }[] };
-              const results = data.results ?? [];
-              // 1. Exact match (case-insensitive)
-              const exact = results.find((r) => (r.symbol ?? "").trim().toUpperCase() === sym);
-              // 2. Fall back to first result — handles common tickers where the API
-              //    returns no exact hit but the first entry is the right stock
-              const match = exact ?? results[0] ?? null;
-              if (match?.name) batchMap.set(sym, match.name);
-            } catch { /* ignore */ }
-          })
-        );
-        if (!cancelled && batchMap.size > 0) {
-          setCompanyNames((prev) => new Map([...prev, ...batchMap]));
-        }
+        await Promise.all(batch.map(async (sym) => {
+          try {
+            const res = await fetch(`/api/symbols?q=${encodeURIComponent(sym)}`, { cache: "force-cache" });
+            if (!res.ok) return;
+            const data = (await res.json()) as { results?: { symbol: string; name: string }[] };
+            const results = data.results ?? [];
+            const exact = results.find((r) => (r.symbol ?? "").trim().toUpperCase() === sym);
+            const match = exact ?? results[0] ?? null;
+            if (match?.name) batchMap.set(sym, match.name);
+          } catch { /* ignore */ }
+        }));
+        if (!cancelled && batchMap.size > 0) setCompanyNames((prev) => new Map([...prev, ...batchMap]));
       }
     }
-
     void fetchNames();
     return () => { cancelled = true; };
   }, [sections]);
@@ -502,13 +499,18 @@ export default function PickersClient() {
 
   const displaySections = useMemo(() => {
     const out: PickerSection[] = [];
-    const ma200 = safeSections.find((s) => s.title.toLowerCase().includes("200-day"));
-    const buyDip = safeSections.find((s) => s.title.includes("All-Time Highs"));
-    const athBreak = safeSections.find((s) => s.title.includes("All-Time High Breakout"));
-    const threeMonth = safeSections.find((s) => s.title.includes("3-Month High Breakout"));
-    const oversold = safeSections.find((s) => s.title.toLowerCase().includes("oversold"));
-    const macroSR = safeSections.find((s) => { const t = s.title.toLowerCase(); return t.includes("macro") && t.includes("support") && t.includes("resistance"); });
-    const others = safeSections.filter((s) => s !== ma200 && s !== buyDip && s !== athBreak && s !== threeMonth && s !== oversold && s !== macroSR && !s.title.toLowerCase().includes("hot market names"));
+    const ma200       = safeSections.find((s) => s.title.toLowerCase().includes("200-day"));
+    const buyDip      = safeSections.find((s) => s.title.includes("All-Time Highs") && !s.title.includes("Breakout"));
+    const athBreak    = safeSections.find((s) => s.title.includes("All-Time High Breakout"));
+    const threeMonth  = safeSections.find((s) => s.title.includes("3-Month High Breakout"));
+    const oversold    = safeSections.find((s) => s.title.toLowerCase().includes("oversold"));
+    const macroSR     = safeSections.find((s) => { const t = s.title.toLowerCase(); return t.includes("macro") && t.includes("support") && t.includes("resistance"); });
+    const earningsGrowth = safeSections.find((s) => s.title.toLowerCase().includes("strong earnings growth"));
+    const divergence  = safeSections.find((s) => s.title.toLowerCase().includes("divergence"));
+    // Remaining sections not explicitly placed
+    const placed = new Set([ma200, buyDip, athBreak, threeMonth, oversold, macroSR, earningsGrowth, divergence].filter(Boolean));
+    const others = safeSections.filter((s) => !placed.has(s) && !s.title.toLowerCase().includes("hot market names"));
+
     if (ma200) out.push(ma200);
     if (topBuySection) out.push(topBuySection);
     if (buyDip) out.push(buyDip);
@@ -517,6 +519,9 @@ export default function PickersClient() {
     if (threeMonth) out.push(threeMonth);
     if (topSellSection) out.push(topSellSection);
     if (oversold) out.push(oversold);
+    // Earnings Growth and Divergence placed adjacent
+    if (earningsGrowth) out.push(earningsGrowth);
+    if (divergence) out.push(divergence);
     return [...out, ...others];
   }, [safeSections, topBuySection, topSellSection]);
 
@@ -542,21 +547,21 @@ export default function PickersClient() {
   .pickers-shell { width:100%;min-width:0; }
   .pickers-sections-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start; }
 
-  /* ── Picker row ── */
+  /* ── Picker row ─────────────────────────────────────────────── */
   .picker-row { display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.06); }
   .picker-row:last-child { border-bottom:none; }
-  .picker-row-left { display:flex;align-items:center;gap:10px;min-width:0;flex:1; }
+  .picker-row-left { display:flex;align-items:center;gap:10px;min-width:0;flex:1;overflow:hidden; }
 
-  /* Ticker — bold, fixed width so company name always starts at the same position */
-  .picker-row-ticker { font-size:14px;font-weight:700;color:#e2e8f0;letter-spacing:0.01em;flex:0 0 auto; }
+  /* Ticker — larger, takes the visual weight of both lines */
+  .picker-row-ticker { font-size:16px;font-weight:700;color:#e2e8f0;letter-spacing:0.01em;flex:0 0 auto;line-height:1.2; }
 
-  /* Separator · between ticker and company */
-  .picker-name-sep { font-size:11px;color:rgba(148,163,184,0.30);flex:0 0 auto;user-select:none; }
+  /* Separator between ticker and company name */
+  .picker-name-sep { font-size:11px;color:rgba(148,163,184,0.28);flex:0 0 auto;user-select:none; }
 
-  /* Company name — muted, truncates */
+  /* Company name — strictly one line, truncates with ellipsis, hover reveals full */
   .picker-row-company {
     font-size:11px;
-    color:rgba(148,163,184,0.58);
+    color:rgba(148,163,184,0.55);
     font-weight:400;
     white-space:nowrap;
     overflow:hidden;
@@ -565,18 +570,21 @@ export default function PickersClient() {
     flex:1;
   }
 
-  /* Note (signal info) — second line, slightly indented to align under company name */
+  /* Note/signal line — strictly one line, truncates, hover reveals full */
   .picker-row-note {
     font-size:11px;
-    color:rgba(148,163,184,0.60);
+    color:rgba(148,163,184,0.58);
     font-weight:400;
-    padding-left:2px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    display:block;
   }
 
   .picker-row-link { font-size:11px;font-weight:600;color:rgba(148,163,184,0.55);text-decoration:none;white-space:nowrap;flex:0 0 auto;transition:color 120ms ease; }
   .picker-row-link:hover { color:#93c5fd !important; }
 
-  /* See all — green button */
+  /* See all */
   .pickers-see-all { display:inline-flex !important;align-items:center;padding:4px 10px;border-radius:7px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);font-size:11px;font-weight:600;color:#4ade80;text-decoration:none;transition:color 120ms ease,background 120ms ease;white-space:nowrap; }
   .pickers-see-all:hover { background:rgba(255,255,255,0.07);color:#86efac !important;filter:none !important;transform:none !important; }
 
@@ -610,6 +618,7 @@ export default function PickersClient() {
     .pickers-help-tip { width:18px !important;height:18px !important;font-size:10px !important; }
     .pickers-section-title-text { font-size:13px !important; }
     .picker-row-note { display:none !important; }
+    .picker-row-ticker { font-size:14px !important; }
     .pickers-section-footer { flex-wrap:wrap; }
     .pickers-see-all { width:100%;justify-content:center;padding:6px 10px;font-size:12px; }
   }
@@ -631,7 +640,6 @@ export default function PickersClient() {
 
       {err ? <div style={{ border: "1px solid rgba(239,68,68,0.18)", borderRadius: 12, padding: 14, background: "rgba(239,68,68,0.06)", color: "#fecaca", fontSize: 14 }}>{err}</div> : null}
 
-      {/* Screener panel — desktop only */}
       {!loading && !err ? (
         <section className="pickers-screener-panel" style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "12px 16px", background: "rgba(255,255,255,0.02)", marginBottom: 14, boxSizing: "border-box" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
