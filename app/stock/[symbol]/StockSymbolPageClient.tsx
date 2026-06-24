@@ -778,8 +778,125 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
         ) : (
           <div className="stock-page-layout" style={{ paddingTop: 24 }}>
 
-            {/* ════ LEFT COLUMN ════════════════════════════════════ */}
-            <div className="stock-page-left">
+            {/* ════ LEFT SIDEBAR ═══════════════════════════════════
+                DOM order: sidebar first so it's the first grid child,
+                which places it in column 1 (300px) on desktop.
+                On mobile the grid collapses to 1 col and sidebar
+                gets order:2 so main content still reads first.       */}
+            <aside className="stock-page-sidebar">
+
+              {/* ── Change stock ──────────────────────────────────── */}
+              <div style={sideCardStyle()}>
+                <div style={sideCardHeaderStyle()}>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Change stock</div>
+                  <div style={{ marginTop: 3, fontSize: 12, opacity: 0.50, lineHeight: 1.4 }}>Search another ticker to view its stock analysis page.</div>
+                </div>
+                <div style={sideCardBodyStyle()}>
+                  <StockTickerJump currentSymbol={symbol} />
+                </div>
+              </div>
+
+              {/* ── Earnings summary card ─────────────────────────── */}
+              <div style={sideCardStyle()}>
+                <div style={{ ...sideCardHeaderStyle(), display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Earnings read</div>
+                    <div style={{ marginTop: 3, fontSize: 14, fontWeight: 700, letterSpacing: "-0.02em" }}>{symbol} earnings</div>
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 6, border: toneBorder(earningsPanelT), background: toneSoftBackground(earningsPanelT), color: toneColor(earningsPanelT), whiteSpace: "nowrap" }}>
+                    {earningsLoading ? "Loading" : earnings?.toneLabel ?? "Unavailable"}
+                  </span>
+                </div>
+                <div style={sideCardBodyStyle()}>
+                  {/* Score bar */}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontSize: 12, opacity: 0.55 }}>Score</span>
+                    <span style={{ fontSize: 18, fontWeight: 800, color: toneColor(earningsScTone) }}>{typeof earningsScore === "number" ? `${earningsScore}/100` : "—"}</span>
+                  </div>
+                  <div aria-hidden="true" style={{ position: "relative", height: 6, borderRadius: 999, background: "linear-gradient(90deg, rgba(239,68,68,0.85), rgba(250,204,21,0.85), rgba(34,197,94,0.85))" }}>
+                    <span style={{ position: "absolute", top: "50%", left: `${typeof earningsScore === "number" ? earningsScore : 50}%`, width: 12, height: 12, borderRadius: 999, background: "#f8fafc", border: `2px solid ${toneColor(earningsScTone)}`, transform: "translate(-50%, -50%)" }} />
+                  </div>
+                  <div style={{ marginTop: 4, display: "flex", justifyContent: "space-between", fontSize: 9, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "rgba(226,232,240,0.40)" }}>
+                    <span>Weak</span><span>Mixed</span><span>Strong</span>
+                  </div>
+                  <div style={{ marginTop: 4, fontSize: 11, opacity: 0.55 }}>{earningsScaleSummary(earnings, earningsLoading)}</div>
+
+                  {/* Date line */}
+                  {!earningsLoading && earnings?.hasStructuredData ? (
+                    <div style={{ marginTop: 10, fontSize: 12, opacity: 0.55, lineHeight: 1.5 }}>
+                      Latest: {formatShortDate(earnings.reportDate)}<br />
+                      Next: {formatShortDate(earnings.nextEarningsDate)}
+                    </div>
+                  ) : null}
+
+                  {/* Key figures — 2 col mini grid */}
+                  <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 10px" }}>
+                    {[
+                      { label: "EPS", value: earningsLoading ? "—" : formatEps(earnings?.actualEps ?? null), tone: metricToneFromPct(earnings?.epsSurprisePercent ?? null) },
+                      { label: "EPS beat", value: earningsLoading ? "—" : formatSignedPercent(earnings?.epsSurprisePercent ?? null), tone: metricToneFromPct(earnings?.epsSurprisePercent ?? null) },
+                      { label: "Revenue", value: earningsLoading ? "—" : formatMoneyCompact(earnings?.revenue ?? null), tone: metricToneFromPct(earnings?.revenueSurprisePercent ?? null) },
+                      { label: "Rev beat", value: earningsLoading ? "—" : formatSignedPercent(earnings?.revenueSurprisePercent ?? null), tone: metricToneFromPct(earnings?.revenueSurprisePercent ?? null) },
+                    ].map((m) => (
+                      <div key={m.label} style={{ padding: "7px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", opacity: 0.50 }}>{m.label}</div>
+                        <div style={{ marginTop: 2, fontSize: 15, fontWeight: 800, color: toneColor(m.tone) }}>{m.value}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Yearly dots */}
+                  {earnings?.yearlySummaries?.length ? (
+                    <div style={{ marginTop: 12 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", opacity: 0.50, marginBottom: 6 }}>Yearly trend</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(44px, 1fr))", gap: 5 }}>
+                        {earnings.yearlySummaries.map((item) => (
+                          <div key={item.year} style={{ textAlign: "center", padding: "5px 4px", borderRadius: 7, border: toneBorder(item.tone), background: toneSoftBackground(item.tone) }}>
+                            <div style={{ fontSize: 9, opacity: 0.55 }}>{item.year}</div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: toneColor(item.tone) }}>{item.toneLabel}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <Link href={`/stock/${encodeURIComponent(symbol)}/earnings`} style={{ display: "block", marginTop: 14, textAlign: "center", fontSize: 12, fontWeight: 700, color: "rgba(148,163,184,0.65)", textDecoration: "none", padding: "7px 0", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8 }}>
+                    Full earnings breakdown →
+                  </Link>
+                </div>
+              </div>
+
+              {/* ── Company outlook scores card ───────────────────── */}
+              {aiAnalysis ? (
+                <div style={sideCardStyle()}>
+                  <div style={sideCardHeaderStyle()}>
+                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Company outlook</div>
+                    <div style={{ marginTop: 3, fontSize: 14, fontWeight: 700, letterSpacing: "-0.02em" }}>{symbol} scores</div>
+                  </div>
+                  <div>
+                    {[
+                      { key: "fundamentals" as const, label: "Fundamentals", score: aiAnalysis.fundamentalsScore },
+                      { key: "future" as const, label: "Future potential", score: aiAnalysis.futurePotentialScore },
+                    ].map((s, i) => (
+                      <div key={s.key} style={{ padding: "12px 14px", borderBottom: i === 0 ? "1px solid rgba(255,255,255,0.07)" : "none", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, position: "relative" }}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.80 }}>{s.label}</div>
+                          <div style={{ fontSize: 11, opacity: 0.45, marginTop: 2 }}>{scoreBandLabel(s.score)}</div>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 20, fontWeight: 800, color: toneColor(scoreTone(s.score)) }}>{s.score}/100</span>
+                          <button type="button" onClick={(e) => { e.stopPropagation(); setOpenScoreHelp(openScoreHelp === s.key ? null : s.key); }} style={{ ...scoreHelpButtonStyle, position: "relative", top: "auto", right: "auto" }}>?</button>
+                        </div>
+                        {openScoreHelp === s.key ? <div onClick={(e) => e.stopPropagation()} style={{ ...scoreHelpInlineBoxStyle, top: "100%", right: 14 }}>{scoreExplainText(s.key, s.score)}</div> : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+            </aside>{/* end sidebar */}
+
+            {/* ════ RIGHT MAIN COLUMN ══════════════════════════════ */}
+            <div className="stock-page-main">
 
               {/* ── Chart section ─────────────────────────────────── */}
               <section>
@@ -958,120 +1075,7 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
                 </div>
               </section>
 
-            </div>{/* end left col */}
-
-            {/* ════ RIGHT SIDEBAR ══════════════════════════════════ */}
-            <aside className="stock-page-sidebar">
-
-              {/* ── Change stock ──────────────────────────────────── */}
-              <div style={sideCardStyle()}>
-                <div style={sideCardHeaderStyle()}>
-                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Change stock</div>
-                  <div style={{ marginTop: 3, fontSize: 12, opacity: 0.50, lineHeight: 1.4 }}>Search another ticker to view its stock analysis page.</div>
-                </div>
-                <div style={sideCardBodyStyle()}>
-                  <StockTickerJump currentSymbol={symbol} />
-                </div>
-              </div>
-
-              {/* ── Earnings summary card ─────────────────────────── */}
-              <div style={sideCardStyle()}>
-                <div style={{ ...sideCardHeaderStyle(), display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                  <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Earnings read</div>
-                    <div style={{ marginTop: 3, fontSize: 14, fontWeight: 700, letterSpacing: "-0.02em" }}>{symbol} earnings</div>
-                  </div>
-                  <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 6, border: toneBorder(earningsPanelT), background: toneSoftBackground(earningsPanelT), color: toneColor(earningsPanelT), whiteSpace: "nowrap" }}>
-                    {earningsLoading ? "Loading" : earnings?.toneLabel ?? "Unavailable"}
-                  </span>
-                </div>
-                <div style={sideCardBodyStyle()}>
-                  {/* Score bar */}
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
-                    <span style={{ fontSize: 12, opacity: 0.55 }}>Score</span>
-                    <span style={{ fontSize: 18, fontWeight: 800, color: toneColor(earningsScTone) }}>{typeof earningsScore === "number" ? `${earningsScore}/100` : "—"}</span>
-                  </div>
-                  <div aria-hidden="true" style={{ position: "relative", height: 6, borderRadius: 999, background: "linear-gradient(90deg, rgba(239,68,68,0.85), rgba(250,204,21,0.85), rgba(34,197,94,0.85))" }}>
-                    <span style={{ position: "absolute", top: "50%", left: `${typeof earningsScore === "number" ? earningsScore : 50}%`, width: 12, height: 12, borderRadius: 999, background: "#f8fafc", border: `2px solid ${toneColor(earningsScTone)}`, transform: "translate(-50%, -50%)" }} />
-                  </div>
-                  <div style={{ marginTop: 4, display: "flex", justifyContent: "space-between", fontSize: 9, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "rgba(226,232,240,0.40)" }}>
-                    <span>Weak</span><span>Mixed</span><span>Strong</span>
-                  </div>
-                  <div style={{ marginTop: 4, fontSize: 11, opacity: 0.55 }}>{earningsScaleSummary(earnings, earningsLoading)}</div>
-
-                  {/* Date line */}
-                  {!earningsLoading && earnings?.hasStructuredData ? (
-                    <div style={{ marginTop: 10, fontSize: 12, opacity: 0.55, lineHeight: 1.5 }}>
-                      Latest: {formatShortDate(earnings.reportDate)}<br />
-                      Next: {formatShortDate(earnings.nextEarningsDate)}
-                    </div>
-                  ) : null}
-
-                  {/* Key figures — 2 col mini grid */}
-                  <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 10px" }}>
-                    {[
-                      { label: "EPS", value: earningsLoading ? "—" : formatEps(earnings?.actualEps ?? null), tone: metricToneFromPct(earnings?.epsSurprisePercent ?? null) },
-                      { label: "EPS beat", value: earningsLoading ? "—" : formatSignedPercent(earnings?.epsSurprisePercent ?? null), tone: metricToneFromPct(earnings?.epsSurprisePercent ?? null) },
-                      { label: "Revenue", value: earningsLoading ? "—" : formatMoneyCompact(earnings?.revenue ?? null), tone: metricToneFromPct(earnings?.revenueSurprisePercent ?? null) },
-                      { label: "Rev beat", value: earningsLoading ? "—" : formatSignedPercent(earnings?.revenueSurprisePercent ?? null), tone: metricToneFromPct(earnings?.revenueSurprisePercent ?? null) },
-                    ].map((m) => (
-                      <div key={m.label} style={{ padding: "7px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", opacity: 0.50 }}>{m.label}</div>
-                        <div style={{ marginTop: 2, fontSize: 15, fontWeight: 800, color: toneColor(m.tone) }}>{m.value}</div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Yearly dots */}
-                  {earnings?.yearlySummaries?.length ? (
-                    <div style={{ marginTop: 12 }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", opacity: 0.50, marginBottom: 6 }}>Yearly trend</div>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(44px, 1fr))", gap: 5 }}>
-                        {earnings.yearlySummaries.map((item) => (
-                          <div key={item.year} style={{ textAlign: "center", padding: "5px 4px", borderRadius: 7, border: toneBorder(item.tone), background: toneSoftBackground(item.tone) }}>
-                            <div style={{ fontSize: 9, opacity: 0.55 }}>{item.year}</div>
-                            <div style={{ fontSize: 11, fontWeight: 700, color: toneColor(item.tone) }}>{item.toneLabel}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  <Link href={`/stock/${encodeURIComponent(symbol)}/earnings`} style={{ display: "block", marginTop: 14, textAlign: "center", fontSize: 12, fontWeight: 700, color: "rgba(148,163,184,0.65)", textDecoration: "none", padding: "7px 0", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8 }}>
-                    Full earnings breakdown →
-                  </Link>
-                </div>
-              </div>
-
-              {/* ── Company outlook scores card ───────────────────── */}
-              {aiAnalysis ? (
-                <div style={sideCardStyle()}>
-                  <div style={sideCardHeaderStyle()}>
-                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Company outlook</div>
-                    <div style={{ marginTop: 3, fontSize: 14, fontWeight: 700, letterSpacing: "-0.02em" }}>{symbol} scores</div>
-                  </div>
-                  <div>
-                    {[
-                      { key: "fundamentals" as const, label: "Fundamentals", score: aiAnalysis.fundamentalsScore },
-                      { key: "future" as const, label: "Future potential", score: aiAnalysis.futurePotentialScore },
-                    ].map((s, i) => (
-                      <div key={s.key} style={{ padding: "12px 14px", borderBottom: i === 0 ? "1px solid rgba(255,255,255,0.07)" : "none", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, position: "relative" }}>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.80 }}>{s.label}</div>
-                          <div style={{ fontSize: 11, opacity: 0.45, marginTop: 2 }}>{scoreBandLabel(s.score)}</div>
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{ fontSize: 20, fontWeight: 800, color: toneColor(scoreTone(s.score)) }}>{s.score}/100</span>
-                          <button type="button" onClick={(e) => { e.stopPropagation(); setOpenScoreHelp(openScoreHelp === s.key ? null : s.key); }} style={{ ...scoreHelpButtonStyle, position: "relative", top: "auto", right: "auto" }}>?</button>
-                        </div>
-                        {openScoreHelp === s.key ? <div onClick={(e) => e.stopPropagation()} style={{ ...scoreHelpInlineBoxStyle, top: "100%", right: 14 }}>{scoreExplainText(s.key, s.score)}</div> : null}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-            </aside>{/* end sidebar */}
+            </div>{/* end main col */}
 
           </div>
         )}
@@ -1080,14 +1084,14 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
       <style>{`
         .stock-wrap { max-width: 1240px; margin: 0 auto; padding: 0 20px; box-sizing: border-box; }
 
-        /* ── Two-column page layout ───────────────────────────────── */
+        /* ── Two-column page layout: sidebar LEFT, main RIGHT ─────── */
         .stock-page-layout {
           display: grid;
-          grid-template-columns: 1fr 300px;
+          grid-template-columns: 300px 1fr;
           gap: 28px;
           align-items: start;
         }
-        .stock-page-left { min-width: 0; }
+        .stock-page-main { min-width: 0; }
         .stock-page-sidebar {
           display: flex;
           flex-direction: column;
@@ -1096,13 +1100,18 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
           top: 20px;
         }
 
-        /* Collapse to single column on tablet/mobile */
+        /* Collapse to single column on tablet/mobile.
+           Sidebar gets order:2 so main content reads first on mobile. */
         @media (max-width: 900px) {
           .stock-page-layout {
             grid-template-columns: 1fr !important;
           }
           .stock-page-sidebar {
             position: static !important;
+            order: 2;
+          }
+          .stock-page-main {
+            order: 1;
           }
         }
 
