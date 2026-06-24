@@ -6,6 +6,7 @@ import { getVideoContent } from "@/lib/videoContent";
 import { getVideoStockData } from "@/lib/videoStockData";
 import { remark } from "remark";
 import html from "remark-html";
+import VideoPageClient from "./VideoPageClient";
 
 export const dynamic = "force-dynamic";
 
@@ -108,31 +109,55 @@ export default async function VideoPage({ params }: Props) {
             <span>Video</span>
           </div>
 
-          <div className="videoPageLayout" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 360px", gap: 28, alignItems: "start" }}>
-
-            {/* LEFT: main content */}
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
-                {ticker && <span style={{ display: "inline-flex", alignItems: "center", padding: "5px 12px", borderRadius: 999, background: "rgba(59,130,246,0.16)", border: "1px solid rgba(59,130,246,0.28)", fontSize: 13, fontWeight: 900, color: "#dbeafe" }}>{ticker}</span>}
-                {stockData?.sector && <span style={{ padding: "5px 12px", borderRadius: 999, fontSize: 12, fontWeight: 700, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#94a3b8" }}>{stockData.sector}</span>}
-                <span style={{ fontSize: 13, opacity: 0.6 }}>{formatDate(video.publishedAt)}</span>
+          {/* Header + stats — shown on all screen sizes */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+              {ticker && <span style={{ display: "inline-flex", alignItems: "center", padding: "5px 12px", borderRadius: 999, background: "rgba(59,130,246,0.16)", border: "1px solid rgba(59,130,246,0.28)", fontSize: 13, fontWeight: 900, color: "#dbeafe" }}>{ticker}</span>}
+              {stockData?.sector && <span style={{ padding: "5px 12px", borderRadius: 999, fontSize: 12, fontWeight: 700, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#94a3b8" }}>{stockData.sector}</span>}
+              <span style={{ fontSize: 13, opacity: 0.6 }}>{formatDate(video.publishedAt)}</span>
+            </div>
+            <h1 style={{ margin: "0 0 6px", fontSize: 28, fontWeight: 900, lineHeight: 1.2, letterSpacing: "-0.3px" }}>{video.title}</h1>
+            {stockData?.companyName && <p style={{ margin: "0 0 14px", opacity: 0.7, fontSize: 15 }}>{stockData.companyName}</p>}
+            {statItems && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8, marginBottom: 10 }}>
+                {statItems.map(({ label, value }) => (
+                  <div key={label} style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.04)", padding: "10px 14px" }}>
+                    <div style={{ fontSize: 10, opacity: 0.6, fontWeight: 700, marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
+                    <div style={{ fontSize: 17, fontWeight: 900, letterSpacing: "-0.2px" }}>{value}</div>
+                  </div>
+                ))}
               </div>
+            )}
+            {stockData && <p style={{ fontSize: 11, opacity: 0.38, marginBottom: 0, fontStyle: "italic" }}>Price and market cap update live — figures will differ from those in the video.</p>}
+          </div>
 
-              <h1 style={{ margin: "0 0 6px", fontSize: 28, fontWeight: 900, lineHeight: 1.2, letterSpacing: "-0.3px" }}>{video.title}</h1>
-              {stockData?.companyName && <p style={{ margin: "0 0 18px", opacity: 0.7, fontSize: 15 }}>{stockData.companyName}</p>}
+          {/* ── MOBILE: video embed + client-side article/more-videos ── */}
+          <div className="mobileOnly">
+            <div style={{ position: "relative", width: "100%", paddingTop: "56.25%", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.10)", background: "#000", marginBottom: 10 }}>
+              <iframe src={embedUrl} title={video.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen loading="lazy" referrerPolicy="strict-origin-when-cross-origin" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }} />
+            </div>
+            <div style={{ marginBottom: 18, textAlign: "right" }}>
+              <a href={video.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#fca5a5", textDecoration: "none", fontWeight: 700, opacity: 0.85 }}>Watch on YouTube ↗</a>
+            </div>
+            {/* Client component handles collapsible article + show-more videos */}
+            <VideoPageClient videos={relatedVideos} contentHtml={contentHtml} />
+            {videoContent?.datasheetImage && (
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ fontSize: 11, opacity: 0.55, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>Investor datasheet</div>
+                <img src={videoContent.datasheetImage} alt={`${ticker ?? ""} investor datasheet`} style={{ width: "100%", borderRadius: 12, border: "1px solid rgba(255,255,255,0.10)" }} />
+              </div>
+            )}
+            <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)", padding: "12px 16px", fontSize: 13, opacity: 0.5, lineHeight: 1.6, marginBottom: 16 }}>
+              This page is for educational purposes only and does not constitute financial advice. Always do your own research before making any investment decisions.
+            </div>
+            <Link href="/insights" style={{ display: "inline-flex", alignItems: "center", padding: "10px 16px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.05)", color: "#f1f5f9", textDecoration: "none", fontSize: 13, fontWeight: 700 }}>← Back to Insights</Link>
+          </div>
 
-              {statItems && (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8, marginBottom: 16 }}>
-                  {statItems.map(({ label, value }) => (
-                    <div key={label} style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.04)", padding: "10px 14px" }}>
-                      <div style={{ fontSize: 10, opacity: 0.6, fontWeight: 700, marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
-                      <div style={{ fontSize: 17, fontWeight: 900, letterSpacing: "-0.2px" }}>{value}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {stockData && <p style={{ fontSize: 11, opacity: 0.38, marginBottom: 16, fontStyle: "italic" }}>Price and market cap update live — figures will differ from those in the video.</p>}
+          {/* ── DESKTOP: two-column layout ── */}
+          <div className="desktopOnly videoPageLayout" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 360px", gap: 28, alignItems: "start" }}>
 
+            {/* LEFT */}
+            <div>
               <div style={{ position: "relative", width: "100%", paddingTop: "56.25%", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.10)", background: "#000", marginBottom: 10 }}>
                 <iframe src={embedUrl} title={video.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen loading="lazy" referrerPolicy="strict-origin-when-cross-origin" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }} />
               </div>
@@ -148,7 +173,6 @@ export default async function VideoPage({ params }: Props) {
                 <div style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.025)", padding: "18px 22px", marginBottom: 24, opacity: 0.6, fontSize: 18, lineHeight: 1.8 }}>Written analysis coming soon — watch the video above for the full breakdown.</div>
               )}
 
-              {/* Datasheet — only rendered when the image path is set, no placeholder */}
               {videoContent?.datasheetImage && (
                 <div style={{ marginBottom: 24 }}>
                   <div style={{ fontSize: 11, opacity: 0.55, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>Investor datasheet</div>
@@ -159,26 +183,13 @@ export default async function VideoPage({ params }: Props) {
               <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)", padding: "12px 16px", fontSize: 13, opacity: 0.5, lineHeight: 1.6, marginBottom: 24 }}>
                 This page is for educational purposes only and does not constitute financial advice. Always do your own research before making any investment decisions.
               </div>
-
               <Link href="/insights" style={{ display: "inline-flex", alignItems: "center", padding: "10px 16px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.05)", color: "#f1f5f9", textDecoration: "none", fontSize: 13, fontWeight: 700 }}>← Back to Insights</Link>
             </div>
 
             {/* RIGHT: sticky sidebar */}
-            <aside className="videoSidebar" style={{ position: "sticky", top: 24 }}>
+            <aside style={{ position: "sticky", top: 24 }}>
               <div style={{ fontSize: 11, opacity: 0.55, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 12 }}>More videos</div>
-
-              <div
-                className="videoSidebarList"
-                style={{
-                  maxHeight: `${MAX_VISIBLE * CARD_H}px`,
-                  overflowY: "auto",
-                  display: "grid",
-                  gap: 8,
-                  scrollbarWidth: "thin",
-                  scrollbarColor: "rgba(255,255,255,0.15) transparent",
-                  touchAction: "pan-y",
-                }}
-              >
+              <div style={{ maxHeight: `${MAX_VISIBLE * CARD_H}px`, overflowY: "auto", display: "grid", gap: 8, scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.15) transparent", touchAction: "pan-y" }}>
                 {relatedVideos.length === 0 ? (
                   <div style={{ fontSize: 13, opacity: 0.5, lineHeight: 1.6 }}>No other videos available.</div>
                 ) : (
@@ -195,64 +206,27 @@ export default async function VideoPage({ params }: Props) {
                   ))
                 )}
               </div>
-
               <a href="https://www.youtube.com/@MyStockHarbor" target="_blank" rel="noopener noreferrer" style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "center", padding: "9px 12px", borderRadius: 10, border: "1px solid rgba(239,68,68,0.35)", background: "rgba(239,68,68,0.08)", color: "#fecaca", textDecoration: "none", fontWeight: 800, fontSize: 12 }}>Visit YouTube Channel ↗</a>
             </aside>
           </div>
         </div>
 
         <style>{`
-          .video-article {
-            font-size: 18px;
-            line-height: 1.8;
-            color: #cbd5e1;
-          }
-          .video-article h2 {
-            font-size: 24px;
-            font-weight: 800;
-            color: #f1f5f9;
-            margin: 36px 0 14px;
-            letter-spacing: -0.3px;
-            line-height: 1.25;
-            padding-bottom: 10px;
-            border-bottom: 1px solid rgba(255,255,255,0.08);
-          }
+          .mobileOnly { display: none; }
+          .desktopOnly { display: grid; }
+          .video-article { font-size: 18px; line-height: 1.8; color: #cbd5e1; }
+          .video-article h2 { font-size: 24px; font-weight: 800; color: #f1f5f9; margin: 36px 0 14px; letter-spacing: -0.3px; line-height: 1.25; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.08); }
           .video-article h2:first-child { margin-top: 0; }
-          .video-article p {
-            margin: 0 0 20px;
-            line-height: 1.85;
-          }
+          .video-article p { margin: 0 0 20px; line-height: 1.85; }
           .video-article p:last-child { margin-bottom: 0; }
-          .video-article ul {
-            margin: 0 0 20px;
-            padding: 0;
-            list-style: none;
-          }
-          .video-article ul li {
-            position: relative;
-            padding: 12px 0 12px 24px;
-            line-height: 1.75;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-          }
+          .video-article ul { margin: 0 0 20px; padding: 0; list-style: none; }
+          .video-article ul li { position: relative; padding: 12px 0 12px 24px; line-height: 1.75; border-bottom: 1px solid rgba(255,255,255,0.05); }
           .video-article ul li:last-child { border-bottom: none; padding-bottom: 0; }
-          .video-article ul li::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 22px;
-            width: 7px;
-            height: 7px;
-            border-radius: 50%;
-            background: rgba(59,130,246,0.8);
-          }
-          .video-article strong {
-            font-weight: 800;
-            color: #f1f5f9;
-          }
+          .video-article ul li::before { content: ''; position: absolute; left: 0; top: 22px; width: 7px; height: 7px; border-radius: 50%; background: rgba(59,130,246,0.8); }
+          .video-article strong { font-weight: 800; color: #f1f5f9; }
           @media (max-width: 960px) {
-            .videoPageLayout { grid-template-columns: 1fr !important; }
-            .videoSidebar { position: static !important; order: 1; }
-            .videoSidebarList { max-height: none !important; overflow-y: visible !important; }
+            .mobileOnly { display: block; }
+            .desktopOnly { display: none !important; }
           }
         `}</style>
       </main>
