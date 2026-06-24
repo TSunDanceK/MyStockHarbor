@@ -247,28 +247,25 @@ function PatternPlaysSection() {
   );
 }
 
-// ── Company name row component ───────────────────────────────────────────────
-// Desktop: TICKER bold on line 1, company name + note below in small text
-// Mobile:  TICKER – Company Name on one line (note hidden via CSS)
+// ── Ticker row content ───────────────────────────────────────────────────────
+// Desktop: TICKER · Company Name  (single line, note on line below)
+// Mobile:  TICKER – Company Name  (single line, truncated)
 function PickerRowContent({ symbol, note, companyName }: { symbol: string; note?: string; companyName?: string }) {
   return (
-    <>
-      {/* Desktop layout: stacked */}
-      <span className="picker-name-desktop">
+    <span style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
+      {/* Line 1: ticker + company name inline */}
+      <span style={{ display: "flex", alignItems: "baseline", gap: 0, minWidth: 0, overflow: "hidden" }}>
         <span className="picker-row-ticker">{symbol}</span>
         {companyName ? (
-          <span className="picker-row-company">{companyName}</span>
-        ) : null}
-        {note ? <span className="picker-row-note">{note}</span> : null}
-      </span>
-      {/* Mobile layout: single line */}
-      <span className="picker-name-mobile">
-        <span className="picker-row-ticker">{symbol}</span>
-        {companyName ? (
-          <span className="picker-row-company-mobile"> – {companyName}</span>
+          <>
+            <span className="picker-name-sep"> · </span>
+            <span className="picker-row-company">{companyName}</span>
+          </>
         ) : null}
       </span>
-    </>
+      {/* Line 2: note — hidden on mobile via CSS */}
+      {note ? <span className="picker-row-note">{note}</span> : null}
+    </span>
   );
 }
 
@@ -385,9 +382,10 @@ export default function PickersClient() {
     return () => { cancelled = true; };
   }, []);
 
-  // ── Fetch company names once we have sections ──────────────────────────────
-  // Collect every unique symbol visible in the cards (max 4 per section),
-  // then hit /api/symbols once per symbol. Fire-and-forget, non-blocking.
+  // ── Fetch company names once sections load ──────────────────────────────────
+  // Collects all unique visible symbols, fetches /api/symbols for each in
+  // batches of 5. Uses the first result whose symbol matches (case-insensitive)
+  // to handle tickers like "BRK.B" that the API may return with different casing.
   useEffect(() => {
     if (!sections.length) return;
     let cancelled = false;
@@ -403,26 +401,28 @@ export default function PickersClient() {
     );
 
     async function fetchNames() {
-      const map = new Map<string, string>();
-      // Batch in groups of 5 to avoid hammering the endpoint
       const BATCH = 5;
       for (let i = 0; i < uniqueSymbols.length; i += BATCH) {
         if (cancelled) return;
         const batch = uniqueSymbols.slice(i, i + BATCH);
+        const batchMap = new Map<string, string>();
         await Promise.all(
           batch.map(async (sym) => {
             try {
               const res = await fetch(`/api/symbols?q=${encodeURIComponent(sym)}`, { cache: "force-cache" });
               if (!res.ok) return;
               const data = (await res.json()) as { results?: { symbol: string; name: string }[] };
-              const exact = (data.results ?? []).find(
-                (r) => (r.symbol ?? "").toUpperCase() === sym
+              // Case-insensitive match — handles tickers the API returns differently
+              const match = (data.results ?? []).find(
+                (r) => (r.symbol ?? "").trim().toUpperCase() === sym
               );
-              if (exact?.name) map.set(sym, exact.name);
-            } catch { /* ignore individual failures */ }
+              if (match?.name) batchMap.set(sym, match.name);
+            } catch { /* ignore */ }
           })
         );
-        if (!cancelled) setCompanyNames((prev) => new Map([...prev, ...map]));
+        if (!cancelled && batchMap.size > 0) {
+          setCompanyNames((prev) => new Map([...prev, ...batchMap]));
+        }
       }
     }
 
@@ -543,12 +543,32 @@ export default function PickersClient() {
   .picker-row:last-child { border-bottom:none; }
   .picker-row-left { display:flex;align-items:center;gap:8px;min-width:0;flex:1; }
   .picker-row-ticker { font-size:14px;font-weight:700;color:#e2e8f0;letter-spacing:0.01em;flex:0 0 auto; }
-  .picker-row-note { font-size:11px;color:rgba(148,163,184,0.65);font-weight:400;margin-left:2px; }
+  /* separator dot between ticker and company name */
+  .picker-name-sep { font-size:11px;color:rgba(148,163,184,0.35);flex:0 0 auto; }
+  /* company name — truncates if too long */
+  .picker-row-company {
+    font-size:11px;
+    color:rgba(148,163,184,0.60);
+    font-weight:400;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    min-width:0;
+    flex:1;
+  }
+  /* note line — hidden on mobile */
+  .picker-row-note { font-size:11px;color:rgba(148,163,184,0.65);font-weight:400; }
   .picker-row-link { font-size:11px;font-weight:600;color:rgba(148,163,184,0.55);text-decoration:none;white-space:nowrap;flex:0 0 auto;transition:color 120ms ease; }
   .picker-row-link:hover { color:#93c5fd !important; }
-  /* See all — green button, always visible including mobile */
-  .pickers-see-all { display:inline-flex !important;align-items:center;padding:4px 10px;border-radius:7px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);font-size:11px;font-weight:600;color:#4ade80;text-decoration:none;transition:color 120ms ease,background 120ms ease; }
+
+  /* See all — green button */
+  .pickers-see-all { display:inline-flex !important;align-items:center;padding:4px 10px;border-radius:7px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);font-size:11px;font-weight:600;color:#4ade80;text-decoration:none;transition:color 120ms ease,background 120ms ease;white-space:nowrap; }
   .pickers-see-all:hover { background:rgba(255,255,255,0.07);color:#86efac !important;filter:none !important;transform:none !important; }
+
+  /* Section footer row — fetch button + see all on the same line */
+  .pickers-section-footer { display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;flex-wrap:nowrap; }
+  .pickers-section-footer-left { display:flex;align-items:center;gap:8px;flex:1;min-width:0; }
+
   .pattern-plays-grid { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px; }
   .pattern-play-card:hover { transform:translateY(-2px);filter:brightness(1.08); }
   .pickers-filter-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px; }
@@ -557,36 +577,6 @@ export default function PickersClient() {
   .pickers-section-title-text { min-width:0;line-height:1.22;font-size:14px;font-weight:700; }
   .pickers-screener-panel { display:block; }
   .pickers-earnings-fetch-button:hover:not(:disabled) { filter:brightness(1.08);transform:translateY(-1px); }
-
-  /* ── Company name layout ───────────────────────────────── */
-  /* Desktop: ticker on its own line, company + note below */
-  .picker-name-desktop { display:flex;flex-direction:column;gap:1px;min-width:0; }
-  .picker-name-mobile { display:none; }
-  .picker-row-company {
-    font-size:11px;
-    color:rgba(148,163,184,0.60);
-    font-weight:400;
-    white-space:nowrap;
-    overflow:hidden;
-    text-overflow:ellipsis;
-    max-width:160px;
-  }
-  /* Mobile: single-line compact layout */
-  @media (max-width: 640px) {
-    .picker-name-desktop { display:none !important; }
-    .picker-name-mobile { display:flex !important; align-items:baseline; gap:0; min-width:0; overflow:hidden; }
-    .picker-row-company-mobile {
-      font-size:11px;
-      color:rgba(148,163,184,0.55);
-      font-weight:400;
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
-      min-width:0;
-      flex:1;
-    }
-    .picker-row-note { display:none; }
-  }
 
   @media (max-width: 1100px) {
     .pickers-sections-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
@@ -604,8 +594,10 @@ export default function PickersClient() {
     .pickers-section-description { display:none; }
     .pickers-help-tip { width:18px !important;height:18px !important;font-size:10px !important; }
     .pickers-section-title-text { font-size:13px !important; }
-    /* Explicitly keep See All visible and full-width on mobile */
-    .pickers-see-all { display:inline-flex !important;width:100%;justify-content:center;padding:6px 10px;font-size:12px; }
+    .picker-row-note { display:none !important; }
+    /* On mobile the see-all takes full width in its own row */
+    .pickers-section-footer { flex-wrap:wrap; }
+    .pickers-see-all { width:100%;justify-content:center;padding:6px 10px;font-size:12px; }
   }
   @media (max-width: 400px) {
     .pickers-sections-grid { grid-template-columns:minmax(0,1fr) !important; }
@@ -693,6 +685,7 @@ export default function PickersClient() {
         ) : (
           <div className="pickers-sections-grid pickers-shell">
             {displaySections.map((sec) => {
+              const isEarnings = sec.title.toLowerCase().includes("earnings");
               const items = Array.isArray(sec.items)
                 ? sec.items.map((it) => {
                     const symbol = String(it.symbol ?? "").trim().toUpperCase();
@@ -702,6 +695,25 @@ export default function PickersClient() {
                     return { ...it, symbol, checkCount, isDynamic };
                   }).slice(0, 4)
                 : [];
+
+              // Resolve seoHref once per section
+              const seoHref = (() => {
+                const title = sec.title.toLowerCase();
+                if (title.includes("positive last earnings")) return "/stocks-with-positive-last-earnings";
+                if (title.includes("strong earnings growth")) return "/stocks-with-strong-earnings-growth";
+                if (title.includes("all-time high breakout")) return "/all-time-high-breakout-stocks";
+                if (title.includes("3-month high breakout")) return "/3-month-high-breakout-stocks";
+                if (title.includes("all-time highs")) return "/stocks-down-20-from-all-time-highs";
+                if (title.includes("macro") && title.includes("support") && title.includes("resistance")) return "/macro-support-resistance-stocks";
+                if (title.includes("buy signals")) return "/top-stocks-with-buy-signals";
+                if (title.includes("sell signals")) return "/top-stocks-with-sell-signals";
+                if (title.includes("oversold")) return "/oversold-stocks-today";
+                if (title.includes("overbought")) return "/overbought-stocks-today";
+                if (title.includes("best trend score")) return "/best-trend-score-stocks";
+                if (title.includes("divergence")) return "/bullish-bearish-divergence-stocks";
+                if (title.includes("200")) return "/stocks-near-200-day-moving-average";
+                return "";
+              })();
 
               return (
                 <section key={sec.title} style={{ borderRadius: 12, padding: "12px 14px", background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.08)", boxSizing: "border-box" }}>
@@ -718,7 +730,7 @@ export default function PickersClient() {
                       <div key={it.symbol} className="picker-row">
                         <div className="picker-row-left">
                           <span style={{ width: 6, height: 6, borderRadius: 999, background: toneDot(it.tone), flex: "0 0 auto" }} />
-                          <a href={toChartHref(it.dashboardHref ?? "", it.symbol)} style={{ textDecoration: "none", minWidth: 0, flex: 1 }}>
+                          <a href={toChartHref(it.dashboardHref ?? "", it.symbol)} style={{ textDecoration: "none", minWidth: 0, flex: 1, overflow: "hidden" }}>
                             <PickerRowContent
                               symbol={it.symbol}
                               note={it.note}
@@ -731,38 +743,22 @@ export default function PickersClient() {
                     ))}
                   </div>
 
-                  {sec.title.toLowerCase().includes("earnings") ? (
-                    <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <button type="button" className="pickers-earnings-fetch-button" onClick={handleFetchEarnings} disabled={earningsFetchBusy || earningsFetchRemainingSeconds > 0} style={{ display: "inline-flex", alignItems: "center", minHeight: 28, padding: "4px 10px", borderRadius: 7, border: "1px solid rgba(34,197,94,0.24)", background: "rgba(34,197,94,0.06)", color: "rgba(134,239,172,0.80)", fontSize: 11, fontWeight: 600, cursor: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? "not-allowed" : "pointer", opacity: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? 0.65 : 1, whiteSpace: "nowrap" }}>
-                        {earningsFetchBusy ? "Fetching…" : earningsFetchRemainingSeconds > 0 ? `Fetch (${earningsFetchRemainingSeconds}s)` : "Fetch Earnings"}
-                      </button>
-                      {earningsFetchMessage ? <span style={{ fontSize: 11, opacity: 0.55, lineHeight: 1.4 }}>{earningsFetchMessage}</span> : null}
+                  {/* ── Section footer: fetch button (earnings only) + see all, same line ── */}
+                  {(isEarnings || seoHref) ? (
+                    <div className="pickers-section-footer">
+                      <div className="pickers-section-footer-left">
+                        {isEarnings ? (
+                          <>
+                            <button type="button" className="pickers-earnings-fetch-button" onClick={handleFetchEarnings} disabled={earningsFetchBusy || earningsFetchRemainingSeconds > 0} style={{ display: "inline-flex", alignItems: "center", minHeight: 28, padding: "4px 10px", borderRadius: 7, border: "1px solid rgba(34,197,94,0.24)", background: "rgba(34,197,94,0.06)", color: "rgba(134,239,172,0.80)", fontSize: 11, fontWeight: 600, cursor: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? "not-allowed" : "pointer", opacity: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? 0.65 : 1, whiteSpace: "nowrap", flex: "0 0 auto" }}>
+                              {earningsFetchBusy ? "Fetching…" : earningsFetchRemainingSeconds > 0 ? `Fetch (${earningsFetchRemainingSeconds}s)` : "Fetch Earnings"}
+                            </button>
+                            {earningsFetchMessage ? <span style={{ fontSize: 11, opacity: 0.55, lineHeight: 1.4, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{earningsFetchMessage}</span> : null}
+                          </>
+                        ) : null}
+                      </div>
+                      {seoHref ? <a href={seoHref} className="pickers-see-all">See all →</a> : null}
                     </div>
                   ) : null}
-
-                  {(() => {
-                    const title = sec.title.toLowerCase();
-                    let seoHref = "";
-                    if (title.includes("positive last earnings")) seoHref = "/stocks-with-positive-last-earnings";
-                    else if (title.includes("strong earnings growth")) seoHref = "/stocks-with-strong-earnings-growth";
-                    else if (title.includes("all-time high breakout")) seoHref = "/all-time-high-breakout-stocks";
-                    else if (title.includes("3-month high breakout")) seoHref = "/3-month-high-breakout-stocks";
-                    else if (title.includes("all-time highs")) seoHref = "/stocks-down-20-from-all-time-highs";
-                    else if (title.includes("macro") && title.includes("support") && title.includes("resistance")) seoHref = "/macro-support-resistance-stocks";
-                    else if (title.includes("buy signals")) seoHref = "/top-stocks-with-buy-signals";
-                    else if (title.includes("sell signals")) seoHref = "/top-stocks-with-sell-signals";
-                    else if (title.includes("oversold")) seoHref = "/oversold-stocks-today";
-                    else if (title.includes("overbought")) seoHref = "/overbought-stocks-today";
-                    else if (title.includes("best trend score")) seoHref = "/best-trend-score-stocks";
-                    else if (title.includes("divergence")) seoHref = "/bullish-bearish-divergence-stocks";
-                    else if (title.includes("200")) seoHref = "/stocks-near-200-day-moving-average";
-                    if (!seoHref) return null;
-                    return (
-                      <div style={{ marginTop: 8, textAlign: "center" }}>
-                        <a href={seoHref} className="pickers-see-all">See all →</a>
-                      </div>
-                    );
-                  })()}
                 </section>
               );
             })}
