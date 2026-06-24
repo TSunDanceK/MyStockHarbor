@@ -604,10 +604,19 @@ const miniLabelStyle: React.CSSProperties = { fontSize: 11, opacity: 0.60, fontW
 const miniMetricSubStyle: React.CSSProperties = { marginTop: 6, fontSize: 13, lineHeight: 1.5, opacity: 0.65 };
 const articleTextStyle: React.CSSProperties = { margin: "10px 0 0 0", fontSize: 15, lineHeight: 1.8, opacity: 0.85 };
 
+// ── Sidebar card style helpers ──────────────────────────────────────────────
+function sideCardStyle(): React.CSSProperties {
+  return { border: "1px solid rgba(255,255,255,0.09)", borderRadius: 12, overflow: "hidden", background: "rgba(255,255,255,0.02)" };
+}
+function sideCardHeaderStyle(): React.CSSProperties {
+  return { padding: "12px 14px", borderBottom: "1px solid rgba(255,255,255,0.07)" };
+}
+function sideCardBodyStyle(): React.CSSProperties {
+  return { padding: "14px 14px" };
+}
+
 // ── Main component ──────────────────────────────────────────────────────────
 export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: StockSymbolPageClientProps) {
-  // Seed from the server component pre-populates company name and quote so
-  // the first server-rendered HTML shows real text instead of blank dashes.
   const [quote, setQuote] = useState<Quote | null>(
     seed?.price != null
       ? { symbol, price: seed.price, date: seed.priceDate, time: null, source: "ssr" }
@@ -690,11 +699,15 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
   const macdSignal = useMemo(() => buildMacd(closes), [closes]);
   const tradeContext = useMemo(() => buildTradeContext({ aiAnalysis, lastClose, ma50: typeof lastMA50 === "number" ? lastMA50 : null, ma200: typeof lastMA200 === "number" ? lastMA200 : null, rsi: typeof lastRsi === "number" ? lastRsi : null, trendScore }), [aiAnalysis, lastClose, lastMA50, lastMA200, lastRsi, trendScore]);
 
+  const earningsScore = earningsReadScore(earnings, earningsLoading);
+  const earningsScTone = earningsScoreTone(earningsScore);
+  const earningsPanelT = earningsPanelTone(earnings);
+
   return (
     <main onClick={() => setOpenScoreHelp(null)} style={{ minHeight: "100vh", background: "#06080d", color: "#f1f5f9", fontFamily: "system-ui, Arial" }}>
       <div className="stock-wrap">
 
-        {/* ── Page header ─────────────────────────────────────────── */}
+        {/* ── Page header (full width) ─────────────────────────────── */}
         <header style={{ paddingTop: 24, paddingBottom: 20, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
             <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Stock Analysis</span>
@@ -755,195 +768,310 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
               ))}
             </div>
           ) : null}
-
-          <div style={{ marginTop: 14, maxWidth: 460 }}>
-            <StockTickerJump currentSymbol={symbol} />
-          </div>
         </header>
 
+        {/* ── Two-column body (desktop) / single column (mobile) ───── */}
         {priceLoading ? (
           <div style={{ paddingTop: 40, opacity: 0.60, fontSize: 14 }}>Loading chart and price data…</div>
         ) : err ? (
           <div style={{ paddingTop: 40, opacity: 0.70, fontSize: 14 }}>{err}</div>
         ) : (
-          <div style={{ paddingTop: 24 }}>
+          <div className="stock-page-layout" style={{ paddingTop: 24 }}>
 
-            {/* ── Chart section ───────────────────────────────────── */}
-            <section>
-              <div style={sectionLabelStyle}>Chart View</div>
-              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
-                <h2 style={sectionHeadingStyle}>{symbol} with MA50 and MA200</h2>
-                <div style={{ display: "flex", gap: 6, flexWrap: "nowrap", alignItems: "center", maxWidth: "100%" }}>
-                  <Link href={`/?symbol=${encodeURIComponent(symbol)}`} style={chartLinkStyle("blue")}>Dashboard</Link>
-                  <Link href={`/stock/${encodeURIComponent(symbol)}/news`} style={chartLinkStyle("red")}>News</Link>
-                  <a href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`} target="_blank" rel="noopener noreferrer sponsored nofollow" style={chartLinkStyle("green")}>TradingView</a>
+            {/* ════ LEFT COLUMN ════════════════════════════════════ */}
+            <div className="stock-page-left">
+
+              {/* ── Chart section ─────────────────────────────────── */}
+              <section>
+                <div style={sectionLabelStyle}>Chart View</div>
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
+                  <h2 style={sectionHeadingStyle}>{symbol} with MA50 and MA200</h2>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "nowrap", alignItems: "center", maxWidth: "100%" }}>
+                    <Link href={`/?symbol=${encodeURIComponent(symbol)}`} style={chartLinkStyle("blue")}>Dashboard</Link>
+                    <Link href={`/stock/${encodeURIComponent(symbol)}/news`} style={chartLinkStyle("red")}>News</Link>
+                    <a href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`} target="_blank" rel="noopener noreferrer sponsored nofollow" style={chartLinkStyle("green")}>TradingView</a>
+                  </div>
+                </div>
+                <StockPriceChart symbol={symbol} data={history.slice(-240)} ma50={ma50.slice(-240)} ma200={ma200.slice(-240)} height={360} />
+              </section>
+
+              {/* ── Technical indicators ──────────────────────────── */}
+              <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+                <div style={sectionLabelStyle}>Technical Indicators</div>
+                <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>Key levels &amp; signals</h2>
+                <div className="indicator-rows">
+                  {[
+                    { label: "MA50", value: typeof lastMA50 === "number" ? `$${lastMA50.toFixed(2)}` : "—", sub: typeof ma50Pct === "number" ? `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}% vs price` : "Distance unavailable", tone: metricToneFromPct(ma50Pct) },
+                    { label: "MA200", value: typeof lastMA200 === "number" ? `$${lastMA200.toFixed(2)}` : "—", sub: typeof ma200Pct === "number" ? `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}% vs price` : "Distance unavailable", tone: metricToneFromPct(ma200Pct) },
+                    { label: "RSI (14)", value: typeof lastRsi === "number" ? lastRsi.toFixed(1) : "—", sub: typeof lastRsi === "number" ? (lastRsi >= 70 ? "Overbought zone" : lastRsi <= 30 ? "Oversold zone" : "Neutral zone") : "Momentum unavailable", tone: rsiTone(typeof lastRsi === "number" ? lastRsi : null) },
+                    { label: "MACD Signal", value: macdSignal?.label ?? "—", sub: macdSignal?.meta ?? "Momentum unavailable", tone: macdSignal?.tone ?? "yellow" as "green" | "yellow" | "red" },
+                    { label: "Macro Support", value: macroSupport ? `$${macroSupport.lower.toFixed(2)}–$${macroSupport.upper.toFixed(2)}` : "Not identified", sub: macroSupport ? `${macroSupport.distancePct.toFixed(1)}% below price · ${macroSupport.touches} touches` : "No repeated weekly support zone found", tone: supportTone(macroSupport?.distancePct ?? null) },
+                    { label: "Support Quality", value: macroSupport ? `${macroSupport.touches} touches` : "—", sub: macroSupport?.volumeRatio != null ? `${macroSupport.volumeRatio.toFixed(1)}× zone volume` : "Volume data unavailable", tone: supportQualityTone(macroSupport) },
+                  ].map((row) => (
+                    <div key={row.label} className="indicator-row">
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 110, flex: "0 0 auto" }}>
+                        <span style={{ width: 7, height: 7, borderRadius: 999, background: toneColor(row.tone), boxShadow: `0 0 5px ${toneColor(row.tone)}66`, flex: "0 0 auto" }} />
+                        <span style={{ fontSize: 13, fontWeight: 700, color: "rgba(226,232,240,0.75)" }}>{row.label}</span>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontSize: 15, fontWeight: 800, color: toneColor(row.tone) }}>{row.value}</span>
+                        <span style={{ fontSize: 12, opacity: 0.50, marginLeft: 8 }}>{row.sub}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* ── Chart summaries ───────────────────────────────── */}
+              <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+                <div style={sectionLabelStyle}>Chart Summary</div>
+                <div>
+                  {[
+                    { heading: `Trend summary for ${symbol}`, text: longSummary.trendParagraph, dot: trendTone },
+                    { heading: "Momentum and stretch context", text: longSummary.momentumParagraph, dot: rsiTone(typeof lastRsi === "number" ? lastRsi : null) },
+                    { heading: "What traders may watch next", text: longSummary.structureParagraph, dot: "yellow" as const },
+                  ].map((item, i) => (
+                    <div key={i} style={{ padding: "18px 0", borderBottom: i < 2 ? "1px solid rgba(255,255,255,0.07)" : "none", display: "flex", gap: 12, alignItems: "flex-start" }}>
+                      <span style={{ width: 7, height: 7, borderRadius: 999, background: toneColor(item.dot), marginTop: 6, flex: "0 0 auto", boxShadow: `0 0 5px ${toneColor(item.dot)}66` }} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 5 }}>{item.heading}</div>
+                        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.75, opacity: 0.75 }}>{item.text}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* ── AI / Company outlook ──────────────────────────── */}
+              {aiAnalysis ? (
+                <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+                  <div style={sectionLabelStyle}>Company Outlook</div>
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap", marginBottom: 20 }}>
+                    <div>
+                      <h2 style={sectionHeadingStyle}>Company snapshot &amp; outlook for {symbol}</h2>
+                      <p style={{ margin: "6px 0 0", fontSize: 14, lineHeight: 1.6, opacity: 0.60, maxWidth: 680 }}>Review a broader business snapshot, outlook summary, and key points investors may want to watch.</p>
+                    </div>
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                      {[
+                        { key: "fundamentals" as const, label: "Fundamentals", score: aiAnalysis.fundamentalsScore },
+                        { key: "future" as const, label: "Future potential", score: aiAnalysis.futurePotentialScore },
+                      ].map((s) => (
+                        <div key={s.key} style={scoreChipStyle(scoreTone(s.score))}>
+                          <span style={{ opacity: 0.60, fontWeight: 500, fontSize: 11 }}>{s.label}</span>
+                          <span style={{ fontSize: 20, fontWeight: 800, color: toneColor(scoreTone(s.score)) }}>{s.score}/100</span>
+                          <span style={{ fontSize: 11, opacity: 0.50 }}>{scoreBandLabel(s.score)}</span>
+                          <button type="button" onClick={(e) => { e.stopPropagation(); setOpenScoreHelp(openScoreHelp === s.key ? null : s.key); }} style={scoreHelpButtonStyle}>?</button>
+                          {openScoreHelp === s.key ? <div onClick={(e) => e.stopPropagation()} style={scoreHelpInlineBoxStyle}>{scoreExplainText(s.key, s.score)}</div> : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gap: 18 }}>
+                    {[
+                      { label: "What this company broadly does", text: aiAnalysis.businessSummary },
+                      { label: "Fundamentals read", text: aiAnalysis.fundamentalsSummary },
+                      { label: "Future potential", text: aiAnalysis.futurePotentialSummary },
+                    ].map((item) => (
+                      <div key={item.label}>
+                        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 5, opacity: 0.65, textTransform: "uppercase", letterSpacing: "0.04em" }}>{item.label}</div>
+                        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.75, opacity: 0.82 }}>{item.text}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="factor-grid" style={{ marginTop: 20 }}>
+                    {[
+                      { label: "Bullish factors", dot: "#22c55e", items: aiAnalysis.bullishFactors },
+                      { label: "Risk factors", dot: "#ef4444", items: aiAnalysis.bearishFactors },
+                      { label: "What to watch", dot: "#eab308", items: aiAnalysis.watchPoints },
+                    ].map((col) => (
+                      <div key={col.label}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: 999, background: col.dot, flex: "0 0 auto" }} />
+                          <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", opacity: 0.60 }}>{col.label}</span>
+                        </div>
+                        <div style={{ display: "grid", gap: 8 }}>
+                          {col.items.map((item) => (
+                            <div key={item} style={{ fontSize: 13, lineHeight: 1.65, opacity: 0.80, paddingLeft: 12, borderLeft: `2px solid ${col.dot}44` }}>{item}</div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ marginTop: 10, fontSize: 11, opacity: 0.35 }}>Summary last updated: {formatAiUpdatedLabel(aiAnalysis.generatedAt)}</div>
+                </section>
+              ) : null}
+
+              {/* ── Full Earnings panel ───────────────────────────── */}
+              <StockEarningsPanel symbol={symbol} earnings={earnings} loading={earningsLoading} />
+
+              {/* ── Learn more ────────────────────────────────────── */}
+              <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+                <div style={sectionLabelStyle}>Learn More</div>
+                <h2 style={{ ...sectionHeadingStyle, marginBottom: 14 }}>Learn the indicators behind this page</h2>
+                <div className="learn-grid">
+                  <Link href="/learn/moving-averages" style={learnRowStyle}><span style={learnDotStyle("blue")} /><div><div style={{ fontWeight: 700, fontSize: 14 }}>Moving Averages</div><div style={{ fontSize: 13, opacity: 0.55, marginTop: 2 }}>How traders use MA50 and MA200 to judge medium and long-term structure.</div></div></Link>
+                  <Link href="/learn/rsi" style={learnRowStyle}><span style={learnDotStyle("green")} /><div><div style={{ fontWeight: 700, fontSize: 14 }}>RSI Guide</div><div style={{ fontSize: 13, opacity: 0.55, marginTop: 2 }}>How RSI highlights momentum, overbought and oversold conditions.</div></div></Link>
+                  <Link href="/learn/macd" style={learnRowStyle}><span style={learnDotStyle("red")} /><div><div style={{ fontWeight: 700, fontSize: 14 }}>MACD Guide</div><div style={{ fontSize: 13, opacity: 0.55, marginTop: 2 }}>How MACD helps read momentum strength and weakening trend behaviour.</div></div></Link>
+                </div>
+              </section>
+
+              {/* ── Explore more ──────────────────────────────────── */}
+              <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+                <div style={sectionLabelStyle}>Explore More</div>
+                <h2 style={{ ...sectionHeadingStyle, marginBottom: 14 }}>More stock opportunities</h2>
+                <div className="explore-grid">
+                  {[
+                    { href: "/oversold-stocks-today", label: "Oversold Stocks", sub: "Potential rebound setups", dot: "#22c55e" },
+                    { href: "/overbought-stocks-today", label: "Overbought Stocks", sub: "Pullback watch", dot: "#ef4444" },
+                    { href: "/stocks-ready-to-break-out", label: "Breakout Stocks", sub: "Momentum expansion setups", dot: "#60a5fa" },
+                    { href: "/stocks-near-200-day-moving-average", label: "Near 200-Day MA", sub: "Long-term level tests", dot: "#eab308" },
+                  ].map((item) => (
+                    <Link key={item.href} href={item.href} style={exploreCardStyle}>
+                      <span style={{ width: 7, height: 7, borderRadius: 999, background: item.dot, flex: "0 0 auto" }} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: 13 }}>{item.label}</div>
+                        <div style={{ fontSize: 12, opacity: 0.50, marginTop: 2 }}>{item.sub}</div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+
+              {/* ── FAQ ───────────────────────────────────────────── */}
+              <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24, paddingBottom: 40 }}>
+                <div style={sectionLabelStyle}>FAQ</div>
+                <h2 style={{ ...sectionHeadingStyle, marginBottom: 18 }}>Common questions about {symbol}</h2>
+                <div style={{ display: "grid", gap: 16 }}>
+                  {[
+                    { q: "Is this page a buy or sell recommendation?", a: "No. This page is designed to help you review chart structure, momentum and technical context more quickly, but it is not personal financial advice." },
+                    { q: "Why can a stock look bullish and overbought at the same time?", a: "Strong trending stocks can still become stretched in the short term. That is why trend traders and dip buyers can read the same chart differently." },
+                    { q: "What should I do next after reading this page?", a: "Open the full dashboard, review the chart in more detail, compare indicators, and decide whether the setup still makes sense within your own process." },
+                  ].map((item) => (
+                    <div key={item.q}>
+                      <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>{item.q}</h3>
+                      <p style={{ margin: "5px 0 0", fontSize: 13, lineHeight: 1.7, opacity: 0.65 }}>{item.a}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+            </div>{/* end left col */}
+
+            {/* ════ RIGHT SIDEBAR ══════════════════════════════════ */}
+            <aside className="stock-page-sidebar">
+
+              {/* ── Change stock ──────────────────────────────────── */}
+              <div style={sideCardStyle()}>
+                <div style={sideCardHeaderStyle()}>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Change stock</div>
+                  <div style={{ marginTop: 3, fontSize: 12, opacity: 0.50, lineHeight: 1.4 }}>Search another ticker to view its stock analysis page.</div>
+                </div>
+                <div style={sideCardBodyStyle()}>
+                  <StockTickerJump currentSymbol={symbol} />
                 </div>
               </div>
-              <StockPriceChart symbol={symbol} data={history.slice(-240)} ma50={ma50.slice(-240)} ma200={ma200.slice(-240)} height={360} />
-            </section>
 
-            {/* ── Technical indicators ─────────────────────────────── */}
-            <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
-              <div style={sectionLabelStyle}>Technical Indicators</div>
-              <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>Key levels &amp; signals</h2>
-              <div className="indicator-rows">
-                {[
-                  { label: "MA50", value: typeof lastMA50 === "number" ? `$${lastMA50.toFixed(2)}` : "—", sub: typeof ma50Pct === "number" ? `${ma50Pct >= 0 ? "+" : ""}${ma50Pct.toFixed(2)}% vs price` : "Distance unavailable", tone: metricToneFromPct(ma50Pct) },
-                  { label: "MA200", value: typeof lastMA200 === "number" ? `$${lastMA200.toFixed(2)}` : "—", sub: typeof ma200Pct === "number" ? `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}% vs price` : "Distance unavailable", tone: metricToneFromPct(ma200Pct) },
-                  { label: "RSI (14)", value: typeof lastRsi === "number" ? lastRsi.toFixed(1) : "—", sub: typeof lastRsi === "number" ? (lastRsi >= 70 ? "Overbought zone" : lastRsi <= 30 ? "Oversold zone" : "Neutral zone") : "Momentum unavailable", tone: rsiTone(typeof lastRsi === "number" ? lastRsi : null) },
-                  { label: "MACD Signal", value: macdSignal?.label ?? "—", sub: macdSignal?.meta ?? "Momentum unavailable", tone: macdSignal?.tone ?? "yellow" as "green" | "yellow" | "red" },
-                  { label: "Macro Support", value: macroSupport ? `$${macroSupport.lower.toFixed(2)}–$${macroSupport.upper.toFixed(2)}` : "Not identified", sub: macroSupport ? `${macroSupport.distancePct.toFixed(1)}% below price · ${macroSupport.touches} touches` : "No repeated weekly support zone found", tone: supportTone(macroSupport?.distancePct ?? null) },
-                  { label: "Support Quality", value: macroSupport ? `${macroSupport.touches} touches` : "—", sub: macroSupport?.volumeRatio != null ? `${macroSupport.volumeRatio.toFixed(1)}× zone volume` : "Volume data unavailable", tone: supportQualityTone(macroSupport) },
-                ].map((row) => (
-                  <div key={row.label} className="indicator-row">
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 110, flex: "0 0 auto" }}>
-                      <span style={{ width: 7, height: 7, borderRadius: 999, background: toneColor(row.tone), boxShadow: `0 0 5px ${toneColor(row.tone)}66`, flex: "0 0 auto" }} />
-                      <span style={{ fontSize: 13, fontWeight: 700, color: "rgba(226,232,240,0.75)" }}>{row.label}</span>
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ fontSize: 15, fontWeight: 800, color: toneColor(row.tone) }}>{row.value}</span>
-                      <span style={{ fontSize: 12, opacity: 0.50, marginLeft: 8 }}>{row.sub}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            {/* ── Chart summaries ──────────────────────────────────── */}
-            <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
-              <div style={sectionLabelStyle}>Chart Summary</div>
-              <div>
-                {[
-                  { heading: `Trend summary for ${symbol}`, text: longSummary.trendParagraph, dot: trendTone },
-                  { heading: "Momentum and stretch context", text: longSummary.momentumParagraph, dot: rsiTone(typeof lastRsi === "number" ? lastRsi : null) },
-                  { heading: "What traders may watch next", text: longSummary.structureParagraph, dot: "yellow" as const },
-                ].map((item, i) => (
-                  <div key={i} style={{ padding: "18px 0", borderBottom: i < 2 ? "1px solid rgba(255,255,255,0.07)" : "none", display: "flex", gap: 12, alignItems: "flex-start" }}>
-                    <span style={{ width: 7, height: 7, borderRadius: 999, background: toneColor(item.dot), marginTop: 6, flex: "0 0 auto", boxShadow: `0 0 5px ${toneColor(item.dot)}66` }} />
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 5 }}>{item.heading}</div>
-                      <p style={{ margin: 0, fontSize: 14, lineHeight: 1.75, opacity: 0.75 }}>{item.text}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            {/* ── AI / Company outlook ─────────────────────────────── */}
-            {aiAnalysis ? (
-              <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
-                <div style={sectionLabelStyle}>Company Outlook</div>
-                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap", marginBottom: 20 }}>
+              {/* ── Earnings summary card ─────────────────────────── */}
+              <div style={sideCardStyle()}>
+                <div style={{ ...sideCardHeaderStyle(), display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                   <div>
-                    <h2 style={sectionHeadingStyle}>Company snapshot &amp; outlook for {symbol}</h2>
-                    <p style={{ margin: "6px 0 0", fontSize: 14, lineHeight: 1.6, opacity: 0.60, maxWidth: 680 }}>Review a broader business snapshot, outlook summary, and key points investors may want to watch.</p>
+                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Earnings read</div>
+                    <div style={{ marginTop: 3, fontSize: 14, fontWeight: 700, letterSpacing: "-0.02em" }}>{symbol} earnings</div>
                   </div>
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 6, border: toneBorder(earningsPanelT), background: toneSoftBackground(earningsPanelT), color: toneColor(earningsPanelT), whiteSpace: "nowrap" }}>
+                    {earningsLoading ? "Loading" : earnings?.toneLabel ?? "Unavailable"}
+                  </span>
+                </div>
+                <div style={sideCardBodyStyle()}>
+                  {/* Score bar */}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontSize: 12, opacity: 0.55 }}>Score</span>
+                    <span style={{ fontSize: 18, fontWeight: 800, color: toneColor(earningsScTone) }}>{typeof earningsScore === "number" ? `${earningsScore}/100` : "—"}</span>
+                  </div>
+                  <div aria-hidden="true" style={{ position: "relative", height: 6, borderRadius: 999, background: "linear-gradient(90deg, rgba(239,68,68,0.85), rgba(250,204,21,0.85), rgba(34,197,94,0.85))" }}>
+                    <span style={{ position: "absolute", top: "50%", left: `${typeof earningsScore === "number" ? earningsScore : 50}%`, width: 12, height: 12, borderRadius: 999, background: "#f8fafc", border: `2px solid ${toneColor(earningsScTone)}`, transform: "translate(-50%, -50%)" }} />
+                  </div>
+                  <div style={{ marginTop: 4, display: "flex", justifyContent: "space-between", fontSize: 9, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "rgba(226,232,240,0.40)" }}>
+                    <span>Weak</span><span>Mixed</span><span>Strong</span>
+                  </div>
+                  <div style={{ marginTop: 4, fontSize: 11, opacity: 0.55 }}>{earningsScaleSummary(earnings, earningsLoading)}</div>
+
+                  {/* Date line */}
+                  {!earningsLoading && earnings?.hasStructuredData ? (
+                    <div style={{ marginTop: 10, fontSize: 12, opacity: 0.55, lineHeight: 1.5 }}>
+                      Latest: {formatShortDate(earnings.reportDate)}<br />
+                      Next: {formatShortDate(earnings.nextEarningsDate)}
+                    </div>
+                  ) : null}
+
+                  {/* Key figures — 2 col mini grid */}
+                  <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 10px" }}>
+                    {[
+                      { label: "EPS", value: earningsLoading ? "—" : formatEps(earnings?.actualEps ?? null), tone: metricToneFromPct(earnings?.epsSurprisePercent ?? null) },
+                      { label: "EPS beat", value: earningsLoading ? "—" : formatSignedPercent(earnings?.epsSurprisePercent ?? null), tone: metricToneFromPct(earnings?.epsSurprisePercent ?? null) },
+                      { label: "Revenue", value: earningsLoading ? "—" : formatMoneyCompact(earnings?.revenue ?? null), tone: metricToneFromPct(earnings?.revenueSurprisePercent ?? null) },
+                      { label: "Rev beat", value: earningsLoading ? "—" : formatSignedPercent(earnings?.revenueSurprisePercent ?? null), tone: metricToneFromPct(earnings?.revenueSurprisePercent ?? null) },
+                    ].map((m) => (
+                      <div key={m.label} style={{ padding: "7px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", opacity: 0.50 }}>{m.label}</div>
+                        <div style={{ marginTop: 2, fontSize: 15, fontWeight: 800, color: toneColor(m.tone) }}>{m.value}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Yearly dots */}
+                  {earnings?.yearlySummaries?.length ? (
+                    <div style={{ marginTop: 12 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", opacity: 0.50, marginBottom: 6 }}>Yearly trend</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(44px, 1fr))", gap: 5 }}>
+                        {earnings.yearlySummaries.map((item) => (
+                          <div key={item.year} style={{ textAlign: "center", padding: "5px 4px", borderRadius: 7, border: toneBorder(item.tone), background: toneSoftBackground(item.tone) }}>
+                            <div style={{ fontSize: 9, opacity: 0.55 }}>{item.year}</div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: toneColor(item.tone) }}>{item.toneLabel}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <Link href={`/stock/${encodeURIComponent(symbol)}/earnings`} style={{ display: "block", marginTop: 14, textAlign: "center", fontSize: 12, fontWeight: 700, color: "rgba(148,163,184,0.65)", textDecoration: "none", padding: "7px 0", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8 }}>
+                    Full earnings breakdown →
+                  </Link>
+                </div>
+              </div>
+
+              {/* ── Company outlook scores card ───────────────────── */}
+              {aiAnalysis ? (
+                <div style={sideCardStyle()}>
+                  <div style={sideCardHeaderStyle()}>
+                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Company outlook</div>
+                    <div style={{ marginTop: 3, fontSize: 14, fontWeight: 700, letterSpacing: "-0.02em" }}>{symbol} scores</div>
+                  </div>
+                  <div>
                     {[
                       { key: "fundamentals" as const, label: "Fundamentals", score: aiAnalysis.fundamentalsScore },
                       { key: "future" as const, label: "Future potential", score: aiAnalysis.futurePotentialScore },
-                    ].map((s) => (
-                      <div key={s.key} style={scoreChipStyle(scoreTone(s.score))}>
-                        <span style={{ opacity: 0.60, fontWeight: 500, fontSize: 11 }}>{s.label}</span>
-                        <span style={{ fontSize: 20, fontWeight: 800, color: toneColor(scoreTone(s.score)) }}>{s.score}/100</span>
-                        <span style={{ fontSize: 11, opacity: 0.50 }}>{scoreBandLabel(s.score)}</span>
-                        <button type="button" onClick={(e) => { e.stopPropagation(); setOpenScoreHelp(openScoreHelp === s.key ? null : s.key); }} style={scoreHelpButtonStyle}>?</button>
-                        {openScoreHelp === s.key ? <div onClick={(e) => e.stopPropagation()} style={scoreHelpInlineBoxStyle}>{scoreExplainText(s.key, s.score)}</div> : null}
+                    ].map((s, i) => (
+                      <div key={s.key} style={{ padding: "12px 14px", borderBottom: i === 0 ? "1px solid rgba(255,255,255,0.07)" : "none", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, position: "relative" }}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.80 }}>{s.label}</div>
+                          <div style={{ fontSize: 11, opacity: 0.45, marginTop: 2 }}>{scoreBandLabel(s.score)}</div>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 20, fontWeight: 800, color: toneColor(scoreTone(s.score)) }}>{s.score}/100</span>
+                          <button type="button" onClick={(e) => { e.stopPropagation(); setOpenScoreHelp(openScoreHelp === s.key ? null : s.key); }} style={{ ...scoreHelpButtonStyle, position: "relative", top: "auto", right: "auto" }}>?</button>
+                        </div>
+                        {openScoreHelp === s.key ? <div onClick={(e) => e.stopPropagation()} style={{ ...scoreHelpInlineBoxStyle, top: "100%", right: 14 }}>{scoreExplainText(s.key, s.score)}</div> : null}
                       </div>
                     ))}
                   </div>
                 </div>
+              ) : null}
 
-                <div style={{ display: "grid", gap: 18 }}>
-                  {[
-                    { label: "What this company broadly does", text: aiAnalysis.businessSummary },
-                    { label: "Fundamentals read", text: aiAnalysis.fundamentalsSummary },
-                    { label: "Future potential", text: aiAnalysis.futurePotentialSummary },
-                  ].map((item) => (
-                    <div key={item.label}>
-                      <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 5, opacity: 0.65, textTransform: "uppercase", letterSpacing: "0.04em" }}>{item.label}</div>
-                      <p style={{ margin: 0, fontSize: 14, lineHeight: 1.75, opacity: 0.82 }}>{item.text}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="factor-grid" style={{ marginTop: 20 }}>
-                  {[
-                    { label: "Bullish factors", dot: "#22c55e", items: aiAnalysis.bullishFactors },
-                    { label: "Risk factors", dot: "#ef4444", items: aiAnalysis.bearishFactors },
-                    { label: "What to watch", dot: "#eab308", items: aiAnalysis.watchPoints },
-                  ].map((col) => (
-                    <div key={col.label}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
-                        <span style={{ width: 6, height: 6, borderRadius: 999, background: col.dot, flex: "0 0 auto" }} />
-                        <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", opacity: 0.60 }}>{col.label}</span>
-                      </div>
-                      <div style={{ display: "grid", gap: 8 }}>
-                        {col.items.map((item) => (
-                          <div key={item} style={{ fontSize: 13, lineHeight: 1.65, opacity: 0.80, paddingLeft: 12, borderLeft: `2px solid ${col.dot}44` }}>{item}</div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div style={{ marginTop: 10, fontSize: 11, opacity: 0.35 }}>Summary last updated: {formatAiUpdatedLabel(aiAnalysis.generatedAt)}</div>
-              </section>
-            ) : null}
-
-            {/* ── Earnings ─────────────────────────────────────────── */}
-            <StockEarningsPanel symbol={symbol} earnings={earnings} loading={earningsLoading} />
-
-            {/* ── Learn more ───────────────────────────────────────── */}
-            <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
-              <div style={sectionLabelStyle}>Learn More</div>
-              <h2 style={{ ...sectionHeadingStyle, marginBottom: 14 }}>Learn the indicators behind this page</h2>
-              <div className="learn-grid">
-                <Link href="/learn/moving-averages" style={learnRowStyle}><span style={learnDotStyle("blue")} /><div><div style={{ fontWeight: 700, fontSize: 14 }}>Moving Averages</div><div style={{ fontSize: 13, opacity: 0.55, marginTop: 2 }}>How traders use MA50 and MA200 to judge medium and long-term structure.</div></div></Link>
-                <Link href="/learn/rsi" style={learnRowStyle}><span style={learnDotStyle("green")} /><div><div style={{ fontWeight: 700, fontSize: 14 }}>RSI Guide</div><div style={{ fontSize: 13, opacity: 0.55, marginTop: 2 }}>How RSI highlights momentum, overbought and oversold conditions.</div></div></Link>
-                <Link href="/learn/macd" style={learnRowStyle}><span style={learnDotStyle("red")} /><div><div style={{ fontWeight: 700, fontSize: 14 }}>MACD Guide</div><div style={{ fontSize: 13, opacity: 0.55, marginTop: 2 }}>How MACD helps read momentum strength and weakening trend behaviour.</div></div></Link>
-              </div>
-            </section>
-
-            {/* ── Explore more ─────────────────────────────────────── */}
-            <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
-              <div style={sectionLabelStyle}>Explore More</div>
-              <h2 style={{ ...sectionHeadingStyle, marginBottom: 14 }}>More stock opportunities</h2>
-              <div className="explore-grid">
-                {[
-                  { href: "/oversold-stocks-today", label: "Oversold Stocks", sub: "Potential rebound setups", dot: "#22c55e" },
-                  { href: "/overbought-stocks-today", label: "Overbought Stocks", sub: "Pullback watch", dot: "#ef4444" },
-                  { href: "/stocks-ready-to-break-out", label: "Breakout Stocks", sub: "Momentum expansion setups", dot: "#60a5fa" },
-                  { href: "/stocks-near-200-day-moving-average", label: "Near 200-Day MA", sub: "Long-term level tests", dot: "#eab308" },
-                ].map((item) => (
-                  <Link key={item.href} href={item.href} style={exploreCardStyle}>
-                    <span style={{ width: 7, height: 7, borderRadius: 999, background: item.dot, flex: "0 0 auto" }} />
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 13 }}>{item.label}</div>
-                      <div style={{ fontSize: 12, opacity: 0.50, marginTop: 2 }}>{item.sub}</div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </section>
-
-            {/* ── FAQ ──────────────────────────────────────────────── */}
-            <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24, paddingBottom: 40 }}>
-              <div style={sectionLabelStyle}>FAQ</div>
-              <h2 style={{ ...sectionHeadingStyle, marginBottom: 18 }}>Common questions about {symbol}</h2>
-              <div style={{ display: "grid", gap: 16 }}>
-                {[
-                  { q: "Is this page a buy or sell recommendation?", a: "No. This page is designed to help you review chart structure, momentum and technical context more quickly, but it is not personal financial advice." },
-                  { q: "Why can a stock look bullish and overbought at the same time?", a: "Strong trending stocks can still become stretched in the short term. That is why trend traders and dip buyers can read the same chart differently." },
-                  { q: "What should I do next after reading this page?", a: "Open the full dashboard, review the chart in more detail, compare indicators, and decide whether the setup still makes sense within your own process." },
-                ].map((item) => (
-                  <div key={item.q}>
-                    <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>{item.q}</h3>
-                    <p style={{ margin: "5px 0 0", fontSize: 13, lineHeight: 1.7, opacity: 0.65 }}>{item.a}</p>
-                  </div>
-                ))}
-              </div>
-            </section>
+            </aside>{/* end sidebar */}
 
           </div>
         )}
@@ -952,8 +1080,33 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
       <style>{`
         .stock-wrap { max-width: 1240px; margin: 0 auto; padding: 0 20px; box-sizing: border-box; }
 
+        /* ── Two-column page layout ───────────────────────────────── */
+        .stock-page-layout {
+          display: grid;
+          grid-template-columns: 1fr 300px;
+          gap: 28px;
+          align-items: start;
+        }
+        .stock-page-left { min-width: 0; }
+        .stock-page-sidebar {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          position: sticky;
+          top: 20px;
+        }
+
+        /* Collapse to single column on tablet/mobile */
+        @media (max-width: 900px) {
+          .stock-page-layout {
+            grid-template-columns: 1fr !important;
+          }
+          .stock-page-sidebar {
+            position: static !important;
+          }
+        }
+
         /* ── Header stats ─────────────────────────────────────────── */
-        /* Desktop: horizontal flex row — metric cells narrower, earnings cell wider */
         .stock-header-stats {
           display: flex;
           align-items: stretch;
@@ -972,10 +1125,8 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
         .stock-stat-label { font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; opacity: 0.55; }
         .stock-stat-value { font-size: 22px; font-weight: 800; letter-spacing: -0.03em; margin-top: 4px; line-height: 1; }
         .stock-stat-sub { font-size: 11px; opacity: 0.48; margin-top: 3px; }
-        /* Earnings cell: wider flex share so score, bar and labels have room */
         .stock-earnings-cell { flex: 2.2 1 0 !important; min-width: 180px; }
 
-        /* Mobile: 2-col grid, no horizontal scroll */
         @media (max-width: 640px) {
           .stock-header-stats {
             display: grid !important;
@@ -987,14 +1138,12 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
             border-right: none !important;
             border-bottom: 1px solid rgba(255,255,255,0.07);
           }
-          /* Remove bottom border from last two cells */
           .stock-stat-cell:nth-last-child(-n+2) { border-bottom: none; }
           .stock-stat-value { font-size: 18px !important; }
           .stock-earnings-cell { grid-column: 1 / -1; border-bottom: none !important; }
         }
 
         /* ── Indicator rows ───────────────────────────────────────── */
-        /* Desktop: 2-column grid to reduce vertical scroll */
         .indicator-rows {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1008,10 +1157,8 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
           border-bottom: 1px solid rgba(255,255,255,0.06);
         }
         .indicator-row:last-child { border-bottom: none; }
-        /* On desktop with 6 items (3 per col), also remove border from item 4 (last in col 1) */
         .indicator-row:nth-child(3) { border-bottom: none; }
 
-        /* Mobile: back to single column */
         @media (max-width: 640px) {
           .indicator-rows { grid-template-columns: 1fr !important; }
           .indicator-row:nth-child(3) { border-bottom: 1px solid rgba(255,255,255,0.06); }
@@ -1021,7 +1168,6 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
 
         /* ── Grids ────────────────────────────────────────────────── */
         .factor-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
-        /* Desktop: 3-col earnings grid */
         .earningsMetricGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; }
         .earningsDotGrid { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
         .yearlyEarningsGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
@@ -1039,7 +1185,6 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
 
         @media (max-width: 640px) {
           .stock-wrap { padding: 0 14px; }
-          /* Mobile: earnings snapshot in 2 columns instead of 1 */
           .earningsMetricGrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
           .explore-grid { grid-template-columns: 1fr !important; }
         }
