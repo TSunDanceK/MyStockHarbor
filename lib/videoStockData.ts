@@ -1,9 +1,8 @@
-// Fetches live market data (price, market cap, MA50, MA200) for a video page ticker.
-// Uses FMP for market cap / profile, and the existing internal /api/history + /api/quote
-// routes (same pattern as insightSnapshots.ts) for price and moving averages.
+// Fetches live market data for video pages.
+// Uses the /api/quote route which pulls price, marketCap, name, pe, priceAvg50,
+// priceAvg200 all in one FMP stable/quote call — no separate profile call needed.
 
-// Some tickers need remapping to their FMP/exchange-qualified symbol.
-// E.g. Infineon trades as IFX on Xetra — FMP uses IFX.DE
+// Ticker remapping for non-US tickers that FMP identifies differently.
 const TICKER_REMAP: Record<string, string> = {
   IFX: "IFX.DE",
 };
@@ -16,32 +15,17 @@ function getBaseUrl() {
   return "http://localhost:3000";
 }
 
-function movingAverage(values: number[], window: number): (number | null)[] {
-  const out: (number | null)[] = Array(values.length).fill(null);
-  let sum = 0;
-  for (let i = 0; i < values.length; i++) {
-    sum += values[i];
-    if (i >= window) sum -= values[i - window];
-    if (i >= window - 1) out[i] = sum / window;
-  }
-  return out;
-}
-
-function lastNum(arr: (number | null)[]) {
-  return arr.length ? arr[arr.length - 1] : null;
-}
-
-function pctFromBase(last: number | null, base: number | null): number | null {
-  if (typeof last !== "number" || typeof base !== "number" || !Number.isFinite(last) || !Number.isFinite(base) || base === 0) return null;
-  return ((last - base) / base) * 100;
-}
-
 function formatMarketCap(value: number | null): string | null {
   if (!value || !Number.isFinite(value)) return null;
   if (value >= 1e12) return `$${(value / 1e12).toFixed(2)}T`;
   if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
   if (value >= 1e6) return `$${(value / 1e6).toFixed(0)}M`;
   return `$${value.toLocaleString()}`;
+}
+
+function pctFromBase(last: number | null, base: number | null): number | null {
+  if (typeof last !== "number" || typeof base !== "number" || !Number.isFinite(last) || !Number.isFinite(base) || base === 0) return null;
+  return ((last - base) / base) * 100;
 }
 
 export type VideoStockData = {
@@ -58,81 +42,35 @@ export type VideoStockData = {
   sector: string | null;
 };
 
-async function fetchFmpProfile(ticker: string): Promise<{ marketCap: number | null; pe: number | null; sector: string | null; name: string | null }> {
-  const apiKey = process.env.FMP_API_KEY;
-  if (!apiKey) return { marketCap: null, pe: null, sector: null, name: null };
-
-  // Try both the remapped symbol and the original — FMP stable/profile sometimes
-  // returns data for exchange-qualified symbols (IFX.DE) but not plain ones (IFX)
-  const symbols = TICKER_REMAP[ticker] ? [TICKER_REMAP[ticker], ticker] : [ticker];
-
-  for (const sym of symbols) {
-    try {
-      const res = await fetch(
-        `https://financialmodelingprep.com/stable/profile?symbol=${encodeURIComponent(sym)}&apikey=${encodeURIComponent(apiKey)}`,
-        { next: { revalidate: 60 * 60 * 6 } }
-      );
-      if (!res.ok) continue;
-
-      const data = await res.json() as unknown;
-      const item = Array.isArray(data) ? data[0] : (typeof data === "object" && data !== null ? data : null);
-      if (!item) continue;
-
-      const record = item as Record<string, unknown>;
-      const marketCap = typeof record.mktCap === "number" && Number.isFinite(record.mktCap) ? record.mktCap : null;
-      const pe = typeof record.pe === "number" && Number.isFinite(record.pe) ? record.pe : null;
-      const sector = typeof record.sector === "string" && record.sector.trim() ? record.sector.trim() : null;
-      const name = typeof record.companyName === "string" && record.companyName.trim() ? record.companyName.trim() : null;
-
-      // If we got anything useful, return it
-      if (marketCap !== null || name !== null) {
-        return { marketCap, pe, sector, name };
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  return { marketCap: null, pe: null, sector: null, name: null };
-}
-
 export async function getVideoStockData(ticker: string): Promise<VideoStockData> {
   const upper = ticker.trim().toUpperCase();
-  // Use remapped symbol for price/history lookups too
   const fmpSymbol = TICKER_REMAP[upper] ?? upper;
   const baseUrl = getBaseUrl();
 
-  const [quoteRes, historyRes, profile] = await Promise.allSettled([
-    fetch(`${baseUrl}/api/quote?symbol=${encodeURIComponent(fmpSymbol)}`, { next: { revalidate: 60 } }),
-    fetch(`${baseUrl}/api/history?symbol=${encodeURIComponent(fmpSymbol)}&days=600`, { next: { revalidate: 3600 } }),
-    fetchFmpProfile(upper),
-  ]);
-
   let price: number | null = null;
-  let companyNameFromQuote: string | null = null;
-
-  if (quoteRes.status === "fulfilled" && quoteRes.value.ok) {
-    try {
-      const q = await quoteRes.value.json() as Record<string, unknown>;
-      price = typeof q.price === "number" && Number.isFinite(q.price) ? q.price : null;
-      companyNameFromQuote = typeof q.name === "string" && q.name.trim() ? q.name.trim() : null;
-    } catch { /* fall through */ }
-  }
-
+  let marketCapRaw: number | null = null;
+  let name: string | null = null;
+  let pe: number | null = null;
   let ma50: number | null = null;
   let ma200: number | null = null;
 
-  if (historyRes.status === "fulfilled" && historyRes.value.ok) {
-    try {
-      const h = await historyRes.value.json() as { points?: Array<{ close?: unknown }> };
-      const pts = Array.isArray(h.points) ? h.points : [];
-      const closes = pts.map((p) => Number(p.close)).filter((n) => Number.isFinite(n));
-      if (closes.length >= 50) ma50 = lastNum(movingAverage(closes, 50));
-      if (closes.length >= 200) ma200 = lastNum(movingAverage(closes, 200));
-    } catch { /* fall through */ }
-  }
-
-  const profileData = profile.status === "fulfilled" ? profile.value : { marketCap: null, pe: null, sector: null, name: null };
+  try {
+    const res = await fetch(
+      `${baseUrl}/api/quote?symbol=${encodeURIComponent(fmpSymbol)}`,
+      { next: { revalidate: 60 } }
+    );
+    if (res.ok) {
+      const q = await res.json() as Record<string, unknown>;
+      const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+      const str = (v: unknown) => (typeof v === "string" && (v as string).trim() ? (v as string).trim() : null);
+      price = num(q.price);
+      marketCapRaw = num(q.marketCap);
+      name = str(q.name);
+      pe = num(q.pe);
+      ma50 = num(q.priceAvg50);
+      ma200 = num(q.priceAvg200);
+    }
+  } catch { /* fall through */ }
 
   const ma50Pct = pctFromBase(price, ma50);
   const ma200Pct = pctFromBase(price, ma200);
@@ -144,23 +82,27 @@ export async function getVideoStockData(ticker: string): Promise<VideoStockData>
     else trend = "Mixed";
   }
 
-  // Format price with currency symbol based on whether it's a European ticker
+  // Format market cap — use € for known European tickers
   const isEuro = fmpSymbol.endsWith(".DE") || fmpSymbol.endsWith(".PA") || fmpSymbol.endsWith(".AS");
-  const priceFormatted = price !== null && Number.isFinite(price)
-    ? `${isEuro ? "€" : "$"}${price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-    : null;
+  let marketCap: string | null = null;
+  if (marketCapRaw && Number.isFinite(marketCapRaw)) {
+    const sym = isEuro ? "€" : "$";
+    if (marketCapRaw >= 1e12) marketCap = `${sym}${(marketCapRaw / 1e12).toFixed(2)}T`;
+    else if (marketCapRaw >= 1e9) marketCap = `${sym}${(marketCapRaw / 1e9).toFixed(2)}B`;
+    else if (marketCapRaw >= 1e6) marketCap = `${sym}${(marketCapRaw / 1e6).toFixed(0)}M`;
+  }
 
   return {
     ticker: upper,
-    companyName: profileData.name ?? companyNameFromQuote,
+    companyName: name,
     price,
-    marketCap: formatMarketCap(profileData.marketCap),
+    marketCap,
     ma50,
     ma200,
     ma50Pct,
     ma200Pct,
     trend,
-    peRatio: profileData.pe,
-    sector: profileData.sector,
+    peRatio: pe,
+    sector: null, // quote endpoint doesn't return sector; omitted for simplicity
   };
 }
