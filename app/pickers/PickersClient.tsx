@@ -248,22 +248,22 @@ function PatternPlaysSection() {
 }
 
 // ── Ticker row content ───────────────────────────────────────────────────────
-// Desktop: TICKER · Company Name  (single line, note on line below)
-// Mobile:  TICKER – Company Name  (single line, truncated)
+// Line 1: TICKER  ·  Company Name  (inline, company truncates)
+// Line 2: note (signal info) — hidden on mobile via CSS
 function PickerRowContent({ symbol, note, companyName }: { symbol: string; note?: string; companyName?: string }) {
   return (
-    <span style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
+    <span style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
       {/* Line 1: ticker + company name inline */}
-      <span style={{ display: "flex", alignItems: "baseline", gap: 0, minWidth: 0, overflow: "hidden" }}>
+      <span style={{ display: "flex", alignItems: "baseline", minWidth: 0, overflow: "hidden" }}>
         <span className="picker-row-ticker">{symbol}</span>
         {companyName ? (
           <>
-            <span className="picker-name-sep"> · </span>
+            <span className="picker-name-sep">&nbsp;·&nbsp;</span>
             <span className="picker-row-company">{companyName}</span>
           </>
         ) : null}
       </span>
-      {/* Line 2: note — hidden on mobile via CSS */}
+      {/* Line 2: note — hidden on mobile */}
       {note ? <span className="picker-row-note">{note}</span> : null}
     </span>
   );
@@ -383,9 +383,9 @@ export default function PickersClient() {
   }, []);
 
   // ── Fetch company names once sections load ──────────────────────────────────
-  // Collects all unique visible symbols, fetches /api/symbols for each in
-  // batches of 5. Uses the first result whose symbol matches (case-insensitive)
-  // to handle tickers like "BRK.B" that the API may return with different casing.
+  // Batches in groups of 5. Tries exact symbol match first; falls back to the
+  // first result from the API for single-letter or common tickers (DAY, K, Q,
+  // AES etc.) where the symbols endpoint returns a best-guess first entry.
   useEffect(() => {
     if (!sections.length) return;
     let cancelled = false;
@@ -412,10 +412,12 @@ export default function PickersClient() {
               const res = await fetch(`/api/symbols?q=${encodeURIComponent(sym)}`, { cache: "force-cache" });
               if (!res.ok) return;
               const data = (await res.json()) as { results?: { symbol: string; name: string }[] };
-              // Case-insensitive match — handles tickers the API returns differently
-              const match = (data.results ?? []).find(
-                (r) => (r.symbol ?? "").trim().toUpperCase() === sym
-              );
+              const results = data.results ?? [];
+              // 1. Exact match (case-insensitive)
+              const exact = results.find((r) => (r.symbol ?? "").trim().toUpperCase() === sym);
+              // 2. Fall back to first result — handles common tickers where the API
+              //    returns no exact hit but the first entry is the right stock
+              const match = exact ?? results[0] ?? null;
               if (match?.name) batchMap.set(sym, match.name);
             } catch { /* ignore */ }
           })
@@ -539,16 +541,22 @@ export default function PickersClient() {
   .pickers-loading-bar { height:100%;width:35%;border-radius:999px;background:rgba(59,130,246,0.90);animation:pickersBar 1.1s linear infinite; }
   .pickers-shell { width:100%;min-width:0; }
   .pickers-sections-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start; }
-  .picker-row { display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.06); }
+
+  /* ── Picker row ── */
+  .picker-row { display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.06); }
   .picker-row:last-child { border-bottom:none; }
-  .picker-row-left { display:flex;align-items:center;gap:8px;min-width:0;flex:1; }
+  .picker-row-left { display:flex;align-items:center;gap:10px;min-width:0;flex:1; }
+
+  /* Ticker — bold, fixed width so company name always starts at the same position */
   .picker-row-ticker { font-size:14px;font-weight:700;color:#e2e8f0;letter-spacing:0.01em;flex:0 0 auto; }
-  /* separator dot between ticker and company name */
-  .picker-name-sep { font-size:11px;color:rgba(148,163,184,0.35);flex:0 0 auto; }
-  /* company name — truncates if too long */
+
+  /* Separator · between ticker and company */
+  .picker-name-sep { font-size:11px;color:rgba(148,163,184,0.30);flex:0 0 auto;user-select:none; }
+
+  /* Company name — muted, truncates */
   .picker-row-company {
     font-size:11px;
-    color:rgba(148,163,184,0.60);
+    color:rgba(148,163,184,0.58);
     font-weight:400;
     white-space:nowrap;
     overflow:hidden;
@@ -556,8 +564,15 @@ export default function PickersClient() {
     min-width:0;
     flex:1;
   }
-  /* note line — hidden on mobile */
-  .picker-row-note { font-size:11px;color:rgba(148,163,184,0.65);font-weight:400; }
+
+  /* Note (signal info) — second line, slightly indented to align under company name */
+  .picker-row-note {
+    font-size:11px;
+    color:rgba(148,163,184,0.60);
+    font-weight:400;
+    padding-left:2px;
+  }
+
   .picker-row-link { font-size:11px;font-weight:600;color:rgba(148,163,184,0.55);text-decoration:none;white-space:nowrap;flex:0 0 auto;transition:color 120ms ease; }
   .picker-row-link:hover { color:#93c5fd !important; }
 
@@ -565,7 +580,7 @@ export default function PickersClient() {
   .pickers-see-all { display:inline-flex !important;align-items:center;padding:4px 10px;border-radius:7px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);font-size:11px;font-weight:600;color:#4ade80;text-decoration:none;transition:color 120ms ease,background 120ms ease;white-space:nowrap; }
   .pickers-see-all:hover { background:rgba(255,255,255,0.07);color:#86efac !important;filter:none !important;transform:none !important; }
 
-  /* Section footer row — fetch button + see all on the same line */
+  /* Section footer: fetch button + see all on same line */
   .pickers-section-footer { display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;flex-wrap:nowrap; }
   .pickers-section-footer-left { display:flex;align-items:center;gap:8px;flex:1;min-width:0; }
 
@@ -595,7 +610,6 @@ export default function PickersClient() {
     .pickers-help-tip { width:18px !important;height:18px !important;font-size:10px !important; }
     .pickers-section-title-text { font-size:13px !important; }
     .picker-row-note { display:none !important; }
-    /* On mobile the see-all takes full width in its own row */
     .pickers-section-footer { flex-wrap:wrap; }
     .pickers-see-all { width:100%;justify-content:center;padding:6px 10px;font-size:12px; }
   }
@@ -696,7 +710,6 @@ export default function PickersClient() {
                   }).slice(0, 4)
                 : [];
 
-              // Resolve seoHref once per section
               const seoHref = (() => {
                 const title = sec.title.toLowerCase();
                 if (title.includes("positive last earnings")) return "/stocks-with-positive-last-earnings";
@@ -743,7 +756,6 @@ export default function PickersClient() {
                     ))}
                   </div>
 
-                  {/* ── Section footer: fetch button (earnings only) + see all, same line ── */}
                   {(isEarnings || seoHref) ? (
                     <div className="pickers-section-footer">
                       <div className="pickers-section-footer-left">
