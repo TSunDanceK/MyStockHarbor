@@ -79,7 +79,7 @@ export default function PickersPage() {
                 Stock Pickers &amp; Technical Setup Ideas
               </h1>
               <p className="pickersHeroText" style={{ marginTop: 8, fontSize: 14, lineHeight: 1.6, opacity: 0.72, maxWidth: 480 }}>
-                Screened ideas across oversold, breakouts, divergence, 200-day MA tests and more. Starting points for chart analysis \u2014 not buy or sell recommendations.
+                Screened ideas across oversold, breakouts, divergence, 200-day MA tests and more. Starting points for chart analysis — not buy or sell recommendations.
               </p>
             </section>
 
@@ -104,7 +104,7 @@ export default function PickersPage() {
             <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.65)", marginBottom: 8 }}>Screened Results</div>
             <h2 style={{ margin: "0 0 6px", fontSize: 24, lineHeight: 1.12, letterSpacing: "-0.025em", fontWeight: 700 }}>Screened setups across the market</h2>
             <p className="pickers-mobile-hide" style={{ margin: 0, fontSize: 14, lineHeight: 1.6, opacity: 0.62, maxWidth: 720 }}>
-              These lists are filtered and ranked to surface cleaner, more relevant setups first. Starting points for chart review \u2014 not financial advice.
+              These lists are filtered and ranked to surface cleaner, more relevant setups first. Starting points for chart review — not financial advice.
             </p>
           </div>
           <div style={{ padding: 18, boxSizing: "border-box" }}>
