@@ -138,13 +138,13 @@ function getHeaderHelp(title: string) {
   if (title.includes("Sell Signals")) return "Stocks showing multiple bearish technical conditions, ranked by signal count.";
   if (title.includes("Oversold")) return "Ranked oversold setups favouring stronger oversold readings, better liquidity and cleaner rebound potential.";
   if (title.includes("Best Trend Score")) return "Stocks with strong trend structure: price above MA50/MA200, correct MA alignment, positive MACD momentum.";
-  if (title.includes("Positive Last Earnings")) return "Ranked by the most recent earnings report \u2014 EPS beats, revenue beats and positive EPS carry more weight.";
+  if (title.includes("Positive Last Earnings")) return "Ranked by the most recent earnings report — EPS beats, revenue beats and positive EPS carry more weight.";
   if (title.includes("Strong Earnings Growth")) return "Ranked by year-over-year earnings improvement, recent positive EPS consistency and revenue growth.";
   if (title.includes("Overbought")) return "Ranked overbought setups favouring stronger extension and cleaner pullback-risk profiles.";
   if (title.includes("Divergence")) return "Ranked by timeframe, duration and structure quality. Weekly divergences usually carry more weight than daily ones.";
   if (title.includes("Macro Support") || title.includes("Resistance")) return "Stocks near wider weekly support or resistance zones, ranked by touch count, distance and structure length.";
   if (title.includes("All-Time Highs")) return "Pullback setups from all-time highs, ranked to favour liquid, tradable names over broken charts.";
-  if (title.toLowerCase().includes("200-day")) return "Stocks near the 200-day moving average \u2014 a key long-term level traders watch for support, resistance and trend direction.";
+  if (title.toLowerCase().includes("200-day")) return "Stocks near the 200-day moving average — a key long-term level traders watch for support, resistance and trend direction.";
   if (title.includes("Breakout")) return "Ranked to favour newer, cleaner and more liquid breakouts over older or more stretched moves.";
   return "Stocks matching multiple technical conditions worth reviewing on the chart.";
 }
@@ -262,14 +262,14 @@ function PatternPlaysSection() {
 }
 
 function PickerRowContent({ symbol, note, companyName }: { symbol: string; note?: string; companyName?: string }) {
-  const fullLine1 = companyName ? `${symbol} \u00b7 ${companyName}` : symbol;
+  const fullLine1 = companyName ? `${symbol} · ${companyName}` : symbol;
   return (
     <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0, overflow: "hidden" }}>
       <span title={companyName ? fullLine1 : undefined} style={{ display: "flex", alignItems: "baseline", minWidth: 0, overflow: "hidden" }}>
         <span className="picker-row-ticker">{symbol}</span>
         {companyName ? (
           <>
-            <span className="picker-name-sep">&nbsp;\u00b7&nbsp;</span>
+            <span className="picker-name-sep">&nbsp;·&nbsp;</span>
             <span className="picker-row-company">{companyName}</span>
           </>
         ) : null}
@@ -391,41 +391,80 @@ export default function PickersClient() {
   }, []);
 
   useEffect(() => {
-    if (!sections.length) return;
+    if (!sections.length && !signalRecords.length) return;
+
     let cancelled = false;
-    const uniqueSymbols = Array.from(new Set(
-      sections.flatMap((sec) =>
-        (Array.isArray(sec.items) ? sec.items.slice(0, 4) : []).map((it) =>
-          String(it.symbol ?? "").trim().toUpperCase()
-        )
-      ).filter(Boolean)
-    ));
+
+    const sectionSymbols = sections.flatMap((sec) =>
+      (Array.isArray(sec.items) ? sec.items.slice(0, 4) : []).map((it) =>
+        String(it.symbol ?? "").trim().toUpperCase()
+      )
+    );
+
+    const topBuySymbols = signalRecords
+      .map((record) => ({
+        symbol: String(record.symbol ?? "").trim().toUpperCase(),
+        buyCount: getBuySignalCount(record),
+      }))
+      .filter((item) => item.symbol && item.buyCount > 0)
+      .sort((a, b) => b.buyCount !== a.buyCount ? b.buyCount - a.buyCount : a.symbol.localeCompare(b.symbol))
+      .slice(0, 4)
+      .map((item) => item.symbol);
+
+    const topSellSymbols = signalRecords
+      .map((record) => ({
+        symbol: String(record.symbol ?? "").trim().toUpperCase(),
+        sellCount: getSellSignalCount(record),
+      }))
+      .filter((item) => item.symbol && item.sellCount > 0)
+      .sort((a, b) => b.sellCount !== a.sellCount ? b.sellCount - a.sellCount : a.symbol.localeCompare(b.symbol))
+      .slice(0, 4)
+      .map((item) => item.symbol);
+
+    const uniqueSymbols = Array.from(new Set([...sectionSymbols, ...topBuySymbols, ...topSellSymbols])).filter(Boolean);
+
     async function fetchNames() {
-      const BATCH = 5;
+      const BATCH = 8;
+
       for (let i = 0; i < uniqueSymbols.length; i += BATCH) {
         if (cancelled) return;
+
         const batch = uniqueSymbols.slice(i, i + BATCH);
         const batchMap = new Map<string, string>();
+
         await Promise.all(batch.map(async (sym) => {
           try {
             const res = await fetch(`/api/symbols?q=${encodeURIComponent(sym)}`, { cache: "force-cache" });
             if (!res.ok) return;
+
             const data = (await res.json()) as { results?: { symbol: string; name: string }[] };
-            const results = data.results ?? [];
-            const exact = results.find((r) => (r.symbol ?? "").trim().toUpperCase() === sym);
-            const fallback = !exact && results[0] && (results[0].symbol ?? "").trim().toUpperCase().startsWith(sym)
-              ? results[0]
-              : null;
-            const match = exact ?? fallback;
-            if (match?.name) batchMap.set(sym, match.name);
-          } catch { /* ignore */ }
+            const results = Array.isArray(data.results) ? data.results : [];
+
+            const exact = results.find((r) =>
+              String(r.symbol ?? "").trim().toUpperCase() === sym
+            );
+
+            const name = typeof exact?.name === "string" ? exact.name.trim() : "";
+            if (name) batchMap.set(sym, name);
+          } catch {
+            /* ignore */
+          }
         }));
-        if (!cancelled && batchMap.size > 0) setCompanyNames((prev) => new Map([...prev, ...batchMap]));
+
+        if (!cancelled && batchMap.size > 0) {
+          setCompanyNames((prev) => {
+            const next = new Map(prev);
+            for (const [sym, name] of batchMap) next.set(sym, name);
+            return next;
+          });
+        }
       }
     }
+
     void fetchNames();
+
     return () => { cancelled = true; };
-  }, [sections]);
+  }, [sections, signalRecords]);
 
   const safeSections = useMemo(() => Array.isArray(sections) ? sections : [], [sections]);
   const safeSignalRecords = useMemo(() => Array.isArray(signalRecords) ? signalRecords : [], [signalRecords]);
@@ -591,8 +630,8 @@ export default function PickersClient() {
 
       {loading ? (
         <div style={{ border: "1px solid rgba(255,255,255,0.10)", borderRadius: 14, padding: 18, background: "#0b1220", boxSizing: "border-box" }}>
-          <div style={{ fontSize: 18, fontWeight: 700 }}>Gathering stocks, please wait\u2026</div>
-          <div style={{ marginTop: 6, fontSize: 13, opacity: 0.65 }}>First load can take 10\u201315 seconds. Cached loads are faster.</div>
+          <div style={{ fontSize: 18, fontWeight: 700 }}>Gathering stocks, please wait…</div>
+          <div style={{ marginTop: 6, fontSize: 13, opacity: 0.65 }}>First load can take 10–15 seconds. Cached loads are faster.</div>
           <div style={{ marginTop: 14, width: 360, maxWidth: "100%", height: 6, borderRadius: 999, overflow: "hidden", background: "rgba(255,255,255,0.07)" }}>
             <div className="pickers-loading-bar" />
           </div>
@@ -650,7 +689,7 @@ export default function PickersClient() {
                         <span style={{ fontSize: 16, fontWeight: 700 }}>{item.symbol}</span>
                         {item.note ? <span style={{ fontSize: 11, opacity: 0.55 }}>{item.note}</span> : null}
                       </div>
-                      <a href={toChartHref(item.dashboardHref ?? "", item.symbol)} onClick={(e) => e.stopPropagation()} style={{ fontSize: 11, fontWeight: 600, color: "rgba(148,163,184,0.55)", textDecoration: "none" }}>Chart \u2197</a>
+                      <a href={toChartHref(item.dashboardHref ?? "", item.symbol)} onClick={(e) => e.stopPropagation()} style={{ fontSize: 11, fontWeight: 600, color: "rgba(148,163,184,0.55)", textDecoration: "none" }}>Chart ↗</a>
                     </div>
                     <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
                       {item.matchedSignals.map((signal) => {
@@ -716,7 +755,7 @@ export default function PickersClient() {
                             <PickerRowContent symbol={it.symbol} note={it.note} companyName={companyNames.get(it.symbol)} />
                           </a>
                         </div>
-                        <a href={toChartHref(it.dashboardHref ?? "", it.symbol)} className="picker-row-link">Chart \u2197</a>
+                        <a href={toChartHref(it.dashboardHref ?? "", it.symbol)} className="picker-row-link">Chart ↗</a>
                       </div>
                     ))}
                   </div>
@@ -727,13 +766,13 @@ export default function PickersClient() {
                         {isEarnings ? (
                           <>
                             <button type="button" className="pickers-earnings-fetch-button" onClick={handleFetchEarnings} disabled={earningsFetchBusy || earningsFetchRemainingSeconds > 0} style={{ display: "inline-flex", alignItems: "center", minHeight: 28, padding: "4px 10px", borderRadius: 7, border: "1px solid rgba(34,197,94,0.24)", background: "rgba(34,197,94,0.06)", color: "rgba(134,239,172,0.80)", fontSize: 11, fontWeight: 600, cursor: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? "not-allowed" : "pointer", opacity: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? 0.65 : 1, whiteSpace: "nowrap", flex: "0 0 auto" }}>
-                              {earningsFetchBusy ? "Fetching\u2026" : earningsFetchRemainingSeconds > 0 ? `Fetch (${earningsFetchRemainingSeconds}s)` : "Fetch Earnings"}
+                              {earningsFetchBusy ? "Fetching…" : earningsFetchRemainingSeconds > 0 ? `Fetch (${earningsFetchRemainingSeconds}s)` : "Fetch Earnings"}
                             </button>
                             {earningsFetchMessage ? <span style={{ fontSize: 11, opacity: 0.55, lineHeight: 1.4, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{earningsFetchMessage}</span> : null}
                           </>
                         ) : null}
                       </div>
-                      {seoHref ? <a href={seoHref} className="pickers-see-all">See all \u2192</a> : null}
+                      {seoHref ? <a href={seoHref} className="pickers-see-all">See all →</a> : null}
                     </div>
                   ) : null}
                 </section>
@@ -745,7 +784,7 @@ export default function PickersClient() {
         {!loading && !err && SHOW_FORCE_FETCH_BUTTON ? (
           <div style={{ marginTop: 14, display: "flex", justifyContent: "center" }}>
             <button type="button" onClick={() => { void loadPickers(true); }} disabled={forceRefreshing} style={{ minHeight: 38, padding: "8px 14px", borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: forceRefreshing ? "wait" : "pointer", border: "1px solid rgba(59,130,246,0.24)", background: "rgba(59,130,246,0.06)", color: "#93c5fd", opacity: forceRefreshing ? 0.70 : 1 }}>
-              {forceRefreshing ? "Refreshing\u2026" : "Force Refresh"}
+              {forceRefreshing ? "Refreshing…" : "Force Refresh"}
             </button>
           </div>
         ) : null}
