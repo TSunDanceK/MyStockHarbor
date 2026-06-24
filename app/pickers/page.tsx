@@ -83,7 +83,7 @@ export default function PickersPage() {
               </p>
             </section>
 
-            {/* Right panel \u2014 3-col bullet list \u2014 desktop only */}
+            {/* Right panel — 3-col bullet list — desktop only */}
             <section className="heroPanel mobile-hide-screened-setups" style={{ border: "1px solid rgba(255,255,255,0.10)", borderRadius: 22, padding: "18px 20px", background: "rgba(10,14,24,0.96)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), 0 14px 34px rgba(0,0,0,0.28)", minWidth: 0, width: "100%", boxSizing: "border-box", overflow: "hidden" }}>
               <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "rgba(148,163,184,0.70)", marginBottom: 12 }}>All screened setups on this page</div>
               <div className="hero-bullet-grid">
@@ -137,21 +137,21 @@ export default function PickersPage() {
         <section style={{ marginTop: 22, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, width: "100%", boxSizing: "border-box" }}>
           <Link href="/" style={{ ...supportCardStyle, border: "1px solid rgba(250,204,21,0.18)", background: "rgba(24,20,8,0.60)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 8, border: "1px solid rgba(250,204,21,0.24)", background: "rgba(250,204,21,0.08)", fontSize: 14, flex: "0 0 auto" }}>\ud83d\udcc8</span>
+              <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 8, border: "1px solid rgba(250,204,21,0.24)", background: "rgba(250,204,21,0.08)", fontSize: 14, flex: "0 0 auto" }}>📈</span>
               <div style={{ fontSize: 16, fontWeight: 700, color: "#fefce8" }}>Open the dashboard</div>
             </div>
             <div style={midCardTextStyle}>Review price structure, overlays and indicators for any symbol on this page.</div>
           </Link>
           <Link href="/learn" style={{ ...supportCardStyle, border: "1px solid rgba(59,130,246,0.18)", background: "rgba(8,16,30,0.60)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 8, border: "1px solid rgba(59,130,246,0.24)", background: "rgba(59,130,246,0.08)", fontSize: 14, flex: "0 0 auto" }}>\ud83d\udcd8</span>
+              <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 8, border: "1px solid rgba(59,130,246,0.24)", background: "rgba(59,130,246,0.08)", fontSize: 14, flex: "0 0 auto" }}>📘</span>
               <div style={{ fontSize: 16, fontWeight: 700, color: "#eff6ff" }}>Visit the Learn hub</div>
             </div>
             <div style={midCardTextStyle}>Chart concepts, setups and beginner-friendly guides.</div>
           </Link>
           <Link href="/platforms" style={{ ...supportCardStyle, border: "1px solid rgba(34,197,94,0.18)", background: "rgba(8,20,16,0.60)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 8, border: "1px solid rgba(34,197,94,0.24)", background: "rgba(34,197,94,0.08)", fontSize: 14, flex: "0 0 auto" }}>\ud83c\udfe6</span>
+              <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 8, border: "1px solid rgba(34,197,94,0.24)", background: "rgba(34,197,94,0.08)", fontSize: 14, flex: "0 0 auto" }}>🏦</span>
               <div style={{ fontSize: 16, fontWeight: 700, color: "#f0fdf4" }}>Compare platforms</div>
             </div>
             <div style={midCardTextStyle}>Review charting and broker options after narrowing down your ideas.</div>
