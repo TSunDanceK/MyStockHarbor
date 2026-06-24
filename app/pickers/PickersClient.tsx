@@ -241,7 +241,7 @@ function PatternPlaysSection() {
     <section style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 16, boxSizing: "border-box" }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
         <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em", color: "rgba(226,232,240,0.90)" }}>Chart Pattern Plays</h2>
-        <p style={{ margin: 0, fontSize: 12, opacity: 0.55, lineHeight: 1.5 }}>Visual chart-pattern pages \u2014 click through to the full play lists.</p>
+        <p style={{ margin: 0, fontSize: 12, opacity: 0.55, lineHeight: 1.5 }}>Visual chart-pattern pages — click through to the full play lists.</p>
       </div>
       <div className="pattern-plays-grid">
         {PLAY_CARDS.map((play) => {
@@ -606,7 +606,7 @@ export default function PickersClient() {
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
             <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: "#e2e8f0" }}>Custom Screener</span>
-              <span style={{ fontSize: 14, color: "rgba(148,163,184,0.75)", fontWeight: 400 }}>Select conditions \u2014 only stocks matching all will show.</span>
+              <span style={{ fontSize: 14, color: "rgba(148,163,184,0.75)", fontWeight: 400 }}>Select conditions — only stocks matching all will show.</span>
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flex: "0 0 auto" }}>
               <button type="button" onClick={handleScreenerButton} style={{ display: "inline-flex", alignItems: "center", minHeight: 32, padding: "6px 12px", borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap", border: "1px solid rgba(34,197,94,0.28)", background: screenerOpen ? "rgba(34,197,94,0.14)" : "rgba(34,197,94,0.06)", color: "#86efac" }}>
