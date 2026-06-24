@@ -2,9 +2,11 @@
 // Uses the /api/quote route which pulls price, marketCap, name, pe, priceAvg50,
 // priceAvg200 all in one FMP stable/quote call — no separate profile call needed.
 
-// Ticker remapping for non-US tickers that FMP identifies differently.
+// Ticker remapping for non-US tickers.
+// Use US-listed ADR equivalents where available — all FMP endpoints work reliably for US symbols.
+// IFX (Xetra) → IFNNY (US OTC ADR for Infineon Technologies)
 const TICKER_REMAP: Record<string, string> = {
-  IFX: "IFX.DE",
+  IFX: "IFNNY",
 };
 
 function getBaseUrl() {
@@ -13,14 +15,6 @@ function getBaseUrl() {
   if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL.replace(/\/$/, "")}`;
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL.replace(/\/$/, "")}`;
   return "http://localhost:3000";
-}
-
-function formatMarketCap(value: number | null): string | null {
-  if (!value || !Number.isFinite(value)) return null;
-  if (value >= 1e12) return `$${(value / 1e12).toFixed(2)}T`;
-  if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
-  if (value >= 1e6) return `$${(value / 1e6).toFixed(0)}M`;
-  return `$${value.toLocaleString()}`;
 }
 
 function pctFromBase(last: number | null, base: number | null): number | null {
@@ -41,6 +35,14 @@ export type VideoStockData = {
   peRatio: number | null;
   sector: string | null;
 };
+
+function formatMarketCap(value: number | null): string | null {
+  if (!value || !Number.isFinite(value)) return null;
+  if (value >= 1e12) return `$${(value / 1e12).toFixed(2)}T`;
+  if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
+  if (value >= 1e6) return `$${(value / 1e6).toFixed(0)}M`;
+  return `$${value.toLocaleString()}`;
+}
 
 export async function getVideoStockData(ticker: string): Promise<VideoStockData> {
   const upper = ticker.trim().toUpperCase();
@@ -82,27 +84,17 @@ export async function getVideoStockData(ticker: string): Promise<VideoStockData>
     else trend = "Mixed";
   }
 
-  // Format market cap — use € for known European tickers
-  const isEuro = fmpSymbol.endsWith(".DE") || fmpSymbol.endsWith(".PA") || fmpSymbol.endsWith(".AS");
-  let marketCap: string | null = null;
-  if (marketCapRaw && Number.isFinite(marketCapRaw)) {
-    const sym = isEuro ? "€" : "$";
-    if (marketCapRaw >= 1e12) marketCap = `${sym}${(marketCapRaw / 1e12).toFixed(2)}T`;
-    else if (marketCapRaw >= 1e9) marketCap = `${sym}${(marketCapRaw / 1e9).toFixed(2)}B`;
-    else if (marketCapRaw >= 1e6) marketCap = `${sym}${(marketCapRaw / 1e6).toFixed(0)}M`;
-  }
-
   return {
     ticker: upper,
     companyName: name,
     price,
-    marketCap,
+    marketCap: formatMarketCap(marketCapRaw),
     ma50,
     ma200,
     ma50Pct,
     ma200Pct,
     trend,
     peRatio: pe,
-    sector: null, // quote endpoint doesn't return sector; omitted for simplicity
+    sector: null,
   };
 }
