@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import GuideJsonLd from "@/app/components/GuideJsonLd";
 
-const TITLE = "Stop Loss Strategy for Stock Traders";
-const DESC = "Learn how to use a stop loss strategy to protect your trades, limit downside risk, and build more disciplined trading habits from the start.";
+const TITLE = "Stop Loss Strategy for Beginners";
+const DESC = "Learn how stop loss strategy works in trading, where traders place stop losses, and how stop losses help control downside risk.";
 const PATH = "/stop-loss-strategy";
 
 export const metadata: Metadata = {
@@ -26,4 +26,4 @@ export const metadata: Metadata = {
   },
 };
 
-export { default } from "./StopLossStrategyPage";
+export { default } from "./StopLossStrategyContent";

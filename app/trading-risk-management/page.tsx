@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import GuideJsonLd from "@/app/components/GuideJsonLd";
 
-const TITLE = "Trading Risk Management Guide";
-const DESC = "Learn the core principles of trading risk management, including position sizing, stop losses, risk-to-reward, and how to protect your trading account over the long term.";
+const TITLE = "Trading Risk Management for Beginners";
+const DESC = "Learn the basics of trading risk management including stop losses, position sizing, risk reward, and why protecting capital matters more than chasing trades.";
 const PATH = "/trading-risk-management";
 
 export const metadata: Metadata = {
@@ -26,4 +26,4 @@ export const metadata: Metadata = {
   },
 };
 
-export { default } from "./TradingRiskManagementPage";
+export { default } from "./TradingRiskManagementContent";

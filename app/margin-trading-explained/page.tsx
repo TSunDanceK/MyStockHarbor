@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import GuideJsonLd from "@/app/components/GuideJsonLd";
 
-const TITLE = "Margin Trading Explained";
-const DESC = "Learn what margin trading is, how it works, the risks involved, and what traders need to understand before using leverage to trade stocks.";
+const TITLE = "Margin Trading Explained for Beginners";
+const DESC = "Learn what margin trading means, how leverage works, why liquidation risk matters, and how beginners should think about margin before using it.";
 const PATH = "/margin-trading-explained";
 
 export const metadata: Metadata = {
@@ -26,4 +27,4 @@ export const metadata: Metadata = {
   },
 };
 
-export { default } from "./MarginTradingPage";
+export { default } from "./MarginTradingExplainedContent";

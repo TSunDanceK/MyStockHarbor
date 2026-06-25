@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import GuideJsonLd from "@/app/components/GuideJsonLd";
 
 const TITLE = "Best Free Stock Screener";
@@ -26,4 +27,4 @@ export const metadata: Metadata = {
   },
 };
 
-export { default } from "./BestFreeStockScreenerPage";
+export { default } from "./BestFreeStockScreenerContent";
