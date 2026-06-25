@@ -1,50 +1,51 @@
 ---
-title: "Strategy MSTR Stock Sits on Weekly MA200 at mNAV Discount"
+title: "Strategy MSTR Breaks Below Weekly MA200 After Bitcoin Selloff"
 date: "2026-06-25"
-excerpt: "Strategy Inc has fallen 75% from its 52-week high and is sitting on its weekly 200-period moving average — the same level that has historically marked major accumulation zones — while trading at a rare discount to its Bitcoin NAV."
+excerpt: "Strategy Inc has broken below its weekly 200-period moving average and hit a 23-month low of $103, as Bitcoin tests the $60,000 area and the mNAV accretion model faces its most serious structural challenge since the company's Bitcoin strategy began."
 symbol: "MSTR"
 timeframe: "w"
 chartBars: 200
 chartIndicators: ["MA200"]
-overallBreakdown: "MSTR has retraced the majority of its 2024–2025 Bitcoin-driven surge and is now resting on its weekly 200-period moving average, trading near its 52-week low while the self-reinforcing accretion model faces its first real stress test."
-latestNews: "Strategy continues to accumulate Bitcoin opportunistically, purchasing 520 BTC for $34.9M on June 22, 2026. The company recently amended its Series A preferred stock (STRC) payment schedule from monthly to semi-monthly, effective June 30, 2026, while managing a $1.2B annual preferred dividend obligation."
-latestEarnings: "Q1 FY2026 results showed revenue of $124.3M, ahead of estimates, but a GAAP EPS loss of -$38.25 against a consensus estimate of -$0.86 — a miss driven almost entirely by unrealised Bitcoin fair-value accounting under ASC 350. Next earnings are expected around July 30, 2026."
-investorUsefulInfo: "The key metric to watch alongside the share price is the mNAV multiple — currently ~1.18x, meaning you pay $1.18 for every $1 of Bitcoin Strategy holds. The accretion flywheel that drove MSTR's outperformance only works above 1.0x mNAV; the stock recently touched that danger zone, and how far above 1.0x it can sustainably trade will define the bull case from here."
+overallBreakdown: "MSTR has broken below its weekly 200-period moving average — a level that had been flagged as key long-term support — after hitting a 23-month low of $103. The stock is now trading at a significant discount to Bitcoin NAV with the accretion flywheel under structural pressure."
+latestNews: "MSTR hit a 23-month low of approximately $103 on June 24, 2026, down 81% from its all-time high. The company holds 847,363 BTC valued at around $53 billion, but the stock is now trading below the value of its Bitcoin holdings — meaning the mNAV has broken below 1.0x, the level at which the accretion model mathematically inverts."
+latestEarnings: "Q1 FY2026 results showed revenue of $124.3M, ahead of estimates, but a GAAP EPS loss of -$38.25 against a consensus estimate of -$0.86 — driven almost entirely by unrealised Bitcoin fair-value accounting under ASC 350. The company also carries an unrealised Bitcoin loss of approximately $11.2B based on its average cost basis of $75,680 per coin. Next earnings are expected around July 30, 2026."
+investorUsefulInfo: "The critical level to watch is whether the mNAV can reclaim and hold above 1.0x, since below that level every new share issuance is dilutive rather than accretive — meaning the mechanism that funded Bitcoin accumulation now works in reverse. Bitcoin holding or recovering the $60,000 area is the upstream condition that matters most."
 ---
 
 ## What happened
 
-Strategy Inc — formerly MicroStrategy — has retraced the majority of its extraordinary 2024–2025 run and is now trading near its weekly 200-period moving average, a level that has historically marked major accumulation zones for the stock. Shares are around $120, down roughly 75% from the 52-week high of $457.20, with a 52-week low of $104.17 just below current price. The decline has been driven by a falling Bitcoin price, a collapse in the premium investors were willing to pay above the company's Bitcoin net asset value, and growing scrutiny of the preferred dividend obligations that fund the accumulation engine.
+Strategy Inc has broken below its weekly 200-period moving average and fallen to a 23-month low. Shares hit approximately $103 on June 24, 2026, and are trading around $132 today — down 81% from the all-time high and well through the long-term trend support level that had previously been flagged as a key accumulation zone. The move has been driven by continued Bitcoin weakness, with BTC pressing toward the $60,000 area and the mNAV — the ratio of Strategy's market cap to the value of its Bitcoin holdings — breaking below 1.0x for the first time in a meaningful way.
 
 ## Why it matters
 
-Strategy is not a conventional company — it is effectively a Bitcoin treasury vehicle wrapped around a legacy enterprise analytics software business. The investment logic that drove the stock from double digits to $400+ rested on a self-reinforcing loop: issue MSTR shares at a premium to Bitcoin NAV, use proceeds to buy more Bitcoin, watch Bitcoin-per-share rise, repeat. That loop is mathematically accretive only above 1.0x mNAV. In early June 2026 the stock briefly approached that danger zone, with the mNAV dropping to around 0.82x at the low — meaning buyers were getting $1 of Bitcoin for $0.82, but also taking on all the equity risk, debt, and preferred obligations that sit above them in the capital structure. Since then the mNAV has recovered to around 1.18x, still near the low end of its 52-week range of 1.01x–1.80x. The company holds 845,256 BTC — roughly 4% of all Bitcoin that will ever exist — at an average cost of $75,680 per coin, meaning it is currently underwater on its aggregate cost basis with Bitcoin trading in the mid-$60,000s. Strategy continues buying regardless: 520 BTC was purchased as recently as June 22. For traders watching other stocks testing long-term weekly trend support, our [stocks near their weekly 200-day moving average](/stocks-near-weekly-200-day-moving-average) screener covers the broader setup universe.
+The weekly MA200 break is more than a technical signal for MSTR — it represents the first time the stock has broken its long-term trend structure since the Bitcoin accumulation strategy began. More importantly, the mNAV dropping below 1.0x inverts the entire logic of the model. The strategy was built on a self-reinforcing loop: issue MSTR equity at a premium to Bitcoin NAV, use proceeds to buy more Bitcoin, grow Bitcoin-per-share, repeat. Below 1.0x mNAV, every share issued to fund Bitcoin purchases is dilutive to existing holders rather than accretive — meaning the engine runs in reverse. The company holds 847,363 BTC valued at roughly $53 billion at current prices, but Strategy's own market cap now trades below that figure. That means buyers of the stock are getting $1 of Bitcoin for less than $1, but are also taking on the full weight of $1.2B in annual preferred dividend obligations, senior debt, and execution risk that sits above them. Strategy continues accumulating regardless — 520 BTC was purchased as recently as June 22 — but the capital raise mechanism that funded that accumulation is severely constrained at current prices. For traders tracking oversold large-cap names, our [stocks near their weekly 200-day moving average](/stocks-near-weekly-200-day-moving-average) screener captures similar structural break setups.
 
 ## Levels to watch
 
-- Support: weekly 200-period moving average, sitting right at current price and historically a significant accumulation zone for this stock
-- Resistance: the $153–$162 area where the May and early-June bounces both failed
-- Key ratio: mNAV 1.0x — the level below which the accretion model inverts; a sustained break below it would be a structural warning, not just a technical one
-- Risk point: 52-week low at $104.17, the last structural floor if the weekly MA200 gives way
+- Broken support: weekly 200-period moving average, now acting as overhead resistance on any bounce attempt
+- Immediate resistance: the $153–$162 area from the May and early-June failed bounces
+- Key ratio: mNAV 1.0x — currently broken, recovery above it would be the first sign the accretion model can re-engage
+- Support: 52-week low at $104.17, with the June 24 intraday low of ~$103 as the most recent floor
+- Risk point: a sustained close below $103 would mark a new multi-year low with no visible structural support below
 
-## What would confirm the idea
+## What would confirm a recovery
 
-A weekly close that holds the MA200 and forms a higher low, combined with Bitcoin stabilising or recovering above the company's average cost basis of ~$75,680, would begin to restore the accretion logic that drove the stock's outperformance. A mNAV expanding back toward the mid-range (1.3x–1.5x) would signal the market is once again willing to pay a meaningful premium for the leveraged Bitcoin exposure the structure provides.
+A reclaim of the weekly MA200 on a closing basis, combined with Bitcoin stabilising and recovering above $65,000–$70,000, would be the minimum required to signal the breakdown is reversing rather than continuing. The mNAV recovering back above 1.0x in a sustained way would show the accretion model is viable again and allow Strategy to resume meaningful Bitcoin purchases through equity issuance.
 
-## What would weaken the idea
+## What would extend the breakdown
 
-A weekly close below the MA200, particularly if Bitcoin continues to drift lower and the mNAV approaches or breaks 1.0x again, would remove the last major technical floor and put the 52-week low at $104.17 in play. Any sign that the preferred dividend obligations ($1.2B annually) are straining the capital raise capacity — making it harder to fund further Bitcoin purchases — would represent a fundamental deterioration of the core thesis, not just a sentiment swing.
+A confirmed weekly close below $103 on high volume, continued Bitcoin weakness through the $60,000 area, or any sign that the preferred dividend obligations are beginning to strain the balance sheet would suggest the unwind has further to go. Failed bounces back up to the broken weekly MA200 — where sellers reassert — would be the key behavioural signal that the level has flipped from support to resistance.
 
 ## Bull vs bear scenarios
 
 **Bullish scenario:**
-The weekly MA200 holds, Bitcoin finds support and begins recovering toward the company's average cost basis, the mNAV expands back above 1.5x as the accretion flywheel resumes, and Q2 earnings on July 30 show continued Bitcoin accumulation alongside improving software revenue.
+Bitcoin finds footing at the $60,000 area, bounces strongly, and pulls MSTR back above the weekly MA200. The mNAV recovers above 1.0x, the ATM equity issuance channel reopens on economically accretive terms, and the July 30 earnings call resets confidence in the long-term accumulation thesis.
 
 **Bearish scenario:**
-Bitcoin continues lower, the mNAV breaks back below 1.0x, the common equity ATM issuance channel becomes economically unviable, and the $1.2B preferred dividend burden begins to outpace the company's ability to raise capital — forcing a strategic reassessment of the accumulation model itself.
+Bitcoin loses $60,000, MSTR sets a new multi-year low below $103, the mNAV stays persistently below 1.0x, and the $1.2B preferred dividend burden forces a pause or restructuring of the accumulation strategy — removing the core reason most investors own the stock in the first place.
 
 ## Bottom line
 
-MSTR is sitting on a historically significant level — the weekly 200-period moving average — while trading near a rare discount to its Bitcoin holdings. The setup is binary in a way few stocks are: the bull case depends entirely on Bitcoin recovering and the mNAV premium rebuilding, while the bear case is a structural unwind of the accretion model that built the entire thesis. The weekly MA200 is where that question gets answered first.
+The weekly MA200 has broken, not held. MSTR is now in a materially different position than it was when the post was first written — the question has shifted from whether the MA200 acts as support to whether Bitcoin can recover enough to pull the stock back above it. The mNAV being below 1.0x is the structural signal that matters most here; until that recovers, the accretion flywheel is inverted.
 
 This is a watchlist and education piece, not financial advice. Always do your own research and manage risk carefully.
