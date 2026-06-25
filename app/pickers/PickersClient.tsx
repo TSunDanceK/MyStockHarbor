@@ -79,7 +79,7 @@ function toChartHref(href: string, symbol?: string) {
   const cleanedSymbol = String(symbol || "").trim().toUpperCase();
   const fallback = cleanedSymbol ? `/dashboard?symbol=${encodeURIComponent(cleanedSymbol)}` : "/dashboard";
   const raw = href && href.trim() ? href.trim() : "";
-  const normalised = raw.startsWith("/?symbol=") ? raw.replace("/?symbol=", "/dashboard?symbol=") : raw.startsWith("/?")
+  const normalised = raw.startsWith("/?symbol=") ? raw.replace("/?symbol=", "/dashboard?symbol=") : raw.startsWith("/?")  
     ? raw.replace("/?", "/dashboard?") : raw;
   const base = normalised.startsWith("/dashboard") ? normalised : fallback;
   return base.includes("#chart") ? base : `${base}#chart`;
@@ -209,18 +209,12 @@ function PlayDiagram({ pattern, tone }: { pattern: PlayCardDef["pattern"]; tone:
     </svg>
   );
 
-  // Bull flag: compact proportions so pole + flag + breakout are all visible
-  // without any segment feeling too long. Pole x=20-80, flag x=80-180, breakout x=180-220.
   if (pattern === "bullFlag") return (
     <svg viewBox="0 0 240 110" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Bull flag">
-      {/* Pole */}
       <path d="M28 96 L48 78 L62 58 L76 30" stroke="#22c55e" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      {/* Flag channel boundaries */}
       <path d="M76 30 L168 44" stroke="rgba(226,232,240,0.40)" strokeWidth="1.5" strokeDasharray="5 4" strokeLinecap="round" />
       <path d="M76 50 L168 62" stroke="rgba(226,232,240,0.40)" strokeWidth="1.5" strokeDasharray="5 4" strokeLinecap="round" />
-      {/* Consolidation inside flag */}
       <path d="M78 33 L104 47 L130 40 L156 52 L168 45" stroke="rgba(226,232,240,0.70)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      {/* Breakout — ends at x=218 so nothing clips */}
       <path d="M168 45 L192 28 L218 14" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
@@ -434,7 +428,9 @@ export default function PickersClient() {
 
         await Promise.all(batch.map(async (sym) => {
           try {
-            const res = await fetch(`/api/symbols?q=${encodeURIComponent(sym)}`, { cache: "force-cache" });
+            // Use no-store so stale empty results from previous cold-start
+            // failures don't get permanently cached in the browser.
+            const res = await fetch(`/api/symbols?q=${encodeURIComponent(sym)}`, { cache: "no-store" });
             if (!res.ok) return;
 
             const data = (await res.json()) as { results?: { symbol: string; name: string }[] };
