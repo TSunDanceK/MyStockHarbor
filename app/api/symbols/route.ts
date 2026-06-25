@@ -25,49 +25,45 @@ function parseNasdaqSymbolFile(text: string) {
     const cols = trimmed.split("|");
     if (cols.length < 2) continue;
 
-const rawSymbol = (cols[0] || "").trim();
-const symbol = rawSymbol.replace(/\$/g, ".");
-const name = (cols[1] || "").trim();
+    const rawSymbol = (cols[0] || "").trim();
+    const symbol = rawSymbol.replace(/\$/g, ".");
+    const name = (cols[1] || "").trim();
 
     // Exchange handling: in otherlisted.txt, exchange is cols[2] (N/A/P/Z etc.)
-    // in nasdaqlisted.txt, exchange isn’t directly a letter; we’ll label it NASDAQ.
+    // in nasdaqlisted.txt, exchange isn't directly a letter; we'll label it NASDAQ.
     let exchange = "NASDAQ/Other";
     if (cols.length >= 3 && /^[A-Z]$/.test((cols[2] || "").trim())) {
       exchange = (cols[2] || "").trim();
     }
 
-// Keep only normal equity-style symbols.
-if (!/^[A-Z][A-Z.\-]*$/.test(symbol)) continue;
+    // Keep only normal equity-style symbols.
+    if (!/^[A-Z][A-Z.\-]*$/.test(symbol)) continue;
 
-// Remove test issues, warrants, units, rights, notes, preferreds, ETFs/funds,
-// and other non-common-stock style entries from dashboard search.
-const upperName = name.toUpperCase();
+    // Remove test issues, warrants, units, rights, notes (debt instruments), preferreds,
+    // ETFs/funds and other non-common-stock entries.
+    // Note: "TRUST" is intentionally excluded here because many real operating companies
+    // (e.g. Real Estate companies, banks) have "Trust" in their name yet are common stock.
+    // We only skip purely structural instruments.
+    const upperName = name.toUpperCase();
 
-const nonStockNameParts = [
-  "ETF",
-  "FUND",
-  "TRUST",
-  "ETN",
-  "NOTE",
-  "NOTES",
-  "WARRANT",
-  "RIGHT",
-  "UNIT",
-  "PREFERRED",
-  "PREFERENCE",
-  "DEPOSITARY",
-  "ADR",
-  "ADS",
-];
+    const nonStockNameParts = [
+      "ETF",
+      "FUND",
+      "ETN",
+      "WARRANT",
+      "DEPOSITARY",
+      "ADR",
+      "ADS",
+    ];
 
-if (symbol.includes("#")) continue;
-if (symbol.includes("+")) continue;
-if (symbol.includes("^")) continue;
-if (symbol.includes("=")) continue;
+    if (symbol.includes("#")) continue;
+    if (symbol.includes("+")) continue;
+    if (symbol.includes("^")) continue;
+    if (symbol.includes("=")) continue;
 
-if (nonStockNameParts.some((part) => upperName.includes(part))) {
-  continue;
-}
+    if (nonStockNameParts.some((part) => upperName.includes(part))) {
+      continue;
+    }
 
     out.push({ symbol, name, exchange });
   }
@@ -137,7 +133,8 @@ async function fetchFmpSearchSymbols(query: string): Promise<SymbolRow[]> {
     process.env.FINANCIAL_MODELING_PREP_API_KEY ||
     process.env.NEXT_PUBLIC_FMP_API_KEY;
 
-  if (!apiKey || query.length < 2) return [];
+  // Allow single-letter searches — FMP handles them fine for exact-symbol lookups
+  if (!apiKey || query.length < 1) return [];
 
   try {
     const res = await fetch(
@@ -192,68 +189,71 @@ export async function GET(req: Request) {
     );
   }
 
-const [fmpExact, fmpSearch] = await Promise.all([
-  fetchFmpExactSymbol(q),
-  fetchFmpSearchSymbols(q),
-]);
+  const [fmpExact, fmpSearch] = await Promise.all([
+    fetchFmpExactSymbol(q),
+    fetchFmpSearchSymbols(q),
+  ]);
 
-const exactSymbolMatches = all.filter(
-  (r) => r.symbol.toUpperCase() === q
-);
+  const exactSymbolMatches = all.filter(
+    (r) => r.symbol.toUpperCase() === q
+  );
 
-const startingSymbolMatches = all.filter(
-  (r) =>
-    r.symbol.toUpperCase().startsWith(q) &&
-    r.symbol.toUpperCase() !== q
-);
+  const startingSymbolMatches = all.filter(
+    (r) =>
+      r.symbol.toUpperCase().startsWith(q) &&
+      r.symbol.toUpperCase() !== q
+  );
 
-const startingNameMatches = all.filter(
-  (r) =>
-    !r.symbol.toUpperCase().startsWith(q) &&
-    r.name.toUpperCase().startsWith(q)
-);
+  const startingNameMatches = all.filter(
+    (r) =>
+      !r.symbol.toUpperCase().startsWith(q) &&
+      r.name.toUpperCase().startsWith(q)
+  );
 
-const wordStartingNameMatches = all.filter((r) => {
-  const symbol = r.symbol.toUpperCase();
-  const name = r.name.toUpperCase();
+  const wordStartingNameMatches = all.filter((r) => {
+    const symbol = r.symbol.toUpperCase();
+    const name = r.name.toUpperCase();
 
-  if (symbol.startsWith(q)) return false;
-  if (name.startsWith(q)) return false;
+    if (symbol.startsWith(q)) return false;
+    if (name.startsWith(q)) return false;
 
-  return name
-    .split(/[\s,.-]+/)
-    .some((word) => word.startsWith(q));
-});
+    return name
+      .split(/[\s,.-]+/)
+      .some((word) => word.startsWith(q));
+  });
 
-const looseNameMatches = all.filter((r) => {
-  const symbol = r.symbol.toUpperCase();
-  const name = r.name.toUpperCase();
+  const looseNameMatches = all.filter((r) => {
+    const symbol = r.symbol.toUpperCase();
+    const name = r.name.toUpperCase();
 
-  if (symbol.startsWith(q)) return false;
-  if (name.startsWith(q)) return false;
-  if (name.split(/[\s,.-]+/).some((word) => word.startsWith(q))) return false;
+    if (symbol.startsWith(q)) return false;
+    if (name.startsWith(q)) return false;
+    if (name.split(/[\s,.-]+/).some((word) => word.startsWith(q))) return false;
 
-  return name.includes(q);
-});
+    return name.includes(q);
+  });
 
-const seen = new Set<string>();
+  const seen = new Set<string>();
 
-const results = [
-  ...(fmpExact ? [fmpExact] : []),
-  ...fmpSearch,
-  ...exactSymbolMatches,
-  ...startingSymbolMatches,
-  ...startingNameMatches,
-  ...wordStartingNameMatches,
-  ...looseNameMatches,
-]
-  .filter((r) => {
-    const key = r.symbol.toUpperCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  })
-  .slice(0, 50);
+  // FMP exact profile is the most reliable source — put it first so its
+  // company name wins deduplication for any symbol, including short tickers
+  // like K, C, F that NASDAQ directory names may strip or mislabel.
+  const results = [
+    ...(fmpExact ? [fmpExact] : []),
+    ...fmpSearch,
+    ...exactSymbolMatches,
+    ...startingSymbolMatches,
+    ...startingNameMatches,
+    ...wordStartingNameMatches,
+    ...looseNameMatches,
+  ]
+    .filter((r) => {
+      const key = r.symbol.toUpperCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 50);
 
   return NextResponse.json(
     { results },
