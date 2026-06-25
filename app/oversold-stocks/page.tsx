@@ -6,21 +6,23 @@ export const metadata: Metadata = {
   description:
     "Learn what oversold stocks are, how traders use RSI and other indicators to spot stretched conditions, and how to explore live oversold stock ideas with MyStockHarbor.",
   alternates: {
-    canonical: "/oversold-stocks",
+    canonical: "https://www.mystockharbor.com/oversold-stocks",
   },
   openGraph: {
     title: "Oversold Stocks | MyStockHarbor",
     description:
       "A beginner-friendly guide to oversold stocks, rebound setups and how to explore live stock ideas.",
-    url: "https://mystockharbor.com/oversold-stocks",
+    url: "https://www.mystockharbor.com/oversold-stocks",
     siteName: "MyStockHarbor",
     type: "article",
+    locale: "en_GB",
+    images: [{ url: "https://www.mystockharbor.com/og-image-v2.png", width: 1200, height: 630, alt: "Oversold Stocks | MyStockHarbor" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "Oversold Stocks | MyStockHarbor",
-    description:
-      "Learn how traders identify oversold stocks and potential rebound setups.",
+    description: "Learn how traders identify oversold stocks and potential rebound setups.",
+    images: ["https://www.mystockharbor.com/og-image-v2.png"],
   },
 };
 
@@ -654,4 +656,3 @@ const inlineLinkStyle: React.CSSProperties = {
   fontWeight: 800,
   textDecoration: "none",
 };
-
