@@ -15,9 +15,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MyStockHarbor (My Stock Harbor) | Free Trading Dashboard, Market Signals & Technical Analysis",
+  title: "MyStockHarbor | Free Trading Dashboard, Market Signals & Technical Analysis",
   description:
-    "MyStockHarbor (My Stock Harbor) helps traders track stocks, analyse technical indicators, monitor market benchmarks, and learn trading strategies with free educational tools, stock screeners, and market insights.",
+    "MyStockHarbor helps traders track stocks, analyse technical indicators, monitor market benchmarks, and learn trading strategies with free educational tools, stock screeners, and market insights.",
   icons: {
     icon: "/icon.png",
     shortcut: "/icon.png",
@@ -26,9 +26,9 @@ export const metadata: Metadata = {
 
   openGraph: {
     title:
-      "MyStockHarbor (My Stock Harbor) | Free Trading Dashboard, Market Signals & Technical Analysis",
+      "MyStockHarbor | Free Trading Dashboard, Market Signals & Technical Analysis",
     description:
-      "MyStockHarbor (My Stock Harbor) helps traders track stocks, analyse technical indicators, monitor market benchmarks, and learn trading strategies with free educational tools, stock screeners, and market insights.",
+      "MyStockHarbor helps traders track stocks, analyse technical indicators, monitor market benchmarks, and learn trading strategies with free educational tools, stock screeners, and market insights.",
     url: "https://www.mystockharbor.com",
     siteName: "MyStockHarbor",
     images: [
@@ -46,9 +46,9 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title:
-      "MyStockHarbor (My Stock Harbor) | Free Trading Dashboard, Market Signals & Technical Analysis",
+      "MyStockHarbor | Free Trading Dashboard, Market Signals & Technical Analysis",
     description:
-      "MyStockHarbor (My Stock Harbor) helps traders track stocks, analyse technical indicators, monitor market benchmarks, and learn trading strategies with free educational tools, stock screeners, and market insights.",
+      "MyStockHarbor helps traders track stocks, analyse technical indicators, monitor market benchmarks, and learn trading strategies with free educational tools, stock screeners, and market insights.",
     images: ["https://www.mystockharbor.com/og-image-v2.png"],
   },
   other: {
@@ -183,7 +183,7 @@ export default function RootLayout({
                     color: "rgba(241,245,249,0.78)",
                   }}
                 >
-                  MyStockHarbor (My Stock Harbor) is designed for educational purposes and general
+                  MyStockHarbor is designed for educational purposes and general
                   market research. Please do your own research before making
                   financial decisions.
                 </div>
@@ -366,7 +366,7 @@ export default function RootLayout({
                   color: "rgba(241,245,249,0.56)",
                 }}
               >
-                © {new Date().getFullYear()} MyStockHarbor (My Stock Harbor). All rights reserved.
+                © {new Date().getFullYear()} MyStockHarbor. All rights reserved.
               </div>
             </div>
           </footer>
