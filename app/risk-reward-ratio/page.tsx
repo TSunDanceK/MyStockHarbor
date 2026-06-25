@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import GuideJsonLd from "@/app/components/GuideJsonLd";
 
-const TITLE = "Risk Reward Ratio Explained for Traders";
-const DESC = "Learn what risk reward ratio means, how to calculate it, and why maintaining a positive risk-to-reward ratio is one of the most important habits in trading.";
+const TITLE = "Risk Reward Ratio Explained for Beginners";
+const DESC = "Learn what risk reward ratio means in trading, how to calculate it, and why traders use risk reward to judge whether a setup is worth taking.";
 const PATH = "/risk-reward-ratio";
 
 export const metadata: Metadata = {
@@ -26,4 +26,4 @@ export const metadata: Metadata = {
   },
 };
 
-export { default } from "./RiskRewardRatioPage";
+export { default } from "./RiskRewardRatioContent";

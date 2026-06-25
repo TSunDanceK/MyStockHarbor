@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import GuideJsonLd from "@/app/components/GuideJsonLd";
 
-const TITLE = "Position Sizing Guide for Stock Traders";
-const DESC = "Learn how position sizing works, why it matters for managing risk, and how to calculate the right position size for each trade based on your account and stop loss.";
+const TITLE = "Position Sizing in Trading: How to Control Risk";
+const DESC = "Learn how position sizing works in trading, how to calculate trade size based on stop loss and risk, and why proper position sizing protects your capital.";
 const PATH = "/position-sizing-guide";
 
 export const metadata: Metadata = {
@@ -26,4 +26,4 @@ export const metadata: Metadata = {
   },
 };
 
-export { default } from "./PositionSizingPage";
+export { default } from "./PositionSizingGuideContent";
