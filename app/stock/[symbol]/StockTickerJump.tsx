@@ -131,7 +131,7 @@ if (!exactStillSelected) {
 
   function goToStockPage() {
     if (!selected?.symbol) return;
-   router.push(`/stock/${encodeURIComponent(selected.symbol)}/news`);
+    router.push(`/stock/${encodeURIComponent(selected.symbol)}`);
   }
 
   return (
@@ -235,7 +235,7 @@ if (!exactStillSelected) {
         </div>
 
         <button
-          className="stockTickerJumpNewsButton"
+          className="stockTickerJumpStockButton"
           type="button"
           onClick={goToStockPage}
           disabled={!canGo}
@@ -251,13 +251,13 @@ if (!exactStillSelected) {
             opacity: canGo ? 1 : 0.45,
           }}
         >
-          News Page →
+          Stock Page →
         </button>
       </div>
 
       <style>{`
         @media (max-width: 640px) {
-          .stockTickerJumpNewsButton {
+          .stockTickerJumpStockButton {
             display: none !important;
           }
         }
