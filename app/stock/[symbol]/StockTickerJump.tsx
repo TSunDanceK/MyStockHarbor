@@ -16,6 +16,7 @@ type StockTickerJumpProps = {
 export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps) {
   const router = useRouter();
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   const [query, setQuery] = useState(currentSymbol);
   const [results, setResults] = useState<SymbolResult[]>([]);
@@ -25,15 +26,31 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
     name: "",
     exchange: "",
   });
+  const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
 
   useEffect(() => {
     setQuery(currentSymbol);
-    setSelected({
-      symbol: currentSymbol,
-      name: "",
-      exchange: "",
-    });
+    setSelected({ symbol: currentSymbol, name: "", exchange: "" });
   }, [currentSymbol]);
+
+  // Update dropdown position whenever it opens or on scroll/resize
+  useEffect(() => {
+    if (!open || !inputRef.current) return;
+
+    function updateRect() {
+      if (!inputRef.current) return;
+      const r = inputRef.current.getBoundingClientRect();
+      setDropdownRect({ top: r.bottom + 8, left: r.left, width: r.width });
+    }
+
+    updateRect();
+    window.addEventListener("scroll", updateRect, true);
+    window.addEventListener("resize", updateRect);
+    return () => {
+      window.removeEventListener("scroll", updateRect, true);
+      window.removeEventListener("resize", updateRect);
+    };
+  }, [open]);
 
   useEffect(() => {
     function onClickOutside(event: MouseEvent) {
@@ -42,7 +59,6 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
         setOpen(false);
       }
     }
-
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
@@ -56,25 +72,16 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
       return;
     }
 
-    const exactStillSelected =
-      selected?.symbol.toUpperCase() === q.toUpperCase();
+    const exactStillSelected = selected?.symbol.toUpperCase() === q.toUpperCase();
 
     if (!exactStillSelected) {
       const exactResult = results.find(
         (result) => result.symbol.toUpperCase() === q.toUpperCase()
       );
-
       if (exactResult) {
-        setSelected({
-          ...exactResult,
-          symbol: exactResult.symbol.trim().toUpperCase(),
-        });
+        setSelected({ ...exactResult, symbol: exactResult.symbol.trim().toUpperCase() });
       } else if (/^[A-Z.]{1,6}$/.test(q.toUpperCase())) {
-        setSelected({
-          symbol: q.toUpperCase(),
-          name: "",
-          exchange: "",
-        });
+        setSelected({ symbol: q.toUpperCase(), name: "", exchange: "" });
       } else {
         setSelected(null);
       }
@@ -83,28 +90,19 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
     const timer = window.setTimeout(async () => {
       try {
         const res = await fetch(`/api/symbols?q=${encodeURIComponent(q)}`);
-        if (!res.ok) {
-          setResults([]);
-          return;
-        }
-
+        if (!res.ok) { setResults([]); return; }
         const data = (await res.json()) as { results?: SymbolResult[] };
         const rows = Array.isArray(data.results) ? data.results : [];
         const cleanedQuery = q.toUpperCase();
-
         const sortedRows = [...rows].sort((a, b) => {
           const aSymbol = a.symbol.toUpperCase();
           const bSymbol = b.symbol.toUpperCase();
-
           if (aSymbol === cleanedQuery && bSymbol !== cleanedQuery) return -1;
           if (bSymbol === cleanedQuery && aSymbol !== cleanedQuery) return 1;
-
           if (aSymbol.startsWith(cleanedQuery) && !bSymbol.startsWith(cleanedQuery)) return -1;
           if (bSymbol.startsWith(cleanedQuery) && !aSymbol.startsWith(cleanedQuery)) return 1;
-
           return aSymbol.localeCompare(bSymbol);
         });
-
         setResults(sortedRows);
       } catch {
         setResults([]);
@@ -116,45 +114,17 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
 
   function chooseResult(result: SymbolResult) {
     const clean = result.symbol.trim().toUpperCase();
-
-    setSelected({
-      ...result,
-      symbol: clean,
-    });
+    setSelected({ ...result, symbol: clean });
     setQuery(clean);
     setOpen(false);
-
     router.push(`/stock/${encodeURIComponent(clean)}`);
   }
 
   return (
-    <div ref={wrapRef} style={{ marginTop: 18 }}>
-      <div
-        style={{
-          fontSize: 12,
-          fontWeight: 950,
-          letterSpacing: "0.08em",
-          textTransform: "uppercase",
-          color: "rgba(191,219,254,0.86)",
-          marginBottom: 4,
-        }}
-      >
-        Change stock
-      </div>
-
-      <div
-        style={{
-          fontSize: 13,
-          lineHeight: 1.5,
-          color: "rgba(241,245,249,0.66)",
-          marginBottom: 10,
-        }}
-      >
-        Search another ticker to view its stock analysis page.
-      </div>
-
+    <div ref={wrapRef}>
       <div style={{ position: "relative", width: "100%" }}>
         <input
+          ref={inputRef}
           value={query}
           onChange={(event) => {
             setQuery(event.target.value.toUpperCase());
@@ -179,18 +149,18 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
           }}
         />
 
-        {open && results.length > 0 ? (
+        {open && results.length > 0 && dropdownRect ? (
           <div
             style={{
-              position: "absolute",
-              top: "calc(100% + 8px)",
-              left: 0,
-              right: 0,
-              zIndex: 50,
+              position: "fixed",
+              top: dropdownRect.top,
+              left: dropdownRect.left,
+              width: dropdownRect.width,
+              zIndex: 9999,
               borderRadius: 16,
               border: "1px solid rgba(255,255,255,0.12)",
               background: "#0b1220",
-              boxShadow: "0 18px 34px rgba(0,0,0,0.42)",
+              boxShadow: "0 18px 34px rgba(0,0,0,0.72)",
               overflow: "hidden",
             }}
           >
