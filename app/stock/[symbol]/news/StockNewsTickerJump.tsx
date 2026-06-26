@@ -75,22 +75,22 @@ export default function StockNewsTickerJump({
 
         const data = (await res.json()) as { results?: SymbolResult[] };
         const rows = Array.isArray(data.results) ? data.results : [];
-const cleanedQuery = q.toUpperCase();
+        const cleanedQuery = q.toUpperCase();
 
-const sortedRows = [...rows].sort((a, b) => {
-  const aSymbol = a.symbol.toUpperCase();
-  const bSymbol = b.symbol.toUpperCase();
+        const sortedRows = [...rows].sort((a, b) => {
+          const aSymbol = a.symbol.toUpperCase();
+          const bSymbol = b.symbol.toUpperCase();
 
-  if (aSymbol === cleanedQuery && bSymbol !== cleanedQuery) return -1;
-  if (bSymbol === cleanedQuery && aSymbol !== cleanedQuery) return 1;
+          if (aSymbol === cleanedQuery && bSymbol !== cleanedQuery) return -1;
+          if (bSymbol === cleanedQuery && aSymbol !== cleanedQuery) return 1;
 
-  if (aSymbol.startsWith(cleanedQuery) && !bSymbol.startsWith(cleanedQuery)) return -1;
-  if (bSymbol.startsWith(cleanedQuery) && !aSymbol.startsWith(cleanedQuery)) return 1;
+          if (aSymbol.startsWith(cleanedQuery) && !bSymbol.startsWith(cleanedQuery)) return -1;
+          if (bSymbol.startsWith(cleanedQuery) && !aSymbol.startsWith(cleanedQuery)) return 1;
 
-  return aSymbol.localeCompare(bSymbol);
-});
+          return aSymbol.localeCompare(bSymbol);
+        });
 
-setResults(sortedRows);
+        setResults(sortedRows);
       } catch {
         setResults([]);
       }
@@ -99,29 +99,17 @@ setResults(sortedRows);
     return () => window.clearTimeout(timer);
   }, [query, selected?.symbol]);
 
-  const canGo = Boolean(selected?.symbol);
+  function chooseResult(result: SymbolResult) {
+    const clean = result.symbol.trim().toUpperCase();
 
-function chooseResult(result: SymbolResult) {
-  const clean = result.symbol.trim().toUpperCase();
+    setSelected({
+      ...result,
+      symbol: clean,
+    });
+    setQuery(clean);
+    setOpen(false);
 
-  setSelected({
-    ...result,
-    symbol: clean,
-  });
-  setQuery(clean);
-  setOpen(false);
-
-  router.push(`/stock/${encodeURIComponent(clean)}/news`);
-}
-
-  function goToNews() {
-    if (!selected?.symbol) return;
-    router.push(`/stock/${encodeURIComponent(selected.symbol)}/news`);
-  }
-
-  function goToStockPage() {
-    if (!selected?.symbol) return;
-    router.push(`/stock/${encodeURIComponent(selected.symbol)}`);
+    router.push(`/stock/${encodeURIComponent(clean)}/news`);
   }
 
   return (
@@ -159,15 +147,7 @@ function chooseResult(result: SymbolResult) {
         </div>
       </div>
 
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 10,
-          alignItems: "flex-start",
-        }}
-      >
-      <div style={{ position: "relative", width: 280, maxWidth: "100%" }}>
+      <div style={{ position: "relative", width: "100%", maxWidth: 320 }}>
         <input
           value={query}
           onChange={(event) => {
@@ -189,6 +169,7 @@ function chooseResult(result: SymbolResult) {
             fontWeight: 900,
             outline: "none",
             textTransform: "uppercase",
+            boxSizing: "border-box",
           }}
         />
 
@@ -239,7 +220,7 @@ function chooseResult(result: SymbolResult) {
           </div>
         ) : null}
 
-        {!canGo && query.trim() ? (
+        {!selected?.symbol && query.trim() ? (
           <div
             style={{
               marginTop: 7,
@@ -251,28 +232,6 @@ function chooseResult(result: SymbolResult) {
             Select a valid ticker from the dropdown.
           </div>
         ) : null}
-      </div>
-
-
-      <button
-        type="button"
-        onClick={goToStockPage}
-        disabled={!canGo}
-        style={{
-          minHeight: 44,
-          padding: "0 15px",
-          borderRadius: 14,
-          border: "1px solid rgba(59,130,246,0.30)",
-          background:
-            "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(37,99,235,0.08))",
-          color: "#dbeafe",
-          fontWeight: 900,
-          cursor: canGo ? "pointer" : "not-allowed",
-          opacity: canGo ? 1 : 0.45,
-        }}
-      >
-        Stock Page →
-      </button>
       </div>
     </div>
   );
