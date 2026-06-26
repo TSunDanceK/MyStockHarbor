@@ -56,29 +56,29 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
       return;
     }
 
-const exactStillSelected =
-  selected?.symbol.toUpperCase() === q.toUpperCase();
+    const exactStillSelected =
+      selected?.symbol.toUpperCase() === q.toUpperCase();
 
-if (!exactStillSelected) {
-  const exactResult = results.find(
-    (result) => result.symbol.toUpperCase() === q.toUpperCase()
-  );
+    if (!exactStillSelected) {
+      const exactResult = results.find(
+        (result) => result.symbol.toUpperCase() === q.toUpperCase()
+      );
 
-  if (exactResult) {
-    setSelected({
-      ...exactResult,
-      symbol: exactResult.symbol.trim().toUpperCase(),
-    });
-  } else if (/^[A-Z.]{1,6}$/.test(q.toUpperCase())) {
-    setSelected({
-      symbol: q.toUpperCase(),
-      name: "",
-      exchange: "",
-    });
-  } else {
-    setSelected(null);
-  }
-}
+      if (exactResult) {
+        setSelected({
+          ...exactResult,
+          symbol: exactResult.symbol.trim().toUpperCase(),
+        });
+      } else if (/^[A-Z.]{1,6}$/.test(q.toUpperCase())) {
+        setSelected({
+          symbol: q.toUpperCase(),
+          name: "",
+          exchange: "",
+        });
+      } else {
+        setSelected(null);
+      }
+    }
 
     const timer = window.setTimeout(async () => {
       try {
@@ -114,8 +114,6 @@ if (!exactStillSelected) {
     return () => window.clearTimeout(timer);
   }, [query, selected?.symbol]);
 
-  const canGo = Boolean(selected?.symbol);
-
   function chooseResult(result: SymbolResult) {
     const clean = result.symbol.trim().toUpperCase();
 
@@ -127,11 +125,6 @@ if (!exactStillSelected) {
     setOpen(false);
 
     router.push(`/stock/${encodeURIComponent(clean)}`);
-  }
-
-  function goToStockPage() {
-    if (!selected?.symbol) return;
-    router.push(`/stock/${encodeURIComponent(selected.symbol)}`);
   }
 
   return (
@@ -160,108 +153,79 @@ if (!exactStillSelected) {
         Search another ticker to view its stock analysis page.
       </div>
 
-      <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <div style={{ position: "relative", width: 280, maxWidth: "100%" }}>
-          <input
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value.toUpperCase());
-              setOpen(true);
-            }}
-            onFocus={() => setOpen(true)}
-            aria-label="Search stock ticker"
-            placeholder="Search ticker or company"
-            style={{
-              minHeight: 44,
-              width: "100%",
-              borderRadius: 14,
-              border: "1px solid rgba(59,130,246,0.32)",
-              background: "rgba(15,23,42,0.72)",
-              color: "#f8fafc",
-              padding: "0 14px",
-              fontSize: 15,
-              fontWeight: 900,
-              outline: "none",
-              textTransform: "uppercase",
-            }}
-          />
-
-          {open && results.length > 0 ? (
-            <div
-              style={{
-                position: "absolute",
-                top: "calc(100% + 8px)",
-                left: 0,
-                right: 0,
-                zIndex: 50,
-                borderRadius: 16,
-                border: "1px solid rgba(255,255,255,0.12)",
-                background: "#0b1220",
-                boxShadow: "0 18px 34px rgba(0,0,0,0.42)",
-                overflow: "hidden",
-              }}
-            >
-              {results.slice(0, 8).map((result) => (
-                <button
-                  key={`${result.symbol}-${result.exchange}`}
-                  type="button"
-                  onClick={() => chooseResult(result)}
-                  style={{
-                    width: "100%",
-                    textAlign: "left",
-                    padding: "12px 14px",
-                    border: "none",
-                    borderBottom: "1px solid rgba(255,255,255,0.08)",
-                    background: "#0b1220",
-                    color: "#f8fafc",
-                    cursor: "pointer",
-                  }}
-                >
-                  <div style={{ fontWeight: 950 }}>{result.symbol}</div>
-                  <div style={{ marginTop: 3, fontSize: 13, color: "rgba(241,245,249,0.66)" }}>
-                    {result.name}
-                    {result.exchange ? ` • ${result.exchange}` : ""}
-                  </div>
-                </button>
-              ))}
-            </div>
-          ) : null}
-
-          {!canGo && query.trim() ? (
-            <div style={{ marginTop: 7, fontSize: 12, color: "rgba(248,113,113,0.92)", fontWeight: 800 }}>
-              Select a valid ticker from the dropdown.
-            </div>
-          ) : null}
-        </div>
-
-        <button
-          className="stockTickerJumpStockButton"
-          type="button"
-          onClick={goToStockPage}
-          disabled={!canGo}
+      <div style={{ position: "relative", width: "100%" }}>
+        <input
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value.toUpperCase());
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          aria-label="Search stock ticker"
+          placeholder="Search ticker or company"
           style={{
             minHeight: 44,
-            padding: "0 15px",
+            width: "100%",
             borderRadius: 14,
-            border: "1px solid rgba(59,130,246,0.30)",
-            background: "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(37,99,235,0.08))",
-            color: "#dbeafe",
+            border: "1px solid rgba(59,130,246,0.32)",
+            background: "rgba(15,23,42,0.72)",
+            color: "#f8fafc",
+            padding: "0 14px",
+            fontSize: 15,
             fontWeight: 900,
-            cursor: canGo ? "pointer" : "not-allowed",
-            opacity: canGo ? 1 : 0.45,
+            outline: "none",
+            textTransform: "uppercase",
+            boxSizing: "border-box",
           }}
-        >
-          Stock Page →
-        </button>
-      </div>
+        />
 
-      <style>{`
-        @media (max-width: 640px) {
-          .stockTickerJumpStockButton {
-            display: none !important;
-          }
-        }
-      `}</style>
+        {open && results.length > 0 ? (
+          <div
+            style={{
+              position: "absolute",
+              top: "calc(100% + 8px)",
+              left: 0,
+              right: 0,
+              zIndex: 50,
+              borderRadius: 16,
+              border: "1px solid rgba(255,255,255,0.12)",
+              background: "#0b1220",
+              boxShadow: "0 18px 34px rgba(0,0,0,0.42)",
+              overflow: "hidden",
+            }}
+          >
+            {results.slice(0, 8).map((result) => (
+              <button
+                key={`${result.symbol}-${result.exchange}`}
+                type="button"
+                onClick={() => chooseResult(result)}
+                style={{
+                  width: "100%",
+                  textAlign: "left",
+                  padding: "12px 14px",
+                  border: "none",
+                  borderBottom: "1px solid rgba(255,255,255,0.08)",
+                  background: "#0b1220",
+                  color: "#f8fafc",
+                  cursor: "pointer",
+                }}
+              >
+                <div style={{ fontWeight: 950 }}>{result.symbol}</div>
+                <div style={{ marginTop: 3, fontSize: 13, color: "rgba(241,245,249,0.66)" }}>
+                  {result.name}
+                  {result.exchange ? ` • ${result.exchange}` : ""}
+                </div>
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {!selected?.symbol && query.trim() ? (
+          <div style={{ marginTop: 7, fontSize: 12, color: "rgba(248,113,113,0.92)", fontWeight: 800 }}>
+            Select a valid ticker from the dropdown.
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
