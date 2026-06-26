@@ -85,8 +85,6 @@ type SymbolResult = {
 type StockSymbolPageClientProps = {
   symbol: string;
   aiAnalysis: AiStockAnalysis | null;
-  // Optional seed from the server component — used as initial state so the
-  // first paint shows real values instead of loading spinners/dashes.
   seed?: IndicatorSeed | null;
 };
 
@@ -150,13 +148,6 @@ function formatValuationMultiple(value: number | null | undefined) {
   if (value >= 100) return `${Math.round(value)}×`;
   if (value >= 10) return `${value.toFixed(1)}×`;
   return `${value.toFixed(2)}×`;
-}
-
-function valuationTone(value: number | null | undefined): "green" | "yellow" | "red" {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return "yellow";
-  if (value >= 80) return "red";
-  if (value >= 30) return "yellow";
-  return "green";
 }
 
 function toneColor(tone: "green" | "yellow" | "red") {
@@ -469,21 +460,6 @@ function formatShortDate(value: string | null) {
   return dt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
-function earningsToneText(earnings: StockEarningsData | null, loading: boolean) {
-  if (loading) return "Loading";
-  if (!earnings?.hasStructuredData) return "Unavailable";
-  return earnings.toneLabel;
-}
-
-function earningsMiniText(earnings: StockEarningsData | null, loading: boolean) {
-  if (loading) return "Checking FMP earnings";
-  if (!earnings?.hasStructuredData) return "Structured earnings unavailable";
-  return earnings.reportDate ? `Latest report ${formatShortDate(earnings.reportDate)}` : "Latest report loaded";
-}
-
-function clampScore(value: number) { return Math.max(0, Math.min(100, Math.round(value))); }
-function capContribution(value: number, min: number, max: number) { return Math.max(min, Math.min(max, value)); }
-
 function earningsReadScore(earnings: StockEarningsData | null, loading: boolean) {
   if (loading || !earnings?.hasStructuredData) return null;
   if (typeof earnings.score === "number" && Number.isFinite(earnings.score)) return earnings.score;
@@ -544,7 +520,6 @@ function StockEarningsPanel({ symbol, earnings, loading }: { symbol: string; ear
           {loading ? "Loading" : earnings?.toneLabel ?? "Unavailable"}
         </span>
       </div>
-
       <div className="earningsMetricGrid">
         {[
           { label: "Actual EPS", value: loading ? "—" : formatEps(earnings?.actualEps ?? null), sub: `Estimate: ${loading ? "—" : formatEps(earnings?.estimatedEps ?? null)}`, tone: metricToneFromPct(earnings?.epsSurprisePercent ?? null) },
@@ -564,7 +539,6 @@ function StockEarningsPanel({ symbol, earnings, loading }: { symbol: string; ear
           </div>
         ))}
       </div>
-
       {earnings?.recentReports?.length ? (
         <div style={{ marginTop: 16 }}>
           <div style={miniLabelStyle}>Recent earnings trend</div>
@@ -578,7 +552,6 @@ function StockEarningsPanel({ symbol, earnings, loading }: { symbol: string; ear
           </div>
         </div>
       ) : null}
-
       {earnings?.yearlySummaries?.length ? (
         <div style={{ marginTop: 16 }}>
           <div style={miniLabelStyle}>Yearly earnings read</div>
@@ -591,20 +564,17 @@ function StockEarningsPanel({ symbol, earnings, loading }: { symbol: string; ear
           </div>
         </div>
       ) : null}
-
       <div style={{ marginTop: 12, fontSize: 12, lineHeight: 1.6, opacity: 0.45 }}>{earnings?.sourceNote ?? "Structured earnings data is provided by Financial Modeling Prep when available."}</div>
     </section>
   );
 }
 
-// ── Shared style constants ──────────────────────────────────────────────────
 const sectionLabelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.65)", marginBottom: 6 };
 const sectionHeadingStyle: React.CSSProperties = { margin: 0, fontSize: 22, lineHeight: 1.15, letterSpacing: "-0.025em", fontWeight: 700 };
 const miniLabelStyle: React.CSSProperties = { fontSize: 11, opacity: 0.60, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" };
 const miniMetricSubStyle: React.CSSProperties = { marginTop: 6, fontSize: 13, lineHeight: 1.5, opacity: 0.65 };
 const articleTextStyle: React.CSSProperties = { margin: "10px 0 0 0", fontSize: 15, lineHeight: 1.8, opacity: 0.85 };
 
-// ── Sidebar card style helpers ──────────────────────────────────────────────
 function sideCardStyle(): React.CSSProperties {
   return { border: "1px solid rgba(255,255,255,0.09)", borderRadius: 12, overflow: "hidden", background: "rgba(255,255,255,0.02)" };
 }
@@ -615,12 +585,9 @@ function sideCardBodyStyle(): React.CSSProperties {
   return { padding: "14px 14px" };
 }
 
-// ── Main component ──────────────────────────────────────────────────────────
 export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: StockSymbolPageClientProps) {
   const [quote, setQuote] = useState<Quote | null>(
-    seed?.price != null
-      ? { symbol, price: seed.price, date: seed.priceDate, time: null, source: "ssr" }
-      : null
+    seed?.price != null ? { symbol, price: seed.price, date: seed.priceDate, time: null, source: "ssr" } : null
   );
   const [history, setHistory] = useState<Point[]>([]);
   const [companyName, setCompanyName] = useState(seed?.companyName ?? "");
@@ -707,21 +674,17 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
     <main onClick={() => setOpenScoreHelp(null)} style={{ minHeight: "100vh", background: "#06080d", color: "#f1f5f9", fontFamily: "system-ui, Arial" }}>
       <div className="stock-wrap">
 
-        {/* ── Page header (full width) ─────────────────────────────── */}
+        {/* ── Page header ──────────────────────────────────────────── */}
         <header style={{ paddingTop: 24, paddingBottom: 20, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
             <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Stock Analysis</span>
             <span style={{ fontSize: 11, color: "rgba(148,163,184,0.30)" }}>·</span>
             <Link href="/pickers" style={{ fontSize: 11, fontWeight: 600, color: "rgba(148,163,184,0.55)", textDecoration: "none" }}>← Pickers</Link>
           </div>
-
-          {/* Symbol + name */}
           <div style={{ marginTop: 10 }}>
             <h1 style={{ margin: 0, fontSize: 28, lineHeight: 1.1, fontWeight: 800, letterSpacing: "-0.04em" }}>{symbol}</h1>
             {companyName ? <p style={{ margin: "3px 0 0", fontSize: 15, opacity: 0.60, fontWeight: 400 }}>{companyName}</p> : null}
           </div>
-
-          {/* Stats grid */}
           {!priceLoading && !err ? (
             <div className="stock-header-stats" style={{ marginTop: 16 }}>
               <div className="stock-stat-cell">
@@ -752,8 +715,6 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
               </Link>
             </div>
           ) : null}
-
-          {/* Trend checks */}
           {!priceLoading && !err ? (
             <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
               {[
@@ -770,7 +731,6 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
           ) : null}
         </header>
 
-        {/* ── Two-column body (desktop) / single column (mobile) ───── */}
         {priceLoading ? (
           <div style={{ paddingTop: 40, opacity: 0.60, fontSize: 14 }}>Loading chart and price data…</div>
         ) : err ? (
@@ -778,15 +738,11 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
         ) : (
           <div className="stock-page-layout" style={{ paddingTop: 24 }}>
 
-            {/* ════ LEFT SIDEBAR ═══════════════════════════════════
-                DOM order: sidebar first so it's the first grid child,
-                which places it in column 1 (300px) on desktop.
-                On mobile the grid collapses to 1 col and sidebar
-                gets order:2 so main content still reads first.       */}
+            {/* ════ LEFT SIDEBAR ═══════════════════════════════════ */}
             <aside className="stock-page-sidebar">
 
-              {/* ── Change stock ──────────────────────────────────── */}
-              <div style={sideCardStyle()}>
+              {/* Change stock — desktop only (hidden on mobile via CSS) */}
+              <div className="sidebar-change-stock" style={sideCardStyle()}>
                 <div style={sideCardHeaderStyle()}>
                   <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Change stock</div>
                   <div style={{ marginTop: 3, fontSize: 12, opacity: 0.50, lineHeight: 1.4 }}>Search another ticker to view its stock analysis page.</div>
@@ -796,7 +752,7 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
                 </div>
               </div>
 
-              {/* ── Earnings summary card ─────────────────────────── */}
+              {/* Earnings summary card */}
               <div style={sideCardStyle()}>
                 <div style={{ ...sideCardHeaderStyle(), display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                   <div>
@@ -808,7 +764,6 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
                   </span>
                 </div>
                 <div style={sideCardBodyStyle()}>
-                  {/* Score bar */}
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
                     <span style={{ fontSize: 12, opacity: 0.55 }}>Score</span>
                     <span style={{ fontSize: 18, fontWeight: 800, color: toneColor(earningsScTone) }}>{typeof earningsScore === "number" ? `${earningsScore}/100` : "—"}</span>
@@ -820,16 +775,12 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
                     <span>Weak</span><span>Mixed</span><span>Strong</span>
                   </div>
                   <div style={{ marginTop: 4, fontSize: 11, opacity: 0.55 }}>{earningsScaleSummary(earnings, earningsLoading)}</div>
-
-                  {/* Date line */}
                   {!earningsLoading && earnings?.hasStructuredData ? (
                     <div style={{ marginTop: 10, fontSize: 12, opacity: 0.55, lineHeight: 1.5 }}>
                       Latest: {formatShortDate(earnings.reportDate)}<br />
                       Next: {formatShortDate(earnings.nextEarningsDate)}
                     </div>
                   ) : null}
-
-                  {/* Key figures — 2 col mini grid */}
                   <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 10px" }}>
                     {[
                       { label: "EPS", value: earningsLoading ? "—" : formatEps(earnings?.actualEps ?? null), tone: metricToneFromPct(earnings?.epsSurprisePercent ?? null) },
@@ -843,8 +794,6 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
                       </div>
                     ))}
                   </div>
-
-                  {/* Yearly dots */}
                   {earnings?.yearlySummaries?.length ? (
                     <div style={{ marginTop: 12 }}>
                       <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", opacity: 0.50, marginBottom: 6 }}>Yearly trend</div>
@@ -858,14 +807,13 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
                       </div>
                     </div>
                   ) : null}
-
                   <Link href={`/stock/${encodeURIComponent(symbol)}/earnings`} style={{ display: "block", marginTop: 14, textAlign: "center", fontSize: 12, fontWeight: 700, color: "rgba(148,163,184,0.65)", textDecoration: "none", padding: "7px 0", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8 }}>
                     Full earnings breakdown →
                   </Link>
                 </div>
               </div>
 
-              {/* ── Company outlook scores card ───────────────────── */}
+              {/* Company outlook scores card */}
               {aiAnalysis ? (
                 <div style={sideCardStyle()}>
                   <div style={sideCardHeaderStyle()}>
@@ -893,13 +841,24 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
                 </div>
               ) : null}
 
-            </aside>{/* end sidebar */}
+            </aside>
 
-            {/* ════ RIGHT MAIN COLUMN ══════════════════════════════ */}
+            {/* ════ MAIN COLUMN ════════════════════════════════════ */}
             <div className="stock-page-main">
 
+              {/* ── Change stock — mobile only, above chart ────────── */}
+              <div className="mobile-change-stock" style={sideCardStyle()}>
+                <div style={sideCardHeaderStyle()}>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Change stock</div>
+                  <div style={{ marginTop: 3, fontSize: 12, opacity: 0.50, lineHeight: 1.4 }}>Search another ticker to view its stock analysis page.</div>
+                </div>
+                <div style={sideCardBodyStyle()}>
+                  <StockTickerJump currentSymbol={symbol} />
+                </div>
+              </div>
+
               {/* ── Chart section ─────────────────────────────────── */}
-              <section>
+              <section style={{ marginTop: 20 }}>
                 <div style={sectionLabelStyle}>Chart View</div>
                 <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
                   <h2 style={sectionHeadingStyle}>{symbol} with MA50 and MA200</h2>
@@ -983,7 +942,6 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
                       ))}
                     </div>
                   </div>
-
                   <div style={{ display: "grid", gap: 18 }}>
                     {[
                       { label: "What this company broadly does", text: aiAnalysis.businessSummary },
@@ -996,7 +954,6 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
                       </div>
                     ))}
                   </div>
-
                   <div className="factor-grid" style={{ marginTop: 20 }}>
                     {[
                       { label: "Bullish factors", dot: "#22c55e", items: aiAnalysis.bullishFactors },
@@ -1016,12 +973,10 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
                       </div>
                     ))}
                   </div>
-
                   <div style={{ marginTop: 10, fontSize: 11, opacity: 0.35 }}>Summary last updated: {formatAiUpdatedLabel(aiAnalysis.generatedAt)}</div>
                 </section>
               ) : null}
 
-              {/* ── Full Earnings panel ───────────────────────────── */}
               <StockEarningsPanel symbol={symbol} earnings={earnings} loading={earningsLoading} />
 
               {/* ── Learn more ────────────────────────────────────── */}
@@ -1076,7 +1031,6 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
               </section>
 
             </div>{/* end main col */}
-
           </div>
         )}
       </div>
@@ -1084,7 +1038,6 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
       <style>{`
         .stock-wrap { max-width: 1240px; margin: 0 auto; padding: 0 20px; box-sizing: border-box; }
 
-        /* ── Two-column page layout: sidebar LEFT, main RIGHT ─────── */
         .stock-page-layout {
           display: grid;
           grid-template-columns: 300px 1fr;
@@ -1100,22 +1053,19 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
           top: 20px;
         }
 
-        /* Collapse to single column on tablet/mobile.
-           Sidebar gets order:2 so main content reads first on mobile. */
+        /* Desktop: show sidebar change stock, hide inline one */
+        .mobile-change-stock { display: none; }
+        .sidebar-change-stock { display: block; }
+
         @media (max-width: 900px) {
-          .stock-page-layout {
-            grid-template-columns: 1fr !important;
-          }
-          .stock-page-sidebar {
-            position: static !important;
-            order: 2;
-          }
-          .stock-page-main {
-            order: 1;
-          }
+          .stock-page-layout { grid-template-columns: 1fr !important; }
+          .stock-page-sidebar { position: static !important; order: 2; }
+          .stock-page-main { order: 1; }
+          /* Mobile: show inline change stock above chart, hide sidebar one */
+          .mobile-change-stock { display: block; }
+          .sidebar-change-stock { display: none !important; }
         }
 
-        /* ── Header stats ─────────────────────────────────────────── */
         .stock-header-stats {
           display: flex;
           align-items: stretch;
@@ -1152,7 +1102,6 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
           .stock-earnings-cell { grid-column: 1 / -1; border-bottom: none !important; }
         }
 
-        /* ── Indicator rows ───────────────────────────────────────── */
         .indicator-rows {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1175,7 +1124,6 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
           .indicator-row { flex-direction: column; align-items: flex-start; gap: 3px; }
         }
 
-        /* ── Grids ────────────────────────────────────────────────── */
         .factor-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
         .earningsMetricGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; }
         .earningsDotGrid { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
@@ -1202,7 +1150,6 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
   );
 }
 
-// ── Style helpers ────────────────────────────────────────────────────────────
 function chartLinkStyle(tone: "blue" | "red" | "green"): React.CSSProperties {
   const map = { blue: { border: "rgba(59,130,246,0.28)", bg: "rgba(59,130,246,0.07)", color: "#bfdbfe" }, red: { border: "rgba(239,68,68,0.28)", bg: "rgba(239,68,68,0.07)", color: "#fecaca" }, green: { border: "rgba(34,197,94,0.28)", bg: "rgba(34,197,94,0.07)", color: "#bbf7d0" } };
   const s = map[tone];
