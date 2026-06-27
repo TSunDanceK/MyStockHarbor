@@ -38,7 +38,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         : "Stock market analysis and technical insight from MyStockHarbor.");
 
     const url = `https://www.mystockharbor.com/insights/${slug}`;
-    const image = "https://www.mystockharbor.com/og-image-v2.png";
+
+    // Dynamic OG image is served by opengraph-image.tsx in this directory.
+    // Next.js auto-wires it — do NOT set images here or the static URL wins.
+    const ogImageUrl = `https://www.mystockharbor.com/insights/${slug}/opengraph-image`;
 
     // ISO date string for article OG tags — falls back to today if post has no date.
     const publishedTime = post.date
@@ -62,10 +65,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         siteName: "MyStockHarbor",
         images: [
           {
-            url: image,
+            url: ogImageUrl,
             width: 1200,
             height: 630,
-            alt: post.title,
+            alt: post.symbol
+              ? `${post.symbol} — ${post.title}`
+              : post.title,
           },
         ],
         locale: "en_GB",
@@ -82,12 +87,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         card: "summary_large_image",
         title,
         description,
-        images: [image],
+        images: [ogImageUrl],
       },
     };
   } catch {
-    const image = "https://www.mystockharbor.com/og-image.png";
-
     return {
       title: "Insight | MyStockHarbor",
       description: "Stock market insight from MyStockHarbor.",
@@ -102,7 +105,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         siteName: "MyStockHarbor",
         images: [
           {
-            url: image,
+            url: "https://www.mystockharbor.com/og-image-v2.png",
             width: 1200,
             height: 630,
             alt: "MyStockHarbor insight",
@@ -115,7 +118,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         card: "summary_large_image",
         title: "Insight | MyStockHarbor",
         description: "Stock market insight from MyStockHarbor.",
-        images: [image],
+        images: ["https://www.mystockharbor.com/og-image-v2.png"],
       },
     };
   }
