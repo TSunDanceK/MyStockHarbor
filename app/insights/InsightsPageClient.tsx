@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import type { BlogPost } from "@/lib/blog";
 import type { YouTubeVideo } from "@/lib/youtube";
+import ShareButton from "@/app/components/ShareButton";
 
 const YOUTUBE_CHANNEL_URL = "https://www.youtube.com/@MyStockHarbor";
 
@@ -125,12 +126,27 @@ function VideoCard({ video }: { video: YouTubeVideo }) {
 export default function InsightsPageClient({ posts, videos }: Props) {
   const [mobileTab, setMobileTab] = useState<"insights" | "videos">("insights");
 
+  const pageUrl = "https://www.mystockharbor.com/insights";
+  const shareText = "Daily stock market insights, chart setups & technical analysis on MyStockHarbor 📊";
+
   return (
     <main style={{ minHeight: "100vh", background: "#06080d", color: "#f1f5f9", fontFamily: "system-ui, Arial" }}>
       <div style={{ maxWidth: 1240, margin: "0 auto", padding: "24px 20px 40px" }}>
 
-        <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 800 }}>DAILY STOCK BLOG</div>
-        <h1 style={{ margin: "8px 0 0", fontSize: 34, letterSpacing: "-0.4px" }}>Stock Market Insights & Trade Ideas</h1>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: 12, opacity: 0.7, fontWeight: 800 }}>DAILY STOCK BLOG</div>
+            <h1 style={{ margin: "8px 0 0", fontSize: 34, letterSpacing: "-0.4px" }}>Stock Market Insights & Trade Ideas</h1>
+          </div>
+          <div style={{ paddingTop: 20 }}>
+            <ShareButton
+              url={pageUrl}
+              title="MyStockHarbor Insights"
+              text={shareText}
+            />
+          </div>
+        </div>
+
         <p style={{ marginTop: 10, maxWidth: 760, opacity: 0.8, lineHeight: 1.6 }}>
           Daily stock market observations, chart-based trade ideas, and simple technical analysis write-ups focused on price structure, trend, support, resistance, and setups worth watching.
         </p>
