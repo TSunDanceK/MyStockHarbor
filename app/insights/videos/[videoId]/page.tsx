@@ -39,16 +39,57 @@ function fmtPrice(value: number | null): string {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { videoId } = await params;
-  const video = await getYouTubeVideoById(videoId);
-  if (!video) return { title: "Video | MyStockHarbor", description: "Stock market video analysis from MyStockHarbor." };
-  const title = `${video.title} | MyStockHarbor`;
-  const description = `Watch and read the full analysis: ${video.title}`;
+
+  const [video, videoContent] = await Promise.all([
+    getYouTubeVideoById(videoId),
+    Promise.resolve(getVideoContent(videoId)),
+  ]);
+
+  if (!video) {
+    return {
+      title: "Video | MyStockHarbor",
+      description: "Stock market video analysis from MyStockHarbor.",
+    };
+  }
+
+  const ticker = videoContent?.ticker ?? null;
+
+  // Prefix title with ticker if available, e.g. "TSLA — Tesla's Key Level..."
+  const title = ticker
+    ? `${ticker} — ${video.title} | MyStockHarbor`
+    : `${video.title} | MyStockHarbor`;
+
+  const description = ticker
+    ? `${ticker} stock analysis: ${video.title}. Watch the full breakdown on MyStockHarbor.`
+    : `Watch and read the full analysis: ${video.title}`;
+
   const url = `https://www.mystockharbor.com/insights/videos/${videoId}`;
+
+  // Use the YouTube thumbnail as the OG image — it's the actual video art
+  // people recognise. Fall back to the site OG image if unavailable.
+  const ogImage = video.thumbnailUrl
+    ? { url: video.thumbnailUrl, width: 1280, height: 720, alt: video.title }
+    : { url: "https://www.mystockharbor.com/og-image-v2.png", width: 1200, height: 630, alt: "MyStockHarbor" };
+
   return {
-    title, description,
+    title,
+    description,
     alternates: { canonical: url },
-    openGraph: { title, description, url, siteName: "MyStockHarbor", images: video.thumbnailUrl ? [{ url: video.thumbnailUrl, width: 1280, height: 720, alt: video.title }] : [], type: "article" },
-    twitter: { card: "summary_large_image", title, description, images: video.thumbnailUrl ? [video.thumbnailUrl] : [] },
+    openGraph: {
+      title,
+      description,
+      url,
+      siteName: "MyStockHarbor",
+      images: [ogImage],
+      type: "article",
+      locale: "en_GB",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [ogImage.url],
+    },
   };
 }
 
@@ -139,7 +180,6 @@ export default async function VideoPage({ params }: Props) {
             <div style={{ marginBottom: 18, textAlign: "right" }}>
               <a href={video.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#fca5a5", textDecoration: "none", fontWeight: 700, opacity: 0.85 }}>Watch on YouTube ↗</a>
             </div>
-            {/* Client component handles collapsible article + show-more videos */}
             <VideoPageClient videos={relatedVideos} contentHtml={contentHtml} />
             {videoContent?.datasheetImage && (
               <div style={{ marginBottom: 24 }}>
