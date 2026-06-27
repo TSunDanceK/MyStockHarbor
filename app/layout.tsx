@@ -15,9 +15,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MyStockHarbor | Free Trading Dashboard, Market Signals & Technical Analysis",
+  title: "MyStockHarbor — Stock Screeners, Swing Trade Setups & Daily Market Insights",
   description:
-    "MyStockHarbor helps traders track stocks, analyse technical indicators, monitor market benchmarks, and learn trading strategies with free educational tools, stock screeners, and market insights.",
+    "Free stock screeners for breakouts, oversold stocks & bullish divergence. Daily insight posts, live dashboards, chart pattern plays, and swing trade setups. No login needed.",
   icons: {
     icon: "/icon.png",
     shortcut: "/icon.png",
@@ -26,9 +26,9 @@ export const metadata: Metadata = {
 
   openGraph: {
     title:
-      "MyStockHarbor | Free Trading Dashboard, Market Signals & Technical Analysis",
+      "MyStockHarbor — Stock Screeners, Swing Trade Setups & Daily Market Insights",
     description:
-      "MyStockHarbor helps traders track stocks, analyse technical indicators, monitor market benchmarks, and learn trading strategies with free educational tools, stock screeners, and market insights.",
+      "Free stock screeners for breakouts, oversold stocks & bullish divergence. Daily insight posts, live dashboards, chart pattern plays, and swing trade setups. No login needed.",
     url: "https://www.mystockharbor.com",
     siteName: "MyStockHarbor",
     images: [
@@ -46,9 +46,9 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title:
-      "MyStockHarbor | Free Trading Dashboard, Market Signals & Technical Analysis",
+      "MyStockHarbor — Stock Screeners, Swing Trade Setups & Daily Market Insights",
     description:
-      "MyStockHarbor helps traders track stocks, analyse technical indicators, monitor market benchmarks, and learn trading strategies with free educational tools, stock screeners, and market insights.",
+      "Free stock screeners for breakouts, oversold stocks & bullish divergence. Daily insight posts, live dashboards, chart pattern plays, and swing trade setups. No login needed.",
     images: ["https://www.mystockharbor.com/og-image-v2.png"],
   },
   other: {
