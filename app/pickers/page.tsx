@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import PickersClient from "./PickersClient";
 import BookmarkPromptButton from "./BookmarkPromptButton";
+import PageShareBar from "@/app/components/PageShareBar";
 
 const pickersJsonLd = {
   "@context": "https://schema.org",
@@ -64,6 +65,12 @@ export default function PickersPage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(pickersJsonLd) }} />
 
       <div className="wrap">
+        <PageShareBar
+          url="https://www.mystockharbor.com/pickers"
+          title="Stock Pickers & Technical Setup Ideas | MyStockHarbor"
+          text="Screened stock ideas across oversold, breakouts, divergence & 200-day MA tests 📊 MyStockHarbor"
+        />
+
         <div style={{ display: "grid", gap: 14 }}>
           <div className="heroGrid">
 
