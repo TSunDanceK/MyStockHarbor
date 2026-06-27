@@ -174,15 +174,15 @@ const mainStyle: React.CSSProperties = {
   color: "#f1f5f9",
   fontFamily: "system-ui, Arial",
   display: "flex",
-  alignItems: "center",
+  alignItems: "flex-start",
   justifyContent: "center",
-  padding: "40px 20px",
+  padding: "48px 20px 40px",
   boxSizing: "border-box",
 };
 
 const innerStyle: React.CSSProperties = {
   width: "100%",
-  maxWidth: 520,
+  maxWidth: 560,
   animation: "mshFadeIn 0.4s ease both",
 };
 
@@ -306,6 +306,5 @@ const etaStyle: React.CSSProperties = {
   marginTop: 22,
   fontSize: 12,
   color: "rgba(148,163,184,0.42)",
-  textAlign: "center",
   letterSpacing: "0.03em",
 };
