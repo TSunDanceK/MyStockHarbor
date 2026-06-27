@@ -1,5 +1,6 @@
 ---
 ticker: ONDS
+datasheetImage: /images/datasheets/onds-june-2026.png
 statLabel1: Market cap
 statValue1: "~$4.4B"
 statLabel2: Q1 2026 revenue
@@ -18,12 +19,12 @@ The answer isn't Lockheed Martin. It isn't Raytheon. It's a company that most in
 
 ## Key numbers
 
-- **$457M pro forma backlog** — up from $68M at end of 2025, a 570% surge driven by accelerating organic orders and newly acquired businesses
-- **$50.1M Q1 2026 revenue** — ten times what it was a year earlier
-- **49% gross margin in Q1 2026** — expanded from 35% twelve months prior as software and services increasingly dominate the revenue mix
-- **$390M+ full-year 2026 guidance** — implying 670% annual revenue growth; product companies turned adjusted EBITDA positive six months ahead of schedule
-- **$1.48B cash and short-term investments** — self-funding the platform buildout without toxic debt; profitability target is Q1 2028
-- **~$4.4B market cap, P/E N/M** — still pre-profitability at the group level, valued on the platform and backlog trajectory
+- **$457M pro forma backlog** — up from $68M at end of 2025, a 570% surge; signed backlog now covers over a full year of guided revenue, providing strong forward earnings visibility
+- **$50.1M Q1 2026 revenue** — ten times what it was a year earlier; exceeded the top of guidance by 25%, signalling execution tracking well ahead of plan
+- **49% gross margin in Q1 2026** — expanded 14 points year-over-year from 35% as software and services increasingly dominate the revenue mix
+- **$390M+ full-year 2026 guidance** — raised post-Q1; Cyberhawk adds a high-quality software annuity stream via iHawk (~$45M ARR, 95% recurring), not just top-line scale
+- **$1.48B cash and short-term investments** — war chest funds the acquisition pipeline and organic growth without near-term dilution pressure; profitability target Q1 2028
+- **~$4.4B market cap, P/E N/M** — market cap risen over 1,500% in 12 months reflecting rapid re-rating as a defence-tech platform; traditional P/E not meaningful until 2028 target date
 
 ## The setup
 
@@ -35,9 +36,9 @@ Beyond Sentrycs, Ondas has built an entire autonomous systems stack: American Ro
 
 ## Risk factors
 
-- **Share dilution is the single biggest overhang:** Share count grew five times in fifteen months. This is the primary risk and cannot be dismissed — the platform is being built with heavily diluted equity.
-- **Pre-profitability at group level:** Despite strong unit economics and expanding gross margins, the company is not yet profitable. The Q1 2028 profitability target is a long runway, and any execution miss extends the loss period.
-- **Acquisition integration complexity:** Ondas has made multiple acquisitions rapidly — Sentrycs, American Robotics, Airobotics, World View, Cyberhawk. Integrating these into a coherent operating platform at pace is a significant management execution challenge.
+- **Share dilution is the single biggest overhang:** Share count grew five times in fifteen months, with a $1.1B warrant liability. Warrant overhang and insider selling could weigh on per-share returns regardless of underlying platform performance.
+- **Pre-profitability at group level:** Despite expanding gross margins and strong unit economics, the company is not yet profitable. The Q1 2028 profitability target is a long runway, and any execution miss extends the loss period.
+- **Acquisition integration complexity:** Sentrycs, American Robotics, Airobotics, World View, and Cyberhawk all acquired in rapid succession. Integrating these into a coherent operating platform at pace is a significant management execution challenge.
 - **Backlog conversion risk:** Pro forma backlog of $457M includes newly acquired businesses. The key question is how much converts to recognised revenue on schedule and at the guided gross margin.
 
 ## What to watch
