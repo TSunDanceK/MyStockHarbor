@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import type { BlogPost } from "@/lib/blog";
 import type { YouTubeVideo } from "@/lib/youtube";
+import type { VideoMeta } from "@/lib/videoContent";
 import ShareButton from "@/app/components/ShareButton";
 
 const YOUTUBE_CHANNEL_URL = "https://www.youtube.com/@MyStockHarbor";
@@ -17,6 +18,7 @@ function formatVideoDate(value: string) {
 type Props = {
   posts: BlogPost[];
   videos: YouTubeVideo[];
+  videoMeta: VideoMeta[];
 };
 
 function PostCard({ post }: { post: BlogPost }) {
@@ -123,7 +125,87 @@ function VideoCard({ video }: { video: YouTubeVideo }) {
   );
 }
 
-export default function InsightsPageClient({ posts, videos }: Props) {
+// Static card — rendered from content/videos/*.md, no YouTube API needed.
+// These links are in the SSR HTML so Googlebot can discover and index the
+// video pages without depending on client-side JS or the YouTube API.
+function StaticVideoCard({ meta }: { meta: VideoMeta }) {
+  return (
+    <Link
+      href={`/insights/videos/${meta.youtubeId}`}
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 14,
+        padding: "14px 16px",
+        borderRadius: 12,
+        border: "1px solid rgba(239,68,68,0.12)",
+        background: "rgba(239,68,68,0.04)",
+        textDecoration: "none",
+        color: "#f1f5f9",
+      }}
+    >
+      {/* Play icon */}
+      <div style={{
+        flexShrink: 0,
+        width: 36,
+        height: 36,
+        borderRadius: "50%",
+        background: "rgba(239,68,68,0.18)",
+        border: "1px solid rgba(239,68,68,0.30)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        marginTop: 2,
+      }}>
+        <span style={{ fontSize: 14, marginLeft: 2 }}>▶</span>
+      </div>
+
+      <div style={{ minWidth: 0, flex: 1 }}>
+        {/* Ticker + stat badge row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5, flexWrap: "wrap" }}>
+          {meta.ticker && (
+            <span style={{
+              fontSize: 12,
+              fontWeight: 900,
+              color: "#fca5a5",
+              background: "rgba(239,68,68,0.15)",
+              border: "1px solid rgba(239,68,68,0.25)",
+              borderRadius: 6,
+              padding: "2px 8px",
+              letterSpacing: "0.04em",
+            }}>
+              {meta.ticker}
+            </span>
+          )}
+          {meta.label && meta.value && (
+            <span style={{ fontSize: 12, opacity: 0.6, fontWeight: 600 }}>
+              {meta.label}: <span style={{ color: "#f1f5f9", fontWeight: 800 }}>{meta.value}</span>
+            </span>
+          )}
+        </div>
+
+        {/* Excerpt */}
+        {meta.excerpt && (
+          <div style={{
+            fontSize: 13,
+            opacity: 0.65,
+            lineHeight: 1.5,
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+          }}>
+            {meta.excerpt}
+          </div>
+        )}
+      </div>
+
+      <div style={{ flexShrink: 0, fontSize: 18, opacity: 0.25, alignSelf: "center" }}>›</div>
+    </Link>
+  );
+}
+
+export default function InsightsPageClient({ posts, videos, videoMeta }: Props) {
   const [mobileTab, setMobileTab] = useState<"insights" | "videos">("insights");
 
   const pageUrl = "https://www.mystockharbor.com/insights";
@@ -164,8 +246,41 @@ export default function InsightsPageClient({ posts, videos }: Props) {
           </div>
         </section>
 
+        {/* ── STATIC VIDEO ANALYSIS SECTION ─────────────────────────────────────
+            Rendered from content/videos/*.md — no YouTube API.
+            These <Link> elements are in the SSR HTML, so Googlebot can
+            discover and crawl every video page from this anchor point.
+        ──────────────────────────────────────────────────────────────────────── */}
+        {videoMeta.length > 0 && (
+          <section style={{ marginTop: 28 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 12, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontSize: 11, opacity: 0.55, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase", color: "#fca5a5" }}>
+                  Video analysis
+                </div>
+                <div style={{ marginTop: 4, fontSize: 18, fontWeight: 800, letterSpacing: "-0.2px" }}>
+                  Stock Breakdowns & Deep Dives
+                </div>
+              </div>
+              <a
+                href={YOUTUBE_CHANNEL_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontSize: 12, color: "#fca5a5", textDecoration: "none", fontWeight: 800, opacity: 0.8, whiteSpace: "nowrap" }}
+              >
+                YouTube Channel ↗
+              </a>
+            </div>
+            <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr" }}>
+              {videoMeta.map((meta) => (
+                <StaticVideoCard key={meta.youtubeId} meta={meta} />
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* ── MOBILE: tab switcher ── */}
-        <div className="mobileTabs" style={{ marginTop: 20, display: "none" }}>
+        <div className="mobileTabs" style={{ marginTop: 24, display: "none" }}>
           <div style={{ display: "flex", borderRadius: 12, overflow: "hidden", border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.03)" }}>
             <button
               onClick={() => setMobileTab("insights")}
