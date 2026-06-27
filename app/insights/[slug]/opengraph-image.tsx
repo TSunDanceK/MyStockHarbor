@@ -1,5 +1,5 @@
 import { ImageResponse } from "next/og";
-import { getAllPosts, getPostBySlug } from "@/lib/blog";
+import { getPostBySlug } from "@/lib/blog";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,14 +11,6 @@ type Props = {
   params: Promise<{ slug: string }>;
 };
 
-export async function generateImageMetadata({ params }: Props) {
-  const { slug } = await params;
-  return [{ id: slug, alt: `MyStockHarbor insight: ${slug}` }];
-}
-
-// Derive a short human-readable badge from timeframe + first indicator.
-// e.g. "w" + "MA200" → "Weekly · MA200"
-// e.g. "d" + "RSI(14)" → "Daily · RSI"
 function setupBadge(timeframe: "d" | "w", indicators: string[]): string {
   const tf = timeframe === "w" ? "Weekly" : "Daily";
   if (!indicators.length) return tf;
