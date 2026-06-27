@@ -5,6 +5,7 @@ import SPXChartClient from "./SPXChartClient";
 import { getDailyHistory } from "@/lib/server/historyCache";
 import { getSpxMarketAnalysis } from "@/lib/ai-market";
 import { buildMarketMoodScore } from "@/lib/market-mood";
+import PageShareBar from "@/app/components/PageShareBar";
 
 export const dynamic = "force-dynamic";
 
@@ -364,10 +365,14 @@ export default async function SPXPage() {
           padding: 24,
         }}
       >
+        <PageShareBar
+          url="https://www.mystockharbor.com/markets/spx"
+          title="S&P 500 (SPX) Analysis | MyStockHarbor"
+          text="S&P 500 market analysis — trend, moving averages, RSI and what's happening right now 📊 MyStockHarbor"
+        />
+
         <div style={{ display: "grid", gap: 14 }}>
           <div style={{ display: "grid", gap: 14 }}>
-
-
             <div style={{ fontSize: 12, opacity: 0.72, fontWeight: 900 }}>
               MARKET ANALYSIS
             </div>
