@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getAllPosts } from "@/lib/blog";
 import { getLatestYouTubeVideos } from "@/lib/youtube";
+import { getAllVideoMeta } from "@/lib/videoContent";
 import InsightsPageClient from "./InsightsPageClient";
 
 export const metadata: Metadata = {
@@ -24,9 +25,10 @@ export const metadata: Metadata = {
 };
 
 export default async function InsightsPage() {
-  const [posts, videos] = await Promise.all([
+  const [posts, videos, videoMeta] = await Promise.all([
     Promise.resolve(getAllPosts()),
     getLatestYouTubeVideos(20),
+    Promise.resolve(getAllVideoMeta()),
   ]);
 
   const insightsJsonLd = {
@@ -85,7 +87,7 @@ export default async function InsightsPage() {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(insightsJsonLd) }} />
-      <InsightsPageClient posts={posts} videos={videos} />
+      <InsightsPageClient posts={posts} videos={videos} videoMeta={videoMeta} />
     </>
   );
 }
