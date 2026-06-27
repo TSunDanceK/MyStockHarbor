@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import PriceChart, { type Overlay } from "@/app/components/PriceChart";
 import type { InsightSnapshot } from "@/lib/blog";
+import ShareButton from "@/app/components/ShareButton";
 
 type Point = {
   date: string;
@@ -609,6 +610,12 @@ export default function InsightPostClient({
     post.investorUsefulInfo ||
     "The key investor question is whether price action confirms the thesis or starts to invalidate the setup.";
 
+  // Share button config
+  const postUrl = `https://www.mystockharbor.com/insights/${post.slug}`;
+  const shareText = symbol
+    ? `${symbol} chart insight: ${post.title} 📊`
+    : `${post.title} 📊`;
+
   return (
     <main
       style={{
@@ -637,6 +644,12 @@ export default function InsightPostClient({
                 Latest news
               </Link>
             ) : null}
+
+            <ShareButton
+              url={postUrl}
+              title={post.title}
+              text={shareText}
+            />
           </div>
         </nav>
 
@@ -1064,6 +1077,7 @@ export default function InsightPostClient({
           gap: 12px;
           flex-wrap: wrap;
           justify-content: flex-end;
+          align-items: center;
         }
 
         .insightHeroShell {
