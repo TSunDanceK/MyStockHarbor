@@ -1,7 +1,8 @@
 import { ImageResponse } from "next/og";
-import { getPostBySlug } from "@/lib/blog";
+import { getAllPosts, getPostBySlug } from "@/lib/blog";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export const alt = "MyStockHarbor Insight";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
@@ -10,17 +11,18 @@ type Props = {
   params: Promise<{ slug: string }>;
 };
 
+export async function generateImageMetadata({ params }: Props) {
+  const { slug } = await params;
+  return [{ id: slug, alt: `MyStockHarbor insight: ${slug}` }];
+}
+
 // Derive a short human-readable badge from timeframe + first indicator.
 // e.g. "w" + "MA200" → "Weekly · MA200"
 // e.g. "d" + "RSI(14)" → "Daily · RSI"
-function setupBadge(
-  timeframe: "d" | "w",
-  indicators: string[]
-): string {
+function setupBadge(timeframe: "d" | "w", indicators: string[]): string {
   const tf = timeframe === "w" ? "Weekly" : "Daily";
   if (!indicators.length) return tf;
 
-  // Shorten indicator labels for the badge
   const label = indicators[0]
     .replace("MACD(12,26,9)", "MACD")
     .replace("RSI(14)", "RSI")
@@ -45,7 +47,7 @@ export default async function OGImage({ params }: Props) {
     symbol = post.symbol ?? null;
     badge = setupBadge(post.timeframe, post.chartIndicators);
   } catch {
-    // Slug not found — fall back to generic values above
+    // Slug not found — render generic fallback
   }
 
   return new ImageResponse(
@@ -57,7 +59,8 @@ export default async function OGImage({ params }: Props) {
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
-          background: "linear-gradient(135deg, #060c18 0%, #0b1628 60%, #0d1f35 100%)",
+          background:
+            "linear-gradient(135deg, #060c18 0%, #0b1628 60%, #0d1f35 100%)",
           padding: "64px 72px",
           fontFamily: "system-ui, -apple-system, sans-serif",
           position: "relative",
@@ -82,14 +85,7 @@ export default async function OGImage({ params }: Props) {
             justifyContent: "space-between",
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-            }}
-          >
-            {/* Anchor icon approximation using text */}
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div
               style={{
                 width: 36,
