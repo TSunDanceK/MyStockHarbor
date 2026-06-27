@@ -7,6 +7,7 @@ import { getVideoStockData } from "@/lib/videoStockData";
 import { remark } from "remark";
 import html from "remark-html";
 import VideoPageClient from "./VideoPageClient";
+import PageShareBar from "@/app/components/PageShareBar";
 
 export const dynamic = "force-dynamic";
 
@@ -27,13 +28,13 @@ function formatDateShort(value: string) {
 }
 
 function fmtPct(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) return "—";
+  if (value === null || !Number.isFinite(value)) return "\u2014";
   const sign = value >= 0 ? "+" : "";
   return `${sign}${value.toFixed(1)}%`;
 }
 
 function fmtPrice(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) return "—";
+  if (value === null || !Number.isFinite(value)) return "\u2014";
   return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
@@ -54,9 +55,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const ticker = videoContent?.ticker ?? null;
 
-  // Prefix title with ticker if available, e.g. "TSLA — Tesla's Key Level..."
   const title = ticker
-    ? `${ticker} — ${video.title} | MyStockHarbor`
+    ? `${ticker} \u2014 ${video.title} | MyStockHarbor`
     : `${video.title} | MyStockHarbor`;
 
   const description = ticker
@@ -65,8 +65,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const url = `https://www.mystockharbor.com/insights/videos/${videoId}`;
 
-  // Use the YouTube thumbnail as the OG image — it's the actual video art
-  // people recognise. Fall back to the site OG image if unavailable.
   const ogImage = video.thumbnailUrl
     ? { url: video.thumbnailUrl, width: 1280, height: 720, alt: video.title }
     : { url: "https://www.mystockharbor.com/og-image-v2.png", width: 1200, height: 630, alt: "MyStockHarbor" };
@@ -126,7 +124,7 @@ export default async function VideoPage({ params }: Props) {
 
   const statItems = stockData ? [
     { label: "Price", value: fmtPrice(stockData.price) },
-    { label: "Market cap", value: stockData.marketCap ?? "—" },
+    { label: "Market cap", value: stockData.marketCap ?? "\u2014" },
     { label: "vs MA50", value: fmtPct(stockData.ma50Pct) },
     { label: "vs MA200", value: fmtPct(stockData.ma200Pct) },
     ...(stockData.peRatio ? [{ label: "P/E (TTM)", value: stockData.peRatio.toFixed(1) }] : []),
@@ -136,6 +134,11 @@ export default async function VideoPage({ params }: Props) {
   const CARD_H = 260;
   const MAX_VISIBLE = 6;
 
+  const pageUrl = `https://www.mystockharbor.com/insights/videos/${videoId}`;
+  const shareText = ticker
+    ? `${ticker} stock analysis: ${video.title} \uD83D\uDCCA MyStockHarbor`
+    : `${video.title} \uD83D\uDCCA MyStockHarbor`;
+
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(videoJsonLd) }} />
@@ -143,14 +146,22 @@ export default async function VideoPage({ params }: Props) {
       <main style={{ minHeight: "100vh", background: "#06080d", color: "#f1f5f9", fontFamily: "system-ui, Arial" }}>
         <div style={{ maxWidth: 1400, margin: "0 auto", padding: "24px 20px 60px" }}>
 
-          {/* Breadcrumb */}
-          <div style={{ fontSize: 13, opacity: 0.6, marginBottom: 20 }}>
-            <Link href="/insights" style={{ color: "inherit", textDecoration: "none" }}>Insights</Link>
-            <span style={{ margin: "0 8px" }}>›</span>
-            <span>Video</span>
+          {/* Breadcrumb + share */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, gap: 12, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 13, opacity: 0.6 }}>
+              <Link href="/insights" style={{ color: "inherit", textDecoration: "none" }}>Insights</Link>
+              <span style={{ margin: "0 8px" }}>›</span>
+              <span>Video</span>
+            </div>
+            <PageShareBar
+              url={pageUrl}
+              title={ticker ? `${ticker} \u2014 ${video.title} | MyStockHarbor` : `${video.title} | MyStockHarbor`}
+              text={shareText}
+              align="right"
+            />
           </div>
 
-          {/* Header + stats — shown on all screen sizes */}
+          {/* Header + stats */}
           <div style={{ marginBottom: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
               {ticker && <span style={{ display: "inline-flex", alignItems: "center", padding: "5px 12px", borderRadius: 999, background: "rgba(59,130,246,0.16)", border: "1px solid rgba(59,130,246,0.28)", fontSize: 13, fontWeight: 900, color: "#dbeafe" }}>{ticker}</span>}
@@ -169,16 +180,16 @@ export default async function VideoPage({ params }: Props) {
                 ))}
               </div>
             )}
-            {stockData && <p style={{ fontSize: 11, opacity: 0.38, marginBottom: 0, fontStyle: "italic" }}>Price and market cap update live — figures will differ from those in the video.</p>}
+            {stockData && <p style={{ fontSize: 11, opacity: 0.38, marginBottom: 0, fontStyle: "italic" }}>Price and market cap update live \u2014 figures will differ from those in the video.</p>}
           </div>
 
-          {/* ── MOBILE: video embed + client-side article/more-videos ── */}
+          {/* \u2500\u2500 MOBILE \u2500\u2500 */}
           <div className="mobileOnly">
             <div style={{ position: "relative", width: "100%", paddingTop: "56.25%", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.10)", background: "#000", marginBottom: 10 }}>
               <iframe src={embedUrl} title={video.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen loading="lazy" referrerPolicy="strict-origin-when-cross-origin" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }} />
             </div>
             <div style={{ marginBottom: 18, textAlign: "right" }}>
-              <a href={video.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#fca5a5", textDecoration: "none", fontWeight: 700, opacity: 0.85 }}>Watch on YouTube ↗</a>
+              <a href={video.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#fca5a5", textDecoration: "none", fontWeight: 700, opacity: 0.85 }}>Watch on YouTube \u2197</a>
             </div>
             <VideoPageClient videos={relatedVideos} contentHtml={contentHtml} />
             {videoContent?.datasheetImage && (
@@ -190,43 +201,37 @@ export default async function VideoPage({ params }: Props) {
             <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)", padding: "12px 16px", fontSize: 13, opacity: 0.5, lineHeight: 1.6, marginBottom: 16 }}>
               This page is for educational purposes only and does not constitute financial advice. Always do your own research before making any investment decisions.
             </div>
-            <Link href="/insights" style={{ display: "inline-flex", alignItems: "center", padding: "10px 16px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.05)", color: "#f1f5f9", textDecoration: "none", fontSize: 13, fontWeight: 700 }}>← Back to Insights</Link>
+            <Link href="/insights" style={{ display: "inline-flex", alignItems: "center", padding: "10px 16px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.05)", color: "#f1f5f9", textDecoration: "none", fontSize: 13, fontWeight: 700 }}>{"\u2190"} Back to Insights</Link>
           </div>
 
-          {/* ── DESKTOP: two-column layout ── */}
+          {/* \u2500\u2500 DESKTOP \u2500\u2500 */}
           <div className="desktopOnly videoPageLayout" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 360px", gap: 28, alignItems: "start" }}>
-
-            {/* LEFT */}
             <div>
               <div style={{ position: "relative", width: "100%", paddingTop: "56.25%", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.10)", background: "#000", marginBottom: 10 }}>
                 <iframe src={embedUrl} title={video.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen loading="lazy" referrerPolicy="strict-origin-when-cross-origin" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }} />
               </div>
               <div style={{ marginBottom: 28, textAlign: "right" }}>
-                <a href={video.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#fca5a5", textDecoration: "none", fontWeight: 700, opacity: 0.85 }}>Watch on YouTube ↗</a>
+                <a href={video.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#fca5a5", textDecoration: "none", fontWeight: 700, opacity: 0.85 }}>Watch on YouTube \u2197</a>
               </div>
-
               {contentHtml ? (
                 <article className="video-article" style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.04)", padding: "28px 30px", marginBottom: 24 }}>
                   <div dangerouslySetInnerHTML={{ __html: contentHtml }} />
                 </article>
               ) : (
-                <div style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.025)", padding: "18px 22px", marginBottom: 24, opacity: 0.6, fontSize: 18, lineHeight: 1.8 }}>Written analysis coming soon — watch the video above for the full breakdown.</div>
+                <div style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.025)", padding: "18px 22px", marginBottom: 24, opacity: 0.6, fontSize: 18, lineHeight: 1.8 }}>Written analysis coming soon \u2014 watch the video above for the full breakdown.</div>
               )}
-
               {videoContent?.datasheetImage && (
                 <div style={{ marginBottom: 24 }}>
                   <div style={{ fontSize: 11, opacity: 0.55, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>Investor datasheet</div>
                   <img src={videoContent.datasheetImage} alt={`${ticker ?? ""} investor datasheet`} style={{ width: "100%", borderRadius: 12, border: "1px solid rgba(255,255,255,0.10)" }} />
                 </div>
               )}
-
               <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)", padding: "12px 16px", fontSize: 13, opacity: 0.5, lineHeight: 1.6, marginBottom: 24 }}>
                 This page is for educational purposes only and does not constitute financial advice. Always do your own research before making any investment decisions.
               </div>
-              <Link href="/insights" style={{ display: "inline-flex", alignItems: "center", padding: "10px 16px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.05)", color: "#f1f5f9", textDecoration: "none", fontSize: 13, fontWeight: 700 }}>← Back to Insights</Link>
+              <Link href="/insights" style={{ display: "inline-flex", alignItems: "center", padding: "10px 16px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.05)", color: "#f1f5f9", textDecoration: "none", fontSize: 13, fontWeight: 700 }}>{"\u2190"} Back to Insights</Link>
             </div>
 
-            {/* RIGHT: sticky sidebar */}
             <aside style={{ position: "sticky", top: 24 }}>
               <div style={{ fontSize: 11, opacity: 0.55, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 12 }}>More videos</div>
               <div style={{ maxHeight: `${MAX_VISIBLE * CARD_H}px`, overflowY: "auto", display: "grid", gap: 8, scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.15) transparent", touchAction: "pan-y" }}>
@@ -246,7 +251,7 @@ export default async function VideoPage({ params }: Props) {
                   ))
                 )}
               </div>
-              <a href="https://www.youtube.com/@MyStockHarbor" target="_blank" rel="noopener noreferrer" style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "center", padding: "9px 12px", borderRadius: 10, border: "1px solid rgba(239,68,68,0.35)", background: "rgba(239,68,68,0.08)", color: "#fecaca", textDecoration: "none", fontWeight: 800, fontSize: 12 }}>Visit YouTube Channel ↗</a>
+              <a href="https://www.youtube.com/@MyStockHarbor" target="_blank" rel="noopener noreferrer" style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "center", padding: "9px 12px", borderRadius: 10, border: "1px solid rgba(239,68,68,0.35)", background: "rgba(239,68,68,0.08)", color: "#fecaca", textDecoration: "none", fontWeight: 800, fontSize: 12 }}>Visit YouTube Channel \u2197</a>
             </aside>
           </div>
         </div>
