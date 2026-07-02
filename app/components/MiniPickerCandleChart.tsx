@@ -310,11 +310,11 @@ export default function MiniPickerCandleChart({
   const macdMax = Math.max(0.01, ...macdFinite.map((value) => Math.abs(value)));
   const highLineLabel = overlay === "ath" ? "Previous ATH" : "Previous 3M high";
   const supportResistanceColour =
-    validSupportResistanceZone?.kind === "support" ? "#22c55e" : "#fb923c";
+    validSupportResistanceZone?.kind === "support" ? "#22c55e" : "#ef4444";
   const supportResistanceFill =
     validSupportResistanceZone?.kind === "support"
-      ? "rgba(34,197,94,0.11)"
-      : "rgba(251,146,60,0.12)";
+      ? "rgba(34,197,94,0.16)"
+      : "rgba(239,68,68,0.16)";
   const supportResistanceLabel =
     validSupportResistanceZone?.kind === "support" ? "Macro support" : "Macro resistance";
 
@@ -359,25 +359,35 @@ export default function MiniPickerCandleChart({
               width={width - paddingX * 2}
               height={Math.max(3, Math.abs(yAt(validSupportResistanceZone.lower) - yAt(validSupportResistanceZone.upper)))}
               fill={supportResistanceFill}
-              stroke={supportResistanceColour}
-              strokeWidth="1"
-              strokeDasharray="5 5"
-              opacity="0.95"
+              stroke="none"
             />
             <line
               x1={paddingX}
               x2={width - paddingX}
-              y1={yAt((validSupportResistanceZone.lower + validSupportResistanceZone.upper) / 2)}
-              y2={yAt((validSupportResistanceZone.lower + validSupportResistanceZone.upper) / 2)}
+              y1={yAt(validSupportResistanceZone.upper)}
+              y2={yAt(validSupportResistanceZone.upper)}
               stroke={supportResistanceColour}
-              strokeWidth="1.8"
-              opacity="0.88"
+              strokeWidth="3"
+              strokeDasharray="9 6"
+              strokeLinecap="round"
+              opacity="1"
+            />
+            <line
+              x1={paddingX}
+              x2={width - paddingX}
+              y1={yAt(validSupportResistanceZone.lower)}
+              y2={yAt(validSupportResistanceZone.lower)}
+              stroke={supportResistanceColour}
+              strokeWidth="3"
+              strokeDasharray="9 6"
+              strokeLinecap="round"
+              opacity="1"
             />
             <text
               x={width - paddingX}
-              y={Math.max(12, yAt(validSupportResistanceZone.upper) - 5)}
+              y={Math.max(12, yAt(validSupportResistanceZone.upper) - 6)}
               textAnchor="end"
-              fill={validSupportResistanceZone.kind === "support" ? "#bbf7d0" : "#fed7aa"}
+              fill={validSupportResistanceZone.kind === "support" ? "#bbf7d0" : "#fecaca"}
               fontSize="10"
               fontWeight="900"
             >
