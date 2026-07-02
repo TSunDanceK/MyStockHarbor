@@ -2,6 +2,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import MiniPickerCandleChart, {
   type MiniCandlePoint,
+  type SupportResistanceZone,
 } from "@/app/components/MiniPickerCandleChart";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
@@ -32,6 +33,7 @@ type PickerSectionItem = {
   dashboardHref?: string;
   chartPoints?: MiniCandlePoint[];
   score?: number;
+  supportResistanceZone?: SupportResistanceZone;
 };
 
 type PickerSection = {
@@ -84,6 +86,7 @@ type ResultEntry = {
   chartPoints: MiniCandlePoint[];
   badge?: string;
   score?: number;
+  supportResistanceZone?: SupportResistanceZone;
 };
 
 const PICKER_NAV: Array<{
@@ -235,6 +238,7 @@ function entriesFromSection(args: {
       chartPoints,
       badge: [item.timeframe, item.indicator].filter(Boolean).join(" \u00b7 "),
       score: typeof item.score === "number" ? item.score : typeof record?.score === "number" ? record.score : undefined,
+      supportResistanceZone: item.supportResistanceZone,
     };
   }).filter((entry): entry is ResultEntry => Boolean(entry));
 }
@@ -503,7 +507,7 @@ export default async function PickerResultPage({ config }: { config: PickerResul
                       </div>
                     ) : null}
                   </div>
-                  <MiniPickerCandleChart points={entry.chartPoints} tone={config.tone} overlay={chartOverlayForEntry(config, entry)} />
+                  <MiniPickerCandleChart points={entry.chartPoints} tone={config.tone} overlay={chartOverlayForEntry(config, entry)} supportResistanceZone={entry.supportResistanceZone} />
                   <div className="note">{entry.note}</div>
                   <div className="cardActions">
                     {isEarningsPickerPage(config) ? (
