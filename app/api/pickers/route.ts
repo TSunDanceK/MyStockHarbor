@@ -51,6 +51,12 @@ type MarketPayload = {
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
+type PickerSupportResistanceZone = {
+  kind: "support" | "resistance";
+  lower: number;
+  upper: number;
+};
+
 type PickerItem = {
   symbol: string;
   note?: string;
@@ -61,6 +67,7 @@ type PickerItem = {
   chartPoints?: PickerChartPoint[];
   score?: number;
   _score?: number;
+  supportResistanceZone?: PickerSupportResistanceZone;
 };
 
 type PickerSection = {
@@ -77,6 +84,7 @@ type PickerSection = {
     dashboardHref?: string;
     chartPoints?: PickerChartPoint[];
     score?: number;
+    supportResistanceZone?: PickerSupportResistanceZone;
   }[];
 };
 
@@ -2196,6 +2204,11 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
                 symbol,
                 timeframe: "W",
               }),
+              supportResistanceZone: {
+                kind: macroSupportResistanceCandidate.kind,
+                lower: macroSupportResistanceCandidate.zoneLow,
+                upper: macroSupportResistanceCandidate.zoneHigh,
+              },
               _score: macroSupportResistanceCandidate.score + dynamicBoost(symbol),
             });
           }
@@ -2500,7 +2513,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
     const sorted = [...arr].sort((a, b) => (b._score ?? 0) - (a._score ?? 0));
     return sorted
       .slice(0, n)
-      .map(({ symbol, note, tone, timeframe, indicator, dashboardHref, chartPoints, _score, score }) => ({
+      .map(({ symbol, note, tone, timeframe, indicator, dashboardHref, chartPoints, supportResistanceZone, _score, score }) => ({
         symbol,
         note,
         tone,
@@ -2508,6 +2521,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
         indicator,
         dashboardHref,
         chartPoints,
+        supportResistanceZone,
         score: typeof score === "number" ? score : typeof _score === "number" ? Math.round(_score) : undefined,
       }));
   };
