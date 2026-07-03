@@ -317,6 +317,9 @@ export default function MiniPickerCandleChart({
       : "rgba(239,68,68,0.16)";
   const supportResistanceLabel =
     validSupportResistanceZone?.kind === "support" ? "Macro support" : "Macro resistance";
+  const supportResistanceLineValue = validSupportResistanceZone
+    ? (validSupportResistanceZone.lower + validSupportResistanceZone.upper) / 2
+    : null;
 
   return (
     <div
@@ -351,7 +354,7 @@ export default function MiniPickerCandleChart({
           />
         ))}
 
-        {validSupportResistanceZone ? (
+        {validSupportResistanceZone && isFiniteNumber(supportResistanceLineValue) ? (
           <g>
             <rect
               x={paddingX}
@@ -364,19 +367,8 @@ export default function MiniPickerCandleChart({
             <line
               x1={paddingX}
               x2={width - paddingX}
-              y1={yAt(validSupportResistanceZone.upper)}
-              y2={yAt(validSupportResistanceZone.upper)}
-              stroke={supportResistanceColour}
-              strokeWidth="3"
-              strokeDasharray="9 6"
-              strokeLinecap="round"
-              opacity="1"
-            />
-            <line
-              x1={paddingX}
-              x2={width - paddingX}
-              y1={yAt(validSupportResistanceZone.lower)}
-              y2={yAt(validSupportResistanceZone.lower)}
+              y1={yAt(supportResistanceLineValue)}
+              y2={yAt(supportResistanceLineValue)}
               stroke={supportResistanceColour}
               strokeWidth="3"
               strokeDasharray="9 6"
@@ -385,7 +377,7 @@ export default function MiniPickerCandleChart({
             />
             <text
               x={width - paddingX}
-              y={Math.max(12, yAt(validSupportResistanceZone.upper) - 6)}
+              y={Math.max(12, yAt(supportResistanceLineValue) - 6)}
               textAnchor="end"
               fill={validSupportResistanceZone.kind === "support" ? "#bbf7d0" : "#fecaca"}
               fontSize="10"
