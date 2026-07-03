@@ -1211,15 +1211,40 @@ function computeMacroSupportResistanceCandidate(points: Point[]): MacroSupportRe
 
   if (!best) return null;
 
-  const kindLabel = best.kind === "support" ? "Macro support" : "Macro resistance";
-  const distanceSide =
-    best.kind === "support"
-      ? best.distancePct >= 0
-        ? "above"
-        : "below"
-      : best.distancePct >= 0
-        ? "below"
-        : "above";
+  // The clustering above uses the structural pivot type (swing lows form
+  // candidate support zones, swing highs form candidate resistance zones) to
+  // find where the wall is. But whether the zone should be *labelled*
+  // support or resistance depends on where price is sitting right now, not
+  // on how the zone originally formed:
+  //   - price below the zone  -> resistance (price is being capped from below)
+  //   - price above the zone  -> support    (price is being held up from above)
+  //   - price inside the zone -> ambiguous; default using the previous 3
+  //     weekly bars (excluding the current one) — mostly-below defaults to
+  //     resistance, mostly-above defaults to support, and a tie falls back to
+  //     the original structural classification.
+  let displayKind: "support" | "resistance";
+
+  if (lastClose < best.zoneLow) {
+    displayKind = "resistance";
+  } else if (lastClose > best.zoneHigh) {
+    displayKind = "support";
+  } else {
+    const priorBars = series.slice(-4, -1);
+    let below = 0;
+    let above = 0;
+
+    for (const bar of priorBars) {
+      if (!Number.isFinite(bar.close)) continue;
+      if (bar.close < best.level) below++;
+      else if (bar.close > best.level) above++;
+    }
+
+    displayKind = below > above ? "resistance" : above > below ? "support" : best.kind;
+  }
+
+  const kindLabel = displayKind === "support" ? "Macro support" : "Macro resistance";
+  const distancePctFromLevel = best.level > 0 ? Math.abs(((lastClose - best.level) / best.level) * 100) : 0;
+  const distanceSide = lastClose >= best.level ? "above" : "below";
   const zoneLabel =
     Math.abs(best.zoneHigh - best.zoneLow) / best.level < 0.008
       ? `$${best.level.toFixed(2)}`
@@ -1227,7 +1252,7 @@ function computeMacroSupportResistanceCandidate(points: Point[]): MacroSupportRe
 
   return {
     score: best.score,
-    kind: best.kind,
+    kind: displayKind,
     zoneLow: best.zoneLow,
     zoneHigh: best.zoneHigh,
     level: best.level,
@@ -1236,8 +1261,8 @@ function computeMacroSupportResistanceCandidate(points: Point[]): MacroSupportRe
     zonePct: best.zonePct,
     spanWeeks: best.spanWeeks,
     volumeRatio: best.volumeRatio,
-    tone: best.kind === "support" ? "green" : "orange",
-    note: `${kindLabel} ${zoneLabel} • ${best.touches} touches • ${Math.abs(best.distancePct).toFixed(1)}% ${distanceSide} zone • ${best.volumeRatio.toFixed(1)}x zone volume`,
+    tone: displayKind === "support" ? "green" : "orange",
+    note: `${kindLabel} ${zoneLabel} • ${best.touches} touches • ${distancePctFromLevel.toFixed(1)}% ${distanceSide} zone • ${best.volumeRatio.toFixed(1)}x zone volume`,
   };
 }
 
