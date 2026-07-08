@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { getAllBottleneckPosts } from "@/lib/bottlenecks";
 
 export const metadata: Metadata = {
   title: "Stock Bottlenecks | Supply Chain & Customer Dependency | MyStockHarbor",
@@ -10,7 +11,11 @@ export const metadata: Metadata = {
   },
 };
 
+export const dynamic = "force-dynamic";
+
 export default function BottlenecksIndexPage() {
+  const posts = getAllBottleneckPosts();
+
   return (
     <main
       style={{
@@ -45,24 +50,6 @@ export default function BottlenecksIndexPage() {
             boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
           }}
         >
-          <span
-            style={{
-              display: "inline-block",
-              fontSize: 12,
-              fontWeight: 800,
-              letterSpacing: 1,
-              textTransform: "uppercase",
-              color: "#5FD4C7",
-              background: "rgba(95,212,199,0.1)",
-              border: "1px solid rgba(95,212,199,0.35)",
-              borderRadius: 999,
-              padding: "4px 12px",
-              marginBottom: 16,
-            }}
-          >
-            Coming soon
-          </span>
-
           <h1
             style={{
               marginTop: 0,
@@ -79,24 +66,48 @@ export default function BottlenecksIndexPage() {
             Every public company depends on other companies to function -
             suppliers it can&apos;t easily replace, and customers that make up
             an outsized share of its revenue. This section breaks that down
-            for one stock at a time.
+            for one stock at a time, with two pie charts per stock:{" "}
+            <strong>supply-chain dependency</strong> and{" "}
+            <strong>customer concentration</strong>.
           </p>
 
           <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92 }}>
-            Each stock page will show two pie charts - up to 10 companies in{" "}
-            <strong>supply-chain dependency</strong> (who it relies on to
-            build and deliver its product) and up to 10 in{" "}
-            <strong>customer concentration</strong> (who it relies on to buy
-            from it) - each with a short summary of the company and why it
-            matters, plus links through to that company&apos;s earnings and
-            stock analysis pages.
-          </p>
-
-          <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92 }}>
-            Pages are built one stock per day, starting soon. Check back here
-            as the first pages go live.
+            New stock pages are added roughly one per day.
           </p>
         </section>
+
+        {posts.length > 0 && (
+          <section style={{ marginTop: 24 }}>
+            <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 12 }}>
+              Built so far
+            </h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {posts.map((post) => (
+                <Link
+                  key={post.slug}
+                  href={`/bottlenecks/${post.slug}`}
+                  style={{
+                    display: "block",
+                    background: "#0b1220",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    borderRadius: 12,
+                    padding: 18,
+                    textDecoration: "none",
+                    color: "#f1f5f9",
+                  }}
+                >
+                  <div style={{ fontSize: 17, fontWeight: 800 }}>
+                    {post.companyName}{" "}
+                    <span style={{ color: "#5FD4C7" }}>({post.symbol})</span>
+                  </div>
+                  <div style={{ fontSize: 14, opacity: 0.75, marginTop: 4 }}>
+                    Who {post.symbol} depends on →
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </main>
   );
