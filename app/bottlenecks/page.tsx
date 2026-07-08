@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { getAllBottleneckPosts } from "@/lib/bottlenecks";
+import CompanyLogo from "@/app/components/CompanyLogo";
 
 export const metadata: Metadata = {
   title: "Stock Bottlenecks | Supply Chain & Customer Dependency | MyStockHarbor",
@@ -13,8 +14,21 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
+function formatUpdatedDate(value: string) {
+  if (!value) return "";
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return value;
+  return dt.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 export default function BottlenecksIndexPage() {
-  const posts = getAllBottleneckPosts();
+  const posts = [...getAllBottleneckPosts()].sort((a, b) =>
+    a.companyName.localeCompare(b.companyName)
+  );
 
   return (
     <main
@@ -76,38 +90,94 @@ export default function BottlenecksIndexPage() {
           </p>
         </section>
 
-        {posts.length > 0 && (
-          <section style={{ marginTop: 24 }}>
-            <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 12 }}>
-              Built so far
-            </h2>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <section style={{ marginTop: 24 }}>
+          <div
+            style={{
+              fontSize: 11,
+              opacity: 0.55,
+              fontWeight: 800,
+              letterSpacing: "0.07em",
+              textTransform: "uppercase",
+              marginBottom: 12,
+            }}
+          >
+            Built so far
+          </div>
+
+          {posts.length === 0 ? (
+            <div
+              style={{
+                borderRadius: 14,
+                border: "1px solid rgba(255,255,255,0.10)",
+                background: "rgba(255,255,255,0.03)",
+                padding: 16,
+                opacity: 0.7,
+              }}
+            >
+              No bottleneck pages yet.
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 8 }}>
               {posts.map((post) => (
                 <Link
                   key={post.slug}
                   href={`/bottlenecks/${post.slug}`}
                   style={{
-                    display: "block",
-                    background: "#0b1220",
-                    border: "1px solid rgba(255,255,255,0.12)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 16,
+                    padding: "15px 18px",
                     borderRadius: 12,
-                    padding: 18,
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    background: "rgba(255,255,255,0.03)",
                     textDecoration: "none",
                     color: "#f1f5f9",
                   }}
                 >
-                  <div style={{ fontSize: 17, fontWeight: 800 }}>
-                    {post.companyName}{" "}
-                    <span style={{ color: "#5FD4C7" }}>({post.symbol})</span>
+                  <CompanyLogo domain={post.domain} name={post.companyName} />
+
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div
+                      style={{
+                        fontSize: 18,
+                        fontWeight: 700,
+                        lineHeight: 1.35,
+                        display: "-webkit-box",
+                        WebkitLineClamp: 1,
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {post.companyName}{" "}
+                      <span style={{ color: "#93c5fd" }}>({post.symbol})</span>
+                    </div>
+                    {post.category && (
+                      <div
+                        style={{
+                          marginTop: 4,
+                          fontSize: 14,
+                          opacity: 0.6,
+                          lineHeight: 1.4,
+                        }}
+                      >
+                        {post.category}
+                      </div>
+                    )}
+                    {post.date && (
+                      <div style={{ marginTop: 4, fontSize: 12, opacity: 0.45 }}>
+                        Updated {formatUpdatedDate(post.date)}
+                      </div>
+                    )}
                   </div>
-                  <div style={{ fontSize: 14, opacity: 0.75, marginTop: 4 }}>
-                    Who {post.symbol} depends on →
+
+                  <div style={{ flexShrink: 0, fontSize: 20, opacity: 0.3 }}>
+                    ›
                   </div>
                 </Link>
               ))}
             </div>
-          </section>
-        )}
+          )}
+        </section>
       </div>
     </main>
   );
