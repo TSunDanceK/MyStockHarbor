@@ -196,6 +196,14 @@ export default async function BottleneckPage({ params }: Props) {
     notFound();
   }
 
+  const supplyChainDescription =
+    post.supplyChainNote ||
+    `Companies ${post.symbol} relies on to design, manufacture, package, and assemble its hardware.`;
+
+  const customersDescription =
+    post.customersNote ||
+    `Companies that make up an outsized share of ${post.symbol}'s revenue - who ${post.symbol} relies on to buy from it.`;
+
   return (
     <main
       style={{
@@ -278,13 +286,13 @@ export default async function BottleneckPage({ params }: Props) {
         >
           <ChartBlock
             heading="Supply-chain dependency"
-            description={`Companies ${post.symbol} relies on to design, manufacture, package, and assemble its hardware.`}
+            description={supplyChainDescription}
             companies={post.supplyChain}
           />
 
           <ChartBlock
             heading="Customer concentration"
-            description={`Companies that make up an outsized share of ${post.symbol}'s revenue - who ${post.symbol} relies on to buy from it.`}
+            description={customersDescription}
             companies={post.customers}
           />
         </div>
