@@ -1,0 +1,43 @@
+name: Warm MyStockHarbor Pickers & Earnings
+
+# Runs entirely on GitHub's own servers - no browser, no login, no secrets
+# needed. Both endpoints below are public, rate-limited GET routes (see
+# app/api/jobs/warm-picker-universe/route.ts and
+# app/api/jobs/warm-earnings/route.ts) - the same ones already wired to
+# Vercel Cron in vercel.json (07:00/07:15 UTC daily). This workflow runs
+# earlier in the morning and does a second earnings pass 2 minutes after
+# the first, mirroring the manual "click, wait 2 min, click again" routine.
+#
+# DST note: cron below is in UTC. '3 5 * * *' = ~6:03am UK time while the
+# UK is on BST (UTC+1). When UK clocks change (late Mar / late Oct), this
+# will drift an hour until updated - ask Claude to adjust it then.
+
+on:
+  schedule:
+    - cron: "3 5 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  warm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Warm picker universe (fills the /pickers list)
+        run: |
+          curl -sS -o /dev/null -w "warm-picker-universe: HTTP %{http_code}\n" \
+            "https://www.mystockharbor.com/api/jobs/warm-picker-universe?t=$(date +%s)"
+
+      - name: Wait 2 minutes
+        run: sleep 120
+
+      - name: Fetch earnings - pass 1
+        run: |
+          curl -sS -o /dev/null -w "warm-earnings pass 1: HTTP %{http_code}\n" \
+            "https://www.mystockharbor.com/api/jobs/warm-earnings?t=$(date +%s)"
+
+      - name: Wait 2 minutes
+        run: sleep 120
+
+      - name: Fetch earnings - pass 2
+        run: |
+          curl -sS -o /dev/null -w "warm-earnings pass 2: HTTP %{http_code}\n" \
+            "https://www.mystockharbor.com/api/jobs/warm-earnings?t=$(date +%s)"
