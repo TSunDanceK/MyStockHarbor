@@ -21,6 +21,12 @@ export type BottleneckPost = {
   date: string;
   summary: string;
   disclaimer: string;
+  // Optional per-post overrides for the intro sentence under each chart
+  // heading - most stocks are fine with the generic template sentence, but
+  // some (e.g. companies with no real customer concentration, like large
+  // diversified advertisers) need an honest, specific caveat instead.
+  supplyChainNote: string;
+  customersNote: string;
   supplyChain: BottleneckCompany[];
   customers: BottleneckCompany[];
 };
@@ -82,6 +88,8 @@ function readPost(fileName: string): BottleneckPost {
     date: formatFrontmatterDate(data.date),
     summary: String(data.summary || "").trim(),
     disclaimer: String(data.disclaimer || "").trim(),
+    supplyChainNote: String(data.supplyChainNote || "").trim(),
+    customersNote: String(data.customersNote || "").trim(),
     supplyChain: normalizeCompanies(data.supplyChain),
     customers: normalizeCompanies(data.customers),
   };
