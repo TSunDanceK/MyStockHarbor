@@ -116,12 +116,11 @@ customers:
     blurb: >
       Relies on Google Cloud for a significant share of its infrastructure.
   - name: Deutsche Bank
-    ticker: null
+    ticker: DB
     pct: 8
     blurb: >
       A major enterprise customer for Google Cloud's infrastructure and AI
-      products. Trades primarily on the Frankfurt Stock Exchange with no
-      proper US-listed ticker.
+      products.
   - name: General Motors
     ticker: GM
     pct: 8
