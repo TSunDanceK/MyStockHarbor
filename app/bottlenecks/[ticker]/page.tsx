@@ -6,20 +6,7 @@ import {
   getBottleneckBySlug,
   type BottleneckCompany,
 } from "@/lib/bottlenecks";
-import BottleneckPieChart from "@/app/components/BottleneckPieChart";
-
-const PALETTE = [
-  "#5FD4C7",
-  "#8FE3D8",
-  "#93C5FD",
-  "#F2C879",
-  "#FF9E8A",
-  "#C4B5FD",
-  "#6EE7B7",
-  "#FDA4AF",
-  "#67E8F9",
-  "#D4D4D8",
-];
+import BottleneckPieChart, { NEON_PALETTE } from "@/app/components/BottleneckPieChart";
 
 type Props = {
   params: Promise<{ ticker: string }>;
@@ -77,7 +64,7 @@ function CompanyRow({
         display: "flex",
         flexDirection: "column",
         gap: 6,
-        padding: "16px 0",
+        padding: "14px 0",
         borderBottom: "1px solid rgba(255,255,255,0.08)",
       }}
     >
@@ -90,7 +77,7 @@ function CompanyRow({
           flexWrap: "wrap",
         }}
       >
-        <span style={{ fontSize: 17, fontWeight: 800, color: "#f1f5f9" }}>
+        <span style={{ fontSize: 16, fontWeight: 800, color: "#f1f5f9" }}>
           <span
             aria-hidden
             style={{
@@ -100,6 +87,7 @@ function CompanyRow({
               borderRadius: 999,
               background: color,
               marginRight: 8,
+              boxShadow: `0 0 6px ${color}`,
             }}
           />
           {company.name}
@@ -107,11 +95,11 @@ function CompanyRow({
             <span style={{ color: "#5FD4C7" }}> ({company.ticker})</span>
           ) : null}
         </span>
-        <span style={{ fontSize: 15, fontWeight: 700, color: "#8a97ad" }}>
+        <span style={{ fontSize: 14, fontWeight: 700, color: "#8a97ad" }}>
           ~{company.pct}%
         </span>
       </div>
-      <p style={{ margin: 0, fontSize: 15, lineHeight: 1.6, opacity: 0.88 }}>
+      <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, opacity: 0.88 }}>
         {company.blurb}
       </p>
       {company.ticker ? (
@@ -122,7 +110,7 @@ function CompanyRow({
               color: "#93c5fd",
               textDecoration: "none",
               fontWeight: 700,
-              fontSize: 14,
+              fontSize: 13,
             }}
           >
             Stock analysis →
@@ -133,7 +121,7 @@ function CompanyRow({
               color: "#93c5fd",
               textDecoration: "none",
               fontWeight: 700,
-              fontSize: 14,
+              fontSize: 13,
             }}
           >
             Earnings →
@@ -157,7 +145,7 @@ function ChartBlock({
     name: company.name,
     ticker: company.ticker,
     pct: company.pct,
-    color: PALETTE[index % PALETTE.length],
+    color: NEON_PALETTE[index % NEON_PALETTE.length],
   }));
 
   return (
@@ -166,32 +154,22 @@ function ChartBlock({
         background: "#0b1220",
         border: "1px solid rgba(255,255,255,0.12)",
         borderRadius: 16,
-        padding: 24,
+        padding: 22,
         boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
-        marginTop: 24,
+        height: "100%",
       }}
     >
       <h2
-        style={{ marginTop: 0, marginBottom: 8, fontSize: 24, fontWeight: 850 }}
+        style={{ marginTop: 0, marginBottom: 8, fontSize: 21, fontWeight: 850 }}
       >
         {heading}
       </h2>
-      <p style={{ fontSize: 15, lineHeight: 1.6, opacity: 0.85, marginBottom: 20 }}>
+      <p style={{ fontSize: 14, lineHeight: 1.55, opacity: 0.85, marginBottom: 18 }}>
         {description}
       </p>
 
-      <div
-        style={{
-          display: "flex",
-          gap: 32,
-          flexWrap: "wrap",
-          alignItems: "flex-start",
-          marginBottom: 8,
-        }}
-      >
-        <div style={{ flex: "0 0 auto" }}>
-          <BottleneckPieChart segments={segments} />
-        </div>
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
+        <BottleneckPieChart segments={segments} />
       </div>
 
       <div>
@@ -199,7 +177,7 @@ function ChartBlock({
           <CompanyRow
             key={`${company.ticker ?? company.name}-${index}`}
             company={company}
-            color={PALETTE[index % PALETTE.length]}
+            color={NEON_PALETTE[index % NEON_PALETTE.length]}
           />
         ))}
       </div>
@@ -228,7 +206,7 @@ export default async function BottleneckPage({ params }: Props) {
         padding: "40px 20px",
       }}
     >
-      <div style={{ maxWidth: 900, margin: "0 auto" }}>
+      <div style={{ maxWidth: 1160, margin: "0 auto" }}>
         <div
           style={{
             marginBottom: 24,
@@ -269,6 +247,7 @@ export default async function BottleneckPage({ params }: Props) {
             borderRadius: 16,
             padding: 24,
             boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
+            maxWidth: 900,
           }}
         >
           <h1
@@ -288,17 +267,28 @@ export default async function BottleneckPage({ params }: Props) {
           </p>
         </section>
 
-        <ChartBlock
-          heading="Supply-chain dependency"
-          description={`Companies ${post.symbol} relies on to design, manufacture, package, and assemble its hardware.`}
-          companies={post.supplyChain}
-        />
+        <div
+          className="bottleneckColumns"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 24,
+            marginTop: 24,
+            alignItems: "start",
+          }}
+        >
+          <ChartBlock
+            heading="Supply-chain dependency"
+            description={`Companies ${post.symbol} relies on to design, manufacture, package, and assemble its hardware.`}
+            companies={post.supplyChain}
+          />
 
-        <ChartBlock
-          heading="Customer concentration"
-          description={`Companies that make up an outsized share of ${post.symbol}'s revenue - who ${post.symbol} relies on to buy from it.`}
-          companies={post.customers}
-        />
+          <ChartBlock
+            heading="Customer concentration"
+            description={`Companies that make up an outsized share of ${post.symbol}'s revenue - who ${post.symbol} relies on to buy from it.`}
+            companies={post.customers}
+          />
+        </div>
 
         <p
           style={{
@@ -307,11 +297,20 @@ export default async function BottleneckPage({ params }: Props) {
             opacity: 0.6,
             marginTop: 24,
             fontStyle: "italic",
+            maxWidth: 900,
           }}
         >
           {post.disclaimer}
         </p>
       </div>
+
+      <style>{`
+        @media (max-width: 860px) {
+          .bottleneckColumns {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </main>
   );
 }
