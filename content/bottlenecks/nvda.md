@@ -16,7 +16,8 @@ disclaimer: >
   (company filings, earnings commentary, and industry reporting) meant to
   illustrate relative reliance, not precise or audited figures - NVIDIA does
   not publish an exact "reliance percentage" for any single supplier or
-  customer. This is not financial advice.
+  customer. Companies without a proper, reliably tradable ticker on this
+  site are shown without stock/earnings links. This is not financial advice.
 supplyChain:
   - name: Taiwan Semiconductor Manufacturing Company
     ticker: TSM
@@ -28,12 +29,12 @@ supplyChain:
       currently matches TSMC's capacity or yields at this node, making it
       NVIDIA's single largest manufacturing concentration risk.
   - name: SK Hynix
-    ticker: HXSCL
     pct: 14
     blurb: >
       A leading supplier of the HBM (high-bandwidth memory) stacked onto
       NVIDIA's data-center GPUs, and historically NVIDIA's primary HBM3e
-      source before Samsung and Micron ramped competing supply.
+      source before Samsung and Micron ramped competing supply. Trades
+      primarily on the Korea Exchange with no proper US-listed ticker.
   - name: Micron Technology
     ticker: MU
     pct: 11
@@ -42,19 +43,19 @@ supplyChain:
       production for NVIDIA's next-generation GPU platforms as demand for
       high-bandwidth memory continues to outstrip supply.
   - name: Samsung Electronics
-    ticker: SSNLF
     pct: 8
     blurb: >
       An alternate foundry and memory supplier named alongside TSMC and SK
       Hynix in NVIDIA's own filings, though it currently supplies a smaller
-      share of NVIDIA's wafer and HBM needs than either.
+      share of NVIDIA's wafer and HBM needs than either. Trades primarily on
+      the Korea Exchange with no proper US-listed ticker.
   - name: Hon Hai Precision Industry (Foxconn)
-    ticker: HNHPF
     pct: 10
     blurb: >
       NVIDIA's named contract manufacturer for assembly, testing, and
       packaging of finished systems, including being the first supplier to
-      ship complete GB200 rack-scale AI systems.
+      ship complete GB200 rack-scale AI systems. Trades primarily on the
+      Taiwan Stock Exchange with no proper US-listed ticker.
   - name: ASE Technology Holding
     ticker: ASX
     pct: 6
