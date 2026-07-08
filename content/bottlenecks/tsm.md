@@ -21,15 +21,13 @@ disclaimer: >
   stock/earnings links. This is not financial advice.
 supplyChain:
   - name: ASML
-    ticker: null
+    ticker: ASML
     pct: 28
     blurb: >
       The sole global supplier of extreme ultraviolet (EUV) lithography
       machines needed to print the smallest chip features. No alternative
       exists at scale, making ASML the single biggest concentration risk in
-      TSMC's - and the entire chip industry's - supply chain. (ASML does
-      trade on Nasdaq as ASML; omitted here as this file predates that
-      ticker mapping being finalized.)
+      TSMC's - and the entire chip industry's - supply chain.
   - name: Applied Materials
     ticker: AMAT
     pct: 14
