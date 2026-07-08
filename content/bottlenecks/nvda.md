@@ -1,6 +1,8 @@
 ---
 symbol: NVDA
 companyName: NVIDIA Corporation
+category: Semiconductor / GPU & AI chip maker
+domain: nvidia.com
 title: "NVIDIA (NVDA) Bottlenecks: Who NVIDIA Depends On"
 date: 2026-07-08
 summary: >
