@@ -15,6 +15,8 @@ export type BottleneckPost = {
   slug: string;
   symbol: string;
   companyName: string;
+  category: string;
+  domain: string;
   title: string;
   date: string;
   summary: string;
@@ -74,6 +76,8 @@ function readPost(fileName: string): BottleneckPost {
     slug,
     symbol: String(data.symbol || slug).toUpperCase(),
     companyName: String(data.companyName || ""),
+    category: String(data.category || "").trim(),
+    domain: String(data.domain || "").trim(),
     title: String(data.title || ""),
     date: formatFrontmatterDate(data.date),
     summary: String(data.summary || "").trim(),
