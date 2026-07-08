@@ -102,7 +102,10 @@ function CompanyRow({
               marginRight: 8,
             }}
           />
-          {company.name} <span style={{ color: "#5FD4C7" }}>({company.ticker})</span>
+          {company.name}
+          {company.ticker ? (
+            <span style={{ color: "#5FD4C7" }}> ({company.ticker})</span>
+          ) : null}
         </span>
         <span style={{ fontSize: 15, fontWeight: 700, color: "#8a97ad" }}>
           ~{company.pct}%
@@ -111,30 +114,32 @@ function CompanyRow({
       <p style={{ margin: 0, fontSize: 15, lineHeight: 1.6, opacity: 0.88 }}>
         {company.blurb}
       </p>
-      <div style={{ display: "flex", gap: 16, marginTop: 4 }}>
-        <Link
-          href={`/stock/${encodeURIComponent(company.ticker)}`}
-          style={{
-            color: "#93c5fd",
-            textDecoration: "none",
-            fontWeight: 700,
-            fontSize: 14,
-          }}
-        >
-          Stock analysis →
-        </Link>
-        <Link
-          href={`/stock/${encodeURIComponent(company.ticker)}/earnings`}
-          style={{
-            color: "#93c5fd",
-            textDecoration: "none",
-            fontWeight: 700,
-            fontSize: 14,
-          }}
-        >
-          Earnings →
-        </Link>
-      </div>
+      {company.ticker ? (
+        <div style={{ display: "flex", gap: 16, marginTop: 4 }}>
+          <Link
+            href={`/stock/${encodeURIComponent(company.ticker)}`}
+            style={{
+              color: "#93c5fd",
+              textDecoration: "none",
+              fontWeight: 700,
+              fontSize: 14,
+            }}
+          >
+            Stock analysis →
+          </Link>
+          <Link
+            href={`/stock/${encodeURIComponent(company.ticker)}/earnings`}
+            style={{
+              color: "#93c5fd",
+              textDecoration: "none",
+              fontWeight: 700,
+              fontSize: 14,
+            }}
+          >
+            Earnings →
+          </Link>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -192,7 +197,7 @@ function ChartBlock({
       <div>
         {companies.map((company, index) => (
           <CompanyRow
-            key={company.ticker}
+            key={`${company.ticker ?? company.name}-${index}`}
             company={company}
             color={PALETTE[index % PALETTE.length]}
           />
