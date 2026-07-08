@@ -1,6 +1,6 @@
 export type PieSegment = {
   name: string;
-  ticker: string;
+  ticker: string | null;
   pct: number;
   color: string;
 };
@@ -59,17 +59,20 @@ export default function BottleneckPieChart({
         const startAngle = cumulativeAngle;
         const endAngle = cumulativeAngle + sweep;
         cumulativeAngle = endAngle;
+        const label = segment.ticker
+          ? `${segment.name} (${segment.ticker})`
+          : segment.name;
 
         return (
           <path
-            key={`${segment.ticker}-${index}`}
+            key={`${segment.ticker ?? segment.name}-${index}`}
             d={arcPath(cx, cy, r, startAngle, endAngle)}
             fill={segment.color}
             stroke="#06080d"
             strokeWidth={1.5}
           >
             <title>
-              {segment.name} ({segment.ticker}) - {segment.pct}%
+              {label} - {segment.pct}%
             </title>
           </path>
         );
