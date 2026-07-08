@@ -247,7 +247,6 @@ export default async function BottleneckPage({ params }: Props) {
             borderRadius: 16,
             padding: 24,
             boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
-            maxWidth: 900,
           }}
         >
           <h1
@@ -297,7 +296,6 @@ export default async function BottleneckPage({ params }: Props) {
             opacity: 0.6,
             marginTop: 24,
             fontStyle: "italic",
-            maxWidth: 900,
           }}
         >
           {post.disclaimer}
