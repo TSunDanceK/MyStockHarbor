@@ -117,6 +117,8 @@ export default function BottleneckList({ posts }: { posts: BottleneckPost[] }) {
             maxHeight,
             overflowY: "auto",
             paddingRight: 4,
+            scrollbarWidth: "thin",
+            scrollbarColor: "rgba(255,255,255,0.15) transparent",
           }}
         >
           {filtered.map((post, index) => (
