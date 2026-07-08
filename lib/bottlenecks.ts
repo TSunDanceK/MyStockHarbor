@@ -6,7 +6,7 @@ const bottlenecksDirectory = path.join(process.cwd(), "content/bottlenecks");
 
 export type BottleneckCompany = {
   name: string;
-  ticker: string;
+  ticker: string | null;
   pct: number;
   blurb: string;
 };
@@ -44,13 +44,19 @@ function normalizeCompanies(value: unknown): BottleneckCompany[] {
 
       const record = item as Record<string, unknown>;
       const name = String(record.name ?? "").trim();
-      const ticker = String(record.ticker ?? "")
+      const rawTicker = String(record.ticker ?? "")
         .trim()
         .toUpperCase();
+      // Some suppliers/customers don't have a proper, reliably tradable
+      // ticker on this site's data provider (e.g. companies that only trade
+      // as thin OTC ADRs, or aren't independently publicly listed at all).
+      // Those still show in the chart and list, just without a ticker -
+      // the page hides the "Stock analysis"/"Earnings" links when this is null.
+      const ticker = rawTicker || null;
       const pct = Number(record.pct);
       const blurb = String(record.blurb ?? "").trim();
 
-      if (!name || !ticker || !Number.isFinite(pct)) return null;
+      if (!name || !Number.isFinite(pct)) return null;
 
       return { name, ticker, pct, blurb };
     })
