@@ -1,0 +1,163 @@
+import fs from "fs";
+import path from "path";
+import matter from "gray-matter";
+
+const bottlenecksDirectory = path.join(process.cwd(), "content/bottlenecks");
+
+export type BottleneckCompany = {
+  name: string;
+  ticker: string | null;
+  pct: number;
+  blurb: string;
+};
+
+export type BottleneckPost = {
+  slug: string;
+  symbol: string;
+  companyName: string;
+  category: string;
+  domain: string;
+  title: string;
+  date: string;
+  summary: string;
+  disclaimer: string;
+  // Optional per-post overrides for the intro sentence under each chart
+  // heading - most stocks are fine with the generic template sentence, but
+  // some (e.g. companies with no real customer concentration, like large
+  // diversified advertisers) need an honest, specific caveat instead.
+  supplyChainNote: string;
+  customersNote: string;
+  supplyChain: BottleneckCompany[];
+  customers: BottleneckCompany[];
+};
+
+// A company's total appearance count across every stock page's supply-chain
+// and customer-concentration lists combined - used to power the "Bottleneck
+// Leaderboard" panel on the /bottlenecks index page.
+export type BottleneckCompanyCount = {
+  name: string;
+  ticker: string | null;
+  count: number;
+};
+
+function formatFrontmatterDate(value: unknown): string {
+  if (value instanceof Date) {
+    return value.toISOString().split("T")[0];
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return "";
+}
+
+function normalizeCompanies(value: unknown): BottleneckCompany[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+
+      const record = item as Record<string, unknown>;
+      const name = String(record.name ?? "").trim();
+      const rawTicker = String(record.ticker ?? "")
+        .trim()
+        .toUpperCase();
+      // Some suppliers/customers don't have a proper, reliably tradable
+      // ticker on this site's data provider (e.g. companies that only trade
+      // as thin OTC ADRs, or aren't independently publicly listed at all).
+      // Those still show in the chart and list, just without a ticker -
+      // the page hides the "Stock analysis"/"Earnings" links when this is null.
+      const ticker = rawTicker || null;
+      const pct = Number(record.pct);
+      const blurb = String(record.blurb ?? "").trim();
+
+      if (!name || !Number.isFinite(pct)) return null;
+
+      return { name, ticker, pct, blurb };
+    })
+    .filter((item): item is BottleneckCompany => item !== null);
+}
+
+function readPost(fileName: string): BottleneckPost {
+  const slug = fileName.replace(/\.md$/, "");
+  const fullPath = path.join(bottlenecksDirectory, fileName);
+  const fileContents = fs.readFileSync(fullPath, "utf8");
+
+  const { data } = matter(fileContents);
+
+  return {
+    slug,
+    symbol: String(data.symbol || slug).toUpperCase(),
+    companyName: String(data.companyName || ""),
+    category: String(data.category || "").trim(),
+    domain: String(data.domain || "").trim(),
+    title: String(data.title || ""),
+    date: formatFrontmatterDate(data.date),
+    summary: String(data.summary || "").trim(),
+    disclaimer: String(data.disclaimer || "").trim(),
+    supplyChainNote: String(data.supplyChainNote || "").trim(),
+    customersNote: String(data.customersNote || "").trim(),
+    supplyChain: normalizeCompanies(data.supplyChain),
+    customers: normalizeCompanies(data.customers),
+  };
+}
+
+export function getAllBottleneckPosts(): BottleneckPost[] {
+  if (!fs.existsSync(bottlenecksDirectory)) return [];
+
+  const fileNames = fs
+    .readdirSync(bottlenecksDirectory)
+    .filter((fileName) => fileName.endsWith(".md"));
+
+  const posts = fileNames.map(readPost);
+
+  return posts.sort((a, b) => {
+    if (a.date === b.date) return 0;
+    if (!a.date) return 1;
+    if (!b.date) return -1;
+    return a.date < b.date ? 1 : -1;
+  });
+}
+
+export function getBottleneckBySlug(slug: string): BottleneckPost {
+  return readPost(`${slug}.md`);
+}
+
+// Counts how many times each company shows up as a bottleneck - as a
+// supplier or as a customer - across every stock page, keyed by company
+// name (tickers can legitimately be null on some entries, name is always
+// present and consistent). Sorted highest count first, alphabetical on ties.
+export function getBottleneckCompanyCounts(): BottleneckCompanyCount[] {
+  const posts = getAllBottleneckPosts();
+  const counts = new Map<string, BottleneckCompanyCount>();
+
+  for (const post of posts) {
+    const appearances = [...post.supplyChain, ...post.customers];
+
+    for (const company of appearances) {
+      const key = company.name.trim().toLowerCase();
+      if (!key) continue;
+
+      const existing = counts.get(key);
+      if (existing) {
+        existing.count += 1;
+        if (!existing.ticker && company.ticker) {
+          existing.ticker = company.ticker;
+        }
+      } else {
+        counts.set(key, {
+          name: company.name,
+          ticker: company.ticker,
+          count: 1,
+        });
+      }
+    }
+  }
+
+  return Array.from(counts.values()).sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count;
+    return a.name.localeCompare(b.name);
+  });
+}

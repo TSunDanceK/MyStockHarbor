@@ -97,6 +97,12 @@ export default function SiteHeader() {
         isActive: (path) => path === "/insights" || path.startsWith("/insights/"),
       },
       {
+        label: "Bottlenecks",
+        href: "/bottlenecks",
+        isActive: (path) =>
+          path === "/bottlenecks" || path.startsWith("/bottlenecks/"),
+      },
+      {
         label: "Earnings",
         href: stockHref(lastSymbol, "earnings"),
         stockNav: "earnings",

@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { getAllPosts } from "@/lib/blog";
 import { getAllVideoIds } from "@/lib/videoContent";
+import { getAllBottleneckPosts } from "@/lib/bottlenecks";
 import { LESSONS } from "@/app/learn/lessons";
 
 const baseUrl = "https://www.mystockharbor.com";
@@ -12,6 +13,7 @@ const mainPages = [
   { path: "/pickers", changeFrequency: "daily" as const, priority: 0.9 },
   { path: "/utilities", changeFrequency: "weekly" as const, priority: 0.7 },
   { path: "/insights", changeFrequency: "daily" as const, priority: 0.85 },
+  { path: "/bottlenecks", changeFrequency: "daily" as const, priority: 0.85 },
   { path: "/about", changeFrequency: "monthly" as const, priority: 0.5 },
   { path: "/contact", changeFrequency: "monthly" as const, priority: 0.5 },
   { path: "/privacy-policy", changeFrequency: "monthly" as const, priority: 0.4 },
@@ -131,6 +133,7 @@ function toAbsoluteUrl(path: string) {
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
   const insightPosts = getAllPosts();
+  const bottleneckPosts = getAllBottleneckPosts();
   const videoIds = getAllVideoIds();
 
   const mainPageEntries: MetadataRoute.Sitemap = mainPages.map((page) => ({
@@ -160,6 +163,15 @@ export default function sitemap(): MetadataRoute.Sitemap {
     changeFrequency: "monthly",
     priority: 0.72,
   }));
+
+  const bottleneckEntries: MetadataRoute.Sitemap = bottleneckPosts.map(
+    (post) => ({
+      url: toAbsoluteUrl(`/bottlenecks/${post.slug}`),
+      lastModified: post.date ? new Date(post.date) : now,
+      changeFrequency: "weekly",
+      priority: 0.72,
+    })
+  );
 
   // Video pages — only pages with a content file are submitted to Google.
   // Auto-updates as new content/videos/*.md files are added.
@@ -217,6 +229,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     ...marketPageEntries,
     ...seoGuideEntries,
     ...insightEntries,
+    ...bottleneckEntries,
     ...videoEntries,
     ...learnEntries,
     ...stockEntries,
