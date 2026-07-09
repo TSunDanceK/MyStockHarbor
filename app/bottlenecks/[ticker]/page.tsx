@@ -95,63 +95,108 @@ function CompanyRow({
   return (
     <div
       style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 6,
-        padding: "14px 0",
+        padding: "12px 0",
         borderBottom: "1px solid rgba(255,255,255,0.08)",
       }}
     >
       <div
         style={{
           display: "flex",
-          alignItems: "baseline",
-          justifyContent: "space-between",
-          gap: 12,
-          flexWrap: "wrap",
+          alignItems: "center",
+          gap: 10,
         }}
       >
-        <span style={{ fontSize: 16, fontWeight: 800, color: "#f1f5f9" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "baseline",
+            gap: 6,
+            flex: 1,
+            minWidth: 0,
+          }}
+        >
           <span
             aria-hidden
             style={{
+              flexShrink: 0,
               display: "inline-block",
               width: 10,
               height: 10,
               borderRadius: 999,
               background: color,
-              marginRight: 8,
               boxShadow: `0 0 6px ${color}`,
             }}
           />
-          {company.name}
+          <span
+            title={company.name}
+            style={{
+              flex: "1 1 auto",
+              minWidth: 0,
+              fontSize: 16,
+              fontWeight: 800,
+              color: "#f1f5f9",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {company.name}
+          </span>
           {company.ticker ? (
-            <span style={{ color: "#5FD4C7" }}> ({company.ticker})</span>
+            <span
+              style={{
+                flexShrink: 0,
+                fontSize: 16,
+                fontWeight: 800,
+                color: "#5FD4C7",
+              }}
+            >
+              ({company.ticker})
+            </span>
           ) : null}
-        </span>
-        <span style={{ fontSize: 14, fontWeight: 700, color: "#8a97ad" }}>
-          ~{company.pct}%
-        </span>
+        </div>
+
+        <div
+          style={{
+            flexShrink: 0,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#8a97ad" }}>
+            ~{company.pct}%
+          </span>
+          {company.ticker ? (
+            <>
+              <Link
+                href={`/stock/${encodeURIComponent(company.ticker)}`}
+                className="bnActionBtn bnActionBtn--blue"
+              >
+                Stock analysis →
+              </Link>
+              <Link
+                href={`/stock/${encodeURIComponent(company.ticker)}/earnings`}
+                className="bnActionBtn bnActionBtn--teal"
+              >
+                Earnings →
+              </Link>
+            </>
+          ) : null}
+        </div>
       </div>
-      <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, opacity: 0.88 }}>
+
+      <p
+        style={{
+          margin: 0,
+          marginTop: 6,
+          fontSize: 14,
+          lineHeight: 1.6,
+          opacity: 0.88,
+        }}
+      >
         {company.blurb}
       </p>
-      {company.ticker ? (
-        <div style={{ display: "flex", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
-          <Link
-            href={`/stock/${encodeURIComponent(company.ticker)}`}
-            className="bnActionBtn bnActionBtn--blue"
-          >
-            Stock analysis →
-          </Link>
-          <Link
-            href={`/stock/${encodeURIComponent(company.ticker)}/earnings`}
-            className="bnActionBtn bnActionBtn--teal"
-          >
-            Earnings →
-          </Link>
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -426,11 +471,12 @@ export default async function BottleneckPage({ params }: Props) {
           .bnActionBtn {
             display: inline-flex;
             align-items: center;
-            gap: 4px;
-            padding: 7px 14px;
+            gap: 3px;
+            padding: 5px 11px;
             border-radius: 999px;
             font-weight: 700;
-            font-size: 13px;
+            font-size: 12px;
+            white-space: nowrap;
             text-decoration: none;
             transition: transform 0.18s ease, box-shadow 0.18s ease,
               background-color 0.18s ease, border-color 0.18s ease;
@@ -444,8 +490,8 @@ export default async function BottleneckPage({ params }: Props) {
           .bnActionBtn--blue:focus-visible {
             background: rgba(147, 197, 253, 0.18);
             border-color: rgba(147, 197, 253, 0.75);
-            box-shadow: 0 0 16px rgba(147, 197, 253, 0.45);
-            transform: scale(1.07);
+            box-shadow: 0 0 14px rgba(147, 197, 253, 0.45);
+            transform: scale(1.06);
           }
           .bnActionBtn--teal {
             color: #5fd4c7;
@@ -456,8 +502,8 @@ export default async function BottleneckPage({ params }: Props) {
           .bnActionBtn--teal:focus-visible {
             background: rgba(95, 212, 199, 0.18);
             border-color: rgba(95, 212, 199, 0.75);
-            box-shadow: 0 0 16px rgba(95, 212, 199, 0.45);
-            transform: scale(1.07);
+            box-shadow: 0 0 14px rgba(95, 212, 199, 0.45);
+            transform: scale(1.06);
           }
         `}</style>
       </main>
