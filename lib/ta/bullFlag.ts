@@ -187,6 +187,130 @@ function lowAt(points: ReturnType<typeof normalisePoints>, index: number) {
   return points[index]?.low ?? points[index]?.close ?? 0;
 }
 
+type FlagLineFit = {
+  valueAtStart: number;
+  valueAtEnd: number;
+  slopePerBar: number;
+  touchCount: number;
+};
+
+/**
+ * Fits one boundary of the flag channel as a true envelope line.
+ *
+ * For the upper boundary ("upper"), the fitted line must stay at or above
+ * every flag-bar high (small tolerance); for the lower boundary ("lower"),
+ * at or below every flag-bar low. Both boundaries of a bull flag must slope
+ * downward. This replaces the old averaged channel (which routinely cut
+ * through candles) with lines that actually sit on the candle extremes.
+ *
+ * Among valid lines, prefers the one the price touched most, then the
+ * longest anchor span.
+ */
+function fitFlagEnvelope(args: {
+  values: number[];
+  side: "upper" | "lower";
+  envelopeTolPct: number;
+  touchTolPct: number;
+  minTouches: number;
+  minAnchorSeparationBars: number;
+}): FlagLineFit | null {
+  const {
+    values,
+    side,
+    envelopeTolPct,
+    touchTolPct,
+    minTouches,
+    minAnchorSeparationBars,
+  } = args;
+
+  const barCount = values.length;
+
+  if (barCount < 3) return null;
+
+  const lastIdx = barCount - 1;
+
+  let best: FlagLineFit | null = null;
+  let bestSpan = 0;
+
+  for (let i = 0; i < barCount; i++) {
+    for (let j = i + minAnchorSeparationBars; j < barCount; j++) {
+      // Flag channels slope down: the later anchor must be lower.
+      if (values[j] >= values[i]) continue;
+
+      const slopePerBar = (values[j] - values[i]) / (j - i);
+
+      const lineValueAt = (idx: number) =>
+        values[i] + slopePerBar * (idx - i);
+
+      let isEnvelope = true;
+
+      for (let k = 0; k < barCount; k++) {
+        const lineValue = lineValueAt(k);
+
+        if (lineValue <= 0) {
+          isEnvelope = false;
+          break;
+        }
+
+        if (
+          side === "upper" &&
+          values[k] > lineValue * (1 + envelopeTolPct / 100)
+        ) {
+          isEnvelope = false;
+          break;
+        }
+
+        if (
+          side === "lower" &&
+          values[k] < lineValue * (1 - envelopeTolPct / 100)
+        ) {
+          isEnvelope = false;
+          break;
+        }
+      }
+
+      if (!isEnvelope) continue;
+
+      let touchCount = 0;
+      let lastTouchIdx = -Infinity;
+
+      for (let k = 0; k < barCount; k++) {
+        const lineValue = lineValueAt(k);
+
+        const touches =
+          side === "upper"
+            ? values[k] >= lineValue * (1 - touchTolPct / 100)
+            : values[k] <= lineValue * (1 + touchTolPct / 100);
+
+        if (touches && k - lastTouchIdx >= 2) {
+          touchCount++;
+          lastTouchIdx = k;
+        }
+      }
+
+      if (touchCount < minTouches) continue;
+
+      const span = j - i;
+
+      if (
+        !best ||
+        touchCount > best.touchCount ||
+        (touchCount === best.touchCount && span > bestSpan)
+      ) {
+        best = {
+          valueAtStart: lineValueAt(0),
+          valueAtEnd: lineValueAt(lastIdx),
+          slopePerBar,
+          touchCount,
+        };
+        bestSpan = span;
+      }
+    }
+  }
+
+  return best;
+}
+
 export function detectBullFlag(
   rawPoints: PatternPoint[],
   options: DetectOptions = {}
@@ -195,20 +319,30 @@ export function detectBullFlag(
 
   const lookbackBars = options.lookbackBars ?? (timeframe === "W" ? 104 : 160);
   const minPoleGainPct = options.minPoleGainPct ?? (timeframe === "W" ? 12 : 9);
-const minFlagBars = options.minFlagBars ?? (timeframe === "W" ? 8 : 7);
+  const minFlagBars = options.minFlagBars ?? (timeframe === "W" ? 8 : 7);
 
-const maxFlagBars = options.maxFlagBars ?? (timeframe === "W" ? 24 : 38);
+  const maxFlagBars = options.maxFlagBars ?? (timeframe === "W" ? 24 : 38);
 
-const minPoleBars = options.minPoleBars ?? (timeframe === "W" ? 12 : 12);
+  const minPoleBars = options.minPoleBars ?? (timeframe === "W" ? 12 : 12);
   const maxPoleBars = options.maxPoleBars ?? (timeframe === "W" ? 34 : 55);
-  const minFlagRetracementPct = options.minFlagRetracementPct ?? 2;
+
+  // A real flag has to give back a meaningful part of the pole: floor the
+  // minimum retracement at 12% (the old default of 2% let sideways drifts
+  // that never pulled back qualify as "flags").
+  const minFlagRetracementPct = Math.max(
+    options.minFlagRetracementPct ?? 12,
+    12
+  );
+
   const maxFlagRetracementPct =
-    options.maxFlagRetracementPct ?? (timeframe === "W" ? 58 : 52);
+    options.maxFlagRetracementPct ?? (timeframe === "W" ? 55 : 50);
   const maxDistanceToBreakoutPct =
     options.maxDistanceToBreakoutPct ?? (timeframe === "W" ? 16 : 10);
-  const maxFlagUpDriftPct = options.maxFlagUpDriftPct ?? (timeframe === "W" ? 7 : 5);
   const maxBreakoutExtensionPct =
     options.maxBreakoutExtensionPct ?? (timeframe === "W" ? 10 : 7);
+
+  const envelopeTolPct = timeframe === "W" ? 1.2 : 0.75;
+  const touchTolPct = timeframe === "W" ? 2.5 : 1.5;
 
   const points = normalisePoints(rawPoints).slice(-lookbackBars);
 
@@ -218,18 +352,22 @@ const minPoleBars = options.minPoleBars ?? (timeframe === "W" ? 12 : 12);
 
   const latest = points[points.length - 1];
   const latestDateMs = new Date(latest.date).getTime();
-const nowMs = Date.now();
+  const nowMs = Date.now();
 
-const maxStaleDays = timeframe === "W" ? 21 : 7;
+  const maxStaleDays = timeframe === "W" ? 21 : 7;
 
-const maxStaleMs = maxStaleDays * 24 * 60 * 60 * 1000;
+  const maxStaleMs = maxStaleDays * 24 * 60 * 60 * 1000;
 
-if (Number.isFinite(latestDateMs) && nowMs - latestDateMs > maxStaleMs) {
-  return null;
-}
+  if (Number.isFinite(latestDateMs) && nowMs - latestDateMs > maxStaleMs) {
+    return null;
+  }
+
   let best: BullFlagResult | null = null;
 
-  const maxUsableFlagBars = Math.min(maxFlagBars, points.length - minPoleBars - 2);
+  const maxUsableFlagBars = Math.min(
+    maxFlagBars,
+    points.length - minPoleBars - 2
+  );
 
   for (let flagBars = minFlagBars; flagBars <= maxUsableFlagBars; flagBars++) {
     const flagStartIdx = points.length - flagBars;
@@ -278,7 +416,6 @@ if (Number.isFinite(latestDateMs) && nowMs - latestDateMs > maxStaleMs) {
     const flagHighs = flagPoints.map((point) => point.high);
     const flagLows = flagPoints.map((point) => point.low);
 
-    const flagHigh = Math.max(...flagHighs);
     const flagLow = Math.min(...flagLows);
     const poleRange = poleHighPrice - poleStartPrice;
 
@@ -289,158 +426,149 @@ if (Number.isFinite(latestDateMs) && nowMs - latestDateMs > maxStaleMs) {
     if (flagRetracementPct < minFlagRetracementPct) continue;
     if (flagRetracementPct > maxFlagRetracementPct) continue;
 
-const channelWindow = Math.max(2, Math.floor(flagPoints.length * 0.35));
+    const minAnchorSeparationBars = Math.max(
+      3,
+      Math.floor(flagPoints.length / 4)
+    );
 
-const earlyHighAvg = avg(flagHighs.slice(0, channelWindow));
-const lateHighAvg = avg(flagHighs.slice(-channelWindow));
+    const upperFit = fitFlagEnvelope({
+      values: flagHighs,
+      side: "upper",
+      envelopeTolPct,
+      touchTolPct,
+      minTouches: 2,
+      minAnchorSeparationBars,
+    });
 
-const earlyLowAvg = avg(flagLows.slice(0, channelWindow));
-const lateLowAvg = avg(flagLows.slice(-channelWindow));
+    if (!upperFit) continue;
 
-const flagDriftPct = pctDiff(earlyHighAvg, lateHighAvg);
-const lowerFlagDriftPct = pctDiff(earlyLowAvg, lateLowAvg);
+    const lowerFit = fitFlagEnvelope({
+      values: flagLows,
+      side: "lower",
+      envelopeTolPct,
+      touchTolPct,
+      minTouches: 2,
+      minAnchorSeparationBars,
+    });
 
-if (flagDriftPct > maxFlagUpDriftPct) continue;
+    if (!lowerFit) continue;
 
-if (flagDriftPct >= 0) continue;
-if (lowerFlagDriftPct >= 0) continue;
+    const channelUpperStartPrice = upperFit.valueAtStart;
+    const channelUpperEndPrice = upperFit.valueAtEnd;
+    const channelLowerStartPrice = lowerFit.valueAtStart;
+    const channelLowerEndPrice = lowerFit.valueAtEnd;
 
-const rawChannelWidthStart = earlyHighAvg - earlyLowAvg;
-const rawChannelWidthEnd = lateHighAvg - lateLowAvg;
-const rawAverageChannelWidth = (rawChannelWidthStart + rawChannelWidthEnd) / 2;
+    const flagDriftPct = pctDiff(channelUpperStartPrice, channelUpperEndPrice);
 
-if (!Number.isFinite(rawAverageChannelWidth) || rawAverageChannelWidth <= 0) {
-  continue;
-}
+    const rawChannelWidthStart = channelUpperStartPrice - channelLowerStartPrice;
+    const rawChannelWidthEnd = channelUpperEndPrice - channelLowerEndPrice;
+    const rawAverageChannelWidth =
+      (rawChannelWidthStart + rawChannelWidthEnd) / 2;
 
-const channelWidthOfPolePct = (rawAverageChannelWidth / poleRange) * 100;
-const channelWidthOfPricePct = (rawAverageChannelWidth / latest.close) * 100;
+    if (
+      !Number.isFinite(rawAverageChannelWidth) ||
+      rawAverageChannelWidth <= 0 ||
+      rawChannelWidthStart <= 0 ||
+      rawChannelWidthEnd <= 0
+    ) {
+      continue;
+    }
 
-const minChannelWidthOfPolePct = timeframe === "W" ? 12 : 10;
+    const channelWidthOfPolePct = (rawAverageChannelWidth / poleRange) * 100;
+    const channelWidthOfPricePct =
+      (rawAverageChannelWidth / latest.close) * 100;
 
-const maxChannelWidthOfPolePct = timeframe === "W" ? 48 : 45;
+    const minChannelWidthOfPolePct = timeframe === "W" ? 12 : 10;
 
-const minChannelWidthOfPricePct = timeframe === "W" ? 2.25 : 1.6;
+    const maxChannelWidthOfPolePct = timeframe === "W" ? 48 : 45;
 
-if (channelWidthOfPolePct < minChannelWidthOfPolePct) continue;
-if (channelWidthOfPolePct > maxChannelWidthOfPolePct) continue;
-if (channelWidthOfPricePct < minChannelWidthOfPricePct) continue;
+    const minChannelWidthOfPricePct = timeframe === "W" ? 2.25 : 1.6;
 
-const channelVisualPad = rawAverageChannelWidth * 0.18;
+    if (channelWidthOfPolePct < minChannelWidthOfPolePct) continue;
+    if (channelWidthOfPolePct > maxChannelWidthOfPolePct) continue;
+    if (channelWidthOfPricePct < minChannelWidthOfPricePct) continue;
 
-const channelUpperStartPrice = earlyHighAvg + channelVisualPad;
-const channelUpperEndPrice = lateHighAvg + channelVisualPad;
-const channelLowerStartPrice = earlyLowAvg - channelVisualPad;
-const channelLowerEndPrice = lateLowAvg - channelVisualPad;
+    const flagStartIdxForAngle = poleHighIdx;
+    const flagEndIdxForAngle = points.length - 1;
 
-const flagStartIdxForAngle = poleHighIdx;
-const flagEndIdxForAngle = points.length - 1;
+    const upperFlagAngleDeg = visualDownAngleDeg({
+      points,
+      startIdx: flagStartIdxForAngle,
+      endIdx: flagEndIdxForAngle,
+      startPrice: channelUpperStartPrice,
+      endPrice: channelUpperEndPrice,
+    });
 
-const upperFlagAngleDeg = visualDownAngleDeg({
-  points,
-  startIdx: flagStartIdxForAngle,
-  endIdx: flagEndIdxForAngle,
-  startPrice: channelUpperStartPrice,
-  endPrice: channelUpperEndPrice,
-});
+    const lowerFlagAngleDeg = visualDownAngleDeg({
+      points,
+      startIdx: flagStartIdxForAngle,
+      endIdx: flagEndIdxForAngle,
+      startPrice: channelLowerStartPrice,
+      endPrice: channelLowerEndPrice,
+    });
 
-const lowerFlagAngleDeg = visualDownAngleDeg({
-  points,
-  startIdx: flagStartIdxForAngle,
-  endIdx: flagEndIdxForAngle,
-  startPrice: channelLowerStartPrice,
-  endPrice: channelLowerEndPrice,
-});
+    const minFlagAngleDeg = timeframe === "W" ? 8 : 9;
+    const maxFlagAngleDeg = timeframe === "W" ? 28 : 30;
 
-const minFlagAngleDeg = timeframe === "W" ? 11 : 12;
-const maxFlagAngleDeg = timeframe === "W" ? 26 : 28;
+    if (upperFlagAngleDeg < minFlagAngleDeg) continue;
+    if (upperFlagAngleDeg > maxFlagAngleDeg) continue;
+    if (lowerFlagAngleDeg < minFlagAngleDeg) continue;
+    if (lowerFlagAngleDeg > maxFlagAngleDeg) continue;
 
-if (upperFlagAngleDeg < minFlagAngleDeg) continue;
-if (upperFlagAngleDeg > maxFlagAngleDeg) continue;
-if (lowerFlagAngleDeg < minFlagAngleDeg) continue;
-if (lowerFlagAngleDeg > maxFlagAngleDeg) continue;
+    const maxChannelAngleDifferenceDeg = timeframe === "W" ? 9 : 7;
 
-const maxChannelAngleDifferenceDeg = timeframe === "W" ? 8 : 6;
+    if (
+      Math.abs(upperFlagAngleDeg - lowerFlagAngleDeg) >
+      maxChannelAngleDifferenceDeg
+    ) {
+      continue;
+    }
 
-if (
-  Math.abs(upperFlagAngleDeg - lowerFlagAngleDeg) >
-  maxChannelAngleDifferenceDeg
-) {
-  continue;
-}
+    const flagAngleDeg = (upperFlagAngleDeg + lowerFlagAngleDeg) / 2;
 
-const maxCloseOutsideChannelPct = timeframe === "W" ? 2.2 : 1.35;
-const maxWickOutsideChannelPct = timeframe === "W" ? 3.4 : 2.25;
-const maxCloseOutsideBars = timeframe === "W" ? 2 : 1;
-const maxWickOutsideBars = timeframe === "W" ? 2 : 1;
+    const breakoutPrice = channelUpperEndPrice;
+    const distanceToBreakoutPct = pctDiff(latest.close, breakoutPrice);
 
-let closeOutsideChannelBars = 0;
-let wickOutsideChannelBars = 0;
+    const tightenedMaxDistanceToBreakoutPct =
+      timeframe === "W"
+        ? Math.min(maxDistanceToBreakoutPct, 5)
+        : Math.min(maxDistanceToBreakoutPct, 3.5);
 
-for (let i = 0; i < flagPoints.length; i++) {
-  const point = flagPoints[i];
-  const progress = i / Math.max(1, flagPoints.length - 1);
+    if (distanceToBreakoutPct > tightenedMaxDistanceToBreakoutPct) continue;
+    if (distanceToBreakoutPct < -maxBreakoutExtensionPct) continue;
 
-  const upperAtPoint =
-    channelUpperStartPrice +
-    (channelUpperEndPrice - channelUpperStartPrice) * progress;
+    const poleScore = clamp((poleGainPct - minPoleGainPct) * 0.8 + 14, 0, 24);
 
-  const lowerAtPoint =
-    channelLowerStartPrice +
-    (channelLowerEndPrice - channelLowerStartPrice) * progress;
+    const retracementScore = clamp(
+      22 - Math.abs(flagRetracementPct - 35) * 0.6,
+      0,
+      22
+    );
 
-  const closeAboveUpperPct = pctDiff(upperAtPoint, point.close);
-  const closeBelowLowerPct = pctDiff(lowerAtPoint, point.close);
+    const proximityScore = clamp(
+      16 - Math.max(0, distanceToBreakoutPct) * 2.5,
+      0,
+      16
+    );
 
-  const highAboveUpperPct = pctDiff(upperAtPoint, point.high);
-  const lowBelowLowerPct = pctDiff(lowerAtPoint, point.low);
-
-  if (
-    closeAboveUpperPct > maxCloseOutsideChannelPct ||
-    closeBelowLowerPct < -maxCloseOutsideChannelPct
-  ) {
-    closeOutsideChannelBars++;
-  }
-
-  if (
-    highAboveUpperPct > maxWickOutsideChannelPct ||
-    lowBelowLowerPct < -maxWickOutsideChannelPct
-  ) {
-    wickOutsideChannelBars++;
-  }
-}
-
-if (closeOutsideChannelBars > maxCloseOutsideBars) continue;
-if (wickOutsideChannelBars > maxWickOutsideBars) continue;
-
-const flagAngleDeg = (upperFlagAngleDeg + lowerFlagAngleDeg) / 2;
-
-const breakoutPrice = channelUpperEndPrice;
-const distanceToBreakoutPct = pctDiff(latest.close, breakoutPrice);
-
-const tightenedMaxDistanceToBreakoutPct =
-  timeframe === "W"
-    ? Math.min(maxDistanceToBreakoutPct, 5)
-    : Math.min(maxDistanceToBreakoutPct, 3.5);
-
-if (distanceToBreakoutPct > tightenedMaxDistanceToBreakoutPct) continue;
-if (distanceToBreakoutPct < -maxBreakoutExtensionPct) continue;
-
-    const poleScore = clamp((poleGainPct - minPoleGainPct) * 1.15 + 18, 0, 28);
-    const retracementScore = clamp(28 - Math.abs(flagRetracementPct - 32) * 0.62, 0, 26);
-    const proximityScore = clamp(18 - Math.max(0, distanceToBreakoutPct) * 0.85, 0, 18);
     const durationScore = clamp(
       timeframe === "W"
         ? flagBars >= 5 && flagBars <= 18
-          ? 13
-          : 9
+          ? 12
+          : 8
         : flagBars >= 7 && flagBars <= 28
-          ? 13
-          : 9,
+          ? 12
+          : 8,
       0,
-      13
+      12
     );
-    const driftScore = clamp(9 - Math.max(0, flagDriftPct) * 0.9, 0, 9);
+
+    const channelScore = clamp(
+      (upperFit.touchCount + lowerFit.touchCount - 4) * 2,
+      0,
+      8
+    );
+
     const volumeScore = volumeCompressionScore(flagPoints);
     const timeframeBonus = timeframe === "W" ? 4 : 0;
 
@@ -450,7 +578,7 @@ if (distanceToBreakoutPct < -maxBreakoutExtensionPct) continue;
           retracementScore +
           proximityScore +
           durationScore +
-          driftScore +
+          channelScore +
           volumeScore +
           timeframeBonus,
         0,
@@ -458,11 +586,17 @@ if (distanceToBreakoutPct < -maxBreakoutExtensionPct) continue;
       )
     );
 
-    const minScore = timeframe === "W" ? 48 : 50;
+    const minScore = 55;
     if (score < minScore) continue;
 
     const tone =
-      score >= 75 ? "green" : score >= 62 ? "yellow" : score >= 50 ? "orange" : "red";
+      score >= 78
+        ? "green"
+        : score >= 64
+          ? "yellow"
+          : score >= 52
+            ? "orange"
+            : "red";
 
     const note =
       timeframe === "W"
@@ -490,6 +624,9 @@ if (distanceToBreakoutPct < -maxBreakoutExtensionPct) continue;
       poleBars,
       flagDriftPct: Number(flagDriftPct.toFixed(2)),
 
+      // Channel endpoints are envelope values at the flag's first and last
+      // bar, so the client can draw them verbatim and the lines sit on the
+      // candle extremes instead of cutting through them.
       flagUpperStartPrice: Number(channelUpperStartPrice.toFixed(2)),
       flagUpperEndPrice: Number(channelUpperEndPrice.toFixed(2)),
       flagLowerStartPrice: Number(channelLowerStartPrice.toFixed(2)),
