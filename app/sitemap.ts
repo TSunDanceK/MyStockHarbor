@@ -14,6 +14,11 @@ const mainPages = [
   { path: "/utilities", changeFrequency: "weekly" as const, priority: 0.7 },
   { path: "/insights", changeFrequency: "daily" as const, priority: 0.85 },
   { path: "/bottlenecks", changeFrequency: "daily" as const, priority: 0.85 },
+  // Real page (app/platforms/page.tsx) that was missing from the sitemap
+  // entirely — found during the 2026-07-09 indexing audit. Prioritized
+  // alongside Insights/Bottlenecks as one of the site's higher-value pages,
+  // deliberately above the templated /stock/{symbol} pages below.
+  { path: "/platforms", changeFrequency: "weekly" as const, priority: 0.85 },
   { path: "/about", changeFrequency: "monthly" as const, priority: 0.5 },
   { path: "/contact", changeFrequency: "monthly" as const, priority: 0.5 },
   { path: "/privacy-policy", changeFrequency: "monthly" as const, priority: 0.4 },
@@ -157,19 +162,25 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.8,
   }));
 
+  // Individual Insights posts — bumped from 0.72 to 0.8 (2026-07-09 SEO
+  // rebalance) so Google weighs this real editorial content above the
+  // templated /stock/{symbol} pages, which were previously tied at the
+  // same 0.72 priority.
   const insightEntries: MetadataRoute.Sitemap = insightPosts.map((post) => ({
     url: toAbsoluteUrl(`/insights/${post.slug}`),
     lastModified: post.date ? new Date(post.date) : now,
     changeFrequency: "monthly",
-    priority: 0.72,
+    priority: 0.8,
   }));
 
+  // Individual Bottleneck pages — same 0.72 → 0.8 rebalance as Insights
+  // above, for the same reason.
   const bottleneckEntries: MetadataRoute.Sitemap = bottleneckPosts.map(
     (post) => ({
       url: toAbsoluteUrl(`/bottlenecks/${post.slug}`),
       lastModified: post.date ? new Date(post.date) : now,
       changeFrequency: "weekly",
-      priority: 0.72,
+      priority: 0.8,
     })
   );
 
@@ -189,39 +200,56 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.68,
   }));
 
+  // Plain /stock/{symbol} landing pages — deliberately dropped from 0.72
+  // to 0.55 (2026-07-09 SEO rebalance). These are the thinnest, most
+  // templated pages on the site (same shared layout across 129 symbols)
+  // and made up the bulk of the "Discovered - currently not indexed"
+  // backlog found in the 2026-07-09 Search Console audit
+  // (claude/SEO_INDEXING_AUDIT_2026-07-09.md). Crawl/index priority should
+  // go to Insights, Bottlenecks, Pickers, Platforms, and the per-symbol
+  // News/Earnings pages instead - all bumped above this tier below.
   const stockEntries: MetadataRoute.Sitemap = priorityStocks.map((symbol) => ({
     url: toAbsoluteUrl(`/stock/${encodeURIComponent(symbol.toUpperCase())}`),
     lastModified: now,
     changeFrequency: "weekly",
-    priority: 0.72,
+    priority: 0.55,
   }));
 
+  // Per-symbol News pages — bumped from 0.7 to 0.78. These carry real,
+  // regularly-refreshed aggregated news content per symbol (much larger
+  // page than the plain stock page), so they rank above the plain
+  // /stock/{symbol} page in this rebalance.
   const stockNewsEntries: MetadataRoute.Sitemap = priorityStocks.map((symbol) => ({
     url: toAbsoluteUrl(`/stock/${encodeURIComponent(symbol.toUpperCase())}/news`),
     lastModified: now,
     changeFrequency: "daily",
-    priority: 0.7,
+    priority: 0.78,
   }));
 
+  // Per-symbol Earnings pages — bumped from 0.69 to 0.78, same reasoning
+  // as News above.
   const stockEarningsEntries: MetadataRoute.Sitemap = priorityStocks.map((symbol) => ({
     url: toAbsoluteUrl(`/stock/${encodeURIComponent(symbol.toUpperCase())}/earnings`),
     lastModified: now,
     changeFrequency: "weekly",
-    priority: 0.69,
+    priority: 0.78,
   }));
 
+  // Plain ETF /stock/{symbol} pages — same 0.74 → 0.55 rebalance as the
+  // stock entries above.
   const etfEntries: MetadataRoute.Sitemap = uniqueEtfs.map((symbol) => ({
     url: toAbsoluteUrl(`/stock/${encodeURIComponent(symbol.toUpperCase())}`),
     lastModified: now,
     changeFrequency: "weekly",
-    priority: 0.74,
+    priority: 0.55,
   }));
 
+  // ETF News pages — bumped 0.69 → 0.78, same reasoning as stockNewsEntries.
   const etfNewsEntries: MetadataRoute.Sitemap = uniqueEtfs.map((symbol) => ({
     url: toAbsoluteUrl(`/stock/${encodeURIComponent(symbol.toUpperCase())}/news`),
     lastModified: now,
     changeFrequency: "daily",
-    priority: 0.69,
+    priority: 0.78,
   }));
 
   const entries: MetadataRoute.Sitemap = [
