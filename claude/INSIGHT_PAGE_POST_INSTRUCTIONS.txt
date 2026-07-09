@@ -1,0 +1,8 @@
+Read CLAUDE.md in Knowledge Base and write insights page
+here is a ticker -
+or Suggest your own Ticker
+
+(Mirror note: this is the original short-form doc from the Claude Project,
+kept here for completeness. The authoritative, current instructions for the
+daily Insights pipeline are CLAUDE.md at the repo root and
+claude/InsightScheduleInstructions.md.)
