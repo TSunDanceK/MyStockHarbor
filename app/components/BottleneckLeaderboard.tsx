@@ -176,6 +176,36 @@ export default function BottleneckLeaderboard({
           })}
         </div>
       )}
+
+      <div
+        style={{
+          marginTop: 18,
+          paddingTop: 14,
+          borderTop: "1px solid rgba(255,255,255,0.10)",
+        }}
+      >
+        <div
+          style={{
+            fontSize: 11,
+            opacity: 0.55,
+            fontWeight: 800,
+            letterSpacing: "0.07em",
+            textTransform: "uppercase",
+            marginBottom: 6,
+          }}
+        >
+          Why it matters
+        </div>
+        <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.6, opacity: 0.75 }}>
+          A company that keeps showing up here isn&apos;t just important to
+          one stock - it&apos;s a shared dependency across many of them. If a
+          name high on this list runs into trouble - an outage, a shortage,
+          a regulatory action, a bad quarter - the disruption can ripple
+          across every business that relies on it, not just the one you
+          started on. The higher the count, the more concentrated - and
+          systemic - that risk becomes.
+        </p>
+      </div>
     </section>
   );
 }
