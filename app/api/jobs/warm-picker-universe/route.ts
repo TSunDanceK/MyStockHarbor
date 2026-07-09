@@ -493,18 +493,37 @@ function normalizeEarningsRows(value: unknown, fallbackSymbol: string): Earnings
     .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
 }
 
-async function readCachedFmpEarnings(symbol: string): Promise<EarningsRow[]> {
-  if (!redis) return [];
+// Batch version of the old per-symbol readCachedFmpEarnings(): reads the
+// whole universe's cached earnings in a single pipelined Redis round-trip
+// (via mget) instead of one individual REST call per symbol. For a
+// 200-symbol universe this was ~200 separate Upstash calls; now it's 1.
+async function readCachedFmpEarningsBulk(
+  symbols: string[]
+): Promise<Map<string, EarningsRow[]>> {
+  const result = new Map<string, EarningsRow[]>();
+  if (!redis) return result;
 
-  const cleanSymbol = symbol.toUpperCase().replace(/[^A-Z0-9.-]/g, "");
-  if (!cleanSymbol) return [];
+  const cleanSymbols = Array.from(
+    new Set(
+      symbols
+        .map((symbol) => symbol.toUpperCase().replace(/[^A-Z0-9.-]/g, ""))
+        .filter(Boolean)
+    )
+  );
+  if (!cleanSymbols.length) return result;
 
   try {
-    const cached = await redis.get<EarningsRow[]>(`${EARNINGS_REDIS_KEY_PREFIX}${cleanSymbol}`);
-    return normalizeEarningsRows(cached, cleanSymbol);
+    const keys = cleanSymbols.map((symbol) => `${EARNINGS_REDIS_KEY_PREFIX}${symbol}`);
+    const values = await redis.mget<EarningsRow[]>(...keys);
+
+    cleanSymbols.forEach((symbol, i) => {
+      result.set(symbol, normalizeEarningsRows(values[i], symbol));
+    });
   } catch {
-    return [];
+    // Best-effort; a missing entry just means "no cached earnings yet".
   }
+
+  return result;
 }
 
 async function queueEarningsWarmupSymbols(symbols: string[]) {
@@ -520,28 +539,47 @@ async function queueEarningsWarmupSymbols(symbols: string[]) {
     )
   );
 
-  await Promise.all(
-    cleanSymbols.map(async (symbol) => {
-      try {
-        const cacheKey = `${EARNINGS_REDIS_KEY_PREFIX}${symbol}`;
-        const dueKey = `${EARNINGS_DUE_KEY_PREFIX}${symbol}`;
-        const [cached, existingDue] = await Promise.all([
-          redis.get<EarningsRow[]>(cacheKey),
-          redis.get<number>(dueKey),
-        ]);
+  if (!cleanSymbols.length) return;
 
-        if (Array.isArray(cached) && cached.length > 0) return;
-        if (typeof existingDue === "number" && existingDue > now) return;
+  try {
+    // Batch-read the cached-earnings flag + due timestamp for every symbol
+    // in one pipelined round-trip instead of 2 separate Redis calls per
+    // symbol (was up to ~400 individual REST calls for a 200-symbol
+    // universe, just for this read phase).
+    const readPipeline = redis.pipeline();
+    for (const symbol of cleanSymbols) {
+      readPipeline.get<EarningsRow[]>(`${EARNINGS_REDIS_KEY_PREFIX}${symbol}`);
+      readPipeline.get<number>(`${EARNINGS_DUE_KEY_PREFIX}${symbol}`);
+    }
+    const readResults =
+      await readPipeline.exec<Array<EarningsRow[] | number | null>>();
 
-        await Promise.all([
-          redis.sadd(EARNINGS_QUEUE_KEY, symbol),
-          redis.set(dueKey, dueAt, { ex: EARNINGS_CACHE_TTL_SECONDS }),
-        ]);
-      } catch {
-        // Queueing is best-effort; picker results should still load.
-      }
-    })
-  );
+    const symbolsNeedingQueue: string[] = [];
+    for (let i = 0; i < cleanSymbols.length; i++) {
+      const cached = readResults[i * 2] as EarningsRow[] | null;
+      const existingDue = readResults[i * 2 + 1] as number | null;
+
+      if (Array.isArray(cached) && cached.length > 0) continue;
+      if (typeof existingDue === "number" && existingDue > now) continue;
+
+      symbolsNeedingQueue.push(cleanSymbols[i]);
+    }
+
+    if (!symbolsNeedingQueue.length) return;
+
+    // Batch-write the queue additions + due timestamps in one more
+    // pipelined round-trip instead of 2 separate Redis calls per symbol.
+    const writePipeline = redis.pipeline();
+    for (const symbol of symbolsNeedingQueue) {
+      writePipeline.sadd(EARNINGS_QUEUE_KEY, symbol);
+      writePipeline.set(`${EARNINGS_DUE_KEY_PREFIX}${symbol}`, dueAt, {
+        ex: EARNINGS_CACHE_TTL_SECONDS,
+      });
+    }
+    await writePipeline.exec();
+  } catch {
+    // Queueing is best-effort; picker results should still load.
+  }
 }
 
 function selectLatestCompletedEarnings(rows: EarningsRow[]) {
@@ -2003,6 +2041,10 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
   // earnings from Redis only, so page loads never spend FMP calls on earnings.
   await queueEarningsWarmupSymbols(universe);
 
+  // One pipelined bulk read for the whole universe instead of one Redis
+  // call per symbol inside the loop below.
+  const earningsBySymbol = await readCachedFmpEarningsBulk(universe);
+
   const limit = pLimit(10);
   const days = 1300;
 
@@ -2030,7 +2072,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
           const pts = await fetchHistory(symbol, days);
           if (!pts.length) return;
 
-          const earningsRows = await readCachedFmpEarnings(symbol);
+          const earningsRows = earningsBySymbol.get(symbol) ?? [];
 
           const dynamicName = isDynamicUniverse(symbol);
           const chartPoints = buildPickerChartPoints(pts);
