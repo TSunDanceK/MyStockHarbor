@@ -4,6 +4,11 @@ This file is the persistent memory for the daily/on-demand insights post pipelin
 Read this file at the start of any new chat instead of re-reading old conversation
 history — it contains everything learned from building and debugging this workflow.
 
+**Note (2026-07-09):** this file had drifted out of sync with the actual live
+automation for a while — the "Full daily automation" section below was missing
+from `main` even though the automation was already built and running via a
+Cowork/Claude Code scheduled task. This edit reconciles the two.
+
 ---
 
 ## What this is
@@ -17,6 +22,16 @@ The strict content template lives at `content/templates/insight-template.md` —
 **always read that file fresh before writing a post**, don't rely on a cached
 understanding of it, since it may be edited over time.
 
+There are now **two publishing paths**:
+
+- **Manual / chat-initiated** (below, steps 1–8): you send a ticker (or ask for a
+  pick) in a chat, Claude opens a PR, you review the preview link, and you approve
+  the merge yourself.
+- **Fully automated daily run** (see "Full daily automation" section below): a
+  scheduled task fires **twice a day** with nobody watching, picks its own two
+  tickers, self-checks its own work, publishes straight to production with no
+  preview, and verifies the live deploy — fixing it if something's broken.
+
 ---
 
 ## Repo
@@ -29,7 +44,7 @@ understanding of it, since it may be edited over time.
 
 ---
 
-## Daily workflow
+## Daily workflow (manual / chat-initiated)
 
 1. **Ticker selection**
    - If the user has sent a ticker, use it.
@@ -92,6 +107,8 @@ understanding of it, since it may be edited over time.
    - Open a PR against `main` with a clear title and a short body summarizing
      the setup, chart settings, and internal link used
    - Do NOT merge automatically — this is a human-approval gate
+     *(this rule applies to the manual path only — see the automated path below
+     for when it's intentionally skipped)*
 
 7. **Notify for review**
    - Vercel auto-builds a preview on the PR. The **branch alias URL** (stable
@@ -104,6 +121,117 @@ understanding of it, since it may be edited over time.
 8. **Merge on approval**
    - Once approved, merge the PR (squash merge). Vercel auto-deploys `main`
      to production within a minute or two.
+
+---
+
+## Full daily automation (scheduled task)
+
+Built via a Cowork/Claude Code **scheduled task** (a "Routine"), which fires
+**twice a day**, starts a completely fresh session with no chat history, and
+runs unattended — no human needs to open Claude. Editing the trigger itself
+(cron, prompt text, connectors) has to be done from within Cowork/Claude Code's
+routine settings — there is no tool for it from a normal claude.ai chat.
+
+This path deliberately differs from the manual workflow above in two ways: ticker
+selection is fully self-directed, and the human-approval gate is replaced with a
+self-QA pass plus a post-deploy verification/auto-fix loop, since nobody is
+watching to catch problems.
+
+1. **Ticker selection — pick TWO tickers per run, not one (changed 2026-07-09):**
+   - **Pick A — Good buying level:** same logic as the manual path above —
+     price testing/near Daily or Weekly MA200 ("buy zone"); price at a major
+     horizontal support level; support test + bullish RSI/MACD divergence; or
+     a genuinely major, dated, verifiable news catalyst.
+   - **Pick B — Retail-hungry, accumulating stage:** a stock showing strong
+     retail attention (high StockTwits/Reddit/financial-news mention volume,
+     elevated relative volume, or a recent viral catalyst) that is currently
+     base-building/accumulating rather than already breaking out — price
+     holding a range or a support shelf with rising volume on up-days, not yet
+     extended. Prefer names **not in the S&P 500** (mid/small-cap, recent IPO,
+     or meme-adjacent) — deliberately lower-competition SEO territory than the
+     mega-caps everyone already covers. Caveat: genuinely "retail-hungry" names
+     are often also the most content-saturated on the internet (every finance
+     blog chases the same meme tickers) — the low-competition edge only holds
+     if the pick is caught during genuine early accumulation, before the
+     content crowd piles on too.
+   - Pull the most recent 50 posts from `content/insights/` (sort by date) and
+     build a single shared exclude-list from their tickers, applied to both
+     picks.
+   - Web search for today's high-traffic / most-active stocks (for Pick A
+     candidates) and for trending/most-discussed retail names (for Pick B
+     candidates — e.g. StockTwits trending, Reddit trending tickers, "most
+     active" retail-skewed screens).
+   - If nothing clears the bar for Pick A, fall back to the best available
+     high-traffic mover anyway and say so plainly in its PR body. If nothing
+     clears the bar for Pick B specifically, fall back to the best available
+     retail-attention name anyway and say so in its PR body — don't silently
+     drop back to a second Pick-A-style pick instead.
+
+2. **Research, chart settings, internal links, writing the post** — identical to
+   steps 2–5 of the manual workflow above, run once per pick (twice total per
+   day). No shortcuts here even though nobody is reviewing it before it goes
+   live.
+
+3. **Self-QA pass (replaces the human reviewer)** — before publishing each post,
+   check:
+   - Frontmatter `date` is today's actual date.
+   - Ticker is not in the shared 50-post exclude-list.
+   - Every internal link verified against `app/sitemap.ts`'s `seoGuides` array.
+   - No invented facts — every claim traces back to an actual search result.
+   - Chart symbol/timeframe/indicator/bar count match the setup table and the
+     stated thesis.
+   - Formatting matches the template exactly.
+   - Fix anything that fails before moving on.
+
+4. **Publish with no preview and no wait**
+   - For each pick, open the PR as usual (branch `insight/{ticker}-{date}`,
+     clear title/body), then **immediately squash-merge it** — do not wait for
+     a human. Two picks means two branches, two PRs, two merges.
+
+5. **Post-deploy verification (do not skip)**
+   - Vercel deploys `main` to production within a couple of minutes. Poll each
+     live production URL (`https://www.mystockharbor.com/insights/{slug}`) for
+     up to ~10 minutes until it returns 200 with the right content.
+   - If it's not live in time, or something's visibly broken (wrong content,
+     404, chart not rendering, build failure), diagnose from the repo and push
+     a fix commit to `main`, then re-verify. Retry once more if still broken.
+
+6. **Notify**
+   - Send a push notification: both tickers picked (and why each was chosen —
+     Pick A vs Pick B rationale), both post URLs, deploy status for each, and
+     a one-line note on anything that needed correcting.
+
+**Search Console indexing nudge — infrastructure built, decision pending:**
+A Google Cloud project (`mystockharbor-indexing`), a service account
+(`mystockharbor-indexing@mystockharbor-indexing.iam.gserviceaccount.com`, added
+as a Full user on the `mystockharbor.com` Search Console property), and its key
+(stored at project doc `automation/gcp-search-console-service-account.json`)
+were built and tested for the sitemap-ping idea (nudging Google to recrawl
+`https://www.mystockharbor.com/sitemap.xml`, which already auto-includes every
+new insight post via `getAllPosts()` in `app/sitemap.ts`).
+
+**Real constraint found:** Claude's own cloud sandbox network policy only
+allowlists a few hosts (GitHub's API works; `googleapis.com`,
+`oauth2.googleapis.com`, npm, and PyPI are all blocked — confirmed by testing).
+So the daily scheduled task **cannot** call the Google API directly from its
+own environment. Two live options if this is ever revisited:
+1. **Do nothing extra (current default)** — the sitemap already exists, is
+   already registered with Google, and auto-updates with every new post.
+   Google recrawls it on its own normal cadence with no ping needed; this
+   matches "a few days is fine."
+2. **GitHub Actions relay** — add a `workflow_dispatch` GitHub Action to the
+   repo that does the Google OAuth + sitemap-submit call (Actions runners have
+   full internet access, unlike Claude's sandbox), triggered via the GitHub
+   API (which Claude's sandbox *can* reach) after each daily deploy. Needs one
+   more one-time manual step: the user pastes the service account JSON into
+   the repo's GitHub Actions secrets. Not built by default — more moving parts
+   for a speed-up the user said they don't need.
+
+**Known caveat — DST drift:** the scheduled task's cron expression is set in UTC
+(e.g. `0 6 * * *` for 7:00am UK time while the UK is on BST, UTC+1). When the UK
+switches to/from BST, the actual UK-local fire time shifts by an hour until the
+cron is manually updated. Ask Claude to nudge the schedule at the late-March and
+late-October clock changes if 7:00am UK time needs to stay exact.
 
 ---
 
@@ -154,7 +282,26 @@ understanding of it, since it may be edited over time.
   write scope, not just OAuth-authorized. A 403 "Resource not accessible by
   integration" on a simple branch-creation call is a permissions problem, not
   a content problem — check the connector's install status before debugging
-  anything else.
+  anything else. This matters even more for the automated path, since there's
+  no human present to notice a stuck/failed run beyond the notification sent.
+
+- **Claude's cloud sandbox has a restrictive outbound network allowlist.**
+  Confirmed reachable: GitHub's API. Confirmed blocked: googleapis.com,
+  oauth2.googleapis.com, npm registry, PyPI. Any future automation idea that
+  needs to call a third-party API directly from a Claude session/scheduled
+  task should check reachability first (a plain `curl -sI <host>` test) rather
+  than assuming it'll work — GitHub Actions (triggered via the GitHub API,
+  which Claude's sandbox can reach) is the fallback relay for anything that
+  needs real internet access Claude's own sandbox doesn't have.
+
+- **This file can drift from the actual live automation.** The "Full daily
+  automation" section above didn't exist on `main` for a while even though
+  the automation was already built and running — the scheduled task's stored
+  prompt is the actual source of truth for what runs, and this file is
+  documentation of it, not the mechanism itself. If a schedule/rule change is
+  made, update both: this file (for anyone reading the repo) and the trigger's
+  stored prompt directly in Cowork/Claude Code (for what actually runs) —
+  updating one does not update the other.
 
 ---
 
@@ -172,12 +319,19 @@ That's enough for a fresh chat to pick up the entire workflow, research the
 stock, write the post correctly, and open a PR for review — without needing
 any of this conversation's history.
 
+For the automated path, nothing needs to be said each day — the scheduled task's
+own stored prompt already contains the full self-contained instructions (a copy
+of the "Full daily automation" section above), since a fresh triggered session
+also starts with no chat memory. **If you change the rules here, remember to
+also update the trigger's stored prompt in Cowork/Claude Code — the two are not
+linked.**
+
 ---
 
-## Open item: full 7am automation
+## Open item: full 7am automation — RESOLVED
 
-True unattended scheduling (something runs at 7am UK without a human starting
-a chat) requires a **GitHub Action on a cron schedule** calling the Claude API
-directly, separate from this chat interface. Not yet built. Until it exists,
-the daily post still needs a human (or a scheduled reminder) to kick off a
-fresh chat each morning using the prompt above.
+~~True unattended scheduling... requires a GitHub Action on a cron schedule...~~
+Superseded: built as a Cowork/Claude Code **scheduled task** instead (see "Full
+daily automation" above). No GitHub Action was needed. If the schedule ever needs
+changing (time, frequency, pausing it), ask Claude to update or list the
+scheduled task/routine directly — no code changes required.
