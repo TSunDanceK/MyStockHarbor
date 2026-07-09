@@ -9,7 +9,7 @@ export type PatternPoint = {
 };
 
 export type AscendingTriangleTimeframe = "D" | "W";
- 
+
 export type AscendingTriangleResult = {
   pattern: "ascendingTriangle";
   timeframe: AscendingTriangleTimeframe;
@@ -286,33 +286,118 @@ function findBestResistanceCluster(
   };
 }
 
-function getRisingLows(pivotLows: Pivot[]) {
-  if (pivotLows.length < 2) return [];
+type TrendlineFit = {
+  anchorStart: Pivot;
+  anchorEnd: Pivot;
+  slopePerBar: number;
+  touchCount: number;
+  projectedAtLatest: number;
+};
 
-  let best: Pivot[] = [];
+/**
+ * Fits the rising-lows line as a true lower envelope:
+ * a straight line through two pivot lows such that NO candle low between the
+ * line start and the latest bar dips below it (beyond a small tolerance).
+ * This is what makes the drawn line sit underneath the candles instead of
+ * cutting through them.
+ *
+ * Among all valid envelope lines, prefers the one the price has respected
+ * most often (most spaced touches), then the longest one.
+ */
+function fitRisingLowsEnvelope(args: {
+  points: ReturnType<typeof normalisePoints>;
+  candidates: Pivot[];
+  lastIdx: number;
+  envelopeTolPct: number;
+  touchTolPct: number;
+  minTouches: number;
+  minAnchorSeparationBars: number;
+  minTouchSeparationBars: number;
+}): TrendlineFit | null {
+  const {
+    points,
+    candidates,
+    lastIdx,
+    envelopeTolPct,
+    touchTolPct,
+    minTouches,
+    minAnchorSeparationBars,
+    minTouchSeparationBars,
+  } = args;
 
-  for (let start = 0; start < pivotLows.length; start++) {
-    const rising: Pivot[] = [pivotLows[start]];
+  const sorted = [...candidates].sort((a, b) => a.idx - b.idx);
 
-    for (let i = start + 1; i < pivotLows.length; i++) {
-      const previous = rising[rising.length - 1];
+  let best: TrendlineFit | null = null;
+  let bestSpan = 0;
 
-      if (pivotLows[i].price > previous.price) {
-        rising.push(pivotLows[i]);
+  for (let i = 0; i < sorted.length; i++) {
+    for (let j = i + 1; j < sorted.length; j++) {
+      const a = sorted[i];
+      const b = sorted[j];
+
+      if (b.idx - a.idx < minAnchorSeparationBars) continue;
+      if (b.price <= a.price) continue;
+
+      const slopePerBar = (b.price - a.price) / (b.idx - a.idx);
+
+      const lineValueAt = (idx: number) =>
+        a.price + slopePerBar * (idx - a.idx);
+
+      // Envelope check: every bar from the line start to the latest bar
+      // must keep its low at or above the line (small tolerance).
+      let isEnvelope = true;
+
+      for (let k = a.idx; k <= lastIdx; k++) {
+        const lineValue = lineValueAt(k);
+
+        if (lineValue <= 0) {
+          isEnvelope = false;
+          break;
+        }
+
+        if (points[k].low < lineValue * (1 - envelopeTolPct / 100)) {
+          isEnvelope = false;
+          break;
+        }
       }
-    }
 
-    const currentSpan =
-      rising.length >= 2 ? rising[rising.length - 1].idx - rising[0].idx : 0;
+      if (!isEnvelope) continue;
 
-    const bestSpan =
-      best.length >= 2 ? best[best.length - 1].idx - best[0].idx : 0;
+      // Count how many spaced pivot lows actually come down and touch the line.
+      let touchCount = 0;
+      let lastTouchIdx = -Infinity;
 
-    if (
-      rising.length > best.length ||
-      (rising.length === best.length && currentSpan > bestSpan)
-    ) {
-      best = rising;
+      for (const pivot of sorted) {
+        if (pivot.idx < a.idx || pivot.idx > lastIdx) continue;
+
+        const lineValue = lineValueAt(pivot.idx);
+
+        if (pivot.price <= lineValue * (1 + touchTolPct / 100)) {
+          if (pivot.idx - lastTouchIdx >= minTouchSeparationBars) {
+            touchCount++;
+            lastTouchIdx = pivot.idx;
+          }
+        }
+      }
+
+      if (touchCount < minTouches) continue;
+
+      const span = b.idx - a.idx;
+
+      if (
+        !best ||
+        touchCount > best.touchCount ||
+        (touchCount === best.touchCount && span > bestSpan)
+      ) {
+        best = {
+          anchorStart: a,
+          anchorEnd: b,
+          slopePerBar,
+          touchCount,
+          projectedAtLatest: lineValueAt(lastIdx),
+        };
+        bestSpan = span;
+      }
     }
   }
 
@@ -361,14 +446,21 @@ export function detectAscendingTriangle(
   const maxDistanceBelowResistancePct =
     options.maxDistanceBelowResistancePct ?? 8;
 
-  const minResistanceTouches = options.minResistanceTouches ?? 2;
+  // Quality floor: an ascending triangle needs at least 3 touches on both
+  // boundaries to be worth showing, regardless of what the caller asks for.
+  const minResistanceTouches = Math.max(3, options.minResistanceTouches ?? 3);
 
-  const minRisingLowTouches = options.minRisingLowTouches ?? 2;
+  const minRisingLowTouches = Math.max(3, options.minRisingLowTouches ?? 3);
 
   const minPatternBars = options.minPatternBars ?? (timeframe === "W" ? 8 : 20);
 
   const minTouchSeparationBars =
     options.minTouchSeparationBars ?? (timeframe === "W" ? 2 : 5);
+
+  const envelopeTolPct = timeframe === "W" ? 1 : 0.5;
+  const touchTolPct = timeframe === "W" ? 2.25 : 1.5;
+
+  const minAnchorSeparationBars = Math.max(minTouchSeparationBars * 2, 5);
 
   const points = normalisePoints(rawPoints).slice(-lookbackBars);
 
@@ -377,6 +469,7 @@ export function detectAscendingTriangle(
   }
 
   const latest = points[points.length - 1];
+  const lastIdx = points.length - 1;
   const pivotHighs = findPivotHighs(points, pivotLeftRight);
   const pivotLows = findPivotLows(points, pivotLeftRight);
 
@@ -412,7 +505,7 @@ export function detectAscendingTriangle(
     lastResistanceTouch.price
   );
 
-const maxDescendingResistanceSlopePct = timeframe === "W" ? -5.5 : -2.75;
+  const maxDescendingResistanceSlopePct = timeframe === "W" ? -5.5 : -2.75;
 
   if (resistanceSlopePct < maxDescendingResistanceSlopePct) {
     return null;
@@ -436,33 +529,45 @@ const maxDescendingResistanceSlopePct = timeframe === "W" ? -5.5 : -2.75;
 
   const resistanceDriftPct = pctDiff(earlyResistanceAvg, lateResistanceAvg);
 
-const maxDescendingResistanceDriftPct = timeframe === "W" ? -5 : -2.25;
+  const maxDescendingResistanceDriftPct = timeframe === "W" ? -5 : -2.25;
 
   if (resistanceDriftPct < maxDescendingResistanceDriftPct) {
     return null;
   }
 
-const lowLookbackBeforeFirstResistance = timeframe === "W" ? 40 : 12;
+  const lowLookbackBeforeFirstResistance = timeframe === "W" ? 40 : 12;
 
-const relevantLows = pivotLows.filter(
-  (pivot) =>
-    pivot.idx >=
-      Math.max(0, firstResistanceTouch.idx - lowLookbackBeforeFirstResistance) &&
-    pivot.idx <= points.length - 1 &&
-    pivot.price < resistanceCluster.resistance
-);
+  const relevantLows = pivotLows.filter(
+    (pivot) =>
+      pivot.idx >=
+        Math.max(
+          0,
+          firstResistanceTouch.idx - lowLookbackBeforeFirstResistance
+        ) &&
+      pivot.idx <= lastIdx &&
+      pivot.price < resistanceCluster.resistance
+  );
 
-  const risingLows = getRisingLows(relevantLows);
+  const envelopeFit = fitRisingLowsEnvelope({
+    points,
+    candidates: relevantLows,
+    lastIdx,
+    envelopeTolPct,
+    touchTolPct,
+    minTouches: minRisingLowTouches,
+    minAnchorSeparationBars,
+    minTouchSeparationBars,
+  });
 
-  if (risingLows.length < minRisingLowTouches) {
+  if (!envelopeFit) {
     return null;
   }
 
-  const firstLow = risingLows[0];
-  const lastLow = risingLows[risingLows.length - 1];
+  const firstLow = envelopeFit.anchorStart;
+  const projectedSupportAtLatest = envelopeFit.projectedAtLatest;
 
   const patternStartIdx = Math.min(firstResistanceTouch.idx, firstLow.idx);
-  const patternBars = points.length - 1 - patternStartIdx;
+  const patternBars = lastIdx - patternStartIdx;
 
   if (patternBars < minPatternBars) {
     return null;
@@ -477,7 +582,10 @@ const relevantLows = pivotLows.filter(
     return null;
   }
 
-  if (distanceToResistancePct > maxDistanceBelowResistancePct * 4) {
+  // Price must genuinely be near the breakout level for this to count as a
+  // play (previously this cap was multiplied by 4, which let through setups
+  // sitting 20%+ below resistance).
+  if (distanceToResistancePct > maxDistanceBelowResistancePct) {
     return null;
   }
 
@@ -542,7 +650,13 @@ const relevantLows = pivotLows.filter(
     return null;
   }
 
-  const lowSlopePct = pctDiff(firstLow.price, lastLow.price);
+  // The triangle must still be open: if the projected support line has
+  // already converged into (or above) resistance, the pattern is spent.
+  if (projectedSupportAtLatest > resistanceCluster.resistance * 0.99) {
+    return null;
+  }
+
+  const lowSlopePct = pctDiff(firstLow.price, projectedSupportAtLatest);
 
   if (lowSlopePct <= 0) {
     return null;
@@ -553,95 +667,56 @@ const relevantLows = pivotLows.filter(
     resistance: resistanceCluster.resistance,
     latestClose: latest.close,
     startIdx: firstLow.idx,
-    endIdx: lastLow.idx,
+    endIdx: lastIdx,
     startPrice: firstLow.price,
-    endPrice: lastLow.price,
+    endPrice: projectedSupportAtLatest,
   });
 
-const minSupportAngleDeg = timeframe === "W" ? 4.5 : 7;
+  const minSupportAngleDeg = timeframe === "W" ? 4.5 : 7;
 
-if (supportAngleDeg < minSupportAngleDeg) {
-  return null;
-}
-
-  const supportProjectionBars = lastLow.idx - firstLow.idx;
-
-  if (supportProjectionBars <= 0) {
-    return null;
-  }
-
-  const supportSlopePerBar =
-    (lastLow.price - firstLow.price) / supportProjectionBars;
-
-  const projectedSupportAtLatest =
-    firstLow.price + supportSlopePerBar * (points.length - 1 - firstLow.idx);
-
-  const supportToResistanceGapPct = pctDiff(
-    projectedSupportAtLatest,
-    resistanceCluster.resistance
-  );
-
-const maxSupportAboveResistancePct = timeframe === "W" ? 3.5 : 1.25;
-
-  if (supportToResistanceGapPct < -maxSupportAboveResistancePct) {
-    return null;
-  }
-
-  const latestBelowProjectedSupportPct = pctDiff(
-    projectedSupportAtLatest,
-    latest.close
-  );
-
-const maxLatestBelowSupportPct = timeframe === "W" ? 5 : 2.25;
-
-  if (latestBelowProjectedSupportPct < -maxLatestBelowSupportPct) {
+  if (supportAngleDeg < minSupportAngleDeg) {
     return null;
   }
 
   const resistanceQualityScore = clamp(
-    25 - resistanceCluster.zonePct * 4,
+    22 - resistanceCluster.zonePct * 5,
     0,
-    25
+    22
   );
 
-  const risingLowsScore = clamp(
-    10 + lowSlopePct * 1.2 + risingLows.length * 3,
+  const trendlineScore = clamp(
+    envelopeFit.touchCount * 4 + lowSlopePct * 0.4,
     0,
-    25
+    22
   );
 
   const priceLocationScore = clamp(
-    15 - Math.max(0, distanceToResistancePct) * 0.5,
+    14 - Math.max(0, distanceToResistancePct) * 1.6,
     0,
-    15
+    14
   );
 
   const durationScore = clamp(
-    timeframe === "W"
-      ? patternBars >= 12
-        ? 15
-        : 10
-      : patternBars >= 35
-        ? 15
-        : 10,
-    0,
-    15
+    4 + (patternBars / (timeframe === "W" ? 14 : 40)) * 8,
+    4,
+    12
   );
 
   const touchScore = clamp(
-    resistanceCluster.touches.length * 3 + risingLows.length * 2,
+    (resistanceCluster.touches.length - 3) * 3 +
+      (envelopeFit.touchCount - 3) * 3,
     0,
-    10
+    12
   );
 
   const volumeScore = volumeCompressionScore(points);
 
-  const timeframeBonus = timeframe === "W" ? 5 : 0;
+  const timeframeBonus = timeframe === "W" ? 3 : 0;
 
   const score = Math.round(
     clamp(
       resistanceQualityScore +
-        risingLowsScore +
+        trendlineScore +
         priceLocationScore +
         durationScore +
         touchScore +
@@ -652,17 +727,21 @@ const maxLatestBelowSupportPct = timeframe === "W" ? 5 : 2.25;
     )
   );
 
-const minScore = timeframe === "W" ? 38 : 45;
-
-if (score < minScore) return null;
+  if (score < 50) return null;
 
   const tone =
-    score >= 75 ? "green" : score >= 62 ? "yellow" : score >= 50 ? "orange" : "red";
+    score >= 78
+      ? "green"
+      : score >= 64
+        ? "yellow"
+        : score >= 52
+          ? "orange"
+          : "red";
 
   const note =
     timeframe === "W"
-      ? `Weekly ascending triangle candidate: ${resistanceCluster.touches.length} resistance touches, ${risingLows.length} rising lows, ${distanceToResistancePct.toFixed(1)}% below resistance.`
-      : `Daily ascending triangle candidate: ${resistanceCluster.touches.length} resistance touches, ${risingLows.length} rising lows, ${distanceToResistancePct.toFixed(1)}% below resistance.`;
+      ? `Weekly ascending triangle candidate: ${resistanceCluster.touches.length} resistance touches, ${envelopeFit.touchCount} rising lows, ${distanceToResistancePct.toFixed(1)}% below resistance.`
+      : `Daily ascending triangle candidate: ${resistanceCluster.touches.length} resistance touches, ${envelopeFit.touchCount} rising lows, ${distanceToResistancePct.toFixed(1)}% below resistance.`;
 
   return {
     pattern: "ascendingTriangle",
@@ -674,15 +753,18 @@ if (score < minScore) return null;
     latestClose: Number(latest.close.toFixed(2)),
     distanceToResistancePct: Number(distanceToResistancePct.toFixed(2)),
     resistanceTouches: resistanceCluster.touches.length,
-    risingLowTouches: risingLows.length,
+    risingLowTouches: envelopeFit.touchCount,
     patternBars,
     resistanceZonePct: Number(resistanceCluster.zonePct.toFixed(2)),
     lowSlopePct: Number(lowSlopePct.toFixed(2)),
 
+    // The line is anchored on the first envelope pivot and projected to the
+    // latest bar, so the client can draw these two points verbatim and the
+    // line is guaranteed to sit underneath every candle in between.
     supportStartDate: firstLow.date,
     supportStartPrice: Number(firstLow.price.toFixed(2)),
-    supportEndDate: lastLow.date,
-    supportEndPrice: Number(lastLow.price.toFixed(2)),
+    supportEndDate: latest.date,
+    supportEndPrice: Number(projectedSupportAtLatest.toFixed(2)),
 
     startDate: points[patternStartIdx].date,
     endDate: latest.date,
