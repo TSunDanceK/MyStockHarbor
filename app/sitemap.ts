@@ -6,6 +6,14 @@ import { LESSONS } from "@/app/learn/lessons";
 
 const baseUrl = "https://www.mystockharbor.com";
 
+// Google's hard cap is 50,000 URLs per sitemap file. We're nowhere near it
+// today, but content/insights/ now grows 5x faster than before (5 posts/day
+// instead of 1), so this is a genuine long-run number, not a hypothetical.
+// If this ever fires in a Vercel build log, it's the cue to split this file
+// using Next's generateSitemaps() - see the note above `insightEntries`
+// below for exactly how, with the API confirmed against the Next.js 16 docs.
+const SITEMAP_WARN_THRESHOLD = 40000;
+
 const mainPages = [
   { path: "", changeFrequency: "daily" as const, priority: 1 },
   { path: "/dashboard", changeFrequency: "daily" as const, priority: 0.95 },
@@ -157,10 +165,30 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.8,
   }));
 
+  // Insight posts are frozen snapshots tied to their `date` field - they
+  // never change after publish (see claude/CLAUDE.md "Lessons learned").
+  // "yearly" is a more honest signal than "monthly" for Google's crawl
+  // budget, and matters more now that 5 new frozen posts land every day
+  // instead of 1.
+  //
+  // FUTURE SCALING NOTE: at 5 posts/day this list reaches Google's 50,000
+  // per-sitemap cap in ~27 years - not urgent, but if SITEMAP_WARN_THRESHOLD
+  // below ever fires, split this into its own nested file
+  // (app/insights/sitemap.ts) using Next's generateSitemaps():
+  //   export async function generateSitemaps() {
+  //     const total = getAllPosts().length;
+  //     return Array.from({ length: Math.ceil(total / 40000) }, (_, id) => ({ id }));
+  //   }
+  // which serves chunks at /insights/sitemap/0.xml, /insights/sitemap/1.xml,
+  // etc. (confirmed against the Next.js 16 docs - a plain /insights/sitemap.xml
+  // does not additionally exist once generateSitemaps is used). Add each new
+  // chunk URL to the `sitemap` array in app/robots.ts alongside the existing
+  // root sitemap - do NOT replace the already-registered
+  // https://www.mystockharbor.com/sitemap.xml with this, only add to it.
   const insightEntries: MetadataRoute.Sitemap = insightPosts.map((post) => ({
     url: toAbsoluteUrl(`/insights/${post.slug}`),
     lastModified: post.date ? new Date(post.date) : now,
-    changeFrequency: "monthly",
+    changeFrequency: "yearly",
     priority: 0.72,
   }));
 
@@ -242,7 +270,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   // Safety guard: only return clean canonical www HTTPS URLs once.
   const seen = new Set<string>();
 
-  return entries.filter((entry) => {
+  const deduped = entries.filter((entry) => {
     if (!entry.url.startsWith(`${baseUrl}/`) && entry.url !== baseUrl) {
       return false;
     }
@@ -252,4 +280,17 @@ export default function sitemap(): MetadataRoute.Sitemap {
     seen.add(entry.url);
     return true;
   });
+
+  // Advance warning well before Google's real 50,000-per-sitemap limit, so
+  // this shows up in a Vercel build log years before it could ever become
+  // an actual problem - see the scaling note above `insightEntries`.
+  if (deduped.length > SITEMAP_WARN_THRESHOLD) {
+    console.warn(
+      `[sitemap] ${deduped.length} URLs in the root sitemap - approaching Google's 50,000 ` +
+        "per-sitemap limit. Time to split insights/bottlenecks into their own " +
+        "generateSitemaps()-based files (see the comment above insightEntries in app/sitemap.ts)."
+    );
+  }
+
+  return deduped;
 }

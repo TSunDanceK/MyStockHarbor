@@ -119,7 +119,12 @@ function normalizeChartIndicators(value: unknown): InsightChartIndicator[] {
     );
 }
 
-export function getAllPosts(): BlogPost[] {
+// Single source of truth for reading + sorting every post's frontmatter.
+// Cheap even at large scale (frontmatter-only parse, no markdown body), but
+// still O(n) in the number of files - getAllPosts(), getPaginatedPosts(),
+// and searchPosts() all share this so there's only one place that walks
+// content/insights/.
+function readSortedPosts(): BlogPost[] {
   if (!fs.existsSync(postsDirectory)) return [];
 
   const fileNames = fs
@@ -155,6 +160,81 @@ export function getAllPosts(): BlogPost[] {
     if (!b.date) return -1;
     return a.date < b.date ? 1 : -1;
   });
+}
+
+// Full, unbounded list - still needed for the sitemap (every post needs a
+// URL there) and for generateStaticParams on the post pages. Do NOT pass
+// the result of this straight into a client component's props for the
+// /insights list - see getPaginatedPosts() below, which is what the list
+// page actually renders. Shipping the full array to the browser is exactly
+// the unbounded-DOM/hydration-payload problem that got fixed here.
+export function getAllPosts(): BlogPost[] {
+  return readSortedPosts();
+}
+
+export type PaginatedPosts = {
+  posts: BlogPost[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+};
+
+// Bounded page of posts for the /insights list UI. However large
+// content/insights/ grows, the browser only ever receives `pageSize` posts -
+// the DOM size and hydration payload for the list page stay flat over time.
+export function getPaginatedPosts(page: number, pageSize: number): PaginatedPosts {
+  const all = readSortedPosts();
+  const totalCount = all.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const safePage = Math.min(Math.max(1, Math.floor(page) || 1), totalPages);
+  const start = (safePage - 1) * pageSize;
+
+  return {
+    posts: all.slice(start, start + pageSize),
+    page: safePage,
+    pageSize,
+    totalCount,
+    totalPages,
+  };
+}
+
+export type InsightSearchResult = {
+  slug: string;
+  title: string;
+  date: string;
+  excerpt: string;
+  symbol: string | null;
+};
+
+// Search across the FULL history (not just the current page) without ever
+// shipping the full history to the client. The route handler in
+// app/api/insights/search calls this server-side and returns only the
+// capped `results` array - the response size stays bounded regardless of
+// how many posts exist.
+export function searchPosts(query: string, limit = 30): InsightSearchResult[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+
+  const all = readSortedPosts();
+  const results: InsightSearchResult[] = [];
+
+  for (const post of all) {
+    if (results.length >= limit) break;
+
+    const haystack = `${post.title} ${post.symbol ?? ""} ${post.excerpt}`.toLowerCase();
+    if (haystack.includes(q)) {
+      results.push({
+        slug: post.slug,
+        title: post.title,
+        date: post.date,
+        excerpt: post.excerpt,
+        symbol: post.symbol ?? null,
+      });
+    }
+  }
+
+  return results;
 }
 
 export function getPostBySlug(slug: string): BlogPostFull {
