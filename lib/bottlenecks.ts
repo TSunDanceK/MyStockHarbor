@@ -31,6 +31,15 @@ export type BottleneckPost = {
   customers: BottleneckCompany[];
 };
 
+// A company's total appearance count across every stock page's supply-chain
+// and customer-concentration lists combined - used to power the "Bottleneck
+// Leaderboard" panel on the /bottlenecks index page.
+export type BottleneckCompanyCount = {
+  name: string;
+  ticker: string | null;
+  count: number;
+};
+
 function formatFrontmatterDate(value: unknown): string {
   if (value instanceof Date) {
     return value.toISOString().split("T")[0];
@@ -114,4 +123,41 @@ export function getAllBottleneckPosts(): BottleneckPost[] {
 
 export function getBottleneckBySlug(slug: string): BottleneckPost {
   return readPost(`${slug}.md`);
+}
+
+// Counts how many times each company shows up as a bottleneck - as a
+// supplier or as a customer - across every stock page, keyed by company
+// name (tickers can legitimately be null on some entries, name is always
+// present and consistent). Sorted highest count first, alphabetical on ties.
+export function getBottleneckCompanyCounts(): BottleneckCompanyCount[] {
+  const posts = getAllBottleneckPosts();
+  const counts = new Map<string, BottleneckCompanyCount>();
+
+  for (const post of posts) {
+    const appearances = [...post.supplyChain, ...post.customers];
+
+    for (const company of appearances) {
+      const key = company.name.trim().toLowerCase();
+      if (!key) continue;
+
+      const existing = counts.get(key);
+      if (existing) {
+        existing.count += 1;
+        if (!existing.ticker && company.ticker) {
+          existing.ticker = company.ticker;
+        }
+      } else {
+        counts.set(key, {
+          name: company.name,
+          ticker: company.ticker,
+          count: 1,
+        });
+      }
+    }
+  }
+
+  return Array.from(counts.values()).sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count;
+    return a.name.localeCompare(b.name);
+  });
 }
