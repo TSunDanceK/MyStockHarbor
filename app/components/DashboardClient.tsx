@@ -532,7 +532,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
       );
     };
     return (
-      <SectionCard title="Market Benchmarks">
+      <SectionCard title="Market Benchmarks" right={<Link href="/markets/spx" style={{ display: "inline-flex", alignItems: "center", padding: "6px 11px", borderRadius: 9, border: `1px solid ${COLORS.amberBorder}`, background: COLORS.amberSoft, color: COLORS.amber, textDecoration: "none", fontWeight: 700, fontSize: 11 }}>S&P 500 Detail →</Link>}>
         <div style={{ fontSize: 11, color: COLORS.mutedFg2, marginBottom: 12, fontWeight: 600 }}>Updated: {bench?.updatedAt ? new Date(bench.updatedAt).toLocaleString() : "—"} · {bench?.scope ?? "Benchmarks"}</div>
         {isMobile ? (
           <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch", scrollbarWidth: "none" } as React.CSSProperties}>
