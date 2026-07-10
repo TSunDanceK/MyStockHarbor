@@ -218,6 +218,11 @@ function ChartBlock({
         padding: 22,
         boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
         height: "100%",
+        // Grid items default to min-width: auto, meaning they refuse to
+        // shrink below their content's natural width. Without this, a
+        // grid item can force its whole track (and the page) wider than
+        // the viewport on mobile even after the pie chart itself is fixed.
+        minWidth: 0,
       }}
     >
       <h2
@@ -356,6 +361,7 @@ export default async function BottleneckPage({ params }: Props) {
           color: "#f1f5f9",
           fontFamily: "system-ui, Arial",
           padding: "40px 20px",
+          overflowX: "hidden",
         }}
       >
         <div style={{ maxWidth: 1160, margin: "0 auto" }}>
