@@ -22,19 +22,30 @@ type BenchPayload = {
 };
 
 const CACHE_MS = 5 * 60_000;
-let cache: { at: number; payload: BenchPayload } | null = null;
+const cache = new Map<string, { at: number; payload: BenchPayload }>();
 
 function toNum(x: unknown): number | null {
   const n = typeof x === "number" ? x : typeof x === "string" ? Number(x) : NaN;
   return Number.isFinite(n) ? n : null;
 }
 
-const BENCH_DEFS = [
+const BENCH_DEFS_STOCK = [
   { key: "spy", label: "S&P 500 (via SPY)",     symbol: "SPY" },
   { key: "ndx", label: "Nasdaq 100 (via QQQ)",  symbol: "QQQ" },
   { key: "dia", label: "Dow Jones (via DIA)",    symbol: "DIA" },
   { key: "iwm", label: "Russell 2000 (via IWM)", symbol: "IWM" },
 ] as const;
+
+const BENCH_DEFS_CRYPTO = [
+  { key: "btc", label: "Bitcoin (BTC)",  symbol: "BTCUSD" },
+  { key: "eth", label: "Ethereum (ETH)", symbol: "ETHUSD" },
+  { key: "sol", label: "Solana (SOL)",   symbol: "SOLUSD" },
+  { key: "trx", label: "TRON (TRX)",     symbol: "TRXUSD" },
+] as const;
+
+function getBenchDefs(scope: string) {
+  return scope === "crypto" ? BENCH_DEFS_CRYPTO : BENCH_DEFS_STOCK;
+}
 
 async function fetchFmpQuote(symbol: string, apiKey: string): Promise<any | null> {
   try {
@@ -53,30 +64,39 @@ async function fetchFmpQuote(symbol: string, apiKey: string): Promise<any | null
   }
 }
 
-export async function GET() {
-  if (cache && Date.now() - cache.at < CACHE_MS) {
-    return NextResponse.json(cache.payload, {
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const scope = (searchParams.get("scope") || "stock").toLowerCase() === "crypto" ? "crypto" : "stock";
+
+  const cached = cache.get(scope);
+  if (cached && Date.now() - cached.at < CACHE_MS) {
+    return NextResponse.json(cached.payload, {
       headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
     });
   }
 
   const apiKey = process.env.FMP_API_KEY;
+  const defs = getBenchDefs(scope);
 
   if (!apiKey) {
     return NextResponse.json(
-      { updatedAt: new Date().toISOString(), scope: "Benchmarks (FMP)", items: [] } satisfies BenchPayload,
+      {
+        updatedAt: new Date().toISOString(),
+        scope: scope === "crypto" ? "Crypto Benchmarks (FMP)" : "Benchmarks (FMP)",
+        items: [],
+      } satisfies BenchPayload,
       { status: 500 }
     );
   }
 
   // Fire all 4 in parallel — same pattern as the working /api/quote route
-  const rows = await Promise.all(BENCH_DEFS.map((d) => fetchFmpQuote(d.symbol, apiKey)));
+  const rows = await Promise.all(defs.map((d) => fetchFmpQuote(d.symbol, apiKey)));
 
   const now = new Date();
   const dateStr = now.toISOString().slice(0, 10);
   const timeStr = now.toISOString().slice(11, 19);
 
-  const items: BenchItem[] = BENCH_DEFS.map((d, i) => {
+  const items: BenchItem[] = defs.map((d, i) => {
     const r = rows[i];
     return {
       key: d.key,
@@ -92,11 +112,11 @@ export async function GET() {
 
   const payload: BenchPayload = {
     updatedAt: now.toISOString(),
-    scope: "Benchmarks (FMP)",
+    scope: scope === "crypto" ? "Crypto Benchmarks (FMP)" : "Benchmarks (FMP)",
     items,
   };
 
-  cache = { at: Date.now(), payload };
+  cache.set(scope, { at: Date.now(), payload });
 
   return NextResponse.json(payload, {
     headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
