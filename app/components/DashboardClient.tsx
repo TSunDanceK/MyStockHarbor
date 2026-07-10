@@ -548,10 +548,11 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
         <button type="button" onClick={() => chooseSymbol(cs, undefined, assetType)}
           style={{ border: `1px solid ${COLORS.border}`, borderRadius: 13, padding: "13px 14px", background: COLORS.cardBg2, color: COLORS.cardFg, textAlign: "left", cursor: "pointer", ...(isMobile ? { flex: "0 0 148px" } : { width: "100%" }) }}>
           <div style={{ fontWeight: 800, fontSize: isMobile ? 13 : 14 }}>{it.label}</div>
-          <div style={{ fontSize: 10, color: COLORS.mutedFg2, fontWeight: 700, marginTop: 2 }}>{it.symbol}</div>
           <div style={{ fontSize: isMobile ? 19 : 20, fontWeight: 800, marginTop: 9, fontVariantNumeric: "tabular-nums" }}>{pr}</div>
-          {pt != null ? <div style={{ marginTop: 3, fontSize: 12, fontWeight: 700, color: ac }}>{isUp ? "▲" : "▼"} {pt}</div> : <div style={{ marginTop: 3, fontSize: 11, opacity: 0.5 }}>—</div>}
-          <div style={{ marginTop: isMobile ? 7 : 8, fontSize: 11, opacity: 0.6 }}>{it.date && it.time ? `${it.date} ${it.time}` : "—"}</div>
+          <div style={{ marginTop: 6, display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 6 }}>
+            {pt != null ? <span style={{ fontSize: 12, fontWeight: 700, color: ac, whiteSpace: "nowrap" }}>{isUp ? "▲" : "▼"} {pt}</span> : <span style={{ fontSize: 11, opacity: 0.5 }}>—</span>}
+            <span style={{ fontSize: 11, opacity: 0.6, whiteSpace: "nowrap" }}>{it.date && it.time ? `${it.date} ${it.time}` : "—"}</span>
+          </div>
         </button>
       );
     };
