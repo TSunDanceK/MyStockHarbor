@@ -127,6 +127,7 @@ export default function BottlenecksIndexPage() {
       />
 
       <main
+        className="bottlenecksMain"
         style={{
           minHeight: "100vh",
           background: "#06080d",
@@ -161,6 +162,7 @@ export default function BottlenecksIndexPage() {
           >
             <div>
               <section
+                className="bottlenecksIntroCard"
                 style={{
                   background: "#0b1220",
                   border: "1px solid rgba(255,255,255,0.12)",
@@ -170,6 +172,7 @@ export default function BottlenecksIndexPage() {
                 }}
               >
                 <h1
+                  className="bottlenecksTitle"
                   style={{
                     marginTop: 0,
                     marginBottom: 16,
@@ -217,6 +220,18 @@ export default function BottlenecksIndexPage() {
             }
             .bottlenecksLeaderboardRail {
               position: static !important;
+            }
+          }
+
+          @media (max-width: 640px) {
+            .bottlenecksMain {
+              padding: 24px 14px !important;
+            }
+            .bottlenecksIntroCard {
+              padding: 18px !important;
+            }
+            .bottlenecksTitle {
+              font-size: 26px !important;
             }
           }
         `}</style>
