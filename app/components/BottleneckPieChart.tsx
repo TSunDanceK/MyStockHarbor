@@ -99,73 +99,78 @@ export default function BottleneckPieChart({
   });
 
   return (
-    <svg
-      viewBox={`0 0 ${size} ${size}`}
-      width={size}
-      height={size}
-      role="img"
-      aria-label="Dependency breakdown pie chart"
-    >
-      <defs>
-        <filter id={glowId} x="-60%" y="-60%" width="220%" height="220%">
-          <feGaussianBlur in="SourceGraphic" stdDeviation={size * 0.012} result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-      </defs>
+    // Wrapper caps the chart at its natural size on wide screens but lets it
+    // shrink to fill a narrow phone-width container instead of overflowing
+    // it - the SVG itself uses percentage width/height (viewBox keeps the
+    // 1:1 aspect ratio) rather than the old fixed pixel width/height.
+    <div style={{ width: "100%", maxWidth: size, margin: "0 auto" }}>
+      <svg
+        viewBox={`0 0 ${size} ${size}`}
+        role="img"
+        aria-label="Dependency breakdown pie chart"
+        style={{ width: "100%", height: "auto", display: "block" }}
+      >
+        <defs>
+          <filter id={glowId} x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation={size * 0.012} result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
 
-      {/* dark backing disc so the glow has somewhere to bleed into */}
-      <circle cx={cx} cy={cy} r={r + 3} fill="#06080d" />
+        {/* dark backing disc so the glow has somewhere to bleed into */}
+        <circle cx={cx} cy={cy} r={r + 3} fill="#06080d" />
 
-      {/* muted, darker fills - this is where the "depth" reads as darker */}
-      {computed.map((segment) => (
-        <path
-          key={`fill-${segment.index}`}
-          d={wedgePath(cx, cy, r, segment.startAngle, segment.endAngle)}
-          fill={segment.color}
-          fillOpacity={0.5}
-        >
-          <title>
-            {segment.name}
-            {segment.ticker ? ` (${segment.ticker})` : ""} - {segment.pct}%
-          </title>
-        </path>
-      ))}
-
-      {/* bright glowing neon outline on top - the rim arc AND the radial
-          dividers between slices both come from this same stroked path */}
-      {computed.map((segment) => (
-        <path
-          key={`stroke-${segment.index}`}
-          d={wedgePath(cx, cy, r, segment.startAngle, segment.endAngle)}
-          fill="none"
-          stroke={segment.color}
-          strokeWidth={2.25}
-          strokeLinejoin="round"
-          filter={`url(#${glowId})`}
-        />
-      ))}
-
-      {/* ticker labels, only where they fit neatly */}
-      {computed.map((segment) =>
-        segment.showLabel ? (
-          <text
-            key={`label-${segment.index}`}
-            x={segment.labelPos.x}
-            y={segment.labelPos.y}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fontSize={fontSize}
-            fontWeight={800}
-            fill="#f8fafc"
-            style={{ pointerEvents: "none" }}
+        {/* muted, darker fills - this is where the "depth" reads as darker */}
+        {computed.map((segment) => (
+          <path
+            key={`fill-${segment.index}`}
+            d={wedgePath(cx, cy, r, segment.startAngle, segment.endAngle)}
+            fill={segment.color}
+            fillOpacity={0.5}
           >
-            {segment.label}
-          </text>
-        ) : null
-      )}
-    </svg>
+            <title>
+              {segment.name}
+              {segment.ticker ? ` (${segment.ticker})` : ""} - {segment.pct}%
+            </title>
+          </path>
+        ))}
+
+        {/* bright glowing neon outline on top - the rim arc AND the radial
+            dividers between slices both come from this same stroked path */}
+        {computed.map((segment) => (
+          <path
+            key={`stroke-${segment.index}`}
+            d={wedgePath(cx, cy, r, segment.startAngle, segment.endAngle)}
+            fill="none"
+            stroke={segment.color}
+            strokeWidth={2.25}
+            strokeLinejoin="round"
+            filter={`url(#${glowId})`}
+          />
+        ))}
+
+        {/* ticker labels, only where they fit neatly */}
+        {computed.map((segment) =>
+          segment.showLabel ? (
+            <text
+              key={`label-${segment.index}`}
+              x={segment.labelPos.x}
+              y={segment.labelPos.y}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontSize={fontSize}
+              fontWeight={800}
+              fill="#f8fafc"
+              style={{ pointerEvents: "none" }}
+            >
+              {segment.label}
+            </text>
+          ) : null
+        )}
+      </svg>
+    </div>
   );
 }
