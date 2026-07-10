@@ -134,6 +134,7 @@ export default function BottlenecksIndexPage() {
           color: "#f1f5f9",
           fontFamily: "system-ui, Arial",
           padding: "40px 20px",
+          overflowX: "hidden",
         }}
       >
         <div style={{ maxWidth: 1160, margin: "0 auto" }}>
@@ -160,7 +161,7 @@ export default function BottlenecksIndexPage() {
               alignItems: "start",
             }}
           >
-            <div>
+            <div style={{ minWidth: 0 }}>
               <section
                 className="bottlenecksIntroCard"
                 style={{
@@ -206,7 +207,7 @@ export default function BottlenecksIndexPage() {
 
             <div
               className="bottlenecksLeaderboardRail"
-              style={{ position: "sticky", top: 24 }}
+              style={{ position: "sticky", top: 24, minWidth: 0 }}
             >
               <BottleneckLeaderboard counts={counts} />
             </div>
