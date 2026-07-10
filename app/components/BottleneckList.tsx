@@ -73,7 +73,9 @@ export default function BottleneckList({ posts }: { posts: BottleneckPost[] }) {
             border: "1px solid rgba(255,255,255,0.14)",
             background: "rgba(255,255,255,0.04)",
             color: "#f1f5f9",
-            fontSize: 15,
+            // 16px (not 15px) so mobile Safari doesn't auto-zoom the page
+            // in when this input is focused.
+            fontSize: 16,
             outline: "none",
           }}
         />
@@ -111,6 +113,7 @@ export default function BottleneckList({ posts }: { posts: BottleneckPost[] }) {
         </div>
       ) : (
         <div
+          className="bottleneckListScroll"
           style={{
             display: "grid",
             gap: ROW_GAP,
@@ -126,6 +129,7 @@ export default function BottleneckList({ posts }: { posts: BottleneckPost[] }) {
               key={post.slug}
               ref={index === 0 ? firstItemRef : undefined}
               href={`/bottlenecks/${post.slug}`}
+              className="bottleneckListRow"
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -142,6 +146,7 @@ export default function BottleneckList({ posts }: { posts: BottleneckPost[] }) {
 
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div
+                  className="bottleneckListRowName"
                   style={{
                     fontSize: 18,
                     fontWeight: 700,
@@ -186,6 +191,18 @@ export default function BottleneckList({ posts }: { posts: BottleneckPost[] }) {
           ))}
         </div>
       )}
+
+      <style>{`
+        @media (max-width: 480px) {
+          .bottleneckListRow {
+            padding: 12px 14px !important;
+            gap: 12px !important;
+          }
+          .bottleneckListRowName {
+            font-size: 16px !important;
+          }
+        }
+      `}</style>
     </>
   );
 }

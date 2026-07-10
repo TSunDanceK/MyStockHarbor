@@ -173,7 +173,7 @@ function CompanyRow({
       </p>
 
       {company.ticker ? (
-        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
           <Link
             href={`/stock/${encodeURIComponent(company.ticker)}`}
             className="bnActionBtn bnActionBtn--blue"
@@ -210,6 +210,7 @@ function ChartBlock({
 
   return (
     <section
+      className="bottleneckChartBlock"
       style={{
         background: "#0b1220",
         border: "1px solid rgba(255,255,255,0.12)",
@@ -348,6 +349,7 @@ export default async function BottleneckPage({ params }: Props) {
       />
 
       <main
+        className="bottlenecksTickerMain"
         style={{
           minHeight: "100vh",
           background: "#06080d",
@@ -391,6 +393,7 @@ export default async function BottleneckPage({ params }: Props) {
           </div>
 
           <section
+            className="bottleneckIntroCard"
             style={{
               background: "#0b1220",
               border: "1px solid rgba(255,255,255,0.12)",
@@ -400,6 +403,7 @@ export default async function BottleneckPage({ params }: Props) {
             }}
           >
             <h1
+              className="bottleneckTickerTitle"
               style={{
                 marginTop: 0,
                 marginBottom: 16,
@@ -456,6 +460,21 @@ export default async function BottleneckPage({ params }: Props) {
           @media (max-width: 860px) {
             .bottleneckColumns {
               grid-template-columns: 1fr !important;
+            }
+          }
+
+          @media (max-width: 640px) {
+            .bottlenecksTickerMain {
+              padding: 24px 14px !important;
+            }
+            .bottleneckIntroCard {
+              padding: 18px !important;
+            }
+            .bottleneckTickerTitle {
+              font-size: 24px !important;
+            }
+            .bottleneckChartBlock {
+              padding: 16px !important;
             }
           }
 
