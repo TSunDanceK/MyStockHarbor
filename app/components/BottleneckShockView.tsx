@@ -5,7 +5,7 @@ import { useState } from "react";
 import BottleneckPieChart, { NEON_PALETTE } from "./BottleneckPieChart";
 import type { BottleneckCompany, BottleneckPost } from "@/lib/bottlenecks";
 
-type View = "dependency" | "shock";
+type Panel = "supply" | "customers";
 
 function severityForPct(pct: number): { label: string; color: string } {
   if (pct >= 15) return { label: "Critical", color: "#FF9E8A" };
@@ -16,11 +16,9 @@ function severityForPct(pct: number): { label: string; color: string } {
 function CompanyRow({
   company,
   color,
-  view,
 }: {
   company: BottleneckCompany;
   color: string;
-  view: View;
 }) {
   const severity = severityForPct(company.pct);
 
@@ -81,11 +79,30 @@ function CompanyRow({
           ) : null}
         </span>
 
-        {view === "shock" ? (
+        {/* Percentage and severity badge sit together, always - no separate
+            "shock mode" needed, this is just a second lens on the same
+            reliance figure. */}
+        <span
+          style={{
+            flexShrink: 0,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
           <span
             style={{
-              flexShrink: 0,
-              fontSize: 11,
+              fontSize: 14,
+              fontWeight: 700,
+              color: "#8a97ad",
+              whiteSpace: "nowrap",
+            }}
+          >
+            ~{company.pct}%
+          </span>
+          <span
+            style={{
+              fontSize: 10.5,
               fontWeight: 800,
               letterSpacing: 0.4,
               textTransform: "uppercase",
@@ -93,24 +110,13 @@ function CompanyRow({
               background: `${severity.color}1a`,
               border: `1px solid ${severity.color}66`,
               borderRadius: 999,
-              padding: "3px 10px",
+              padding: "2px 8px",
               whiteSpace: "nowrap",
             }}
           >
             {severity.label}
           </span>
-        ) : (
-          <span
-            style={{
-              flexShrink: 0,
-              fontSize: 14,
-              fontWeight: 700,
-              color: "#8a97ad",
-            }}
-          >
-            ~{company.pct}%
-          </span>
-        )}
+        </span>
       </div>
 
       <p
@@ -124,21 +130,6 @@ function CompanyRow({
       >
         {company.blurb}
       </p>
-
-      {view === "shock" ? (
-        <p
-          style={{
-            margin: 0,
-            marginTop: 4,
-            fontSize: 12.5,
-            lineHeight: 1.5,
-            opacity: 0.6,
-            fontStyle: "italic",
-          }}
-        >
-          ~{company.pct}% exposure estimate.
-        </p>
-      ) : null}
 
       {company.ticker ? (
         <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
@@ -164,12 +155,12 @@ function ChartBlock({
   heading,
   description,
   companies,
-  view,
+  className,
 }: {
   heading: string;
   description: string;
   companies: BottleneckCompany[];
-  view: View;
+  className?: string;
 }) {
   const segments = companies.map((company, index) => ({
     name: company.name,
@@ -180,7 +171,7 @@ function ChartBlock({
 
   return (
     <section
-      className="bottleneckChartBlock"
+      className={`bottleneckChartBlock${className ? ` ${className}` : ""}`}
       style={{
         background: "#0b1220",
         border: "1px solid rgba(255,255,255,0.12)",
@@ -210,7 +201,6 @@ function ChartBlock({
             key={`${company.ticker ?? company.name}-${index}`}
             company={company}
             color={NEON_PALETTE[index % NEON_PALETTE.length]}
-            view={view}
           />
         ))}
       </div>
@@ -219,35 +209,20 @@ function ChartBlock({
 }
 
 export default function BottleneckShockView({ post }: { post: BottleneckPost }) {
-  const [view, setView] = useState<View>("dependency");
+  // Mobile-only: which single chart panel is showing. Desktop always shows
+  // both side by side and ignores this - the toggle itself is hidden above
+  // 860px via CSS (see .bottleneckMobileToggle in page.tsx's <style> block),
+  // and the CSS media query that hides the non-selected panel
+  // (.bottleneckMobileHidden) only takes effect below that same breakpoint.
+  const [mobilePanel, setMobilePanel] = useState<Panel>("supply");
 
-  const isShock = view === "shock";
+  const supplyChainDescription =
+    post.supplyChainNote ||
+    `Companies ${post.symbol} relies on to design, manufacture, package, and assemble its hardware.`;
 
-  const title = isShock
-    ? `${post.companyName} (${post.symbol}): Who Gets Hit If Something Breaks`
-    : `${post.companyName} (${post.symbol}): Who It Depends On`;
-
-  const intro = isShock
-    ? `If ${post.symbol} were hit by a real supply shock — a key supplier failing, a component shortage, an outage, anything that stops it delivering normally — here's who absorbs it. The left chart shows how exposed ${post.symbol} itself is if one of its own suppliers falters; the right chart shows which of ${post.symbol}'s customers would feel it hardest if ${post.symbol} couldn't deliver.`
-    : post.summary;
-
-  const supplyChainDescription = isShock
-    ? `Ranked by how much of ${post.symbol}'s own supply chain runs through each partner — this is the vulnerability ${post.symbol} carries if any one of these falters.`
-    : post.supplyChainNote ||
-      `Companies ${post.symbol} relies on to design, manufacture, package, and assemble its hardware.`;
-
-  const customersDescription = isShock
-    ? `If ${post.symbol} faced a shortage or outage, these are the customers most exposed — ranked by how much of their own business leans on ${post.symbol}.`
-    : post.customersNote ||
-      `Companies that make up an outsized share of ${post.symbol}'s revenue - who ${post.symbol} relies on to buy from it.`;
-
-  const supplyChainHeading = isShock
-    ? `If a supplier breaks, this is ${post.symbol}'s exposure`
-    : "Supply-chain dependency";
-
-  const customersHeading = isShock
-    ? `Who gets hit if ${post.symbol} can't deliver`
-    : "Customer concentration";
+  const customersDescription =
+    post.customersNote ||
+    `Companies that make up an outsized share of ${post.symbol}'s revenue - who ${post.symbol} relies on to buy from it.`;
 
   return (
     <>
@@ -261,59 +236,6 @@ export default function BottleneckShockView({ post }: { post: BottleneckPost }) 
           boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
         }}
       >
-        <div
-          role="group"
-          aria-label="Page view"
-          style={{
-            display: "inline-flex",
-            gap: 4,
-            padding: 4,
-            background: "rgba(255,255,255,0.04)",
-            border: "1px solid rgba(255,255,255,0.12)",
-            borderRadius: 999,
-            marginBottom: 18,
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => setView("dependency")}
-            style={{
-              cursor: "pointer",
-              border: "none",
-              borderRadius: 999,
-              padding: "7px 16px",
-              fontSize: 13,
-              fontWeight: 800,
-              letterSpacing: 0.2,
-              background: !isShock ? "rgba(147, 197, 253, 0.16)" : "transparent",
-              color: !isShock ? "#93c5fd" : "#8a97ad",
-              boxShadow: !isShock ? "0 0 12px rgba(147, 197, 253, 0.3)" : "none",
-              transition: "all 0.18s ease",
-            }}
-          >
-            Dependency view
-          </button>
-          <button
-            type="button"
-            onClick={() => setView("shock")}
-            style={{
-              cursor: "pointer",
-              border: "none",
-              borderRadius: 999,
-              padding: "7px 16px",
-              fontSize: 13,
-              fontWeight: 800,
-              letterSpacing: 0.2,
-              background: isShock ? "rgba(255, 158, 138, 0.16)" : "transparent",
-              color: isShock ? "#FF9E8A" : "#8a97ad",
-              boxShadow: isShock ? "0 0 12px rgba(255, 158, 138, 0.3)" : "none",
-              transition: "all 0.18s ease",
-            }}
-          >
-            ⚡ Shock view
-          </button>
-        </div>
-
         <h1
           className="bottleneckTickerTitle"
           style={{
@@ -324,11 +246,72 @@ export default function BottleneckShockView({ post }: { post: BottleneckPost }) 
             fontWeight: 900,
           }}
         >
-          {title}
+          {post.companyName} ({post.symbol}): Who It Depends On
         </h1>
 
-        <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92 }}>{intro}</p>
+        <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92 }}>
+          {post.summary}
+        </p>
       </section>
+
+      <div
+        className="bottleneckMobileToggle"
+        role="group"
+        aria-label="Chart panel"
+        style={{
+          display: "none",
+          gap: 4,
+          padding: 4,
+          marginTop: 20,
+          width: "fit-content",
+          background: "rgba(255,255,255,0.04)",
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 999,
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setMobilePanel("supply")}
+          style={{
+            cursor: "pointer",
+            border: "none",
+            borderRadius: 999,
+            padding: "7px 16px",
+            fontSize: 13,
+            fontWeight: 800,
+            letterSpacing: 0.2,
+            background:
+              mobilePanel === "supply" ? "rgba(147, 197, 253, 0.16)" : "transparent",
+            color: mobilePanel === "supply" ? "#93c5fd" : "#8a97ad",
+            boxShadow:
+              mobilePanel === "supply" ? "0 0 12px rgba(147, 197, 253, 0.3)" : "none",
+            transition: "all 0.18s ease",
+          }}
+        >
+          Supply chain
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobilePanel("customers")}
+          style={{
+            cursor: "pointer",
+            border: "none",
+            borderRadius: 999,
+            padding: "7px 16px",
+            fontSize: 13,
+            fontWeight: 800,
+            letterSpacing: 0.2,
+            background:
+              mobilePanel === "customers" ? "rgba(95, 212, 199, 0.16)" : "transparent",
+            color: mobilePanel === "customers" ? "#5FD4C7" : "#8a97ad",
+            boxShadow:
+              mobilePanel === "customers" ? "0 0 12px rgba(95, 212, 199, 0.3)" : "none",
+            transition: "all 0.18s ease",
+          }}
+        >
+          Customers
+        </button>
+      </div>
 
       <div
         className="bottleneckColumns"
@@ -341,17 +324,17 @@ export default function BottleneckShockView({ post }: { post: BottleneckPost }) 
         }}
       >
         <ChartBlock
-          heading={supplyChainHeading}
+          heading="Supply-chain dependency"
           description={supplyChainDescription}
           companies={post.supplyChain}
-          view={view}
+          className={mobilePanel === "customers" ? "bottleneckMobileHidden" : undefined}
         />
 
         <ChartBlock
-          heading={customersHeading}
+          heading="Customer concentration"
           description={customersDescription}
           companies={post.customers}
-          view={view}
+          className={mobilePanel === "supply" ? "bottleneckMobileHidden" : undefined}
         />
       </div>
     </>
