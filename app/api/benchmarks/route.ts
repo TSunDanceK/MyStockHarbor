@@ -106,7 +106,11 @@ export async function GET(req: Request) {
       time: r ? timeStr : null,
       close: toNum(r?.price),
       prevClose: toNum(r?.previousClose),
-      changePct: toNum(r?.changesPercentage),
+      // FMP's /stable/quote endpoint returns `changePercentage` (no "s").
+      // `changesPercentage` was the legacy v3 field name — kept as a
+      // defensive fallback in case a symbol ever routes through an
+      // older response shape.
+      changePct: toNum(r?.changePercentage ?? r?.changesPercentage),
     };
   });
 
