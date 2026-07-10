@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     title: "Stock Screener for Breakouts | MyStockHarbor",
     description:
       "Learn how traders scan for breakout stocks and explore live breakout ideas.",
-    url: "https://mystockharbor.com/stock-screener-for-breakouts",
+    url: "https://www.mystockharbor.com/stock-screener-for-breakouts",
     siteName: "MyStockHarbor",
     type: "article",
   },
