@@ -4,12 +4,30 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       // ── Duplicate consolidation (301) ──────────────────────────────
-      // /bullish-divergence-stocks is byte-for-byte identical to
-      // /bullish-bearish-divergence-stocks (same git tree). Consolidate
-      // ranking signals onto the canonical combined page.
+      // /bullish-divergence-stocks and /bearish-divergence-stocks are both
+      // byte-for-byte identical to /bullish-bearish-divergence-stocks (same
+      // git tree, canonical already points at the combined page). Consolidate
+      // ranking signals onto the canonical combined page for both variants.
       {
         source: "/bullish-divergence-stocks",
         destination: "/bullish-bearish-divergence-stocks",
+        permanent: true,
+      },
+      {
+        source: "/bearish-divergence-stocks",
+        destination: "/bullish-bearish-divergence-stocks",
+        permanent: true,
+      },
+
+      // ── Removed page cleanup (301) ──────────────────────────────────
+      // /hot-market-names-right-now was deliberately removed from the site
+      // (see CLAUDE.md "Lessons learned") but Google still has it indexed
+      // from before removal and keeps re-crawling it as a dead 404, wasting
+      // crawl budget. Redirect any residual traffic/link equity to the
+      // closest live equivalent instead of leaving it as a permanent 404.
+      {
+        source: "/hot-market-names-right-now",
+        destination: "/pickers",
         permanent: true,
       },
 
