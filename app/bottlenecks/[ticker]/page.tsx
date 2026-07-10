@@ -240,6 +240,12 @@ export default async function BottleneckPage({ params }: Props) {
             .bottleneckColumns {
               grid-template-columns: 1fr !important;
             }
+            .bottleneckMobileToggle {
+              display: inline-flex !important;
+            }
+            .bottleneckMobileHidden {
+              display: none !important;
+            }
           }
 
           @media (max-width: 640px) {
