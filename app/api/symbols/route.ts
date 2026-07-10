@@ -89,11 +89,16 @@ async function fetchSymbolDirectory(url: string) {
   return res.text();
 }
 
-async function fetchFmpExactSymbol(symbol: string): Promise<SymbolRow | null> {
-  const apiKey =
+function getFmpApiKey() {
+  return (
     process.env.FMP_API_KEY ||
     process.env.FINANCIAL_MODELING_PREP_API_KEY ||
-    process.env.NEXT_PUBLIC_FMP_API_KEY;
+    process.env.NEXT_PUBLIC_FMP_API_KEY
+  );
+}
+
+async function fetchFmpExactSymbol(symbol: string): Promise<SymbolRow | null> {
+  const apiKey = getFmpApiKey();
 
   if (!apiKey) return null;
 
@@ -128,10 +133,7 @@ async function fetchFmpExactSymbol(symbol: string): Promise<SymbolRow | null> {
 }
 
 async function fetchFmpSearchSymbols(query: string): Promise<SymbolRow[]> {
-  const apiKey =
-    process.env.FMP_API_KEY ||
-    process.env.FINANCIAL_MODELING_PREP_API_KEY ||
-    process.env.NEXT_PUBLIC_FMP_API_KEY;
+  const apiKey = getFmpApiKey();
 
   // Allow single-letter searches — FMP handles them fine for exact-symbol lookups
   if (!apiKey || query.length < 1) return [];
@@ -167,9 +169,42 @@ async function fetchFmpSearchSymbols(query: string): Promise<SymbolRow[]> {
   }
 }
 
+// Small, deliberately narrow set of USD crypto pairs for the dashboard's
+// crypto mode. Kept as a static allow-list (rather than pulling FMP's full
+// cryptocurrency-list endpoint) since the dashboard toggle only supports a
+// handful of majors for now — see DashboardClient's CRYPTO_PRESETS.
+const CRYPTO_USD_PAIRS: SymbolRow[] = [
+  { symbol: "BTCUSD", name: "Bitcoin", exchange: "CRYPTO" },
+  { symbol: "ETHUSD", name: "Ethereum", exchange: "CRYPTO" },
+  { symbol: "SOLUSD", name: "Solana", exchange: "CRYPTO" },
+  { symbol: "TRXUSD", name: "TRON", exchange: "CRYPTO" },
+];
+
+function searchCryptoPairs(q: string) {
+  if (!q) return CRYPTO_USD_PAIRS;
+
+  return CRYPTO_USD_PAIRS.filter(
+    (row) => row.symbol.includes(q) || row.name.toUpperCase().includes(q)
+  );
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const q = (searchParams.get("q") || "").trim().toUpperCase();
+  const type = (searchParams.get("type") || "").trim().toLowerCase();
+
+  if (type === "crypto") {
+    const results = searchCryptoPairs(q);
+
+    return NextResponse.json(
+      { results },
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=86400",
+        },
+      }
+    );
+  }
 
   const [nasdaqTxt, otherTxt] = await Promise.all([
     fetchSymbolDirectory("https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.txt"),

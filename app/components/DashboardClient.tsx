@@ -20,6 +20,7 @@ type DivergenceState = "bullish" | "bearish" | "none";
 type OverviewItem = { key: string; label: string; tone: "green" | "yellow" | "orange" | "red" | "muted"; valueText: string; severity: number; order: number; };
 type TrendScore = { total: number; passed: number; details: { name: string; ok: boolean | null }[]; };
 type StretchScore = { total: number; flagged: number; oversold: number; overbought: number; details: { name: string; state: "oversold" | "overbought" | "neutral" | "na" }[]; };
+type AssetType = "stock" | "crypto";
 
 function movingAverage(values: number[], window: number): (number | null)[] {
   const out: (number | null)[] = Array(values.length).fill(null); let sum = 0;
@@ -195,6 +196,15 @@ const PRESET_TICKERS: { symbol: string; name: string }[] = [
   { symbol: "AAPL", name: "Apple Inc." }, { symbol: "ABBV", name: "AbbVie Inc." }, { symbol: "ABT", name: "Abbott Laboratories" }, { symbol: "ADBE", name: "Adobe Inc." }, { symbol: "AMZN", name: "Amazon.com Inc." }, { symbol: "AVGO", name: "Broadcom Inc." }, { symbol: "BAC", name: "Bank of America" }, { symbol: "BRK.B", name: "Berkshire Hathaway B" }, { symbol: "COST", name: "Costco Wholesale" }, { symbol: "CRM", name: "Salesforce Inc." }, { symbol: "CSCO", name: "Cisco Systems" }, { symbol: "CVX", name: "Chevron Corp." }, { symbol: "DIS", name: "Walt Disney Co." }, { symbol: "GOOGL", name: "Alphabet Inc. Class A" }, { symbol: "HD", name: "Home Depot" }, { symbol: "INTC", name: "Intel Corp." }, { symbol: "JNJ", name: "Johnson & Johnson" }, { symbol: "JPM", name: "JPMorgan Chase" }, { symbol: "KO", name: "Coca-Cola Co." }, { symbol: "LLY", name: "Eli Lilly & Co." }, { symbol: "MA", name: "Mastercard Inc." }, { symbol: "MCD", name: "McDonald's Corp." }, { symbol: "META", name: "Meta Platforms" }, { symbol: "MRK", name: "Merck & Co." }, { symbol: "MSFT", name: "Microsoft Corp." }, { symbol: "NFLX", name: "Netflix Inc." }, { symbol: "NVDA", name: "NVIDIA Corp." }, { symbol: "ORCL", name: "Oracle Corp." }, { symbol: "PEP", name: "PepsiCo Inc." }, { symbol: "PG", name: "Procter & Gamble" }, { symbol: "PYPL", name: "PayPal Holdings" }, { symbol: "QCOM", name: "Qualcomm Inc." }, { symbol: "SBUX", name: "Starbucks Corp." }, { symbol: "T", name: "AT&T Inc." }, { symbol: "TGT", name: "Target Corp." }, { symbol: "TSLA", name: "Tesla Inc." }, { symbol: "TXN", name: "Texas Instruments" }, { symbol: "UNH", name: "UnitedHealth Group" }, { symbol: "V", name: "Visa Inc." }, { symbol: "VZ", name: "Verizon Communications" }, { symbol: "WFC", name: "Wells Fargo" }, { symbol: "WMT", name: "Walmart Inc." }, { symbol: "XOM", name: "Exxon Mobil Corp." },
 ].sort((a, b) => a.symbol.localeCompare(b.symbol));
 
+const CRYPTO_PRESETS: { symbol: string; name: string }[] = [
+  { symbol: "BTCUSD", name: "Bitcoin" },
+  { symbol: "ETHUSD", name: "Ethereum" },
+  { symbol: "SOLUSD", name: "Solana" },
+  { symbol: "TRXUSD", name: "TRON" },
+];
+
+const DEFAULT_CRYPTO_SYMBOL = "BTCUSD";
+
 const TIMEFRAMES = [{ label: "D", interval: "d" as ChartInterval, fetchBars: 2600, defaultVisibleBars: 75 }, { label: "W", interval: "w" as ChartInterval, fetchBars: 2600, defaultVisibleBars: 75 }, { label: "M", interval: "m" as ChartInterval, fetchBars: 360, defaultVisibleBars: 75 }];
 const PRICE_OVERLAY_OPTIONS: Overlay[] = ["MA50", "MA200", "EMA20", "VWMA(20)", "Bollinger(20,2)", "Support/Resistance"];
 const LOWER_OVERLAY_OPTIONS: Overlay[] = ["RSI(14)", "MACD(12,26,9)", "Stochastic(14,3)", "ATR(14)", "Volume"];
@@ -202,7 +212,9 @@ function isLowerOverlay(v: Overlay) { return LOWER_OVERLAY_OPTIONS.includes(v); 
 
 export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymbol?: string }) {
   const router = useRouter(), searchParams = useSearchParams();
+  const [assetType, setAssetType] = useState<AssetType>("stock");
   const [symbol, setSymbol] = useState(() => { if (typeof window === "undefined") return defaultSymbol; const s = window.localStorage.getItem("msh_last_symbol"); return s && s.trim() ? s.trim().toUpperCase() : defaultSymbol; });
+  const [lastStockSymbol, setLastStockSymbol] = useState(() => { if (typeof window === "undefined") return defaultSymbol; const s = window.localStorage.getItem("msh_last_symbol"); return s && s.trim() ? s.trim().toUpperCase() : defaultSymbol; });
   const [symbolName, setSymbolName] = useState("");
   const [activeTimeframe, setActiveTimeframe] = useState("D");
   const [visibleBars, setVisibleBars] = useState(75);
@@ -234,7 +246,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   const COLORS = useMemo(() => ({ isDark: true, pageBg: "#0a0f1a", pageFg: "#eaf0fa", mutedFg: "#8a97ad", mutedFg2: "#5f6b80", cardBg: "#141b2b", cardFg: "#eaf0fa", cardBg2: "#0f1624", border: "#222c40", borderSoft: "#1a2336", controlBg: "#0f1624", controlBgSolid: "#0f1624", controlBorder: "#222c40", controlFg: "#eaf0fa", blue: "#2f6bff", blueSoft: "#13213f", blueBorder: "#27406f", green: "#16c784", greenSoft: "#0f2a23", greenBorder: "#1c4a3c", amber: "#f5a524", amberSoft: "#2c2310", amberBorder: "#3a2f10", red: "#f04444", yellowBorder: "rgba(234,179,8,0.38)", yellowBg: "rgba(234,179,8,0.10)", yellowText: "#fde68a" }), []);
 
   useEffect(() => { const r = () => setIsMobile(window.innerWidth <= 768); r(); window.addEventListener("resize", r); return () => window.removeEventListener("resize", r); }, []);
-  useEffect(() => { if (symbolName.trim()) return; const f = PRESET_TICKERS.find(x => x.symbol.toUpperCase() === symbol.toUpperCase()); if (f?.name) setSymbolName(f.name); }, [symbol, symbolName]);
+  useEffect(() => { if (symbolName.trim()) return; const list = assetType === "crypto" ? CRYPTO_PRESETS : PRESET_TICKERS; const f = list.find(x => x.symbol.toUpperCase() === symbol.toUpperCase()); if (f?.name) setSymbolName(f.name); }, [symbol, symbolName, assetType]);
   useEffect(() => { setChartInterval(selectedTimeframe.interval); setVisibleBars(selectedTimeframe.defaultVisibleBars); setWindowOffset(0); }, [symbol, selectedTimeframe]);
   useEffect(() => {
     const us = searchParams.get("symbol"); const cleaned = us ? us.trim().toUpperCase() : ""; if (!cleaned) return;
@@ -244,15 +256,16 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     if (indi === "MA200") { setSelectedIndicators(["MA200"]); setIndicator("MA200"); } else if (indi === "RSI(14)") { setSelectedIndicators(["RSI(14)"]); setIndicator("RSI(14)"); } else if (indi === "MACD(12,26,9)") { setSelectedIndicators(["MACD(12,26,9)"]); setIndicator("MACD(12,26,9)"); } else { setSelectedIndicators([]); setIndicator("None"); }
     setIndicatorMenuOpen(false); setWindowOffset(0);
   }, [searchParams]);
-  useEffect(() => { if (!symbol.trim()) return; window.localStorage.setItem("msh_last_symbol", symbol.trim().toUpperCase()); }, [symbol]);
+  useEffect(() => { if (!symbol.trim()) return; if (assetType === "stock") { window.localStorage.setItem("msh_last_symbol", symbol.trim().toUpperCase()); setLastStockSymbol(symbol.trim().toUpperCase()); } }, [symbol, assetType]);
   useEffect(() => { if (!expanded) return; const k = (e: KeyboardEvent) => { if (e.key === "Escape") setExpanded(false); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [expanded]);
   useEffect(() => { function h(e: MouseEvent) { if (!indicatorMenuRef.current) return; if (!indicatorMenuRef.current.contains(e.target as Node)) setIndicatorMenuOpen(false); } document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h); }, []);
   useEffect(() => {
+    if (assetType === "crypto") { const p = CRYPTO_PRESETS.find(t => t.symbol === symbol); if (p) setSymbolName(p.name); return; }
     const p = PRESET_TICKERS.find(t => t.symbol === symbol); if (p) { setSymbolName(p.name); return; }
     let c = false;
     async function r() { try { const res = await fetch(`/api/symbols?q=${encodeURIComponent(symbol)}`); if (!res.ok) throw new Error(""); const d = (await res.json()) as { results?: SymbolResult[] }; const rows = Array.isArray(d.results) ? d.results : []; const ex = rows.find(r => (r.symbol ?? "").toUpperCase() === symbol.toUpperCase()); if (!c && ex?.name) setSymbolName(ex.name); } catch { } }
     r(); return () => { c = true; };
-  }, [symbol]);
+  }, [symbol, assetType]);
   useEffect(() => {
     let c = false;
     async function load() {
@@ -272,13 +285,13 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   }, [symbol, activeTimeframe, selectedTimeframe, chartInterval, symbolCache]);
   useEffect(() => {
     let c = false; const q = query.trim(); if (!q) { setResults([]); return; }
-    const t = setTimeout(async () => { try { const r = await fetch(`/api/symbols?q=${encodeURIComponent(q)}`); const d = (await r.json()) as { results: SymbolResult[] }; if (c) return; const rows = Array.isArray(d.results) ? d.results : []; const cu = q.toUpperCase(); setResults([...rows].sort((a, b) => { const aS = a.symbol.toUpperCase(), bS = b.symbol.toUpperCase(); if (aS === cu && bS !== cu) return -1; if (bS === cu && aS !== cu) return 1; if (aS.startsWith(cu) && !bS.startsWith(cu)) return -1; if (bS.startsWith(cu) && !aS.startsWith(cu)) return 1; return aS.localeCompare(bS); })); } catch { if (c) return; setResults([]); } }, 250);
+    const t = setTimeout(async () => { try { const typeParam = assetType === "crypto" ? "&type=crypto" : ""; const r = await fetch(`/api/symbols?q=${encodeURIComponent(q)}${typeParam}`); const d = (await r.json()) as { results: SymbolResult[] }; if (c) return; const rows = Array.isArray(d.results) ? d.results : []; const cu = q.toUpperCase(); setResults([...rows].sort((a, b) => { const aS = a.symbol.toUpperCase(), bS = b.symbol.toUpperCase(); if (aS === cu && bS !== cu) return -1; if (bS === cu && aS !== cu) return 1; if (aS.startsWith(cu) && !bS.startsWith(cu)) return -1; if (bS.startsWith(cu) && !aS.startsWith(cu)) return 1; return aS.localeCompare(bS); })); } catch { if (c) return; setResults([]); } }, 250);
     return () => { c = true; clearTimeout(t); };
-  }, [query]);
-  useEffect(() => { let c = false; async function lb() { try { const r = await fetch("/api/benchmarks"); if (!r.ok) throw new Error(""); const raw = (await r.json()) as any; if (!c) setBench({ updatedAt: typeof raw?.updatedAt === "string" ? raw.updatedAt : new Date().toISOString(), scope: typeof raw?.scope === "string" ? raw.scope : "Benchmarks", items: Array.isArray(raw?.items) ? raw.items : [] }); } catch { if (!c) setBench({ updatedAt: new Date().toISOString(), scope: "Benchmarks", items: [] }); } } lb(); return () => { c = true; }; }, []);
+  }, [query, assetType]);
+  useEffect(() => { let c = false; async function lb() { try { const scope = assetType === "crypto" ? "crypto" : "stock"; const r = await fetch(`/api/benchmarks?scope=${scope}`); if (!r.ok) throw new Error(""); const raw = (await r.json()) as any; if (!c) setBench({ updatedAt: typeof raw?.updatedAt === "string" ? raw.updatedAt : new Date().toISOString(), scope: typeof raw?.scope === "string" ? raw.scope : "Benchmarks", items: Array.isArray(raw?.items) ? raw.items : [] }); } catch { if (!c) setBench({ updatedAt: new Date().toISOString(), scope: "Benchmarks", items: [] }); } } lb(); return () => { c = true; }; }, [assetType]);
   useEffect(() => { const h = typeof window !== "undefined" ? window.location.hash : ""; if (h !== "#chart" || !historyAll.length) return; const t = window.setTimeout(() => { chartSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); setHighlightChart(true); setTimeout(() => setHighlightChart(false), 1200); }, 80); return () => window.clearTimeout(t); }, [historyAll, symbol]);
-  useEffect(() => { let c = false; async function ln() { try { const r = await fetch(`/api/internal-news?symbol=${encodeURIComponent(symbol)}`); if (!r.ok) throw new Error(""); if (!c) setNews((await r.json()) as NewsPayload); } catch { if (!c) setNews(null); } } ln(); return () => { c = true; }; }, [symbol]);
-  useEffect(() => { let c = false; async function le() { setEarningsSummary(null); try { const r = await fetch(`/api/stock-earnings/${encodeURIComponent(symbol)}`, { cache: "no-store" }); if (!r.ok) throw new Error(""); if (!c) setEarningsSummary((await r.json()) as StockEarningsSummary); } catch { if (!c) setEarningsSummary(null); } } le(); return () => { c = true; }; }, [symbol]);
+  useEffect(() => { if (assetType === "crypto") { setNews(null); return; } let c = false; async function ln() { try { const r = await fetch(`/api/internal-news?symbol=${encodeURIComponent(symbol)}`); if (!r.ok) throw new Error(""); if (!c) setNews((await r.json()) as NewsPayload); } catch { if (!c) setNews(null); } } ln(); return () => { c = true; }; }, [symbol, assetType]);
+  useEffect(() => { if (assetType === "crypto") { setEarningsSummary(null); return; } let c = false; async function le() { setEarningsSummary(null); try { const r = await fetch(`/api/stock-earnings/${encodeURIComponent(symbol)}`, { cache: "no-store" }); if (!r.ok) throw new Error(""); if (!c) setEarningsSummary((await r.json()) as StockEarningsSummary); } catch { if (!c) setEarningsSummary(null); } } le(); return () => { c = true; }; }, [symbol, assetType]);
 
   const totalPoints = historyAll.length, win = Math.max(visibleBars, 2), maxOffset = Math.max(totalPoints - win, 0), offset = Math.min(Math.max(windowOffset, 0), maxOffset);
   const { displayStart, displayEnd, displayedHistory } = useMemo(() => { if (!historyAll.length) return { displayStart: 0, displayEnd: 0, displayedHistory: [] as Point[] }; const end = totalPoints - offset, start = Math.max(0, end - win); const slice = historyAll.slice(start, end); if (slice.length >= 2) return { displayStart: start, displayEnd: end, displayedHistory: slice }; return { displayStart: Math.max(totalPoints - 2, 0), displayEnd: totalPoints, displayedHistory: historyAll.slice(-2) }; }, [historyAll, totalPoints, offset, win]);
@@ -336,7 +349,12 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
 
   const customMode = selectedIndicators.length > 0;
   function chartIndicatorLabel(v: Overlay[]) { return !v.length ? "Overview" : v.join(", "); }
-  function chooseSymbol(s: string, name?: string) { const c = s.trim().toUpperCase(); if (!c) return; setSymbol(c); setSymbolName(name?.trim() ? name.trim() : ""); setQuery(c); setResults([]); setOpen(false); setActiveTimeframe("D"); setSelectedIndicators([]); setIndicator("None"); setWindowOffset(0); }
+  function chooseSymbol(s: string, name?: string, nextAssetType?: AssetType) { const c = s.trim().toUpperCase(); if (!c) return; if (nextAssetType) setAssetType(nextAssetType); setSymbol(c); setSymbolName(name?.trim() ? name.trim() : ""); setQuery(c); setResults([]); setOpen(false); setActiveTimeframe("D"); setSelectedIndicators([]); setIndicator("None"); setWindowOffset(0); }
+  function switchAssetType(next: AssetType) {
+    if (next === assetType) return;
+    if (next === "crypto") { chooseSymbol(DEFAULT_CRYPTO_SYMBOL, CRYPTO_PRESETS[0]?.name, "crypto"); return; }
+    chooseSymbol(lastStockSymbol || defaultSymbol, undefined, "stock");
+  }
   function clearIndicatorSelection() { setSelectedIndicators([]); setIndicator("None"); setWindowOffset(0); setIndicatorMenuOpen(false); }
   function getNextFocusedIndicator(v: Overlay[]) { const al = v.find(x => isLowerOverlay(x)); if (al) return al; if (v.length) return v[v.length - 1]; return "None" as Overlay; }
   function toggleIndicatorSelection(next: Overlay) {
@@ -398,11 +416,11 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     if (typeof ma200Pct === "number") push({ key: "ma200", label: "MA200", tone: Math.abs(ma200Pct) >= 5 ? "red" : Math.abs(ma200Pct) >= 2 ? "orange" : "yellow", valueText: `${ma200Pct >= 0 ? "+" : ""}${ma200Pct.toFixed(2)}%`, severity: Math.abs(ma200Pct) }); else push({ key: "ma200", label: "MA200", tone: "muted", valueText: "—", severity: 0 });
     if (typeof volumeLast === "number" && typeof volumeSmaLast === "number" && volumeSmaLast > 0) { const r = volumeLast / volumeSmaLast; push({ key: "vol", label: "Volume", tone: r >= 1.8 ? "orange" : "yellow", valueText: r >= 1.8 ? `Spike ${r.toFixed(2)}×` : `Normal ${r.toFixed(2)}×`, severity: Math.max(0, r - 1) }); } else push({ key: "vol", label: "Volume", tone: "muted", valueText: "—", severity: 0 });
     if (typeof atrLast === "number" && typeof atrSmaLast === "number" && atrSmaLast > 0) { const r = atrLast / atrSmaLast; push({ key: "atr", label: "ATR", tone: r >= 1.5 ? "orange" : "yellow", valueText: r >= 1.5 ? `Spike ${r.toFixed(2)}×` : `Normal ${r.toFixed(2)}×`, severity: Math.max(0, r - 1) }); } else push({ key: "atr", label: "ATR", tone: "muted", valueText: "—", severity: 0 });
-    if (earningsSummary?.hasStructuredData && earningsSummary.tone) push({ key: "earnings", label: "Earnings", tone: earningsSummary.tone === "green" ? "green" : earningsSummary.tone === "red" ? "red" : "yellow", valueText: earningsSummary.toneLabel ?? "Neutral", severity: earningsSummary.tone === "red" ? 0.35 : earningsSummary.tone === "green" ? 0.25 : 0.1 }); else push({ key: "earnings", label: "Earnings", tone: "muted", valueText: "—", severity: 0 });
+    if (assetType === "stock") { if (earningsSummary?.hasStructuredData && earningsSummary.tone) push({ key: "earnings", label: "Earnings", tone: earningsSummary.tone === "green" ? "green" : earningsSummary.tone === "red" ? "red" : "yellow", valueText: earningsSummary.toneLabel ?? "Neutral", severity: earningsSummary.tone === "red" ? 0.35 : earningsSummary.tone === "green" ? 0.25 : 0.1 }); else push({ key: "earnings", label: "Earnings", tone: "muted", valueText: "—", severity: 0 }); }
     if (divergence.rsi !== "none") push({ key: "div_rsi", label: "RSI Div", tone: divergenceTone(divergence.rsi), valueText: divergenceLabel(divergence.rsi), severity: 100 });
     if (divergence.macd !== "none") push({ key: "div_macd", label: "MACD Div", tone: divergenceTone(divergence.macd), valueText: divergenceLabel(divergence.macd), severity: 100 });
     return items.sort((a, b) => { if (b.severity !== a.severity) return b.severity - a.severity; const tr = toneRank(b.tone) - toneRank(a.tone); if (tr !== 0) return tr; return a.order - b.order; });
-  }, [lastClose, vwma20Arr, macdHistLast, rsiLast, stochLast, ma200Pct, volumeLast, volumeSmaLast, atrLast, atrSmaLast, divergence, earningsSummary]);
+  }, [lastClose, vwma20Arr, macdHistLast, rsiLast, stochLast, ma200Pct, volumeLast, volumeSmaLast, atrLast, atrSmaLast, divergence, earningsSummary, assetType]);
 
   function chipToneColor(t: OverviewItem["tone"]) { return toneToColor(t, true); }
 
@@ -412,6 +430,12 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   }
   function TimeframeButton(props: { label: string; active: boolean; onClick: () => void }) {
     return (<button type="button" onClick={props.onClick} style={{ padding: isMobile ? "8px 14px" : "9px 18px", borderRadius: 9, border: `1px solid ${props.active ? COLORS.blue : COLORS.controlBorder}`, background: props.active ? COLORS.blue : COLORS.controlBg, color: props.active ? "#fff" : COLORS.mutedFg, fontWeight: 800, fontSize: 13, cursor: "pointer", minWidth: isMobile ? 44 : 50, letterSpacing: "0.02em" }}>{props.label}</button>);
+  }
+  function AssetTypeToggle(props: { compact?: boolean }) {
+    const opts: { key: AssetType; label: string }[] = [{ key: "stock", label: "Stocks" }, { key: "crypto", label: "Crypto" }];
+    return (<div style={{ display: "flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3 }}>
+      {opts.map(o => (<button key={o.key} type="button" onClick={() => switchAssetType(o.key)} style={{ border: "none", borderRadius: 7, padding: props.compact ? "7px 12px" : "9px 16px", background: assetType === o.key ? "rgba(47,107,255,0.28)" : "transparent", color: assetType === o.key ? "#dbeafe" : COLORS.mutedFg, fontWeight: 800, fontSize: props.compact ? 12 : 13, cursor: "pointer", boxShadow: assetType === o.key ? "inset 0 0 0 1px rgba(96,165,250,0.36)" : "none" }}>{o.label}</button>))}
+    </div>);
   }
   function SectionCard(props: { title?: string; right?: React.ReactNode; children: React.ReactNode; style?: React.CSSProperties; bodyStyle?: React.CSSProperties; allowOverflow?: boolean; }) {
     return (<section style={{ border: `1px solid ${COLORS.border}`, borderRadius: 16, background: COLORS.cardBg, color: COLORS.cardFg, overflow: props.allowOverflow ? "visible" : "hidden", minWidth: 0, ...props.style }}>{props.title || props.right ? <div style={{ padding: "13px 16px", borderBottom: `1px solid ${COLORS.borderSoft}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}><div style={{ fontWeight: 800, fontSize: 14, color: COLORS.mutedFg }}>{props.title}</div>{props.right}</div> : null}<div style={{ padding: 16, ...props.bodyStyle }}>{props.children}</div></section>);
@@ -423,7 +447,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
 
   function OverviewPanel() {
     const tc = toneToColor(trendToneFromScore(trendScore), true), sc = toneToColor(compositeToneFromCounts(stretchScore.overbought, stretchScore.oversold, 0).tone, true);
-    return (<SectionCard title={`${symbol} Overview`} allowOverflow right={<Link href={`/stock/${encodeURIComponent(symbol)}`} style={{ display: "inline-flex", alignItems: "center", padding: "6px 11px", borderRadius: 9, border: `1px solid ${COLORS.amberBorder}`, background: COLORS.amberSoft, color: COLORS.amber, textDecoration: "none", fontWeight: 700, fontSize: 11 }}>Company Overview →</Link>}>
+    return (<SectionCard title={`${symbol} Overview`} allowOverflow right={assetType === "stock" ? <Link href={`/stock/${encodeURIComponent(symbol)}`} style={{ display: "inline-flex", alignItems: "center", padding: "6px 11px", borderRadius: 9, border: `1px solid ${COLORS.amberBorder}`, background: COLORS.amberSoft, color: COLORS.amber, textDecoration: "none", fontWeight: 700, fontSize: 11 }}>Company Overview →</Link> : null}>
       <div style={{ display: "grid", gap: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}><div><div style={{ fontSize: isMobile ? 24 : 28, fontWeight: 800, lineHeight: 1, letterSpacing: "-0.02em" }}>{symbol}</div><div style={{ marginTop: 4, fontSize: 12, color: COLORS.mutedFg, fontWeight: 600 }}>{symbolName || "Name unavailable"}</div></div><div style={{ textAlign: "right" }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>Last price</div><div style={{ fontSize: isMobile ? 22 : 28, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.05 }}>{quote?.price != null ? `$${quote.price.toFixed(2)}` : "—"}</div></div></div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -437,7 +461,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{[{ label: `Regime: ${overviewMeta.trend}`, hi: false }, { label: `Volatility: ${overviewMeta.vol}`, hi: false }, { label: overviewMeta.toneTag, hi: true }].map(t => <span key={t.label} style={{ fontSize: 11.5, fontWeight: 600, padding: "4px 9px", borderRadius: 7, background: t.hi ? COLORS.amberSoft : COLORS.cardBg2, border: `1px solid ${t.hi ? COLORS.amberBorder : COLORS.borderSoft}`, color: t.hi ? COLORS.amber : COLORS.mutedFg }}>{t.label}</span>)}</div>
         <div style={{ background: customMode ? COLORS.amberSoft : COLORS.cardBg2, border: `1px solid ${customMode ? COLORS.amberBorder : COLORS.borderSoft}`, borderRadius: 12, padding: 12, fontSize: 13, lineHeight: 1.55, color: customMode ? COLORS.amber : COLORS.mutedFg }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: customMode ? COLORS.amber : COLORS.cardFg, marginBottom: 5 }}>{customMode ? "Selected Indicator Summary" : "Chart Summary"}</div>{chartSummaryText}</div>
-        <div style={{ paddingTop: 10, borderTop: `1px solid ${COLORS.borderSoft}`, fontSize: 11, color: COLORS.mutedFg2, fontWeight: 600 }}>As of {quote?.date ?? "—"} {quote?.time ?? ""} · Source: {quote?.source ?? "stooq.com"}</div>
+        <div style={{ paddingTop: 10, borderTop: `1px solid ${COLORS.borderSoft}`, fontSize: 11, color: COLORS.mutedFg2, fontWeight: 600 }}>As of {quote?.date ?? "—"} {quote?.time ?? ""} · Source: {quote?.source ?? "financialmodelingprep.com"}</div>
       </div>
     </SectionCard>);
   }
@@ -521,18 +545,19 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
       const pr = typeof it.close === "number" ? `$${it.close.toFixed(2)}` : "—";
       const cs = (it.symbol || "").split(".")[0]?.toUpperCase() || it.symbol.toUpperCase();
       return (
-        <button type="button" onClick={() => chooseSymbol(cs)}
+        <button type="button" onClick={() => chooseSymbol(cs, undefined, assetType)}
           style={{ border: `1px solid ${COLORS.border}`, borderRadius: 13, padding: "13px 14px", background: COLORS.cardBg2, color: COLORS.cardFg, textAlign: "left", cursor: "pointer", ...(isMobile ? { flex: "0 0 148px" } : { width: "100%" }) }}>
           <div style={{ fontWeight: 800, fontSize: isMobile ? 13 : 14 }}>{it.label}</div>
-          <div style={{ fontSize: 10, color: COLORS.mutedFg2, fontWeight: 700, marginTop: 2 }}>{it.symbol}</div>
           <div style={{ fontSize: isMobile ? 19 : 20, fontWeight: 800, marginTop: 9, fontVariantNumeric: "tabular-nums" }}>{pr}</div>
-          {pt != null ? <div style={{ marginTop: 3, fontSize: 12, fontWeight: 700, color: ac }}>{isUp ? "▲" : "▼"} {pt}</div> : <div style={{ marginTop: 3, fontSize: 11, opacity: 0.5 }}>—</div>}
-          <div style={{ marginTop: isMobile ? 7 : 8, fontSize: 11, opacity: 0.6 }}>{it.date && it.time ? `${it.date} ${it.time}` : "—"}</div>
+          <div style={{ marginTop: 6, display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 6 }}>
+            {pt != null ? <span style={{ fontSize: 12, fontWeight: 700, color: ac, whiteSpace: "nowrap" }}>{isUp ? "▲" : "▼"} {pt}</span> : <span style={{ fontSize: 11, opacity: 0.5 }}>—</span>}
+            <span style={{ fontSize: 11, opacity: 0.6, whiteSpace: "nowrap" }}>{it.date && it.time ? `${it.date} ${it.time}` : "—"}</span>
+          </div>
         </button>
       );
     };
     return (
-      <SectionCard title="Market Benchmarks" right={<Link href="/markets/spx" style={{ display: "inline-flex", alignItems: "center", padding: "6px 11px", borderRadius: 9, border: `1px solid ${COLORS.amberBorder}`, background: COLORS.amberSoft, color: COLORS.amber, textDecoration: "none", fontWeight: 700, fontSize: 11 }}>S&P 500 Detail →</Link>}>
+      <SectionCard title={assetType === "crypto" ? "Crypto Benchmarks" : "Market Benchmarks"} right={assetType === "stock" ? <Link href="/markets/spx" style={{ display: "inline-flex", alignItems: "center", padding: "6px 11px", borderRadius: 9, border: `1px solid ${COLORS.amberBorder}`, background: COLORS.amberSoft, color: COLORS.amber, textDecoration: "none", fontWeight: 700, fontSize: 11 }}>S&P 500 Detail →</Link> : null}>
         <div style={{ fontSize: 11, color: COLORS.mutedFg2, marginBottom: 12, fontWeight: 600 }}>Updated: {bench?.updatedAt ? new Date(bench.updatedAt).toLocaleString() : "—"} · {bench?.scope ?? "Benchmarks"}</div>
         {isMobile ? (
           <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch", scrollbarWidth: "none" } as React.CSSProperties}>
@@ -548,6 +573,13 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   }
 
   function NewsPanel() {
+    if (assetType === "crypto") {
+      return (<SectionCard title="Latest Headlines">
+        <div style={{ padding: 12, borderRadius: 12, border: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg2, color: COLORS.mutedFg, fontSize: 13, lineHeight: 1.6 }}>
+          Crypto news briefings aren't available yet — this section is stock-only for now.
+        </div>
+      </SectionCard>);
+    }
     return (<SectionCard title={news ? `Latest Headlines · ${news.symbol}` : "Latest Headlines"}>
       {news ? (
         <div style={{ display: "grid", gap: 14 }}>
@@ -594,11 +626,12 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}><Link href="/" style={{ display: "inline-flex", alignItems: "center", textDecoration: "none", flex: "0 0 auto" }}><img src="/logo.png" alt="MyStockHarbor" style={{ height: 48, width: "auto", objectFit: "contain", display: "block" }} /></Link><div style={{ fontSize: 12, fontWeight: 700, color: COLORS.mutedFg, lineHeight: 1.35 }}>Educational stock dashboard and market research tools.</div></div>
         <div style={{ fontWeight: 800, fontSize: 26, lineHeight: 1.05, letterSpacing: "-0.02em" }}>Stock Analysis Tools, Stock Pickers & Market Insights</div>
         <div style={{ marginTop: 7, color: COLORS.mutedFg, fontSize: 13, fontWeight: 600, lineHeight: 1.5 }}>Scan the market for ideas, or search any stock to open its full analysis page.</div>
+        <div style={{ marginTop: 14 }}><AssetTypeToggle /></div>
         <button type="button" onClick={() => router.push("/pickers")} style={{ width: "100%", marginTop: 14, padding: "14px 16px", borderRadius: 14, border: "1px solid rgba(47,107,255,0.5)", background: "linear-gradient(135deg, rgba(47,107,255,0.28), rgba(22,199,132,0.14))", color: COLORS.controlFg, fontWeight: 800, fontSize: 16, cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ display: "flex", alignItems: "center", gap: 9 }}><span>🔎</span><span>Scan for Stock Ideas</span></span><span>→</span></button>
         <div style={{ marginTop: 12 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.mutedFg2, marginBottom: 6 }}>Search Any Stock</div>
-          <input value={query} onChange={e => { setQuery(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); const f = results[0]; if (!f?.symbol) return; chooseSymbol(f.symbol, f.name); } }} placeholder="🔎 Search ticker or company" style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, outline: "none", fontSize: 15, fontWeight: 700 }} />
-          {open && results.length > 0 ? <div style={{ position: "relative", marginTop: 7, zIndex: 20, border: `1px solid ${COLORS.border}`, borderRadius: 13, background: COLORS.cardBg, boxShadow: "0 14px 28px rgba(0,0,0,0.4)", overflow: "hidden" }}>{results.slice(0, 8).map(r => <button key={`${r.symbol}-${r.exchange}`} type="button" onClick={() => chooseSymbol(r.symbol, r.name)} style={{ width: "100%", textAlign: "left", padding: "11px 13px", border: "none", borderBottom: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg, color: COLORS.cardFg, cursor: "pointer" }}><div style={{ fontWeight: 800 }}>{r.symbol}</div><div style={{ fontSize: 12, color: COLORS.mutedFg }}>{r.name}{r.exchange ? ` · ${r.exchange}` : ""}</div></button>)}</div> : null}
+          <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.mutedFg2, marginBottom: 6 }}>{assetType === "crypto" ? "Search Crypto (USD pairs)" : "Search Any Stock"}</div>
+          <input value={query} onChange={e => { setQuery(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); const f = results[0]; if (!f?.symbol) return; chooseSymbol(f.symbol, f.name, assetType); } }} placeholder={assetType === "crypto" ? "🔎 Search BTC, ETH, SOL, TRX…" : "🔎 Search ticker or company"} style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, outline: "none", fontSize: 15, fontWeight: 700 }} />
+          {open && results.length > 0 ? <div style={{ position: "relative", marginTop: 7, zIndex: 20, border: `1px solid ${COLORS.border}`, borderRadius: 13, background: COLORS.cardBg, boxShadow: "0 14px 28px rgba(0,0,0,0.4)", overflow: "hidden" }}>{results.slice(0, 8).map(r => <button key={`${r.symbol}-${r.exchange}`} type="button" onClick={() => chooseSymbol(r.symbol, r.name, assetType)} style={{ width: "100%", textAlign: "left", padding: "11px 13px", border: "none", borderBottom: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg, color: COLORS.cardFg, cursor: "pointer" }}><div style={{ fontWeight: 800 }}>{r.symbol}</div><div style={{ fontSize: 12, color: COLORS.mutedFg }}>{r.name}{r.exchange ? ` · ${r.exchange}` : ""}</div></button>)}</div> : null}
         </div>
       </div>
     </section>);
@@ -608,11 +641,11 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     <main style={{ padding: 0, fontFamily: "system-ui, -apple-system, Arial, sans-serif", background: "#05080f", color: COLORS.pageFg, minHeight: "100vh" }}>
       <style>{`
         .msh-wrap{width:min(1240px,calc(100% - 24px));margin:0 auto;padding:0 0 40px;}
-        .msh-hero{display:flex;align-items:center;gap:18px;padding:20px 0 16px;}
+        .msh-hero{display:flex;align-items:center;gap:18px;padding:20px 0 16px;flex-wrap:wrap;}
         .msh-hero-lead{flex:0 0 auto;max-width:260px;}
         .msh-hero-lead h1{margin:0;font-size:18px;font-weight:800;line-height:1.2;}
         .msh-hero-lead p{margin:4px 0 0;font-size:12px;color:#8a97ad;}
-        .msh-hero-actions{flex:1;display:flex;gap:10px;}
+        .msh-hero-actions{flex:1;display:flex;gap:10px;align-items:center;}
         .msh-searchbox{flex:1;display:flex;align-items:center;gap:10px;background:#141b2b;border:1px solid #222c40;border-radius:12px;padding:0 13px;height:48px;transition:border-color .15s;position:relative;}
         .msh-searchbox:focus-within{border-color:#2f6bff;}
         .msh-searchbox input{flex:1;background:none;border:none;outline:none;color:#eaf0fa;font-size:15px;font-weight:700;}
@@ -634,12 +667,13 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
       <div className="msh-wrap">
         <div className="msh-hero">
           <div className="msh-hero-lead"><h1>Analyze any stock</h1><p>Search a ticker for its full breakdown, or scan for fresh ideas.</p></div>
+          <AssetTypeToggle compact />
           <div className="msh-hero-actions">
             <div className="msh-searchbox">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8a97ad" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
-              <input value={query} onChange={e => { setQuery(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); const f = results[0]; if (f?.symbol) chooseSymbol(f.symbol, f.name); } }} placeholder="Search ANY ticker or company…" />
-              <button className="msh-go" onClick={() => { if (results[0]) chooseSymbol(results[0].symbol, results[0].name); }}>Go</button>
-              {open && results.length > 0 ? <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, right: 0, zIndex: 30, border: `1px solid ${COLORS.border}`, borderRadius: 13, background: COLORS.cardBg, boxShadow: "0 14px 28px rgba(0,0,0,0.4)", overflow: "hidden" }}>{results.slice(0, 8).map(r => <button key={`${r.symbol}-${r.exchange}`} type="button" onClick={() => chooseSymbol(r.symbol, r.name)} style={{ width: "100%", textAlign: "left", padding: "10px 13px", border: "none", borderBottom: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg, color: COLORS.cardFg, cursor: "pointer" }}><div style={{ fontWeight: 800, fontSize: 13 }}>{r.symbol}</div><div style={{ fontSize: 12, color: COLORS.mutedFg }}>{r.name}{r.exchange ? ` · ${r.exchange}` : ""}</div></button>)}</div> : null}
+              <input value={query} onChange={e => { setQuery(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); const f = results[0]; if (f?.symbol) chooseSymbol(f.symbol, f.name, assetType); } }} placeholder={assetType === "crypto" ? "Search BTC, ETH, SOL, TRX…" : "Search ANY ticker or company…"} />
+              <button className="msh-go" onClick={() => { if (results[0]) chooseSymbol(results[0].symbol, results[0].name, assetType); }}>Go</button>
+              {open && results.length > 0 ? <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, right: 0, zIndex: 30, border: `1px solid ${COLORS.border}`, borderRadius: 13, background: COLORS.cardBg, boxShadow: "0 14px 28px rgba(0,0,0,0.4)", overflow: "hidden" }}>{results.slice(0, 8).map(r => <button key={`${r.symbol}-${r.exchange}`} type="button" onClick={() => chooseSymbol(r.symbol, r.name, assetType)} style={{ width: "100%", textAlign: "left", padding: "10px 13px", border: "none", borderBottom: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg, color: COLORS.cardFg, cursor: "pointer" }}><div style={{ fontWeight: 800, fontSize: 13 }}>{r.symbol}</div><div style={{ fontSize: 12, color: COLORS.mutedFg }}>{r.name}{r.exchange ? ` · ${r.exchange}` : ""}</div></button>)}</div> : null}
             </div>
             <button className="msh-scanbtn" onClick={() => router.push("/pickers")}>🔎 Scan for stock ideas</button>
           </div>
