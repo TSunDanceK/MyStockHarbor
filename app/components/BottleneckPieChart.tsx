@@ -100,15 +100,21 @@ export default function BottleneckPieChart({
 
   return (
     // Wrapper caps the chart at its natural size on wide screens but lets it
-    // shrink to fill a narrow phone-width container instead of overflowing
-    // it - the SVG itself uses percentage width/height (viewBox keeps the
-    // 1:1 aspect ratio) rather than the old fixed pixel width/height.
-    <div style={{ width: "100%", maxWidth: size, margin: "0 auto" }}>
+    // shrink to fit a narrow phone-width container. The SVG keeps its real
+    // width/height attributes (240x240) as an intrinsic-size fallback so
+    // browsers that don't resolve percentage sizing cleanly on a bare
+    // viewBox-only SVG don't fall back to an oversized default render - the
+    // CSS width/height below is what actually makes it responsive, capped
+    // by the wrapper's maxWidth and further clamped by minWidth: 0 so it
+    // can shrink inside flex/grid ancestors instead of forcing them wider.
+    <div style={{ width: "100%", maxWidth: size, minWidth: 0, margin: "0 auto" }}>
       <svg
         viewBox={`0 0 ${size} ${size}`}
+        width={size}
+        height={size}
         role="img"
         aria-label="Dependency breakdown pie chart"
-        style={{ width: "100%", height: "auto", display: "block" }}
+        style={{ width: "100%", height: "auto", maxWidth: "100%", display: "block" }}
       >
         <defs>
           <filter id={glowId} x="-60%" y="-60%" width="220%" height="220%">
