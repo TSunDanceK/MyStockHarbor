@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     title: "Stocks Down From Recent Highs | MyStockHarbor",
     description:
       "A beginner-friendly guide to spotting stocks down from highs and finding potential dip opportunities.",
-    url: "https://mystockharbor.com/stocks-down-from-highs",
+    url: "https://www.mystockharbor.com/stocks-down-from-highs",
     siteName: "MyStockHarbor",
     type: "article",
   },
@@ -630,4 +630,3 @@ const inlineLinkStyle: React.CSSProperties = {
   fontWeight: 800,
   textDecoration: "none",
 };
-
