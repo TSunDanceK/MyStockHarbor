@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     title: "Breakout Stocks | MyStockHarbor",
     description:
       "A beginner-friendly guide to breakout stocks, momentum setups and how to explore live stock ideas.",
-    url: "https://mystockharbor.com/breakout-stocks",
+    url: "https://www.mystockharbor.com/breakout-stocks",
     siteName: "MyStockHarbor",
     type: "article",
   },
@@ -776,4 +776,3 @@ const inlineLinkStyle: React.CSSProperties = {
   fontWeight: 800,
   textDecoration: "none",
 };
-
