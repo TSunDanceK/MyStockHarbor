@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     title: "Stock Screener for Oversold Stocks | MyStockHarbor",
     description:
       "Learn how traders scan for oversold stocks and explore pullback-style stock ideas.",
-    url: "https://mystockharbor.com/stock-screener-for-oversold-stocks",
+    url: "https://www.mystockharbor.com/stock-screener-for-oversold-stocks",
     siteName: "MyStockHarbor",
     type: "article",
   },
