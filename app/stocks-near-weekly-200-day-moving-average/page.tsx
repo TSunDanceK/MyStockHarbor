@@ -39,11 +39,15 @@ const config: PickerResultConfig = {
     "No weekly MA200 proximity stocks are currently available from the live picker feed.",
   tone: "yellow",
   kind: "section",
-  sectionIncludes: ["ma200 proximity"],
+  sectionIncludes: ["weekly ma200"],
   filterTimeframe: "W",
   maxItems: 36,
 };
 
-export default function Page() {
-  return <PickerResultPage config={config} />;
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ symbol?: string | string[] }>;
+}) {
+  return <PickerResultPage config={config} searchParams={searchParams} />;
 }
