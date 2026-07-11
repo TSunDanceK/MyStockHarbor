@@ -13,7 +13,7 @@
 import { Redis } from "@upstash/redis";
 import { NextRequest, NextResponse } from "next/server";
 import { detectDivergenceFromHistory } from "../ta/divergence";
-import { getDailyHistory } from "./historyCache";
+import { getDailyHistoryBulk } from "./historyCache";
 import {
   addToDynamicUniverse,
   readDynamicUniverse,
@@ -2017,9 +2017,11 @@ async function fetchMarket(origin: string, forceFresh = false) {
   return fetchJSON<MarketPayload>(`${origin}/api/market`, forceFresh);
 }
 
-async function fetchHistory(symbol: string, days: number) {
-  const pts = await getDailyHistory(symbol);
-
+// Pure transform over already-fetched points -- the actual Redis/FMP fetch
+// now happens once for the whole universe via getDailyHistoryBulk() before
+// this is called (see the comment at that call site), rather than per
+// symbol here.
+function normalizeHistory(pts: Point[], days: number) {
   return pts
     .map((p) => ({
       date: String(p?.date ?? ""),
@@ -2121,6 +2123,13 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
   // call per symbol inside the loop below.
   const earningsBySymbol = await readCachedFmpEarningsBulk(universe);
 
+  // Same idea for price history: one pipelined mget for the whole universe
+  // up front instead of one Redis GET per symbol inside the loop below (was
+  // up to ~200 individual Upstash REST calls just to check "is this already
+  // cached", before any FMP fetch even happens). Cache misses still fall
+  // back to the existing per-symbol lock+fetch path inside this helper.
+  const historyBySymbol = await getDailyHistoryBulk(universe);
+
   const limit = pLimit(10);
   const days = 1300;
 
@@ -2152,7 +2161,8 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
     universe.map((symbol) =>
       limit(async () => {
         try {
-          const pts = await fetchHistory(symbol, days);
+          const rawPts = historyBySymbol.get(symbol) ?? [];
+          const pts = normalizeHistory(rawPts, days);
           if (!pts.length) {
             failedSymbolCount++;
             failedSymbols.push(symbol);
