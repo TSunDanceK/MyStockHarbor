@@ -25,6 +25,8 @@ export type PickerResultConfig = {
   filterTimeframe?: "D" | "W";
 };
 
+type PickerChartFocus = { kind: "ath" | "rangeHigh"; price: number; date: string };
+
 type PickerSectionItem = {
   symbol?: string;
   note?: string;
@@ -35,6 +37,8 @@ type PickerSectionItem = {
   chartPoints?: MiniCandlePoint[];
   score?: number;
   supportResistanceZone?: SupportResistanceZone;
+  chartFocus?: PickerChartFocus;
+  dominantIndicator?: string;
 };
 
 type PickerSection = {
@@ -110,7 +114,7 @@ const PICKER_NAV: Array<{
   { href: "/stocks-near-weekly-200-day-moving-average", label: "Weekly MA200", icon: "◆", tone: "yellow" },
   { href: "/macro-support-resistance-stocks", label: "Macro S/R", icon: "⇄", tone: "blue" },
   { href: "/overbought-stocks-today", label: "Overbought", icon: "●", tone: "red" },
-  { href: "/bullish-bearish-divergence-stocks", label: "Divergence", icon: "⍁", tone: "blue" },
+  { href: "/bullish-bearish-divergence-stocks", label: "Divergence", icon: "⚇", tone: "blue" },
 ];
 
 function toneColour(tone?: PickerTone) {
@@ -157,6 +161,51 @@ function chartHrefFor(symbol: string, href?: string) {
 
   const base = normalised.startsWith("/dashboard") ? normalised : fallback;
   return base.includes("#chart") ? base : `${base}#chart`;
+}
+
+// Inserts extra deep-link query params ahead of the "#chart" fragment.
+function withExtraChartParams(base: string, extra: Record<string, string | number>) {
+  const hashIdx = base.indexOf("#");
+  const beforeHash = hashIdx >= 0 ? base.slice(0, hashIdx) : base;
+  const hash = hashIdx >= 0 ? base.slice(hashIdx) : "";
+  const sep = beforeHash.includes("?") ? "&" : "?";
+  const qs = Object.entries(extra)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+    .join("&");
+  return `${beforeHash}${sep}${qs}${hash}`;
+}
+
+// Page-specific (config.href-keyed) equivalent of PickersClient's
+// buildPickHref -- these dedicated SEO pages are exactly where the
+// /pickers accordion's "See all" links send people, so they should carry
+// the same pre-configured chart deep links (reference line + zoom, macro
+// S/R zone, dominant oversold/overbought indicator, trend MAs).
+function chartHrefForEntry(
+  configHref: string,
+  symbol: string,
+  rawHref: string | undefined,
+  item: { supportResistanceZone?: SupportResistanceZone; chartFocus?: PickerChartFocus; dominantIndicator?: string }
+) {
+  const base = chartHrefFor(symbol, rawHref);
+  const href = configHref.toLowerCase();
+
+  if (href.includes("macro-support-resistance") && item.supportResistanceZone) {
+    const z = item.supportResistanceZone;
+    return withExtraChartParams(base, { srLower: z.lower, srUpper: z.upper, srKind: z.kind });
+  }
+  if ((href.includes("all-time-high-breakout") || href.includes("all-time-highs")) && item.chartFocus?.kind === "ath") {
+    return withExtraChartParams(base, { athPrice: item.chartFocus.price, athDate: item.chartFocus.date });
+  }
+  if (href.includes("3-month-high-breakout") && item.chartFocus?.kind === "rangeHigh") {
+    return withExtraChartParams(base, { rangeHighPrice: item.chartFocus.price, rangeHighDate: item.chartFocus.date });
+  }
+  if ((href.includes("oversold-stocks-today") || href.includes("overbought-stocks-today")) && item.dominantIndicator) {
+    return withExtraChartParams(base, { indicator: item.dominantIndicator });
+  }
+  if (href.includes("best-trend-score")) {
+    return withExtraChartParams(base, { indicators: "MA50,MA200" });
+  }
+  return base;
 }
 
 function getBuySignalCount(record: SignalRecord) {
@@ -244,6 +293,7 @@ function makeRecordMap(records: SignalRecord[]) {
 }
 
 function entriesFromSection(args: {
+  configHref: string;
   section: PickerSection | undefined;
   recordMap: Map<string, SignalRecord>;
   fallbackTone: PickerTone;
@@ -264,7 +314,7 @@ function entriesFromSection(args: {
       note,
       tone,
       stockHref: `/stock/${encodeURIComponent(symbol)}`,
-      chartHref: chartHrefFor(symbol, item.dashboardHref || record?.dashboardHref),
+      chartHref: chartHrefForEntry(args.configHref, symbol, item.dashboardHref || record?.dashboardHref, item),
       chartPoints,
       badge: [item.timeframe, item.indicator].filter(Boolean).join(" · "),
       score: typeof item.score === "number" ? item.score : typeof record?.score === "number" ? record.score : undefined,
@@ -319,7 +369,7 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
   }
 
   const section = findSection(sections, config.sectionIncludes ?? []);
-  return entriesFromSection({ section, recordMap, fallbackTone: config.tone, maxItems, filterTimeframe: config.filterTimeframe });
+  return entriesFromSection({ configHref: config.href, section, recordMap, fallbackTone: config.tone, maxItems, filterTimeframe: config.filterTimeframe });
 }
 
 async function getPickerData(config: PickerResultConfig) {
