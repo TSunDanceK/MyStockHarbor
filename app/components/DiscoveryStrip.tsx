@@ -18,9 +18,15 @@ type Tile = {
   text: string;
   href: string;
   accent: string;
-  accentSoft: string;
-  accentBorder: string;
 };
+
+// Accent colors are pulled from hues already established elsewhere on the
+// site (amber = company/overview badges, green = Pickers links, blue =
+// Insights links) rather than inventing new ones per tile. AI News and
+// Earnings don't have an existing color anchor, so they stay neutral slate
+// instead of getting an arbitrary new hue — the icon + label already
+// differentiate them.
+const NEUTRAL_ACCENT = "#8b95a7";
 
 function buildTiles(data: DiscoveryData | null): Tile[] {
   const bottleneck = data?.bottleneck ?? null;
@@ -35,56 +41,46 @@ function buildTiles(data: DiscoveryData | null): Tile[] {
       icon: "⛓️",
       label: "Bottlenecks",
       text: bottleneck
-        ? `${bottleneck.name}${bottleneck.ticker ? ` (${bottleneck.ticker})` : ""} is today's #1 systemic dependency — showing up ${bottleneck.count}× across every stock we've built.`
-        : "See which suppliers and customers each stock depends on most.",
+        ? `${bottleneck.name}${bottleneck.ticker ? ` (${bottleneck.ticker})` : ""} — today's top dependency, ${bottleneck.count}× across our coverage.`
+        : "Every stock's supplier & customer dependencies, mapped.",
       href: "/bottlenecks",
       accent: "#f5a524",
-      accentSoft: "rgba(245,165,36,0.12)",
-      accentBorder: "rgba(245,165,36,0.35)",
     },
     {
       key: "pickers",
       icon: "🔎",
       label: "Pickers",
-      text: `${pickersCount} screened setups — breakouts, divergence, 200-day MA tests & more.`,
+      text: `${pickersCount} screened setups — breakouts, divergence, 200-day MA & more.`,
       href: "/pickers",
       accent: "#16c784",
-      accentSoft: "rgba(22,199,132,0.12)",
-      accentBorder: "rgba(22,199,132,0.35)",
     },
     {
       key: "insights",
       icon: "💡",
       label: "Insights",
       text: insight
-        ? `Latest: "${insight.title}"${insight.symbol ? ` (${insight.symbol})` : ""}`
+        ? `${insight.symbol ? `${insight.symbol}: ` : ""}${insight.title}`
         : "Daily chart write-ups and trade ideas.",
       href: insight ? `/insights/${insight.slug}` : "/insights",
       accent: "#2f6bff",
-      accentSoft: "rgba(47,107,255,0.12)",
-      accentBorder: "rgba(47,107,255,0.35)",
     },
     {
       key: "news",
       icon: "🧠",
       label: "AI News",
       text: news
-        ? `Market headlines scored: ${news.scoreLabel}${news.headline ? ` — "${news.headline}"` : ""}`
-        : "AI-scored headline briefings for any ticker.",
+        ? `${news.symbol} headlines: ${news.scoreLabel}`
+        : "AI-scored headlines for any ticker.",
       href: news ? `/stock/${encodeURIComponent(news.symbol)}/news` : "/stock/SPY/news",
-      accent: "#a78bfa",
-      accentSoft: "rgba(167,139,250,0.12)",
-      accentBorder: "rgba(167,139,250,0.35)",
+      accent: NEUTRAL_ACCENT,
     },
     {
       key: "earnings",
       icon: "📅",
       label: "Earnings",
-      text: `Full beat/miss history & surprise % — right on ${earningsSymbol}'s page.`,
+      text: `Beat/miss history & surprise % for ${earningsSymbol}.`,
       href: `/stock/${encodeURIComponent(earningsSymbol)}/earnings`,
-      accent: "#22d3ee",
-      accentSoft: "rgba(34,211,238,0.12)",
-      accentBorder: "rgba(34,211,238,0.35)",
+      accent: NEUTRAL_ACCENT,
     },
   ];
 }
@@ -147,10 +143,11 @@ export default function DiscoveryStrip() {
               flexDirection: "column",
               gap: 8,
               padding: "14px 14px 15px",
-              minHeight: 106,
+              minHeight: 92,
               borderRadius: 14,
-              border: `1px solid ${tile.accentBorder}`,
-              background: `linear-gradient(160deg, ${tile.accentSoft}, rgba(20,27,43,0.65))`,
+              border: "1px solid rgba(255,255,255,0.08)",
+              borderLeft: `3px solid ${tile.accent}`,
+              background: "rgba(255,255,255,0.03)",
               textDecoration: "none",
               color: "#eaf0fa",
               transition: "transform 120ms ease, filter 120ms ease",
@@ -179,7 +176,7 @@ export default function DiscoveryStrip() {
                 lineHeight: 1.5,
                 color: "#c7d0de",
                 display: "-webkit-box",
-                WebkitLineClamp: 3,
+                WebkitLineClamp: 2,
                 WebkitBoxOrient: "vertical",
                 overflow: "hidden",
               }}
