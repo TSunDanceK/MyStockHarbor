@@ -5,6 +5,9 @@ import Link from "next/link";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
+type PickerSupportResistanceZone = { kind: "support" | "resistance"; lower: number; upper: number };
+type PickerChartFocus = { kind: "ath" | "rangeHigh"; price: number; date: string };
+
 type PickerItem = {
   symbol: string;
   note?: string;
@@ -12,6 +15,9 @@ type PickerItem = {
   timeframe?: "D" | "W" | "M";
   indicator?: "MA200" | "RSI(14)" | "MACD(12,26,9)";
   dashboardHref?: string;
+  supportResistanceZone?: PickerSupportResistanceZone;
+  chartFocus?: PickerChartFocus;
+  dominantIndicator?: string;
 };
 
 type PickerSection = {
@@ -84,6 +90,62 @@ function toChartHref(href: string, symbol?: string) {
     ? raw.replace("/?", "/dashboard?") : raw;
   const base = normalised.startsWith("/dashboard") ? normalised : fallback;
   return base.includes("#chart") ? base : `${base}#chart`;
+}
+
+// Inserts extra query params into a toChartHref()-built URL (which already
+// ends in "#chart") ahead of the hash, so deep-link params never end up
+// tacked on after the fragment.
+function buildDashboardHref(rawHref: string, symbol: string, extraParams?: Record<string, string | number>) {
+  const base = toChartHref(rawHref, symbol);
+  if (!extraParams || !Object.keys(extraParams).length) return base;
+  const hashIdx = base.indexOf("#");
+  const beforeHash = hashIdx >= 0 ? base.slice(0, hashIdx) : base;
+  const hash = hashIdx >= 0 ? base.slice(hashIdx) : "";
+  const sep = beforeHash.includes("?") ? "&" : "?";
+  const qs = Object.entries(extraParams)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+    .join("&");
+  return `${beforeHash}${sep}${qs}${hash}`;
+}
+
+// Category-aware destination for a picker row: most categories still open
+// the dashboard chart, but a few now carry enough data to open a more
+// useful, pre-configured view -- the earnings page for earnings picks, the
+// chart pre-zoomed to the referenced high with a line for ATH/3-month-high
+// picks, the macro zone pre-drawn for support/resistance picks, the
+// triggering indicator auto-selected for oversold/overbought picks, and
+// both trend MAs for trend-score picks.
+function buildPickHref(sectionTitle: string, item: PickerItem): string {
+  const symbol = String(item.symbol ?? "").trim().toUpperCase();
+  const title = sectionTitle.toLowerCase();
+  const rawHref = item.dashboardHref ?? "";
+
+  if (title.includes("earnings")) {
+    return `/stock/${encodeURIComponent(symbol)}/earnings`;
+  }
+
+  if (title.includes("macro") && title.includes("support") && title.includes("resistance") && item.supportResistanceZone) {
+    const z = item.supportResistanceZone;
+    return buildDashboardHref(rawHref, symbol, { srLower: z.lower, srUpper: z.upper, srKind: z.kind });
+  }
+
+  if ((title.includes("all-time high breakout") || title.includes("all-time highs")) && item.chartFocus?.kind === "ath") {
+    return buildDashboardHref(rawHref, symbol, { athPrice: item.chartFocus.price, athDate: item.chartFocus.date });
+  }
+
+  if (title.includes("3-month high breakout") && item.chartFocus?.kind === "rangeHigh") {
+    return buildDashboardHref(rawHref, symbol, { rangeHighPrice: item.chartFocus.price, rangeHighDate: item.chartFocus.date });
+  }
+
+  if ((title.includes("oversold") || title.includes("overbought")) && item.dominantIndicator) {
+    return buildDashboardHref(rawHref, symbol, { indicator: item.dominantIndicator });
+  }
+
+  if (title.includes("best trend score")) {
+    return buildDashboardHref(rawHref, symbol, { indicators: "MA50,MA200" });
+  }
+
+  return toChartHref(rawHref, symbol);
 }
 
 function getFilterLabel(key: FilterKey) { return FILTER_DEFS.find((f) => f.key === key)?.label ?? key; }
@@ -374,14 +436,6 @@ function PickerRowContent({ symbol, note, companyName }: { symbol: string; note?
 
 type InsightSummary = { slug: string; title: string; date: string; symbol: string | null };
 
-type LazyPlayCategory = { id: string; title: string; apiUrl: string; seeAllHref: string };
-
-const LAZY_PLAY_CATEGORIES: LazyPlayCategory[] = [
-  { id: "ascending", title: "Ascending Triangle Plays", apiUrl: "/api/plays", seeAllHref: "/plays" },
-  { id: "descending", title: "Descending Triangle Plays", apiUrl: "/api/descending-triangles", seeAllHref: "/plays/descending-triangles" },
-  { id: "bullFlag", title: "Bull Flag Plays", apiUrl: "/api/bull-flags", seeAllHref: "/plays/bull-flags" },
-];
-
 export default function PickersClient({ latestInsights = [] }: { latestInsights?: InsightSummary[] }) {
   const SHOW_FORCE_FETCH_BUTTON = false;
 
@@ -409,8 +463,6 @@ export default function PickersClient({ latestInsights = [] }: { latestInsights?
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [highlightRowKey, setHighlightRowKey] = useState<string | null>(null);
   const rowRefs = React.useRef<Map<string, HTMLDivElement>>(new Map());
-  const [lazyPlayData, setLazyPlayData] = useState<Record<string, PickerSection | null>>({});
-  const [lazyPlayLoading, setLazyPlayLoading] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [searchSubmitted, setSearchSubmitted] = useState("");
 
@@ -438,55 +490,22 @@ export default function PickersClient({ latestInsights = [] }: { latestInsights?
     finally { setEarningsFetchBusy(false); }
   }
 
-  // Ascending/Descending Triangle and Bull Flag plays each live behind
-  // their own dedicated route (/api/plays, /api/descending-triangles,
-  // /api/bull-flags) and are individually as CPU-heavy as /api/pickers
-  // itself (full universe scan + pattern detection). Fetching all three
-  // on every /pickers page load would undo the recent work to cut
-  // /api/pickers' own Redis/CPU cost, so these are fetched lazily -- only
-  // when a visitor actually expands that accordion row -- and cached in
-  // state afterward so collapsing/re-expanding doesn't refetch.
-  async function loadLazyPlay(cat: LazyPlayCategory) {
-    if (lazyPlayData[cat.id] || lazyPlayLoading[cat.id]) return;
-    setLazyPlayLoading((prev) => ({ ...prev, [cat.id]: true }));
-    try {
-      const res = await fetch(`${cat.apiUrl}?t=${Date.now()}`, { cache: "no-store" });
-      if (!res.ok) throw new Error("play fetch failed");
-      const data = (await res.json()) as { sections?: { title: string; foundCount?: number; items?: PickerItem[] }[] };
-      const primary = Array.isArray(data?.sections) ? data.sections[0] : undefined;
-      setLazyPlayData((prev) => ({
-        ...prev,
-        [cat.id]: {
-          title: cat.title,
-          foundCount: primary?.foundCount,
-          items: Array.isArray(primary?.items) ? primary.items : [],
-        },
-      }));
-    } catch {
-      setLazyPlayData((prev) => ({ ...prev, [cat.id]: { title: cat.title, items: [] } }));
-    } finally {
-      setLazyPlayLoading((prev) => ({ ...prev, [cat.id]: false }));
-    }
-  }
-
-  function toggleSection(title: string, lazyCat?: LazyPlayCategory) {
+  function toggleSection(title: string) {
     setExpandedSections((prev) => {
       const next = new Set(prev);
       if (next.has(title)) next.delete(title);
       else next.add(title);
       return next;
     });
-    if (lazyCat) void loadLazyPlay(lazyCat);
   }
 
   // Shared by "click a ticker anywhere", "Top Picks" sidebar rows, and
-  // ticker-search result chips: expand that category (fetching lazy play
-  // data first if needed), scroll the specific row into view, and give it
-  // a brief highlight pulse -- the in-page version of the "jump to a
-  // specific stock" behaviour used for the seeAll deep links.
-  function focusPick(title: string, symbol: string, lazyCat?: LazyPlayCategory) {
+  // ticker-search result chips: expand that category, scroll the specific
+  // row into view, and give it a brief highlight pulse -- the in-page
+  // version of the "jump to a specific stock" behaviour used for the
+  // seeAll deep links.
+  function focusPick(title: string, symbol: string) {
     setExpandedSections((prev) => new Set(prev).add(title));
-    if (lazyCat) void loadLazyPlay(lazyCat);
     const key = `${title}::${symbol}`;
     window.setTimeout(() => {
       const el = rowRefs.current.get(key);
@@ -1010,6 +1029,11 @@ export default function PickersClient({ latestInsights = [] }: { latestInsights?
                       return { ...it, symbol, checkCount, isDynamic };
                     })
                   : [];
+                // Items already arrive strongest-first from the API; only
+                // show the top 5 inline and point to the dedicated page
+                // (via seeAllHref) for the rest, rather than dumping the
+                // full up-to-20-item list into every dropdown.
+                const visibleItems = items.slice(0, 5);
                 const seeAllHref = seeAllHrefFor(sec);
 
                 return (
@@ -1033,8 +1057,10 @@ export default function PickersClient({ latestInsights = [] }: { latestInsights?
                     {isOpen ? (
                       <div className="acc-body">
                         <div>
-                          {items.map((it) => {
+                          {visibleItems.map((it) => {
                             const rowKey = `${sec.title}::${it.symbol}`;
+                            const href = buildPickHref(sec.title, it);
+                            const linkLabel = isEarnings ? "Earnings →" : "Chart ↗";
                             return (
                               <div
                                 key={it.symbol}
@@ -1043,11 +1069,11 @@ export default function PickersClient({ latestInsights = [] }: { latestInsights?
                               >
                                 <div className="picker-row-left">
                                   <span style={{ width: 6, height: 6, borderRadius: 999, background: toneDot(it.tone), flex: "0 0 auto" }} />
-                                  <a href={toChartHref(it.dashboardHref ?? "", it.symbol)} style={{ textDecoration: "none", minWidth: 0, flex: 1, overflow: "hidden" }}>
+                                  <a href={href} style={{ textDecoration: "none", minWidth: 0, flex: 1, overflow: "hidden" }}>
                                     <PickerRowContent symbol={it.symbol} note={it.note} companyName={companyNames.get(it.symbol)} />
                                   </a>
                                 </div>
-                                <a href={toChartHref(it.dashboardHref ?? "", it.symbol)} className="picker-row-link">Chart ↗</a>
+                                <a href={href} className="picker-row-link">{linkLabel}</a>
                               </div>
                             );
                           })}
@@ -1068,68 +1094,6 @@ export default function PickersClient({ latestInsights = [] }: { latestInsights?
                             {seeAllHref ? <a href={seeAllHref} className="pickers-see-all">See all →</a> : null}
                           </div>
                         ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-
-              {LAZY_PLAY_CATEGORIES.map((cat) => {
-                const isOpen = expandedSections.has(cat.title);
-                const data = lazyPlayData[cat.id];
-                const isLoadingCat = lazyPlayLoading[cat.id];
-                const items = data?.items ?? [];
-
-                return (
-                  <div key={cat.id} className={isOpen ? "acc-item open" : "acc-item"}>
-                    <button type="button" className="acc-head" onClick={() => toggleSection(cat.title, cat)}>
-                      <span className="acc-head-left">
-                        <span className="acc-icon" style={{ background: `${colorForTitle(cat.title)}1a` }}>
-                          <PatternIcon title={cat.title} />
-                        </span>
-                        <span className="acc-head-text">
-                          <span className="pickers-section-title">
-                            <span className="pickers-section-title-text">{cat.title}</span>
-                            <HelpTip text="A chart-pattern screener, loaded on demand rather than on every pickers page load to avoid adding extra scan cost up front." />
-                          </span>
-                          <span className="acc-count">{data ? `${typeof data.foundCount === "number" ? data.foundCount : items.length} matches` : "tap to load"}</span>
-                        </span>
-                      </span>
-                      <span className="acc-chevron">▶</span>
-                    </button>
-
-                    {isOpen ? (
-                      <div className="acc-body">
-                        {isLoadingCat ? (
-                          <div style={{ padding: "12px 0", fontSize: 12, opacity: 0.6 }}>Scanning for {cat.title.toLowerCase()}…</div>
-                        ) : (
-                          <div>
-                            {items.map((it) => {
-                              const symbol = String(it.symbol ?? "").trim().toUpperCase();
-                              const rowKey = `${cat.title}::${symbol}`;
-                              return (
-                                <div
-                                  key={symbol}
-                                  className={highlightRowKey === rowKey ? "picker-row rowHighlight" : "picker-row"}
-                                  ref={(el) => { if (el) rowRefs.current.set(rowKey, el); }}
-                                >
-                                  <div className="picker-row-left">
-                                    <span style={{ width: 6, height: 6, borderRadius: 999, background: toneDot(it.tone), flex: "0 0 auto" }} />
-                                    <a href={toChartHref(it.dashboardHref ?? "", symbol)} style={{ textDecoration: "none", minWidth: 0, flex: 1, overflow: "hidden" }}>
-                                      <PickerRowContent symbol={symbol} note={it.note} companyName={companyNames.get(symbol)} />
-                                    </a>
-                                  </div>
-                                  <a href={toChartHref(it.dashboardHref ?? "", symbol)} className="picker-row-link">Chart ↗</a>
-                                </div>
-                              );
-                            })}
-                            {!items.length ? <div style={{ padding: "10px 0", fontSize: 12, opacity: 0.55 }}>No {cat.title.toLowerCase()} currently found.</div> : null}
-                          </div>
-                        )}
-                        <div className="pickers-section-footer">
-                          <div className="pickers-section-footer-left" />
-                          <a href={cat.seeAllHref} className="pickers-see-all">See all →</a>
-                        </div>
                       </div>
                     ) : null}
                   </div>
