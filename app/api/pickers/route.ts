@@ -68,6 +68,9 @@ type PickerItem = {
   score?: number;
   _score?: number;
   supportResistanceZone?: PickerSupportResistanceZone;
+  epsGrowthPct?: number | null;
+  revenueGrowthPct?: number | null;
+  releaseDate?: string | null;
 };
 
 type PickerSection = {
@@ -115,6 +118,7 @@ type SignalRecord = {
   belowMA200: boolean;
   dailyMa200Proximity: boolean;
   weeklyMa200Proximity: boolean;
+  weeklyMa200DistancePct?: number;
 
   bullishRsiDivergence: boolean;
   bearishRsiDivergence: boolean;
@@ -129,6 +133,14 @@ type SignalRecord = {
   isDynamicUniverse?: boolean;
 };
 
+type TickerEarningsGrowthItem = {
+  symbol: string;
+  epsGrowthPct: number | null;
+  revenueGrowthPct: number | null;
+  releaseDate: string | null;
+  tone: PickerTone;
+};
+
 type PickersPayload = {
   updatedAt: string;
   universeSize: number;
@@ -138,6 +150,10 @@ type PickersPayload = {
   estimatedApiCalls: number;
   sections: PickerSection[];
   signalRecords: SignalRecord[];
+  tickerFeed: {
+    topMovers: MarketRow[];
+    earningsGrowth: TickerEarningsGrowthItem[];
+  };
   degradedSymbolCount?: number;
   degradedSymbolPct?: number;
 };
@@ -217,6 +233,9 @@ type EarningsCandidate = {
   score: number;
   note: string;
   tone: PickerTone;
+  epsGrowthPct?: number | null;
+  revenueGrowthPct?: number | null;
+  releaseDate?: string | null;
 };
 
 const redis =
@@ -729,6 +748,9 @@ function computeStrongEarningsGrowthCandidate(rows: EarningsRow[]): EarningsCand
     score,
     tone,
     note: `${epsText}; ${revenueText}; ${positiveEpsCount}/${recent.length} recent EPS-positive reports.`,
+    epsGrowthPct: epsGrowth,
+    revenueGrowthPct: revenueGrowth,
+    releaseDate: latest.date ?? null,
   };
 }
 
@@ -1257,7 +1279,7 @@ function computeMacroSupportResistanceCandidate(points: Point[]): MacroSupportRe
   //   - price below the zone  -> resistance (price is being capped from below)
   //   - price above the zone  -> support    (price is being held up from above)
   //   - price inside the zone -> ambiguous; default using the previous 3
-  //     weekly bars (excluding the current one) — mostly-below defaults to
+  //     weekly bars (excluding the current one) -- mostly-below defaults to
   //     resistance, mostly-above defaults to support, and a tie falls back to
   //     the original structural classification.
   let displayKind: "support" | "resistance";
@@ -2028,7 +2050,9 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
     .map((x) => x.symbol)
     .filter(Boolean);
 
-  const topMovers = (market?.topMovers ?? [])
+  const topMoversRaw: MarketRow[] = market?.topMovers ?? [];
+
+  const topMovers = topMoversRaw
     .map((x) => x.symbol)
     .filter(Boolean);
 
@@ -2150,6 +2174,9 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
               tone: strongEarningsGrowthCandidate.tone,
               note: strongEarningsGrowthCandidate.note,
               _score: strongEarningsGrowthCandidate.score + dynamicBoost(symbol),
+              epsGrowthPct: strongEarningsGrowthCandidate.epsGrowthPct,
+              revenueGrowthPct: strongEarningsGrowthCandidate.revenueGrowthPct,
+              releaseDate: strongEarningsGrowthCandidate.releaseDate,
             });
           }
 
@@ -2349,6 +2376,30 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
             volume: p.volume,
           }));
 
+          // Raw numeric weekly MA200 distance, independent of the -1%..+3%
+          // "proximity" gate inside computeMa200Candidate (that gate decides
+          // whether a symbol qualifies for the MA200 Proximity picker
+          // section; the ticker feed wants a distance for every symbol with
+          // enough weekly history so it can rank "closest to weekly MA200"
+          // across the whole universe, not just symbols already flagged).
+          const weeklyMa200DistancePct = (() => {
+            const wCloses = weeklyPts
+              .map((p) => p.close)
+              .filter((x): x is number => Number.isFinite(x));
+            if (wCloses.length < 220) return undefined;
+            const wMa200Arr = movingAverage(wCloses, 200);
+            const wLastClose = wCloses[wCloses.length - 1];
+            const wLastMa200 = lastNum(wMa200Arr);
+            if (
+              typeof wLastMa200 !== "number" ||
+              !Number.isFinite(wLastMa200) ||
+              wLastMa200 === 0
+            ) {
+              return undefined;
+            }
+            return pctChange(wLastMa200, wLastClose);
+          })();
+
           const weeklyDiv = detectDivergenceFromHistory(weeklyPts, {
             lookbackBars: 30,
             leftRight: 2,
@@ -2534,6 +2585,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
             belowMA200,
             dailyMa200Proximity: hasDailyMa200Proximity,
             weeklyMa200Proximity: hasWeeklyMa200Proximity,
+            weeklyMa200DistancePct,
             bullishRsiDivergence,
             bearishRsiDivergence,
             bullishMacdDivergence,
@@ -2698,6 +2750,32 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
     displayedSymbols.has(record.symbol)
   );
 
+  // Homepage dashboard scrolling ticker: a handful of candidates per
+  // category, ranked here so the client doesn't need a second fetch or
+  // its own re-derivation of "top movers" / "recent earnings growth".
+  // Weekly MA200 proximity and buy-signal counts are cheap to derive
+  // client-side from filteredSignalRecords, so they aren't duplicated here.
+  const topMoversForTicker = topMoversRaw
+    .filter((row) => typeof row.changePct === "number" && Number.isFinite(row.changePct))
+    .slice(0, 8);
+
+  const earningsGrowthForTicker: TickerEarningsGrowthItem[] = strongEarningsGrowth
+    .filter((item) => !!item.releaseDate)
+    .slice()
+    .sort((a, b) => {
+      const ad = a.releaseDate ? new Date(a.releaseDate).getTime() : 0;
+      const bd = b.releaseDate ? new Date(b.releaseDate).getTime() : 0;
+      return bd - ad;
+    })
+    .slice(0, 8)
+    .map((item) => ({
+      symbol: item.symbol,
+      epsGrowthPct: item.epsGrowthPct ?? null,
+      revenueGrowthPct: item.revenueGrowthPct ?? null,
+      releaseDate: item.releaseDate ?? null,
+      tone: item.tone ?? "green",
+    }));
+
   return {
     updatedAt: new Date().toISOString(),
     universeSize: universe.length,
@@ -2710,6 +2788,10 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
     estimatedApiCalls: process.env.FMP_API_KEY ? universe.length * 2 + 1 : universe.length + 1,
     sections,
     signalRecords: filteredSignalRecords,
+    tickerFeed: {
+      topMovers: topMoversForTicker,
+      earningsGrowth: earningsGrowthForTicker,
+    },
     degradedSymbolCount: failedSymbolCount,
     degradedSymbolPct: universe.length > 0 ? Number(((failedSymbolCount / universe.length) * 100).toFixed(1)) : 0,
   };
@@ -2815,6 +2897,7 @@ export async function GET(req: NextRequest) {
         estimatedApiCalls: 0,
         sections: [],
         signalRecords: [],
+        tickerFeed: { topMovers: [], earningsGrowth: [] },
         error: message,
       },
       {
