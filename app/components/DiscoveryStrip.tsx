@@ -25,12 +25,13 @@ type Tile = {
 // resolved earnings symbol) via /api/discovery-strip once it resolves;
 // until then each tile falls back to its section index.
 //
-// Accent colors are pulled from hues already established elsewhere on the
-// site (amber = company/overview badges, green = Pickers links, blue =
-// Insights links). News and Earnings don't have an existing color anchor,
-// so they stay neutral slate instead of getting an arbitrary new hue.
-const NEUTRAL_ACCENT = "#8b95a7";
-
+// Every tile gets its own accent color. Bottlenecks/Pickers/Insights reuse
+// hues already established elsewhere on the site (amber, green, blue);
+// News and Earnings get their own distinct hues too (violet, cyan) rather
+// than a shared neutral -- the card itself (dark bg, thin border, color
+// only on the left edge + label) is what keeps the row feeling like one
+// product, not the number of colors in play. Keep these in sync with the
+// matching keys in MobileHomePage.tsx's TILES array.
 const TILE_DEFS: Array<Omit<Tile, "href"> & { defaultHref: string }> = [
   {
     key: "bottlenecks",
@@ -61,7 +62,7 @@ const TILE_DEFS: Array<Omit<Tile, "href"> & { defaultHref: string }> = [
     icon: "🧠",
     label: "News",
     text: "Headlines — uniquely scored & explained",
-    accent: NEUTRAL_ACCENT,
+    accent: "#a78bfa",
     defaultHref: "/stock/SPY/news",
   },
   {
@@ -69,7 +70,7 @@ const TILE_DEFS: Array<Omit<Tile, "href"> & { defaultHref: string }> = [
     icon: "📅",
     label: "Earnings",
     text: "Beat, miss & surprise % — decoded",
-    accent: NEUTRAL_ACCENT,
+    accent: "#22d3ee",
     defaultHref: "/stock/AAPL/earnings",
   },
 ];
