@@ -16,19 +16,21 @@ type NavTile = {
 
 // Same unified-card treatment as the desktop discovery strip: one dark
 // card style for every tile, with a thin colored left border + label as
-// the only accent, instead of each tile getting its own full-gradient
-// background. Colors reuse the hues already established elsewhere on the
-// site (amber = Bottlenecks, green = Pickers, blue = Insights); tiles with
-// no existing color anchor share a neutral slate instead of an invented hue.
-const NEUTRAL_ACCENT = "#8b95a7";
-
+// the only accent. With 10 tiles here (vs. 5 on desktop), giving every
+// tile its own distinct hue reads better than leaning on a shared neutral
+// for most of them -- the card itself (dark bg, thin border, color only
+// on the edge + label) is what keeps the grid feeling like one product,
+// not a limited color count. Bottlenecks/Pickers/Insights/News/Earnings
+// match their desktop DiscoveryStrip.tsx counterparts exactly; the other
+// five (mobile-only entries) get their own hues, chosen so no two tiles
+// next to each other in the grid share a color.
 const TILES: NavTile[] = [
   {
     icon: "📈",
     label: "Chart Dashboard",
     sublabel: "Live charts & full technical breakdown",
     href: "/dashboard",
-    accent: NEUTRAL_ACCENT,
+    accent: "#f87171",
   },
   {
     icon: "⛓️",
@@ -56,42 +58,42 @@ const TILES: NavTile[] = [
     label: "News",
     sublabel: "Headlines — uniquely scored & explained",
     href: (symbol: string) => `/stock/${encodeURIComponent(symbol)}/news`,
-    accent: NEUTRAL_ACCENT,
+    accent: "#a78bfa",
   },
   {
     icon: "📊",
     label: "Stock Analysis",
     sublabel: (symbol: string) => `Viewing ${symbol}`,
     href: (symbol: string) => `/stock/${encodeURIComponent(symbol)}`,
-    accent: NEUTRAL_ACCENT,
+    accent: "#fb923c",
   },
   {
     icon: "📅",
     label: "Earnings",
     sublabel: (symbol: string) => `${symbol} earnings`,
     href: (symbol: string) => `/stock/${encodeURIComponent(symbol)}/earnings`,
-    accent: NEUTRAL_ACCENT,
+    accent: "#22d3ee",
   },
   {
     icon: "🧮",
     label: "Risk Calculator",
     sublabel: "Position sizing & risk tools",
     href: "/utilities",
-    accent: NEUTRAL_ACCENT,
+    accent: "#ec4899",
   },
   {
     icon: "🏦",
     label: "Platforms",
     sublabel: "Compare brokers & charting tools",
     href: "/platforms",
-    accent: NEUTRAL_ACCENT,
+    accent: "#818cf8",
   },
   {
     icon: "📘",
     label: "Learn",
     sublabel: "Indicators, patterns & strategy",
     href: "/learn",
-    accent: NEUTRAL_ACCENT,
+    accent: "#a3e635",
   },
 ];
 
