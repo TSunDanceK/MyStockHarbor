@@ -3,6 +3,7 @@ import Link from "next/link";
 import PickersClient from "./PickersClient";
 import BookmarkPromptButton from "./BookmarkPromptButton";
 import PageShareBar from "@/app/components/PageShareBar";
+import { getAllPosts } from "@/lib/blog";
 
 const pickersJsonLd = {
   "@context": "https://schema.org",
@@ -53,13 +54,26 @@ const SETUP_LINKS: { label: string; href: string }[] = [
   { label: "Oversold Stocks Today", href: "/oversold-stocks-today" },
   { label: "Overbought Stocks Today", href: "/overbought-stocks-today" },
   { label: "Best Trend Score Stocks", href: "/best-trend-score-stocks" },
-  { label: "MA200 Proximity", href: "/stocks-near-200-day-moving-average" },
+  { label: "Daily MA200 Proximity", href: "/stocks-near-200-day-moving-average" },
+  { label: "Weekly MA200 Proximity", href: "/stocks-near-weekly-200-day-moving-average" },
   { label: "Bullish & Bearish Divergence", href: "/bullish-bearish-divergence-stocks" },
   { label: "Stocks With Positive Last Earnings", href: "/stocks-with-positive-last-earnings" },
   { label: "Stocks With Strong Earnings Growth", href: "/stocks-with-strong-earnings-growth" },
 ];
 
 export default function PickersPage() {
+  // Cheap, local read (frontmatter off disk, already sorted newest-first) --
+  // no new API route, no extra Active CPU cost on the pickers request path.
+  // Powers the accordion sidebar's "From the Insights blog" widget.
+  const latestInsights = getAllPosts()
+    .slice(0, 3)
+    .map((post) => ({
+      slug: post.slug,
+      title: post.title,
+      date: post.date,
+      symbol: post.symbol ?? null,
+    }));
+
   return (
     <main style={{ padding: 0, fontFamily: "system-ui, Arial", background: "#06080d", color: "#f1f5f9", minHeight: "100vh" }}>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(pickersJsonLd) }} />
@@ -115,7 +129,7 @@ export default function PickersPage() {
             </p>
           </div>
           <div style={{ padding: 18, boxSizing: "border-box" }}>
-            <PickersClient />
+            <PickersClient latestInsights={latestInsights} />
           </div>
         </section>
 

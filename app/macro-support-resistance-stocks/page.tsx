@@ -44,6 +44,10 @@ const config: PickerResultConfig = {
   maxItems: 36,
 };
 
-export default function Page() {
-  return <PickerResultPage config={config} />;
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ symbol?: string | string[] }>;
+}) {
+  return <PickerResultPage config={config} searchParams={searchParams} />;
 }
