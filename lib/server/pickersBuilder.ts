@@ -77,6 +77,8 @@ type PickerItem = {
   score?: number;
   _score?: number;
   supportResistanceZone?: PickerSupportResistanceZone;
+  chartFocus?: PickerChartFocus;
+  dominantIndicator?: string;
   epsGrowthPct?: number | null;
   revenueGrowthPct?: number | null;
   releaseDate?: string | null;
@@ -97,6 +99,8 @@ type PickerSection = {
     chartPoints?: PickerChartPoint[];
     score?: number;
     supportResistanceZone?: PickerSupportResistanceZone;
+    chartFocus?: PickerChartFocus;
+    dominantIndicator?: string;
   }[];
 };
 
@@ -108,6 +112,8 @@ type CompositeResult = {
   spikes: number;
   tone: PickerTone;
   tag: string;
+  dominantOversoldIndicator?: string;
+  dominantOverboughtIndicator?: string;
 };
 
 type SignalRecord = {
@@ -138,6 +144,9 @@ type SignalRecord = {
   preferredIndicator?: "MA200" | "RSI(14)" | "MACD(12,26,9)";
   dashboardHref?: string;
   chartPoints?: PickerChartPoint[];
+  supportResistanceZone?: PickerSupportResistanceZone;
+  dominantOversoldIndicator?: string;
+  dominantOverboughtIndicator?: string;
 
   isDynamicUniverse?: boolean;
 };
@@ -193,17 +202,27 @@ type Ma200Candidate = {
 type OversoldCandidate = {
   score: number;
   note: string;
+  dominantIndicator?: string;
 };
 
 type OverboughtCandidate = {
   score: number;
   note: string;
+  dominantIndicator?: string;
+};
+
+type PickerChartFocus = {
+  kind: "ath" | "rangeHigh";
+  price: number;
+  date: string;
 };
 
 type AthPullbackCandidate = {
   score: number;
   drawdownPct: number;
   avgDollarVolume: number;
+  athPrice: number;
+  athDate: string;
 };
 
 type BreakoutCandidate = {
@@ -211,6 +230,8 @@ type BreakoutCandidate = {
   breakoutPct: number;
   breakoutBarsAgo: number;
   avgDollarVolume: number;
+  highPrice: number;
+  highDate: string;
 };
 
 type MacroSupportResistanceCandidate = {
@@ -1487,36 +1508,73 @@ function buildCompositeFromHistory(points: Point[]): CompositeResult | null {
   let oversold = 0;
   let spikes = 0;
 
+  // Track how far past its own trigger threshold each check landed (as a
+  // ratio of the threshold itself), so the strongest contributor to an
+  // oversold/overbought read can be identified afterwards and mapped to a
+  // chart indicator -- rather than only exposing the aggregate counts.
+  const oversoldRatios: Array<{ label: string; ratio: number }> = [];
+  const overboughtRatios: Array<{ label: string; ratio: number }> = [];
+
   if (typeof last.rsi === "number") {
-    if (last.rsi >= 70) overbought++;
-    else if (last.rsi <= 30) oversold++;
+    if (last.rsi >= 70) {
+      overbought++;
+      overboughtRatios.push({ label: "RSI(14)", ratio: (last.rsi - 70) / 70 });
+    } else if (last.rsi <= 30) {
+      oversold++;
+      oversoldRatios.push({ label: "RSI(14)", ratio: (30 - last.rsi) / 30 });
+    }
   }
 
-  if (typeof last.bbU === "number" && lastClose > last.bbU) overbought++;
-  else if (typeof last.bbL === "number" && lastClose < last.bbL) oversold++;
+  if (typeof last.bbU === "number" && lastClose > last.bbU) {
+    overbought++;
+    overboughtRatios.push({ label: "Bollinger(20,2)", ratio: (lastClose - last.bbU) / last.bbU });
+  } else if (typeof last.bbL === "number" && lastClose < last.bbL) {
+    oversold++;
+    oversoldRatios.push({ label: "Bollinger(20,2)", ratio: (last.bbL - lastClose) / last.bbL });
+  }
 
   if (typeof last.ema20 === "number" && last.ema20 > 0) {
     const pct = (lastClose - last.ema20) / last.ema20;
-    if (pct >= 0.05) overbought++;
-    else if (pct <= -0.05) oversold++;
+    if (pct >= 0.05) {
+      overbought++;
+      overboughtRatios.push({ label: "EMA20", ratio: (pct - 0.05) / 0.05 });
+    } else if (pct <= -0.05) {
+      oversold++;
+      oversoldRatios.push({ label: "EMA20", ratio: (-pct - 0.05) / 0.05 });
+    }
   }
 
   if (typeof last.ma50 === "number" && last.ma50 > 0) {
     const pct = (lastClose - last.ma50) / last.ma50;
-    if (pct >= 0.05) overbought++;
-    else if (pct <= -0.05) oversold++;
+    if (pct >= 0.05) {
+      overbought++;
+      overboughtRatios.push({ label: "MA50", ratio: (pct - 0.05) / 0.05 });
+    } else if (pct <= -0.05) {
+      oversold++;
+      oversoldRatios.push({ label: "MA50", ratio: (-pct - 0.05) / 0.05 });
+    }
   }
 
   if (typeof last.ma200 === "number" && last.ma200 > 0) {
     const pct = (lastClose - last.ma200) / last.ma200;
-    if (pct >= 0.05) overbought++;
-    else if (pct <= -0.05) oversold++;
+    if (pct >= 0.05) {
+      overbought++;
+      overboughtRatios.push({ label: "MA200", ratio: (pct - 0.05) / 0.05 });
+    } else if (pct <= -0.05) {
+      oversold++;
+      oversoldRatios.push({ label: "MA200", ratio: (-pct - 0.05) / 0.05 });
+    }
   }
 
   if (typeof last.macdHist === "number") {
     const thresh = Math.abs(lastClose) * 0.002;
-    if (last.macdHist >= thresh) overbought++;
-    else if (last.macdHist <= -thresh) oversold++;
+    if (last.macdHist >= thresh) {
+      overbought++;
+      overboughtRatios.push({ label: "MACD(12,26,9)", ratio: thresh > 0 ? (last.macdHist - thresh) / thresh : 0 });
+    } else if (last.macdHist <= -thresh) {
+      oversold++;
+      oversoldRatios.push({ label: "MACD(12,26,9)", ratio: thresh > 0 ? (-last.macdHist - thresh) / thresh : 0 });
+    }
   }
 
   if (typeof last.vol === "number" && typeof last.volSma === "number" && last.volSma > 0) {
@@ -1532,6 +1590,13 @@ function buildCompositeFromHistory(points: Point[]): CompositeResult | null {
 
   const toneInfo = compositeToneFromCounts(overbought, oversold, spikes);
 
+  const dominantOversoldIndicator = oversoldRatios.length
+    ? oversoldRatios.reduce((best, cur) => (cur.ratio > best.ratio ? cur : best)).label
+    : undefined;
+  const dominantOverboughtIndicator = overboughtRatios.length
+    ? overboughtRatios.reduce((best, cur) => (cur.ratio > best.ratio ? cur : best)).label
+    : undefined;
+
   return {
     total,
     flagged,
@@ -1540,6 +1605,8 @@ function buildCompositeFromHistory(points: Point[]): CompositeResult | null {
     spikes,
     tone: toneInfo.tone,
     tag: toneInfo.tag,
+    dominantOversoldIndicator,
+    dominantOverboughtIndicator,
   };
 }
 
@@ -1688,6 +1755,7 @@ function computeOversoldCandidate(points: Point[], comp: CompositeResult | null,
   return {
     score,
     note: `${comp.oversold} oversold • liquid ${Math.round(advScore)} • exhaustion ${Math.round(exhaustionScore)}`,
+    dominantIndicator: comp.dominantOversoldIndicator,
   };
 }
 
@@ -1777,6 +1845,7 @@ function computeOverboughtCandidate(points: Point[], comp: CompositeResult | nul
   return {
     score,
     note: `${comp.overbought} overbought • liquid ${Math.round(advScore)} • extension ${Math.round(extensionScore)}`,
+    dominantIndicator: comp.dominantOverboughtIndicator,
   };
 }
 
@@ -1832,10 +1901,20 @@ function computeAthPullback(points: Point[]): AthPullbackCandidate | null {
     recentBehaviour * 0.1 -
     penalty;
 
+  let athDate = "";
+  for (const p of points) {
+    if (Number.isFinite(p.close) && p.close === allTimeHigh) {
+      athDate = String(p.date ?? "");
+      break;
+    }
+  }
+
   return {
     score,
     drawdownPct,
     avgDollarVolume: adv,
+    athPrice: allTimeHigh,
+    athDate,
   };
 }
 
@@ -1897,11 +1976,21 @@ function computeAthBreakout(points: Point[]): BreakoutCandidate | null {
     extensionScore * 0.1 -
     penalty;
 
+  let athDate = "";
+  for (const p of pts) {
+    if (p.close === allTimeHigh) {
+      athDate = String(p.date ?? "");
+      break;
+    }
+  }
+
   return {
     score,
     breakoutPct,
     breakoutBarsAgo: breakoutBarsAgo ?? 999,
     avgDollarVolume: adv,
+    highPrice: allTimeHigh,
+    highDate: athDate,
   };
 }
 
@@ -1966,11 +2055,21 @@ function computeThreeMonthBreakout(points: Point[]): BreakoutCandidate | null {
     extensionScore * 0.1 -
     penalty;
 
+  let rangeHighDate = "";
+  for (let i = 0; i < breakoutWindow.length; i++) {
+    if (breakoutWindow[i] === rangeHigh) {
+      rangeHighDate = String(pts[startInclusive + i]?.date ?? "");
+      break;
+    }
+  }
+
   return {
     score,
     breakoutPct,
     breakoutBarsAgo,
     avgDollarVolume: adv,
+    highPrice: rangeHigh,
+    highDate: rangeHighDate,
   };
 }
 
@@ -2228,6 +2327,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
               tone: "green",
               note: oversoldCandidate.note,
               _score: oversoldCandidate.score + dynamicBoost(symbol),
+              dominantIndicator: oversoldCandidate.dominantIndicator,
             });
           }
 
@@ -2239,6 +2339,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
               tone: "red",
               note: overboughtCandidate.note,
               _score: overboughtCandidate.score + dynamicBoost(symbol),
+              dominantIndicator: overboughtCandidate.dominantIndicator,
             });
           }
 
@@ -2270,6 +2371,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
               tone: athPullback.drawdownPct <= 35 ? "yellow" : "orange",
               note: `Down ${athPullback.drawdownPct.toFixed(1)}% from ATH • liquid ${Math.round(liquidityScore(pts))}`,
               _score: athPullback.score + dynamicBoost(symbol),
+              chartFocus: { kind: "ath", price: athPullback.athPrice, date: athPullback.athDate },
             });
           }
 
@@ -2281,6 +2383,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
               tone: "orange",
               note: `ATH breakout • ${athBo.breakoutBarsAgo} bars ago`,
               _score: athBo.score + dynamicBoost(symbol),
+              chartFocus: { kind: "ath", price: athBo.highPrice, date: athBo.highDate },
             });
           }
 
@@ -2292,6 +2395,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
               tone: "orange",
               note: `3-month breakout • ${threeMonthBo.breakoutBarsAgo} bars ago`,
               _score: threeMonthBo.score + dynamicBoost(symbol),
+              chartFocus: { kind: "rangeHigh", price: threeMonthBo.highPrice, date: threeMonthBo.highDate },
             });
           }
 
@@ -2624,6 +2728,15 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
                     indicator: preferredDivergenceIndicator,
                   })
                 : undefined,
+            supportResistanceZone: macroSupportResistanceCandidate
+              ? {
+                  kind: macroSupportResistanceCandidate.kind,
+                  lower: macroSupportResistanceCandidate.zoneLow,
+                  upper: macroSupportResistanceCandidate.zoneHigh,
+                }
+              : undefined,
+            dominantOversoldIndicator: comp?.dominantOversoldIndicator,
+            dominantOverboughtIndicator: comp?.dominantOverboughtIndicator,
             isDynamicUniverse: dynamicName,
           });
         } catch {
@@ -2656,7 +2769,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
     const sorted = [...arr].sort((a, b) => (b._score ?? 0) - (a._score ?? 0));
     return sorted
       .slice(0, n)
-      .map(({ symbol, note, tone, timeframe, indicator, dashboardHref, chartPoints, supportResistanceZone, _score, score }) => ({
+      .map(({ symbol, note, tone, timeframe, indicator, dashboardHref, chartPoints, supportResistanceZone, chartFocus, dominantIndicator, _score, score }) => ({
         symbol,
         note,
         tone,
@@ -2665,6 +2778,8 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
         dashboardHref,
         chartPoints,
         supportResistanceZone,
+        chartFocus,
+        dominantIndicator,
         score: typeof score === "number" ? score : typeof _score === "number" ? Math.round(_score) : undefined,
       }));
   };
