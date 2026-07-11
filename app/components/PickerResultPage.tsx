@@ -86,6 +86,7 @@ type ResultEntry = {
   chartPoints: MiniCandlePoint[];
   badge?: string;
   score?: number;
+  reasons?: string[];
   supportResistanceZone?: SupportResistanceZone;
 };
 
@@ -95,20 +96,20 @@ const PICKER_NAV: Array<{
   icon: string;
   tone: PickerTone;
 }> = [
-  { href: "/top-stocks-with-buy-signals", label: "Buy Signals", icon: "\u25b2", tone: "green" },
-  { href: "/stocks-down-20-from-all-time-highs", label: "20% From ATH", icon: "\u25c6", tone: "yellow" },
-  { href: "/all-time-high-breakout-stocks", label: "ATH Breakouts", icon: "\u2197", tone: "orange" },
-  { href: "/3-month-high-breakout-stocks", label: "3-Month Highs", icon: "\u2197", tone: "orange" },
-  { href: "/top-stocks-with-sell-signals", label: "Sell Signals", icon: "\u25bc", tone: "red" },
-  { href: "/oversold-stocks-today", label: "Oversold", icon: "\u25cf", tone: "green" },
-  { href: "/best-trend-score-stocks", label: "Best Trend", icon: "\u2605", tone: "green" },
-  { href: "/stocks-with-positive-last-earnings", label: "Last Earnings", icon: "\u2713", tone: "green" },
-  { href: "/stocks-with-strong-earnings-growth", label: "Earnings Growth", icon: "\u2197", tone: "green" },
-  { href: "/stocks-near-200-day-moving-average", label: "Near 200-Day", icon: "\u25c7", tone: "yellow" },
-  { href: "/stocks-near-weekly-200-day-moving-average", label: "Weekly MA200", icon: "\u25c6", tone: "yellow" },
-  { href: "/macro-support-resistance-stocks", label: "Macro S/R", icon: "\u21c4", tone: "blue" },
-  { href: "/overbought-stocks-today", label: "Overbought", icon: "\u25cf", tone: "red" },
-  { href: "/bullish-bearish-divergence-stocks", label: "Divergence", icon: "\u2301", tone: "blue" },
+  { href: "/top-stocks-with-buy-signals", label: "Buy Signals", icon: "▲", tone: "green" },
+  { href: "/stocks-down-20-from-all-time-highs", label: "20% From ATH", icon: "◆", tone: "yellow" },
+  { href: "/all-time-high-breakout-stocks", label: "ATH Breakouts", icon: "↗", tone: "orange" },
+  { href: "/3-month-high-breakout-stocks", label: "3-Month Highs", icon: "↗", tone: "orange" },
+  { href: "/top-stocks-with-sell-signals", label: "Sell Signals", icon: "▼", tone: "red" },
+  { href: "/oversold-stocks-today", label: "Oversold", icon: "●", tone: "green" },
+  { href: "/best-trend-score-stocks", label: "Best Trend", icon: "★", tone: "green" },
+  { href: "/stocks-with-positive-last-earnings", label: "Last Earnings", icon: "✓", tone: "green" },
+  { href: "/stocks-with-strong-earnings-growth", label: "Earnings Growth", icon: "↗", tone: "green" },
+  { href: "/stocks-near-200-day-moving-average", label: "Near 200-Day", icon: "◇", tone: "yellow" },
+  { href: "/stocks-near-weekly-200-day-moving-average", label: "Weekly MA200", icon: "◆", tone: "yellow" },
+  { href: "/macro-support-resistance-stocks", label: "Macro S/R", icon: "⇄", tone: "blue" },
+  { href: "/overbought-stocks-today", label: "Overbought", icon: "●", tone: "red" },
+  { href: "/bullish-bearish-divergence-stocks", label: "Divergence", icon: "⌁", tone: "blue" },
 ];
 
 function toneColour(tone?: PickerTone) {
@@ -182,6 +183,34 @@ function getSellSignalCount(record: SignalRecord) {
   return count;
 }
 
+// Readable labels for each boolean condition behind a buy/sell signal
+// score, using the same short indicator naming already used on the
+// dashboard's Breakdown panel (RSI Div, MACD, MA200, etc.) so the language
+// is consistent across the site. Order here doubles as display priority.
+const BUY_REASON_DEFS: Array<{ key: keyof SignalRecord; label: string }> = [
+  { key: "aboveMA200", label: "Above MA200" },
+  { key: "aboveMA50", label: "Above MA50" },
+  { key: "bullishMacdDivergence", label: "MACD Bullish Div" },
+  { key: "bullishRsiDivergence", label: "RSI Bullish Div" },
+  { key: "breakout", label: "Breakout" },
+  { key: "buyTheDip", label: "Buy The Dip" },
+  { key: "oversold", label: "RSI Oversold" },
+  { key: "volumeSpike", label: "Volume Spike" },
+  { key: "atrSpike", label: "ATR Spike" },
+];
+
+const SELL_REASON_DEFS: Array<{ key: keyof SignalRecord; label: string }> = [
+  { key: "belowMA200", label: "Below MA200" },
+  { key: "belowMA50", label: "Below MA50" },
+  { key: "bearishMacdDivergence", label: "MACD Bearish Div" },
+  { key: "bearishRsiDivergence", label: "RSI Bearish Div" },
+  { key: "overbought", label: "RSI Overbought" },
+];
+
+function getReasons(record: SignalRecord, defs: Array<{ key: keyof SignalRecord; label: string }>) {
+  return defs.filter((def) => record[def.key] === true).map((def) => def.label);
+}
+
 function formatUpdatedAt(value?: string | null) {
   if (!value) return "Live data";
   const dt = new Date(value);
@@ -228,7 +257,7 @@ function entriesFromSection(args: {
     const record = args.recordMap.get(symbol);
     const chartPoints = Array.isArray(item.chartPoints) ? item.chartPoints : Array.isArray(record?.chartPoints) ? record.chartPoints : [];
     const tone = item.tone || record?.tone || args.fallbackTone;
-    const note = item.note || record?.note || [item.timeframe, item.indicator].filter(Boolean).join(" \u00b7 ") || "Screened setup";
+    const note = item.note || record?.note || [item.timeframe, item.indicator].filter(Boolean).join(" · ") || "Screened setup";
     return {
       symbol,
       note,
@@ -236,7 +265,7 @@ function entriesFromSection(args: {
       stockHref: `/stock/${encodeURIComponent(symbol)}`,
       chartHref: chartHrefFor(symbol, item.dashboardHref || record?.dashboardHref),
       chartPoints,
-      badge: [item.timeframe, item.indicator].filter(Boolean).join(" \u00b7 "),
+      badge: [item.timeframe, item.indicator].filter(Boolean).join(" · "),
       score: typeof item.score === "number" ? item.score : typeof record?.score === "number" ? record.score : undefined,
       supportResistanceZone: item.supportResistanceZone,
     };
@@ -254,7 +283,17 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
       if (!symbol) return null;
       const score = getBuySignalCount(record);
       if (score <= 0) return null;
-      return { symbol, note: `${score} buy signal${score === 1 ? "" : "s"}`, tone: "green", score, stockHref: `/stock/${encodeURIComponent(symbol)}`, chartHref: chartHrefFor(symbol, record.dashboardHref), chartPoints: Array.isArray(record.chartPoints) ? record.chartPoints : [], badge: "Buy signals" };
+      const reasons = getReasons(record, BUY_REASON_DEFS);
+      return {
+        symbol,
+        note: `${score} of ${BUY_REASON_DEFS.length} bullish conditions met`,
+        tone: "green",
+        score,
+        reasons,
+        stockHref: `/stock/${encodeURIComponent(symbol)}`,
+        chartHref: chartHrefFor(symbol, record.dashboardHref),
+        chartPoints: Array.isArray(record.chartPoints) ? record.chartPoints : [],
+      };
     }).filter((entry): entry is ResultEntry => Boolean(entry)).sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.symbol.localeCompare(b.symbol)).slice(0, maxItems);
   }
 
@@ -264,7 +303,17 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
       if (!symbol) return null;
       const score = getSellSignalCount(record);
       if (score <= 0) return null;
-      return { symbol, note: `${score} sell signal${score === 1 ? "" : "s"}`, tone: "red", score, stockHref: `/stock/${encodeURIComponent(symbol)}`, chartHref: chartHrefFor(symbol, record.dashboardHref), chartPoints: Array.isArray(record.chartPoints) ? record.chartPoints : [], badge: "Sell signals" };
+      const reasons = getReasons(record, SELL_REASON_DEFS);
+      return {
+        symbol,
+        note: `${score} of ${SELL_REASON_DEFS.length} bearish conditions met`,
+        tone: "red",
+        score,
+        reasons,
+        stockHref: `/stock/${encodeURIComponent(symbol)}`,
+        chartHref: chartHrefFor(symbol, record.dashboardHref),
+        chartPoints: Array.isArray(record.chartPoints) ? record.chartPoints : [],
+      };
     }).filter((entry): entry is ResultEntry => Boolean(entry)).sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.symbol.localeCompare(b.symbol)).slice(0, maxItems);
   }
 
@@ -312,7 +361,7 @@ function SignalNav({ currentHref }: { currentHref: string }) {
 
 function chartOverlayForEntry(config: PickerResultConfig, entry: ResultEntry) {
   const href = config.href.toLowerCase();
-  const text = `${config.title} ${entry.badge ?? ""} ${entry.note}`.toLowerCase();
+  const text = `${config.title} ${entry.badge ?? ""} ${entry.note} ${entry.reasons?.join(" ") ?? ""}`.toLowerCase();
   if (text.includes("macd")) return "macd" as const;
   if (text.includes("rsi") || href.includes("overbought") || href.includes("oversold")) return "rsi" as const;
   if (href.includes("200-day") || href.includes("ma200") || href.includes("best-trend")) return href.includes("best-trend") ? ("trend" as const) : ("ma200" as const);
@@ -403,6 +452,8 @@ export default async function PickerResultPage({ config }: { config: PickerResul
         .scorePill { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; min-width: 62px; min-height: 52px; border-radius: 15px; border: 1px solid rgba(34,197,94,0.26); background: rgba(34,197,94,0.10); color: #dcfce7; box-shadow: inset 0 1px 0 rgba(255,255,255,0.035); }
         .scorePill strong { font-size: 22px; line-height: 1; letter-spacing: -0.04em; }
         .scorePill span { margin-top: 5px; font-size: 10px; font-weight: 950; letter-spacing: 0.04em; color: rgba(220,252,231,0.72); }
+        .reasonChips { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+        .reasonChip { display: inline-flex; align-items: center; padding: 4px 9px; border-radius: 999px; border: 1px solid; background: rgba(255,255,255,0.04); font-size: 11px; font-weight: 800; letter-spacing: 0.01em; white-space: nowrap; }
         .note { margin: 10px 0 0; color: rgba(226,232,240,0.74); font-size: 13px; line-height: 1.55; min-height: 40px; }
         .cardActions { margin-top: 13px; display: flex; gap: 10px; flex-wrap: wrap; }
         .cardActions a { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 8px 11px; border-radius: 11px; border: 1px solid rgba(96,165,250,0.26); background: rgba(59,130,246,0.09); color: #dbeafe; text-decoration: none; font-size: 12px; font-weight: 950; }
@@ -438,6 +489,8 @@ export default async function PickerResultPage({ config }: { config: PickerResul
           .badge { max-width: 100%; white-space: normal; text-align: center; line-height: 1.25; }
           .scorePill { min-width: 54px; min-height: 48px; border-radius: 13px; }
           .scorePill strong { font-size: 20px; }
+          .reasonChips { gap: 5px; }
+          .reasonChip { font-size: 10.5px; padding: 4px 8px; }
           .note { min-height: 0; font-size: 13px; }
           .cardActions { display: grid; grid-template-columns: 1fr; gap: 8px; }
           .cardActions a { width: 100%; min-height: 42px; }
@@ -507,6 +560,19 @@ export default async function PickerResultPage({ config }: { config: PickerResul
                       </div>
                     ) : null}
                   </div>
+                  {entry.reasons && entry.reasons.length > 0 ? (
+                    <div className="reasonChips">
+                      {entry.reasons.map((reason) => (
+                        <span
+                          key={reason}
+                          className="reasonChip"
+                          style={{ borderColor: toneBorder(entry.tone), color: toneColour(entry.tone) }}
+                        >
+                          {reason}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                   <MiniPickerCandleChart points={entry.chartPoints} tone={config.tone} overlay={chartOverlayForEntry(config, entry)} supportResistanceZone={entry.supportResistanceZone} />
                   <div className="note">{entry.note}</div>
                   <div className="cardActions">
