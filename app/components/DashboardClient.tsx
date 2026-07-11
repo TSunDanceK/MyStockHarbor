@@ -6,6 +6,7 @@ import Link from "next/link";
 import PriceChart, { type Overlay, type ChartType, type SupportResistanceZone } from "./PriceChart";
 import { detectDivergenceFromHistory } from "../../lib/ta/divergence";
 import DiscoveryStrip from "./DiscoveryStrip";
+import DashboardTicker from "./DashboardTicker";
 
 type Quote = { symbol: string; price: number | null; date: string | null; time: string | null; source: string; };
 type Point = { date: string; open?: number; close: number; high?: number; low?: number; volume?: number; };
@@ -685,6 +686,8 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
         </div>
 
         <div className="msh-mobile-only">{isMobile ? MobileHero() : null}</div>
+
+        <DashboardTicker />
 
         {err ? <div style={{ marginBottom: 14, padding: 12, borderRadius: 12, border: "1px solid rgba(240,68,68,0.35)", background: "rgba(127,29,29,0.24)", fontWeight: 700, fontSize: 13 }}>{err}</div> : null}
 
