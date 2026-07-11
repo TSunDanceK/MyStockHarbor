@@ -33,10 +33,14 @@ const config: PickerResultConfig = {
   emptyText: "No MA200 proximity stocks are currently available from the live picker feed.",
   tone: "yellow",
   kind: "section",
-  sectionIncludes: ["ma200 proximity"],
+  sectionIncludes: ["daily ma200"],
   maxItems: 36,
 };
 
-export default function Page() {
-  return <PickerResultPage config={config} />;
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ symbol?: string | string[] }>;
+}) {
+  return <PickerResultPage config={config} searchParams={searchParams} />;
 }
