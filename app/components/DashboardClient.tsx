@@ -210,7 +210,24 @@ const DEFAULT_CRYPTO_SYMBOL = "BTCUSD";
 const TIMEFRAMES = [{ label: "D", interval: "d" as ChartInterval, fetchBars: 2600, defaultVisibleBars: 75 }, { label: "W", interval: "w" as ChartInterval, fetchBars: 2600, defaultVisibleBars: 75 }, { label: "M", interval: "m" as ChartInterval, fetchBars: 360, defaultVisibleBars: 75 }];
 const PRICE_OVERLAY_OPTIONS: Overlay[] = ["MA50", "MA200", "EMA20", "VWMA(20)", "Bollinger(20,2)", "Support/Resistance"];
 const LOWER_OVERLAY_OPTIONS: Overlay[] = ["RSI(14)", "MACD(12,26,9)", "Stochastic(14,3)", "ATR(14)", "Volume"];
+const ALL_OVERLAY_OPTIONS: string[] = [...PRICE_OVERLAY_OPTIONS, ...LOWER_OVERLAY_OPTIONS];
 function isLowerOverlay(v: Overlay) { return LOWER_OVERLAY_OPTIONS.includes(v); }
+function fmtPrice(v: number) { return `$${v.toFixed(v >= 100 ? 0 : 2)}`; }
+
+type ChartFocus = { kind: "ath" | "rangeHigh"; price: number; date: string; label: string };
+
+// Finds the offset (bars back from "now") that puts the bar nearest `iso`
+// at the left edge of the visible window (plus a small left margin), so a
+// deep-linked reference price/date (e.g. an all-time high) is guaranteed
+// visible without the user needing to manually zoom/pan.
+function computeFocusWindow(historyAll: Point[], iso: string, leftMargin = 15) {
+  if (!iso || !historyAll.length) return null;
+  const idx = historyAll.findIndex(p => p.date >= iso);
+  const anchor = idx >= 0 ? idx : 0;
+  const desiredStart = Math.max(0, anchor - leftMargin);
+  const bars = historyAll.length - desiredStart;
+  return { visibleBars: Math.min(historyAll.length, Math.max(bars, 30)), windowOffset: 0 };
+}
 
 export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymbol?: string }) {
   const router = useRouter(), searchParams = useSearchParams();
@@ -243,6 +260,8 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   const [expanded, setExpanded] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
+  const [externalZone, setExternalZone] = useState<SupportResistanceZone | null>(null);
+  const [chartFocus, setChartFocus] = useState<ChartFocus | null>(null);
   const theme = "dark" as const;
   const selectedTimeframe = useMemo(() => TIMEFRAMES.find(t => t.label === activeTimeframe) ?? TIMEFRAMES[0], [activeTimeframe]);
   const COLORS = useMemo(() => ({ isDark: true, pageBg: "#0a0f1a", pageFg: "#eaf0fa", mutedFg: "#8a97ad", mutedFg2: "#5f6b80", cardBg: "#141b2b", cardFg: "#eaf0fa", cardBg2: "#0f1624", border: "#222c40", borderSoft: "#1a2336", controlBg: "#0f1624", controlBgSolid: "#0f1624", controlBorder: "#222c40", controlFg: "#eaf0fa", blue: "#2f6bff", blueSoft: "#13213f", blueBorder: "#27406f", green: "#16c784", greenSoft: "#0f2a23", greenBorder: "#1c4a3c", amber: "#f5a524", amberSoft: "#2c2310", amberBorder: "#3a2f10", red: "#f04444", yellowBorder: "rgba(234,179,8,0.38)", yellowBg: "rgba(234,179,8,0.10)", yellowText: "#fde68a" }), []);
@@ -252,12 +271,65 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   useEffect(() => { setChartInterval(selectedTimeframe.interval); setVisibleBars(selectedTimeframe.defaultVisibleBars); setWindowOffset(0); }, [symbol, selectedTimeframe]);
   useEffect(() => {
     const us = searchParams.get("symbol"); const cleaned = us ? us.trim().toUpperCase() : ""; if (!cleaned) return;
-    const tf = (searchParams.get("tf") || "").trim().toUpperCase(), indi = (searchParams.get("indicator") || "").trim();
+    const tf = (searchParams.get("tf") || "").trim().toUpperCase();
+    const indi = (searchParams.get("indicator") || "").trim();
+    const indicatorsRaw = (searchParams.get("indicators") || "").trim();
     setSymbol(cleaned); setQuery(cleaned); setResults([]); setOpen(false);
     setActiveTimeframe(tf === "D" || tf === "W" || tf === "M" ? tf : "D");
-    if (indi === "MA200") { setSelectedIndicators(["MA200"]); setIndicator("MA200"); } else if (indi === "RSI(14)") { setSelectedIndicators(["RSI(14)"]); setIndicator("RSI(14)"); } else if (indi === "MACD(12,26,9)") { setSelectedIndicators(["MACD(12,26,9)"]); setIndicator("MACD(12,26,9)"); } else { setSelectedIndicators([]); setIndicator("None"); }
-    setIndicatorMenuOpen(false); setWindowOffset(0);
+
+    // Deep-link support/resistance zone (from the /pickers Macro Support /
+    // Resistance category) -- an externally-supplied zone rather than the
+    // locally-computed one, merged in below.
+    const srLower = Number(searchParams.get("srLower"));
+    const srUpper = Number(searchParams.get("srUpper"));
+    const srKind = searchParams.get("srKind");
+    const hasExternalZone = Number.isFinite(srLower) && Number.isFinite(srUpper) && (srKind === "support" || srKind === "resistance");
+    setExternalZone(hasExternalZone ? { kind: srKind as "support" | "resistance", lower: Math.min(srLower, srUpper), upper: Math.max(srLower, srUpper), label: srKind === "support" ? "Macro support" : "Macro resistance" } : null);
+
+    // Deep-link reference line + auto-zoom (ATH breakout / down-20%-from-ATH
+    // / 3-month-high breakout picks from /pickers).
+    const athPrice = Number(searchParams.get("athPrice"));
+    const rangeHighPrice = Number(searchParams.get("rangeHighPrice"));
+    if (Number.isFinite(athPrice) && athPrice > 0) {
+      const date = (searchParams.get("athDate") || "").trim();
+      setChartFocus({ kind: "ath", price: athPrice, date, label: `All-time high ${fmtPrice(athPrice)}` });
+    } else if (Number.isFinite(rangeHighPrice) && rangeHighPrice > 0) {
+      const date = (searchParams.get("rangeHighDate") || "").trim();
+      setChartFocus({ kind: "rangeHigh", price: rangeHighPrice, date, label: `3-month high ${fmtPrice(rangeHighPrice)}` });
+    } else {
+      setChartFocus(null);
+    }
+
+    // Indicator selection: `indicators` (comma-separated) wins for
+    // multi-select deep links (e.g. Best Trend Score -> MA50,MA200);
+    // otherwise fall back to the single `indicator` param. Any value from
+    // the chart's own supported overlay/oscillator lists is accepted, not
+    // just the original 3 hardcoded ones.
+    const requested = indicatorsRaw
+      ? indicatorsRaw.split(",").map(s => s.trim()).filter(Boolean)
+      : indi
+        ? [indi]
+        : [];
+    const valid = requested.filter(v => ALL_OVERLAY_OPTIONS.includes(v)) as Overlay[];
+    if (hasExternalZone && !valid.includes("Support/Resistance")) valid.push("Support/Resistance");
+    if (valid.length) {
+      setSelectedIndicators(valid);
+      const preferredLower = valid.find(isLowerOverlay);
+      setIndicator(preferredLower ?? valid[0]);
+    } else {
+      setSelectedIndicators([]); setIndicator("None");
+    }
+
+    setIndicatorMenuOpen(false);
+    if (!Number.isFinite(athPrice) && !Number.isFinite(rangeHighPrice)) setWindowOffset(0);
   }, [searchParams]);
+  useEffect(() => {
+    if (!chartFocus?.date) return;
+    const win = computeFocusWindow(historyAll, chartFocus.date);
+    if (!win) return;
+    setVisibleBars(win.visibleBars);
+    setWindowOffset(win.windowOffset);
+  }, [chartFocus, historyAll]);
   useEffect(() => { if (!symbol.trim()) return; if (assetType === "stock") { window.localStorage.setItem("msh_last_symbol", symbol.trim().toUpperCase()); setLastStockSymbol(symbol.trim().toUpperCase()); } }, [symbol, assetType]);
   useEffect(() => { if (!expanded) return; const k = (e: KeyboardEvent) => { if (e.key === "Escape") setExpanded(false); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [expanded]);
   useEffect(() => { function h(e: MouseEvent) { if (!indicatorMenuRef.current) return; if (!indicatorMenuRef.current.contains(e.target as Node)) setIndicatorMenuOpen(false); } document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h); }, []);
@@ -330,7 +402,16 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   const atrSma20Arr = useMemo(() => atrSma20Full.slice(displayStart, displayEnd), [atrSma20Full, displayStart, displayEnd]);
 
   const lastClose = displayedHistory.length ? displayedHistory[displayedHistory.length - 1].close : null;
-  const supportResistanceZones = useMemo(() => computeMacroSupportResistanceZones(historyAll, lastClose), [historyAll, lastClose]);
+  const localSupportResistanceZones = useMemo(() => computeMacroSupportResistanceZones(historyAll, lastClose), [historyAll, lastClose]);
+  const supportResistanceZones = useMemo(() => {
+    if (!externalZone) return localSupportResistanceZones;
+    // Deep-linked zone (the exact zone that qualified this symbol for the
+    // Macro Support/Resistance picker category) takes priority -- drop any
+    // locally-computed zone of the same kind so they don't visually clash.
+    const rest = localSupportResistanceZones.filter(z => z.kind !== externalZone.kind);
+    return [externalZone, ...rest];
+  }, [localSupportResistanceZones, externalZone]);
+  const referenceLines = useMemo(() => (chartFocus ? [{ price: chartFocus.price, label: chartFocus.label }] : []), [chartFocus]);
   const lastMA50 = lastNum(ma50), lastMA200 = lastNum(ma200);
   const ma50Pct = formatPctFromBase(lastClose, typeof lastMA50 === "number" ? lastMA50 : null);
   const ma200Pct = formatPctFromBase(lastClose, typeof lastMA200 === "number" ? lastMA200 : null);
@@ -527,7 +608,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
           </div>
         </div>
         <div style={{ padding: 16 }}>
-          <PriceChart symbol={symbol} data={displayedHistory} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={isMobile ? 320 : 430} />
+          <PriceChart symbol={symbol} data={displayedHistory} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} referenceLines={referenceLines} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={isMobile ? 320 : 430} />
           <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", fontSize: 12, fontWeight: 600, color: COLORS.mutedFg2 }}>
             <div>{displayedHistory.length ? `${displayedHistory[0].date} → ${displayedHistory[displayedHistory.length - 1].date}` : "No chart data"}</div>
             <Link href="/platforms" style={{ fontSize: 12, color: "#9cc0ff", textDecoration: "none", fontWeight: 700 }}>Compare platforms →</Link>
@@ -717,7 +798,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
               <button type="button" onClick={() => setExpanded(false)} style={{ padding: "7px 10px", borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, cursor: "pointer" }}>✕</button>
             </div>
             <div style={{ padding: 16 }}>
-              <PriceChart symbol={symbol} data={displayedHistory} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={isMobile ? 280 : 520} />
+              <PriceChart symbol={symbol} data={displayedHistory} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} referenceLines={referenceLines} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={isMobile ? 280 : 520} />
             </div>
           </div>
         </div>
