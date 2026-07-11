@@ -2140,7 +2140,8 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
   const dips: PickerItem[] = [];
   const athBreakouts: PickerItem[] = [];
   const threeMonthBreakouts: PickerItem[] = [];
-  const ma200Proximity: PickerItem[] = [];
+  const dailyMa200Proximity: PickerItem[] = [];
+  const weeklyMa200Proximity: PickerItem[] = [];
   const macroSupportResistance: PickerItem[] = [];
   const divergences: PickerItem[] = [];
   const positiveLastEarnings: PickerItem[] = [];
@@ -2330,7 +2331,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
           if (dailyMa200Candidate) {
             const side = dailyMa200Candidate.pctDistance >= 0 ? "above" : "below";
 
-            ma200Proximity.push({
+            dailyMa200Proximity.push({
               symbol,
               chartPoints,
               tone: dailyMa200Candidate.pctDistance >= 0 ? "yellow" : "orange",
@@ -2350,7 +2351,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
           if (weeklyMa200Candidate) {
             const side = weeklyMa200Candidate.pctDistance >= 0 ? "above" : "below";
 
-            ma200Proximity.push({
+            weeklyMa200Proximity.push({
               symbol,
               chartPoints: buildPickerChartPoints(
                 aggregatePoints(pts, "w").map((p) => ({
@@ -2371,7 +2372,11 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
                 timeframe: "W",
                 indicator: "MA200",
               }),
-              _score: weeklyMa200Candidate.score + 12 + dynamicBoost(symbol),
+              // Independent section now (own take:20), so no cross-timeframe
+              // score boost is needed -- each timeframe is ranked only
+              // against itself. See the Daily/Weekly MA200 Proximity
+              // sections below.
+              _score: weeklyMa200Candidate.score + dynamicBoost(symbol),
             });
           }
 
@@ -2711,10 +2716,17 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
       take: 20,
     }),
     buildSection({
-      title: "MA200 Proximity",
+      title: "Daily MA200 Proximity",
       description:
-        "Stocks trading close to their Daily or Weekly MA200, with ranking favouring constructive MA200 behaviour over messy long-term weakness.",
-      source: ma200Proximity,
+        "Stocks trading close to their Daily MA200, with ranking favouring constructive MA200 behaviour over messy long-term weakness.",
+      source: dailyMa200Proximity,
+      take: 20,
+    }),
+    buildSection({
+      title: "Weekly MA200 Proximity",
+      description:
+        "Stocks trading close to their Weekly MA200, with ranking favouring constructive MA200 behaviour over messy long-term weakness.",
+      source: weeklyMa200Proximity,
       take: 20,
     }),
     buildSection({

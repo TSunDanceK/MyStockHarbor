@@ -4,6 +4,7 @@ import MiniPickerCandleChart, {
   type MiniCandlePoint,
   type SupportResistanceZone,
 } from "@/app/components/MiniPickerCandleChart";
+import PickerHighlightScroller from "@/app/components/PickerHighlightScroller";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -109,7 +110,7 @@ const PICKER_NAV: Array<{
   { href: "/stocks-near-weekly-200-day-moving-average", label: "Weekly MA200", icon: "◆", tone: "yellow" },
   { href: "/macro-support-resistance-stocks", label: "Macro S/R", icon: "⇄", tone: "blue" },
   { href: "/overbought-stocks-today", label: "Overbought", icon: "●", tone: "red" },
-  { href: "/bullish-bearish-divergence-stocks", label: "Divergence", icon: "⌁", tone: "blue" },
+  { href: "/bullish-bearish-divergence-stocks", label: "Divergence", icon: "⍁", tone: "blue" },
 ];
 
 function toneColour(tone?: PickerTone) {
@@ -142,7 +143,7 @@ function cleanSymbol(value: unknown) {
   return String(value || "").trim().toUpperCase().replace(/[^A-Z0-9.-]/g, "");
 }
 
-// Routes "Open chart" links to /dashboard — works correctly on both mobile and desktop.
+// Routes "Open chart" links to /dashboard -- works correctly on both mobile and desktop.
 function chartHrefFor(symbol: string, href?: string) {
   const fallback = `/dashboard?symbol=${encodeURIComponent(symbol)}`;
   const raw = href && href.trim() ? href.trim() : "";
@@ -391,8 +392,22 @@ function MetricCard({ label, value }: { label: string; value: string | number })
   );
 }
 
-export default async function PickerResultPage({ config }: { config: PickerResultConfig }) {
+export default async function PickerResultPage({
+  config,
+  searchParams,
+}: {
+  config: PickerResultConfig;
+  searchParams?: Promise<{ symbol?: string | string[] }>;
+}) {
   const { entries, updatedAt, universeSize, foundCount } = await getPickerData(config);
+
+  // Supports deep links from the /pickers accordion like
+  // /all-time-high-breakout-stocks?symbol=MTB -- scrolls to and briefly
+  // highlights that specific card instead of just landing at the top of
+  // the list. See PickerHighlightScroller for the client-side scroll/pulse.
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const rawHighlight = resolvedSearchParams?.symbol;
+  const highlightSymbol = cleanSymbol(Array.isArray(rawHighlight) ? rawHighlight[0] : rawHighlight);
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -459,6 +474,13 @@ export default async function PickerResultPage({ config }: { config: PickerResul
         .cardActions a { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 8px 11px; border-radius: 11px; border: 1px solid rgba(96,165,250,0.26); background: rgba(59,130,246,0.09); color: #dbeafe; text-decoration: none; font-size: 12px; font-weight: 950; }
         .cardActions a.green { border-color: rgba(34,197,94,0.26); background: rgba(34,197,94,0.09); color: #dcfce7; }
         .emptyBox { margin-top: 16px; border: 1px solid rgba(255,255,255,0.10); border-radius: 18px; padding: 18px; background: rgba(255,255,255,0.035); color: rgba(226,232,240,0.72); line-height: 1.7; }
+        @keyframes pickerHighlightPulse {
+          0% { box-shadow: 0 0 0 0 rgba(245,197,66,0); border-color: rgba(255,255,255,0.09); }
+          15% { box-shadow: 0 0 0 4px rgba(245,197,66,0.35); border-color: #f5c542; }
+          50% { box-shadow: 0 0 28px 4px rgba(245,197,66,0.55); border-color: #f5c542; }
+          100% { box-shadow: 0 0 0 0 rgba(245,197,66,0); border-color: rgba(255,255,255,0.09); }
+        }
+        .resultCard.highlight { animation: pickerHighlightPulse 2.4s ease-out 1; scroll-margin-top: 90px; }
         @media (max-width: 980px) { .heroTop { grid-template-columns: 1fr; } .scanPanel { width: 100%; } }
         @media (max-width: 720px) {
           .pickerResultPage, .pickerResultPage * { box-sizing: border-box; }
@@ -541,10 +563,12 @@ export default async function PickerResultPage({ config }: { config: PickerResul
             </div>
           </div>
 
+          {highlightSymbol ? <PickerHighlightScroller symbol={highlightSymbol} /> : null}
+
           {entries.length ? (
             <div className="resultsGrid">
               {entries.map((entry) => (
-                <article key={`${entry.symbol}-${entry.note}`} className="resultCard">
+                <article key={`${entry.symbol}-${entry.note}`} id={`picker-${entry.symbol}`} className="resultCard">
                   <div className="resultCardTop">
                     <div>
                       <div className="symbolLine">

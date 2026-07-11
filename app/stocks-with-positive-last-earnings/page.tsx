@@ -44,6 +44,10 @@ export const metadata: Metadata = {
   },
 };
 
-export default function StocksWithPositiveLastEarningsPage() {
-  return <PickerResultPage config={config} />;
+export default async function StocksWithPositiveLastEarningsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ symbol?: string | string[] }>;
+}) {
+  return <PickerResultPage config={config} searchParams={searchParams} />;
 }
