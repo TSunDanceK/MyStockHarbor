@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import PriceChart, { type Overlay, type ChartType, type SupportResistanceZone } from "./PriceChart";
 import { detectDivergenceFromHistory } from "../../lib/ta/divergence";
+import DiscoveryStrip from "./DiscoveryStrip";
 
 type Quote = { symbol: string; price: number | null; date: string | null; time: string | null; source: string; };
 type Point = { date: string; open?: number; close: number; high?: number; low?: number; volume?: number; };
@@ -677,6 +678,10 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
             </div>
             <button className="msh-scanbtn" onClick={() => router.push("/pickers")}>🔎 Scan for stock ideas</button>
           </div>
+        </div>
+
+        <div className="msh-desktop-only">
+          <DiscoveryStrip />
         </div>
 
         <div className="msh-mobile-only">{isMobile ? MobileHero() : null}</div>
