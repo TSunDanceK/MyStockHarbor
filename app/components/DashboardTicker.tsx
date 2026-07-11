@@ -9,6 +9,13 @@ import Link from "next/link";
 // server-side every 6 minutes), so this adds no new backend load. Renders
 // on both desktop and mobile since DashboardClient places it outside the
 // .msh-desktop-only / .msh-mobile-only split.
+//
+// Item variety and ordering: every category below is derived purely from
+// fields already present in the single /api/pickers response this
+// component fetches (signalRecords + sections) -- no new endpoints, no
+// extra requests. Categories are built independently, combined, then
+// shuffled (Fisher-Yates) on each fetch so the feed doesn't read as a
+// fixed block-by-category list.
 
 type MarketRow = {
   symbol: string;
@@ -29,19 +36,35 @@ type TickerEarningsGrowthItem = {
 type SignalRecordLite = {
   symbol: string;
   oversold: boolean;
+  overbought: boolean;
   buyTheDip: boolean;
   breakout: boolean;
   volumeSpike: boolean;
   atrSpike: boolean;
   aboveMA50: boolean;
+  belowMA50: boolean;
   aboveMA200: boolean;
+  belowMA200: boolean;
   bullishRsiDivergence: boolean;
+  bearishRsiDivergence: boolean;
   bullishMacdDivergence: boolean;
+  bearishMacdDivergence: boolean;
   weeklyMa200DistancePct?: number;
+};
+
+type PickerSectionItem = {
+  symbol: string;
+  supportResistanceZone?: { kind: "support" | "resistance" };
+};
+
+type PickerSection = {
+  title: string;
+  items: PickerSectionItem[];
 };
 
 type PickersPayload = {
   signalRecords: SignalRecordLite[];
+  sections?: PickerSection[];
   tickerFeed: {
     topMovers: MarketRow[];
     earningsGrowth: TickerEarningsGrowthItem[];
@@ -55,13 +78,11 @@ type TickerItem = {
   color: string;
 };
 
-// Only 3 accent colors in play, reused from the site's existing tile
-// language (Pickers/Insights/Earnings) rather than inventing new hues:
-// movers get green/red purely for up/down polarity (a near-universal
-// finance convention, not really "a 4th category color"), earnings growth
-// gets the same cyan as the Earnings discovery tile, and the two
-// "technical setup" categories (weekly MA200 proximity + buy signals)
-// share one blue so the feed doesn't feel busier than it needs to.
+// Four accent colors, reused from the site's existing tile language
+// (Pickers/Insights/Earnings) rather than inventing new hues per category.
+// Green/red carry polarity (up vs down, bullish vs bearish setup), cyan is
+// reserved for anything earnings-related, and blue covers neutral
+// technical/pattern context that isn't inherently bullish or bearish.
 const COLOR_UP = "#22c55e";
 const COLOR_DOWN = "#f87171";
 const COLOR_EARNINGS = "#22d3ee";
@@ -82,9 +103,37 @@ function getBuySignalCount(r: SignalRecordLite) {
   return count;
 }
 
+function getSellSignalCount(r: SignalRecordLite) {
+  if (!r.belowMA200) return 0;
+  let count = 0;
+  if (r.overbought) count += 1;
+  if (r.belowMA50) count += 1;
+  if (r.belowMA200) count += 1;
+  if (r.bearishRsiDivergence) count += 1;
+  if (r.bearishMacdDivergence) count += 1;
+  return count;
+}
+
+function findSection(sections: PickerSection[], title: string): PickerSectionItem[] {
+  return sections.find((s) => s.title === title)?.items ?? [];
+}
+
+function shuffle<T>(arr: T[]): T[] {
+  const out = arr.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
 function buildItems(data: PickersPayload | null): TickerItem[] {
   if (!data) return [];
   const items: TickerItem[] = [];
+  const sections = data.sections ?? [];
+  const signalRecords = data.signalRecords ?? [];
+
+  const href = (symbol: string) => `/stock/${encodeURIComponent(symbol)}`;
 
   const movers = (data.tickerFeed?.topMovers ?? [])
     .filter((row) => typeof row.changePct === "number" && Number.isFinite(row.changePct))
@@ -95,7 +144,7 @@ function buildItems(data: PickersPayload | null): TickerItem[] {
     items.push({
       id: `mover-${row.symbol}`,
       text: `${row.symbol} ${up ? "▲" : "▼"} ${Math.abs(pct).toFixed(1)}% today`,
-      href: `/stock/${encodeURIComponent(row.symbol)}`,
+      href: href(row.symbol),
       color: up ? COLOR_UP : COLOR_DOWN,
     });
   });
@@ -114,40 +163,169 @@ function buildItems(data: PickersPayload | null): TickerItem[] {
     items.push({
       id: `earnings-${item.symbol}`,
       text,
-      href: `/stock/${encodeURIComponent(item.symbol)}/earnings`,
+      href: `${href(item.symbol)}/earnings`,
       color: COLOR_EARNINGS,
     });
   });
 
-  const ma200Close = (data.signalRecords ?? [])
+  const ma200Close = signalRecords
     .filter((r) => typeof r.weeklyMa200DistancePct === "number" && Number.isFinite(r.weeklyMa200DistancePct))
     .slice()
     .sort((a, b) => Math.abs(a.weeklyMa200DistancePct!) - Math.abs(b.weeklyMa200DistancePct!))
-    .slice(0, 3);
+    .slice(0, 2);
   ma200Close.forEach((r) => {
     items.push({
       id: `ma200-${r.symbol}`,
       text: `${r.symbol} getting close to weekly MA200`,
-      href: `/stock/${encodeURIComponent(r.symbol)}`,
+      href: href(r.symbol),
       color: COLOR_TECHNICAL,
     });
   });
 
-  const buySignalLeaders = (data.signalRecords ?? [])
+  const buySignalLeaders = signalRecords
     .map((r) => ({ symbol: r.symbol, count: getBuySignalCount(r) }))
     .filter((r) => r.count > 0)
     .sort((a, b) => b.count - a.count)
-    .slice(0, 3);
+    .slice(0, 2);
   buySignalLeaders.forEach((r) => {
     items.push({
       id: `buysignals-${r.symbol}`,
       text: `${r.symbol} currently has ${r.count} buy signal${r.count === 1 ? "" : "s"}`,
-      href: `/stock/${encodeURIComponent(r.symbol)}`,
-      color: COLOR_TECHNICAL,
+      href: href(r.symbol),
+      color: COLOR_UP,
     });
   });
 
-  return items;
+  const sellSignalLeaders = signalRecords
+    .map((r) => ({ symbol: r.symbol, count: getSellSignalCount(r) }))
+    .filter((r) => r.count > 0)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 2);
+  sellSignalLeaders.forEach((r) => {
+    items.push({
+      id: `sellsignals-${r.symbol}`,
+      text: `${r.symbol} currently has ${r.count} sell signal${r.count === 1 ? "" : "s"}`,
+      href: href(r.symbol),
+      color: COLOR_DOWN,
+    });
+  });
+
+  const bullishDivergence = signalRecords
+    .filter((r) => r.bullishRsiDivergence || r.bullishMacdDivergence)
+    .slice(0, 2);
+  bullishDivergence.forEach((r) => {
+    items.push({
+      id: `bulldiv-${r.symbol}`,
+      text: `${r.symbol} showing bullish divergence`,
+      href: href(r.symbol),
+      color: COLOR_UP,
+    });
+  });
+
+  const bearishDivergence = signalRecords
+    .filter((r) => r.bearishRsiDivergence || r.bearishMacdDivergence)
+    .slice(0, 2);
+  bearishDivergence.forEach((r) => {
+    items.push({
+      id: `beardiv-${r.symbol}`,
+      text: `${r.symbol} showing bearish divergence`,
+      href: href(r.symbol),
+      color: COLOR_DOWN,
+    });
+  });
+
+  findSection(sections, "All-Time High Breakout Stocks")
+    .slice(0, 2)
+    .forEach((item) => {
+      items.push({
+        id: `athbo-${item.symbol}`,
+        text: `${item.symbol} just broke out to a new all-time high`,
+        href: href(item.symbol),
+        color: COLOR_UP,
+      });
+    });
+
+  findSection(sections, "3-Month High Breakout Stocks")
+    .slice(0, 2)
+    .forEach((item) => {
+      items.push({
+        id: `3mbo-${item.symbol}`,
+        text: `${item.symbol} broke out to a fresh 3-month high`,
+        href: href(item.symbol),
+        color: COLOR_UP,
+      });
+    });
+
+  findSection(sections, "Macro Support and Resistance Stocks")
+    .slice(0, 2)
+    .forEach((item) => {
+      const isSupport = item.supportResistanceZone?.kind !== "resistance";
+      items.push({
+        id: `macrosr-${item.symbol}`,
+        text: isSupport
+          ? `${item.symbol} holding at a key support zone`
+          : `${item.symbol} testing a key resistance zone`,
+        href: href(item.symbol),
+        color: isSupport ? COLOR_UP : COLOR_DOWN,
+      });
+    });
+
+  findSection(sections, "Stocks Down 20% From All-Time Highs")
+    .slice(0, 2)
+    .forEach((item) => {
+      items.push({
+        id: `dip-${item.symbol}`,
+        text: `${item.symbol} is 20%+ below its all-time high`,
+        href: href(item.symbol),
+        color: COLOR_TECHNICAL,
+      });
+    });
+
+  findSection(sections, "Oversold Stocks Today (Potential Rebound Setups)")
+    .slice(0, 2)
+    .forEach((item) => {
+      items.push({
+        id: `oversold-${item.symbol}`,
+        text: `${item.symbol} is oversold today`,
+        href: href(item.symbol),
+        color: COLOR_UP,
+      });
+    });
+
+  findSection(sections, "Overbought Stocks Today (Potential Pullback Setups)")
+    .slice(0, 2)
+    .forEach((item) => {
+      items.push({
+        id: `overbought-${item.symbol}`,
+        text: `${item.symbol} is overbought today`,
+        href: href(item.symbol),
+        color: COLOR_DOWN,
+      });
+    });
+
+  findSection(sections, "Best Trend Score Stocks")
+    .slice(0, 2)
+    .forEach((item) => {
+      items.push({
+        id: `trend-${item.symbol}`,
+        text: `${item.symbol} has one of the strongest trend scores today`,
+        href: href(item.symbol),
+        color: COLOR_TECHNICAL,
+      });
+    });
+
+  findSection(sections, "Stocks With Positive Last Earnings")
+    .slice(0, 2)
+    .forEach((item) => {
+      items.push({
+        id: `posearnings-${item.symbol}`,
+        text: `${item.symbol} beat on its last earnings report`,
+        href: `${href(item.symbol)}/earnings`,
+        color: COLOR_EARNINGS,
+      });
+    });
+
+  return shuffle(items);
 }
 
 export default function DashboardTicker() {
