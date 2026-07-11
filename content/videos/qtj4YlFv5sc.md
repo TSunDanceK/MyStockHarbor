@@ -1,6 +1,6 @@
 ---
 ticker: KTOS
-datasheetImage:
+datasheetImage: /images/datasheets/ktos-july-2026.png
 statLabel1: Market cap
 statValue1: "~$8.8B"
 statLabel2: Q1 2026 revenue
