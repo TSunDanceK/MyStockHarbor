@@ -12,73 +12,86 @@ type NavTile = {
   sublabel: string | ((symbol: string) => string);
   href: string | ((symbol: string) => string);
   accent: string;
-  bg: string;
 };
+
+// Same unified-card treatment as the desktop discovery strip: one dark
+// card style for every tile, with a thin colored left border + label as
+// the only accent, instead of each tile getting its own full-gradient
+// background. Colors reuse the hues already established elsewhere on the
+// site (amber = Bottlenecks, green = Pickers, blue = Insights); tiles with
+// no existing color anchor share a neutral slate instead of an invented hue.
+const NEUTRAL_ACCENT = "#8b95a7";
 
 const TILES: NavTile[] = [
   {
     icon: "📈",
     label: "Chart Dashboard",
-    sublabel: "Live charts & technical analysis",
+    sublabel: "Live charts & full technical breakdown",
     href: "/dashboard",
-    accent: "rgba(59,130,246,0.55)",
-    bg: "linear-gradient(135deg, rgba(37,99,235,0.22), rgba(59,130,246,0.10))",
+    accent: NEUTRAL_ACCENT,
+  },
+  {
+    icon: "⛓️",
+    label: "Bottlenecks",
+    sublabel: "Where the market's choke points hide",
+    href: "/bottlenecks",
+    accent: "#f5a524",
   },
   {
     icon: "🔎",
     label: "Stock Pickers",
-    sublabel: "Scan for ideas & setups",
+    sublabel: "Today's screened setups & breakouts",
     href: "/pickers",
-    accent: "rgba(239,68,68,0.50)",
-    bg: "linear-gradient(135deg, rgba(239,68,68,0.18), rgba(127,29,29,0.10))",
+    accent: "#16c784",
   },
   {
     icon: "💡",
     label: "Insights",
-    sublabel: "Daily chart write-ups & trade ideas",
+    sublabel: "Fresh chart breakdowns, daily",
     href: "/insights",
-    accent: "rgba(250,204,21,0.50)",
-    bg: "linear-gradient(135deg, rgba(234,179,8,0.18), rgba(202,138,4,0.08))",
+    accent: "#2f6bff",
+  },
+  {
+    icon: "🧠",
+    label: "News",
+    sublabel: "Headlines — uniquely scored & explained",
+    href: (symbol: string) => `/stock/${encodeURIComponent(symbol)}/news`,
+    accent: NEUTRAL_ACCENT,
   },
   {
     icon: "📊",
     label: "Stock Analysis",
     sublabel: (symbol: string) => `Viewing ${symbol}`,
     href: (symbol: string) => `/stock/${encodeURIComponent(symbol)}`,
-    accent: "rgba(34,197,94,0.50)",
-    bg: "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(16,185,129,0.08))",
+    accent: NEUTRAL_ACCENT,
   },
   {
     icon: "📅",
     label: "Earnings",
     sublabel: (symbol: string) => `${symbol} earnings`,
     href: (symbol: string) => `/stock/${encodeURIComponent(symbol)}/earnings`,
-    accent: "rgba(251,146,60,0.50)",
-    bg: "linear-gradient(135deg, rgba(251,146,60,0.18), rgba(234,88,12,0.08))",
+    accent: NEUTRAL_ACCENT,
   },
   {
     icon: "🧮",
     label: "Risk Calculator",
     sublabel: "Position sizing & risk tools",
     href: "/utilities",
-    accent: "rgba(168,85,247,0.50)",
-    bg: "linear-gradient(135deg, rgba(168,85,247,0.18), rgba(139,92,246,0.08))",
+    accent: NEUTRAL_ACCENT,
   },
   {
     icon: "🏦",
     label: "Platforms",
     sublabel: "Compare brokers & charting tools",
     href: "/platforms",
-    accent: "rgba(20,184,166,0.50)",
-    bg: "linear-gradient(135deg, rgba(20,184,166,0.18), rgba(13,148,136,0.08))",
+    accent: NEUTRAL_ACCENT,
   },
   {
     icon: "📘",
     label: "Learn",
     sublabel: "Indicators, patterns & strategy",
     href: "/learn",
-    accent: "rgba(99,102,241,0.50)",
-    bg: "linear-gradient(135deg, rgba(99,102,241,0.18), rgba(79,70,229,0.08))",
+    accent: NEUTRAL_ACCENT,
   },
 ];
 
@@ -270,31 +283,40 @@ export default function MobileHomePage() {
                 display: "flex",
                 flexDirection: "column",
                 gap: 8,
-                padding: "16px 14px",
-                borderRadius: 18,
-                border: `1px solid ${tile.accent}`,
-                background: tile.bg,
+                padding: "14px 14px 15px",
+                borderRadius: 16,
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderLeft: `3px solid ${tile.accent}`,
+                background: "rgba(255,255,255,0.03)",
                 textDecoration: "none",
                 color: "#f1f5f9",
-                boxShadow: `0 4px 20px ${tile.accent.replace("0.5", "0.12")}`,
                 transition: "transform 120ms ease, filter 120ms ease",
                 WebkitTapHighlightColor: "transparent",
               }}
             >
-              <span style={{ fontSize: 28, lineHeight: 1 }}>{tile.icon}</span>
-              <div>
-                <div style={{ fontWeight: 950, fontSize: 15, lineHeight: 1.15 }}>{tile.label}</div>
-                <div
+              <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                <span style={{ fontSize: 18, lineHeight: 1 }}>{tile.icon}</span>
+                <span
                   style={{
-                    marginTop: 3,
-                    fontSize: 12,
-                    opacity: 0.65,
-                    fontWeight: 700,
-                    lineHeight: 1.4,
+                    fontSize: 11,
+                    fontWeight: 800,
+                    letterSpacing: "0.05em",
+                    textTransform: "uppercase",
+                    color: tile.accent,
                   }}
                 >
-                  {resolvedSublabel}
-                </div>
+                  {tile.label}
+                </span>
+              </div>
+              <div
+                style={{
+                  fontSize: 12.5,
+                  opacity: 0.75,
+                  fontWeight: 600,
+                  lineHeight: 1.4,
+                }}
+              >
+                {resolvedSublabel}
               </div>
             </Link>
           );
