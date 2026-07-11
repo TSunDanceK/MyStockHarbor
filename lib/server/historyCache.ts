@@ -26,6 +26,19 @@ const REDIS_HISTORY_PREFIX = "msh:history:v7";
 const REDIS_HISTORY_TTL_SECONDS = 6 * 60 * 60;
 const MIN_QUALIFIED_POINTS = 30;
 
+// The FMP "full" history endpoint returns a symbol's entire trading history
+// with no date bound -- for a decades-old blue chip that can be 10,000+
+// daily bars, even though nothing in this app ever requests more than 5000
+// trading days (see app/api/history/route.ts's `days` clamp, the largest
+// consumer). Trimming here, once, right after the fetch keeps every cached
+// Redis entry (and every subsequent read of it, by any of the many callers
+// of getDailyHistory/getDailyHistoryBulk) bounded to what the app can
+// actually use, without touching the request itself -- bounding the FMP
+// request via from=/to= would save bytes on the wire too, but this module
+// couldn't verify FMP's exact supported query parameters for this endpoint
+// from this environment, so it's left as a follow-up rather than guessed at.
+const MAX_CACHED_HISTORY_DAYS = 5500;
+
 const HISTORY_LOCK_PREFIX = "msh:history-lock:v1";
 const HISTORY_LOCK_TTL_SECONDS = 45;
 
@@ -358,7 +371,12 @@ const url = `https://financialmodelingprep.com/stable/historical-price-eod/full?
     throw new Error(`FMP history error for ${normalized}: ${payload.Error}`);
   }
 
-  const daily = parseFmpHistoricalRows(Array.isArray(payload) ? payload : undefined);
+  const parsed = parseFmpHistoricalRows(Array.isArray(payload) ? payload : undefined);
+  const daily =
+    parsed.length > MAX_CACHED_HISTORY_DAYS
+      ? parsed.slice(-MAX_CACHED_HISTORY_DAYS)
+      : parsed;
+
   if (daily.length >= MIN_QUALIFIED_POINTS) {
     const entry: HistoryCacheEntry = {
       symbol: normalized,
@@ -420,6 +438,111 @@ export async function getDailyHistory(symbol: string) {
   } finally {
     await releaseHistoryLock(normalized, lockToken);
   }
+}
+
+// Small local concurrency limiter, same shape as the one in
+// pickersBuilder.ts -- kept local here rather than shared/exported so this
+// module has no dependency on the picker builder. Used to cap how many
+// concurrent FMP fetches getDailyHistoryBulk's cache-miss fallback can
+// trigger at once (e.g. right after a Redis flush, when a large fraction
+// of a 200-symbol universe could otherwise all miss simultaneously).
+function createLimiter(limit: number) {
+  let active = 0;
+  const queue: Array<() => void> = [];
+
+  const next = () => {
+    active--;
+    const fn = queue.shift();
+    if (fn) fn();
+  };
+
+  return async function <T>(fn: () => Promise<T>): Promise<T> {
+    if (active >= limit) {
+      await new Promise<void>((resolve) => queue.push(resolve));
+    }
+    active++;
+    try {
+      return await fn();
+    } finally {
+      next();
+    }
+  };
+}
+
+// Batch version of getDailyHistory(): reads the whole requested symbol list's
+// cached history in a single pipelined Redis round-trip (via mget) instead
+// of one individual REST call per symbol -- for a 200-symbol universe this
+// was ~200 separate Upstash calls just to check "is this already cached"
+// before any FMP fetch even happens. Only symbols that miss the bulk read
+// (no entry yet, or a corrupt/unexpected entry shape) fall back to the
+// existing single-symbol getDailyHistory() path, which still handles the
+// distributed lock + FMP fetch + wait-for-other-request's-fetch logic
+// exactly as before. On a warm cache (the common case, given the 6h TTL and
+// the daily warm-up cron) this fallback runs for zero or very few symbols.
+export async function getDailyHistoryBulk(
+  symbols: string[]
+): Promise<Map<string, Point[]>> {
+  const result = new Map<string, Point[]>();
+
+  const normalized = Array.from(
+    new Set(symbols.map((symbol) => normalizeSymbol(symbol)).filter(Boolean))
+  );
+  if (!normalized.length) return result;
+
+  if (!redis) {
+    const limitNoRedis = createLimiter(10);
+    await Promise.all(
+      normalized.map((symbol) =>
+        limitNoRedis(async () => {
+          result.set(symbol, await getDailyHistory(symbol));
+        })
+      )
+    );
+    return result;
+  }
+
+  const keys = normalized.map((symbol) => getHistoryRedisKey(symbol));
+  let entries: (HistoryCacheEntry | null)[] = normalized.map(() => null);
+
+  try {
+    entries = await redis.mget<(HistoryCacheEntry | null)[]>(...keys);
+  } catch {
+    // Best-effort; every symbol just falls through to the per-symbol path.
+  }
+
+  const misses: string[] = [];
+
+  normalized.forEach((symbol, i) => {
+    const entry = entries[i];
+
+    if (
+      entry &&
+      typeof entry === "object" &&
+      entry.symbol === symbol &&
+      (entry.status === "qualified" || entry.status === "non_qualified") &&
+      entry.source === "fmp"
+    ) {
+      result.set(
+        symbol,
+        entry.status === "qualified" && Array.isArray(entry.daily) ? entry.daily : []
+      );
+    } else {
+      misses.push(symbol);
+    }
+  });
+
+  if (misses.length) {
+    const limit = createLimiter(10);
+    await Promise.all(
+      misses.map((symbol) =>
+        limit(async () => {
+          result.set(symbol, await getDailyHistory(symbol));
+        })
+      )
+    );
+  }
+
+  return result;
 }
 
 export async function getCachedDailyHistory(symbol: string) {
