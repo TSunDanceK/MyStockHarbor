@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -144,9 +145,36 @@ function getHeaderHelp(title: string) {
   if (title.includes("Divergence")) return "Ranked by timeframe, duration and structure quality. Weekly divergences usually carry more weight than daily ones.";
   if (title.includes("Macro Support") || title.includes("Resistance")) return "Stocks near wider weekly support or resistance zones, ranked by touch count, distance and structure length.";
   if (title.includes("All-Time Highs")) return "Pullback setups from all-time highs, ranked to favour liquid, tradable names over broken charts.";
-  if (title.toLowerCase().includes("200-day")) return "Stocks near the 200-day moving average — a key long-term level traders watch for support, resistance and trend direction.";
+  if (title.toLowerCase().includes("ma200")) return "Stocks near the 200-day moving average — a key long-term level traders watch for support, resistance and trend direction.";
   if (title.includes("Breakout")) return "Ranked to favour newer, cleaner and more liquid breakouts over older or more stretched moves.";
   return "Stocks matching multiple technical conditions worth reviewing on the chart.";
+}
+
+function seoHrefForTitle(rawTitle: string): string {
+  const title = rawTitle.toLowerCase();
+  if (title.includes("positive last earnings")) return "/stocks-with-positive-last-earnings";
+  if (title.includes("strong earnings growth")) return "/stocks-with-strong-earnings-growth";
+  if (title.includes("all-time high breakout")) return "/all-time-high-breakout-stocks";
+  if (title.includes("3-month high breakout")) return "/3-month-high-breakout-stocks";
+  if (title.includes("all-time highs")) return "/stocks-down-20-from-all-time-highs";
+  if (title.includes("macro") && title.includes("support") && title.includes("resistance")) return "/macro-support-resistance-stocks";
+  if (title.includes("buy signals")) return "/top-stocks-with-buy-signals";
+  if (title.includes("sell signals")) return "/top-stocks-with-sell-signals";
+  if (title.includes("oversold")) return "/oversold-stocks-today";
+  if (title.includes("overbought")) return "/overbought-stocks-today";
+  if (title.includes("best trend score")) return "/best-trend-score-stocks";
+  if (title.includes("divergence")) return "/bullish-bearish-divergence-stocks";
+  if (title.includes("daily ma200")) return "/stocks-near-200-day-moving-average";
+  if (title.includes("weekly ma200")) return "/stocks-near-weekly-200-day-moving-average";
+  return "";
+}
+
+function seeAllHrefFor(sec: { title: string }, lazySeeAllHref?: string, highlightSymbol?: string) {
+  const base = lazySeeAllHref || seoHrefForTitle(sec.title);
+  if (!base) return "";
+  if (!highlightSymbol) return base;
+  const sep = base.includes("?") ? "&" : "?";
+  return `${base}${sep}symbol=${encodeURIComponent(highlightSymbol)}`;
 }
 
 function HelpTip({ text }: { text: string }) {
@@ -255,6 +283,77 @@ function PatternPlaysSection() {
   );
 }
 
+// Small schematic chart icons for each accordion category -- illustrative
+// only (don't correspond to any real stock's actual chart), matching the
+// same idea as the ascending/descending/bull-flag PlayDiagram SVGs above
+// but sized down for an accordion row header.
+const PATTERN_SVG_INNER: Record<string, string> = {
+  buy: `<polyline points="5,48 22,40 34,42 50,26 66,30 90,10" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M84,6 L96,8 L90,20 Z" fill="currentColor"/>`,
+  sell: `<polyline points="5,12 22,20 34,18 50,34 66,30 90,50" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M84,54 L96,52 L90,40 Z" fill="currentColor"/>`,
+  macro: `<line x1="5" y1="30" x2="95" y2="30" stroke="currentColor" stroke-width="4" stroke-dasharray="6 5" opacity=".55"/><polyline points="5,45 20,32 35,28 50,32 65,20 80,30 95,15" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>`,
+  ath: `<line x1="5" y1="18" x2="70" y2="18" stroke="currentColor" stroke-width="4" stroke-dasharray="6 5" opacity=".55"/><polyline points="5,48 25,40 45,36 60,24 75,10 95,4" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`,
+  breakout3mo: `<line x1="30" y1="24" x2="80" y2="24" stroke="currentColor" stroke-width="4" stroke-dasharray="6 5" opacity=".55"/><polyline points="5,46 25,38 45,32 60,26 75,14 95,8" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`,
+  oversold: `<polyline points="5,15 25,30 45,50 65,32 95,12" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="45" cy="50" r="5" fill="currentColor"/>`,
+  overbought: `<polyline points="5,45 25,30 45,10 65,28 95,48" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="45" cy="10" r="5" fill="currentColor"/>`,
+  earnings: `<rect x="8" y="34" width="14" height="20" rx="2" fill="currentColor" opacity=".9"/><rect x="30" y="24" width="14" height="30" rx="2" fill="currentColor" opacity=".9"/><rect x="52" y="14" width="14" height="40" rx="2" fill="currentColor" opacity=".9"/><rect x="74" y="4" width="14" height="50" rx="2" fill="currentColor" opacity=".9"/>`,
+  divergence: `<polyline points="5,40 30,32 55,30 80,14 95,8" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><polyline points="5,50 30,50 55,52 80,54 95,56" fill="none" stroke="currentColor" stroke-width="4" stroke-dasharray="3 4" opacity=".6" stroke-linecap="round"/>`,
+  trend: `<polyline points="5,50 25,42 45,38 65,24 85,16 95,10" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`,
+  posEarnings: `<path d="M8,32 L22,46 L46,12" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/><rect x="60" y="26" width="12" height="28" rx="2" fill="currentColor" opacity=".85"/><rect x="78" y="14" width="12" height="40" rx="2" fill="currentColor" opacity=".85"/>`,
+  maDaily: `<line x1="5" y1="34" x2="95" y2="34" stroke="currentColor" stroke-width="4" opacity=".5"/><polyline points="5,50 20,44 35,36 50,32 65,34 80,30 95,20" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>`,
+  maWeekly: `<line x1="5" y1="32" x2="95" y2="30" stroke="currentColor" stroke-width="4" opacity=".5"/><polyline points="5,46 25,40 45,34 65,32 85,26 95,22" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>`,
+  down20: `<line x1="5" y1="10" x2="30" y2="10" stroke="currentColor" stroke-width="4" stroke-dasharray="5 4" opacity=".5"/><polyline points="8,12 25,10 40,28 55,38 75,42 95,40" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`,
+  triAsc: `<line x1="5" y1="12" x2="95" y2="12" stroke="currentColor" stroke-width="4" stroke-dasharray="6 5" opacity=".55"/><line x1="5" y1="50" x2="95" y2="12" stroke="currentColor" stroke-width="3" stroke-dasharray="3 4" opacity=".4"/><polyline points="5,50 30,26 55,36 80,16 95,12" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>`,
+  triDesc: `<line x1="5" y1="48" x2="95" y2="48" stroke="currentColor" stroke-width="4" stroke-dasharray="6 5" opacity=".55"/><line x1="5" y1="10" x2="95" y2="48" stroke="currentColor" stroke-width="3" stroke-dasharray="3 4" opacity=".4"/><polyline points="5,10 30,34 55,24 80,44 95,48" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>`,
+  flag: `<polyline points="10,52 25,16" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round"/><rect x="20" y="16" width="34" height="20" rx="2" fill="none" stroke="currentColor" stroke-width="4" opacity=".7" transform="rotate(-8 37 26)"/><polyline points="54,26 75,18 95,4" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>`,
+};
+
+function iconPatternForTitle(title: string): string {
+  const t = title.toLowerCase();
+  if (t.includes("buy signals")) return "buy";
+  if (t.includes("sell signals")) return "sell";
+  if (t.includes("oversold")) return "oversold";
+  if (t.includes("overbought")) return "overbought";
+  if (t.includes("strong earnings growth")) return "earnings";
+  if (t.includes("positive last earnings")) return "posEarnings";
+  if (t.includes("divergence")) return "divergence";
+  if (t.includes("best trend")) return "trend";
+  if (t.includes("daily ma200")) return "maDaily";
+  if (t.includes("weekly ma200")) return "maWeekly";
+  if (t.includes("macro") && t.includes("support")) return "macro";
+  if (t.includes("all-time high breakout")) return "ath";
+  if (t.includes("3-month high breakout")) return "breakout3mo";
+  if (t.includes("all-time highs")) return "down20";
+  if (t.includes("ascending triangle")) return "triAsc";
+  if (t.includes("descending triangle")) return "triDesc";
+  if (t.includes("bull flag")) return "flag";
+  return "trend";
+}
+
+function colorForTitle(title: string): string {
+  const t = title.toLowerCase();
+  if (t.includes("sell") || t.includes("overbought") || t.includes("descending triangle")) return "#ef4444";
+  if (t.includes("divergence") || t.includes("macro")) return "#60a5fa";
+  if (t.includes("earnings")) return "#22d3ee";
+  if (t.includes("ma200") || t.includes("all-time highs")) return "#eab308";
+  if (t.includes("breakout") || t.includes("ascending triangle") || t.includes("bull flag")) return "#fb923c";
+  return "#22c55e";
+}
+
+function PatternIcon({ title }: { title: string }) {
+  const pattern = iconPatternForTitle(title);
+  const color = colorForTitle(title);
+  const inner = PATTERN_SVG_INNER[pattern] ?? PATTERN_SVG_INNER.trend;
+  return (
+    <svg
+      viewBox="0 0 100 60"
+      style={{ width: 34, height: 22, display: "block", color, flex: "0 0 auto" }}
+      role="img"
+      aria-hidden="true"
+      dangerouslySetInnerHTML={{ __html: inner }}
+    />
+  );
+}
+
 function PickerRowContent({ symbol, note, companyName }: { symbol: string; note?: string; companyName?: string }) {
   const fullLine1 = companyName ? `${symbol} · ${companyName}` : symbol;
   return (
@@ -273,7 +372,17 @@ function PickerRowContent({ symbol, note, companyName }: { symbol: string; note?
   );
 }
 
-export default function PickersClient() {
+type InsightSummary = { slug: string; title: string; date: string; symbol: string | null };
+
+type LazyPlayCategory = { id: string; title: string; apiUrl: string; seeAllHref: string };
+
+const LAZY_PLAY_CATEGORIES: LazyPlayCategory[] = [
+  { id: "ascending", title: "Ascending Triangle Plays", apiUrl: "/api/plays", seeAllHref: "/plays" },
+  { id: "descending", title: "Descending Triangle Plays", apiUrl: "/api/descending-triangles", seeAllHref: "/plays/descending-triangles" },
+  { id: "bullFlag", title: "Bull Flag Plays", apiUrl: "/api/bull-flags", seeAllHref: "/plays/bull-flags" },
+];
+
+export default function PickersClient({ latestInsights = [] }: { latestInsights?: InsightSummary[] }) {
   const SHOW_FORCE_FETCH_BUTTON = false;
 
   const [sections, setSections] = useState<PickerSection[]>([]);
@@ -294,6 +403,16 @@ export default function PickersClient() {
   const [earningsFetchTick, setEarningsFetchTick] = useState(0);
   const [earningsFetchMessage, setEarningsFetchMessage] = useState<string | null>(null);
   const [companyNames, setCompanyNames] = useState<Map<string, string>>(new Map());
+
+  // Accordion + sidebar + search state (draft-approved redesign of the
+  // pickers results area -- see claude/PICKERS_ACCORDION_REDESIGN.md).
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  const [highlightRowKey, setHighlightRowKey] = useState<string | null>(null);
+  const rowRefs = React.useRef<Map<string, HTMLDivElement>>(new Map());
+  const [lazyPlayData, setLazyPlayData] = useState<Record<string, PickerSection | null>>({});
+  const [lazyPlayLoading, setLazyPlayLoading] = useState<Record<string, boolean>>({});
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchSubmitted, setSearchSubmitted] = useState("");
 
   const EARNINGS_FETCH_LOCK_MS = 90 * 1000;
   void earningsFetchTick;
@@ -317,6 +436,66 @@ export default function PickersClient() {
       await loadPickers(true);
     } catch { setEarningsFetchMessage("Earnings warm-up failed. Try again in a moment."); }
     finally { setEarningsFetchBusy(false); }
+  }
+
+  // Ascending/Descending Triangle and Bull Flag plays each live behind
+  // their own dedicated route (/api/plays, /api/descending-triangles,
+  // /api/bull-flags) and are individually as CPU-heavy as /api/pickers
+  // itself (full universe scan + pattern detection). Fetching all three
+  // on every /pickers page load would undo the recent work to cut
+  // /api/pickers' own Redis/CPU cost, so these are fetched lazily -- only
+  // when a visitor actually expands that accordion row -- and cached in
+  // state afterward so collapsing/re-expanding doesn't refetch.
+  async function loadLazyPlay(cat: LazyPlayCategory) {
+    if (lazyPlayData[cat.id] || lazyPlayLoading[cat.id]) return;
+    setLazyPlayLoading((prev) => ({ ...prev, [cat.id]: true }));
+    try {
+      const res = await fetch(`${cat.apiUrl}?t=${Date.now()}`, { cache: "no-store" });
+      if (!res.ok) throw new Error("play fetch failed");
+      const data = (await res.json()) as { sections?: { title: string; foundCount?: number; items?: PickerItem[] }[] };
+      const primary = Array.isArray(data?.sections) ? data.sections[0] : undefined;
+      setLazyPlayData((prev) => ({
+        ...prev,
+        [cat.id]: {
+          title: cat.title,
+          foundCount: primary?.foundCount,
+          items: Array.isArray(primary?.items) ? primary.items : [],
+        },
+      }));
+    } catch {
+      setLazyPlayData((prev) => ({ ...prev, [cat.id]: { title: cat.title, items: [] } }));
+    } finally {
+      setLazyPlayLoading((prev) => ({ ...prev, [cat.id]: false }));
+    }
+  }
+
+  function toggleSection(title: string, lazyCat?: LazyPlayCategory) {
+    setExpandedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(title)) next.delete(title);
+      else next.add(title);
+      return next;
+    });
+    if (lazyCat) void loadLazyPlay(lazyCat);
+  }
+
+  // Shared by "click a ticker anywhere", "Top Picks" sidebar rows, and
+  // ticker-search result chips: expand that category (fetching lazy play
+  // data first if needed), scroll the specific row into view, and give it
+  // a brief highlight pulse -- the in-page version of the "jump to a
+  // specific stock" behaviour used for the seeAll deep links.
+  function focusPick(title: string, symbol: string, lazyCat?: LazyPlayCategory) {
+    setExpandedSections((prev) => new Set(prev).add(title));
+    if (lazyCat) void loadLazyPlay(lazyCat);
+    const key = `${title}::${symbol}`;
+    window.setTimeout(() => {
+      const el = rowRefs.current.get(key);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlightRowKey(key);
+      window.setTimeout(() => {
+        setHighlightRowKey((cur) => (cur === key ? null : cur));
+      }, 2200);
+    }, 80);
   }
 
   async function loadPickers(force = false) {
@@ -532,7 +711,8 @@ export default function PickersClient() {
 
   const displaySections = useMemo(() => {
     const out: PickerSection[] = [];
-    const ma200       = safeSections.find((s) => s.title.toLowerCase().includes("200-day"));
+    const ma200Daily  = safeSections.find((s) => s.title.toLowerCase().includes("daily ma200"));
+    const ma200Weekly = safeSections.find((s) => s.title.toLowerCase().includes("weekly ma200"));
     const buyDip      = safeSections.find((s) => s.title.includes("All-Time Highs") && !s.title.includes("Breakout"));
     const athBreak    = safeSections.find((s) => s.title.includes("All-Time High Breakout"));
     const threeMonth  = safeSections.find((s) => s.title.includes("3-Month High Breakout"));
@@ -540,9 +720,10 @@ export default function PickersClient() {
     const macroSR     = safeSections.find((s) => { const t = s.title.toLowerCase(); return t.includes("macro") && t.includes("support") && t.includes("resistance"); });
     const earningsGrowth = safeSections.find((s) => s.title.toLowerCase().includes("strong earnings growth"));
     const divergence  = safeSections.find((s) => s.title.toLowerCase().includes("divergence"));
-    const placed = new Set([ma200, buyDip, athBreak, threeMonth, oversold, macroSR, earningsGrowth, divergence].filter(Boolean));
+    const placed = new Set([ma200Daily, ma200Weekly, buyDip, athBreak, threeMonth, oversold, macroSR, earningsGrowth, divergence].filter(Boolean));
     const others = safeSections.filter((s) => !placed.has(s) && !s.title.toLowerCase().includes("hot market names"));
-    if (ma200) out.push(ma200);
+    if (ma200Daily) out.push(ma200Daily);
+    if (ma200Weekly) out.push(ma200Weekly);
     if (topBuySection) out.push(topBuySection);
     if (buyDip) out.push(buyDip);
     if (macroSR) out.push(macroSR);
@@ -554,6 +735,47 @@ export default function PickersClient() {
     if (divergence) out.push(divergence);
     return [...out, ...others];
   }, [safeSections, topBuySection, topSellSection]);
+
+  // Cross-category overlap for the sidebar's "Top Picks" widget -- symbols
+  // appearing in 2+ of the always-loaded categories above. Deliberately
+  // scoped to displaySections (not the 3 lazy chart-pattern categories,
+  // which aren't fetched until expanded).
+  const topPicks = useMemo(() => {
+    const map = new Map<string, { count: number; titles: string[] }>();
+    for (const sec of displaySections) {
+      for (const item of Array.isArray(sec.items) ? sec.items : []) {
+        const symbol = String(item.symbol ?? "").trim().toUpperCase();
+        if (!symbol) continue;
+        const entry = map.get(symbol) ?? { count: 0, titles: [] };
+        entry.count += 1;
+        entry.titles.push(sec.title);
+        map.set(symbol, entry);
+      }
+    }
+    return Array.from(map.entries())
+      .map(([symbol, v]) => ({ symbol, count: v.count, titles: v.titles }))
+      .filter((p) => p.count > 1)
+      .sort((a, b) => (b.count !== a.count ? b.count - a.count : a.symbol.localeCompare(b.symbol)))
+      .slice(0, 6);
+  }, [displaySections]);
+
+  // symbol -> every (title, note, tone) it currently qualifies for, built
+  // from the same always-loaded categories -- powers the ticker search box.
+  const symbolCategoryIndex = useMemo(() => {
+    const map = new Map<string, { title: string; note?: string; tone?: PickerTone }[]>();
+    for (const sec of displaySections) {
+      for (const item of Array.isArray(sec.items) ? sec.items : []) {
+        const symbol = String(item.symbol ?? "").trim().toUpperCase();
+        if (!symbol) continue;
+        const arr = map.get(symbol) ?? [];
+        arr.push({ title: sec.title, note: item.note, tone: item.tone });
+        map.set(symbol, arr);
+      }
+    }
+    return map;
+  }, [displaySections]);
+
+  const searchResults = searchSubmitted ? symbolCategoryIndex.get(searchSubmitted) ?? [] : null;
 
   const customMode = selectedFilters.length > 0;
 
@@ -575,7 +797,6 @@ export default function PickersClient() {
   @keyframes pickersBar { 0%{transform:translateX(-60%);opacity:0.55;} 50%{transform:translateX(140%);opacity:0.95;} 100%{transform:translateX(320%);opacity:0.55;} }
   .pickers-loading-bar { height:100%;width:35%;border-radius:999px;background:rgba(59,130,246,0.90);animation:pickersBar 1.1s linear infinite; }
   .pickers-shell { width:100%;min-width:0; }
-  .pickers-sections-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start; }
   .picker-row { display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.06); }
   .picker-row:last-child { border-bottom:none; }
   .picker-row-left { display:flex;align-items:center;gap:10px;min-width:0;flex:1;overflow:hidden; }
@@ -597,10 +818,49 @@ export default function PickersClient() {
   .pickers-section-title-text { min-width:0;line-height:1.22;font-size:14px;font-weight:700; }
   .pickers-screener-panel { display:block; }
   .pickers-earnings-fetch-button:hover:not(:disabled) { filter:brightness(1.08);transform:translateY(-1px); }
+
+  /* Accordion + sidebar (replaces the old fixed 3-col card grid) */
+  .pickers-accordion-layout { display:grid;grid-template-columns:2.15fr 1fr;gap:18px;align-items:start; }
+  .pickers-accordion { display:flex;flex-direction:column;gap:8px;min-width:0; }
+  .acc-item { border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.025);overflow:hidden; }
+  .acc-item.open { border-color:rgba(96,165,250,0.35); }
+  .acc-head { width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;background:none;border:none;cursor:pointer;text-align:left;color:inherit;font:inherit; }
+  .acc-head-left { display:flex;align-items:center;gap:10px;min-width:0;flex:1; }
+  .acc-head-text { display:flex;flex-direction:column;gap:2px;min-width:0; }
+  .acc-icon { width:44px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;overflow:hidden; }
+  .acc-count { font-size:11px;color:rgba(148,163,184,0.55); }
+  .acc-chevron { color:rgba(148,163,184,0.45);transition:transform 160ms ease;flex:0 0 auto;font-size:12px; }
+  .acc-item.open .acc-chevron { transform:rotate(90deg);color:#93c5fd; }
+  .acc-body { padding:0 14px 12px;border-top:1px solid rgba(255,255,255,0.06); }
+  .pickers-sidebar { position:sticky;top:16px;display:flex;flex-direction:column;gap:14px; }
+  .pickers-side-panel { border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.025);padding:14px; }
+  .pickers-side-panel-head { font-size:12px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(226,232,240,0.72); }
+  .pickers-side-panel-sub { margin:4px 0 10px;font-size:11px;color:rgba(148,163,184,0.55);line-height:1.5; }
+  .pickers-side-empty { font-size:12px;color:rgba(148,163,184,0.50);padding:6px 0; }
+  .toppick-row { display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer; }
+  .toppick-row:last-child { border-bottom:none; }
+  .toppick-row:hover .sym { text-decoration:underline; }
+  .toppick-badge { width:22px;height:22px;border-radius:6px;background:rgba(245,197,66,0.14);color:#f5c542;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:0 0 auto; }
+  .toppick-cats { font-size:11px;color:rgba(148,163,184,0.55);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+  .insight-row { display:block;text-decoration:none;color:inherit;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.05); }
+  .insight-row:last-of-type { border-bottom:none; }
+  .insight-tag { display:inline-block;font-size:10px;font-weight:700;letter-spacing:0.03em;color:#c084fc;background:rgba(192,132,252,0.12);border:1px solid rgba(192,132,252,0.28);padding:2px 6px;border-radius:5px;margin-bottom:5px; }
+  .insight-title { font-size:13px;font-weight:600;line-height:1.35;color:#e2e8f0; }
+  .insight-row:hover .insight-title { color:#67e8f9; }
+  .insight-meta { font-size:10.5px;color:rgba(148,163,184,0.50);margin-top:3px; }
+  .pickers-side-footer-link { display:block;text-align:right;margin-top:6px;font-size:11px;font-weight:600;color:#4ade80;text-decoration:none; }
+  @keyframes pickerRowHighlight {
+    0% { background:rgba(245,197,66,0); }
+    20% { background:rgba(245,197,66,0.18); }
+    100% { background:rgba(245,197,66,0); }
+  }
+  .picker-row.rowHighlight { animation:pickerRowHighlight 2.2s ease-out 1;border-radius:8px; }
+
   @media (max-width: 1100px) {
-    .pickers-sections-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
     .pattern-plays-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
     .pickers-filter-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+    .pickers-accordion-layout { grid-template-columns:1fr; }
+    .pickers-sidebar { position:static; }
   }
   @media (max-width: 820px) {
     .pickers-filter-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
@@ -608,7 +868,6 @@ export default function PickersClient() {
   }
   @media (max-width: 640px) {
     .pickers-screener-panel { display:none !important; }
-    .pickers-sections-grid { grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:8px; }
     .pattern-plays-grid { grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:8px; }
     .pickers-section-description { display:none; }
     .pickers-help-tip { width:18px !important;height:18px !important;font-size:10px !important; }
@@ -619,7 +878,6 @@ export default function PickersClient() {
     .pickers-see-all { width:100%;justify-content:center;padding:6px 10px;font-size:12px; }
   }
   @media (max-width: 400px) {
-    .pickers-sections-grid { grid-template-columns:minmax(0,1fr) !important; }
     .pattern-plays-grid { grid-template-columns:minmax(0,1fr) !important; }
   }
 `}</style>
@@ -669,6 +927,43 @@ export default function PickersClient() {
       <div className="pickers-shell" style={{ marginTop: loading || err ? 16 : 0, display: "grid", gap: 12, boxSizing: "border-box" }}>
         {!loading && !err && !customMode ? <PatternPlaysSection /> : null}
 
+        {!loading && !err && !customMode ? (
+          <section style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "12px 16px", background: "rgba(255,255,255,0.02)", boxSizing: "border-box" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#67e8f9", marginBottom: 6 }}>Search a ticker</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") setSearchSubmitted(searchQuery.trim().toUpperCase()); }}
+                placeholder="e.g. AAPL — see every list it qualifies for"
+                style={{ flex: 1, minWidth: 180, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 8, padding: "9px 12px", color: "#e2e8f0", fontSize: 13 }}
+              />
+              <button type="button" onClick={() => setSearchSubmitted(searchQuery.trim().toUpperCase())} style={{ padding: "9px 16px", borderRadius: 8, border: "1px solid rgba(34,197,94,0.28)", background: "rgba(34,197,94,0.10)", color: "#86efac", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>Search</button>
+            </div>
+            {searchResults != null ? (
+              <div style={{ marginTop: 10 }}>
+                {searchResults.length ? (
+                  <>
+                    <div style={{ fontSize: 12, opacity: 0.6, marginBottom: 6 }}><b>{searchSubmitted}</b> qualifies for {searchResults.length} {searchResults.length === 1 ? "list" : "lists"}:</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {searchResults.map((r) => (
+                        <button key={r.title} type="button" onClick={() => focusPick(r.title, searchSubmitted)} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.04)", color: "#e2e8f0", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+                          <span style={{ width: 6, height: 6, borderRadius: 999, background: toneDot(r.tone), flex: "0 0 auto" }} />
+                          {r.title}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{ marginTop: 6, fontSize: 10.5, opacity: 0.4 }}>Doesn&apos;t include Ascending/Descending Triangle or Bull Flag plays until those are expanded below.</div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: 12, opacity: 0.55 }}>No current picker lists match &ldquo;{searchSubmitted}&rdquo;.</div>
+                )}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
         {customMode ? (
           <section style={{ border: "1px solid rgba(255,255,255,0.10)", borderRadius: 12, padding: 14, background: "#0b1220", boxSizing: "border-box" }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline", flexWrap: "wrap", marginBottom: 12 }}>
@@ -701,79 +996,174 @@ export default function PickersClient() {
             )}
           </section>
         ) : (
-          <div className="pickers-sections-grid pickers-shell">
-            {displaySections.map((sec) => {
-              const isEarnings = sec.title.toLowerCase().includes("earnings");
-              const items = Array.isArray(sec.items)
-                ? sec.items.map((it) => {
-                    const symbol = String(it.symbol ?? "").trim().toUpperCase();
-                    const record = signalRecordMap.get(symbol);
-                    const checkCount = record ? matchedSignalsForRecord(record).length : 0;
-                    const isDynamic = dynamicSymbolSet.has(symbol);
-                    return { ...it, symbol, checkCount, isDynamic };
-                  }).slice(0, 4)
-                : [];
+          <div className="pickers-accordion-layout">
+            <div className="pickers-accordion">
+              {displaySections.map((sec) => {
+                const isEarnings = sec.title.toLowerCase().includes("earnings");
+                const isOpen = expandedSections.has(sec.title);
+                const items = Array.isArray(sec.items)
+                  ? sec.items.map((it) => {
+                      const symbol = String(it.symbol ?? "").trim().toUpperCase();
+                      const record = signalRecordMap.get(symbol);
+                      const checkCount = record ? matchedSignalsForRecord(record).length : 0;
+                      const isDynamic = dynamicSymbolSet.has(symbol);
+                      return { ...it, symbol, checkCount, isDynamic };
+                    })
+                  : [];
+                const seeAllHref = seeAllHrefFor(sec);
 
-              const seoHref = (() => {
-                const title = sec.title.toLowerCase();
-                if (title.includes("positive last earnings")) return "/stocks-with-positive-last-earnings";
-                if (title.includes("strong earnings growth")) return "/stocks-with-strong-earnings-growth";
-                if (title.includes("all-time high breakout")) return "/all-time-high-breakout-stocks";
-                if (title.includes("3-month high breakout")) return "/3-month-high-breakout-stocks";
-                if (title.includes("all-time highs")) return "/stocks-down-20-from-all-time-highs";
-                if (title.includes("macro") && title.includes("support") && title.includes("resistance")) return "/macro-support-resistance-stocks";
-                if (title.includes("buy signals")) return "/top-stocks-with-buy-signals";
-                if (title.includes("sell signals")) return "/top-stocks-with-sell-signals";
-                if (title.includes("oversold")) return "/oversold-stocks-today";
-                if (title.includes("overbought")) return "/overbought-stocks-today";
-                if (title.includes("best trend score")) return "/best-trend-score-stocks";
-                if (title.includes("divergence")) return "/bullish-bearish-divergence-stocks";
-                if (title.includes("200")) return "/stocks-near-200-day-moving-average";
-                return "";
-              })();
+                return (
+                  <div key={sec.title} className={isOpen ? "acc-item open" : "acc-item"}>
+                    <button type="button" className="acc-head" onClick={() => toggleSection(sec.title)}>
+                      <span className="acc-head-left">
+                        <span className="acc-icon" style={{ background: `${colorForTitle(sec.title)}1a` }}>
+                          <PatternIcon title={sec.title} />
+                        </span>
+                        <span className="acc-head-text">
+                          <span className="pickers-section-title">
+                            <span className="pickers-section-title-text">{sec.title}</span>
+                            <HelpTip text={getHeaderHelp(sec.title)} />
+                          </span>
+                          <span className="acc-count">{typeof sec.foundCount === "number" ? sec.foundCount : items.length} matches</span>
+                        </span>
+                      </span>
+                      <span className="acc-chevron">▶</span>
+                    </button>
 
-              return (
-                <section key={sec.title} style={{ borderRadius: 12, padding: "12px 14px", background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.08)", boxSizing: "border-box" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 6, alignItems: "center", marginBottom: 8 }}>
-                    <h2 className="pickers-section-title" style={{ margin: 0, display: "flex", alignItems: "center", gap: 5, flexWrap: "nowrap", flex: 1, minWidth: 0 }}>
-                      <span className="pickers-section-title-text">{sec.title}</span>
-                      <HelpTip text={getHeaderHelp(sec.title)} />
-                    </h2>
-                    <span style={{ fontSize: 10, opacity: 0.40, flex: "0 0 auto" }}>{typeof sec.foundCount === "number" ? sec.foundCount : items.length}</span>
-                  </div>
-
-                  <div>
-                    {items.map((it) => (
-                      <div key={it.symbol} className="picker-row">
-                        <div className="picker-row-left">
-                          <span style={{ width: 6, height: 6, borderRadius: 999, background: toneDot(it.tone), flex: "0 0 auto" }} />
-                          <a href={toChartHref(it.dashboardHref ?? "", it.symbol)} style={{ textDecoration: "none", minWidth: 0, flex: 1, overflow: "hidden" }}>
-                            <PickerRowContent symbol={it.symbol} note={it.note} companyName={companyNames.get(it.symbol)} />
-                          </a>
+                    {isOpen ? (
+                      <div className="acc-body">
+                        <div>
+                          {items.map((it) => {
+                            const rowKey = `${sec.title}::${it.symbol}`;
+                            return (
+                              <div
+                                key={it.symbol}
+                                className={highlightRowKey === rowKey ? "picker-row rowHighlight" : "picker-row"}
+                                ref={(el) => { if (el) rowRefs.current.set(rowKey, el); }}
+                              >
+                                <div className="picker-row-left">
+                                  <span style={{ width: 6, height: 6, borderRadius: 999, background: toneDot(it.tone), flex: "0 0 auto" }} />
+                                  <a href={toChartHref(it.dashboardHref ?? "", it.symbol)} style={{ textDecoration: "none", minWidth: 0, flex: 1, overflow: "hidden" }}>
+                                    <PickerRowContent symbol={it.symbol} note={it.note} companyName={companyNames.get(it.symbol)} />
+                                  </a>
+                                </div>
+                                <a href={toChartHref(it.dashboardHref ?? "", it.symbol)} className="picker-row-link">Chart ↗</a>
+                              </div>
+                            );
+                          })}
                         </div>
-                        <a href={toChartHref(it.dashboardHref ?? "", it.symbol)} className="picker-row-link">Chart ↗</a>
-                      </div>
-                    ))}
-                  </div>
 
-                  {(isEarnings || seoHref) ? (
-                    <div className="pickers-section-footer">
-                      <div className="pickers-section-footer-left">
-                        {isEarnings ? (
-                          <>
-                            <button type="button" className="pickers-earnings-fetch-button" onClick={handleFetchEarnings} disabled={earningsFetchBusy || earningsFetchRemainingSeconds > 0} style={{ display: "inline-flex", alignItems: "center", minHeight: 28, padding: "4px 10px", borderRadius: 7, border: "1px solid rgba(34,197,94,0.24)", background: "rgba(34,197,94,0.06)", color: "rgba(134,239,172,0.80)", fontSize: 11, fontWeight: 600, cursor: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? "not-allowed" : "pointer", opacity: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? 0.65 : 1, whiteSpace: "nowrap", flex: "0 0 auto" }}>
-                              {earningsFetchBusy ? "Fetching…" : earningsFetchRemainingSeconds > 0 ? `Fetch (${earningsFetchRemainingSeconds}s)` : "Fetch Earnings"}
-                            </button>
-                            {earningsFetchMessage ? <span style={{ fontSize: 11, opacity: 0.55, lineHeight: 1.4, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{earningsFetchMessage}</span> : null}
-                          </>
+                        {(isEarnings || seeAllHref) ? (
+                          <div className="pickers-section-footer">
+                            <div className="pickers-section-footer-left">
+                              {isEarnings ? (
+                                <>
+                                  <button type="button" className="pickers-earnings-fetch-button" onClick={handleFetchEarnings} disabled={earningsFetchBusy || earningsFetchRemainingSeconds > 0} style={{ display: "inline-flex", alignItems: "center", minHeight: 28, padding: "4px 10px", borderRadius: 7, border: "1px solid rgba(34,197,94,0.24)", background: "rgba(34,197,94,0.06)", color: "rgba(134,239,172,0.80)", fontSize: 11, fontWeight: 600, cursor: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? "not-allowed" : "pointer", opacity: earningsFetchBusy || earningsFetchRemainingSeconds > 0 ? 0.65 : 1, whiteSpace: "nowrap", flex: "0 0 auto" }}>
+                                    {earningsFetchBusy ? "Fetching…" : earningsFetchRemainingSeconds > 0 ? `Fetch (${earningsFetchRemainingSeconds}s)` : "Fetch Earnings"}
+                                  </button>
+                                  {earningsFetchMessage ? <span style={{ fontSize: 11, opacity: 0.55, lineHeight: 1.4, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{earningsFetchMessage}</span> : null}
+                                </>
+                              ) : null}
+                            </div>
+                            {seeAllHref ? <a href={seeAllHref} className="pickers-see-all">See all →</a> : null}
+                          </div>
                         ) : null}
                       </div>
-                      {seoHref ? <a href={seoHref} className="pickers-see-all">See all →</a> : null}
-                    </div>
-                  ) : null}
-                </section>
-              );
-            })}
+                    ) : null}
+                  </div>
+                );
+              })}
+
+              {LAZY_PLAY_CATEGORIES.map((cat) => {
+                const isOpen = expandedSections.has(cat.title);
+                const data = lazyPlayData[cat.id];
+                const isLoadingCat = lazyPlayLoading[cat.id];
+                const items = data?.items ?? [];
+
+                return (
+                  <div key={cat.id} className={isOpen ? "acc-item open" : "acc-item"}>
+                    <button type="button" className="acc-head" onClick={() => toggleSection(cat.title, cat)}>
+                      <span className="acc-head-left">
+                        <span className="acc-icon" style={{ background: `${colorForTitle(cat.title)}1a` }}>
+                          <PatternIcon title={cat.title} />
+                        </span>
+                        <span className="acc-head-text">
+                          <span className="pickers-section-title">
+                            <span className="pickers-section-title-text">{cat.title}</span>
+                            <HelpTip text="A chart-pattern screener, loaded on demand rather than on every pickers page load to avoid adding extra scan cost up front." />
+                          </span>
+                          <span className="acc-count">{data ? `${typeof data.foundCount === "number" ? data.foundCount : items.length} matches` : "tap to load"}</span>
+                        </span>
+                      </span>
+                      <span className="acc-chevron">▶</span>
+                    </button>
+
+                    {isOpen ? (
+                      <div className="acc-body">
+                        {isLoadingCat ? (
+                          <div style={{ padding: "12px 0", fontSize: 12, opacity: 0.6 }}>Scanning for {cat.title.toLowerCase()}…</div>
+                        ) : (
+                          <div>
+                            {items.map((it) => {
+                              const symbol = String(it.symbol ?? "").trim().toUpperCase();
+                              const rowKey = `${cat.title}::${symbol}`;
+                              return (
+                                <div
+                                  key={symbol}
+                                  className={highlightRowKey === rowKey ? "picker-row rowHighlight" : "picker-row"}
+                                  ref={(el) => { if (el) rowRefs.current.set(rowKey, el); }}
+                                >
+                                  <div className="picker-row-left">
+                                    <span style={{ width: 6, height: 6, borderRadius: 999, background: toneDot(it.tone), flex: "0 0 auto" }} />
+                                    <a href={toChartHref(it.dashboardHref ?? "", symbol)} style={{ textDecoration: "none", minWidth: 0, flex: 1, overflow: "hidden" }}>
+                                      <PickerRowContent symbol={symbol} note={it.note} companyName={companyNames.get(symbol)} />
+                                    </a>
+                                  </div>
+                                  <a href={toChartHref(it.dashboardHref ?? "", symbol)} className="picker-row-link">Chart ↗</a>
+                                </div>
+                              );
+                            })}
+                            {!items.length ? <div style={{ padding: "10px 0", fontSize: 12, opacity: 0.55 }}>No {cat.title.toLowerCase()} currently found.</div> : null}
+                          </div>
+                        )}
+                        <div className="pickers-section-footer">
+                          <div className="pickers-section-footer-left" />
+                          <a href={cat.seeAllHref} className="pickers-see-all">See all →</a>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+
+            <aside className="pickers-sidebar">
+              <div className="pickers-side-panel">
+                <div className="pickers-side-panel-head">Top Picks</div>
+                <p className="pickers-side-panel-sub">Stocks showing up on the most lists right now — worth a closer look.</p>
+                {topPicks.length ? topPicks.map((p) => (
+                  <div key={p.symbol} className="toppick-row" onClick={() => focusPick(p.titles[0], p.symbol)}>
+                    <span className="toppick-badge">{p.count}</span>
+                    <span style={{ minWidth: 0 }}>
+                      <span className="sym" style={{ display: "block" }}>{p.symbol}</span>
+                      <span className="toppick-cats">{p.titles.slice(0, 2).join(", ")}</span>
+                    </span>
+                  </div>
+                )) : <div className="pickers-side-empty">Not enough overlap between lists yet.</div>}
+              </div>
+
+              <div className="pickers-side-panel">
+                <div className="pickers-side-panel-head">From the Insights blog</div>
+                {latestInsights.length ? latestInsights.map((post) => (
+                  <Link key={post.slug} href={`/insights/${post.slug}`} className="insight-row">
+                    {post.symbol ? <span className="insight-tag">{post.symbol}</span> : null}
+                    <div className="insight-title">{post.title}</div>
+                    <div className="insight-meta">{new Date(post.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}</div>
+                  </Link>
+                )) : <div className="pickers-side-empty">No recent posts yet.</div>}
+                <Link href="/insights" className="pickers-side-footer-link">More reads →</Link>
+              </div>
+            </aside>
           </div>
         )}
 
