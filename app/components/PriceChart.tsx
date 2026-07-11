@@ -33,6 +33,7 @@ const CHART_COLORS = {
   volume: "rgba(96,165,250,0.34)",
   supportZone: "#22c55e",
   resistanceZone: "#ef4444",
+  referenceLine: "#facc15",
 };
 
 export type Overlay =
@@ -97,6 +98,12 @@ export type SupportResistanceZone = {
   label?: string;
 };
 
+export type ChartReferenceLine = {
+  price: number;
+  label?: string;
+  color?: string;
+};
+
 type Props = {
   symbol: string;
   data: Point[];
@@ -107,6 +114,7 @@ type Props = {
   selectedIndicators?: Overlay[];
   chartType?: ChartType;
   supportResistanceZones?: SupportResistanceZone[];
+  referenceLines?: ChartReferenceLine[];
 
   divergence?: DivResult | null;
 
@@ -140,6 +148,7 @@ export default function PriceChart(props: Props) {
     selectedIndicators = [],
     chartType = "line",
     supportResistanceZones = [],
+    referenceLines = [],
     divergence = null,
 
     bollUpper,
@@ -318,6 +327,10 @@ export default function PriceChart(props: Props) {
       }
     }
 
+    for (const line of referenceLines) {
+      if (typeof line.price === "number" && Number.isFinite(line.price)) vals.push(line.price);
+    }
+
     const minV = Math.min(...vals);
     const maxV = Math.max(...vals);
     const r = Math.max(1e-9, maxV - minV);
@@ -334,6 +347,7 @@ export default function PriceChart(props: Props) {
     showVWMA20,
     showSupportResistance,
     supportResistanceZones,
+    referenceLines,
     chartType,
   ]);
 
@@ -590,6 +604,40 @@ export default function PriceChart(props: Props) {
               );
             })
           : null}
+
+        {referenceLines.map((line, idx) => {
+          if (typeof line.price !== "number" || !Number.isFinite(line.price)) return null;
+
+          const y = yMain(line.price);
+          const color = line.color ?? CHART_COLORS.referenceLine;
+          const label = line.label ?? fmtMoney(line.price);
+
+          return (
+            <g key={`ref-line-${idx}`}>
+              <line
+                x1={padL}
+                y1={y}
+                x2={width - padR}
+                y2={y}
+                stroke={color}
+                strokeWidth="1.6"
+                strokeDasharray="5 4"
+                opacity="0.9"
+              />
+              <text
+                x={width - padR - 6}
+                y={Math.max(padT + 13, y - 6)}
+                fontSize="11"
+                fill={color}
+                fontWeight="800"
+                opacity="0.95"
+                textAnchor="end"
+              >
+                {label}
+              </text>
+            </g>
+          );
+        })}
 
         {xTicks.map((t, idx) => (
           <g key={idx}>
