@@ -4,11 +4,9 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 type DiscoveryData = {
-  bottleneck: { name: string; ticker: string | null; count: number } | null;
-  insight: { title: string; slug: string; symbol: string | null; date: string } | null;
-  news: { symbol: string; scoreLabel: string; headline: string | null } | null;
-  pickers: { count: number };
-  earnings: { symbol: string };
+  insight: { slug: string; symbol: string | null } | null;
+  newsSymbol: string | null;
+  earningsSymbol: string;
 };
 
 type Tile = {
@@ -20,74 +18,79 @@ type Tile = {
   accent: string;
 };
 
+// Tile copy is fixed, one-line taglines rather than live-data snippets --
+// this keeps the row catchy and consistent every day instead of wrapping
+// oddly depending on what a headline or post title happens to be. Links
+// still route to genuinely fresh content (today's latest insight, today's
+// resolved earnings symbol) via /api/discovery-strip once it resolves;
+// until then each tile falls back to its section index.
+//
 // Accent colors are pulled from hues already established elsewhere on the
 // site (amber = company/overview badges, green = Pickers links, blue =
-// Insights links) rather than inventing new ones per tile. AI News and
-// Earnings don't have an existing color anchor, so they stay neutral slate
-// instead of getting an arbitrary new hue — the icon + label already
-// differentiate them.
+// Insights links). News and Earnings don't have an existing color anchor,
+// so they stay neutral slate instead of getting an arbitrary new hue.
 const NEUTRAL_ACCENT = "#8b95a7";
 
-function buildTiles(data: DiscoveryData | null): Tile[] {
-  const bottleneck = data?.bottleneck ?? null;
-  const insight = data?.insight ?? null;
-  const news = data?.news ?? null;
-  const pickersCount = data?.pickers?.count ?? 17;
-  const earningsSymbol = data?.earnings?.symbol ?? "AAPL";
+const TILE_DEFS: Array<Omit<Tile, "href"> & { defaultHref: string }> = [
+  {
+    key: "bottlenecks",
+    icon: "⛓️",
+    label: "Bottlenecks",
+    text: "Where the market's choke points hide",
+    accent: "#f5a524",
+    defaultHref: "/bottlenecks",
+  },
+  {
+    key: "pickers",
+    icon: "🔎",
+    label: "Pickers",
+    text: "Today's screened setups & breakouts",
+    accent: "#16c784",
+    defaultHref: "/pickers",
+  },
+  {
+    key: "insights",
+    icon: "💡",
+    label: "Insights",
+    text: "Fresh chart breakdowns, daily",
+    accent: "#2f6bff",
+    defaultHref: "/insights",
+  },
+  {
+    key: "news",
+    icon: "🧠",
+    label: "News",
+    text: "Headlines — uniquely scored & explained",
+    accent: NEUTRAL_ACCENT,
+    defaultHref: "/stock/SPY/news",
+  },
+  {
+    key: "earnings",
+    icon: "📅",
+    label: "Earnings",
+    text: "Beat, miss & surprise % — decoded",
+    accent: NEUTRAL_ACCENT,
+    defaultHref: "/stock/AAPL/earnings",
+  },
+];
 
-  return [
-    {
-      key: "bottlenecks",
-      icon: "⛓️",
-      label: "Bottlenecks",
-      text: bottleneck
-        ? `${bottleneck.name}${bottleneck.ticker ? ` (${bottleneck.ticker})` : ""} — today's top dependency, ${bottleneck.count}× across our coverage.`
-        : "Every stock's supplier & customer dependencies, mapped.",
-      href: "/bottlenecks",
-      accent: "#f5a524",
-    },
-    {
-      key: "pickers",
-      icon: "🔎",
-      label: "Pickers",
-      text: `${pickersCount} screened setups — breakouts, divergence, 200-day MA & more.`,
-      href: "/pickers",
-      accent: "#16c784",
-    },
-    {
-      key: "insights",
-      icon: "💡",
-      label: "Insights",
-      text: insight
-        ? `${insight.symbol ? `${insight.symbol}: ` : ""}${insight.title}`
-        : "Daily chart write-ups and trade ideas.",
-      href: insight ? `/insights/${insight.slug}` : "/insights",
-      accent: "#2f6bff",
-    },
-    {
-      key: "news",
-      icon: "🧠",
-      label: "AI News",
-      text: news
-        ? `${news.symbol} headlines: ${news.scoreLabel}`
-        : "AI-scored headlines for any ticker.",
-      href: news ? `/stock/${encodeURIComponent(news.symbol)}/news` : "/stock/SPY/news",
-      accent: NEUTRAL_ACCENT,
-    },
-    {
-      key: "earnings",
-      icon: "📅",
-      label: "Earnings",
-      text: `Beat/miss history & surprise % for ${earningsSymbol}.`,
-      href: `/stock/${encodeURIComponent(earningsSymbol)}/earnings`,
-      accent: NEUTRAL_ACCENT,
-    },
-  ];
+function resolveHref(key: string, defaultHref: string, data: DiscoveryData | null): string {
+  switch (key) {
+    case "insights":
+      return data?.insight ? `/insights/${data.insight.slug}` : defaultHref;
+    case "news":
+      return data?.newsSymbol ? `/stock/${encodeURIComponent(data.newsSymbol)}/news` : defaultHref;
+    case "earnings":
+      return data?.earningsSymbol
+        ? `/stock/${encodeURIComponent(data.earningsSymbol)}/earnings`
+        : defaultHref;
+    default:
+      return defaultHref;
+  }
 }
 
 export default function DiscoveryStrip() {
   const [data, setData] = useState<DiscoveryData | null>(null);
-  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,9 +102,6 @@ export default function DiscoveryStrip() {
       })
       .catch(() => {
         if (!cancelled) setData(null);
-      })
-      .finally(() => {
-        if (!cancelled) setLoaded(true);
       });
 
     return () => {
@@ -109,7 +109,10 @@ export default function DiscoveryStrip() {
     };
   }, []);
 
-  const tiles = buildTiles(data);
+  const tiles: Tile[] = TILE_DEFS.map(({ defaultHref, ...tile }) => ({
+    ...tile,
+    href: resolveHref(tile.key, defaultHref, data),
+  }));
 
   return (
     <section style={{ margin: "4px 0 18px" }}>
@@ -151,7 +154,6 @@ export default function DiscoveryStrip() {
               textDecoration: "none",
               color: "#eaf0fa",
               transition: "transform 120ms ease, filter 120ms ease",
-              opacity: loaded ? 1 : 0.6,
               minWidth: 0,
               boxSizing: "border-box",
             }}
@@ -175,10 +177,6 @@ export default function DiscoveryStrip() {
                 fontSize: 12.5,
                 lineHeight: 1.5,
                 color: "#c7d0de",
-                display: "-webkit-box",
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: "vertical",
-                overflow: "hidden",
               }}
             >
               {tile.text}
