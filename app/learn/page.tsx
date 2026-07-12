@@ -2,6 +2,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { lessonsByCategory } from "./lessons";
+import LearnShell from "./LearnShell";
 
 export const metadata: Metadata = {
   title: "Learn Stock Charts & Trading Basics",
@@ -27,42 +28,13 @@ export const metadata: Metadata = {
 };
 
 
-function siteNavCss(wrapMaxWidth: number) {
-  return `
-    .wrap {
-      max-width: ${wrapMaxWidth}px;
-      margin: 0 auto;
-      padding: 24px;
-    }
-
-    a:hover {
-      filter: brightness(1.05);
-    }
-
-    @media (max-width: 760px) {
-      .wrap {
-        padding: 16px !important;
-      }
-    }
-  `;
-}
-
 export default function LearnPage() {
   const basics = lessonsByCategory("Basics");
   const indicators = lessonsByCategory("Indicators");
   const divergencies = lessonsByCategory("Divergencies");
 
   return (
-    <main
-      style={{
-        padding: 0,
-        fontFamily: "system-ui, Arial",
-        background: "#06080d",
-        color: "#f1f5f9",
-        minHeight: "100vh",
-      }}
-    >
-      <div className="wrap">
+    <LearnShell>
         <div style={{ display: "grid", gap: 12 }}>
           <div style={{ minWidth: 0 }}>
             <div
@@ -270,18 +242,11 @@ export default function LearnPage() {
             </div>
           </section>
         </div>
-      </div>
-
-      <style>{siteNavCss(980)}</style>
-    </main>
+    </LearnShell>
   );
 }
 
 function learnCardHref(slug: string) {
-  if (slug === "macd-divergence") return "/learn/macd";
-  if (slug === "rsi-divergence") return "/learn/rsi";
-  if (slug === "how-to-identify-stock-trends")
-    return "/learn/how-to-identify-stock-trends";
   return `/learn/${encodeURIComponent(slug)}`;
 }
 
