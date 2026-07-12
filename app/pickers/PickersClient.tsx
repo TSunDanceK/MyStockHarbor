@@ -466,6 +466,27 @@ export default function PickersClient({ latestInsights = [] }: { latestInsights?
   const [searchQuery, setSearchQuery] = useState("");
   const [searchSubmitted, setSearchSubmitted] = useState("");
 
+  // Header "Build Screener" dropdown link deep-links to /pickers#custom-screener --
+  // once the results have loaded, scroll the custom screener panel into view and
+  // give it a brief glow so the user's eye lands on it without staying lit forever.
+  const [screenerHighlight, setScreenerHighlight] = useState(false);
+  const screenerPanelRef = React.useRef<HTMLElement | null>(null);
+  const screenerHashHandledRef = React.useRef(false);
+
+  useEffect(() => {
+    if (loading) return;
+    if (screenerHashHandledRef.current) return;
+    if (typeof window === "undefined") return;
+    if (window.location.hash !== "#custom-screener") return;
+    screenerHashHandledRef.current = true;
+
+    window.setTimeout(() => {
+      screenerPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setScreenerHighlight(true);
+      window.setTimeout(() => setScreenerHighlight(false), 2700);
+    }, 80);
+  }, [loading]);
+
   const EARNINGS_FETCH_LOCK_MS = 90 * 1000;
   void earningsFetchTick;
   const earningsFetchRemainingSeconds = Math.max(0, Math.ceil((earningsFetchLockedUntil - Date.now()) / 1000));
@@ -838,6 +859,13 @@ export default function PickersClient({ latestInsights = [] }: { latestInsights?
   .pickers-screener-panel { display:block; }
   .pickers-earnings-fetch-button:hover:not(:disabled) { filter:brightness(1.08);transform:translateY(-1px); }
 
+  @keyframes screenerHighlightGlow {
+    0% { box-shadow:0 0 0 0 rgba(59,130,246,0);border-color:rgba(255,255,255,0.08); }
+    15% { box-shadow:0 0 0 4px rgba(59,130,246,0.30),0 0 26px rgba(59,130,246,0.45);border-color:rgba(96,165,250,0.65); }
+    100% { box-shadow:0 0 0 0 rgba(59,130,246,0);border-color:rgba(255,255,255,0.08); }
+  }
+  .pickers-screener-panel.screenerHighlightPulse { animation:screenerHighlightGlow 2.6s ease-out 1; }
+
   /* Accordion + sidebar (replaces the old fixed 3-col card grid) */
   .pickers-accordion-layout { display:grid;grid-template-columns:2.15fr 1fr;gap:18px;align-items:start; }
   .pickers-accordion { display:flex;flex-direction:column;gap:8px;min-width:0; }
@@ -914,7 +942,12 @@ export default function PickersClient({ latestInsights = [] }: { latestInsights?
       {err ? <div style={{ border: "1px solid rgba(239,68,68,0.18)", borderRadius: 12, padding: 14, background: "rgba(239,68,68,0.06)", color: "#fecaca", fontSize: 14 }}>{err}</div> : null}
 
       {!loading && !err ? (
-        <section className="pickers-screener-panel" style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "12px 16px", background: "rgba(255,255,255,0.02)", marginBottom: 14, boxSizing: "border-box" }}>
+        <section
+          id="custom-screener"
+          ref={screenerPanelRef}
+          className={`pickers-screener-panel${screenerHighlight ? " screenerHighlightPulse" : ""}`}
+          style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "12px 16px", background: "rgba(255,255,255,0.02)", marginBottom: 14, boxSizing: "border-box" }}
+        >
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
             <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: "#e2e8f0" }}>Custom Screener</span>
