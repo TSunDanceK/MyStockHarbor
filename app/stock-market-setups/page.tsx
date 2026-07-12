@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import LearnShell from "@/app/learn/LearnShell";
 import GuideJsonLd from "@/app/components/GuideJsonLd";
 
 const TITLE = "Stock Market Setups Explained";
@@ -41,8 +42,7 @@ export default function StockMarketSetupsPage() {
   return (
     <>
       <GuideJsonLd path={PATH} title={TITLE} description={DESC} />
-      <main style={{ minHeight: "100vh", background: "#06080d", color: "#f1f5f9", fontFamily: "system-ui, Arial" }}>
-        <div className="wrap">
+      <LearnShell activeHref="/stock-market-setups">
           <div style={{ maxWidth: 760 }}>
             <div style={{ display: "inline-flex", alignItems: "center", padding: "7px 12px", borderRadius: 999, background: "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.12))", border: "1px solid rgba(239,68,68,0.34)", color: "#fee2e2", fontWeight: 950, letterSpacing: "0.08em", fontSize: 12 }}>TRADING SETUPS</div>
             <h1 style={{ margin: "14px 0 0 0", fontSize: 42, lineHeight: 1.08, letterSpacing: "-0.6px" }}>Common Stock Market Setups</h1>
@@ -74,9 +74,7 @@ export default function StockMarketSetupsPage() {
               <Link href="/pickers" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "11px 15px", borderRadius: 12, border: "1px solid rgba(239,68,68,0.38)", background: "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.10))", color: "#fef2f2", textDecoration: "none", fontWeight: 900 }}>Find Your Next Stock →</Link>
             </div>
           </section>
-        </div>
-        <style>{`.wrap { max-width: 1000px; margin: 0 auto; padding: 28px 20px 40px; } a:hover { filter: brightness(1.05); transform: translateY(-1px); } @media (max-width: 760px) { .wrap { padding: 18px 16px 34px !important; } }`}</style>
-      </main>
+        </LearnShell>
     </>
   );
 }
