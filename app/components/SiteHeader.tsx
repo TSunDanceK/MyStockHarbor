@@ -462,7 +462,10 @@ export default function SiteHeader() {
       {
         kind: "dropdown",
         label: "News",
-        isActive: (path) => /^\/stock\/[^/]+\/news$/.test(path) || path === "/upcoming-ipos",
+        isActive: (path) =>
+          /^\/stock\/[^/]+\/news$/.test(path) ||
+          path === "/upcoming-ipos" ||
+          path === "/headlines",
         sections: [
           {
             items: [
@@ -476,6 +479,11 @@ export default function SiteHeader() {
                 label: "Upcoming IPO's",
                 href: "/upcoming-ipos",
                 isActive: (path) => path === "/upcoming-ipos",
+              },
+              {
+                label: "Headlines",
+                href: "/headlines",
+                isActive: (path) => path === "/headlines",
               },
             ],
           },
