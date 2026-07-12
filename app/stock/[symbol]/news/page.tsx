@@ -34,6 +34,10 @@ type NewsItem = {
   pubDate: string | null;
   source: string | null;
   description: string | null;
+  // FMP stock-news items usually include a thumbnail image; the Google
+  // News RSS fallback in lib/stock-news-data.ts does not, so this can be
+  // null/undefined and rendering below must handle that gracefully.
+  image?: string | null;
 };
 
 type ScoreTone = "green" | "yellow" | "red";
@@ -143,61 +147,6 @@ type FmpEarningsCalendarItem = {
   revenueEstimated?: number | string | null;
 };
 
-function decodeHtml(value: string) {
-  return value
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
-}
-
-function cleanRssDescription(value: string | null) {
-  if (!value) return null;
-
-  const cleaned = decodeHtml(
-    value
-      .replace(/<!\[CDATA\[(.*?)\]\]>/g, "$1")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\s+/g, " ")
-      .trim(),
-  );
-
-  return cleaned || null;
-}
-
-function parseRss(xml: string): NewsItem[] {
-  const items: NewsItem[] = [];
-  const blocks = xml.split("<item>").slice(1);
-
-  for (const block of blocks) {
-    const title =
-      block.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1] ??
-      block.match(/<title>(.*?)<\/title>/)?.[1] ??
-      "";
-
-    const link = block.match(/<link>(.*?)<\/link>/)?.[1] ?? "";
-    const pubDate = block.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] ?? null;
-    const source = block.match(/<source[^>]*>(.*?)<\/source>/)?.[1] ?? null;
-    const description =
-      block.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/)?.[1] ??
-      block.match(/<description>(.*?)<\/description>/)?.[1] ??
-      null;
-
-    if (title && link) {
-      items.push({
-        title: decodeHtml(title.replace(/\s+-\s+Google News$/i, "").trim()),
-        link: link.trim(),
-        pubDate,
-        source: source ? decodeHtml(source.trim()) : null,
-        description: cleanRssDescription(description),
-      });
-    }
-  }
-
-  return items;
-}
-
 async function fetchQuote(symbol: string): Promise<Quote | null> {
   const stooqSymbol = `${symbol.toLowerCase()}.us`;
   const url = `https://stooq.com/q/l/?s=${stooqSymbol}&f=sd2t2l&h&e=csv`;
@@ -298,31 +247,6 @@ async function fetchCompanyName(symbol: string): Promise<string> {
   }
 }
 
-async function fetchNews(
-  symbol: string,
-  companyName: string,
-): Promise<NewsItem[]> {
-  const baseQuery = companyName
-    ? `${companyName} ${symbol} stock`
-    : `${symbol} stock`;
-  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(
-    baseQuery,
-  )}&hl=en-GB&gl=GB&ceid=GB:en`;
-
-  try {
-    const res = await fetch(url, {
-      next: { revalidate: 1800 },
-    });
-
-    if (!res.ok) return [];
-
-    const xml = await res.text();
-    return parseRss(xml).slice(0, 8);
-  } catch {
-    return [];
-  }
-}
-
 function movingAverage(values: number[], window: number): (number | null)[] {
   const out: (number | null)[] = Array(values.length).fill(null);
   let sum = 0;
@@ -410,11 +334,11 @@ function trendLabel(
 function formatMoney(value: number | null) {
   return typeof value === "number" && Number.isFinite(value)
     ? `$${value.toFixed(2)}`
-    : "\u2014";
+    : "—";
 }
 
 function formatPercent(value: number | null, digits = 1) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "\u2014";
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
   return `${value > 0 ? "+" : ""}${value.toFixed(digits)}%`;
 }
 
@@ -431,7 +355,7 @@ function formatDate(value: string | null) {
 }
 
 function formatLargeMoney(value: number | null) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "\u2014";
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
 
   const abs = Math.abs(value);
   const sign = value < 0 ? "-" : "";
@@ -446,7 +370,7 @@ function formatLargeMoney(value: number | null) {
 }
 
 function formatPlainDate(value: string | null) {
-  if (!value) return "\u2014";
+  if (!value) return "—";
   const date = new Date(`${value}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) return value;
 
@@ -1398,7 +1322,7 @@ function buildTechnicalRead(args: {
 
 function getArticleSnippet(item: NewsItem, symbol: string) {
   const text = item.description?.replace(/\s+/g, " ").trim();
-  if (text && text.length >= 40) return text.length > 520 ? `${text.slice(0, 520).trim()}\u2026` : text;
+  if (text && text.length >= 40) return text.length > 520 ? `${text.slice(0, 520).trim()}…` : text;
   return `${item.title} is one of the latest ${symbol} headlines from ${compactSource(item.source)}. Use the full article link for the complete source context.`;
 }
 
@@ -1443,7 +1367,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const seed = computeIndicatorSeed(points, "", price, date);
 
-  const priceStr = seed.lastClose != null ? ` \u2014 Price $${seed.lastClose.toFixed(2)}` : "";
+  const priceStr = seed.lastClose != null ? ` — Price $${seed.lastClose.toFixed(2)}` : "";
   const trendStr = seed.trend ? `, ${seed.trend}` : "";
 
   const title = `${upper} Stock News${priceStr} | MyStockHarbor`;
@@ -1492,6 +1416,11 @@ async function DetailedNewsAiSection({
             const hasAi = !!aiBrief?.summary?.trim() && !!aiBrief?.whyItMatters?.trim();
             return (
               <article key={`${item.link}-${index}`} style={{ ...newsLeadCardStyle, borderLeft: index === 0 ? "3px solid rgba(59,130,246,0.75)" : "3px solid rgba(255,255,255,0.08)" }}>
+                {item.image ? (
+                  <div style={newsThumbWrapStyle}>
+                    <img src={item.image} alt="" loading="lazy" style={newsThumbImgStyle} />
+                  </div>
+                ) : null}
                 <div style={newsMetaRowStyle}>
                   <span style={newsSourcePillStyle}>{compactSource(item.source)}</span>
                   <span style={newsDateStyle}>{formatDate(item.pubDate)}</span>
@@ -1504,7 +1433,7 @@ async function DetailedNewsAiSection({
                 </div>
                 <div style={{ ...sourceFooterStyle, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                   <span>Article excerpt provided by the FMP news feed. AI is used only for the short investor read above.</span>
-                  <a href={item.link} target="_blank" rel="noopener noreferrer" style={readArticleLinkStyle}>Read full article \u2197</a>
+                  <a href={item.link} target="_blank" rel="noopener noreferrer" style={readArticleLinkStyle}>Read full article ↗</a>
                 </div>
               </article>
             );
@@ -1522,14 +1451,17 @@ async function DetailedNewsAiSection({
           <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
             {compactNews.map((item, index) => (
               <article key={`${item.link}-compact-${index}`} className="compactNewsRow" style={compactNewsRowStyle}>
-                <div style={{ minWidth: 88 }}>
+                {item.image ? (
+                  <img src={item.image} alt="" loading="lazy" style={compactThumbStyle} />
+                ) : null}
+                <div style={{ minWidth: 88, flexShrink: 0 }}>
                   <div style={compactSourceStyle}>{compactSource(item.source)}</div>
                   <div style={compactDateStyle}>{formatDate(item.pubDate)}</div>
                 </div>
-                <div style={{ minWidth: 0 }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={compactHeadlineStyle}>{item.title}</div>
                 </div>
-                <a href={item.link} target="_blank" rel="noopener noreferrer" style={compactMutedLinkStyle}>Read \u2197</a>
+                <a href={item.link} target="_blank" rel="noopener noreferrer" style={compactMutedLinkStyle}>Read ↗</a>
               </article>
             ))}
           </div>
@@ -1615,6 +1547,11 @@ function DetailedNewsFallback({ symbol, detailedNews, compactNews }: { symbol: s
         {detailedNews.length ? (
           detailedNews.map((item, index) => (
             <article key={`${item.link}-${index}`} style={{ ...newsLeadCardStyle, borderLeft: index === 0 ? "3px solid rgba(59,130,246,0.75)" : "3px solid rgba(255,255,255,0.08)" }}>
+              {item.image ? (
+                <div style={newsThumbWrapStyle}>
+                  <img src={item.image} alt="" loading="lazy" style={newsThumbImgStyle} />
+                </div>
+              ) : null}
               <div style={newsMetaRowStyle}>
                 <span style={newsSourcePillStyle}>{compactSource(item.source)}</span>
                 <span style={newsDateStyle}>{formatDate(item.pubDate)}</span>
@@ -1627,7 +1564,7 @@ function DetailedNewsFallback({ symbol, detailedNews, compactNews }: { symbol: s
               </div>
               <div style={{ ...sourceFooterStyle, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                 <span>Article excerpt provided by the FMP news feed.</span>
-                <a href={item.link} target="_blank" rel="noopener noreferrer" style={readArticleLinkStyle}>Read full article \u2197</a>
+                <a href={item.link} target="_blank" rel="noopener noreferrer" style={readArticleLinkStyle}>Read full article ↗</a>
               </div>
             </article>
           ))
@@ -1644,14 +1581,17 @@ function DetailedNewsFallback({ symbol, detailedNews, compactNews }: { symbol: s
           <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
             {compactNews.map((item, index) => (
               <article key={`${item.link}-compact-${index}`} className="compactNewsRow" style={compactNewsRowStyle}>
-                <div style={{ minWidth: 88 }}>
+                {item.image ? (
+                  <img src={item.image} alt="" loading="lazy" style={compactThumbStyle} />
+                ) : null}
+                <div style={{ minWidth: 88, flexShrink: 0 }}>
                   <div style={compactSourceStyle}>{compactSource(item.source)}</div>
                   <div style={compactDateStyle}>{formatDate(item.pubDate)}</div>
                 </div>
-                <div style={{ minWidth: 0 }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={compactHeadlineStyle}>{item.title}</div>
                 </div>
-                <a href={item.link} target="_blank" rel="noopener noreferrer" style={compactMutedLinkStyle}>Read \u2197</a>
+                <a href={item.link} target="_blank" rel="noopener noreferrer" style={compactMutedLinkStyle}>Read ↗</a>
               </article>
             ))}
           </div>
@@ -1718,6 +1658,9 @@ function EarningsNewsSection({ symbol, earningsNews, latestEarnings }: { symbol:
           earningsNews.slice(0, 2).map((item, index) => (
             <a key={`${item.link}-${index}`} href={item.link} target="_blank" rel="noopener noreferrer" style={earningsNewsRowStyle}>
               <div style={earningsNewsNumberStyle}>{index + 1}</div>
+              {item.image ? (
+                <img src={item.image} alt="" loading="lazy" style={earningsThumbStyle} />
+              ) : null}
               <div style={{ minWidth: 0 }}>
                 <div style={newsMetaRowStyle}>
                   <span style={newsSourcePillStyle}>{compactSource(item.source)}</span>
@@ -1772,7 +1715,7 @@ function LatestEarningsCard({ earnings, symbol }: { earnings: LatestEarningsData
             <EarningsMetric label="Gross margin" value={formatPercent(earnings.grossMargin, 1)} />
             <EarningsMetric label="Operating margin" value={formatPercent(earnings.operatingMargin, 1)} />
             <EarningsMetric label="Net income" value={formatLargeMoney(earnings.netIncome)} />
-            <Link href={`/stock/${encodeURIComponent(symbol)}/earnings`} style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 82, borderRadius: 14, border: "1px solid rgba(59,130,246,0.32)", background: "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(15,23,42,0.30))", color: "#dbeafe", textDecoration: "none", fontSize: 13, fontWeight: 950, letterSpacing: "0.02em", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035)" }}>See full report \u2192</Link>
+            <Link href={`/stock/${encodeURIComponent(symbol)}/earnings`} style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 82, borderRadius: 14, border: "1px solid rgba(59,130,246,0.32)", background: "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(15,23,42,0.30))", color: "#dbeafe", textDecoration: "none", fontSize: 13, fontWeight: 950, letterSpacing: "0.02em", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035)" }}>See full report →</Link>
           </div>
           {earnings.recentReports.length ? (
             <div style={earningsTrendBoxStyle}>
@@ -1812,7 +1755,7 @@ function EarningsMetric({ label, value, meta, tone }: { label: string; value: st
     <div style={earningsMetricStyle(tone)}>
       <div style={earningsMiniLabelStyle}>{label}</div>
       <div style={earningsMetricValueStyle}>{value}</div>
-      {meta && meta !== "\u2014" ? <div style={earningsMetricMetaStyle(tone)}>{meta}</div> : null}
+      {meta && meta !== "—" ? <div style={earningsMetricMetaStyle(tone)}>{meta}</div> : null}
     </div>
   );
 }
@@ -1888,7 +1831,7 @@ export default async function StockNewsPage({ params }: Props) {
         <PageShareBar
           url={`https://www.mystockharbor.com/stock/${upper}/news`}
           title={`${upper} Stock News & Analysis | MyStockHarbor`}
-          text={`${upper} stock news \u2014 headline sentiment, earnings context & chart analysis \uD83D\uDCCA MyStockHarbor`}
+          text={`${upper} stock news — headline sentiment, earnings context & chart analysis 📊 MyStockHarbor`}
         />
 
         <section className="newsHeroShell" style={heroShellStyle}>
@@ -1903,7 +1846,7 @@ export default async function StockNewsPage({ params }: Props) {
             </div>
             <StockNewsTickerJump currentSymbol={upper} />
             <div className="newsHeroCtaRow" style={heroCtaRowStyle}>
-              <a href={`/api/go/tradingview?symbol=${encodeURIComponent(upper)}`} target="_blank" rel="noopener noreferrer sponsored nofollow" className="newsHeroBtn" style={heroPrimaryCtaStyle}>OPEN ON TRADINGVIEW \u2197</a>
+              <a href={`/api/go/tradingview?symbol=${encodeURIComponent(upper)}`} target="_blank" rel="noopener noreferrer sponsored nofollow" className="newsHeroBtn" style={heroPrimaryCtaStyle}>OPEN ON TRADINGVIEW ↗</a>
               <Link href="/platforms" className="newsHeroBtn" style={heroSecondaryCtaStyle}>TRADE THIS STOCK</Link>
             </div>
             <div className="newsHeroSubCopy" style={heroSubCopyStyle}>Full chart, indicators and drawing tools on TradingView. Move to Platforms when you are ready to act.</div>
@@ -1957,193 +1900,3 @@ export default async function StockNewsPage({ params }: Props) {
               <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
                 <div style={signalBoxStyle("green")}>
                   <div style={signalBoxTitleStyle}>Positive drivers</div>
-                  {newsScore.positives.length ? newsScore.positives.map((item) => (<div key={item} style={signalBoxItemStyle}>{item}</div>)) : <div style={signalBoxEmptyStyle}>No strong positive driver stood out in the latest higher-value headlines.</div>}
-                </div>
-                <div style={signalBoxStyle("red")}>
-                  <div style={signalBoxTitleStyle}>Negative drivers</div>
-                  {newsScore.negatives.length ? newsScore.negatives.map((item) => (<div key={item} style={signalBoxItemStyle}>{item}</div>)) : <div style={signalBoxEmptyStyle}>No strong negative driver stood out in the latest higher-value headlines.</div>}
-                </div>
-              </div>
-            </section>
-            <LatestEarningsCard earnings={latestEarnings} symbol={upper} />
-            <Suspense fallback={<GoingForwardFallbackCard />}>
-              <GoingForwardAiCard aiData={aiData} symbol={upper} companyName={companyName} trend={trend} newsScore={newsScore} earningsScore={earningsScore} lastRsi={lastRsi} priceVs50={priceVs50} priceVs200={priceVs200} recentHigh={recentHigh} recentLow={recentLow} detailedNews={detailedNews} fallbackWhatItMeans={whatItMeans} />
-            </Suspense>
-            <section style={sidebarCardStyle}>
-              <div style={sectionEyebrowStyle}>Chart context</div>
-              <h2 style={sectionTitleSmallStyle}>Technical Picture</h2>
-              <div style={{ display: "grid", gap: 14, marginTop: 14 }}>
-                <p style={bodyCopyStyle}>{technicalRead.trendText}</p>
-                <p style={bodyCopyStyle}>{technicalRead.momentumText}</p>
-                <p style={bodyCopyStyle}>{technicalRead.levelText}</p>
-              </div>
-            </section>
-          </aside>
-        </section>
-
-        <section className="newsBottomStrip" style={bottomStripStyle}>
-          <div>
-            <div style={bottomStripTitleStyle}>Continue your {upper} research</div>
-            <div style={bottomStripTextStyle}>Use the stock analysis page for a fuller technical read, open TradingView for charting, or head to Platforms when you are ready to place a trade.</div>
-          </div>
-          <div className="newsBottomActions" style={bottomStripActionsStyle}>
-            <Link href={`/stock/${encodeURIComponent(upper)}`} style={bottomActionStyle("blue")}>Stock Analysis</Link>
-            <a href={`/api/go/tradingview?symbol=${encodeURIComponent(upper)}`} target="_blank" rel="noopener noreferrer sponsored nofollow" style={bottomActionStyle("green")}>OPEN ON TRADINGVIEW \u2197</a>
-            <Link href="/platforms" style={bottomActionStyle("red")}>TRADE THIS STOCK</Link>
-          </div>
-        </section>
-      </div>
-
-      <style>{`
-        .newsWrap { max-width: 1240px; margin: 0 auto; padding: 24px 40px 42px; }
-        .newsGrid { display: grid; grid-template-columns: minmax(0, 1.22fr) minmax(320px, 0.78fr); gap: 22px; margin-top: 22px; align-items: start; }
-        .newsHeroShell { display: grid; grid-template-columns: minmax(0, 1.24fr) minmax(280px, 0.76fr); gap: 18px; }
-        .newsHeroTitle { margin: 14px 0 0 0; max-width: 760px; word-break: break-word; }
-        .newsHeroLead { margin: 14px 0 0 0; max-width: 780px; }
-        .newsHeroMetricRow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
-        .newsHeroCtaRow { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
-        .newsBottomStrip { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: center; }
-        .compactNewsRow { display: grid; grid-template-columns: 88px minmax(0, 1fr) 120px; gap: 12px; align-items: start; }
-        @media (max-width: 1180px) { .newsWrap { padding: 22px 24px 38px; } .newsHeroShell { grid-template-columns: 1fr !important; } .newsGrid { grid-template-columns: 1fr !important; } }
-        @media (max-width: 820px) { .newsWrap { padding: 18px 16px 32px; } .newsHeroTitle { font-size: 34px !important; line-height: 1.06 !important; letter-spacing: -0.045em !important; } .newsHeroLead { font-size: 15px !important; line-height: 1.7 !important; } .newsHeroMetricRow { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } .newsHeroCtaRow { flex-direction: column !important; align-items: stretch !important; } .newsHeroBtn { width: 100%; justify-content: center !important; } .newsBottomStrip { flex-direction: column !important; align-items: stretch !important; } .newsBottomActions { width: 100%; } }
-        @media (max-width: 560px) { .newsWrap { padding: 14px 12px 26px; } .newsHeroShell { grid-template-columns: 1fr !important; border-radius: 22px !important; padding: 16px !important; } .newsHeroTitle { font-size: 28px !important; line-height: 1.08 !important; letter-spacing: -0.035em !important; } .newsHeroLead { font-size: 14px !important; line-height: 1.65 !important; } .newsHeroMetricRow { grid-template-columns: 1fr !important; } .compactNewsRow { grid-template-columns: 1fr !important; } .newsBottomActions { display: grid !important; grid-template-columns: 1fr !important; width: 100%; } .newsBottomActions a { width: 100%; justify-content: center !important; } .newsMainColumn, .newsSidebar { min-width: 0; } .newsSidebar section, .newsMainColumn section, .compactNewsRow, .newsHeroRight > div, .newsHeroMetricRow > div { min-width: 0; } }
-        @keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
-        .shimmer { background: linear-gradient(90deg, rgba(30,41,59,0.9) 0%, rgba(71,85,105,0.55) 50%, rgba(30,41,59,0.9) 100%); background-size: 800px 100%; animation: shimmer 1.4s infinite linear; }
-      `}</style>
-    </main>
-  );
-}
-
-const heroShellStyle: CSSProperties = { display: "grid", gridTemplateColumns: "minmax(0, 1.24fr) minmax(280px, 0.76fr)", gap: 18, border: "1px solid rgba(255,255,255,0.09)", borderRadius: 28, padding: 22, background: "linear-gradient(135deg, rgba(10,16,32,0.98), rgba(6,9,15,0.98))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 20px 54px rgba(0,0,0,0.36)" };
-const heroLeftStyle: CSSProperties = { minWidth: 0 };
-const heroRightStyle: CSSProperties = { display: "grid", gap: 14, alignContent: "start" };
-const newsDeskTagStyle: CSSProperties = { display: "inline-flex", alignItems: "center", padding: "8px 12px", borderRadius: 999, border: "1px solid rgba(59,130,246,0.28)", background: "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.08))", color: "#dbeafe", fontSize: 12, fontWeight: 950, letterSpacing: "0.08em", textTransform: "uppercase" };
-const heroTitleStyle: CSSProperties = { margin: "14px 0 0 0", fontSize: 44, lineHeight: 1.02, letterSpacing: "-0.055em", maxWidth: 760 };
-const heroLeadStyle: CSSProperties = { margin: "14px 0 0 0", maxWidth: 780, fontSize: 16, lineHeight: 1.75, color: "rgba(241,245,249,0.82)" };
-const heroMetricRowStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12, marginTop: 18 };
-const heroMetricStyle: CSSProperties = { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: 14, background: "rgba(255,255,255,0.03)" };
-const heroMetricLabelStyle: CSSProperties = { fontSize: 11, fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(191,219,254,0.86)" };
-const heroMetricValueStyle: CSSProperties = { marginTop: 8, fontSize: 24, lineHeight: 1.08, fontWeight: 950, letterSpacing: "-0.04em", color: "#f8fafc" };
-const heroCtaRowStyle: CSSProperties = { display: "flex", flexWrap: "wrap", gap: 12, marginTop: 18 };
-const heroPrimaryCtaStyle: CSSProperties = { display: "inline-flex", alignItems: "center", justifyContent: "center", minHeight: 46, padding: "12px 16px", borderRadius: 14, border: "1px solid rgba(59,130,246,0.34)", background: "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))", color: "#dbeafe", textDecoration: "none", fontWeight: 900, fontSize: 13, letterSpacing: "0.04em" };
-const heroSecondaryCtaStyle: CSSProperties = { display: "inline-flex", alignItems: "center", justifyContent: "center", minHeight: 46, padding: "12px 16px", borderRadius: 14, border: "1px solid rgba(34,197,94,0.30)", background: "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))", color: "#dcfce7", textDecoration: "none", fontWeight: 900, fontSize: 13, letterSpacing: "0.04em" };
-const heroSubCopyStyle: CSSProperties = { marginTop: 10, fontSize: 13, lineHeight: 1.6, color: "rgba(241,245,249,0.62)" };
-
-function scorePanelStyle(tone: ScoreTone): CSSProperties {
-  if (tone === "green") return { border: "1px solid rgba(34,197,94,0.26)", borderRadius: 20, padding: 18, background: "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(7,16,12,0.96))" };
-  if (tone === "red") return { border: "1px solid rgba(248,113,113,0.24)", borderRadius: 20, padding: 18, background: "linear-gradient(135deg, rgba(248,113,113,0.16), rgba(18,10,10,0.96))" };
-  return { border: "1px solid rgba(250,204,21,0.24)", borderRadius: 20, padding: 18, background: "linear-gradient(135deg, rgba(250,204,21,0.14), rgba(18,16,8,0.96))" };
-}
-
-const scorePanelKickerStyle: CSSProperties = { fontSize: 11, fontWeight: 950, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(255,255,255,0.76)" };
-function newsGaugeColour(tone: ScoreTone) { if (tone === "green") return "#22c55e"; if (tone === "red") return "#ef4444"; return "#eab308"; }
-
-function NewsScoreGauge({ newsScore }: { newsScore: NewsScoreResult }) {
-  const safeScore = Math.max(0, Math.min(100, newsScore.score));
-  const colour = newsGaugeColour(newsScore.tone);
-  const markerX = 24 + (192 * safeScore) / 100;
-  const markerY = 122 - Math.sin((safeScore / 100) * Math.PI) * 96;
-
-  return (
-    <div>
-      <div style={scorePanelKickerStyle}>NEWS SCORE</div>
-      <div style={{ marginTop: 14, position: "relative", minHeight: 178 }}>
-        <svg viewBox="0 0 240 145" role="img" aria-label={`News score ${safeScore} out of 100: ${newsScore.label}`} style={{ width: "100%", display: "block", overflow: "visible" }}>
-          <defs>
-            <linearGradient id="newsGaugeWarmGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#ef4444" />
-              <stop offset="48%" stopColor="#eab308" />
-              <stop offset="100%" stopColor="#22c55e" />
-            </linearGradient>
-          </defs>
-          <path d="M 24 122 A 96 96 0 0 1 216 122" fill="none" stroke="rgba(148,163,184,0.22)" strokeWidth="22" strokeLinecap="round" pathLength={100} />
-          <path d="M 24 122 A 96 96 0 0 1 216 122" fill="none" stroke="url(#newsGaugeWarmGradient)" strokeWidth="22" strokeLinecap="round" strokeDasharray={`${safeScore} 100`} pathLength={100} style={{ filter: `drop-shadow(0 0 10px ${colour}55)` }} />
-          <circle cx={markerX} cy={markerY} r="8" fill={colour} stroke="rgba(255,255,255,0.88)" strokeWidth="3" style={{ filter: `drop-shadow(0 0 10px ${colour}88)` }} />
-        </svg>
-        <div style={{ position: "absolute", left: 0, right: 0, bottom: 18, display: "grid", justifyItems: "center", pointerEvents: "none" }}>
-          <div style={scoreValueStyle}>{safeScore}/100</div>
-          <div style={scoreLabelStyle(newsScore.tone)}>{newsScore.label}</div>
-        </div>
-      </div>
-      <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, fontSize: 11, fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-        <div style={{ color: "#fca5a5" }}>Bearish</div>
-        <div style={{ color: "#fde68a", textAlign: "center" }}>Neutral</div>
-        <div style={{ color: "#86efac", textAlign: "right" }}>Bullish</div>
-      </div>
-    </div>
-  );
-}
-
-const scoreValueStyle: CSSProperties = { marginTop: 8, fontSize: 42, lineHeight: 1, fontWeight: 950, letterSpacing: "-0.06em" };
-function scoreLabelStyle(tone: ScoreTone): CSSProperties { return { marginTop: 8, display: "inline-flex", alignItems: "center", padding: "7px 11px", borderRadius: 999, fontSize: 12, fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", color: tone === "green" ? "#dcfce7" : tone === "red" ? "#fee2e2" : "#fef3c7", background: tone === "green" ? "rgba(34,197,94,0.18)" : tone === "red" ? "rgba(248,113,113,0.16)" : "rgba(250,204,21,0.14)", border: tone === "green" ? "1px solid rgba(34,197,94,0.28)" : tone === "red" ? "1px solid rgba(248,113,113,0.24)" : "1px solid rgba(250,204,21,0.22)" }; }
-const scoreReasonStyle: CSSProperties = { margin: "12px 0 0 0", fontSize: 14, lineHeight: 1.7, color: "rgba(241,245,249,0.82)" };
-const miniScoreGridStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 };
-function miniScoreCardStyle(tone: ScoreTone): CSSProperties { return { border: tone === "green" ? "1px solid rgba(34,197,94,0.22)" : tone === "red" ? "1px solid rgba(248,113,113,0.20)" : "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: 14, background: "rgba(255,255,255,0.03)" }; }
-const miniScoreTitleStyle: CSSProperties = { fontSize: 11, fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(241,245,249,0.66)" };
-const miniScoreNumberStyle: CSSProperties = { marginTop: 8, fontSize: 24, lineHeight: 1.05, fontWeight: 950, letterSpacing: "-0.04em" };
-const miniScoreLabelStyle: CSSProperties = { marginTop: 6, fontSize: 13, color: "rgba(241,245,249,0.76)" };
-const newsGridStyle: CSSProperties = {};
-const editorialCardStyle: CSSProperties = { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 24, padding: 20, background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.025))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" };
-const featuredInsightShellStyle: CSSProperties = { border: "1px solid rgba(59,130,246,0.22)", borderRadius: 24, padding: 20, background: "linear-gradient(135deg, rgba(59,130,246,0.10), rgba(7,12,22,0.96))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" };
-function earningsCardStyle(tone: ScoreTone): CSSProperties { const toneMap = { green: { border: "rgba(34,197,94,0.24)", bg: "linear-gradient(135deg, rgba(34,197,94,0.09), rgba(255,255,255,0.022))" }, yellow: { border: "rgba(250,204,21,0.24)", bg: "linear-gradient(135deg, rgba(250,204,21,0.09), rgba(255,255,255,0.022))" }, red: { border: "rgba(239,68,68,0.26)", bg: "linear-gradient(135deg, rgba(239,68,68,0.10), rgba(255,255,255,0.022))" } } as const; return { border: `1px solid ${toneMap[tone].border}`, borderRadius: 20, padding: 18, background: toneMap[tone].bg, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" }; }
-function earningsTonePillStyle(tone: ScoreTone): CSSProperties { const toneMap = { green: { border: "rgba(34,197,94,0.32)", color: "#bbf7d0", bg: "rgba(34,197,94,0.12)" }, yellow: { border: "rgba(250,204,21,0.32)", color: "#fde68a", bg: "rgba(250,204,21,0.12)" }, red: { border: "rgba(239,68,68,0.34)", color: "#fecaca", bg: "rgba(239,68,68,0.13)" } } as const; return { display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "7px 10px", borderRadius: 999, border: `1px solid ${toneMap[tone].border}`, background: toneMap[tone].bg, color: toneMap[tone].color, fontSize: 12, fontWeight: 950, textTransform: "uppercase", letterSpacing: "0.06em" }; }
-const earningsDateRowStyle: CSSProperties = { marginTop: 14, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 };
-const earningsMetricGridStyle: CSSProperties = { marginTop: 14, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 };
-function earningsMetricStyle(tone?: ScoreTone): CSSProperties { const toneBorder = tone === "green" ? "rgba(34,197,94,0.22)" : tone === "red" ? "rgba(239,68,68,0.24)" : tone === "yellow" ? "rgba(250,204,21,0.22)" : "rgba(255,255,255,0.08)"; return { border: `1px solid ${toneBorder}`, borderRadius: 14, padding: 12, background: "rgba(2,6,23,0.30)", minWidth: 0 }; }
-const earningsMiniLabelStyle: CSSProperties = { fontSize: 10, fontWeight: 950, letterSpacing: "0.09em", textTransform: "uppercase", color: "rgba(203,213,225,0.72)" };
-const earningsMiniValueStyle: CSSProperties = { marginTop: 5, fontSize: 14, fontWeight: 900, color: "#f8fafc" };
-const earningsMetricValueStyle: CSSProperties = { marginTop: 6, fontSize: 18, lineHeight: 1.08, fontWeight: 950, letterSpacing: "-0.035em", color: "#f8fafc" };
-function earningsMetricMetaStyle(tone?: ScoreTone): CSSProperties { return { marginTop: 5, fontSize: 12, fontWeight: 850, color: tone === "green" ? "#86efac" : tone === "red" ? "#fca5a5" : "rgba(226,232,240,0.70)" }; }
-const earningsNewsRowStyle: CSSProperties = { display: "grid", gridTemplateColumns: "34px minmax(0, 1fr)", gap: 12, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.035)", borderRadius: 16, padding: 14, color: "#f1f5f9", textDecoration: "none" };
-const earningsNewsNumberStyle: CSSProperties = { width: 28, height: 28, borderRadius: 999, display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(59,130,246,0.36)", background: "rgba(59,130,246,0.14)", color: "#bfdbfe", fontSize: 13, fontWeight: 950 };
-const earningsNewsHeadlineStyle: CSSProperties = { margin: "9px 0 0", fontSize: 16, lineHeight: 1.38, color: "#f8fafc" };
-const earningsNewsTextStyle: CSSProperties = { margin: "8px 0 0", fontSize: 13, lineHeight: 1.6, color: "rgba(226,232,240,0.76)" };
-const earningsNoNewsStyle: CSSProperties = { border: "1px solid rgba(250,204,21,0.20)", background: "rgba(250,204,21,0.07)", borderRadius: 16, padding: 14, display: "grid", gap: 6, color: "rgba(254,249,195,0.88)", fontSize: 14, lineHeight: 1.55 };
-const earningsTrendBoxStyle: CSSProperties = { marginTop: 14, borderRadius: 14, border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.035)", padding: 12 };
-const earningsDotRowStyle: CSSProperties = { marginTop: 10, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" };
-const earningsDotItemStyle: CSSProperties = { display: "grid", gap: 6, justifyItems: "center", minWidth: 46 };
-const earningsDotLabelStyle: CSSProperties = { fontSize: 11, color: "rgba(226,232,240,0.78)", fontWeight: 850 };
-function earningsDotStyle(tone: ScoreTone): CSSProperties { const color = tone === "green" ? "#2dd4bf" : tone === "red" ? "#fb7185" : "#fbbf24"; return { width: 15, height: 15, borderRadius: 999, background: color, boxShadow: `0 0 0 5px ${color}22` }; }
-const yearlyEarningsGridStyle: CSSProperties = { marginTop: 10, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 };
-function yearlyEarningsBadgeStyle(tone: ScoreTone): CSSProperties { const border = tone === "green" ? "rgba(34,197,94,0.32)" : tone === "red" ? "rgba(244,63,94,0.34)" : "rgba(250,204,21,0.30)"; const background = tone === "green" ? "rgba(34,197,94,0.10)" : tone === "red" ? "rgba(244,63,94,0.10)" : "rgba(250,204,21,0.10)"; const color = tone === "green" ? "#dcfce7" : tone === "red" ? "#ffe4e6" : "#fef9c3"; return { border: `1px solid ${border}`, background, color, borderRadius: 12, padding: "9px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12, fontWeight: 850 }; }
-const earningsSourceStyle: CSSProperties = { marginTop: 12, fontSize: 11, lineHeight: 1.5, color: "rgba(203,213,225,0.58)" };
-const sidebarCardStyle: CSSProperties = { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 20, padding: 18, background: "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" };
-const sectionEyebrowStyle: CSSProperties = { fontSize: 11, fontWeight: 950, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)" };
-const sectionTitleStyle: CSSProperties = { margin: "8px 0 0 0", fontSize: 28, lineHeight: 1.08, letterSpacing: "-0.04em" };
-const sectionTitleSmallStyle: CSSProperties = { margin: "8px 0 0 0", fontSize: 22, lineHeight: 1.12, letterSpacing: "-0.03em" };
-const bodyCopyStyle: CSSProperties = { margin: "14px 0 0 0", fontSize: 15, lineHeight: 1.72, color: "rgba(241,245,249,0.82)" };
-const newsLeadCardStyle: CSSProperties = { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: 16, background: "rgba(255,255,255,0.028)" };
-const newsMetaRowStyle: CSSProperties = { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" };
-const newsSourcePillStyle: CSSProperties = { display: "inline-flex", alignItems: "center", padding: "6px 10px", borderRadius: 999, background: "rgba(59,130,246,0.12)", border: "1px solid rgba(59,130,246,0.22)", color: "#dbeafe", fontSize: 12, fontWeight: 800 };
-const newsDateStyle: CSSProperties = { fontSize: 12, fontWeight: 700, color: "rgba(241,245,249,0.58)" };
-const newsHeadlineStyle: CSSProperties = { margin: "12px 0 0 0", fontSize: 22, lineHeight: 1.32, letterSpacing: "-0.02em", color: "#f8fafc" };
-const newsSummaryStyle: CSSProperties = { margin: "10px 0 0 0", fontSize: 15, lineHeight: 1.72, color: "rgba(241,245,249,0.82)" };
-const whyItMattersBoxStyle: CSSProperties = { marginTop: 14, border: "1px solid rgba(59,130,246,0.16)", borderRadius: 14, padding: 12, background: "linear-gradient(135deg, rgba(59,130,246,0.08), rgba(255,255,255,0.02))" };
-const whyItMattersLabelStyle: CSSProperties = { fontSize: 11, fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(191,219,254,0.86)" };
-const whyItMattersTextStyle: CSSProperties = { marginTop: 7, fontSize: 14, lineHeight: 1.65, color: "rgba(241,245,249,0.82)" };
-const sourceFooterStyle: CSSProperties = { marginTop: 12, fontSize: 12, lineHeight: 1.5, color: "rgba(241,245,249,0.48)" };
-const compactFeedLabelStyle: CSSProperties = { fontSize: 12, fontWeight: 850, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(241,245,249,0.56)" };
-const compactNewsRowStyle: CSSProperties = { display: "grid", gridTemplateColumns: "88px minmax(0, 1fr) 120px", gap: 12, alignItems: "start", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 14, padding: 12, background: "rgba(255,255,255,0.02)" };
-const compactSourceStyle: CSSProperties = { fontSize: 12, fontWeight: 800, color: "#dbeafe" };
-const compactDateStyle: CSSProperties = { marginTop: 4, fontSize: 11, color: "rgba(241,245,249,0.56)" };
-const compactHeadlineStyle: CSSProperties = { fontSize: 14, lineHeight: 1.55, color: "rgba(241,245,249,0.84)" };
-const compactMutedStyle: CSSProperties = { fontSize: 11, lineHeight: 1.4, color: "rgba(241,245,249,0.42)", textAlign: "right" };
-const compactMutedLinkStyle: CSSProperties = { fontSize: 12, color: "#93c5fd", textAlign: "right", textDecoration: "none", fontWeight: 900, whiteSpace: "nowrap" };
-const readArticleLinkStyle: CSSProperties = { display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "8px 10px", borderRadius: 999, border: "1px solid rgba(59,130,246,0.30)", background: "rgba(59,130,246,0.10)", color: "#bfdbfe", textDecoration: "none", fontWeight: 900, fontSize: 12, whiteSpace: "nowrap" };
-function signalBoxStyle(tone: "green" | "red"): CSSProperties { return { border: tone === "green" ? "1px solid rgba(34,197,94,0.22)" : "1px solid rgba(248,113,113,0.20)", borderRadius: 14, padding: 12, background: tone === "green" ? "rgba(34,197,94,0.06)" : "rgba(248,113,113,0.05)" }; }
-const signalBoxTitleStyle: CSSProperties = { fontSize: 12, fontWeight: 900, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(241,245,249,0.8)" };
-const signalBoxItemStyle: CSSProperties = { marginTop: 8, fontSize: 13, lineHeight: 1.55, color: "rgba(241,245,249,0.78)" };
-const signalBoxEmptyStyle: CSSProperties = { marginTop: 8, fontSize: 13, lineHeight: 1.55, color: "rgba(241,245,249,0.58)" };
-const bulletRowStyle: CSSProperties = { display: "grid", gridTemplateColumns: "10px minmax(0, 1fr)", gap: 12, alignItems: "start" };
-const bulletDotStyle: CSSProperties = { width: 10, height: 10, borderRadius: 999, marginTop: 7, background: "linear-gradient(135deg, #60a5fa, #22c55e)", boxShadow: "0 0 0 4px rgba(59,130,246,0.10)" };
-const bulletTextStyle: CSSProperties = { fontSize: 15, lineHeight: 1.7, color: "rgba(241,245,249,0.84)" };
-const bottomStripStyle: CSSProperties = { marginTop: 22, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 22, padding: 18, background: "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02))", display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "center" };
-const bottomStripTitleStyle: CSSProperties = { fontSize: 22, lineHeight: 1.1, fontWeight: 900, letterSpacing: "-0.03em" };
-const bottomStripTextStyle: CSSProperties = { marginTop: 8, maxWidth: 760, fontSize: 14, lineHeight: 1.65, color: "rgba(241,245,249,0.76)" };
-const bottomStripActionsStyle: CSSProperties = { display: "flex", flexWrap: "wrap", gap: 10 };
-function bottomActionStyle(tone: "blue" | "green" | "red"): CSSProperties {
-  const base: CSSProperties = { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 44, padding: "11px 15px", borderRadius: 999, textDecoration: "none", fontSize: 13, fontWeight: 850, lineHeight: 1, whiteSpace: "nowrap" };
-  if (tone === "blue") return { ...base, border: "1px solid rgba(59,130,246,0.24)", background: "linear-gradient(135deg, rgba(59,130,246,0.14), rgba(37,99,235,0.08))", color: "#dbeafe" };
-  if (tone === "green") return { ...base, border: "1px solid rgba(34,197,94,0.22)", background: "linear-gradient(135deg, rgba(34,197,94,0.14), rgba(21,128,61,0.08))", color: "#dcfce7" };
-  return { ...base, border: "1px solid rgba(248,113,113,0.22)", background: "linear-gradient(135deg, rgba(248,113,113,0.14), rgba(185,28,28,0.08))", color: "#fee2e2" };
-}
