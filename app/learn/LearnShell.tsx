@@ -79,10 +79,12 @@ function NavGroup(props: {
 
 export default function LearnShell(props: {
   activeSlug?: string; // lesson slug, or undefined on the /learn index
+  activeHref?: string; // explicit path for non-lesson pages (guides, risk pages)
   children: React.ReactNode;
 }) {
   const { activeSlug, children } = props;
-  const activeHref = activeSlug ? `/learn/${activeSlug}` : "/learn";
+  const activeHref =
+    props.activeHref ?? (activeSlug ? `/learn/${activeSlug}` : "/learn");
 
   const byCat = (cat: "Basics" | "Indicators" | "Divergencies") =>
     LESSONS.filter((l) => l.category === cat).map((l) => ({
