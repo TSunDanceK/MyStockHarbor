@@ -1,10 +1,10 @@
 "use client";
+import LearnShell from "@/app/learn/LearnShell";
 import Link from "next/link";
 
 export default function PositionSizingGuidePage() {
   return (
-    <main style={{ minHeight: "100vh", background: "#06080d", color: "#f1f5f9", fontFamily: "system-ui, Arial" }}>
-      <div className="wrap">
+    <LearnShell activeHref="/position-sizing-guide">
         <div style={{ maxWidth: 780 }}>
           <div style={{ display: "inline-flex", alignItems: "center", padding: "7px 12px", borderRadius: 999, background: "linear-gradient(135deg, rgba(168,85,247,0.20), rgba(139,92,246,0.10))", border: "1px solid rgba(168,85,247,0.34)", color: "#f3e8ff", fontWeight: 950, letterSpacing: "0.08em", fontSize: 12 }}>POSITION SIZING GUIDE</div>
           <h1 style={{ margin: "14px 0 0", fontSize: 42, lineHeight: 1.08, letterSpacing: "-0.6px" }}>Position Sizing in Trading: How to Control Risk</h1>
@@ -24,8 +24,6 @@ export default function PositionSizingGuidePage() {
             <Link href="/utilities" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "13px 18px", borderRadius: 14, border: "1px solid rgba(168,85,247,0.42)", background: "linear-gradient(135deg, rgba(168,85,247,0.22), rgba(59,130,246,0.18))", color: "#f8fafc", textDecoration: "none", fontWeight: 900, minHeight: 48, whiteSpace: "nowrap" }}>Open the Risk Calculators →</Link>
           </div>
         </section>
-      </div>
-      <style>{`.wrap { max-width: 900px; margin: 0 auto; padding: 28px 20px 40px; } a:hover { filter: brightness(1.05); transform: translateY(-1px); }`}</style>
-    </main>
+      </LearnShell>
   );
 }

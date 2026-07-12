@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import LearnShell from "@/app/learn/LearnShell";
 import GuideJsonLd from "@/app/components/GuideJsonLd";
 
 const TITLE = "Trading Setups";
@@ -41,8 +42,7 @@ export default function TradingSetupsPage() {
   return (
     <>
       <GuideJsonLd path={PATH} title={TITLE} description={DESC} />
-      <main style={{ padding: 0, fontFamily: "system-ui, Arial", background: "#06080d", color: "#f1f5f9", minHeight: "100vh" }}>
-        <div className="wrap">
+      <LearnShell activeHref="/trading-setups">
           <div style={{ maxWidth: 760 }}>
             <div style={{ display: "inline-flex", alignItems: "center", padding: "7px 12px", borderRadius: 999, background: "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.12))", border: "1px solid rgba(239,68,68,0.34)", color: "#fee2e2", fontWeight: 950, letterSpacing: "0.08em", fontSize: 12 }}>TRADING SETUPS</div>
             <h1 style={{ margin: "14px 0 0 0", fontSize: 42, lineHeight: 1.08, letterSpacing: "-0.6px" }}>Trading Setups</h1>
@@ -74,9 +74,7 @@ export default function TradingSetupsPage() {
               <Link href="/pickers" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "11px 15px", borderRadius: 12, border: "1px solid rgba(239,68,68,0.38)", background: "linear-gradient(135deg, rgba(239,68,68,0.20), rgba(127,29,29,0.10))", color: "#fef2f2", textDecoration: "none", fontWeight: 900 }}>Explore Stock Pickers →</Link>
             </div>
           </section>
-        </div>
-        <style>{`.wrap { max-width: 1000px; margin: 0 auto; padding: 24px; } a:hover { filter: brightness(1.05); transform: translateY(-1px); } @media (max-width: 760px) { .wrap { padding: 16px !important; } }`}</style>
-      </main>
+        </LearnShell>
     </>
   );
 }
