@@ -91,7 +91,10 @@ function parsePriceRange(row: FmpIpoRow): { low: number | null; high: number | n
 }
 
 function isWithdrawnOrPostponed(row: FmpIpoRow): boolean {
-  const status = firstStr(row, ["status", "ipoStatus"]);
+  // Live data confirms FMP's actual field for this is "actions" (values seen:
+  // "Expected"), not "status"/"ipoStatus" as originally guessed -- kept both
+  // as fallbacks in case that varies by row.
+  const status = firstStr(row, ["actions", "status", "ipoStatus"]);
   if (!status) return false;
   const normalized = status.toLowerCase();
   return normalized.includes("withdraw") || normalized.includes("postpone");
@@ -126,7 +129,16 @@ function parseRow(row: FmpIpoRow): ConfirmedIpo | null {
     priceRangeLow: low,
     priceRangeHigh: high,
     sharesOffered,
-    dealSize: dealSize ?? (sharesOffered !== null && high !== null ? sharesOffered * high : null),
+    // FMP doesn't return a dedicated deal-size field, so this is computed --
+    // verified against real confirmed rows that shares x price-range
+    // *midpoint* (not the high end) matches the expected deal size (e.g.
+    // 50,000,000 shares x $25.00 mid = $1.25B), so mid is used here rather
+    // than high.
+    dealSize:
+      dealSize ??
+      (sharesOffered !== null && low !== null && high !== null
+        ? sharesOffered * ((low + high) / 2)
+        : null),
     marketCap,
     revenue,
   };
