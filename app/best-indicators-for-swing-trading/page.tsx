@@ -66,7 +66,7 @@ export default function BestIndicatorsForSwingTradingPage() {
             <h2>Related guides</h2>
             <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
               <Link href="/best-stock-indicators-for-beginners">Best Stock Indicators for Beginners</Link>
-              <Link href="/stock-market-setups">Stock Market Setups</Link>
+              <Link href="/trading-setups">Trading Setups</Link>
               <Link href="/breakout-stocks">Breakout Stocks</Link>
               <Link href="/oversold-stocks">Oversold Stocks</Link>
             </div>

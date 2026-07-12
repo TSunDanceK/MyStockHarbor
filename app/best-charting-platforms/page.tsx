@@ -118,7 +118,7 @@ export default function BestChartingPlatformsPage() {
               <Link href="/best-indicators-for-swing-trading">Best Indicators for Swing Trading</Link>
               <Link href="/best-stock-indicators-for-beginners">Best Stock Indicators for Beginners</Link>
               <Link href="/how-to-read-stock-charts">How to Read Stock Charts</Link>
-              <Link href="/stock-market-setups">Stock Market Setups</Link>
+              <Link href="/trading-setups">Trading Setups</Link>
             </div>
           </section>
         </div>

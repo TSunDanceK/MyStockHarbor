@@ -55,7 +55,7 @@ export default function BestFreeStockScreenerPage() {
         <section style={{ marginTop: 32 }}>
           <h2 style={{ fontSize: 24, margin: 0 }}>Related guides</h2>
           <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-            {[{href:"/stock-screener-for-breakouts",title:"Stock Screener for Breakouts"},{href:"/stock-screener-for-oversold-stocks",title:"Stock Screener for Oversold Stocks"},{href:"/stock-market-setups",title:"Stock Market Setups"},{href:"/best-stock-indicators-for-beginners",title:"Best Stock Indicators for Beginners"}].map((item) => (
+            {[{href:"/stock-screener-for-breakouts",title:"Stock Screener for Breakouts"},{href:"/stock-screener-for-oversold-stocks",title:"Stock Screener for Oversold Stocks"},{href:"/trading-setups",title:"Trading Setups"},{href:"/best-stock-indicators-for-beginners",title:"Best Stock Indicators for Beginners"}].map((item) => (
               <Link key={item.href} href={item.href} style={{ borderRadius: 14, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.04)", padding: 16, textDecoration: "none", color: "#f1f5f9", display: "block" }}>
                 <div style={{ fontWeight: 900 }}>{item.title}</div>
               </Link>
