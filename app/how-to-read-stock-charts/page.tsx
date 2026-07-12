@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import LearnShell from "@/app/learn/LearnShell";
 import GuideJsonLd from "@/app/components/GuideJsonLd";
 
 const TITLE = "How to Read Stock Charts";
@@ -31,8 +32,7 @@ export default function HowToReadStockChartsPage() {
   return (
     <>
       <GuideJsonLd path={PATH} title={TITLE} description={DESC} breadcrumbs={[{ name: "Learn", href: "/learn" }]} />
-      <main style={{ minHeight: "100vh", background: "#06080d", color: "#f1f5f9", fontFamily: "system-ui, Arial" }}>
-        <div className="wrap" style={{ maxWidth: 940, margin: "0 auto", padding: "28px 20px 40px" }}>
+      <LearnShell activeHref="/how-to-read-stock-charts">
           <div style={{ display: "grid", gap: 10 }}>
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "nowrap" }}>
               <div style={{ minWidth: 0 }}>
@@ -64,9 +64,7 @@ export default function HowToReadStockChartsPage() {
               <Link href="/learn" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "13px 18px", borderRadius: 14, border: "1px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.06)", color: "#f8fafc", textDecoration: "none", fontWeight: 900, minHeight: 48, whiteSpace: "nowrap" }}>Explore Learn Page →</Link>
             </div>
           </section>
-        </div>
-        <style>{`a:hover{filter:brightness(1.05);transform:translateY(-1px)}@media(max-width:900px){.wrap{padding:22px 18px 36px!important}}@media(max-width:760px){.wrap{padding:16px!important}}`}</style>
-      </main>
+        </LearnShell>
     </>
   );
 }

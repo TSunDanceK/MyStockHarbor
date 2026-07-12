@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import LearnShell from "@/app/learn/LearnShell";
 import GuideJsonLd from "@/app/components/GuideJsonLd";
 
 const TITLE = "Best Stock Indicators for Beginners";
@@ -50,8 +51,7 @@ export default function BestStockIndicatorsForBeginnersPage() {
   return (
     <>
       <GuideJsonLd path={PATH} title={TITLE} description={DESC} />
-      <main style={{ minHeight: "100vh", background: "#06080d", color: "#f1f5f9", fontFamily: "system-ui, Arial" }}>
-        <div className="wrap" style={{ maxWidth: 940, margin: "0 auto", padding: "28px 20px 40px" }}>
+      <LearnShell activeHref="/best-stock-indicators-for-beginners">
           <div style={{ display: "grid", gap: 10 }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 12, opacity: 0.72, fontWeight: 800, letterSpacing: "0.08em" }}>BEGINNER INDICATOR GUIDE</div>
@@ -91,9 +91,7 @@ export default function BestStockIndicatorsForBeginnersPage() {
               <Link href="/pickers" style={ctaSecondaryStyle()}>Browse Stock Ideas →</Link>
             </div>
           </section>
-        </div>
-        <style>{`a:hover{filter:brightness(1.05);transform:translateY(-1px)}@media(max-width:900px){.wrap{padding:22px 18px 36px!important}}@media(max-width:760px){.wrap{padding:16px!important}}`}</style>
-      </main>
+        </LearnShell>
     </>
   );
 }
