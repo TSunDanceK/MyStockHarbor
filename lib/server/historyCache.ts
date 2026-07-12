@@ -26,18 +26,19 @@ const REDIS_HISTORY_PREFIX = "msh:history:v7";
 const REDIS_HISTORY_TTL_SECONDS = 6 * 60 * 60;
 const MIN_QUALIFIED_POINTS = 30;
 
-// The FMP "full" history endpoint returns a symbol's entire trading history
-// with no date bound -- for a decades-old blue chip that can be 10,000+
-// daily bars, even though nothing in this app ever requests more than 5000
-// trading days (see app/api/history/route.ts's `days` clamp, the largest
-// consumer). Trimming here, once, right after the fetch keeps every cached
-// Redis entry (and every subsequent read of it, by any of the many callers
-// of getDailyHistory/getDailyHistoryBulk) bounded to what the app can
-// actually use, without touching the request itself -- bounding the FMP
-// request via from=/to= would save bytes on the wire too, but this module
-// couldn't verify FMP's exact supported query parameters for this endpoint
-// from this environment, so it's left as a follow-up rather than guessed at.
-const MAX_CACHED_HISTORY_DAYS = 5500;
+// The FMP "full" history endpoint is bounded to ~5 years of daily bars on
+// this account's plan (roughly 1,250-1,260 trading days) regardless of what
+// this app asks for -- confirmed against the actual plan, not assumed. This
+// trim is a defensive ceiling in case that ever changes (a plan upgrade, or
+// FMP altering the endpoint's behavior), set comfortably above the real
+// 5-year window rather than at the old 5500-day (~21 year) value, which
+// never actually fired and just meant every cached entry -- and therefore
+// every Redis pull of it, including the bulk multi-symbol reads in
+// getDailyHistoryBulk -- carried no real ceiling on its size. Also see
+// app/api/history/route.ts's `days` clamp (currently 5000), the largest
+// single-symbol consumer -- that clamp is about how much of the cached
+// history a request is allowed to ask for, not how much gets cached.
+const MAX_CACHED_HISTORY_DAYS = 1400;
 
 const HISTORY_LOCK_PREFIX = "msh:history-lock:v1";
 const HISTORY_LOCK_TTL_SECONDS = 45;
@@ -470,15 +471,28 @@ function createLimiter(limit: number) {
 }
 
 // Batch version of getDailyHistory(): reads the whole requested symbol list's
-// cached history in a single pipelined Redis round-trip (via mget) instead
-// of one individual REST call per symbol -- for a 200-symbol universe this
-// was ~200 separate Upstash calls just to check "is this already cached"
-// before any FMP fetch even happens. Only symbols that miss the bulk read
-// (no entry yet, or a corrupt/unexpected entry shape) fall back to the
-// existing single-symbol getDailyHistory() path, which still handles the
-// distributed lock + FMP fetch + wait-for-other-request's-fetch logic
-// exactly as before. On a warm cache (the common case, given the 6h TTL and
-// the daily warm-up cron) this fallback runs for zero or very few symbols.
+// cached history in a single Redis round-trip instead of one individual REST
+// call per symbol -- for a 200-symbol universe this was ~200 separate
+// Upstash calls just to check "is this already cached" before any FMP fetch
+// even happens. Only symbols that miss the bulk read (no entry yet, or a
+// corrupt/unexpected entry shape) fall back to the existing single-symbol
+// getDailyHistory() path, which still handles the distributed lock + FMP
+// fetch + wait-for-other-request's-fetch logic exactly as before. On a warm
+// cache (the common case, given the 6h TTL and the daily warm-up cron) this
+// fallback runs for zero or very few symbols.
+//
+// This uses a Redis *pipeline* of individual GETs, not MGET. Both send the
+// whole batch to Upstash as a single HTTP round-trip, so neither costs extra
+// network calls -- the difference is how the reply is measured. MGET
+// combines every key's value into one single command reply; on a warm cache
+// with the full ~200+ symbol universe, that single reply routinely blew past
+// Upstash's per-pull size ceiling (this is what triggered a "single pull
+// exceeded 10MB" warning from Upstash in production). A pipeline sends the
+// same N commands in one request, but Upstash measures and returns each
+// command's reply separately, so no single reply is ever larger than one
+// symbol's cached history -- the batch as a whole is unbounded, but no
+// individual piece of it is, which is what the size ceiling actually cares
+// about.
 export async function getDailyHistoryBulk(
   symbols: string[]
 ): Promise<Map<string, Point[]>> {
@@ -505,7 +519,11 @@ export async function getDailyHistoryBulk(
   let entries: (HistoryCacheEntry | null)[] = normalized.map(() => null);
 
   try {
-    entries = await redis.mget<(HistoryCacheEntry | null)[]>(...keys);
+    const pipeline = redis.pipeline();
+    for (const key of keys) {
+      pipeline.get<HistoryCacheEntry | null>(key);
+    }
+    entries = await pipeline.exec<(HistoryCacheEntry | null)[]>();
   } catch {
     // Best-effort; every symbol just falls through to the per-symbol path.
   }
