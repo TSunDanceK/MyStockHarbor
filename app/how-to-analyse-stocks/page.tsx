@@ -70,7 +70,7 @@ export default function HowToAnalyseStocksPage() {
             <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
               <Link href="/how-to-read-stock-charts">How to Read Stock Charts</Link>
               <Link href="/best-indicators-for-swing-trading">Best Indicators for Swing Trading</Link>
-              <Link href="/stock-market-setups">Stock Market Setups</Link>
+              <Link href="/trading-setups">Trading Setups</Link>
               <Link href="/best-charting-platforms">Best Charting Platforms</Link>
             </div>
           </section>

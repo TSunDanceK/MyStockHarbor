@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   async redirects() {
     return [
-      // ── Duplicate consolidation (301) ──────────────────────────────
+      // ── Duplicate consolidation (301) ────────────────────────────
       // /bullish-divergence-stocks and /bearish-divergence-stocks are both
       // byte-for-byte identical to /bullish-bearish-divergence-stocks (same
       // git tree, canonical already points at the combined page). Consolidate
@@ -18,8 +18,16 @@ const nextConfig: NextConfig = {
         destination: "/bullish-bearish-divergence-stocks",
         permanent: true,
       },
+      // /stock-market-setups duplicated /trading-setups (same 7 destination
+      // cards, different copy). Consolidated into /trading-setups; redirect
+      // any residual traffic/link equity instead of leaving a 404.
+      {
+        source: "/stock-market-setups",
+        destination: "/trading-setups",
+        permanent: true,
+      },
 
-      // ── Removed page cleanup (301) ──────────────────────────────────
+      // ── Removed page cleanup (301) ────────────────────────
       // /hot-market-names-right-now was deliberately removed from the site
       // (see CLAUDE.md "Lessons learned") but Google still has it indexed
       // from before removal and keeps re-crawling it as a dead 404, wasting
@@ -31,7 +39,7 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
 
-      // ── Existing redirects ─────────────────────────────────────────
+      // ── Existing redirects ───────────────────────
       {
         source: "/stocks/:symbol",
         destination: "/stock/:symbol",
