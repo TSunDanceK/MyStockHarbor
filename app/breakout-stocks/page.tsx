@@ -380,8 +380,8 @@ export default function BreakoutStocksPage() {
             }}
           >
             <RelatedCard
-              href="/stock-market-setups"
-              title="Stock Market Setups"
+              href="/trading-setups"
+              title="Trading Setups"
               desc="Explore the main setup hub covering dips, breakouts and divergence."
             />
             <RelatedCard
@@ -776,4 +776,3 @@ const inlineLinkStyle: React.CSSProperties = {
   fontWeight: 800,
   textDecoration: "none",
 };
-
