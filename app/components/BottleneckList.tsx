@@ -103,13 +103,37 @@ export default function BottleneckList({ posts }: { posts: BottleneckPost[] }) {
             borderRadius: 14,
             border: "1px solid rgba(255,255,255,0.10)",
             background: "rgba(255,255,255,0.03)",
-            padding: 16,
-            opacity: 0.7,
+            padding: "20px 16px",
+            textAlign: "center",
           }}
         >
-          {posts.length === 0
-            ? "No bottleneck pages yet."
-            : `No stocks match "${query}".`}
+          {posts.length === 0 ? (
+            <div style={{ opacity: 0.7 }}>No bottleneck pages yet.</div>
+          ) : (
+            <>
+              <div
+                style={{
+                  fontSize: 15,
+                  fontWeight: 800,
+                  letterSpacing: "0.14em",
+                  textTransform: "uppercase",
+                  color: "#93c5fd",
+                }}
+              >
+                Coming soon
+              </div>
+              <div
+                style={{
+                  marginTop: 6,
+                  fontSize: 14,
+                  lineHeight: 1.5,
+                  opacity: 0.7,
+                }}
+              >
+                We haven&apos;t mapped &ldquo;{query}&rdquo; yet.
+              </div>
+            </>
+          )}
         </div>
       ) : (
         <div
@@ -191,6 +215,17 @@ export default function BottleneckList({ posts }: { posts: BottleneckPost[] }) {
           ))}
         </div>
       )}
+
+      <div
+        style={{
+          marginTop: 12,
+          fontSize: 12,
+          opacity: 0.5,
+          lineHeight: 1.5,
+        }}
+      >
+        Not all stocks have been mapped yet — more are added daily.
+      </div>
 
       <style>{`
         @media (max-width: 480px) {
