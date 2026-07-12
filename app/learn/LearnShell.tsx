@@ -12,7 +12,6 @@ const IN_DEPTH_GUIDES: GuideLink[] = [
   { href: "/how-to-read-stock-charts", title: "How to Read Stock Charts" },
   { href: "/best-stock-indicators-for-beginners", title: "Best Indicators for Beginners" },
   { href: "/trading-setups", title: "Trading Setups" },
-  { href: "/stock-market-setups", title: "Stock Market Setups" },
 ];
 
 const RISK_GUIDES: GuideLink[] = [

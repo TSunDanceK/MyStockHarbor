@@ -35,7 +35,6 @@ const seoGuides = [
   "/what-is-vwap-indicator",
   "/stocks-down-from-highs",
   "/buy-the-dip-stocks",
-  "/stock-market-setups",
   "/trading-setups",
   "/stock-screener-for-breakouts",
   "/stock-screener-for-oversold-stocks",

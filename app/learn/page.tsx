@@ -182,13 +182,6 @@ export default function LearnPage() {
                   divergence — and how traders think about each.
                 </div>
               </Link>
-
-              <Link href="/stock-market-setups" style={learnGuideCard()}>
-                <div style={{ fontWeight: 900, fontSize: 16 }}>Stock Market Setups</div>
-                <div style={guideSub()}>
-                  Overview of common trading setups including dips, breakouts and divergences.
-                </div>
-              </Link>
             </div>
           </section>
 
