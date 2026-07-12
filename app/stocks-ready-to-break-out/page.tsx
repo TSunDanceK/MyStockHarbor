@@ -218,7 +218,7 @@ export default function StocksReadyToBreakOutPage() {
             <Link href="/stock-screener-for-breakouts">
               Stock Screener for Breakouts
             </Link>
-            <Link href="/stock-market-setups">Stock Market Setups</Link>
+            <Link href="/trading-setups">Trading Setups</Link>
             <Link href="/how-to-scan-stocks">How to Scan Stocks</Link>
           </div>
         </section>

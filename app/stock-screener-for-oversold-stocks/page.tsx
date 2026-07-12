@@ -426,8 +426,8 @@ export default function StockScreenerForOversoldStocksPage() {
                 text: "Learn how traders think about stocks that have pulled back from previous highs.",
               },
               {
-                href: "/stock-market-setups",
-                title: "Stock Market Setups",
+                href: "/trading-setups",
+                title: "Trading Setups",
                 text: "Explore the full hub of common stock market setups and ideas.",
               },
             ].map((item) => (

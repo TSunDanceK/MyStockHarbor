@@ -390,8 +390,8 @@ export default function StocksDown20PercentPage() {
                 text: "Learn how traders think about pullbacks inside stronger trends.",
               },
               {
-                href: "/stock-market-setups",
-                title: "Stock Market Setups",
+                href: "/trading-setups",
+                title: "Trading Setups",
                 text: "Explore the full hub of common stock market setups and ideas.",
               },
             ].map((item) => (
