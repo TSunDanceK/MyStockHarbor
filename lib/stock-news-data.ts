@@ -29,6 +29,12 @@ export type NewsItem = {
   source: string | null;
   description: string | null;
   /**
+   * Thumbnail image URL, when the upstream source provides one. FMP's
+   * stock-news endpoint usually includes this; the Google News RSS fallback
+   * does not, so this is null for those items.
+   */
+  image?: string | null;
+  /**
    * Ticker symbols supplied by the upstream FMP stock-news endpoint.
    * These are used as the strongest relevance signal before falling back
    * to text/company-name matching.
@@ -370,6 +376,10 @@ async function fetchFmpStockNews(symbol: string): Promise<NewsItem[]> {
             description: descriptionSource.trim()
               ? cleanRssDescription(descriptionSource.slice(0, 650))
               : null,
+            image:
+              typeof item.image === "string" && item.image.trim()
+                ? item.image.trim()
+                : null,
             fmpSymbols,
             fmpSymbolMatched: fmpSymbols.includes(symbol.toUpperCase()),
           };
@@ -400,11 +410,49 @@ function isVideoOrLowQualitySource(item: NewsItem) {
   ].some((term) => combined.includes(term));
 }
 
-async function fetchNews(symbol: string, _companyName: string): Promise<NewsItem[]> {
+/**
+ * Fallback source used only when FMP has nothing for a symbol (missing
+ * FMP_API_KEY, or thin coverage on a small/obscure ticker). FMP is the
+ * site's paid primary data source and is preferred because, unlike this
+ * Google News RSS feed, it returns article thumbnail images.
+ */
+async function fetchGoogleNewsFallback(
+  symbol: string,
+  companyName: string
+): Promise<NewsItem[]> {
+  const baseQuery = companyName ? `${companyName} ${symbol} stock` : `${symbol} stock`;
+  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(
+    baseQuery
+  )}&hl=en-GB&gl=GB&ceid=GB:en`;
+
+  try {
+    const res = await fetch(url, {
+      next: { revalidate: 1800 },
+    });
+
+    if (!res.ok) return [];
+
+    const xml = await res.text();
+    return parseRss(xml).slice(0, 12);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchNews(symbol: string, companyName: string): Promise<NewsItem[]> {
   const fmpNews = await fetchFmpStockNews(symbol);
+  const filteredFmp = fmpNews.filter((item) => !isVideoOrLowQualitySource(item));
+
+  if (filteredFmp.length) {
+    return mergeNewsPools([filteredFmp]).slice(0, 50);
+  }
+
+  // FMP returned nothing usable for this symbol — fall back to Google News
+  // RSS so the page still shows headlines. These items will have no image.
+  const googleNews = await fetchGoogleNewsFallback(symbol, companyName);
 
   return mergeNewsPools([
-    fmpNews.filter((item) => !isVideoOrLowQualitySource(item)),
+    googleNews.filter((item) => !isVideoOrLowQualitySource(item)),
   ]).slice(0, 50);
 }
 
