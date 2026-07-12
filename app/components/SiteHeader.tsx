@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 type StockNavKind = "earnings" | "analysis" | "news";
 
@@ -98,15 +99,53 @@ function NavDropdown({
   onNavigate: (stockNav: StockNavKind) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  // No SSR/hydration guard is needed for the portal target below: `open`
+  // starts false on both server and client, so the portal only ever
+  // mounts after a click -- by which point this is definitely running in
+  // the browser and `document` is available.
+
+  // The nav bar needs `overflow-x: auto` so it can scroll on narrow
+  // screens, but that also clips any absolutely-positioned child that
+  // extends past the nav's own box -- which silently hid this dropdown's
+  // menu entirely (confirmed live: the menu was present in the DOM and
+  // marked open, just invisible). Rendering the menu into a portal at
+  // document.body, positioned from the trigger's live bounding rect, sidesteps
+  // that ancestor overflow clipping regardless of where this component sits.
+  useEffect(() => {
+    if (!open) return;
+
+    function updatePosition() {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setMenuPos({
+        top: rect.bottom + 6,
+        right: window.innerWidth - rect.right,
+      });
+    }
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
 
     function handlePointerDown(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
+      const target = event.target as Node;
+      if (containerRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
     }
 
     function handleKeyDown(event: KeyboardEvent) {
@@ -122,10 +161,55 @@ function NavDropdown({
     };
   }, [open]);
 
+  const menu =
+    open && menuPos ? (
+      <div
+        ref={menuRef}
+        role="menu"
+        className="mshGlobalHeaderDropdownMenu"
+        style={{
+          position: "fixed",
+          top: menuPos.top,
+          right: menuPos.right,
+          minWidth: 180,
+          background: "#0b1220",
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 10,
+          boxShadow: "0 12px 30px rgba(0,0,0,0.4)",
+          padding: 6,
+          zIndex: 300,
+        }}
+      >
+        {item.children.map((child) => {
+          const childHref = child.stockNav ? stockHref(lastSymbol, child.stockNav) : child.href;
+
+          return (
+            <Link
+              key={child.label}
+              href={childHref}
+              role="menuitem"
+              className="mshGlobalHeaderDropdownItem"
+              onClick={(event) => {
+                setOpen(false);
+
+                if (!child.stockNav) return;
+
+                event.preventDefault();
+                onNavigate(child.stockNav);
+              }}
+            >
+              {child.label}
+            </Link>
+          );
+        })}
+      </div>
+    ) : null;
+
   return (
     <div ref={containerRef} style={{ position: "relative", flex: "0 0 auto" }}>
       <button
         type="button"
+        ref={triggerRef}
         className={`mshGlobalHeaderLink mshGlobalHeaderDropdownTrigger ${
           active ? "is-active" : ""
         }`}
@@ -148,47 +232,7 @@ function NavDropdown({
         </span>
       </button>
 
-      {open && (
-        <div
-          role="menu"
-          className="mshGlobalHeaderDropdownMenu"
-          style={{
-            position: "absolute",
-            top: "calc(100% + 6px)",
-            right: 0,
-            minWidth: 180,
-            background: "#0b1220",
-            border: "1px solid rgba(255,255,255,0.12)",
-            borderRadius: 10,
-            boxShadow: "0 12px 30px rgba(0,0,0,0.4)",
-            padding: 6,
-            zIndex: 200,
-          }}
-        >
-          {item.children.map((child) => {
-            const childHref = child.stockNav ? stockHref(lastSymbol, child.stockNav) : child.href;
-
-            return (
-              <Link
-                key={child.label}
-                href={childHref}
-                role="menuitem"
-                className="mshGlobalHeaderDropdownItem"
-                onClick={(event) => {
-                  setOpen(false);
-
-                  if (!child.stockNav) return;
-
-                  event.preventDefault();
-                  onNavigate(child.stockNav);
-                }}
-              >
-                {child.label}
-              </Link>
-            );
-          })}
-        </div>
-      )}
+      {menu ? createPortal(menu, document.body) : null}
     </div>
   );
 }
