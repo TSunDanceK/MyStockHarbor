@@ -110,7 +110,7 @@ function NavDropdown({
   onNavigate: (stockNav: StockNavKind) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number; maxHeight: number } | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -133,9 +133,15 @@ function NavDropdown({
     function updatePosition() {
       const rect = triggerRef.current?.getBoundingClientRect();
       if (!rect) return;
+      const top = rect.bottom + 6;
       setMenuPos({
-        top: rect.bottom + 6,
+        top,
         right: window.innerWidth - rect.right,
+        // Longer menus (e.g. the Pickers dropdown, now ~22 items across 3
+        // sections) can otherwise run off the bottom of the viewport on
+        // shorter screens -- clamp to available space below the trigger
+        // and let the menu itself scroll instead.
+        maxHeight: Math.max(160, window.innerHeight - top - 16),
       });
     }
 
@@ -183,6 +189,8 @@ function NavDropdown({
           top: menuPos.top,
           right: menuPos.right,
           minWidth: item.menuMinWidth ?? 180,
+          maxHeight: menuPos.maxHeight,
+          overflowY: "auto",
           background: "#0b1220",
           border: "1px solid rgba(255,255,255,0.12)",
           borderRadius: 10,
@@ -289,7 +297,15 @@ export default function SiteHeader() {
           path === "/stocks-with-high-rsi" ||
           path === "/stocks-with-low-rsi" ||
           path === "/stocks-near-200-day-moving-average" ||
-          path === "/stocks-near-weekly-200-day-moving-average",
+          path === "/stocks-near-weekly-200-day-moving-average" ||
+          path === "/top-stocks-with-buy-signals" ||
+          path === "/top-stocks-with-sell-signals" ||
+          path === "/stocks-down-20-from-all-time-highs" ||
+          path === "/all-time-high-breakout-stocks" ||
+          path === "/3-month-high-breakout-stocks" ||
+          path === "/best-trend-score-stocks" ||
+          path === "/stocks-with-positive-last-earnings" ||
+          path === "/stocks-with-strong-earnings-growth",
         menuMinWidth: 260,
         sections: [
           {
@@ -364,6 +380,51 @@ export default function SiteHeader() {
                 label: "Near 200-Day MA (Weekly)",
                 href: "/stocks-near-weekly-200-day-moving-average",
                 isActive: (path) => path === "/stocks-near-weekly-200-day-moving-average",
+              },
+            ],
+          },
+          {
+            heading: "Signals & Screens",
+            items: [
+              {
+                label: "Buy Signals",
+                href: "/top-stocks-with-buy-signals",
+                isActive: (path) => path === "/top-stocks-with-buy-signals",
+              },
+              {
+                label: "Sell Signals",
+                href: "/top-stocks-with-sell-signals",
+                isActive: (path) => path === "/top-stocks-with-sell-signals",
+              },
+              {
+                label: "ATH Breakouts",
+                href: "/all-time-high-breakout-stocks",
+                isActive: (path) => path === "/all-time-high-breakout-stocks",
+              },
+              {
+                label: "3-Month Highs",
+                href: "/3-month-high-breakout-stocks",
+                isActive: (path) => path === "/3-month-high-breakout-stocks",
+              },
+              {
+                label: "20% From ATH",
+                href: "/stocks-down-20-from-all-time-highs",
+                isActive: (path) => path === "/stocks-down-20-from-all-time-highs",
+              },
+              {
+                label: "Best Trend Score",
+                href: "/best-trend-score-stocks",
+                isActive: (path) => path === "/best-trend-score-stocks",
+              },
+              {
+                label: "Positive Last Earnings",
+                href: "/stocks-with-positive-last-earnings",
+                isActive: (path) => path === "/stocks-with-positive-last-earnings",
+              },
+              {
+                label: "Strong Earnings Growth",
+                href: "/stocks-with-strong-earnings-growth",
+                isActive: (path) => path === "/stocks-with-strong-earnings-growth",
               },
             ],
           },
@@ -488,6 +549,30 @@ export default function SiteHeader() {
           cursor: pointer;
           display: inline-flex;
           align-items: center;
+        }
+
+        /* Subtle dark-theme scrollbar for long dropdown menus (e.g. the
+           Pickers dropdown once it's grouped into 3 sections). */
+        .mshGlobalHeaderDropdownMenu {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(255,255,255,0.18) transparent;
+        }
+
+        .mshGlobalHeaderDropdownMenu::-webkit-scrollbar {
+          width: 7px;
+        }
+
+        .mshGlobalHeaderDropdownMenu::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        .mshGlobalHeaderDropdownMenu::-webkit-scrollbar-thumb {
+          background: rgba(255,255,255,0.16);
+          border-radius: 999px;
+        }
+
+        .mshGlobalHeaderDropdownMenu::-webkit-scrollbar-thumb:hover {
+          background: rgba(255,255,255,0.28);
         }
 
         .mshGlobalHeaderDropdownItem {
