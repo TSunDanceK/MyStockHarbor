@@ -13,6 +13,16 @@ type NavChild = {
   href: string;
   isActive: (pathname: string) => boolean;
   stockNav?: StockNavKind;
+  // Visually distinguishes a single "home" link for a dropdown section
+  // (e.g. "Main Pickers Page") from the grouped items below it.
+  emphasize?: boolean;
+};
+
+type NavDropdownSection = {
+  // Omit for a section with no visible group label (e.g. the standalone
+  // "home" link at the top, or a standalone item at the bottom).
+  heading?: string;
+  items: NavChild[];
 };
 
 type NavLinkItem = NavChild & {
@@ -23,7 +33,8 @@ type NavDropdownItem = {
   kind: "dropdown";
   label: string;
   isActive: (pathname: string) => boolean;
-  children: NavChild[];
+  sections: NavDropdownSection[];
+  menuMinWidth?: number;
 };
 
 type NavItem = NavLinkItem | NavDropdownItem;
@@ -99,7 +110,7 @@ function NavDropdown({
   onNavigate: (stockNav: StockNavKind) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number; maxHeight: number } | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -122,9 +133,15 @@ function NavDropdown({
     function updatePosition() {
       const rect = triggerRef.current?.getBoundingClientRect();
       if (!rect) return;
+      const top = rect.bottom + 6;
       setMenuPos({
-        top: rect.bottom + 6,
+        top,
         right: window.innerWidth - rect.right,
+        // Longer menus (e.g. the Pickers dropdown, now ~22 items across 3
+        // sections) can otherwise run off the bottom of the viewport on
+        // shorter screens -- clamp to available space below the trigger
+        // and let the menu itself scroll instead.
+        maxHeight: Math.max(160, window.innerHeight - top - 16),
       });
     }
 
@@ -171,7 +188,9 @@ function NavDropdown({
           position: "fixed",
           top: menuPos.top,
           right: menuPos.right,
-          minWidth: 180,
+          minWidth: item.menuMinWidth ?? 180,
+          maxHeight: menuPos.maxHeight,
+          overflowY: "auto",
           background: "#0b1220",
           border: "1px solid rgba(255,255,255,0.12)",
           borderRadius: 10,
@@ -180,28 +199,41 @@ function NavDropdown({
           zIndex: 300,
         }}
       >
-        {item.children.map((child) => {
-          const childHref = child.stockNav ? stockHref(lastSymbol, child.stockNav) : child.href;
+        {item.sections.map((section, sectionIndex) => (
+          <div
+            key={section.heading ?? `section-${sectionIndex}`}
+            className={sectionIndex > 0 ? "mshGlobalHeaderDropdownSection" : undefined}
+          >
+            {section.heading ? (
+              <div className="mshGlobalHeaderDropdownHeading">{section.heading}</div>
+            ) : null}
 
-          return (
-            <Link
-              key={child.label}
-              href={childHref}
-              role="menuitem"
-              className="mshGlobalHeaderDropdownItem"
-              onClick={(event) => {
-                setOpen(false);
+            {section.items.map((child) => {
+              const childHref = child.stockNav ? stockHref(lastSymbol, child.stockNav) : child.href;
 
-                if (!child.stockNav) return;
+              return (
+                <Link
+                  key={child.label}
+                  href={childHref}
+                  role="menuitem"
+                  className={`mshGlobalHeaderDropdownItem${
+                    child.emphasize ? " mshGlobalHeaderDropdownItem--emphasis" : ""
+                  }`}
+                  onClick={(event) => {
+                    setOpen(false);
 
-                event.preventDefault();
-                onNavigate(child.stockNav);
-              }}
-            >
-              {child.label}
-            </Link>
-          );
-        })}
+                    if (!child.stockNav) return;
+
+                    event.preventDefault();
+                    onNavigate(child.stockNav);
+                  }}
+                >
+                  {child.label}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </div>
     ) : null;
 
@@ -252,10 +284,160 @@ export default function SiteHeader() {
         isActive: (path) => path === "/" || path === "/dashboard",
       },
       {
-        kind: "link",
+        kind: "dropdown",
         label: "Pickers",
-        href: "/pickers",
-        isActive: (path) => path === "/pickers",
+        isActive: (path) =>
+          path === "/pickers" ||
+          path === "/plays" ||
+          path.startsWith("/plays/") ||
+          path === "/macro-support-resistance-stocks" ||
+          path === "/overbought-stocks-today" ||
+          path === "/oversold-stocks-today" ||
+          path === "/bullish-bearish-divergence-stocks" ||
+          path === "/stocks-with-high-rsi" ||
+          path === "/stocks-with-low-rsi" ||
+          path === "/stocks-near-200-day-moving-average" ||
+          path === "/stocks-near-weekly-200-day-moving-average" ||
+          path === "/top-stocks-with-buy-signals" ||
+          path === "/top-stocks-with-sell-signals" ||
+          path === "/stocks-down-20-from-all-time-highs" ||
+          path === "/all-time-high-breakout-stocks" ||
+          path === "/3-month-high-breakout-stocks" ||
+          path === "/best-trend-score-stocks" ||
+          path === "/stocks-with-positive-last-earnings" ||
+          path === "/stocks-with-strong-earnings-growth",
+        menuMinWidth: 260,
+        sections: [
+          {
+            items: [
+              {
+                label: "Main Pickers Page",
+                href: "/pickers",
+                isActive: (path) => path === "/pickers",
+                emphasize: true,
+              },
+            ],
+          },
+          {
+            heading: "Chart Plays",
+            items: [
+              {
+                label: "Ascending Triangle Plays",
+                href: "/plays",
+                isActive: (path) => path === "/plays",
+              },
+              {
+                label: "Descending Triangle Plays",
+                href: "/plays/descending-triangles",
+                isActive: (path) => path === "/plays/descending-triangles",
+              },
+              {
+                label: "Bull Flag Plays",
+                href: "/plays/bull-flags",
+                isActive: (path) => path === "/plays/bull-flags",
+              },
+              {
+                label: "Macro Support & Resistance Plays",
+                href: "/macro-support-resistance-stocks",
+                isActive: (path) => path === "/macro-support-resistance-stocks",
+              },
+            ],
+          },
+          {
+            heading: "Indicator Plays",
+            items: [
+              {
+                label: "Overbought Stocks",
+                href: "/overbought-stocks-today",
+                isActive: (path) => path === "/overbought-stocks-today",
+              },
+              {
+                label: "Oversold Stocks",
+                href: "/oversold-stocks-today",
+                isActive: (path) => path === "/oversold-stocks-today",
+              },
+              {
+                label: "Bullish / Bearish Divergence",
+                href: "/bullish-bearish-divergence-stocks",
+                isActive: (path) => path === "/bullish-bearish-divergence-stocks",
+              },
+              {
+                label: "High RSI Stocks",
+                href: "/stocks-with-high-rsi",
+                isActive: (path) => path === "/stocks-with-high-rsi",
+              },
+              {
+                label: "Low RSI Stocks",
+                href: "/stocks-with-low-rsi",
+                isActive: (path) => path === "/stocks-with-low-rsi",
+              },
+              {
+                label: "Near 200-Day MA (Daily)",
+                href: "/stocks-near-200-day-moving-average",
+                isActive: (path) => path === "/stocks-near-200-day-moving-average",
+              },
+              {
+                label: "Near 200-Day MA (Weekly)",
+                href: "/stocks-near-weekly-200-day-moving-average",
+                isActive: (path) => path === "/stocks-near-weekly-200-day-moving-average",
+              },
+            ],
+          },
+          {
+            heading: "Signals & Screens",
+            items: [
+              {
+                label: "Buy Signals",
+                href: "/top-stocks-with-buy-signals",
+                isActive: (path) => path === "/top-stocks-with-buy-signals",
+              },
+              {
+                label: "Sell Signals",
+                href: "/top-stocks-with-sell-signals",
+                isActive: (path) => path === "/top-stocks-with-sell-signals",
+              },
+              {
+                label: "ATH Breakouts",
+                href: "/all-time-high-breakout-stocks",
+                isActive: (path) => path === "/all-time-high-breakout-stocks",
+              },
+              {
+                label: "3-Month Highs",
+                href: "/3-month-high-breakout-stocks",
+                isActive: (path) => path === "/3-month-high-breakout-stocks",
+              },
+              {
+                label: "20% From ATH",
+                href: "/stocks-down-20-from-all-time-highs",
+                isActive: (path) => path === "/stocks-down-20-from-all-time-highs",
+              },
+              {
+                label: "Best Trend Score",
+                href: "/best-trend-score-stocks",
+                isActive: (path) => path === "/best-trend-score-stocks",
+              },
+              {
+                label: "Positive Last Earnings",
+                href: "/stocks-with-positive-last-earnings",
+                isActive: (path) => path === "/stocks-with-positive-last-earnings",
+              },
+              {
+                label: "Strong Earnings Growth",
+                href: "/stocks-with-strong-earnings-growth",
+                isActive: (path) => path === "/stocks-with-strong-earnings-growth",
+              },
+            ],
+          },
+          {
+            items: [
+              {
+                label: "Build Screener",
+                href: "/pickers#custom-screener",
+                isActive: () => false,
+              },
+            ],
+          },
+        ],
       },
       {
         kind: "link",
@@ -281,17 +463,21 @@ export default function SiteHeader() {
         kind: "dropdown",
         label: "News",
         isActive: (path) => /^\/stock\/[^/]+\/news$/.test(path) || path === "/upcoming-ipos",
-        children: [
+        sections: [
           {
-            label: "Stock News",
-            href: stockHref(lastSymbol, "news"),
-            stockNav: "news",
-            isActive: (path) => /^\/stock\/[^/]+\/news$/.test(path),
-          },
-          {
-            label: "Upcoming IPO's",
-            href: "/upcoming-ipos",
-            isActive: (path) => path === "/upcoming-ipos",
+            items: [
+              {
+                label: "Stock News",
+                href: stockHref(lastSymbol, "news"),
+                stockNav: "news",
+                isActive: (path) => /^\/stock\/[^/]+\/news$/.test(path),
+              },
+              {
+                label: "Upcoming IPO's",
+                href: "/upcoming-ipos",
+                isActive: (path) => path === "/upcoming-ipos",
+              },
+            ],
           },
         ],
       },
@@ -365,6 +551,30 @@ export default function SiteHeader() {
           align-items: center;
         }
 
+        /* Subtle dark-theme scrollbar for long dropdown menus (e.g. the
+           Pickers dropdown once it's grouped into 3 sections). */
+        .mshGlobalHeaderDropdownMenu {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(255,255,255,0.18) transparent;
+        }
+
+        .mshGlobalHeaderDropdownMenu::-webkit-scrollbar {
+          width: 7px;
+        }
+
+        .mshGlobalHeaderDropdownMenu::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        .mshGlobalHeaderDropdownMenu::-webkit-scrollbar-thumb {
+          background: rgba(255,255,255,0.16);
+          border-radius: 999px;
+        }
+
+        .mshGlobalHeaderDropdownMenu::-webkit-scrollbar-thumb:hover {
+          background: rgba(255,255,255,0.28);
+        }
+
         .mshGlobalHeaderDropdownItem {
           display: block;
           color: #b7c1d1;
@@ -380,6 +590,31 @@ export default function SiteHeader() {
         .mshGlobalHeaderDropdownItem:hover {
           color: #eaf0fa;
           background: #141b2b;
+        }
+
+        /* "Home" link for a dropdown section (e.g. "Main Pickers Page") --
+           slightly bolder/brighter than the grouped items below it. */
+        .mshGlobalHeaderDropdownItem--emphasis {
+          font-weight: 800;
+          color: #eaf0fa;
+        }
+
+        /* Small uppercase, muted section label -- same visual language as
+           the "Screened Results" / "FAQ" section headers on the pickers
+           page (app/pickers/page.tsx). */
+        .mshGlobalHeaderDropdownHeading {
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: rgba(148,163,184,0.65);
+          padding: 10px 10px 4px;
+        }
+
+        .mshGlobalHeaderDropdownSection {
+          margin-top: 2px;
+          padding-top: 4px;
+          border-top: 1px solid rgba(255,255,255,0.06);
         }
 
         /* Active Path Styles */
