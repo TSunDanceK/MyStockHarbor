@@ -39,7 +39,7 @@ export default function HowToFindBuyTheDipStocksPage() {
           </div>
           <div style={{ fontSize: 12, opacity: 0.72, fontWeight: 800 }}>BUY THE DIP GUIDE</div>
           <h1 style={{ margin: "8px 0 0", fontSize: 36, lineHeight: 1.15 }}>How to Find Buy the Dip Stocks</h1>
-          <p style={{ marginTop: 14, lineHeight: 1.7, opacity: 0.86 }}>"Buy the dip" is one of the most common phrases in the stock market. The real challenge is identifying pullbacks that occur within a healthy trend rather than weakness that signals deeper problems.</p>
+          <p style={{ marginTop: 14, lineHeight: 1.7, opacity: 0.86 }}>&quot;Buy the dip&quot; is one of the most common phrases in the stock market. The real challenge is identifying pullbacks that occur within a healthy trend rather than weakness that signals deeper problems.</p>
           <section style={{ marginTop: 28 }}>
             <h2>1. Look for strong existing trends</h2>
             <p style={{ marginTop: 12, lineHeight: 1.7, opacity: 0.86 }}>Traders usually prefer buying dips in stocks that have already shown strong upward movement. When a stock has been trending higher for months, pullbacks can sometimes represent temporary pauses rather than trend reversals.</p>
@@ -67,7 +67,7 @@ export default function HowToFindBuyTheDipStocksPage() {
               <Link href="/buy-the-dip-stocks">Buy the Dip Stocks</Link>
               <Link href="/oversold-stocks">Oversold Stocks</Link>
               <Link href="/stocks-down-from-highs">Stocks Down From Highs</Link>
-              <Link href="/stock-market-setups">Stock Market Setups</Link>
+              <Link href="/trading-setups">Trading Setups</Link>
             </div>
           </section>
         </div>

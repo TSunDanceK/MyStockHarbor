@@ -64,7 +64,7 @@ export default function HowToScanStocksPage() {
           <section style={{ marginTop: 32 }}>
             <h2>Related guides</h2>
             <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
-              <Link href="/stock-market-setups">Stock Market Setups</Link>
+              <Link href="/trading-setups">Trading Setups</Link>
               <Link href="/stock-screener-for-breakouts">Stock Screener for Breakouts</Link>
               <Link href="/stock-screener-for-oversold-stocks">Stock Screener for Oversold Stocks</Link>
               <Link href="/best-free-stock-screener">Best Free Stock Screener</Link>
