@@ -14,6 +14,7 @@ const mainPages = [
   { path: "/utilities", changeFrequency: "weekly" as const, priority: 0.7 },
   { path: "/insights", changeFrequency: "daily" as const, priority: 0.85 },
   { path: "/bottlenecks", changeFrequency: "daily" as const, priority: 0.85 },
+  { path: "/upcoming-ipos", changeFrequency: "daily" as const, priority: 0.75 },
   { path: "/about", changeFrequency: "monthly" as const, priority: 0.5 },
   { path: "/contact", changeFrequency: "monthly" as const, priority: 0.5 },
   { path: "/privacy-policy", changeFrequency: "monthly" as const, priority: 0.4 },
