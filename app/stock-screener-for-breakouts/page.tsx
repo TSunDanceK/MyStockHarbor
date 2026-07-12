@@ -411,8 +411,8 @@ export default function StockScreenerForBreakoutsPage() {
                 text: "Learn what traders look for in breakout charts and price expansion setups.",
               },
               {
-                href: "/stock-market-setups",
-                title: "Stock Market Setups",
+                href: "/trading-setups",
+                title: "Trading Setups",
                 text: "Explore the full hub of common stock market setups and ideas.",
               },
               {
