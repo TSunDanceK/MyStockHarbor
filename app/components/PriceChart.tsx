@@ -136,6 +136,14 @@ type Props = {
   volume?: (number | null)[];
 
   height?: number;
+
+  // Controlled TradingView toggle: pass both to let a parent (e.g.
+  // DashboardClient) own this state so it can hide its own redundant chart
+  // controls when TradingView mode is active. If omitted, PriceChart falls
+  // back to managing an internal uncontrolled toggle -- existing callers
+  // (SPXChartClient, InsightPostClient) keep working unchanged.
+  tradingViewActive?: boolean;
+  onToggleTradingView?: (next: boolean) => void;
 };
 
 export default function PriceChart(props: Props) {
@@ -169,14 +177,25 @@ export default function PriceChart(props: Props) {
     volume,
 
     height = 320,
+    tradingViewActive,
+    onToggleTradingView,
   } = props;
 
   const width = 760;
 
   // Only mounts TradingViewChartEmbed (and its ~500KB tv.js script) once the
   // user explicitly clicks the toggle below -- the default experience never
-  // pays this cost.
-  const [showTradingView, setShowTradingView] = useState(false);
+  // pays this cost. Controlled by a parent when tradingViewActive is passed
+  // (see Props above); otherwise managed internally.
+  const [internalShowTradingView, setInternalShowTradingView] = useState(false);
+  const isTradingViewControlled = tradingViewActive !== undefined;
+  const showTradingView = isTradingViewControlled ? tradingViewActive! : internalShowTradingView;
+
+  function toggleTradingView() {
+    const next = !showTradingView;
+    if (onToggleTradingView) onToggleTradingView(next);
+    if (!isTradingViewControlled) setInternalShowTradingView(next);
+  }
 
   const padL = 34;
   const padR = 54;
@@ -1059,7 +1078,7 @@ export default function PriceChart(props: Props) {
           >
             <button
               type="button"
-              onClick={() => setShowTradingView((v) => !v)}
+              onClick={toggleTradingView}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
