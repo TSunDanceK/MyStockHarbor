@@ -33,6 +33,7 @@ export async function GET(req: Request) {
           data.aiBriefs[index]?.whyItMatters ??
           "This headline may matter if it changes how traders think about the stock near-term.",
         debugAiUsed: data.aiBriefs[index] ? 1 : 0,
+        image: item.image ?? null,
       })),
       ctaHref: `/stock/${encodeURIComponent(data.symbol)}/news`,
     },
