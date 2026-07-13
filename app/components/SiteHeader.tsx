@@ -110,7 +110,12 @@ function NavDropdown({
   onNavigate: (stockNav: StockNavKind) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [menuPos, setMenuPos] = useState<{ top: number; right: number; maxHeight: number } | null>(null);
+  const [menuPos, setMenuPos] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -134,9 +139,27 @@ function NavDropdown({
       const rect = triggerRef.current?.getBoundingClientRect();
       if (!rect) return;
       const top = rect.bottom + 6;
+      const viewportWidth = window.innerWidth;
+      const margin = 10;
+      const desiredWidth = item.menuMinWidth ?? 180;
+
+      // The menu was previously anchored purely by its right edge
+      // (`right: window.innerWidth - rect.right`) with no horizontal
+      // clamping. On mobile, triggers like "Pickers"/"News" sit close to
+      // the right edge of the nav, so a menu wider than the remaining
+      // space to the trigger's left got pushed off the left edge of the
+      // viewport -- clipping roughly half its content. Anchor by `left`
+      // instead (right-aligned to the trigger by default) and clamp both
+      // edges to the viewport, capping the width so the whole menu always
+      // stays on-screen and scrolls internally if it's still too tall.
+      const width = Math.min(desiredWidth, viewportWidth - margin * 2);
+      let left = rect.right - width;
+      left = Math.min(Math.max(left, margin), viewportWidth - margin - width);
+
       setMenuPos({
         top,
-        right: window.innerWidth - rect.right,
+        left,
+        width,
         // Longer menus (e.g. the Pickers dropdown, now ~22 items across 3
         // sections) can otherwise run off the bottom of the viewport on
         // shorter screens -- clamp to available space below the trigger
@@ -153,7 +176,7 @@ function NavDropdown({
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [open]);
+  }, [open, item.menuMinWidth]);
 
   useEffect(() => {
     if (!open) return;
@@ -187,8 +210,8 @@ function NavDropdown({
         style={{
           position: "fixed",
           top: menuPos.top,
-          right: menuPos.right,
-          minWidth: item.menuMinWidth ?? 180,
+          left: menuPos.left,
+          width: menuPos.width,
           maxHeight: menuPos.maxHeight,
           overflowY: "auto",
           background: "#0b1220",
