@@ -282,7 +282,7 @@ function PlayDiagram({ pattern, tone }: { pattern: PlayCardDef["pattern"]; tone:
   const c = playTone(tone);
 
   if (pattern === "ascending") return (
-    <svg viewBox="0 0 280 110" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Ascending triangle">
+    <svg viewBox="0 0 280 110" style={{ width: "100%", maxWidth: "100%", height: "auto", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Ascending triangle">
       <path d="M20 28 H260" stroke={c.line} strokeWidth="2" strokeDasharray="6 4" strokeLinecap="round" opacity="0.85" />
       <path d="M20 88 L260 28" stroke={c.accent} strokeWidth="1.5" strokeLinecap="round" opacity="0.55" />
       <path d="M22 86 L50 28 L72 62 L100 28 L122 50 L150 28 L172 42 L200 28 L222 35 L250 28" stroke="rgba(226,232,240,0.75)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
@@ -291,7 +291,7 @@ function PlayDiagram({ pattern, tone }: { pattern: PlayCardDef["pattern"]; tone:
   );
 
   if (pattern === "descending") return (
-    <svg viewBox="0 0 280 110" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Descending triangle">
+    <svg viewBox="0 0 280 110" style={{ width: "100%", maxWidth: "100%", height: "auto", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Descending triangle">
       <path d="M20 82 H260" stroke={c.line} strokeWidth="2" strokeDasharray="6 4" strokeLinecap="round" opacity="0.85" />
       <path d="M20 24 L260 82" stroke={c.accent} strokeWidth="1.5" strokeLinecap="round" opacity="0.55" />
       <path d="M22 26 L50 82 L72 54 L100 82 L122 62 L150 82 L172 70 L200 82 L222 77 L250 82" stroke="rgba(226,232,240,0.75)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
@@ -300,7 +300,7 @@ function PlayDiagram({ pattern, tone }: { pattern: PlayCardDef["pattern"]; tone:
   );
 
   if (pattern === "bullFlag") return (
-    <svg viewBox="0 0 240 110" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Bull flag">
+    <svg viewBox="0 0 240 110" style={{ width: "100%", maxWidth: "100%", height: "auto", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Bull flag">
       <path d="M28 96 L48 78 L62 58 L76 30" stroke="#22c55e" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M76 30 L168 44" stroke="rgba(226,232,240,0.40)" strokeWidth="1.5" strokeDasharray="5 4" strokeLinecap="round" />
       <path d="M76 50 L168 62" stroke="rgba(226,232,240,0.40)" strokeWidth="1.5" strokeDasharray="5 4" strokeLinecap="round" />
@@ -310,7 +310,7 @@ function PlayDiagram({ pattern, tone }: { pattern: PlayCardDef["pattern"]; tone:
   );
 
   if (pattern === "macroSR") return (
-    <svg viewBox="0 0 280 110" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Macro support resistance">
+    <svg viewBox="0 0 280 110" style={{ width: "100%", maxWidth: "100%", height: "auto", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Macro support resistance">
       <path d="M20 22 H260" stroke="#ef4444" strokeWidth="2" strokeDasharray="6 4" strokeLinecap="round" opacity="0.80" />
       <path d="M20 78 H260" stroke="#22c55e" strokeWidth="2" strokeDasharray="6 4" strokeLinecap="round" opacity="0.80" />
       <path d="M22 72 L50 26 L80 72 L110 26 L140 68 L168 26 L196 72 L224 28 L252 72" stroke="rgba(226,232,240,0.72)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
@@ -331,7 +331,7 @@ function PatternPlaysSection() {
         {PLAY_CARDS.map((play) => {
           const c = playTone(play.tone);
           return (
-            <a key={play.href} href={play.href} style={{ display: "grid", gap: 8, padding: 12, borderRadius: 12, border: `1px solid ${c.border}`, background: c.bg, textDecoration: "none", color: "#f1f5f9", transition: "transform 140ms ease, filter 140ms ease", boxSizing: "border-box" }} className="pattern-play-card">
+            <a key={play.href} href={play.href} style={{ display: "grid", gap: 8, padding: 12, borderRadius: 12, border: `1px solid ${c.border}`, background: c.bg, textDecoration: "none", color: "#f1f5f9", transition: "transform 140ms ease, filter 140ms ease", boxSizing: "border-box", minWidth: 0, overflow: "hidden" }} className="pattern-play-card">
               <PlayDiagram pattern={play.pattern} tone={play.tone} />
               <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
                 <span style={{ width: 7, height: 7, borderRadius: 999, background: c.dot, flex: "0 0 auto" }} />
@@ -851,6 +851,8 @@ export default function PickersClient({ latestInsights = [] }: { latestInsights?
   .pickers-section-footer { display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;flex-wrap:nowrap; }
   .pickers-section-footer-left { display:flex;align-items:center;gap:8px;flex:1;min-width:0; }
   .pattern-plays-grid { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px; }
+  .pattern-play-card { min-width:0;overflow:hidden; }
+  .pattern-play-card svg { max-width:100%;height:auto; }
   .pattern-play-card:hover { transform:translateY(-2px);filter:brightness(1.08); }
   .pickers-filter-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px; }
   .pickers-card-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px; }
