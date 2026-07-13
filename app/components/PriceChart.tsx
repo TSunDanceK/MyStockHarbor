@@ -144,6 +144,14 @@ type Props = {
   // (SPXChartClient, InsightPostClient) keep working unchanged.
   tradingViewActive?: boolean;
   onToggleTradingView?: (next: boolean) => void;
+
+  // Controls the internal "Open in TradingView ↗" and "Trade {symbol} →"
+  // links in this component's own footer. Default true preserves existing
+  // behavior for callers (SPXChartClient, InsightPostClient). DashboardClient
+  // sets both to false since it renders its own equivalently-styled links
+  // elsewhere on the page instead.
+  showTradingViewLink?: boolean;
+  showTradeLink?: boolean;
 };
 
 export default function PriceChart(props: Props) {
@@ -179,6 +187,8 @@ export default function PriceChart(props: Props) {
     height = 320,
     tradingViewActive,
     onToggleTradingView,
+    showTradingViewLink = true,
+    showTradeLink = true,
   } = props;
 
   const width = 760;
@@ -191,8 +201,7 @@ export default function PriceChart(props: Props) {
   const isTradingViewControlled = tradingViewActive !== undefined;
   const showTradingView = isTradingViewControlled ? tradingViewActive! : internalShowTradingView;
 
-  function toggleTradingView() {
-    const next = !showTradingView;
+  function setTradingViewMode(next: boolean) {
     if (onToggleTradingView) onToggleTradingView(next);
     if (!isTradingViewControlled) setInternalShowTradingView(next);
   }
@@ -1070,79 +1079,117 @@ export default function PriceChart(props: Props) {
 
           <div
             style={{
+              display: "inline-flex",
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.14)",
+              borderRadius: 10,
+              padding: 3,
+              gap: 3,
+              flex: "0 0 auto",
+            }}
+            role="group"
+            aria-label="Chart source"
+          >
+            <button
+              type="button"
+              onClick={() => setTradingViewMode(false)}
+              aria-pressed={!showTradingView}
+              style={{
+                border: "none",
+                borderRadius: 7,
+                padding: "7px 12px",
+                background: !showTradingView ? "rgba(167,139,250,0.28)" : "transparent",
+                color: !showTradingView ? "#ede9fe" : "#8a97ad",
+                fontWeight: 700,
+                fontSize: 12,
+                cursor: "pointer",
+                boxShadow: !showTradingView ? "inset 0 0 0 1px rgba(167,139,250,0.36)" : "none",
+                whiteSpace: "nowrap",
+              }}
+            >
+              MyStockHarbor
+            </button>
+            <button
+              type="button"
+              onClick={() => setTradingViewMode(true)}
+              aria-pressed={showTradingView}
+              style={{
+                border: "none",
+                borderRadius: 7,
+                padding: "7px 12px",
+                background: showTradingView ? "rgba(167,139,250,0.28)" : "transparent",
+                color: showTradingView ? "#ede9fe" : "#8a97ad",
+                fontWeight: 700,
+                fontSize: 12,
+                cursor: "pointer",
+                boxShadow: showTradingView ? "inset 0 0 0 1px rgba(167,139,250,0.36)" : "none",
+                whiteSpace: "nowrap",
+              }}
+            >
+              TradingView
+            </button>
+          </div>
+        </div>
+
+        {showTradingViewLink || showTradeLink ? (
+          <div
+            style={{
               display: "flex",
               alignItems: "center",
+              justifyContent: "flex-end",
               gap: 10,
               flexWrap: "wrap",
             }}
           >
-            <button
-              type="button"
-              onClick={toggleTradingView}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "8px 12px",
-                borderRadius: 10,
-                border: "1px solid rgba(167,139,250,0.40)",
-                background:
-                  "linear-gradient(135deg, rgba(167,139,250,0.18), rgba(124,58,237,0.10))",
-                color: "#ede9fe",
-                fontWeight: 800,
-                fontSize: 12,
-                whiteSpace: "nowrap",
-                cursor: "pointer",
-              }}
-            >
-              {showTradingView ? "← Back to MyStockHarbor chart" : "Switch to TradingView chart"}
-            </button>
+            {showTradingViewLink ? (
+              <a
+                href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`}
+                target="_blank"
+                rel="noopener noreferrer sponsored nofollow"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "8px 12px",
+                  borderRadius: 10,
+                  border: "1px solid rgba(59,130,246,0.40)",
+                  background:
+                    "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
+                  color: "#dbeafe",
+                  textDecoration: "none",
+                  fontWeight: 800,
+                  fontSize: 12,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Open in TradingView ↗
+              </a>
+            ) : null}
 
-            <a
-              href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`}
-              target="_blank"
-              rel="noopener noreferrer sponsored nofollow"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "8px 12px",
-                borderRadius: 10,
-                border: "1px solid rgba(59,130,246,0.40)",
-                background:
-                  "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
-                color: "#dbeafe",
-                textDecoration: "none",
-                fontWeight: 800,
-                fontSize: 12,
-                whiteSpace: "nowrap",
-              }}
-            >
-              Open in TradingView ↗
-            </a>
-
-            <a
-              href="/platforms"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "8px 12px",
-                borderRadius: 10,
-                border: "1px solid rgba(34,197,94,0.40)",
-                background:
-                  "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))",
-                color: "#dcfce7",
-                textDecoration: "none",
-                fontWeight: 800,
-                fontSize: 12,
-                whiteSpace: "nowrap",
-              }}
-            >
-              Trade {symbol} →
-            </a>
+            {showTradeLink ? (
+              <a
+                href="/platforms"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "8px 12px",
+                  borderRadius: 10,
+                  border: "1px solid rgba(34,197,94,0.40)",
+                  background:
+                    "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))",
+                  color: "#dcfce7",
+                  textDecoration: "none",
+                  fontWeight: 800,
+                  fontSize: 12,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Trade {symbol} →
+              </a>
+            ) : null}
           </div>
-        </div>
+        ) : null}
       </div>
     </div>
   );
