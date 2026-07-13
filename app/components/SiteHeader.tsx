@@ -18,23 +18,32 @@ type NavChild = {
   emphasize?: boolean;
 };
 
-type NavDropdownSection = {
-  // Omit for a section with no visible group label (e.g. the standalone
-  // "home" link at the top, or a standalone item at the bottom).
-  heading?: string;
+// A top-level row inside a dropdown menu: either a plain link, or a
+// "submenu" trigger whose own items open in a second flyout menu to the
+// right (or left, if there isn't room) of the trigger row, instead of
+// being listed inline underneath a heading.
+type NavDropdownLinkEntry = NavChild & { kind: "link" };
+
+type NavDropdownSubmenuEntry = {
+  kind: "submenu";
+  label: string;
   items: NavChild[];
+  isActive: (pathname: string) => boolean;
 };
 
-type NavLinkItem = NavChild & {
-  kind: "link";
-};
+type NavDropdownEntry = NavDropdownLinkEntry | NavDropdownSubmenuEntry;
 
 type NavDropdownItem = {
   kind: "dropdown";
   label: string;
   isActive: (pathname: string) => boolean;
-  sections: NavDropdownSection[];
+  entries: NavDropdownEntry[];
   menuMinWidth?: number;
+  submenuMinWidth?: number;
+};
+
+type NavLinkItem = NavChild & {
+  kind: "link";
 };
 
 type NavItem = NavLinkItem | NavDropdownItem;
@@ -98,6 +107,191 @@ function normalisePathname(pathname: string | null) {
   return withoutTrailingSlash || "/";
 }
 
+// A submenu trigger row rendered inside an open NavDropdown's portal menu.
+// Its own item list opens as a second, independently-positioned flyout
+// menu -- preferring the right of the trigger row, falling back to the
+// left if there isn't room, using the same viewport-clamping approach as
+// the parent dropdown menu itself.
+function NavSubmenu({
+  label,
+  items,
+  lastSymbol,
+  minWidth,
+  onNavigate,
+  closeAll,
+  isOpen,
+  onOpen,
+  onClose,
+}: {
+  label: string;
+  items: NavChild[];
+  lastSymbol: string;
+  minWidth: number;
+  onNavigate: (stockNav: StockNavKind) => void;
+  closeAll: () => void;
+  isOpen: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+}) {
+  const [flyoutPos, setFlyoutPos] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
+  const triggerRef = useRef<HTMLDivElement | null>(null);
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    function updatePosition() {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const gap = 4;
+      const margin = 10;
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const width = Math.min(minWidth, viewportWidth - margin * 2);
+
+      // Prefer opening to the right of the trigger row; fall back to the
+      // left if there isn't enough room so the flyout never gets clipped
+      // off the edge of the viewport (e.g. on narrower screens).
+      let left = rect.right + gap;
+      if (left + width + margin > viewportWidth) {
+        left = rect.left - gap - width;
+      }
+      left = Math.min(Math.max(left, margin), viewportWidth - margin - width);
+
+      let top = rect.top;
+      const maxHeight = Math.max(160, viewportHeight - top - 16);
+      if (top + 40 > viewportHeight - margin) {
+        top = Math.max(margin, viewportHeight - margin - 40);
+      }
+
+      setFlyoutPos({ top, left, width, maxHeight });
+    }
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [isOpen, minWidth]);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
+    };
+  }, []);
+
+  function cancelScheduledClose() {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+  }
+
+  function scheduleClose() {
+    cancelScheduledClose();
+    closeTimeoutRef.current = setTimeout(() => onClose(), 150);
+  }
+
+  const flyout =
+    isOpen && flyoutPos ? (
+      <div
+        role="menu"
+        className="mshGlobalHeaderDropdownMenu"
+        style={{
+          position: "fixed",
+          top: flyoutPos.top,
+          left: flyoutPos.left,
+          width: flyoutPos.width,
+          maxHeight: flyoutPos.maxHeight,
+          overflowY: "auto",
+          background: "#0b1220",
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 10,
+          boxShadow: "0 12px 30px rgba(0,0,0,0.4)",
+          padding: 6,
+          zIndex: 310,
+        }}
+        onMouseEnter={cancelScheduledClose}
+        onMouseLeave={scheduleClose}
+      >
+        {items.map((child) => {
+          const childHref = child.stockNav ? stockHref(lastSymbol, child.stockNav) : child.href;
+
+          return (
+            <Link
+              key={child.label}
+              href={childHref}
+              role="menuitem"
+              className={`mshGlobalHeaderDropdownItem${
+                child.emphasize ? " mshGlobalHeaderDropdownItem--emphasis" : ""
+              }`}
+              onClick={(event) => {
+                closeAll();
+
+                if (!child.stockNav) return;
+
+                event.preventDefault();
+                onNavigate(child.stockNav);
+              }}
+            >
+              {child.label}
+            </Link>
+          );
+        })}
+      </div>
+    ) : null;
+
+  return (
+    <div
+      ref={triggerRef}
+      role="menuitem"
+      aria-haspopup="menu"
+      aria-expanded={isOpen}
+      tabIndex={0}
+      className="mshGlobalHeaderDropdownItem mshGlobalHeaderDropdownItem--submenu"
+      onMouseEnter={() => {
+        cancelScheduledClose();
+        onOpen();
+      }}
+      onMouseLeave={scheduleClose}
+      onClick={() => (isOpen ? onClose() : onOpen())}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          isOpen ? onClose() : onOpen();
+        } else if (event.key === "Escape") {
+          onClose();
+        }
+      }}
+    >
+      <span
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
+        }}
+      >
+        {label}
+        <span aria-hidden="true" style={{ fontSize: 10, opacity: 0.7 }}>
+          ▶
+        </span>
+      </span>
+
+      {flyout ? createPortal(flyout, document.body) : null}
+    </div>
+  );
+}
+
 function NavDropdown({
   item,
   active,
@@ -110,6 +304,7 @@ function NavDropdown({
   onNavigate: (stockNav: StockNavKind) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{
     top: number;
     left: number;
@@ -160,10 +355,9 @@ function NavDropdown({
         top,
         left,
         width,
-        // Longer menus (e.g. the Pickers dropdown, now ~22 items across 3
-        // sections) can otherwise run off the bottom of the viewport on
-        // shorter screens -- clamp to available space below the trigger
-        // and let the menu itself scroll instead.
+        // Longer menus can otherwise run off the bottom of the viewport
+        // on shorter screens -- clamp to available space below the
+        // trigger and let the menu itself scroll instead.
         maxHeight: Math.max(160, window.innerHeight - top - 16),
       });
     }
@@ -179,17 +373,33 @@ function NavDropdown({
   }, [open, item.menuMinWidth]);
 
   useEffect(() => {
+    if (!open) setOpenSubmenu(null);
+  }, [open]);
+
+  useEffect(() => {
     if (!open) return;
 
     function handlePointerDown(event: MouseEvent) {
       const target = event.target as Node;
       if (containerRef.current?.contains(target)) return;
       if (menuRef.current?.contains(target)) return;
+      // Flyout submenus (e.g. "Chart Plays" -> its right-hand item list)
+      // are portaled to document.body as siblings of this main menu, so
+      // they won't be inside menuRef's DOM tree -- match by the shared
+      // menu class instead so a click inside an open flyout isn't treated
+      // as "outside" and doesn't close everything.
+      if (target instanceof Element && target.closest(".mshGlobalHeaderDropdownMenu")) {
+        return;
+      }
       setOpen(false);
+      setOpenSubmenu(null);
     }
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        setOpen(false);
+        setOpenSubmenu(null);
+      }
     }
 
     document.addEventListener("mousedown", handlePointerDown);
@@ -200,6 +410,11 @@ function NavDropdown({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [open]);
+
+  const closeAll = () => {
+    setOpen(false);
+    setOpenSubmenu(null);
+  };
 
   const menu =
     open && menuPos ? (
@@ -222,41 +437,49 @@ function NavDropdown({
           zIndex: 300,
         }}
       >
-        {item.sections.map((section, sectionIndex) => (
-          <div
-            key={section.heading ?? `section-${sectionIndex}`}
-            className={sectionIndex > 0 ? "mshGlobalHeaderDropdownSection" : undefined}
-          >
-            {section.heading ? (
-              <div className="mshGlobalHeaderDropdownHeading">{section.heading}</div>
-            ) : null}
+        {item.entries.map((entry) => {
+          if (entry.kind === "submenu") {
+            return (
+              <NavSubmenu
+                key={entry.label}
+                label={entry.label}
+                items={entry.items}
+                lastSymbol={lastSymbol}
+                minWidth={item.submenuMinWidth ?? 240}
+                onNavigate={onNavigate}
+                closeAll={closeAll}
+                isOpen={openSubmenu === entry.label}
+                onOpen={() => setOpenSubmenu(entry.label)}
+                onClose={() =>
+                  setOpenSubmenu((prev) => (prev === entry.label ? null : prev))
+                }
+              />
+            );
+          }
 
-            {section.items.map((child) => {
-              const childHref = child.stockNav ? stockHref(lastSymbol, child.stockNav) : child.href;
+          const childHref = entry.stockNav ? stockHref(lastSymbol, entry.stockNav) : entry.href;
 
-              return (
-                <Link
-                  key={child.label}
-                  href={childHref}
-                  role="menuitem"
-                  className={`mshGlobalHeaderDropdownItem${
-                    child.emphasize ? " mshGlobalHeaderDropdownItem--emphasis" : ""
-                  }`}
-                  onClick={(event) => {
-                    setOpen(false);
+          return (
+            <Link
+              key={entry.label}
+              href={childHref}
+              role="menuitem"
+              className={`mshGlobalHeaderDropdownItem${
+                entry.emphasize ? " mshGlobalHeaderDropdownItem--emphasis" : ""
+              }`}
+              onClick={(event) => {
+                closeAll();
 
-                    if (!child.stockNav) return;
+                if (!entry.stockNav) return;
 
-                    event.preventDefault();
-                    onNavigate(child.stockNav);
-                  }}
-                >
-                  {child.label}
-                </Link>
-              );
-            })}
-          </div>
-        ))}
+                event.preventDefault();
+                onNavigate(entry.stockNav);
+              }}
+            >
+              {entry.label}
+            </Link>
+          );
+        })}
       </div>
     ) : null;
 
@@ -329,20 +552,23 @@ export default function SiteHeader() {
           path === "/best-trend-score-stocks" ||
           path === "/stocks-with-positive-last-earnings" ||
           path === "/stocks-with-strong-earnings-growth",
-        menuMinWidth: 260,
-        sections: [
+        menuMinWidth: 220,
+        submenuMinWidth: 250,
+        entries: [
           {
-            items: [
-              {
-                label: "Main Pickers Page",
-                href: "/pickers",
-                isActive: (path) => path === "/pickers",
-                emphasize: true,
-              },
-            ],
+            kind: "link",
+            label: "Main Pickers Page",
+            href: "/pickers",
+            isActive: (path) => path === "/pickers",
+            emphasize: true,
           },
           {
-            heading: "Chart Plays",
+            kind: "submenu",
+            label: "Chart Plays",
+            isActive: (path) =>
+              path === "/plays" ||
+              path.startsWith("/plays/") ||
+              path === "/macro-support-resistance-stocks",
             items: [
               {
                 label: "Ascending Triangle Plays",
@@ -367,7 +593,16 @@ export default function SiteHeader() {
             ],
           },
           {
-            heading: "Indicator Plays",
+            kind: "submenu",
+            label: "Indicator Plays",
+            isActive: (path) =>
+              path === "/overbought-stocks-today" ||
+              path === "/oversold-stocks-today" ||
+              path === "/bullish-bearish-divergence-stocks" ||
+              path === "/stocks-with-high-rsi" ||
+              path === "/stocks-with-low-rsi" ||
+              path === "/stocks-near-200-day-moving-average" ||
+              path === "/stocks-near-weekly-200-day-moving-average",
             items: [
               {
                 label: "Overbought Stocks",
@@ -407,7 +642,17 @@ export default function SiteHeader() {
             ],
           },
           {
-            heading: "Signals & Screens",
+            kind: "submenu",
+            label: "Signals & Screens",
+            isActive: (path) =>
+              path === "/top-stocks-with-buy-signals" ||
+              path === "/top-stocks-with-sell-signals" ||
+              path === "/all-time-high-breakout-stocks" ||
+              path === "/3-month-high-breakout-stocks" ||
+              path === "/stocks-down-20-from-all-time-highs" ||
+              path === "/best-trend-score-stocks" ||
+              path === "/stocks-with-positive-last-earnings" ||
+              path === "/stocks-with-strong-earnings-growth",
             items: [
               {
                 label: "Buy Signals",
@@ -452,13 +697,10 @@ export default function SiteHeader() {
             ],
           },
           {
-            items: [
-              {
-                label: "Build Screener",
-                href: "/pickers#custom-screener",
-                isActive: () => false,
-              },
-            ],
+            kind: "link",
+            label: "Build Screener",
+            href: "/pickers#custom-screener",
+            isActive: () => false,
           },
         ],
       },
@@ -489,26 +731,25 @@ export default function SiteHeader() {
           /^\/stock\/[^/]+\/news$/.test(path) ||
           path === "/upcoming-ipos" ||
           path === "/headlines",
-        sections: [
+        entries: [
           {
-            items: [
-              {
-                label: "Stock News",
-                href: stockHref(lastSymbol, "news"),
-                stockNav: "news",
-                isActive: (path) => /^\/stock\/[^/]+\/news$/.test(path),
-              },
-              {
-                label: "Upcoming IPO's",
-                href: "/upcoming-ipos",
-                isActive: (path) => path === "/upcoming-ipos",
-              },
-              {
-                label: "Headlines",
-                href: "/headlines",
-                isActive: (path) => path === "/headlines",
-              },
-            ],
+            kind: "link",
+            label: "Stock News",
+            href: stockHref(lastSymbol, "news"),
+            stockNav: "news",
+            isActive: (path) => /^\/stock\/[^/]+\/news$/.test(path),
+          },
+          {
+            kind: "link",
+            label: "Upcoming IPO's",
+            href: "/upcoming-ipos",
+            isActive: (path) => path === "/upcoming-ipos",
+          },
+          {
+            kind: "link",
+            label: "Headlines",
+            href: "/headlines",
+            isActive: (path) => path === "/headlines",
           },
         ],
       },
@@ -582,8 +823,9 @@ export default function SiteHeader() {
           align-items: center;
         }
 
-        /* Subtle dark-theme scrollbar for long dropdown menus (e.g. the
-           Pickers dropdown once it's grouped into 3 sections). */
+        /* Subtle dark-theme scrollbar for long dropdown/flyout menus
+           (e.g. the Pickers dropdown and its Chart/Indicator/Signals
+           flyout submenus). */
         .mshGlobalHeaderDropdownMenu {
           scrollbar-width: thin;
           scrollbar-color: rgba(255,255,255,0.18) transparent;
@@ -616,11 +858,19 @@ export default function SiteHeader() {
           border-radius: 7px;
           white-space: nowrap;
           transition: color .15s, background .15s;
+          cursor: pointer;
         }
 
         .mshGlobalHeaderDropdownItem:hover {
           color: #eaf0fa;
           background: #141b2b;
+        }
+
+        /* A dropdown row that opens a flyout submenu instead of navigating
+           directly -- same base look as a link item, plus a right-facing
+           arrow (added inline) to hint that it expands sideways. */
+        .mshGlobalHeaderDropdownItem--submenu {
+          user-select: none;
         }
 
         /* "Home" link for a dropdown section (e.g. "Main Pickers Page") --
