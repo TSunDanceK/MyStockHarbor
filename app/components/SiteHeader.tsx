@@ -515,11 +515,179 @@ function NavDropdown({
   );
 }
 
+// Full-screen mobile nav overlay, opened from the hamburger button below
+// the 720px breakpoint. Reuses the same `navItems` data as the desktop
+// header, but renders dropdown items as inline expand/collapse accordion
+// groups (mobile has no hover, and a sideways flyout doesn't suit a narrow
+// viewport) instead of the desktop NavDropdown/NavSubmenu flyout behavior.
+function MobileNavOverlay({
+  navItems,
+  activePathname,
+  lastSymbol,
+  onNavigate,
+  onClose,
+}: {
+  navItems: NavItem[];
+  activePathname: string;
+  lastSymbol: string;
+  onNavigate: (stockNav: StockNavKind) => void;
+  onClose: () => void;
+}) {
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  function toggle(key: string) {
+    setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  function renderLink(child: NavChild, extraClassName: string) {
+    const href = child.stockNav ? stockHref(lastSymbol, child.stockNav) : child.href;
+    const active = child.isActive(activePathname);
+
+    return (
+      <Link
+        key={child.label}
+        href={href}
+        className={`mshMobileOverlayLink ${extraClassName}${
+          child.emphasize ? " mshMobileOverlayLink--emphasis" : ""
+        }${active ? " is-active" : ""}`}
+        onClick={(event) => {
+          onClose();
+
+          if (!child.stockNav) return;
+
+          event.preventDefault();
+          onNavigate(child.stockNav);
+        }}
+      >
+        {child.label}
+      </Link>
+    );
+  }
+
+  return createPortal(
+    <div className="mshMobileOverlay" role="dialog" aria-modal="true" aria-label="Site menu">
+      <div className="mshMobileOverlayHeader">
+        <span className="mshMobileOverlayTitle">Menu</span>
+        <button
+          type="button"
+          className="mshMobileOverlayClose"
+          onClick={onClose}
+          aria-label="Close menu"
+        >
+          ✕
+        </button>
+      </div>
+
+      <nav className="mshMobileOverlayNav" aria-label="Mobile primary navigation">
+        {navItems.map((item) => {
+          if (item.kind === "link") {
+            return renderLink(item, "");
+          }
+
+          const key = item.label;
+          const isExpanded = !!expanded[key];
+          const active = item.isActive(activePathname);
+
+          return (
+            <div key={key} className="mshMobileOverlayGroup">
+              <button
+                type="button"
+                className={`mshMobileOverlayGroupTrigger${active ? " is-active" : ""}`}
+                onClick={() => toggle(key)}
+                aria-expanded={isExpanded}
+              >
+                <span>{item.label}</span>
+                <span
+                  aria-hidden="true"
+                  className="mshMobileOverlayChevron"
+                  style={{ transform: isExpanded ? "rotate(180deg)" : "none" }}
+                >
+                  ▼
+                </span>
+              </button>
+
+              {isExpanded ? (
+                <div className="mshMobileOverlaySubgroup">
+                  {item.entries.map((entry) => {
+                    if (entry.kind === "link") {
+                      return renderLink(entry, "mshMobileOverlayLink--nested");
+                    }
+
+                    const subKey = `${key}::${entry.label}`;
+                    const subExpanded = !!expanded[subKey];
+                    const subActive = entry.isActive(activePathname);
+
+                    return (
+                      <div key={entry.label} className="mshMobileOverlayGroup">
+                        <button
+                          type="button"
+                          className={`mshMobileOverlayGroupTrigger mshMobileOverlayGroupTrigger--nested${
+                            subActive ? " is-active" : ""
+                          }`}
+                          onClick={() => toggle(subKey)}
+                          aria-expanded={subExpanded}
+                        >
+                          <span>{entry.label}</span>
+                          <span
+                            aria-hidden="true"
+                            className="mshMobileOverlayChevron"
+                            style={{ transform: subExpanded ? "rotate(180deg)" : "none" }}
+                          >
+                            ▼
+                          </span>
+                        </button>
+
+                        {subExpanded ? (
+                          <div className="mshMobileOverlaySubgroup">
+                            {entry.items.map((child) =>
+                              renderLink(child, "mshMobileOverlayLink--nested2")
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </nav>
+    </div>,
+    document.body
+  );
+}
+
 export default function SiteHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const activePathname = normalisePathname(pathname);
   const lastSymbol = useLastStockSymbol(pathname);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // The mobile overlay is a one-way navigation surface -- once a route
+  // change happens (a link was tapped, or the browser back/forward
+  // buttons were used), there's no reason for it to still be open
+  // underneath the new page.
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
 
   const navItems = useMemo<NavItem[]>(
     () => [
@@ -921,31 +1089,222 @@ export default function SiteHeader() {
           background: transparent !important;
         }
 
+        /* Hamburger trigger for the mobile nav overlay -- hidden by
+           default (desktop keeps the horizontal link row), shown only
+           below the 720px breakpoint. Same dark-panel look as the
+           header's own link buttons, with teal bars instead of a plain
+           icon so it matches the site's palette rather than a generic
+           stock icon. */
+        .mshMobileMenuButton {
+          display: none;
+          width: 40px;
+          height: 40px;
+          flex: 0 0 auto;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 5px;
+          padding: 0;
+          border-radius: 10px;
+          border: 1px solid #222c40;
+          background: #141b2b;
+          cursor: pointer;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        .mshMobileMenuButton:hover,
+        .mshMobileMenuButton:active {
+          background: #1b2436;
+          border-color: #2a3550;
+        }
+
+        .mshMobileMenuBar {
+          display: block;
+          width: 20px;
+          height: 2.5px;
+          border-radius: 999px;
+          background: #6FE0D0;
+        }
+
+        /* Full-screen mobile nav overlay */
+        .mshMobileOverlay {
+          position: fixed;
+          inset: 0;
+          z-index: 500;
+          background: #0b1220;
+          display: flex;
+          flex-direction: column;
+          overflow-y: auto;
+          scrollbar-width: thin;
+          scrollbar-color: rgba(255,255,255,0.18) transparent;
+        }
+
+        .mshMobileOverlayHeader {
+          position: sticky;
+          top: 0;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 14px 16px;
+          background: #0b1220;
+          border-bottom: 1px solid rgba(255,255,255,0.08);
+          z-index: 1;
+        }
+
+        .mshMobileOverlayTitle {
+          font-size: 12px;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: rgba(148,163,184,0.75);
+        }
+
+        .mshMobileOverlayClose {
+          width: 38px;
+          height: 38px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 10px;
+          border: 1px solid #222c40;
+          background: #141b2b;
+          color: #eaf0fa;
+          font-size: 16px;
+          line-height: 1;
+          cursor: pointer;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        .mshMobileOverlayClose:hover,
+        .mshMobileOverlayClose:active {
+          background: #1b2436;
+          border-color: #2a3550;
+        }
+
+        .mshMobileOverlayNav {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          padding: 8px 10px 28px;
+        }
+
+        .mshMobileOverlayLink {
+          display: block;
+          padding: 14px 12px;
+          border-radius: 10px;
+          color: #d7deea;
+          font-size: 15.5px;
+          font-weight: 700;
+          text-decoration: none;
+        }
+
+        .mshMobileOverlayLink:hover,
+        .mshMobileOverlayLink:active {
+          color: #eaf0fa;
+          background: #141b2b;
+        }
+
+        .mshMobileOverlayLink.is-active {
+          color: #eaf0fa;
+          background: #141b2b;
+          box-shadow: inset 0 0 0 1px #222c40;
+        }
+
+        .mshMobileOverlayLink--emphasis {
+          font-weight: 800;
+        }
+
+        .mshMobileOverlayLink--nested {
+          padding-left: 26px;
+          font-size: 14.5px;
+          font-weight: 600;
+          color: #b7c1d1;
+        }
+
+        .mshMobileOverlayLink--nested2 {
+          padding-left: 42px;
+          font-size: 14px;
+          font-weight: 600;
+          color: #9aa7bb;
+        }
+
+        .mshMobileOverlayGroup {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .mshMobileOverlayGroupTrigger {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          padding: 14px 12px;
+          border: none;
+          border-radius: 10px;
+          background: transparent;
+          color: #d7deea;
+          font-size: 15.5px;
+          font-weight: 700;
+          font-family: inherit;
+          text-align: left;
+          cursor: pointer;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        .mshMobileOverlayGroupTrigger:hover,
+        .mshMobileOverlayGroupTrigger:active,
+        .mshMobileOverlayGroupTrigger.is-active {
+          color: #eaf0fa;
+          background: #141b2b;
+        }
+
+        .mshMobileOverlayGroupTrigger--nested {
+          padding-left: 26px;
+          font-size: 14.5px;
+          font-weight: 600;
+          color: #b7c1d1;
+        }
+
+        .mshMobileOverlayChevron {
+          font-size: 9px;
+          opacity: 0.7;
+          flex: 0 0 auto;
+          transition: transform .15s;
+        }
+
+        .mshMobileOverlaySubgroup {
+          display: flex;
+          flex-direction: column;
+        }
+
         @media (max-width: 720px) {
           .mshGlobalHeaderInner {
-            align-items: stretch !important;
-            flex-direction: column !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            justify-content: space-between !important;
             gap: 8px !important;
             min-height: auto !important;
-            padding: 10px 12px 8px !important;
+            padding: 10px 14px !important;
           }
 
           .mshGlobalHeaderLogo {
-            align-self: flex-start !important;
+            align-self: center !important;
           }
 
           .mshGlobalHeaderLogo img {
-            height: 34px !important;
+            height: 32px !important;
           }
 
+          /* Below this breakpoint the full link row is replaced by the
+             hamburger + full-screen overlay -- hide it here instead of
+             removing it from the tree, so the >720px layout above is
+             completely untouched. */
           .mshGlobalHeaderNav {
-            margin-left: 0 !important;
-            width: 100% !important;
+            display: none !important;
           }
 
-          .mshGlobalHeaderLink {
-            font-size: 12.5px !important;
-            padding: 8px 10px !important;
+          .mshMobileMenuButton {
+            display: inline-flex !important;
           }
         }
       `}</style>
@@ -960,6 +1319,19 @@ export default function SiteHeader() {
           minHeight: 50,
         }}
       >
+        <button
+          type="button"
+          className="mshMobileMenuButton"
+          aria-label="Open menu"
+          aria-haspopup="dialog"
+          aria-expanded={mobileMenuOpen}
+          onClick={() => setMobileMenuOpen(true)}
+        >
+          <span className="mshMobileMenuBar" />
+          <span className="mshMobileMenuBar" />
+          <span className="mshMobileMenuBar" />
+        </button>
+
         <Link
           href="/"
           aria-label="MyStockHarbor home"
@@ -1038,6 +1410,18 @@ export default function SiteHeader() {
           })}
         </nav>
       </div>
+
+      {mobileMenuOpen ? (
+        <MobileNavOverlay
+          navItems={navItems}
+          activePathname={activePathname}
+          lastSymbol={lastSymbol}
+          onNavigate={(stockNav) =>
+            router.push(stockHref(currentCachedSymbol(), stockNav))
+          }
+          onClose={() => setMobileMenuOpen(false)}
+        />
+      ) : null}
     </header>
   );
 }
