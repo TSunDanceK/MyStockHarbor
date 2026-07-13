@@ -262,6 +262,10 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const [externalZone, setExternalZone] = useState<SupportResistanceZone | null>(null);
   const [chartFocus, setChartFocus] = useState<ChartFocus | null>(null);
+  // Lifted from PriceChart so this component can hide its own redundant
+  // D/W/M, indicator dropdown, Line/Candles, and toolbar controls (and give
+  // the chart more vertical room) whenever TradingView mode is active.
+  const [showTradingView, setShowTradingView] = useState(false);
   const theme = "dark" as const;
   const selectedTimeframe = useMemo(() => TIMEFRAMES.find(t => t.label === activeTimeframe) ?? TIMEFRAMES[0], [activeTimeframe]);
   const COLORS = useMemo(() => ({ isDark: true, pageBg: "#0a0f1a", pageFg: "#eaf0fa", mutedFg: "#8a97ad", mutedFg2: "#5f6b80", cardBg: "#141b2b", cardFg: "#eaf0fa", cardBg2: "#0f1624", border: "#222c40", borderSoft: "#1a2336", controlBg: "#0f1624", controlBgSolid: "#0f1624", controlBorder: "#222c40", controlFg: "#eaf0fa", blue: "#2f6bff", blueSoft: "#13213f", blueBorder: "#27406f", green: "#16c784", greenSoft: "#0f2a23", greenBorder: "#1c4a3c", amber: "#f5a524", amberSoft: "#2c2310", amberBorder: "#3a2f10", red: "#f04444", yellowBorder: "rgba(234,179,8,0.38)", yellowBg: "rgba(234,179,8,0.10)", yellowText: "#fde68a" }), []);
@@ -586,30 +590,39 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   function ChartPanel() {
     return (<div id="chart" ref={chartSectionRef} style={{ scrollMarginTop: 24 }}>
       <SectionCard title="" right={null} bodyStyle={{ padding: 0 }} style={{ transition: "box-shadow 0.4s ease", boxShadow: highlightChart ? "0 0 0 2px rgba(47,107,255,0.4), 0 10px 30px rgba(47,107,255,0.2)" : undefined }}>
-        <div style={{ padding: "13px 16px", borderBottom: `1px solid ${COLORS.borderSoft}` }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>Price · {chartIndicatorName}</div>
-            <div style={{ display: "flex", gap: 4 }}>{TIMEFRAMES.map(t => <TimeframeButton key={t.label} label={t.label} active={activeTimeframe === t.label} onClick={() => setActiveTimeframe(t.label)} />)}</div>
-          </div>
-          <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
-            <div style={{ position: "relative", flex: 1, minWidth: 160 }} ref={indicatorMenuRef}>
-              <button type="button" onClick={() => setIndicatorMenuOpen(v => !v)} style={{ width: "100%", padding: "10px 13px", borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, fontSize: 13, textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer" }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedIndicators.length ? chartIndicatorName : "Indicator · Overview"}</span><span>▾</span></button>
-              {indicatorMenuOpen ? <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 40, width: isMobile ? "100%" : 300, maxHeight: 380, borderRadius: 14, border: `1px solid ${COLORS.border}`, background: COLORS.cardBg, boxShadow: "0 18px 34px rgba(0,0,0,0.40)", overflowY: "auto" }}>
-                <button type="button" onClick={clearIndicatorSelection} style={{ width: "100%", padding: "11px 13px", border: "none", borderBottom: `1px solid ${COLORS.border}`, background: COLORS.controlBg, color: COLORS.cardFg, textAlign: "left", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>Clear all · Overview</button>
-                {[{ title: "Price overlays", opts: PRICE_OVERLAY_OPTIONS }, { title: "Lower indicator (1 max)", opts: LOWER_OVERLAY_OPTIONS }].map(group => <div key={group.title}><div style={{ padding: "9px 13px 7px", fontSize: 10, fontWeight: 700, color: COLORS.mutedFg, textTransform: "uppercase", letterSpacing: "0.04em", borderTop: `1px solid ${COLORS.border}` }}>{group.title}</div>{group.opts.map(opt => (
-                  <label key={opt} onMouseDown={e => { e.stopPropagation(); e.preventDefault(); toggleIndicatorSelection(opt); }} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 13px", borderTop: `1px solid ${COLORS.borderSoft}`, cursor: "pointer", fontWeight: 700, fontSize: 13 }}>
-                    <input type="checkbox" readOnly checked={selectedIndicators.includes(opt)} /><span>{opt}</span>
-                  </label>
-                ))}</div>)}
-              </div> : null}
+        {!showTradingView ? (
+          <div style={{ padding: "13px 16px", borderBottom: `1px solid ${COLORS.borderSoft}` }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>Price · {chartIndicatorName}</div>
+              <div style={{ display: "flex", gap: 4 }}>{TIMEFRAMES.map(t => <TimeframeButton key={t.label} label={t.label} active={activeTimeframe === t.label} onClick={() => setActiveTimeframe(t.label)} />)}</div>
             </div>
-            <div style={{ display: "flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3 }}>{(["line", "candles"] as const).map(type => <button key={type} type="button" onClick={() => setChartType(type)} style={{ border: "none", borderRadius: 7, padding: "7px 12px", background: chartType === type ? "rgba(47,107,255,0.28)" : "transparent", color: chartType === type ? "#dbeafe" : COLORS.mutedFg, fontWeight: 700, fontSize: 12, cursor: "pointer", boxShadow: chartType === type ? "inset 0 0 0 1px rgba(96,165,250,0.36)" : "none" }}>{type === "line" ? "Line" : "Candles"}</button>)}</div>
-            <ChartToolbar />
+            <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+              <div style={{ position: "relative", flex: 1, minWidth: 160 }} ref={indicatorMenuRef}>
+                <button type="button" onClick={() => setIndicatorMenuOpen(v => !v)} style={{ width: "100%", padding: "10px 13px", borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, fontSize: 13, textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer" }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedIndicators.length ? chartIndicatorName : "Indicator · Overview"}</span><span>▾</span></button>
+                {indicatorMenuOpen ? <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 40, width: isMobile ? "100%" : 300, maxHeight: 380, borderRadius: 14, border: `1px solid ${COLORS.border}`, background: COLORS.cardBg, boxShadow: "0 18px 34px rgba(0,0,0,0.40)", overflowY: "auto" }}>
+                  <button type="button" onClick={clearIndicatorSelection} style={{ width: "100%", padding: "11px 13px", border: "none", borderBottom: `1px solid ${COLORS.border}`, background: COLORS.controlBg, color: COLORS.cardFg, textAlign: "left", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>Clear all · Overview</button>
+                  {[{ title: "Price overlays", opts: PRICE_OVERLAY_OPTIONS }, { title: "Lower indicator (1 max)", opts: LOWER_OVERLAY_OPTIONS }].map(group => <div key={group.title}><div style={{ padding: "9px 13px 7px", fontSize: 10, fontWeight: 700, color: COLORS.mutedFg, textTransform: "uppercase", letterSpacing: "0.04em", borderTop: `1px solid ${COLORS.border}` }}>{group.title}</div>{group.opts.map(opt => (
+                    <label key={opt} onMouseDown={e => { e.stopPropagation(); e.preventDefault(); toggleIndicatorSelection(opt); }} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 13px", borderTop: `1px solid ${COLORS.borderSoft}`, cursor: "pointer", fontWeight: 700, fontSize: 13 }}>
+                      <input type="checkbox" readOnly checked={selectedIndicators.includes(opt)} /><span>{opt}</span>
+                    </label>
+                  ))}</div>)}
+                </div> : null}
+              </div>
+              <div style={{ display: "flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3 }}>{(["line", "candles"] as const).map(type => <button key={type} type="button" onClick={() => setChartType(type)} style={{ border: "none", borderRadius: 7, padding: "7px 12px", background: chartType === type ? "rgba(47,107,255,0.28)" : "transparent", color: chartType === type ? "#dbeafe" : COLORS.mutedFg, fontWeight: 700, fontSize: 12, cursor: "pointer", boxShadow: chartType === type ? "inset 0 0 0 1px rgba(96,165,250,0.36)" : "none" }}>{type === "line" ? "Line" : "Candles"}</button>)}</div>
+              <ChartToolbar />
+            </div>
           </div>
-        </div>
+        ) : (
+          <div style={{ padding: "13px 16px", borderBottom: `1px solid ${COLORS.borderSoft}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>TradingView · {symbol}</div>
+          </div>
+        )}
         <div style={{ padding: 16 }}>
-          <PriceChart symbol={symbol} data={displayedHistory} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} referenceLines={referenceLines} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={isMobile ? 320 : 430} />
-          <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", fontSize: 12, fontWeight: 600, color: COLORS.mutedFg2 }}>
+          <PriceChart symbol={symbol} data={displayedHistory} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} referenceLines={referenceLines} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={isMobile ? (showTradingView ? 480 : 320) : (showTradingView ? 620 : 430)} tradingViewActive={showTradingView} onToggleTradingView={setShowTradingView} showTradingViewLink={false} showTradeLink={false} />
+          <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
+            <a href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`} target="_blank" rel="noopener noreferrer sponsored nofollow" style={{ fontSize: 12, color: "#9cc0ff", textDecoration: "none", fontWeight: 700 }}>Open in TradingView ↗</a>
+          </div>
+          <div style={{ marginTop: 6, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", fontSize: 12, fontWeight: 600, color: COLORS.mutedFg2 }}>
             <div>{displayedHistory.length ? `${displayedHistory[0].date} → ${displayedHistory[displayedHistory.length - 1].date}` : "No chart data"}</div>
             <Link href="/platforms" style={{ fontSize: 12, color: "#9cc0ff", textDecoration: "none", fontWeight: 700 }}>Compare platforms →</Link>
           </div>
@@ -804,7 +817,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
               <button type="button" onClick={() => setExpanded(false)} style={{ padding: "7px 10px", borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, cursor: "pointer" }}>✕</button>
             </div>
             <div style={{ padding: 16 }}>
-              <PriceChart symbol={symbol} data={displayedHistory} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} referenceLines={referenceLines} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={isMobile ? 280 : 520} />
+              <PriceChart symbol={symbol} data={displayedHistory} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} referenceLines={referenceLines} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={isMobile ? (showTradingView ? 460 : 280) : (showTradingView ? 640 : 520)} tradingViewActive={showTradingView} onToggleTradingView={setShowTradingView} showTradingViewLink={false} showTradeLink={false} />
             </div>
           </div>
         </div>
