@@ -278,43 +278,69 @@ function playTone(tone: PlayCardDef["tone"]) {
   return { dot: "#60a5fa", border: "rgba(96,165,250,0.20)", bg: "rgba(10,18,36,0.60)", line: "#60a5fa", accent: "#22c55e", color: "#dbeafe" };
 }
 
+// Fixed aspect-ratio box with the svg absolutely positioned inside it.
+// An absolutely positioned element contributes NO intrinsic size to its
+// containing block's layout calculations -- so, unlike a plain
+// width:100% svg, this can never inflate a CSS Grid item's min-content
+// size (the "grid blowout" bug) or hit a Safari inline-SVG sizing quirk.
+// The wrapper's own width is always exactly 100% of its (already
+// correctly shrunk) parent, and its height is derived purely from the
+// padding-top percentage trick -- no content-based sizing anywhere.
+function DiagramFrame({ ratio, children }: { ratio: number; children: React.ReactNode }) {
+  return (
+    <div style={{ position: "relative", width: "100%", minWidth: 0, paddingTop: `${ratio * 100}%`, borderRadius: 10, background: "rgba(2,6,23,0.60)", overflow: "hidden" }}>
+      <div style={{ position: "absolute", inset: 0 }}>{children}</div>
+    </div>
+  );
+}
+
+const DIAGRAM_SVG_STYLE: React.CSSProperties = { display: "block", width: "100%", height: "100%" };
+
 function PlayDiagram({ pattern, tone }: { pattern: PlayCardDef["pattern"]; tone: PlayCardDef["tone"] }) {
   const c = playTone(tone);
 
   if (pattern === "ascending") return (
-    <svg viewBox="0 0 280 110" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Ascending triangle">
-      <path d="M20 28 H260" stroke={c.line} strokeWidth="2" strokeDasharray="6 4" strokeLinecap="round" opacity="0.85" />
-      <path d="M20 88 L260 28" stroke={c.accent} strokeWidth="1.5" strokeLinecap="round" opacity="0.55" />
-      <path d="M22 86 L50 28 L72 62 L100 28 L122 50 L150 28 L172 42 L200 28 L222 35 L250 28" stroke="rgba(226,232,240,0.75)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M250 28 L268 14" stroke={c.line} strokeWidth="2.5" strokeLinecap="round" opacity="0.90" />
-    </svg>
+    <DiagramFrame ratio={110 / 280}>
+      <svg viewBox="0 0 280 110" style={DIAGRAM_SVG_STYLE} role="img" aria-label="Ascending triangle">
+        <path d="M20 28 H260" stroke={c.line} strokeWidth="2" strokeDasharray="6 4" strokeLinecap="round" opacity="0.85" />
+        <path d="M20 88 L260 28" stroke={c.accent} strokeWidth="1.5" strokeLinecap="round" opacity="0.55" />
+        <path d="M22 86 L50 28 L72 62 L100 28 L122 50 L150 28 L172 42 L200 28 L222 35 L250 28" stroke="rgba(226,232,240,0.75)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M250 28 L268 14" stroke={c.line} strokeWidth="2.5" strokeLinecap="round" opacity="0.90" />
+      </svg>
+    </DiagramFrame>
   );
 
   if (pattern === "descending") return (
-    <svg viewBox="0 0 280 110" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Descending triangle">
-      <path d="M20 82 H260" stroke={c.line} strokeWidth="2" strokeDasharray="6 4" strokeLinecap="round" opacity="0.85" />
-      <path d="M20 24 L260 82" stroke={c.accent} strokeWidth="1.5" strokeLinecap="round" opacity="0.55" />
-      <path d="M22 26 L50 82 L72 54 L100 82 L122 62 L150 82 L172 70 L200 82 L222 77 L250 82" stroke="rgba(226,232,240,0.75)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M250 82 L268 96" stroke={c.line} strokeWidth="2.5" strokeLinecap="round" opacity="0.90" />
-    </svg>
+    <DiagramFrame ratio={110 / 280}>
+      <svg viewBox="0 0 280 110" style={DIAGRAM_SVG_STYLE} role="img" aria-label="Descending triangle">
+        <path d="M20 82 H260" stroke={c.line} strokeWidth="2" strokeDasharray="6 4" strokeLinecap="round" opacity="0.85" />
+        <path d="M20 24 L260 82" stroke={c.accent} strokeWidth="1.5" strokeLinecap="round" opacity="0.55" />
+        <path d="M22 26 L50 82 L72 54 L100 82 L122 62 L150 82 L172 70 L200 82 L222 77 L250 82" stroke="rgba(226,232,240,0.75)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M250 82 L268 96" stroke={c.line} strokeWidth="2.5" strokeLinecap="round" opacity="0.90" />
+      </svg>
+    </DiagramFrame>
   );
 
   if (pattern === "bullFlag") return (
-    <svg viewBox="0 0 240 110" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Bull flag">
-      <path d="M28 96 L48 78 L62 58 L76 30" stroke="#22c55e" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M76 30 L168 44" stroke="rgba(226,232,240,0.40)" strokeWidth="1.5" strokeDasharray="5 4" strokeLinecap="round" />
-      <path d="M76 50 L168 62" stroke="rgba(226,232,240,0.40)" strokeWidth="1.5" strokeDasharray="5 4" strokeLinecap="round" />
-      <path d="M78 33 L104 47 L130 40 L156 52 L168 45" stroke="rgba(226,232,240,0.70)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M168 45 L192 28 L218 14" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <DiagramFrame ratio={110 / 240}>
+      <svg viewBox="0 0 240 110" style={DIAGRAM_SVG_STYLE} role="img" aria-label="Bull flag">
+        <path d="M28 96 L48 78 L62 58 L76 30" stroke="#22c55e" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M76 30 L168 44" stroke="rgba(226,232,240,0.40)" strokeWidth="1.5" strokeDasharray="5 4" strokeLinecap="round" />
+        <path d="M76 50 L168 62" stroke="rgba(226,232,240,0.40)" strokeWidth="1.5" strokeDasharray="5 4" strokeLinecap="round" />
+        <path d="M78 33 L104 47 L130 40 L156 52 L168 45" stroke="rgba(226,232,240,0.70)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M168 45 L192 28 L218 14" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </DiagramFrame>
   );
 
   if (pattern === "macroSR") return (
-    <svg viewBox="0 0 280 110" style={{ width: "100%", display: "block", borderRadius: 10, background: "rgba(2,6,23,0.60)" }} role="img" aria-label="Macro support resistance">
-      <path d="M20 22 H260" stroke="#ef4444" strokeWidth="2" strokeDasharray="6 4" strokeLinecap="round" opacity="0.80" />
-      <path d="M20 78 H260" stroke="#22c55e" strokeWidth="2" strokeDasharray="6 4" strokeLinecap="round" opacity="0.80" />
-      <path d="M22 72 L50 26 L80 72 L110 26 L140 68 L168 26 L196 72 L224 28 L252 72" stroke="rgba(226,232,240,0.72)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <DiagramFrame ratio={110 / 280}>
+      <svg viewBox="0 0 280 110" style={DIAGRAM_SVG_STYLE} role="img" aria-label="Macro support resistance">
+        <path d="M20 22 H260" stroke="#ef4444" strokeWidth="2" strokeDasharray="6 4" strokeLinecap="round" opacity="0.80" />
+        <path d="M20 78 H260" stroke="#22c55e" strokeWidth="2" strokeDasharray="6 4" strokeLinecap="round" opacity="0.80" />
+        <path d="M22 72 L50 26 L80 72 L110 26 L140 68 L168 26 L196 72 L224 28 L252 72" stroke="rgba(226,232,240,0.72)" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </DiagramFrame>
   );
 
   return null;
@@ -331,7 +357,7 @@ function PatternPlaysSection() {
         {PLAY_CARDS.map((play) => {
           const c = playTone(play.tone);
           return (
-            <a key={play.href} href={play.href} style={{ display: "grid", gap: 8, padding: 12, borderRadius: 12, border: `1px solid ${c.border}`, background: c.bg, textDecoration: "none", color: "#f1f5f9", transition: "transform 140ms ease, filter 140ms ease", boxSizing: "border-box" }} className="pattern-play-card">
+            <a key={play.href} href={play.href} style={{ display: "grid", gap: 8, padding: 12, borderRadius: 12, border: `1px solid ${c.border}`, background: c.bg, textDecoration: "none", color: "#f1f5f9", transition: "transform 140ms ease, filter 140ms ease", boxSizing: "border-box", minWidth: 0, overflow: "hidden" }} className="pattern-play-card">
               <PlayDiagram pattern={play.pattern} tone={play.tone} />
               <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
                 <span style={{ width: 7, height: 7, borderRadius: 999, background: c.dot, flex: "0 0 auto" }} />
@@ -851,6 +877,7 @@ export default function PickersClient({ latestInsights = [] }: { latestInsights?
   .pickers-section-footer { display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;flex-wrap:nowrap; }
   .pickers-section-footer-left { display:flex;align-items:center;gap:8px;flex:1;min-width:0; }
   .pattern-plays-grid { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px; }
+  .pattern-play-card { min-width:0;overflow:hidden; }
   .pattern-play-card:hover { transform:translateY(-2px);filter:brightness(1.08); }
   .pickers-filter-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px; }
   .pickers-card-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px; }
@@ -914,7 +941,6 @@ export default function PickersClient({ latestInsights = [] }: { latestInsights?
     .pickers-card-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
   }
   @media (max-width: 640px) {
-    .pickers-screener-panel { display:none !important; }
     .pattern-plays-grid { grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:8px; }
     .pickers-section-description { display:none; }
     .pickers-help-tip { width:18px !important;height:18px !important;font-size:10px !important; }
@@ -923,6 +949,10 @@ export default function PickersClient({ latestInsights = [] }: { latestInsights?
     .picker-row-ticker { font-size:14px !important; }
     .pickers-section-footer { flex-wrap:wrap; }
     .pickers-see-all { width:100%;justify-content:center;padding:6px 10px;font-size:12px; }
+  }
+  @media (max-width: 560px) {
+    .pickers-filter-grid { grid-template-columns:1fr !important; }
+    .pickers-card-grid { grid-template-columns:1fr !important; }
   }
   @media (max-width: 400px) {
     .pattern-plays-grid { grid-template-columns:minmax(0,1fr) !important; }
