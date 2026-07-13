@@ -836,8 +836,8 @@ export default function PickersClient({ latestInsights = [] }: { latestInsights?
       <style>{`
   @keyframes pickersBar { 0%{transform:translateX(-60%);opacity:0.55;} 50%{transform:translateX(140%);opacity:0.95;} 100%{transform:translateX(320%);opacity:0.55;} }
   .pickers-loading-bar { height:100%;width:35%;border-radius:999px;background:rgba(59,130,246,0.90);animation:pickersBar 1.1s linear infinite; }
-  .pickers-shell { width:100%;min-width:0; }
-  .picker-row { display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.06); }
+  .pickers-shell { width:100%;min-width:0;grid-template-columns:minmax(0,1fr); }
+  .picker-row { display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.06);min-width:0; }
   .picker-row:last-child { border-bottom:none; }
   .picker-row-left { display:flex;align-items:center;gap:10px;min-width:0;flex:1;overflow:hidden; }
   .picker-row-ticker { font-size:16px;font-weight:700;color:#e2e8f0;letter-spacing:0.01em;flex:0 0 auto;line-height:1.2; }
@@ -854,7 +854,7 @@ export default function PickersClient({ latestInsights = [] }: { latestInsights?
   .pattern-play-card:hover { transform:translateY(-2px);filter:brightness(1.08); }
   .pickers-filter-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px; }
   .pickers-card-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px; }
-  .pickers-section-title { display:flex;align-items:center;gap:6px;flex-wrap:nowrap; }
+  .pickers-section-title { display:flex;align-items:center;gap:6px;flex-wrap:nowrap;min-width:0; }
   .pickers-section-title-text { min-width:0;line-height:1.22;font-size:14px;font-weight:700; }
   .pickers-screener-panel { display:block; }
   .pickers-earnings-fetch-button:hover:not(:disabled) { filter:brightness(1.08);transform:translateY(-1px); }
@@ -867,11 +867,11 @@ export default function PickersClient({ latestInsights = [] }: { latestInsights?
   .pickers-screener-panel.screenerHighlightPulse { animation:screenerHighlightGlow 2.6s ease-out 1; }
 
   /* Accordion + sidebar (replaces the old fixed 3-col card grid) */
-  .pickers-accordion-layout { display:grid;grid-template-columns:2.15fr 1fr;gap:18px;align-items:start; }
+  .pickers-accordion-layout { display:grid;grid-template-columns:minmax(0,2.15fr) minmax(0,1fr);gap:18px;align-items:start; }
   .pickers-accordion { display:flex;flex-direction:column;gap:8px;min-width:0; }
-  .acc-item { border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.025);overflow:hidden; }
+  .acc-item { border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.025);overflow:hidden;min-width:0; }
   .acc-item.open { border-color:rgba(96,165,250,0.35); }
-  .acc-head { width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;background:none;border:none;cursor:pointer;text-align:left;color:inherit;font:inherit; }
+  .acc-head { width:100%;min-width:0;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;background:none;border:none;cursor:pointer;text-align:left;color:inherit;font:inherit; }
   .acc-head-left { display:flex;align-items:center;gap:10px;min-width:0;flex:1; }
   .acc-head-text { display:flex;flex-direction:column;gap:2px;min-width:0; }
   .acc-icon { width:44px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;overflow:hidden; }
@@ -906,7 +906,7 @@ export default function PickersClient({ latestInsights = [] }: { latestInsights?
   @media (max-width: 1100px) {
     .pattern-plays-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
     .pickers-filter-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
-    .pickers-accordion-layout { grid-template-columns:1fr; }
+    .pickers-accordion-layout { grid-template-columns:minmax(0,1fr); }
     .pickers-sidebar { position:static; }
   }
   @media (max-width: 820px) {
