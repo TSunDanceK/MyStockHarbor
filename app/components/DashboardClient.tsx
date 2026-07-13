@@ -14,7 +14,7 @@ type ChartInterval = "d" | "w" | "m";
 type SymbolResult = { symbol: string; name: string; exchange: string };
 type BenchItem = { key: string; label: string; symbol: string; date: string | null; time: string | null; close: number | null; prevClose: number | null; changePct: number | null; };
 type BenchPayload = { updatedAt: string; scope: string; items: BenchItem[]; };
-type InternalNewsCard = { title: string; source: string | null; pubDate: string | null; summary: string; whyItMatters: string; debugAiUsed: 0 | 1; };
+type InternalNewsCard = { title: string; source: string | null; pubDate: string | null; summary: string; whyItMatters: string; debugAiUsed: 0 | 1; image?: string | null; link?: string | null; };
 type NewsPayload = { symbol: string; companyName: string; isInvalidTicker: boolean; trend: string; newsScoreLabel: string; newsScoreValue: number; cards: InternalNewsCard[]; ctaHref: string; };
 type StockEarningsSummary = { hasStructuredData?: boolean; tone?: "green" | "yellow" | "red"; toneLabel?: "Good" | "Neutral" | "Weak" | "Unavailable"; reportDate?: string | null; epsSurprisePercent?: number | null; revenueSurprisePercent?: number | null; };
 type CachedSymbolData = { quote: Quote | null; history: Point[]; };
@@ -679,9 +679,15 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
             {news.cards.map((item, idx) => (
               <div key={`${item.title}-${idx}`} style={{ padding: 13, borderRadius: 13, border: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg2, display: "grid", gap: 9, alignContent: "start" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: COLORS.mutedFg2, textTransform: "uppercase" }}>{item.source ?? "Publisher"}</div><div style={{ fontSize: 10, color: COLORS.mutedFg2 }}>{item.pubDate ? new Date(item.pubDate).toLocaleDateString() : "Recent"}</div></div>
-                <div style={{ fontWeight: 800, lineHeight: 1.4, fontSize: 14 }}>{item.title}</div>
+                <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                  {item.image ? (
+                    <img src={item.image} alt="" loading="lazy" style={{ width: 52, height: 52, borderRadius: 8, objectFit: "cover", flexShrink: 0, background: "rgba(255,255,255,0.04)" }} />
+                  ) : null}
+                  <div style={{ fontWeight: 800, lineHeight: 1.4, fontSize: 14 }}>{item.title}</div>
+                </div>
                 <div style={{ fontSize: 13, lineHeight: 1.6, color: COLORS.mutedFg }}>{item.summary}</div>
                 <div style={{ padding: 9, borderRadius: 10, background: "rgba(255,255,255,0.03)", border: `1px solid ${COLORS.borderSoft}`, fontSize: 12, lineHeight: 1.55 }}><span style={{ fontWeight: 800 }}>Why this matters:</span> {item.whyItMatters}</div>
+                {item.link ? <a href={item.link} target="_blank" rel="noopener noreferrer" style={{ justifySelf: "start", color: "#9cc0ff", textDecoration: "none", fontWeight: 700, fontSize: 12 }}>Read full article ↗</a> : null}
               </div>
             ))}
           </div>
