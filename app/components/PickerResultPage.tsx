@@ -497,8 +497,6 @@ export default async function PickerResultPage({
       <style>{`
         .pickerResultPage { min-height: 100vh; background: radial-gradient(circle at 12% 0%, rgba(59,130,246,0.16), transparent 30%), radial-gradient(circle at 92% 4%, rgba(34,197,94,0.08), transparent 28%), #06080d; color: #f1f5f9; font-family: system-ui, Arial; }
         .resultWrap { max-width: 1240px; margin: 0 auto; padding: 26px 18px 58px; }
-        .topNav { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
-        .topNav a { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; padding: 9px 13px; border-radius: 13px; border: 1px solid rgba(96,165,250,0.30); background: rgba(59,130,246,0.10); color: #dbeafe; text-decoration: none; font-weight: 900; font-size: 13px; }
         .hero { border: 1px solid ${toneBorder(config.tone)}; border-radius: 28px; padding: 22px; background: ${toneBackground(config.tone)}; box-shadow: inset 0 1px 0 rgba(255,255,255,0.045), 0 18px 42px rgba(0,0,0,0.26); }
         .heroTop { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; align-items: start; }
         .heroCopy { min-width: 0; }
@@ -551,8 +549,6 @@ export default async function PickerResultPage({
           .pickerResultPage, .pickerResultPage * { box-sizing: border-box; }
           .pickerResultPage { overflow-x: hidden; }
           .resultWrap { width: 100%; padding: 14px 10px 44px; overflow-x: hidden; }
-          .topNav { display: grid; grid-template-columns: 1fr; gap: 8px; justify-content: stretch; margin-bottom: 12px; }
-          .topNav a { width: 100%; min-height: 44px; padding: 10px 12px; text-align: center; }
           .hero { border-radius: 20px; padding: 15px; }
           .heroTop { gap: 16px; }
           .eyebrow { max-width: 100%; white-space: normal; text-align: center; line-height: 1.35; }
@@ -586,12 +582,6 @@ export default async function PickerResultPage({
       `}</style>
 
       <div className="resultWrap">
-        <nav className="topNav" aria-label="Primary navigation">
-          <Link href="/dashboard">📈 Dashboard</Link>
-          <Link href="/pickers">📊 Stock Pickers</Link>
-          <Link href="/plays">▲ Chart Plays</Link>
-        </nav>
-
         <section className="hero">
           <div className="heroTop">
             <div className="heroCopy">
