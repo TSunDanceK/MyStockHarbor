@@ -357,7 +357,7 @@ async function getEarningsData(symbol: string) {
   const grossMargin = matchingIncome?.grossProfit != null && matchingIncome?.revenue != null && matchingIncome.revenue !== 0 ? (matchingIncome.grossProfit / Math.abs(matchingIncome.revenue)) * 100 : null;
   const operatingMargin = matchingIncome?.operatingIncome != null && matchingIncome?.revenue != null && matchingIncome.revenue !== 0 ? (matchingIncome.operatingIncome / Math.abs(matchingIncome.revenue)) * 100 : null;
   const netIncome = matchingIncome?.netIncome ?? null;
-  const recentTrend: EarningsTrendPoint[] = completedRows.slice(0, 6).map((row) => ({ label: displayQuarterLabel(row), tone: classifyQuarter(row), epsActual: row.epsActual ?? null, epsEstimated: row.epsEstimated ?? null, revenueActual: row.revenueActual ?? null, revenueEstimated: row.revenueEstimated ?? null }));
+  const recentTrend: EarningsTrendPoint[] = completedRows.slice(0, 6).reverse().map((row) => ({ label: displayQuarterLabel(row), tone: classifyQuarter(row), epsActual: row.epsActual ?? null, epsEstimated: row.epsEstimated ?? null, revenueActual: row.revenueActual ?? null, revenueEstimated: row.revenueEstimated ?? null }));
   const yearlySummaries = makeYearlySummaries(completedRows);
   const localScore = scoreEarnings({ latest, sameQuarterLastYear, completedRows });
   const sharedScore = await fetchSharedEarningsScore(symbol);
