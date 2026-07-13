@@ -914,7 +914,6 @@ export default function PickersClient({ latestInsights = [] }: { latestInsights?
     .pickers-card-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
   }
   @media (max-width: 640px) {
-    .pickers-screener-panel { display:none !important; }
     .pattern-plays-grid { grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:8px; }
     .pickers-section-description { display:none; }
     .pickers-help-tip { width:18px !important;height:18px !important;font-size:10px !important; }
@@ -923,6 +922,10 @@ export default function PickersClient({ latestInsights = [] }: { latestInsights?
     .picker-row-ticker { font-size:14px !important; }
     .pickers-section-footer { flex-wrap:wrap; }
     .pickers-see-all { width:100%;justify-content:center;padding:6px 10px;font-size:12px; }
+  }
+  @media (max-width: 560px) {
+    .pickers-filter-grid { grid-template-columns:1fr !important; }
+    .pickers-card-grid { grid-template-columns:1fr !important; }
   }
   @media (max-width: 400px) {
     .pattern-plays-grid { grid-template-columns:minmax(0,1fr) !important; }
