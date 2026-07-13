@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import type { DivResult } from "../../lib/ta/divergence";
+import TradingViewChartEmbed from "./TradingViewChartEmbed";
 
 type Point = {
   date: string;
@@ -171,6 +172,11 @@ export default function PriceChart(props: Props) {
   } = props;
 
   const width = 760;
+
+  // Only mounts TradingViewChartEmbed (and its ~500KB tv.js script) once the
+  // user explicitly clicks the toggle below -- the default experience never
+  // pays this cost.
+  const [showTradingView, setShowTradingView] = useState(false);
 
   const padL = 34;
   const padR = 54;
@@ -511,6 +517,9 @@ export default function PriceChart(props: Props) {
 
   return (
     <div style={{ width: "100%" }}>
+      {showTradingView ? (
+        <TradingViewChartEmbed symbol={symbol} height={Math.max(height, 480)} />
+      ) : (
       <svg
         width="100%"
         viewBox={`0 0 ${width} ${height}`}
@@ -1015,6 +1024,7 @@ export default function PriceChart(props: Props) {
           />
         ) : null}
       </svg>
+      )}
 
       <div
         style={{
@@ -1034,7 +1044,9 @@ export default function PriceChart(props: Props) {
           }}
         >
           <div style={{ fontSize: 12, opacity: 0.7 }}>
-            From {series[0].date} → {series[series.length - 1].date}
+            {showTradingView
+              ? `Live TradingView chart for ${symbol}`
+              : `From ${series[0].date} → ${series[series.length - 1].date}`}
           </div>
 
           <div
@@ -1045,6 +1057,28 @@ export default function PriceChart(props: Props) {
               flexWrap: "wrap",
             }}
           >
+            <button
+              type="button"
+              onClick={() => setShowTradingView((v) => !v)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "8px 12px",
+                borderRadius: 10,
+                border: "1px solid rgba(167,139,250,0.40)",
+                background:
+                  "linear-gradient(135deg, rgba(167,139,250,0.18), rgba(124,58,237,0.10))",
+                color: "#ede9fe",
+                fontWeight: 800,
+                fontSize: 12,
+                whiteSpace: "nowrap",
+                cursor: "pointer",
+              }}
+            >
+              {showTradingView ? "← Back to MyStockHarbor chart" : "Switch to TradingView chart"}
+            </button>
+
             <a
               href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`}
               target="_blank"
