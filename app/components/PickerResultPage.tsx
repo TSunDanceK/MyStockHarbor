@@ -78,6 +78,7 @@ type SignalRecord = {
 type PickersPayload = {
   updatedAt?: string;
   universeSize?: number;
+  dynamicUniverseCount?: number;
   sections?: PickerSection[];
   signalRecords?: SignalRecord[];
 };
@@ -376,7 +377,7 @@ async function getPickerData(config: PickerResultConfig) {
   try {
     const origin = await getOriginFromHeaders();
     const res = await fetch(`${origin}/api/pickers`, { cache: "no-store" });
-    if (!res.ok) return { updatedAt: null, universeSize: null, entries: [], foundCount: 0 };
+    if (!res.ok) return { updatedAt: null, universeSize: null, dynamicUniverseCount: null, entries: [], foundCount: 0 };
     const payload = (await res.json()) as PickersPayload;
     const sections = Array.isArray(payload.sections) ? payload.sections : [];
     const signalRecords = Array.isArray(payload.signalRecords) ? payload.signalRecords : [];
@@ -385,11 +386,12 @@ async function getPickerData(config: PickerResultConfig) {
     return {
       updatedAt: typeof payload.updatedAt === "string" ? payload.updatedAt : null,
       universeSize: typeof payload.universeSize === "number" ? payload.universeSize : null,
+      dynamicUniverseCount: typeof payload.dynamicUniverseCount === "number" ? payload.dynamicUniverseCount : null,
       entries,
       foundCount: config.filterTimeframe ? entries.length : typeof matchedSection?.foundCount === "number" ? matchedSection.foundCount : entries.length,
     };
   } catch {
-    return { updatedAt: null, universeSize: null, entries: [], foundCount: 0 };
+    return { updatedAt: null, universeSize: null, dynamicUniverseCount: null, entries: [], foundCount: 0 };
   }
 }
 
@@ -449,7 +451,20 @@ export default async function PickerResultPage({
   config: PickerResultConfig;
   searchParams?: Promise<{ symbol?: string | string[] }>;
 }) {
-  const { entries, updatedAt, universeSize, foundCount } = await getPickerData(config);
+  const { entries, updatedAt, universeSize, dynamicUniverseCount, foundCount } = await getPickerData(config);
+
+  // "Universe" metric is a debug/sanity-check number for confirming the
+  // dynamic-universe top-up job is actually running: universeSize is the
+  // fixed ~200-symbol cap actually analyzed per build (UNIVERSE_CAP, see
+  // claude/CACHING_REFRESH_ARCHITECTURE_PLAN.md), which never changes even
+  // when the broader dynamic-universe candidate pool grows. Adding
+  // dynamicUniverseCount (the size of that pool, up to 700) on top gives a
+  // combined number that visibly moves when the pool is topping up
+  // correctly, rather than always reading a static "200".
+  const combinedUniverseSize =
+    universeSize != null || dynamicUniverseCount != null
+      ? (universeSize ?? 0) + (dynamicUniverseCount ?? 0)
+      : null;
 
   // Supports deep links from the /pickers accordion like
   // /all-time-high-breakout-stocks?symbol=MTB -- scrolls to and briefly
@@ -592,7 +607,7 @@ export default async function PickerResultPage({
               <div className="metricGrid">
                 <MetricCard label="Live matches" value={foundCount} />
                 <MetricCard label="Shown here" value={entries.length} />
-                <MetricCard label="Universe" value={universeSize ?? "Live"} />
+                <MetricCard label="Universe" value={combinedUniverseSize ?? "Live"} />
                 <MetricCard label="Updated" value={formatUpdatedAt(updatedAt)} />
               </div>
             </aside>
