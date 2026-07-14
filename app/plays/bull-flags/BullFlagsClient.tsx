@@ -121,6 +121,42 @@ function formatNumber(value: number, digits = 2) {
   return value.toFixed(digits);
 }
 
+// Fixed, non-interactive brand watermark right at the top edge of each
+// mini play chart. Positioned with CSS against the chart's own fixed-size
+// wrapper -- never against the SVG's data-derived coordinates -- so it
+// stays put regardless of pattern shape or candle count.
+function PlayChartWatermark() {
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        position: "absolute",
+        inset: 0,
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "center",
+        paddingTop: 2,
+        pointerEvents: "none",
+        userSelect: "none",
+        overflow: "hidden",
+        zIndex: 2,
+      }}
+    >
+      <span
+        style={{
+          fontSize: "clamp(9px, 3vw, 13px)",
+          fontWeight: 800,
+          color: "rgba(148,163,184,0.24)",
+          letterSpacing: "0.03em",
+          whiteSpace: "nowrap",
+        }}
+      >
+        MyStockHarbor.com
+      </span>
+    </div>
+  );
+}
+
 const topNavIconWrapStyle: React.CSSProperties = {
   fontSize: 15,
   lineHeight: 1,
@@ -1068,6 +1104,7 @@ const flagEndIndex = points.length - 1;
     <div
       style={{
         marginTop: 14,
+        position: "relative",
         border: "1px solid rgba(34,197,94,0.20)",
         borderRadius: 18,
         background:
@@ -1238,6 +1275,8 @@ const flagEndIndex = points.length - 1;
           {formatDate(points[points.length - 1]?.date)}
         </text>
       </svg>
+
+      <PlayChartWatermark />
 
       <div
         style={{
