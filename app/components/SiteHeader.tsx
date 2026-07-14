@@ -811,6 +811,25 @@ export default function SiteHeader() {
           },
           {
             kind: "submenu",
+            label: "Earnings",
+            isActive: (path) =>
+              path === "/stocks-with-positive-last-earnings" ||
+              path === "/stocks-with-strong-earnings-growth",
+            items: [
+              {
+                label: "Positive Last Earnings",
+                href: "/stocks-with-positive-last-earnings",
+                isActive: (path) => path === "/stocks-with-positive-last-earnings",
+              },
+              {
+                label: "Strong Earnings Growth",
+                href: "/stocks-with-strong-earnings-growth",
+                isActive: (path) => path === "/stocks-with-strong-earnings-growth",
+              },
+            ],
+          },
+          {
+            kind: "submenu",
             label: "Signals & Screens",
             isActive: (path) =>
               path === "/top-stocks-with-buy-signals" ||
@@ -851,16 +870,6 @@ export default function SiteHeader() {
                 label: "Best Trend Score",
                 href: "/best-trend-score-stocks",
                 isActive: (path) => path === "/best-trend-score-stocks",
-              },
-              {
-                label: "Positive Last Earnings",
-                href: "/stocks-with-positive-last-earnings",
-                isActive: (path) => path === "/stocks-with-positive-last-earnings",
-              },
-              {
-                label: "Strong Earnings Growth",
-                href: "/stocks-with-strong-earnings-growth",
-                isActive: (path) => path === "/stocks-with-strong-earnings-growth",
               },
             ],
           },
