@@ -4,6 +4,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import PriceChart, { type Overlay, type ChartType, type SupportResistanceZone } from "./PriceChart";
+import TradingViewChartEmbed from "./TradingViewChartEmbed";
+import InteractiveChart from "./InteractiveChart";
 import { detectDivergenceFromHistory } from "../../lib/ta/divergence";
 import DiscoveryStrip from "./DiscoveryStrip";
 import DashboardTicker from "./DashboardTicker";
@@ -11,6 +13,7 @@ import DashboardTicker from "./DashboardTicker";
 type Quote = { symbol: string; price: number | null; date: string | null; time: string | null; source: string; };
 type Point = { date: string; open?: number; close: number; high?: number; low?: number; volume?: number; };
 type ChartInterval = "d" | "w" | "m";
+type ChartMode = "basic" | "interactive" | "tradingview";
 type SymbolResult = { symbol: string; name: string; exchange: string };
 type BenchItem = { key: string; label: string; symbol: string; date: string | null; time: string | null; close: number | null; prevClose: number | null; changePct: number | null; };
 type BenchPayload = { updatedAt: string; scope: string; items: BenchItem[]; };
@@ -262,10 +265,25 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const [externalZone, setExternalZone] = useState<SupportResistanceZone | null>(null);
   const [chartFocus, setChartFocus] = useState<ChartFocus | null>(null);
-  // Lifted from PriceChart so this component can hide its own redundant
-  // D/W/M, indicator dropdown, Line/Candles, and toolbar controls (and give
-  // the chart more vertical room) whenever TradingView mode is active.
-  const [showTradingView, setShowTradingView] = useState(false);
+  // Three-way chart mode: "basic" (custom SVG chart, the only mode that shows
+  // picker deep-link drawings), "interactive" (KLineChart engine) and
+  // "tradingview" (TradingView Advanced Chart embed). This component owns the
+  // switch and renders each engine itself, so PriceChart runs Basic-only via
+  // hideSourceToggle. Defaults to "basic" so picker deep-links still land on
+  // the drawing-capable chart.
+  const [chartMode, setChartMode] = useState<ChartMode>("basic");
+  const isInteractive = chartMode === "interactive";
+  // True fullscreen (fill-viewport) overlay, available in every mode.
+  const [fullscreen, setFullscreen] = useState(false);
+  const fsOverlayRef = useRef<HTMLDivElement | null>(null);
+
+  function selectChartMode(next: ChartMode) {
+    setChartMode(next);
+    // On phones the Interactive chart is only usable at full size, so open it
+    // fullscreen straight away (it can then be viewed in portrait or landscape).
+    if (next === "interactive" && isMobile) setFullscreen(true);
+  }
+
   const theme = "dark" as const;
   const selectedTimeframe = useMemo(() => TIMEFRAMES.find(t => t.label === activeTimeframe) ?? TIMEFRAMES[0], [activeTimeframe]);
   const COLORS = useMemo(() => ({ isDark: true, pageBg: "#0a0f1a", pageFg: "#eaf0fa", mutedFg: "#8a97ad", mutedFg2: "#5f6b80", cardBg: "#141b2b", cardFg: "#eaf0fa", cardBg2: "#0f1624", border: "#222c40", borderSoft: "#1a2336", controlBg: "#0f1624", controlBgSolid: "#0f1624", controlBorder: "#222c40", controlFg: "#eaf0fa", blue: "#2f6bff", blueSoft: "#13213f", blueBorder: "#27406f", green: "#16c784", greenSoft: "#0f2a23", greenBorder: "#1c4a3c", amber: "#f5a524", amberSoft: "#2c2310", amberBorder: "#3a2f10", red: "#f04444", yellowBorder: "rgba(234,179,8,0.38)", yellowBg: "rgba(234,179,8,0.10)", yellowText: "#fde68a" }), []);
@@ -336,6 +354,43 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   }, [chartFocus, historyAll]);
   useEffect(() => { if (!symbol.trim()) return; if (assetType === "stock") { window.localStorage.setItem("msh_last_symbol", symbol.trim().toUpperCase()); setLastStockSymbol(symbol.trim().toUpperCase()); } }, [symbol, assetType]);
   useEffect(() => { if (!expanded) return; const k = (e: KeyboardEvent) => { if (e.key === "Escape") setExpanded(false); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [expanded]);
+
+  // Fullscreen overlay: Escape closes it, and we best-effort request true
+  // browser fullscreen on desktop (harmless no-op where unsupported, e.g. iOS,
+  // where the fixed-position overlay already fills the screen). If the user
+  // exits native fullscreen (Esc / browser UI), keep our state in sync.
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setFullscreen(false); };
+    window.addEventListener("keydown", onKey);
+
+    const el = fsOverlayRef.current as (HTMLDivElement & { webkitRequestFullscreen?: () => Promise<void> }) | null;
+    const doc = document as Document & { webkitFullscreenElement?: Element; webkitExitFullscreen?: () => Promise<void> };
+    try {
+      if (el && !doc.fullscreenElement && !doc.webkitFullscreenElement) {
+        const p = el.requestFullscreen ? el.requestFullscreen() : el.webkitRequestFullscreen?.();
+        if (p && typeof (p as Promise<void>).catch === "function") (p as Promise<void>).catch(() => {});
+      }
+    } catch { /* noop */ }
+
+    const onFsChange = () => {
+      if (!doc.fullscreenElement && !doc.webkitFullscreenElement) setFullscreen(false);
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    document.addEventListener("webkitfullscreenchange", onFsChange as EventListener);
+
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("fullscreenchange", onFsChange);
+      document.removeEventListener("webkitfullscreenchange", onFsChange as EventListener);
+      try {
+        if (doc.fullscreenElement || doc.webkitFullscreenElement) {
+          const q = doc.exitFullscreen ? doc.exitFullscreen() : doc.webkitExitFullscreen?.();
+          if (q && typeof (q as Promise<void>).catch === "function") (q as Promise<void>).catch(() => {});
+        }
+      } catch { /* noop */ }
+    };
+  }, [fullscreen]);
   useEffect(() => { function h(e: MouseEvent) { if (!indicatorMenuRef.current) return; if (!indicatorMenuRef.current.contains(e.target as Node)) setIndicatorMenuOpen(false); } document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h); }, []);
   useEffect(() => {
     if (assetType === "crypto") { const p = CRYPTO_PRESETS.find(t => t.symbol === symbol); if (p) setSymbolName(p.name); return; }
@@ -587,16 +642,65 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     </section>);
   }
 
+  // Three-way Basic / Interactive / TradingView switch. Rendered both in the
+  // chart card header and in the fullscreen overlay.
+  function ChartModeSwitcher({ compact }: { compact?: boolean } = {}) {
+    const modes: { key: ChartMode; label: string }[] = [
+      { key: "basic", label: "Basic" },
+      { key: "interactive", label: "Interactive" },
+      { key: "tradingview", label: "TradingView" },
+    ];
+    return (
+      <div style={{ display: "inline-flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3, flexWrap: "nowrap" }} role="group" aria-label="Chart mode">
+        {modes.map(m => (
+          <button key={m.key} type="button" onClick={() => selectChartMode(m.key)} aria-pressed={chartMode === m.key}
+            style={{ border: "none", borderRadius: 7, padding: compact ? "6px 9px" : "7px 12px", background: chartMode === m.key ? "rgba(167,139,250,0.28)" : "transparent", color: chartMode === m.key ? "#ede9fe" : COLORS.mutedFg, fontWeight: 700, fontSize: 12, cursor: "pointer", boxShadow: chartMode === m.key ? "inset 0 0 0 1px rgba(167,139,250,0.36)" : "none", whiteSpace: "nowrap" }}>
+            {m.label}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  function FullscreenButton() {
+    return (
+      <button type="button" onClick={() => setFullscreen(true)} title="Open chart fullscreen" aria-label="Open chart fullscreen"
+        style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>
+        <span style={{ fontSize: 14, lineHeight: 1 }}>⛶</span> Fullscreen
+      </button>
+    );
+  }
+
+  // Renders the actual chart engine for the current mode. `full` = fullscreen
+  // overlay (fill the container, no inline footers). The Interactive engine
+  // never receives picker drawing props (support/resistance zones, reference
+  // lines) -- those belong to the Basic chart only.
+  function ChartEngine({ full }: { full?: boolean } = {}) {
+    if (chartMode === "interactive") {
+      return <InteractiveChart symbol={symbol} seed={historyAll} isMobile={isMobile} fill={full} height={full ? undefined : 520} />;
+    }
+    if (chartMode === "tradingview") {
+      const h = full ? (typeof window !== "undefined" ? Math.max(360, window.innerHeight - 108) : 720) : (isMobile ? 480 : 620);
+      return <TradingViewChartEmbed symbol={symbol} height={h} />;
+    }
+    return <PriceChart symbol={symbol} data={displayedHistory} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} referenceLines={referenceLines} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={full ? (isMobile ? 420 : 560) : (isMobile ? 320 : 430)} hideSourceToggle showTradingViewLink={false} showTradeLink={false} />;
+  }
+
   function ChartPanel() {
+    const modeTitle = chartMode === "tradingview" ? `TradingView · ${symbol}` : chartMode === "interactive" ? `Interactive · ${symbol}` : `Price · ${chartIndicatorName}`;
     return (<div id="chart" ref={chartSectionRef} style={{ scrollMarginTop: 24 }}>
       <SectionCard title="" right={null} bodyStyle={{ padding: 0 }} style={{ transition: "box-shadow 0.4s ease", boxShadow: highlightChart ? "0 0 0 2px rgba(47,107,255,0.4), 0 10px 30px rgba(47,107,255,0.2)" : undefined }}>
-        {!showTradingView ? (
-          <div style={{ padding: "13px 16px", borderBottom: `1px solid ${COLORS.borderSoft}` }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>Price · {chartIndicatorName}</div>
-              <div style={{ display: "flex", gap: 4 }}>{TIMEFRAMES.map(t => <TimeframeButton key={t.label} label={t.label} active={activeTimeframe === t.label} onClick={() => setActiveTimeframe(t.label)} />)}</div>
+        <div style={{ padding: "13px 16px", borderBottom: `1px solid ${COLORS.borderSoft}` }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>{modeTitle}</div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <ChartModeSwitcher />
+              <FullscreenButton />
             </div>
+          </div>
+          {chartMode === "basic" ? (
             <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 4 }}>{TIMEFRAMES.map(t => <TimeframeButton key={t.label} label={t.label} active={activeTimeframe === t.label} onClick={() => setActiveTimeframe(t.label)} />)}</div>
               <div style={{ position: "relative", flex: 1, minWidth: 160 }} ref={indicatorMenuRef}>
                 <button type="button" onClick={() => setIndicatorMenuOpen(v => !v)} style={{ width: "100%", padding: "10px 13px", borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, fontSize: 13, textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer" }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedIndicators.length ? chartIndicatorName : "Indicator · Overview"}</span><span>▾</span></button>
                 {indicatorMenuOpen ? <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 40, width: isMobile ? "100%" : 300, maxHeight: 380, borderRadius: 14, border: `1px solid ${COLORS.border}`, background: COLORS.cardBg, boxShadow: "0 18px 34px rgba(0,0,0,0.40)", overflowY: "auto" }}>
@@ -611,21 +715,29 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
               <div style={{ display: "flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3 }}>{(["line", "candles"] as const).map(type => <button key={type} type="button" onClick={() => setChartType(type)} style={{ border: "none", borderRadius: 7, padding: "7px 12px", background: chartType === type ? "rgba(47,107,255,0.28)" : "transparent", color: chartType === type ? "#dbeafe" : COLORS.mutedFg, fontWeight: 700, fontSize: 12, cursor: "pointer", boxShadow: chartType === type ? "inset 0 0 0 1px rgba(96,165,250,0.36)" : "none" }}>{type === "line" ? "Line" : "Candles"}</button>)}</div>
               <ChartToolbar />
             </div>
-          </div>
-        ) : (
-          <div style={{ padding: "13px 16px", borderBottom: `1px solid ${COLORS.borderSoft}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>TradingView · {symbol}</div>
-          </div>
-        )}
+          ) : null}
+        </div>
         <div style={{ padding: 16 }}>
-          <PriceChart symbol={symbol} data={displayedHistory} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} referenceLines={referenceLines} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={isMobile ? (showTradingView ? 480 : 320) : (showTradingView ? 620 : 430)} tradingViewActive={showTradingView} onToggleTradingView={setShowTradingView} showTradingViewLink={false} showTradeLink={false} />
-          <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
-            <a href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`} target="_blank" rel="noopener noreferrer sponsored nofollow" style={{ fontSize: 12, color: "#9cc0ff", textDecoration: "none", fontWeight: 700 }}>Open in TradingView ↗</a>
-          </div>
-          <div style={{ marginTop: 6, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", fontSize: 12, fontWeight: 600, color: COLORS.mutedFg2 }}>
-            <div>{displayedHistory.length ? `${displayedHistory[0].date} → ${displayedHistory[displayedHistory.length - 1].date}` : "No chart data"}</div>
-            <Link href="/platforms" style={{ fontSize: 12, color: "#9cc0ff", textDecoration: "none", fontWeight: 700 }}>Compare platforms →</Link>
-          </div>
+          {isInteractive && isMobile ? (
+            <button type="button" onClick={() => setFullscreen(true)} style={{ width: "100%", padding: "38px 16px", borderRadius: 12, border: `1px dashed ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 800, fontSize: 15, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 28, lineHeight: 1 }}>⛶</span>
+              Open Interactive Chart
+              <span style={{ fontSize: 12, fontWeight: 600, color: COLORS.mutedFg }}>Full screen · portrait or landscape</span>
+            </button>
+          ) : (
+            <ChartEngine />
+          )}
+          {chartMode !== "interactive" ? (
+            <>
+              <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
+                <a href={`/api/go/tradingview?symbol=${encodeURIComponent(symbol)}`} target="_blank" rel="noopener noreferrer sponsored nofollow" style={{ fontSize: 12, color: "#9cc0ff", textDecoration: "none", fontWeight: 700 }}>Open in TradingView ↗</a>
+              </div>
+              <div style={{ marginTop: 6, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", fontSize: 12, fontWeight: 600, color: COLORS.mutedFg2 }}>
+                <div>{displayedHistory.length ? `${displayedHistory[0].date} → ${displayedHistory[displayedHistory.length - 1].date}` : "No chart data"}</div>
+                <Link href="/platforms" style={{ fontSize: 12, color: "#9cc0ff", textDecoration: "none", fontWeight: 700 }}>Compare platforms →</Link>
+              </div>
+            </>
+          ) : null}
         </div>
       </SectionCard>
     </div>);
@@ -817,8 +929,28 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
               <button type="button" onClick={() => setExpanded(false)} style={{ padding: "7px 10px", borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, cursor: "pointer" }}>✕</button>
             </div>
             <div style={{ padding: 16 }}>
-              <PriceChart symbol={symbol} data={displayedHistory} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} referenceLines={referenceLines} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={isMobile ? (showTradingView ? 460 : 280) : (showTradingView ? 640 : 520)} tradingViewActive={showTradingView} onToggleTradingView={setShowTradingView} showTradingViewLink={false} showTradeLink={false} />
+              <PriceChart symbol={symbol} data={displayedHistory} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} referenceLines={referenceLines} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={isMobile ? 280 : 520} hideSourceToggle showTradingViewLink={false} showTradeLink={false} />
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {fullscreen ? (
+        <div ref={fsOverlayRef} style={{ position: "fixed", inset: 0, zIndex: 130, background: "#0b1220", display: "flex", flexDirection: "column" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: isMobile ? "8px 10px" : "10px 14px", borderBottom: `1px solid ${COLORS.border}`, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+              <div style={{ fontWeight: 800, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{symbol}</div>
+              <ChartModeSwitcher compact />
+            </div>
+            <button type="button" onClick={() => setFullscreen(false)} aria-label="Close fullscreen" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 13px", borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 800, fontSize: 13, cursor: "pointer", minHeight: 40 }}>
+              <span style={{ fontSize: 15, lineHeight: 1 }}>✕</span> Close
+            </button>
+          </div>
+          <div style={{ flex: 1, minHeight: 0, padding: isMobile ? 8 : 14, display: "flex", flexDirection: "column", overflow: "auto" }}>
+            {/* Direct call (not <ChartEngine/>) so the fullscreen engine keeps
+                its props updated across re-renders (e.g. a phone rotation that
+                flips isMobile) instead of remounting and losing zoom/drawings. */}
+            {ChartEngine({ full: true })}
           </div>
         </div>
       ) : null}
