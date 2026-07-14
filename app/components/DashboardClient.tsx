@@ -227,6 +227,12 @@ const CANDLE_ICON = (
     <line x1="12" y1="2.5" x2="12" y2="12.5" /><rect x="10" y="5.5" width="4" height="4.6" rx="0.6" />
   </svg>
 );
+// "Fit all history" bracket-frame icon (replaces the worded MAX button).
+const FIT_ICON = (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M2 5.5 V2.5 H5.5" /><path d="M10.5 2.5 H13.5 V5.5" /><path d="M13.5 10.5 V13.5 H10.5" /><path d="M5.5 13.5 H2.5 V10.5" />
+  </svg>
+);
 
 type ChartFocus = { kind: "ath" | "rangeHigh"; price: number; date: string; label: string };
 
@@ -592,8 +598,29 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     const [ot, setOt] = useState(false);
     return (<span style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", width: 18, height: 18, borderRadius: "50%", background: "rgba(255,255,255,0.12)", color: "#fff", fontSize: 11, fontWeight: 900, cursor: "pointer", marginLeft: 6, flex: "0 0 auto", zIndex: 6 }} onMouseEnter={() => setOt(true)} onMouseLeave={() => setOt(false)} onClick={() => setOt(v => !v)}>?{ot ? <div style={{ position: "absolute", top: "calc(100% + 10px)", right: 0, width: 260, maxWidth: "min(260px, calc(100vw - 32px))", padding: 12, borderRadius: 12, backgroundColor: "#0f172a", border: "1px solid rgba(255,255,255,0.14)", color: "#f1f5f9", fontSize: 12, lineHeight: 1.5, fontWeight: 600, zIndex: 80, boxShadow: "0 10px 24px rgba(0,0,0,0.28)", pointerEvents: "none", whiteSpace: "normal" }}>{props.text}</div> : null}</span>);
   }
-  function TimeframeButton(props: { label: string; active: boolean; onClick: () => void }) {
-    return (<button type="button" onClick={props.onClick} style={{ padding: isMobile ? "8px 11px" : "9px 18px", borderRadius: 9, border: `1px solid ${props.active ? COLORS.blue : COLORS.controlBorder}`, background: props.active ? COLORS.blue : COLORS.controlBg, color: props.active ? "#fff" : COLORS.mutedFg, fontWeight: 800, fontSize: 13, cursor: "pointer", minWidth: isMobile ? 34 : 50, letterSpacing: "0.02em" }}>{props.label}</button>);
+  // D/W/M as a compact segmented toggle (matches the mode switch / Line-Candle
+  // toggle), so it can sit on the same line as the Basic/Interactive/TradingView
+  // switch.
+  function TimeframeToggle() {
+    return (
+      <div style={{ display: "inline-flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3, flex: "0 0 auto" }} role="group" aria-label="Timeframe">
+        {TIMEFRAMES.map(t => (
+          <button key={t.label} type="button" onClick={() => setActiveTimeframe(t.label)} aria-pressed={activeTimeframe === t.label}
+            style={{ border: "none", borderRadius: 7, padding: isMobile ? "6px 10px" : "7px 13px", background: activeTimeframe === t.label ? COLORS.blue : "transparent", color: activeTimeframe === t.label ? "#fff" : COLORS.mutedFg, fontWeight: 800, fontSize: 12, cursor: "pointer", letterSpacing: "0.02em", minWidth: isMobile ? 30 : 34 }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+    );
+  }
+  // "Fit all history" button (was the worded MAX button) — sits next to D/W/M.
+  function MaxButton() {
+    return (
+      <button type="button" onClick={() => { setVisibleBars(Math.max(totalPoints, 2)); setWindowOffset(0); }} title="Show all history" aria-label="Show all history"
+        style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 38, height: 38, borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, cursor: "pointer", flex: "0 0 auto" }}>
+        {FIT_ICON}
+      </button>
+    );
   }
   function AssetTypeToggle(props: { compact?: boolean }) {
     const opts: { key: AssetType; label: string }[] = [{ key: "stock", label: "Stocks" }, { key: "crypto", label: "Crypto" }];
@@ -612,7 +639,6 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     return (<div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "nowrap" }}>
       <button onClick={() => { setVisibleBars(d => Math.max(2, Math.floor(d * 0.8))); setWindowOffset(0); }} title="Zoom in" style={zBtn}>+</button>
       <button onClick={() => { setVisibleBars(d => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25))); setWindowOffset(0); }} title="Zoom out" style={zBtn}>−</button>
-      <button onClick={() => { setVisibleBars(Math.max(totalPoints, 2)); setWindowOffset(0); }} title="Show all history" style={{ ...zBtn, fontSize: 11 }}>MAX</button>
     </div>);
   }
 
@@ -743,15 +769,17 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
           <div style={{ display: "flex", alignItems: "center", justifyContent: isMobile ? "flex-start" : "space-between", gap: 12, flexWrap: "wrap" }}>
             {!isMobile ? <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>{modeTitle}</div> : null}
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <ChartModeSwitcher />
-              {/* Fullscreen has no benefit on the Basic chart, so it's hidden there. */}
+              <ChartModeSwitcher compact={isMobile} />
+              {/* On Basic: D/W/M toggle + "fit all" sit on this line. Fullscreen
+                  is hidden on Basic (no benefit); shown on the other modes. */}
+              {chartMode === "basic" ? <TimeframeToggle /> : null}
+              {chartMode === "basic" ? <MaxButton /> : null}
               {chartMode !== "basic" ? <FullscreenButton /> : null}
             </div>
           </div>
           {chartMode === "basic" ? (
             <div style={{ marginTop: 12, display: "flex", gap: isMobile ? 7 : 10, alignItems: "center", flexWrap: "wrap" }}>
-              <div style={{ display: "flex", gap: 4, flex: "0 0 auto" }}>{TIMEFRAMES.map(t => <TimeframeButton key={t.label} label={t.label} active={activeTimeframe === t.label} onClick={() => setActiveTimeframe(t.label)} />)}</div>
-              <div style={{ position: "relative", flex: isMobile ? "1 1 108px" : 1, minWidth: isMobile ? 104 : 160 }} ref={indicatorMenuRef}>
+              <div style={{ position: "relative", flex: isMobile ? "1 1 140px" : 1, minWidth: isMobile ? 130 : 160 }} ref={indicatorMenuRef}>
                 <button type="button" onClick={() => setIndicatorMenuOpen(v => !v)} style={{ width: "100%", padding: "10px 13px", borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, fontSize: 13, textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer" }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedIndicators.length ? chartIndicatorName : "Indicator"}</span><span>▾</span></button>
                 {indicatorMenuOpen ? <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 40, width: isMobile ? "100%" : 300, maxHeight: 380, borderRadius: 14, border: `1px solid ${COLORS.border}`, background: COLORS.cardBg, boxShadow: "0 18px 34px rgba(0,0,0,0.40)", overflowY: "auto" }}>
                   <button type="button" onClick={clearIndicatorSelection} style={{ width: "100%", padding: "11px 13px", border: "none", borderBottom: `1px solid ${COLORS.border}`, background: COLORS.controlBg, color: COLORS.cardFg, textAlign: "left", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>Clear all · Overview</button>
