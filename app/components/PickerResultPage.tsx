@@ -6,6 +6,7 @@ import MiniPickerCandleChart, {
 } from "@/app/components/MiniPickerCandleChart";
 import PickerHighlightScroller from "@/app/components/PickerHighlightScroller";
 import ScreenerNav from "@/app/components/ScreenerNav";
+import HowToCollapse from "@/app/components/HowToCollapse";
 import { getCompanyNameMap } from "@/lib/server/companyNames";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
@@ -474,7 +475,9 @@ export default async function PickerResultPage({
         .hero h1 { margin: 12px 0 0; font-size: 44px; line-height: 1.03; letter-spacing: -0.055em; }
         .hero > p { margin: 10px 0 0; max-width: 820px; color: rgba(226,232,240,0.78); font-size: 16px; line-height: 1.65; }
         .heroHowTo { margin-top: 16px; padding: 14px 16px; border-radius: 16px; border: 1px solid rgba(59,130,246,0.18); background: linear-gradient(135deg, rgba(59,130,246,0.08), rgba(8,13,22,0.6)); }
+        .heroHowToToggle { display: flex; align-items: center; justify-content: space-between; width: 100%; background: none; border: none; padding: 0; margin: 0; cursor: pointer; font: inherit; text-align: left; color: inherit; }
         .heroHowToLabel { display: block; font-size: 11px; font-weight: 950; letter-spacing: 0.1em; text-transform: uppercase; color: #93c5fd; }
+        .heroHowToChevron { flex: 0 0 auto; margin-left: 10px; color: #93c5fd; font-size: 12px; transition: transform 160ms ease; }
         .heroHowTo p { margin: 7px 0 0; max-width: 860px; color: rgba(226,232,240,0.8); font-size: 14px; line-height: 1.65; }
         .resultsHeader { margin-top: 22px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: end; }
         .resultsHeader h2 { margin: 0; font-size: 26px; letter-spacing: -0.04em; }
@@ -546,12 +549,7 @@ export default async function PickerResultPage({
               </div>
               <h1>{config.title}</h1>
               <p>{config.description}</p>
-              {config.explainerBody ? (
-                <div className="heroHowTo">
-                  <span className="heroHowToLabel">{config.explainerTitle}</span>
-                  <p>{config.explainerBody}</p>
-                </div>
-              ) : null}
+              <HowToCollapse title={config.explainerTitle} body={config.explainerBody} />
             </section>
 
             <section>
