@@ -479,6 +479,7 @@ export default async function PickerResultPage({
         .heroHowToLabel { display: block; font-size: 11px; font-weight: 950; letter-spacing: 0.1em; text-transform: uppercase; color: #93c5fd; }
         .heroHowToChevron { flex: 0 0 auto; margin-left: 10px; color: #93c5fd; font-size: 12px; transition: transform 160ms ease; }
         .heroHowTo p { margin: 7px 0 0; max-width: 860px; color: rgba(226,232,240,0.8); font-size: 14px; line-height: 1.65; }
+        .screenerTriggerWrap { margin: 20px 0 4px; }
         .resultsHeader { margin-top: 22px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: end; }
         .resultsHeader h2 { margin: 0; font-size: 26px; letter-spacing: -0.04em; }
         .resultsHeader p { margin: 8px 0 0; color: rgba(226,232,240,0.70); line-height: 1.6; }
@@ -539,7 +540,7 @@ export default async function PickerResultPage({
 
       <div className="resultWrap">
         <div className="resultShell">
-          <ScreenerNav currentHref={config.href} />
+          <ScreenerNav currentHref={config.href} variant="sidebar" />
 
           <div className="resultMain">
             <section className="hero">
@@ -551,6 +552,10 @@ export default async function PickerResultPage({
               <p>{config.description}</p>
               <HowToCollapse title={config.explainerTitle} body={config.explainerBody} />
             </section>
+
+            <div className="screenerTriggerWrap">
+              <ScreenerNav currentHref={config.href} variant="trigger" />
+            </div>
 
             <section>
               <div className="resultsHeader">
