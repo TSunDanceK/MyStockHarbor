@@ -613,11 +613,12 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
       </div>
     );
   }
-  // "Fit all history" button (was the worded MAX button) — sits next to D/W/M.
+  // "Fit all history" button (was the worded MAX button) — sits with the zoom
+  // controls on line 2.
   function MaxButton() {
     return (
       <button type="button" onClick={() => { setVisibleBars(Math.max(totalPoints, 2)); setWindowOffset(0); }} title="Show all history" aria-label="Show all history"
-        style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 38, height: 38, borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, cursor: "pointer", flex: "0 0 auto" }}>
+        style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 36, height: 34, borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, cursor: "pointer", flex: "0 0 auto" }}>
         {FIT_ICON}
       </button>
     );
@@ -639,6 +640,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     return (<div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "nowrap" }}>
       <button onClick={() => { setVisibleBars(d => Math.max(2, Math.floor(d * 0.8))); setWindowOffset(0); }} title="Zoom in" style={zBtn}>+</button>
       <button onClick={() => { setVisibleBars(d => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25))); setWindowOffset(0); }} title="Zoom out" style={zBtn}>−</button>
+      <MaxButton />
     </div>);
   }
 
@@ -768,20 +770,21 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
         <div style={{ padding: "13px 16px", borderBottom: `1px solid ${COLORS.borderSoft}` }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: isMobile ? "flex-start" : "space-between", gap: 12, flexWrap: "wrap" }}>
             {!isMobile ? <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>{modeTitle}</div> : null}
-            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: isMobile ? 6 : 8, alignItems: "center", flexWrap: "wrap" }}>
               <ChartModeSwitcher compact={isMobile} />
-              {/* On Basic: D/W/M toggle + "fit all" sit on this line. Fullscreen
-                  is hidden on Basic (no benefit); shown on the other modes. */}
+              {/* On Basic: D/W/M toggle sits on this line (the mode-switch line).
+                  Fullscreen is hidden on Basic (no benefit); shown on the other
+                  modes. The "fit all" button lives with the zoom controls on
+                  line 2. */}
               {chartMode === "basic" ? <TimeframeToggle /> : null}
-              {chartMode === "basic" ? <MaxButton /> : null}
               {chartMode !== "basic" ? <FullscreenButton /> : null}
             </div>
           </div>
           {chartMode === "basic" ? (
             <div style={{ marginTop: 12, display: "flex", gap: isMobile ? 7 : 10, alignItems: "center", flexWrap: "wrap" }}>
-              <div style={{ position: "relative", flex: isMobile ? "1 1 140px" : 1, minWidth: isMobile ? 130 : 160 }} ref={indicatorMenuRef}>
+              <div style={{ position: "relative", flex: isMobile ? "0 1 auto" : 1, minWidth: isMobile ? 116 : 160 }} ref={indicatorMenuRef}>
                 <button type="button" onClick={() => setIndicatorMenuOpen(v => !v)} style={{ width: "100%", padding: "10px 13px", borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, fontSize: 13, textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer" }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedIndicators.length ? chartIndicatorName : "Indicator"}</span><span>▾</span></button>
-                {indicatorMenuOpen ? <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 40, width: isMobile ? "100%" : 300, maxHeight: 380, borderRadius: 14, border: `1px solid ${COLORS.border}`, background: COLORS.cardBg, boxShadow: "0 18px 34px rgba(0,0,0,0.40)", overflowY: "auto" }}>
+                {indicatorMenuOpen ? <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 40, width: isMobile ? 250 : 300, maxWidth: "84vw", maxHeight: 380, borderRadius: 14, border: `1px solid ${COLORS.border}`, background: COLORS.cardBg, boxShadow: "0 18px 34px rgba(0,0,0,0.40)", overflowY: "auto" }}>
                   <button type="button" onClick={clearIndicatorSelection} style={{ width: "100%", padding: "11px 13px", border: "none", borderBottom: `1px solid ${COLORS.border}`, background: COLORS.controlBg, color: COLORS.cardFg, textAlign: "left", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>Clear all · Overview</button>
                   {[{ title: "Price overlays", opts: PRICE_OVERLAY_OPTIONS }, { title: "Lower indicator (1 max)", opts: LOWER_OVERLAY_OPTIONS }].map(group => <div key={group.title}><div style={{ padding: "9px 13px 7px", fontSize: 10, fontWeight: 700, color: COLORS.mutedFg, textTransform: "uppercase", letterSpacing: "0.04em", borderTop: `1px solid ${COLORS.border}` }}>{group.title}</div>{group.opts.map(opt => (
                     <label key={opt} onMouseDown={e => { e.stopPropagation(); e.preventDefault(); toggleIndicatorSelection(opt); }} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 13px", borderTop: `1px solid ${COLORS.borderSoft}`, cursor: "pointer", fontWeight: 700, fontSize: 13 }}>
