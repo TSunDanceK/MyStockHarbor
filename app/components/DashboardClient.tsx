@@ -217,6 +217,17 @@ const ALL_OVERLAY_OPTIONS: string[] = [...PRICE_OVERLAY_OPTIONS, ...LOWER_OVERLA
 function isLowerOverlay(v: Overlay) { return LOWER_OVERLAY_OPTIONS.includes(v); }
 function fmtPrice(v: number) { return `$${v.toFixed(v >= 100 ? 0 : 2)}`; }
 
+// Icons for the Line / Candles toggle (inherit the button's currentColor).
+const LINE_ICON = (
+  <svg width="17" height="15" viewBox="0 0 17 15" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1,11 5,6 9,8 15,2" /></svg>
+);
+const CANDLE_ICON = (
+  <svg width="17" height="15" viewBox="0 0 17 15" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+    <line x1="5" y1="1.5" x2="5" y2="13.5" /><rect x="3" y="4.5" width="4" height="5.5" rx="0.6" fill="currentColor" stroke="none" />
+    <line x1="12" y1="2.5" x2="12" y2="12.5" /><rect x="10" y="5.5" width="4" height="4.6" rx="0.6" />
+  </svg>
+);
+
 type ChartFocus = { kind: "ath" | "rangeHigh"; price: number; date: string; label: string };
 
 // Finds the offset (bars back from "now") that puts the bar nearest `iso`
@@ -582,7 +593,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     return (<span style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", width: 18, height: 18, borderRadius: "50%", background: "rgba(255,255,255,0.12)", color: "#fff", fontSize: 11, fontWeight: 900, cursor: "pointer", marginLeft: 6, flex: "0 0 auto", zIndex: 6 }} onMouseEnter={() => setOt(true)} onMouseLeave={() => setOt(false)} onClick={() => setOt(v => !v)}>?{ot ? <div style={{ position: "absolute", top: "calc(100% + 10px)", right: 0, width: 260, maxWidth: "min(260px, calc(100vw - 32px))", padding: 12, borderRadius: 12, backgroundColor: "#0f172a", border: "1px solid rgba(255,255,255,0.14)", color: "#f1f5f9", fontSize: 12, lineHeight: 1.5, fontWeight: 600, zIndex: 80, boxShadow: "0 10px 24px rgba(0,0,0,0.28)", pointerEvents: "none", whiteSpace: "normal" }}>{props.text}</div> : null}</span>);
   }
   function TimeframeButton(props: { label: string; active: boolean; onClick: () => void }) {
-    return (<button type="button" onClick={props.onClick} style={{ padding: isMobile ? "8px 14px" : "9px 18px", borderRadius: 9, border: `1px solid ${props.active ? COLORS.blue : COLORS.controlBorder}`, background: props.active ? COLORS.blue : COLORS.controlBg, color: props.active ? "#fff" : COLORS.mutedFg, fontWeight: 800, fontSize: 13, cursor: "pointer", minWidth: isMobile ? 44 : 50, letterSpacing: "0.02em" }}>{props.label}</button>);
+    return (<button type="button" onClick={props.onClick} style={{ padding: isMobile ? "8px 11px" : "9px 18px", borderRadius: 9, border: `1px solid ${props.active ? COLORS.blue : COLORS.controlBorder}`, background: props.active ? COLORS.blue : COLORS.controlBg, color: props.active ? "#fff" : COLORS.mutedFg, fontWeight: 800, fontSize: 13, cursor: "pointer", minWidth: isMobile ? 34 : 50, letterSpacing: "0.02em" }}>{props.label}</button>);
   }
   function AssetTypeToggle(props: { compact?: boolean }) {
     const opts: { key: AssetType; label: string }[] = [{ key: "stock", label: "Stocks" }, { key: "crypto", label: "Crypto" }];
@@ -595,7 +606,34 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   }
   function BreakdownHelpButton() { return (<div style={{ display: "flex", alignItems: "center", gap: 10 }}><HelpTip text={customMode ? "This breakdown is showing the indicators you currently selected on the chart." : "Breakdown shows the main dashboard indicators including trend, momentum, stretch, volatility and divergence clues."} isDark={true} /><Link href="/learn" style={{ color: "#9cc0ff", textDecoration: "none", fontWeight: 800, fontSize: 12 }}>Learn more →</Link></div>); }
   function ChartToolbar() {
-    return (<div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "nowrap" }}>{[{ label: "←", onClick: () => setWindowOffset(o => Math.min(maxOffset, o + Math.max(1, Math.floor(win * 0.2)))), disabled: offset >= maxOffset }, { label: "→", onClick: () => setWindowOffset(o => Math.max(0, o - Math.max(1, Math.floor(win * 0.2)))), disabled: offset <= 0 }, { label: "+", onClick: () => { setVisibleBars(d => Math.max(2, Math.floor(d * 0.8))); setWindowOffset(0); }, disabled: false }, { label: "−", onClick: () => { setVisibleBars(d => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25))); setWindowOffset(0); }, disabled: false }].map(btn => <button key={btn.label} onClick={btn.onClick} disabled={btn.disabled} style={{ padding: "7px 10px", borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: btn.disabled ? COLORS.mutedFg2 : COLORS.controlFg, cursor: btn.disabled ? "not-allowed" : "pointer", opacity: btn.disabled ? 0.45 : 1, fontWeight: 800, lineHeight: 1, fontSize: 14 }}>{btn.label}</button>)}<div style={{ padding: "7px 10px", borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.mutedFg, fontSize: 11, fontWeight: 800, whiteSpace: "nowrap" }}>{Math.min(win, totalPoints)} bars</div><button onClick={() => { setVisibleBars(Math.max(totalPoints, 2)); setWindowOffset(0); }} style={{ padding: "7px 10px", borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, cursor: "pointer", fontWeight: 800, fontSize: 11 }}>MAX</button><button onClick={() => setExpanded(true)} style={{ padding: "7px 10px", borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, cursor: "pointer", fontWeight: 800, fontSize: 14 }}>⤢</button></div>);
+    const zBtn: React.CSSProperties = { padding: "7px 11px", borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, cursor: "pointer", fontWeight: 800, lineHeight: 1, fontSize: 14 };
+    // Pan (← →) now lives as overlay arrows on the chart; the bar count and the
+    // ⤢ expand button were removed to save vertical space on mobile.
+    return (<div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "nowrap" }}>
+      <button onClick={() => { setVisibleBars(d => Math.max(2, Math.floor(d * 0.8))); setWindowOffset(0); }} title="Zoom in" style={zBtn}>+</button>
+      <button onClick={() => { setVisibleBars(d => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25))); setWindowOffset(0); }} title="Zoom out" style={zBtn}>−</button>
+      <button onClick={() => { setVisibleBars(Math.max(totalPoints, 2)); setWindowOffset(0); }} title="Show all history" style={{ ...zBtn, fontSize: 11 }}>MAX</button>
+    </div>);
+  }
+
+  // Pan arrows overlaid on the left/right edge of the Basic chart (replaces the
+  // old ← → toolbar buttons). Fade out when there's nothing further to pan to.
+  function PanArrow({ dir, onClick, disabled }: { dir: "left" | "right"; onClick: () => void; disabled: boolean }) {
+    return (
+      <button type="button" onClick={onClick} disabled={disabled} aria-label={dir === "left" ? "Pan back in time" : "Pan forward in time"}
+        style={{
+          position: "absolute", top: "44%", transform: "translateY(-50%)",
+          left: dir === "left" ? 4 : undefined, right: dir === "right" ? 30 : undefined,
+          width: 34, height: 34, borderRadius: "50%", border: `1px solid ${COLORS.controlBorder}`,
+          background: "rgba(15,23,42,0.72)", color: COLORS.controlFg,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          cursor: disabled ? "default" : "pointer", opacity: disabled ? 0 : 0.92,
+          pointerEvents: disabled ? "none" : "auto", transition: "opacity 0.15s ease",
+          fontSize: 20, fontWeight: 800, lineHeight: 1, zIndex: 5, WebkitBackdropFilter: "blur(2px)", backdropFilter: "blur(2px)",
+        }}>
+        {dir === "left" ? "‹" : "›"}
+      </button>
+    );
   }
 
   function OverviewPanel() {
@@ -694,7 +732,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
       const h = full ? (typeof window !== "undefined" ? Math.max(360, window.innerHeight - 108) : 720) : (isMobile ? 480 : 620);
       return <TradingViewChartEmbed symbol={symbol} height={h} />;
     }
-    return <PriceChart symbol={symbol} data={displayedHistory} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} referenceLines={referenceLines} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={full ? (isMobile ? 420 : 560) : (isMobile ? 320 : 430)} hideSourceToggle showTradingViewLink={false} showTradeLink={false} />;
+    return <PriceChart symbol={symbol} data={displayedHistory} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} referenceLines={referenceLines} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={full ? (isMobile ? 420 : 560) : (isMobile ? 480 : 430)} hideSourceToggle showTradingViewLink={false} showTradeLink={false} />;
   }
 
   function ChartPanel() {
@@ -702,18 +740,19 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     return (<div id="chart" ref={chartSectionRef} style={{ scrollMarginTop: 24 }}>
       <SectionCard title="" right={null} bodyStyle={{ padding: 0 }} style={{ transition: "box-shadow 0.4s ease", boxShadow: highlightChart ? "0 0 0 2px rgba(47,107,255,0.4), 0 10px 30px rgba(47,107,255,0.2)" : undefined }}>
         <div style={{ padding: "13px 16px", borderBottom: `1px solid ${COLORS.borderSoft}` }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>{modeTitle}</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: isMobile ? "flex-start" : "space-between", gap: 12, flexWrap: "wrap" }}>
+            {!isMobile ? <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>{modeTitle}</div> : null}
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <ChartModeSwitcher />
-              <FullscreenButton />
+              {/* Fullscreen has no benefit on the Basic chart, so it's hidden there. */}
+              {chartMode !== "basic" ? <FullscreenButton /> : null}
             </div>
           </div>
           {chartMode === "basic" ? (
-            <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
-              <div style={{ display: "flex", gap: 4 }}>{TIMEFRAMES.map(t => <TimeframeButton key={t.label} label={t.label} active={activeTimeframe === t.label} onClick={() => setActiveTimeframe(t.label)} />)}</div>
-              <div style={{ position: "relative", flex: 1, minWidth: 160 }} ref={indicatorMenuRef}>
-                <button type="button" onClick={() => setIndicatorMenuOpen(v => !v)} style={{ width: "100%", padding: "10px 13px", borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, fontSize: 13, textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer" }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedIndicators.length ? chartIndicatorName : "Indicator · Overview"}</span><span>▾</span></button>
+            <div style={{ marginTop: 12, display: "flex", gap: isMobile ? 7 : 10, alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 4, flex: "0 0 auto" }}>{TIMEFRAMES.map(t => <TimeframeButton key={t.label} label={t.label} active={activeTimeframe === t.label} onClick={() => setActiveTimeframe(t.label)} />)}</div>
+              <div style={{ position: "relative", flex: isMobile ? "1 1 108px" : 1, minWidth: isMobile ? 104 : 160 }} ref={indicatorMenuRef}>
+                <button type="button" onClick={() => setIndicatorMenuOpen(v => !v)} style={{ width: "100%", padding: "10px 13px", borderRadius: 10, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, fontSize: 13, textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer" }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedIndicators.length ? chartIndicatorName : "Indicator"}</span><span>▾</span></button>
                 {indicatorMenuOpen ? <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 40, width: isMobile ? "100%" : 300, maxHeight: 380, borderRadius: 14, border: `1px solid ${COLORS.border}`, background: COLORS.cardBg, boxShadow: "0 18px 34px rgba(0,0,0,0.40)", overflowY: "auto" }}>
                   <button type="button" onClick={clearIndicatorSelection} style={{ width: "100%", padding: "11px 13px", border: "none", borderBottom: `1px solid ${COLORS.border}`, background: COLORS.controlBg, color: COLORS.cardFg, textAlign: "left", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>Clear all · Overview</button>
                   {[{ title: "Price overlays", opts: PRICE_OVERLAY_OPTIONS }, { title: "Lower indicator (1 max)", opts: LOWER_OVERLAY_OPTIONS }].map(group => <div key={group.title}><div style={{ padding: "9px 13px 7px", fontSize: 10, fontWeight: 700, color: COLORS.mutedFg, textTransform: "uppercase", letterSpacing: "0.04em", borderTop: `1px solid ${COLORS.border}` }}>{group.title}</div>{group.opts.map(opt => (
@@ -723,8 +762,8 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
                   ))}</div>)}
                 </div> : null}
               </div>
-              <div style={{ display: "flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3 }}>{(["line", "candles"] as const).map(type => <button key={type} type="button" onClick={() => setChartType(type)} style={{ border: "none", borderRadius: 7, padding: "7px 12px", background: chartType === type ? "rgba(47,107,255,0.28)" : "transparent", color: chartType === type ? "#dbeafe" : COLORS.mutedFg, fontWeight: 700, fontSize: 12, cursor: "pointer", boxShadow: chartType === type ? "inset 0 0 0 1px rgba(96,165,250,0.36)" : "none" }}>{type === "line" ? "Line" : "Candles"}</button>)}</div>
-              <ChartToolbar />
+              <div style={{ display: "flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3, flex: "0 0 auto" }}>{(["line", "candles"] as const).map(type => <button key={type} type="button" onClick={() => setChartType(type)} title={type === "line" ? "Line" : "Candles"} aria-label={type === "line" ? "Line" : "Candles"} aria-pressed={chartType === type} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: 7, padding: "6px 11px", background: chartType === type ? "rgba(47,107,255,0.28)" : "transparent", color: chartType === type ? "#dbeafe" : COLORS.mutedFg, cursor: "pointer", boxShadow: chartType === type ? "inset 0 0 0 1px rgba(96,165,250,0.36)" : "none" }}>{type === "line" ? LINE_ICON : CANDLE_ICON}</button>)}</div>
+              <div style={{ flex: "0 0 auto" }}><ChartToolbar /></div>
             </div>
           ) : null}
         </div>
@@ -735,6 +774,12 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
               Open Interactive Chart
               <span style={{ fontSize: 12, fontWeight: 600, color: COLORS.mutedFg }}>Full screen · portrait or landscape</span>
             </button>
+          ) : chartMode === "basic" ? (
+            <div style={{ position: "relative" }}>
+              <ChartEngine />
+              <PanArrow dir="left" onClick={() => setWindowOffset(o => Math.min(maxOffset, o + Math.max(1, Math.floor(win * 0.2))))} disabled={offset >= maxOffset} />
+              <PanArrow dir="right" onClick={() => setWindowOffset(o => Math.max(0, o - Math.max(1, Math.floor(win * 0.2))))} disabled={offset <= 0} />
+            </div>
           ) : (
             <ChartEngine />
           )}
