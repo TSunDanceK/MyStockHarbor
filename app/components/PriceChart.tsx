@@ -159,8 +159,9 @@ type Props = {
 // chart's own fixed-height wrapper -- not against any data-derived SVG
 // coordinate -- so it never shifts when the user zooms, pans, or changes
 // the visible bar count; only the chart content underneath it changes.
-// Opacity is kept low so it reads as a background mark rather than
-// interfering with the data.
+// Sits horizontally along the top-center, out of the way of the price
+// action below. Opacity is kept low so it reads as a background mark
+// rather than interfering with the data.
 function ChartWatermark() {
   return (
     <div
@@ -169,8 +170,9 @@ function ChartWatermark() {
         position: "absolute",
         inset: 0,
         display: "flex",
-        alignItems: "center",
+        alignItems: "flex-start",
         justifyContent: "center",
+        paddingTop: "4%",
         pointerEvents: "none",
         userSelect: "none",
         overflow: "hidden",
@@ -179,12 +181,11 @@ function ChartWatermark() {
     >
       <span
         style={{
-          fontSize: "clamp(18px, 5.5vw, 40px)",
+          fontSize: "clamp(13px, 3vw, 22px)",
           fontWeight: 800,
-          color: "rgba(148,163,184,0.16)",
-          letterSpacing: "0.03em",
+          color: "rgba(148,163,184,0.20)",
+          letterSpacing: "0.04em",
           whiteSpace: "nowrap",
-          transform: "rotate(-18deg)",
         }}
       >
         MyStockHarbor.com
