@@ -122,8 +122,24 @@ function NavList({
   );
 }
 
-export default function ScreenerNav({ currentHref }: { currentHref: string }) {
+// `variant` lets callers split the desktop sidebar and the mobile
+// "Select Screener" trigger into two separate places in the page layout
+// (each variant renders its own independent open/close state -- only one
+// of the two is ever visible at a given viewport width via the existing
+// CSS breakpoint, so there's no conflict):
+//   - "full" (default): sidebar + trigger, same position (legacy behaviour)
+//   - "sidebar": desktop sticky column only, no mobile trigger/overlay
+//   - "trigger": mobile "Select Screener" button + overlay only, no sidebar
+export default function ScreenerNav({
+  currentHref,
+  variant = "full",
+}: {
+  currentHref: string;
+  variant?: "full" | "sidebar" | "trigger";
+}) {
   const [open, setOpen] = useState(false);
+  const showSidebar = variant !== "trigger";
+  const showTrigger = variant !== "sidebar";
 
   const currentLabel =
     GROUPS.flatMap((group) => group.items).find((item) => item.href === currentHref)?.label ??
@@ -132,29 +148,36 @@ export default function ScreenerNav({ currentHref }: { currentHref: string }) {
   return (
     <>
       {/* Desktop: sticky left column */}
-      <aside className="screenerSidebar" aria-label="Stock screeners">
-        <div className="screenerSidebarTitle">Screeners</div>
-        <NavList currentHref={currentHref} />
-      </aside>
+      {showSidebar ? (
+        <aside className="screenerSidebar" aria-label="Stock screeners">
+          <div className="screenerSidebarTitle">Screeners</div>
+          <NavList currentHref={currentHref} />
+        </aside>
+      ) : null}
 
       {/* Mobile: single "Select Screener" trigger that opens an overlay */}
-      <div className="screenerMobileBar">
-        <button
-          type="button"
-          className="screenerSelectBtn"
-          onClick={() => setOpen(true)}
-          aria-haspopup="dialog"
-          aria-expanded={open}
-        >
-          <span className="screenerSelectMain">Select Screener</span>
-          <span className="screenerSelectCurrent">
-            {currentLabel}
-            <span className="screenerSelectChevron" aria-hidden="true">▾</span>
-          </span>
-        </button>
-      </div>
+      {showTrigger ? (
+        <div className="screenerMobileBar">
+          <button
+            type="button"
+            className="screenerSelectBtn"
+            onClick={() => setOpen(true)}
+            aria-haspopup="dialog"
+            aria-expanded={open}
+          >
+            <span className="screenerSelectMain">
+              <span className="screenerSelectIcon" aria-hidden="true">⏷</span>
+              Select Screener
+            </span>
+            <span className="screenerSelectCurrent">
+              {currentLabel}
+              <span className="screenerSelectChevron" aria-hidden="true">▾</span>
+            </span>
+          </button>
+        </div>
+      ) : null}
 
-      {open ? (
+      {showTrigger && open ? (
         <div className="screenerOverlay" role="dialog" aria-modal="true" aria-label="Select screener">
           <div className="screenerOverlayBackdrop" onClick={() => setOpen(false)} />
           <div className="screenerOverlayPanel">
@@ -211,16 +234,23 @@ export default function ScreenerNav({ currentHref }: { currentHref: string }) {
         .screenerMobileBar { display: none; }
         .screenerSelectBtn {
           width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px;
-          padding: 12px 15px; border-radius: 14px;
-          border: 1px solid rgba(96,165,250,0.36);
-          background: linear-gradient(135deg, rgba(59,130,246,0.16), rgba(15,23,42,0.62));
-          color: #eff6ff; font-weight: 950; font-size: 15px; cursor: pointer;
+          padding: 14px 16px; border-radius: 16px;
+          border: 1.5px solid rgba(96,165,250,0.65);
+          background: linear-gradient(135deg, rgba(59,130,246,0.34), rgba(37,99,235,0.20));
+          color: #f0f7ff; font-weight: 950; font-size: 15px; cursor: pointer;
+          box-shadow: 0 10px 26px rgba(37,99,235,0.32), inset 0 1px 0 rgba(255,255,255,0.08);
+          transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
         }
-        .screenerSelectMain { flex: 0 0 auto; }
+        .screenerSelectBtn:active {
+          transform: translateY(1px);
+          box-shadow: 0 6px 16px rgba(37,99,235,0.28), inset 0 1px 0 rgba(255,255,255,0.06);
+        }
+        .screenerSelectMain { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 8px; }
+        .screenerSelectIcon { font-size: 14px; color: #93c5fd; }
         .screenerSelectCurrent {
           display: inline-flex; align-items: center; gap: 7px; min-width: 0;
           padding: 5px 10px; border-radius: 999px;
-          border: 1px solid rgba(147,197,253,0.28); background: rgba(59,130,246,0.12);
+          border: 1px solid rgba(147,197,253,0.42); background: rgba(15,23,42,0.55);
           color: #dbeafe; font-size: 12.5px; font-weight: 900;
           overflow: hidden;
         }
@@ -260,7 +290,7 @@ export default function ScreenerNav({ currentHref }: { currentHref: string }) {
           .screenerMobileBar { display: block; }
         }
         @media (max-width: 420px) {
-          .screenerSelectBtn { font-size: 14px; padding: 11px 13px; gap: 10px; }
+          .screenerSelectBtn { font-size: 14px; padding: 12px 14px; gap: 10px; }
           .screenerSelectCurrent { font-size: 12px; }
         }
       `}</style>
