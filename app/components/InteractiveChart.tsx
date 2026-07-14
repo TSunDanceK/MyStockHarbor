@@ -68,6 +68,9 @@ interface ChartApi {
   setLeftMinVisibleBarCount(barCount: number): void;
   setRightMinVisibleBarCount(barCount: number): void;
   setOffsetRightDistance(distance: number): void;
+  scrollToRealTime(animationDuration?: number): void;
+  setBarSpace(space: number): void;
+  getBarSpace(): number;
 }
 
 type Interval = "d" | "w" | "m";
@@ -128,6 +131,75 @@ const DRAW_TOOLS: { key: string; overlay: string; label: string }[] = [
 
 const CANDLE_UP = "#22c55e";
 const CANDLE_DOWN = "#ef4444";
+
+// ---- Icons (small inline SVGs, inherit currentColor) ----------------------
+function IconWrap({ children, size = 15 }: { children: React.ReactNode; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" style={{ flex: "0 0 auto" }} aria-hidden="true">
+      {children}
+    </svg>
+  );
+}
+
+// Candlestick display-type icons.
+const TYPE_ICONS: Record<ChartTypeKey, React.ReactNode> = {
+  candle_solid: (
+    <IconWrap><line x1="8" y1="2" x2="8" y2="14" /><rect x="5.3" y="5" width="5.4" height="6" rx="0.6" fill="currentColor" stroke="none" /></IconWrap>
+  ),
+  candle_stroke: (
+    <IconWrap><line x1="8" y1="2" x2="8" y2="14" /><rect x="5.3" y="5" width="5.4" height="6" rx="0.6" /></IconWrap>
+  ),
+  ohlc: (
+    <IconWrap><line x1="8" y1="2.5" x2="8" y2="13.5" /><line x1="4.5" y1="5" x2="8" y2="5" /><line x1="8" y1="10" x2="11.5" y2="10" /></IconWrap>
+  ),
+  area: (
+    <IconWrap><polyline points="2,11 6,6 9.5,9 14,3" /></IconWrap>
+  ),
+  heikin_ashi: (
+    <IconWrap><line x1="5" y1="3" x2="5" y2="12" /><rect x="3" y="6" width="4" height="4.5" rx="0.5" fill="currentColor" stroke="none" /><line x1="11" y1="4.5" x2="11" y2="13.5" /><rect x="9" y="7.5" width="4" height="4" rx="0.5" fill="currentColor" stroke="none" /></IconWrap>
+  ),
+};
+
+// Drawing-tool icons, keyed by DRAW_TOOLS[].key.
+const TOOL_ICONS: Record<string, React.ReactNode> = {
+  trend: (
+    <IconWrap><line x1="2.5" y1="13" x2="13.5" y2="3.5" /><circle cx="2.5" cy="13" r="1.3" fill="currentColor" stroke="none" /><circle cx="13.5" cy="3.5" r="1.3" fill="currentColor" stroke="none" /></IconWrap>
+  ),
+  ray: (
+    <IconWrap><circle cx="3" cy="12.5" r="1.5" fill="currentColor" stroke="none" /><line x1="3" y1="12.5" x2="14.5" y2="2.8" /></IconWrap>
+  ),
+  extended: (
+    <IconWrap><line x1="1" y1="14.5" x2="15" y2="1.5" /></IconWrap>
+  ),
+  horizontal: (
+    <IconWrap><line x1="1.5" y1="8" x2="14.5" y2="8" /></IconWrap>
+  ),
+  vertical: (
+    <IconWrap><line x1="8" y1="1.5" x2="8" y2="14.5" /></IconWrap>
+  ),
+  priceline: (
+    <IconWrap><line x1="1" y1="8" x2="10" y2="8" strokeDasharray="2 2" /><rect x="10.5" y="5.5" width="4.5" height="5" rx="1" /></IconWrap>
+  ),
+  fib: (
+    <IconWrap><line x1="2" y1="3.5" x2="14" y2="3.5" /><line x1="2" y1="6.5" x2="14" y2="6.5" /><line x1="2" y1="9.5" x2="14" y2="9.5" /><line x1="2" y1="12.5" x2="14" y2="12.5" /></IconWrap>
+  ),
+  note: (
+    <IconWrap><rect x="2" y="2.8" width="12" height="8.2" rx="1.6" /><path d="M5.5 11 L5.5 13.6 L8.2 11" /></IconWrap>
+  ),
+};
+
+const PENCIL_ICON = (
+  <IconWrap><path d="M10.8 2.6 L13.4 5.2 L5.6 13 L2.6 13.6 L3.2 10.6 Z" /><line x1="9.6" y1="3.8" x2="12.2" y2="6.4" /></IconWrap>
+);
+const RECENTER_ICON = (
+  <IconWrap><circle cx="8" cy="8" r="3.1" /><line x1="8" y1="1.4" x2="8" y2="3.3" /><line x1="8" y1="12.7" x2="8" y2="14.6" /><line x1="1.4" y1="8" x2="3.3" y2="8" /><line x1="12.7" y1="8" x2="14.6" y2="8" /></IconWrap>
+);
+const UNDO_ICON = (
+  <IconWrap><path d="M5.5 4 L2.8 6.8 L5.5 9.6" /><path d="M2.8 6.8 H10.4 A2.8 2.8 0 0 1 13.2 9.6 V12.4" /></IconWrap>
+);
+const CLEAR_ICON = (
+  <IconWrap><line x1="2.5" y1="4.4" x2="13.5" y2="4.4" /><path d="M4.6 4.4 V13 H11.4 V4.4" /><path d="M6.4 4.4 V3 H9.6 V4.4" /><line x1="6.6" y1="7" x2="6.6" y2="11" /><line x1="9.4" y1="7" x2="9.4" y2="11" /></IconWrap>
+);
 
 // KLineChart dark style tuned to the MyStockHarbor UI.
 const CHART_STYLES = {
@@ -247,8 +319,12 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [indicatorMenuOpen, setIndicatorMenuOpen] = useState(false);
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
+  const [drawMenuOpen, setDrawMenuOpen] = useState(false);
   const indicatorMenuRef = useRef<HTMLDivElement | null>(null);
   const typeMenuRef = useRef<HTMLDivElement | null>(null);
+  const drawMenuRef = useRef<HTMLDivElement | null>(null);
+  // Default candle width captured at init, restored by "Recenter".
+  const defaultBarSpaceRef = useRef<number | null>(null);
 
   // Apply safety limits so the chart can never be scrolled into the void or
   // zoomed/dragged completely off screen.
@@ -334,6 +410,12 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
 
       chart.setStyles(CHART_STYLES);
 
+      // Remember the default candle width so "Recenter" can restore the zoom.
+      try {
+        const bs = chart.getBarSpace();
+        if (typeof bs === "number" && Number.isFinite(bs) && bs > 0) defaultBarSpaceRef.current = bs;
+      } catch { /* noop */ }
+
       // Seed immediately for an instant first paint.
       if (rawDataRef.current.length) pushData();
 
@@ -412,6 +494,7 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
     const chart = chartRef.current;
     if (!chart) return;
     setActiveTool(key);
+    setDrawMenuOpen(false);
     try {
       const value = overlay === "simpleAnnotation"
         ? { name: overlay, extendData: "Note" }
@@ -421,7 +504,7 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
     } catch { /* noop */ }
     // The overlay stays in "drawing" mode until the user places its points;
     // reset the visual active state shortly after so the button doesn't stay lit.
-    window.setTimeout(() => setActiveTool(null), 400);
+    window.setTimeout(() => setActiveTool(null), 600);
   }
 
   function undoLastDrawing() {
@@ -442,12 +525,25 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
     overlayIdsRef.current = [];
   }
 
+  // Reset the view: restore the default zoom and scroll the latest data back
+  // into frame. Does not touch data, indicators or drawings.
+  function recenter() {
+    const chart = chartRef.current;
+    if (!chart) return;
+    try {
+      if (defaultBarSpaceRef.current) chart.setBarSpace(defaultBarSpaceRef.current);
+    } catch { /* noop */ }
+    try { chart.scrollToRealTime(300); } catch { /* noop */ }
+    try { chart.setOffsetRightDistance(isMobile ? 8 : 12); } catch { /* noop */ }
+  }
+
   // ---- Close menus on outside click ----
   useEffect(() => {
     function onDown(e: MouseEvent) {
       const t = e.target as Node;
       if (indicatorMenuRef.current && !indicatorMenuRef.current.contains(t)) setIndicatorMenuOpen(false);
       if (typeMenuRef.current && !typeMenuRef.current.contains(t)) setTypeMenuOpen(false);
+      if (drawMenuRef.current && !drawMenuRef.current.contains(t)) setDrawMenuOpen(false);
     }
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
@@ -507,19 +603,19 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
 
         {/* Chart type dropdown */}
         <div style={{ position: "relative" }} ref={typeMenuRef}>
-          <button type="button" onClick={() => { setTypeMenuOpen((v) => !v); setIndicatorMenuOpen(false); }} style={{ ...btn(false), display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <span>{activeTypeLabel}</span><span style={{ opacity: 0.7 }}>▾</span>
+          <button type="button" onClick={() => { setTypeMenuOpen((v) => !v); setIndicatorMenuOpen(false); setDrawMenuOpen(false); }} style={{ ...btn(false), display: "inline-flex", alignItems: "center", gap: 6 }}>
+            {TYPE_ICONS[chartType]}<span>{activeTypeLabel}</span><span style={{ opacity: 0.7 }}>▾</span>
           </button>
           {typeMenuOpen ? (
-            <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 50, minWidth: 168, background: "#0f172a", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 12, boxShadow: "0 18px 34px rgba(0,0,0,0.45)", overflow: "hidden" }}>
+            <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 50, minWidth: 178, background: "#0f172a", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 12, boxShadow: "0 18px 34px rgba(0,0,0,0.45)", overflow: "hidden" }}>
               {CHART_TYPES.map((t) => (
                 <button
                   key={t.key}
                   type="button"
                   onClick={() => { setChartType(t.key); setTypeMenuOpen(false); }}
-                  style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 13px", border: "none", background: chartType === t.key ? "rgba(96,165,250,0.18)" : "transparent", color: chartType === t.key ? "#dbeafe" : "#cbd5e1", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+                  style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "10px 13px", border: "none", background: chartType === t.key ? "rgba(96,165,250,0.18)" : "transparent", color: chartType === t.key ? "#dbeafe" : "#cbd5e1", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
                 >
-                  {t.label}
+                  {TYPE_ICONS[t.key]}<span>{t.label}</span>
                 </button>
               ))}
             </div>
@@ -551,19 +647,39 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
           ) : null}
         </div>
 
-        {/* Drawing tools */}
-        <div style={groupWrap} role="group" aria-label="Drawing tools">
-          {DRAW_TOOLS.map((tool) => (
-            <button key={tool.key} type="button" title={tool.label} onClick={() => startTool(tool.overlay, tool.key)} style={btn(activeTool === tool.key)}>
-              {tool.label}
-            </button>
-          ))}
+        {/* Drawing tools dropdown */}
+        <div style={{ position: "relative" }} ref={drawMenuRef}>
+          <button type="button" onClick={() => { setDrawMenuOpen((v) => !v); setTypeMenuOpen(false); setIndicatorMenuOpen(false); }} style={{ ...btn(drawMenuOpen || activeTool != null), display: "inline-flex", alignItems: "center", gap: 6 }}>
+            {PENCIL_ICON}<span>Drawing tools</span><span style={{ opacity: 0.7 }}>▾</span>
+          </button>
+          {drawMenuOpen ? (
+            <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 50, width: 210, background: "#0f172a", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 12, boxShadow: "0 18px 34px rgba(0,0,0,0.45)", overflow: "hidden" }}>
+              <div style={{ padding: "8px 12px 6px", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: "#7c8aa3" }}>Draw</div>
+              {DRAW_TOOLS.map((tool) => (
+                <button
+                  key={tool.key}
+                  type="button"
+                  onClick={() => startTool(tool.overlay, tool.key)}
+                  style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "9px 12px", border: "none", borderTop: "1px solid rgba(255,255,255,0.05)", background: activeTool === tool.key ? "rgba(96,165,250,0.18)" : "transparent", color: "#cbd5e1", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+                >
+                  {TOOL_ICONS[tool.key]}<span>{tool.label}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
 
-        {/* Undo / clear */}
-        <div style={groupWrap} role="group" aria-label="Drawing actions">
-          <button type="button" onClick={undoLastDrawing} style={btn(false)} title="Undo last drawing">Undo</button>
-          <button type="button" onClick={clearDrawings} style={btn(false)} title="Remove all drawings">Clear</button>
+        {/* Actions: recenter / undo / clear */}
+        <div style={groupWrap} role="group" aria-label="Chart actions">
+          <button type="button" onClick={recenter} style={{ ...btn(false), display: "inline-flex", alignItems: "center", gap: 6 }} title="Recenter chart">
+            {RECENTER_ICON}{!isMobile ? <span>Recenter</span> : null}
+          </button>
+          <button type="button" onClick={undoLastDrawing} style={{ ...btn(false), display: "inline-flex", alignItems: "center", gap: 6 }} title="Undo last drawing">
+            {UNDO_ICON}{!isMobile ? <span>Undo</span> : null}
+          </button>
+          <button type="button" onClick={clearDrawings} style={{ ...btn(false), display: "inline-flex", alignItems: "center", gap: 6 }} title="Remove all drawings">
+            {CLEAR_ICON}{!isMobile ? <span>Clear</span> : null}
+          </button>
         </div>
       </div>
 
