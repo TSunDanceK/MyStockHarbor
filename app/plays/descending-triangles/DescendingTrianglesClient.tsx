@@ -3,6 +3,7 @@
 import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
 import ScreenerShell from "@/app/components/ScreenerShell";
+import TimeframeFilterDropdown from "@/app/components/TimeframeFilterDropdown";
 
 type PlayTone = "green" | "yellow" | "orange" | "red";
 
@@ -363,42 +364,18 @@ export default function DescendingTrianglesClient() {
         </>
       }
     >
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
-        {(["ALL", "M", "W", "D", "ST"] as const).map((key) => {
-          const active = selectedTimeframe === key;
-
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setSelectedTimeframe(key)}
-              style={{
-                border: active
-                  ? "1px solid rgba(248,113,113,0.72)"
-                  : "1px solid rgba(255,255,255,0.10)",
-                background: active
-                  ? "rgba(185,28,28,0.30)"
-                  : "rgba(255,255,255,0.04)",
-                color: active ? "#fee2e2" : "#cbd5e1",
-                borderRadius: 999,
-                padding: "9px 13px",
-                fontSize: 13,
-                fontWeight: 900,
-                cursor: "pointer",
-              }}
-            >
-              {key === "ALL"
-                ? "All plays"
-                : key === "M"
-                  ? "Macro only"
-                  : key === "W"
-                    ? "Weekly only"
-                    : key === "ST"
-                      ? "Short-term only"
-                      : "Daily only"}
-            </button>
-          );
-        })}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 16, alignItems: "center" }}>
+        <TimeframeFilterDropdown
+          value={selectedTimeframe}
+          onChange={setSelectedTimeframe}
+          options={[
+            { key: "ALL", label: "All plays" },
+            { key: "M", label: "Macro only" },
+            { key: "W", label: "Weekly only" },
+            { key: "D", label: "Daily only" },
+            { key: "ST", label: "Short-term only" },
+          ]}
+        />
 
         <button
           type="button"
