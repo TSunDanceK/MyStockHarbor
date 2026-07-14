@@ -151,13 +151,13 @@ function fallbackMacdHist(values: number[]) {
   });
 }
 
-// Fixed, non-interactive brand watermark along the top-center of the mini
+// Fixed, non-interactive brand watermark right at the top edge of the mini
 // chart. Positioned with CSS against the chart's own fixed-size wrapper --
 // never against the SVG's data-derived coordinates -- so it stays put
 // regardless of which overlay/zone is drawn or how many candles are
 // shown. Opacity is kept low so it never competes with the candles
-// themselves, and sitting horizontally near the top keeps it clear of the
-// price action.
+// themselves, and sitting horizontally at the very top keeps it clear of
+// the price action.
 function MiniChartWatermark() {
   return (
     <div
@@ -168,7 +168,7 @@ function MiniChartWatermark() {
         display: "flex",
         alignItems: "flex-start",
         justifyContent: "center",
-        paddingTop: "6%",
+        paddingTop: 2,
         pointerEvents: "none",
         userSelect: "none",
         overflow: "hidden",
