@@ -67,6 +67,7 @@ export default function ScreenerShell({
         .heroHowToLabel { display: block; font-size: 11px; font-weight: 950; letter-spacing: 0.1em; text-transform: uppercase; color: #93c5fd; }
         .heroHowToChevron { flex: 0 0 auto; margin-left: 10px; color: #93c5fd; font-size: 12px; transition: transform 160ms ease; }
         .heroHowTo p { margin: 7px 0 0; max-width: 860px; color: rgba(226,232,240,0.8); font-size: 14px; line-height: 1.65; }
+        .screenerTriggerWrap { margin: 20px 0 4px; }
         .screenerShellResults { margin-top: 22px; }
         .scanDebug { margin-top: 30px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); font-size: 11px; line-height: 1.5; color: rgba(148,163,184,0.5); letter-spacing: 0.02em; }
         @media (max-width: 980px) {
@@ -87,7 +88,7 @@ export default function ScreenerShell({
 
       <div className="resultWrap">
         <div className="resultShell">
-          <ScreenerNav currentHref={currentHref} />
+          <ScreenerNav currentHref={currentHref} variant="sidebar" />
 
           <div className="resultMain">
             <section className="hero">
@@ -99,6 +100,10 @@ export default function ScreenerShell({
               <p>{description}</p>
               <HowToCollapse title={explainerTitle} body={explainerBody} />
             </section>
+
+            <div className="screenerTriggerWrap">
+              <ScreenerNav currentHref={currentHref} variant="trigger" />
+            </div>
 
             <div className="screenerShellResults">{children}</div>
 
