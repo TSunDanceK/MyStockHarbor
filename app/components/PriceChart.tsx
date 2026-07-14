@@ -154,6 +154,45 @@ type Props = {
   showTradeLink?: boolean;
 };
 
+// Fixed, non-interactive brand watermark rendered on top of the chart
+// area (SVG or TradingView embed). Positioned via CSS against the
+// chart's own fixed-height wrapper -- not against any data-derived SVG
+// coordinate -- so it never shifts when the user zooms, pans, or changes
+// the visible bar count; only the chart content underneath it changes.
+// Opacity is kept low so it reads as a background mark rather than
+// interfering with the data.
+function ChartWatermark() {
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        position: "absolute",
+        inset: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        pointerEvents: "none",
+        userSelect: "none",
+        overflow: "hidden",
+        zIndex: 2,
+      }}
+    >
+      <span
+        style={{
+          fontSize: "clamp(18px, 5.5vw, 40px)",
+          fontWeight: 800,
+          color: "rgba(148,163,184,0.16)",
+          letterSpacing: "0.03em",
+          whiteSpace: "nowrap",
+          transform: "rotate(-18deg)",
+        }}
+      >
+        MyStockHarbor.com
+      </span>
+    </div>
+  );
+}
+
 export default function PriceChart(props: Props) {
   const {
     symbol,
@@ -545,6 +584,7 @@ export default function PriceChart(props: Props) {
 
   return (
     <div style={{ width: "100%" }}>
+      <div style={{ position: "relative", width: "100%" }}>
       {showTradingView ? (
         <TradingViewChartEmbed symbol={symbol} height={Math.max(height, 480)} />
       ) : (
@@ -1053,6 +1093,9 @@ export default function PriceChart(props: Props) {
         ) : null}
       </svg>
       )}
+
+      <ChartWatermark />
+      </div>
 
       <div
         style={{
