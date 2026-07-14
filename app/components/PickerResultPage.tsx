@@ -5,6 +5,8 @@ import MiniPickerCandleChart, {
   type SupportResistanceZone,
 } from "@/app/components/MiniPickerCandleChart";
 import PickerHighlightScroller from "@/app/components/PickerHighlightScroller";
+import ScreenerNav from "@/app/components/ScreenerNav";
+import { getCompanyNameMap } from "@/lib/server/companyNames";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -85,6 +87,7 @@ type PickersPayload = {
 
 type ResultEntry = {
   symbol: string;
+  companyName?: string;
   note: string;
   tone: PickerTone;
   stockHref: string;
@@ -95,28 +98,6 @@ type ResultEntry = {
   reasons?: string[];
   supportResistanceZone?: SupportResistanceZone;
 };
-
-const PICKER_NAV: Array<{
-  href: string;
-  label: string;
-  icon: string;
-  tone: PickerTone;
-}> = [
-  { href: "/top-stocks-with-buy-signals", label: "Buy Signals", icon: "▲", tone: "green" },
-  { href: "/stocks-down-20-from-all-time-highs", label: "20% From ATH", icon: "◆", tone: "yellow" },
-  { href: "/all-time-high-breakout-stocks", label: "ATH Breakouts", icon: "↗", tone: "orange" },
-  { href: "/3-month-high-breakout-stocks", label: "3-Month Highs", icon: "↗", tone: "orange" },
-  { href: "/top-stocks-with-sell-signals", label: "Sell Signals", icon: "▼", tone: "red" },
-  { href: "/oversold-stocks-today", label: "Oversold", icon: "●", tone: "green" },
-  { href: "/best-trend-score-stocks", label: "Best Trend", icon: "★", tone: "green" },
-  { href: "/stocks-with-positive-last-earnings", label: "Last Earnings", icon: "✓", tone: "green" },
-  { href: "/stocks-with-strong-earnings-growth", label: "Earnings Growth", icon: "↗", tone: "green" },
-  { href: "/stocks-near-200-day-moving-average", label: "Near 200-Day", icon: "◇", tone: "yellow" },
-  { href: "/stocks-near-weekly-200-day-moving-average", label: "Weekly MA200", icon: "◆", tone: "yellow" },
-  { href: "/macro-support-resistance-stocks", label: "Macro S/R", icon: "⇄", tone: "blue" },
-  { href: "/overbought-stocks-today", label: "Overbought", icon: "●", tone: "red" },
-  { href: "/bullish-bearish-divergence-stocks", label: "Divergence", icon: "⚇", tone: "blue" },
-];
 
 function toneColour(tone?: PickerTone) {
   if (tone === "green") return "#22c55e";
@@ -383,6 +364,21 @@ async function getPickerData(config: PickerResultConfig) {
     const signalRecords = Array.isArray(payload.signalRecords) ? payload.signalRecords : [];
     const matchedSection = config.kind === "section" ? findSection(sections, config.sectionIncludes ?? []) : undefined;
     const entries = buildEntries({ config, sections, signalRecords });
+
+    // Best-effort company names for the card display line. Never blocks or
+    // breaks the page: any symbol that doesn't resolve just shows the ticker.
+    try {
+      const nameMap = await getCompanyNameMap();
+      if (nameMap.size) {
+        for (const entry of entries) {
+          const name = nameMap.get(entry.symbol);
+          if (name) entry.companyName = name;
+        }
+      }
+    } catch {
+      // names are optional
+    }
+
     return {
       updatedAt: typeof payload.updatedAt === "string" ? payload.updatedAt : null,
       universeSize: typeof payload.universeSize === "number" ? payload.universeSize : null,
@@ -393,23 +389,6 @@ async function getPickerData(config: PickerResultConfig) {
   } catch {
     return { updatedAt: null, universeSize: null, dynamicUniverseCount: null, entries: [], foundCount: 0 };
   }
-}
-
-function SignalNav({ currentHref }: { currentHref: string }) {
-  return (
-    <nav className="signalTabs" aria-label="Stock picker pages">
-      {PICKER_NAV.map((item) => {
-        const active = item.href === currentHref;
-        const colour = toneColour(item.tone);
-        return (
-          <Link key={item.href} href={item.href} className={active ? "signalTab active" : "signalTab"} style={{ borderColor: active ? `${colour}99` : "rgba(96,165,250,0.36)", background: active ? `linear-gradient(135deg, ${colour}2e, rgba(30,64,175,0.16))` : "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(15,23,42,0.62))" }}>
-            <span style={{ color: colour }}>{item.icon}</span>
-            <span>{item.label}</span>
-          </Link>
-        );
-      })}
-    </nav>
-  );
 }
 
 function chartOverlayForEntry(config: PickerResultConfig, entry: ResultEntry) {
@@ -433,15 +412,6 @@ function scoreLabelForEntry(entry: ResultEntry) {
 
 function isEarningsPickerPage(config: PickerResultConfig) {
   return config.href.includes("earnings");
-}
-
-function MetricCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="metricCard">
-      <div>{label}</div>
-      <strong>{value}</strong>
-    </div>
-  );
 }
 
 export default async function PickerResultPage({
@@ -496,47 +466,38 @@ export default async function PickerResultPage({
 
       <style>{`
         .pickerResultPage { min-height: 100vh; background: radial-gradient(circle at 12% 0%, rgba(59,130,246,0.16), transparent 30%), radial-gradient(circle at 92% 4%, rgba(34,197,94,0.08), transparent 28%), #06080d; color: #f1f5f9; font-family: system-ui, Arial; }
-        .resultWrap { max-width: 1240px; margin: 0 auto; padding: 26px 18px 58px; }
+        .resultWrap { max-width: 1280px; margin: 0 auto; padding: 26px 18px 58px; }
+        .resultShell { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 22px; align-items: start; }
+        .resultMain { min-width: 0; }
         .hero { border: 1px solid ${toneBorder(config.tone)}; border-radius: 28px; padding: 22px; background: ${toneBackground(config.tone)}; box-shadow: inset 0 1px 0 rgba(255,255,255,0.045), 0 18px 42px rgba(0,0,0,0.26); }
-        .heroTop { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; align-items: start; }
-        .heroCopy { min-width: 0; }
         .eyebrow { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 12px; border-radius: 999px; border: 1px solid ${toneBorder(config.tone)}; background: rgba(59,130,246,0.10); color: #dbeafe; font-size: 12px; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
-        .hero h1 { margin: 12px 0 0; font-size: 46px; line-height: 1.03; letter-spacing: -0.055em; }
-        .hero p { margin: 10px 0 0; max-width: 820px; color: rgba(226,232,240,0.78); font-size: 16px; line-height: 1.65; }
-        .scanPanel { border: 1px solid rgba(255,255,255,0.08); border-radius: 22px; padding: 18px 20px; background: linear-gradient(180deg, rgba(3,7,18,0.72), rgba(2,6,23,0.92)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.035); }
-        .scanPanelTitle { font-size: 12px; font-weight: 950; letter-spacing: 0.12em; text-transform: uppercase; color: #93c5fd; margin-bottom: 10px; }
-        .metricGrid { display: grid; gap: 0; }
-        .metricCard { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 11px 0; border-top: 1px solid rgba(255,255,255,0.08); background: transparent; }
-        .metricCard:first-child { border-top: 0; }
-        .metricCard div { font-size: 12px; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(203,213,225,0.78); }
-        .metricCard strong { display: block; font-size: 18px; letter-spacing: -0.03em; text-align: right; white-space: nowrap; }
-        .signalTabs { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 10px; }
-        .signalTab { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 9px 14px; border-radius: 14px; border: 1px solid; color: #eff6ff; text-decoration: none; font-size: 13px; font-weight: 950; box-shadow: 0 10px 24px rgba(0,0,0,0.16); transition: transform 140ms ease, filter 140ms ease; }
-        .signalTab:hover { transform: translateY(-1px); filter: brightness(1.08); }
-        .signalTab.active { box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 12px 26px rgba(0,0,0,0.20); }
-        .explainer { margin-top: 20px; border: 1px solid rgba(59,130,246,0.18); border-radius: 22px; padding: 18px; background: linear-gradient(180deg, rgba(15,23,42,0.78), rgba(8,13,22,0.96)); }
-        .explainer h2 { margin: 0; font-size: 24px; letter-spacing: -0.035em; }
-        .explainer p { margin: 10px 0 0; max-width: 900px; color: rgba(226,232,240,0.78); line-height: 1.7; }
+        .hero h1 { margin: 12px 0 0; font-size: 44px; line-height: 1.03; letter-spacing: -0.055em; }
+        .hero > p { margin: 10px 0 0; max-width: 820px; color: rgba(226,232,240,0.78); font-size: 16px; line-height: 1.65; }
+        .heroHowTo { margin-top: 16px; padding: 14px 16px; border-radius: 16px; border: 1px solid rgba(59,130,246,0.18); background: linear-gradient(135deg, rgba(59,130,246,0.08), rgba(8,13,22,0.6)); }
+        .heroHowToLabel { display: block; font-size: 11px; font-weight: 950; letter-spacing: 0.1em; text-transform: uppercase; color: #93c5fd; }
+        .heroHowTo p { margin: 7px 0 0; max-width: 860px; color: rgba(226,232,240,0.8); font-size: 14px; line-height: 1.65; }
         .resultsHeader { margin-top: 22px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: end; }
-        .resultsHeader h2 { margin: 0; font-size: 28px; letter-spacing: -0.04em; }
+        .resultsHeader h2 { margin: 0; font-size: 26px; letter-spacing: -0.04em; }
         .resultsHeader p { margin: 8px 0 0; color: rgba(226,232,240,0.70); line-height: 1.6; }
-        .resultsGrid { margin-top: 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 16px; }
-        .resultCard { border: 1px solid rgba(255,255,255,0.09); border-radius: 22px; padding: 15px; background: linear-gradient(180deg, rgba(255,255,255,0.042), rgba(255,255,255,0.022)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.035); }
+        .resultsGrid { margin-top: 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+        .resultCard { display: block; border: 1px solid rgba(255,255,255,0.09); border-radius: 22px; padding: 15px; background: linear-gradient(180deg, rgba(255,255,255,0.042), rgba(255,255,255,0.022)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.035); text-decoration: none; color: inherit; cursor: pointer; transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease; }
+        .resultCard:hover { transform: translateY(-2px); border-color: rgba(96,165,250,0.42); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 16px 32px rgba(0,0,0,0.28); }
+        .resultCard:focus-visible { outline: 2px solid rgba(96,165,250,0.7); outline-offset: 2px; }
         .resultCardTop { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
-        .symbolLine { display: flex; align-items: center; gap: 9px; min-width: 0; }
-        .symbolLine span.dot { width: 10px; height: 10px; border-radius: 999px; flex: 0 0 auto; box-shadow: 0 0 0 4px rgba(255,255,255,0.04); }
-        .symbolLine h3 { margin: 0; font-size: 24px; letter-spacing: -0.04em; }
+        .resultCardHead { min-width: 0; flex: 1 1 auto; }
+        .symbolLine { display: flex; align-items: baseline; gap: 9px; min-width: 0; }
+        .symbolLine span.dot { align-self: center; width: 10px; height: 10px; border-radius: 999px; flex: 0 0 auto; box-shadow: 0 0 0 4px rgba(255,255,255,0.04); }
+        .symbolLine h3 { margin: 0; font-size: 23px; letter-spacing: -0.04em; flex: 0 0 auto; }
+        .companyName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 700; letter-spacing: -0.01em; color: rgba(148,163,184,0.92); }
         .badge { display: inline-flex; align-items: center; justify-content: center; border: 1px solid rgba(96,165,250,0.22); border-radius: 999px; padding: 6px 9px; background: rgba(59,130,246,0.08); color: #dbeafe; font-size: 11px; font-weight: 950; white-space: nowrap; }
-        .scorePill { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; min-width: 62px; min-height: 52px; border-radius: 15px; border: 1px solid rgba(34,197,94,0.26); background: rgba(34,197,94,0.10); color: #dcfce7; box-shadow: inset 0 1px 0 rgba(255,255,255,0.035); }
+        .scorePill { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; min-width: 62px; min-height: 52px; border-radius: 15px; border: 1px solid rgba(34,197,94,0.26); background: rgba(34,197,94,0.10); color: #dcfce7; box-shadow: inset 0 1px 0 rgba(255,255,255,0.035); flex: 0 0 auto; }
         .scorePill strong { font-size: 22px; line-height: 1; letter-spacing: -0.04em; }
         .scorePill span { margin-top: 5px; font-size: 10px; font-weight: 950; letter-spacing: 0.04em; color: rgba(220,252,231,0.72); }
         .reasonChips { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
         .reasonChip { display: inline-flex; align-items: center; padding: 4px 9px; border-radius: 999px; border: 1px solid; background: rgba(255,255,255,0.04); font-size: 11px; font-weight: 800; letter-spacing: 0.01em; white-space: nowrap; }
         .note { margin: 10px 0 0; color: rgba(226,232,240,0.74); font-size: 13px; line-height: 1.55; min-height: 40px; }
-        .cardActions { margin-top: 13px; display: flex; gap: 10px; flex-wrap: wrap; }
-        .cardActions a { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 8px 11px; border-radius: 11px; border: 1px solid rgba(96,165,250,0.26); background: rgba(59,130,246,0.09); color: #dbeafe; text-decoration: none; font-size: 12px; font-weight: 950; }
-        .cardActions a.green { border-color: rgba(34,197,94,0.26); background: rgba(34,197,94,0.09); color: #dcfce7; }
         .emptyBox { margin-top: 16px; border: 1px solid rgba(255,255,255,0.10); border-radius: 18px; padding: 18px; background: rgba(255,255,255,0.035); color: rgba(226,232,240,0.72); line-height: 1.7; }
+        .scanDebug { margin-top: 30px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); font-size: 11px; line-height: 1.5; color: rgba(148,163,184,0.5); letter-spacing: 0.02em; }
         @keyframes pickerHighlightPulse {
           0% { box-shadow: 0 0 0 0 rgba(245,197,66,0); border-color: rgba(255,255,255,0.09); }
           15% { box-shadow: 0 0 0 4px rgba(245,197,66,0.35); border-color: #f5c542; }
@@ -544,131 +505,124 @@ export default async function PickerResultPage({
           100% { box-shadow: 0 0 0 0 rgba(245,197,66,0); border-color: rgba(255,255,255,0.09); }
         }
         .resultCard.highlight { animation: pickerHighlightPulse 2.4s ease-out 1; scroll-margin-top: 90px; }
-        @media (max-width: 980px) { .heroTop { grid-template-columns: 1fr; } .scanPanel { width: 100%; } }
+        @media (max-width: 980px) {
+          .resultShell { grid-template-columns: 1fr; gap: 14px; }
+        }
         @media (max-width: 720px) {
           .pickerResultPage, .pickerResultPage * { box-sizing: border-box; }
           .pickerResultPage { overflow-x: hidden; }
           .resultWrap { width: 100%; padding: 14px 10px 44px; overflow-x: hidden; }
           .hero { border-radius: 20px; padding: 15px; }
-          .heroTop { gap: 16px; }
           .eyebrow { max-width: 100%; white-space: normal; text-align: center; line-height: 1.35; }
-          .hero h1 { font-size: clamp(30px, 9vw, 38px); line-height: 1.08; letter-spacing: -0.045em; }
-          .hero p { font-size: 14px; line-height: 1.62; }
-          .scanPanel { border-radius: 18px; padding: 14px; }
-          .metricGrid { grid-template-columns: 1fr; }
-          .metricCard { gap: 12px; padding: 10px 0; }
-          .metricCard div { font-size: 11px; line-height: 1.35; }
-          .metricCard strong { font-size: 15px; white-space: normal; word-break: break-word; }
-          .signalTabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
-          .signalTab { width: 100%; min-height: 44px; padding: 9px 8px; gap: 6px; border-radius: 13px; font-size: 12px; line-height: 1.2; text-align: center; white-space: normal; }
-          .explainer { margin-top: 16px; border-radius: 18px; padding: 15px; }
-          .explainer h2, .resultsHeader h2 { font-size: 23px; line-height: 1.14; }
-          .explainer p, .resultsHeader p { font-size: 14px; line-height: 1.62; }
+          .hero h1 { font-size: clamp(28px, 9vw, 36px); line-height: 1.08; letter-spacing: -0.045em; }
+          .hero > p { font-size: 14px; line-height: 1.62; }
+          .heroHowTo { padding: 12px 13px; }
           .resultsHeader { margin-top: 18px; align-items: flex-start; }
+          .resultsHeader h2 { font-size: 22px; line-height: 1.14; }
+          .resultsHeader p { font-size: 14px; line-height: 1.62; }
           .resultsGrid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-          .resultCard { width: 100%; min-width: 0; border-radius: 18px; padding: 13px; }
+          .resultCard { border-radius: 18px; padding: 13px; }
           .resultCardTop { gap: 10px; }
-          .symbolLine h3 { font-size: 22px; }
+          .symbolLine h3 { font-size: 21px; }
+          .companyName { font-size: 12.5px; }
           .badge { max-width: 100%; white-space: normal; text-align: center; line-height: 1.25; }
           .scorePill { min-width: 54px; min-height: 48px; border-radius: 13px; }
           .scorePill strong { font-size: 20px; }
-          .reasonChips { gap: 5px; }
           .reasonChip { font-size: 10.5px; padding: 4px 8px; }
           .note { min-height: 0; font-size: 13px; }
-          .cardActions { display: grid; grid-template-columns: 1fr; gap: 8px; }
-          .cardActions a { width: 100%; min-height: 42px; }
         }
-        @media (max-width: 390px) { .resultWrap { padding-left: 8px; padding-right: 8px; } .hero, .scanPanel, .explainer, .resultCard { padding: 12px; } .signalTabs { grid-template-columns: 1fr; } }
+        @media (max-width: 390px) { .resultWrap { padding-left: 8px; padding-right: 8px; } .hero, .resultCard { padding: 12px; } }
       `}</style>
 
       <div className="resultWrap">
-        <section className="hero">
-          <div className="heroTop">
-            <div className="heroCopy">
+        <div className="resultShell">
+          <ScreenerNav currentHref={config.href} />
+
+          <div className="resultMain">
+            <section className="hero">
               <div className="eyebrow">
                 <span style={{ color: toneColour(config.tone) }}>●</span>
                 {config.eyebrow}
               </div>
               <h1>{config.title}</h1>
               <p>{config.description}</p>
-            </div>
-            <aside className="scanPanel" aria-label="Current scan summary">
-              <div className="scanPanelTitle">Current scan</div>
-              <div className="metricGrid">
-                <MetricCard label="Live matches" value={foundCount} />
-                <MetricCard label="Shown here" value={entries.length} />
-                <MetricCard label="Universe" value={combinedUniverseSize ?? "Live"} />
-                <MetricCard label="Updated" value={formatUpdatedAt(updatedAt)} />
+              {config.explainerBody ? (
+                <div className="heroHowTo">
+                  <span className="heroHowToLabel">{config.explainerTitle}</span>
+                  <p>{config.explainerBody}</p>
+                </div>
+              ) : null}
+            </section>
+
+            <section>
+              <div className="resultsHeader">
+                <div>
+                  <h2>Current screened results</h2>
+                  <p>Each card shows a mini candle preview — select any stock to open its full view.</p>
+                </div>
               </div>
-            </aside>
-          </div>
-          <SignalNav currentHref={config.href} />
-        </section>
 
-        <section className="explainer">
-          <h2>{config.explainerTitle}</h2>
-          <p>{config.explainerBody}</p>
-        </section>
+              {highlightSymbol ? <PickerHighlightScroller symbol={highlightSymbol} /> : null}
 
-        <section>
-          <div className="resultsHeader">
-            <div>
-              <h2>Current screened results</h2>
-              <p>Each card includes a mini candle preview. Open the chart for the full dashboard view or open the stock page for more context.</p>
+              {entries.length ? (
+                <div className="resultsGrid">
+                  {entries.map((entry) => {
+                    const cardHref = isEarningsPickerPage(config)
+                      ? `/stock/${encodeURIComponent(entry.symbol)}/earnings`
+                      : entry.chartHref;
+                    const scoreValue = scoreLabelForEntry(entry);
+                    return (
+                      <Link
+                        key={`${entry.symbol}-${entry.note}`}
+                        id={`picker-${entry.symbol}`}
+                        href={cardHref}
+                        className="resultCard"
+                      >
+                        <div className="resultCardTop">
+                          <div className="resultCardHead">
+                            <div className="symbolLine">
+                              <span className="dot" style={{ background: toneColour(entry.tone) }} aria-hidden="true" />
+                              <h3>{entry.symbol}</h3>
+                              {entry.companyName ? <span className="companyName">{entry.companyName}</span> : null}
+                            </div>
+                            {entry.badge ? <div className="badge" style={{ marginTop: 8 }}>{entry.badge}</div> : null}
+                          </div>
+                          {scoreValue != null ? (
+                            <div className="scorePill">
+                              <strong>{scoreValue}</strong>
+                              <span>Score</span>
+                            </div>
+                          ) : null}
+                        </div>
+                        {entry.reasons && entry.reasons.length > 0 ? (
+                          <div className="reasonChips">
+                            {entry.reasons.map((reason) => (
+                              <span
+                                key={reason}
+                                className="reasonChip"
+                                style={{ borderColor: toneBorder(entry.tone), color: toneColour(entry.tone) }}
+                              >
+                                {reason}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                        <MiniPickerCandleChart points={entry.chartPoints} tone={config.tone} overlay={chartOverlayForEntry(config, entry)} supportResistanceZone={entry.supportResistanceZone} />
+                        <div className="note">{entry.note}</div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="emptyBox">{config.emptyText}</div>
+              )}
+            </section>
+
+            <div className="scanDebug">
+              Current scan · Live matches {foundCount} · Shown {entries.length} · Universe {combinedUniverseSize ?? "Live"} · Updated {formatUpdatedAt(updatedAt)}
             </div>
           </div>
-
-          {highlightSymbol ? <PickerHighlightScroller symbol={highlightSymbol} /> : null}
-
-          {entries.length ? (
-            <div className="resultsGrid">
-              {entries.map((entry) => (
-                <article key={`${entry.symbol}-${entry.note}`} id={`picker-${entry.symbol}`} className="resultCard">
-                  <div className="resultCardTop">
-                    <div>
-                      <div className="symbolLine">
-                        <span className="dot" style={{ background: toneColour(entry.tone) }} aria-hidden="true" />
-                        <h3>{entry.symbol}</h3>
-                      </div>
-                      {entry.badge ? <div className="badge" style={{ marginTop: 8 }}>{entry.badge}</div> : null}
-                    </div>
-                    {scoreLabelForEntry(entry) != null ? (
-                      <div className="scorePill">
-                        <strong>{scoreLabelForEntry(entry)}</strong>
-                        <span>Score</span>
-                      </div>
-                    ) : null}
-                  </div>
-                  {entry.reasons && entry.reasons.length > 0 ? (
-                    <div className="reasonChips">
-                      {entry.reasons.map((reason) => (
-                        <span
-                          key={reason}
-                          className="reasonChip"
-                          style={{ borderColor: toneBorder(entry.tone), color: toneColour(entry.tone) }}
-                        >
-                          {reason}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                  <MiniPickerCandleChart points={entry.chartPoints} tone={config.tone} overlay={chartOverlayForEntry(config, entry)} supportResistanceZone={entry.supportResistanceZone} />
-                  <div className="note">{entry.note}</div>
-                  <div className="cardActions">
-                    {isEarningsPickerPage(config) ? (
-                      <Link className="green" href={`/stock/${encodeURIComponent(entry.symbol)}/earnings`}>Open earnings →</Link>
-                    ) : (
-                      <Link className="green" href={entry.chartHref}>Open chart ↗</Link>
-                    )}
-                    <Link href={entry.stockHref}>Stock page →</Link>
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="emptyBox">{config.emptyText}</div>
-          )}
-        </section>
+        </div>
       </div>
     </main>
   );
