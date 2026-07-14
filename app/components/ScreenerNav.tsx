@@ -57,6 +57,15 @@ const GROUPS: NavGroup[] = [
       { href: "/stocks-with-strong-earnings-growth", label: "Earnings Growth", icon: "↗", tone: "green" },
     ],
   },
+  {
+    heading: "Chart Plays",
+    headingColor: "#c084fc",
+    items: [
+      { href: "/plays", label: "Ascending Triangles", icon: "△", tone: "green" },
+      { href: "/plays/bull-flags", label: "Bull Flags", icon: "⚑", tone: "green" },
+      { href: "/plays/descending-triangles", label: "Descending Triangles", icon: "▽", tone: "red" },
+    ],
+  },
 ];
 
 function toneColour(tone: Tone) {
