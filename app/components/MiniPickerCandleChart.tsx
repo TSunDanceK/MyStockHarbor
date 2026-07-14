@@ -151,11 +151,13 @@ function fallbackMacdHist(values: number[]) {
   });
 }
 
-// Fixed, non-interactive brand watermark centered over the mini chart.
-// Positioned with CSS against the chart's own fixed-size wrapper -- never
-// against the SVG's data-derived coordinates -- so it stays put regardless
-// of which overlay/zone is drawn or how many candles are shown. Opacity is
-// kept low so it never competes with the candles themselves.
+// Fixed, non-interactive brand watermark along the top-center of the mini
+// chart. Positioned with CSS against the chart's own fixed-size wrapper --
+// never against the SVG's data-derived coordinates -- so it stays put
+// regardless of which overlay/zone is drawn or how many candles are
+// shown. Opacity is kept low so it never competes with the candles
+// themselves, and sitting horizontally near the top keeps it clear of the
+// price action.
 function MiniChartWatermark() {
   return (
     <div
@@ -164,8 +166,9 @@ function MiniChartWatermark() {
         position: "absolute",
         inset: 0,
         display: "flex",
-        alignItems: "center",
+        alignItems: "flex-start",
         justifyContent: "center",
+        paddingTop: "6%",
         pointerEvents: "none",
         userSelect: "none",
         overflow: "hidden",
@@ -174,12 +177,11 @@ function MiniChartWatermark() {
     >
       <span
         style={{
-          fontSize: "clamp(10px, 4vw, 15px)",
+          fontSize: "clamp(9px, 3vw, 13px)",
           fontWeight: 800,
-          color: "rgba(148,163,184,0.20)",
-          letterSpacing: "0.02em",
+          color: "rgba(148,163,184,0.24)",
+          letterSpacing: "0.03em",
           whiteSpace: "nowrap",
-          transform: "rotate(-18deg)",
         }}
       >
         MyStockHarbor.com
