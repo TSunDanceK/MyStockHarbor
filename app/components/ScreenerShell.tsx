@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import ScreenerNav from "@/app/components/ScreenerNav";
+import HowToCollapse from "@/app/components/HowToCollapse";
 
 type Tone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -62,7 +63,9 @@ export default function ScreenerShell({
         .hero h1 { margin: 12px 0 0; font-size: 44px; line-height: 1.03; letter-spacing: -0.055em; }
         .hero > p { margin: 10px 0 0; max-width: 820px; color: rgba(226,232,240,0.78); font-size: 16px; line-height: 1.65; }
         .heroHowTo { margin-top: 16px; padding: 14px 16px; border-radius: 16px; border: 1px solid rgba(59,130,246,0.18); background: linear-gradient(135deg, rgba(59,130,246,0.08), rgba(8,13,22,0.6)); }
+        .heroHowToToggle { display: flex; align-items: center; justify-content: space-between; width: 100%; background: none; border: none; padding: 0; margin: 0; cursor: pointer; font: inherit; text-align: left; color: inherit; }
         .heroHowToLabel { display: block; font-size: 11px; font-weight: 950; letter-spacing: 0.1em; text-transform: uppercase; color: #93c5fd; }
+        .heroHowToChevron { flex: 0 0 auto; margin-left: 10px; color: #93c5fd; font-size: 12px; transition: transform 160ms ease; }
         .heroHowTo p { margin: 7px 0 0; max-width: 860px; color: rgba(226,232,240,0.8); font-size: 14px; line-height: 1.65; }
         .screenerShellResults { margin-top: 22px; }
         .scanDebug { margin-top: 30px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); font-size: 11px; line-height: 1.5; color: rgba(148,163,184,0.5); letter-spacing: 0.02em; }
@@ -94,12 +97,7 @@ export default function ScreenerShell({
               </div>
               <h1>{title}</h1>
               <p>{description}</p>
-              {explainerBody ? (
-                <div className="heroHowTo">
-                  <span className="heroHowToLabel">{explainerTitle}</span>
-                  <p>{explainerBody}</p>
-                </div>
-              ) : null}
+              <HowToCollapse title={explainerTitle} body={explainerBody} />
             </section>
 
             <div className="screenerShellResults">{children}</div>
