@@ -151,6 +151,43 @@ function fallbackMacdHist(values: number[]) {
   });
 }
 
+// Fixed, non-interactive brand watermark centered over the mini chart.
+// Positioned with CSS against the chart's own fixed-size wrapper -- never
+// against the SVG's data-derived coordinates -- so it stays put regardless
+// of which overlay/zone is drawn or how many candles are shown. Opacity is
+// kept low so it never competes with the candles themselves.
+function MiniChartWatermark() {
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        position: "absolute",
+        inset: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        pointerEvents: "none",
+        userSelect: "none",
+        overflow: "hidden",
+        zIndex: 2,
+      }}
+    >
+      <span
+        style={{
+          fontSize: "clamp(10px, 4vw, 15px)",
+          fontWeight: 800,
+          color: "rgba(148,163,184,0.20)",
+          letterSpacing: "0.02em",
+          whiteSpace: "nowrap",
+          transform: "rotate(-18deg)",
+        }}
+      >
+        MyStockHarbor.com
+      </span>
+    </div>
+  );
+}
+
 export default function MiniPickerCandleChart({
   points = [],
   tone = "green",
@@ -325,6 +362,7 @@ export default function MiniPickerCandleChart({
     <div
       style={{
         marginTop: 14,
+        position: "relative",
         border: `1px solid ${toneBorder(tone)}`,
         borderRadius: 16,
         background: `radial-gradient(circle at 18% 0%, ${toneGlow(
@@ -596,6 +634,8 @@ export default function MiniPickerCandleChart({
           {lastDate}
         </text>
       </svg>
+
+      <MiniChartWatermark />
     </div>
   );
 }
