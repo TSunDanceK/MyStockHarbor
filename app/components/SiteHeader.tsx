@@ -694,7 +694,7 @@ export default function SiteHeader() {
       {
         kind: "link",
         label: "Dashboard",
-        href: "/",
+        href: "/dashboard",
         isActive: (path) => path === "/" || path === "/dashboard",
       },
       {
