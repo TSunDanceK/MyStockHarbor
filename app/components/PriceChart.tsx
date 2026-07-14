@@ -159,9 +159,9 @@ type Props = {
 // chart's own fixed-height wrapper -- not against any data-derived SVG
 // coordinate -- so it never shifts when the user zooms, pans, or changes
 // the visible bar count; only the chart content underneath it changes.
-// Sits horizontally along the top-center, out of the way of the price
-// action below. Opacity is kept low so it reads as a background mark
-// rather than interfering with the data.
+// Sits right at the top edge of the chart box, horizontally, out of the
+// way of the price action below. Opacity is kept low so it reads as a
+// background mark rather than interfering with the data.
 function ChartWatermark() {
   return (
     <div
@@ -172,7 +172,7 @@ function ChartWatermark() {
         display: "flex",
         alignItems: "flex-start",
         justifyContent: "center",
-        paddingTop: "4%",
+        paddingTop: 2,
         pointerEvents: "none",
         userSelect: "none",
         overflow: "hidden",
