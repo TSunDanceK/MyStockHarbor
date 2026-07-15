@@ -731,6 +731,9 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, seed }: 
                 </div>
               </div>
 
+              {/* Earnings snapshot — sidebar */}
+              <LatestEarningsCard earnings={latestEarnings} symbol={symbol} />
+
             </aside>
 
             {/* ════ MAIN COLUMN ════════════════════════════════════ */}
@@ -806,10 +809,6 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, seed }: 
                     </div>
                   ))}
                 </div>
-              </section>
-
-              <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
-                <LatestEarningsCard earnings={latestEarnings} symbol={symbol} />
               </section>
 
               {/* ── Learn more ────────────────────────────────────── */}
