@@ -1,4 +1,3 @@
-"use client";
 import LearnShell from "@/app/learn/LearnShell";
 import Link from "next/link";
 
