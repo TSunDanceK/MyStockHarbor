@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import type { AiStockAnalysis } from "@/lib/ai-stock-analysis";
 import type { IndicatorSeed } from "@/lib/indicators";
 import StockPriceChart from "./StockPriceChart";
 import StockTickerJump from "./StockTickerJump";
+import LatestEarningsCard, {
+  type LatestEarningsData,
+} from "@/app/components/LatestEarningsCard";
 
 type Quote = {
   symbol: string;
@@ -84,7 +86,7 @@ type SymbolResult = {
 
 type StockSymbolPageClientProps = {
   symbol: string;
-  aiAnalysis: AiStockAnalysis | null;
+  latestEarnings: LatestEarningsData;
   seed?: IndicatorSeed | null;
 };
 
@@ -391,7 +393,7 @@ function buildLongSummary(args: { symbol: string; companyName: string; quote: Qu
 type ContextTone = "green" | "yellow" | "red" | "blue";
 type TradeContextResult = { alignment: "Strong" | "Constructive" | "Early" | "Mixed" | "Conflict" | "Weak"; tone: ContextTone; businessContext: string; technicalContext: string; riskContext: string; read: string; watch: string; };
 
-function buildTradeContext(args: { aiAnalysis: AiStockAnalysis | null; lastClose: number | null; ma50: number | null; ma200: number | null; rsi: number | null; trendScore: { passed: number; total: number } }): TradeContextResult {
+function buildTradeContext(args: { aiAnalysis: { fundamentalsScore: number | null; futurePotentialScore: number | null } | null; lastClose: number | null; ma50: number | null; ma200: number | null; rsi: number | null; trendScore: { passed: number; total: number } }): TradeContextResult {
   const { aiAnalysis, lastClose, ma50, ma200, rsi, trendScore } = args;
   const fundamentalsScore = aiAnalysis?.fundamentalsScore ?? null, futurePotentialScore = aiAnalysis?.futurePotentialScore ?? null;
   const hasBusinessScores = typeof fundamentalsScore === "number" && typeof futurePotentialScore === "number";
@@ -569,14 +571,14 @@ function StockEarningsPanel({ symbol, earnings, loading }: { symbol: string; ear
   );
 }
 
-const sectionLabelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.65)", marginBottom: 6 };
+const sectionLabelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)", marginBottom: 6 };
 const sectionHeadingStyle: React.CSSProperties = { margin: 0, fontSize: 22, lineHeight: 1.15, letterSpacing: "-0.025em", fontWeight: 700 };
 const miniLabelStyle: React.CSSProperties = { fontSize: 11, opacity: 0.60, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" };
 const miniMetricSubStyle: React.CSSProperties = { marginTop: 6, fontSize: 13, lineHeight: 1.5, opacity: 0.65 };
 const articleTextStyle: React.CSSProperties = { margin: "10px 0 0 0", fontSize: 15, lineHeight: 1.8, opacity: 0.85 };
 
 function sideCardStyle(): React.CSSProperties {
-  return { border: "1px solid rgba(255,255,255,0.09)", borderRadius: 12, overflow: "hidden", background: "rgba(255,255,255,0.02)" };
+  return { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, overflow: "hidden", background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" };
 }
 function sideCardHeaderStyle(): React.CSSProperties {
   return { padding: "12px 14px", borderBottom: "1px solid rgba(255,255,255,0.07)" };
@@ -585,7 +587,7 @@ function sideCardBodyStyle(): React.CSSProperties {
   return { padding: "14px 14px" };
 }
 
-export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: StockSymbolPageClientProps) {
+export default function StockSymbolPageClient({ symbol, latestEarnings, seed }: StockSymbolPageClientProps) {
   const [quote, setQuote] = useState<Quote | null>(
     seed?.price != null ? { symbol, price: seed.price, date: seed.priceDate, time: null, source: "ssr" } : null
   );
@@ -593,8 +595,6 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
   const [companyName, setCompanyName] = useState(seed?.companyName ?? "");
   const [priceLoading, setPriceLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-  const [earnings, setEarnings] = useState<StockEarningsData | null>(null);
-  const [earningsLoading, setEarningsLoading] = useState(true);
   const [valuation, setValuation] = useState<StockValuationData | null>(null);
   const [valuationLoading, setValuationLoading] = useState(true);
   const [openScoreHelp, setOpenScoreHelp] = useState<"fundamentals" | "future" | null>(null);
@@ -628,18 +628,6 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
 
   useEffect(() => {
     let cancelled = false;
-    async function loadEarnings() {
-      setEarningsLoading(true);
-      try { const res = await fetch(`/api/stock-earnings/${encodeURIComponent(symbol)}?t=${Date.now()}`, { cache: "no-store" }); if (!res.ok) throw new Error("Earnings fetch failed"); const data = (await res.json()) as StockEarningsData; if (!cancelled) setEarnings(data); }
-      catch { if (!cancelled) setEarnings(null); }
-      finally { if (!cancelled) setEarningsLoading(false); }
-    }
-    loadEarnings();
-    return () => { cancelled = true; };
-  }, [symbol]);
-
-  useEffect(() => {
-    let cancelled = false;
     async function loadValuation() {
       setValuationLoading(true);
       try { const res = await fetch(`/api/stock-valuation/${encodeURIComponent(symbol)}?t=${Date.now()}`, { cache: "no-store" }); if (!res.ok) throw new Error("Valuation fetch failed"); const data = (await res.json()) as StockValuationData; if (!cancelled) setValuation(data); }
@@ -664,11 +652,6 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
   const ma200Pct = pctFromBase(lastClose, typeof lastMA200 === "number" ? lastMA200 : null);
   const macroSupport = useMemo(() => computeMacroSupport(history, lastClose), [history, lastClose]);
   const macdSignal = useMemo(() => buildMacd(closes), [closes]);
-  const tradeContext = useMemo(() => buildTradeContext({ aiAnalysis, lastClose, ma50: typeof lastMA50 === "number" ? lastMA50 : null, ma200: typeof lastMA200 === "number" ? lastMA200 : null, rsi: typeof lastRsi === "number" ? lastRsi : null, trendScore }), [aiAnalysis, lastClose, lastMA50, lastMA200, lastRsi, trendScore]);
-
-  const earningsScore = earningsReadScore(earnings, earningsLoading);
-  const earningsScTone = earningsScoreTone(earningsScore);
-  const earningsPanelT = earningsPanelTone(earnings);
 
   return (
     <main onClick={() => setOpenScoreHelp(null)} style={{ minHeight: "100vh", background: "#06080d", color: "#f1f5f9", fontFamily: "system-ui, Arial" }}>
@@ -709,10 +692,6 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
                   <div className="stock-stat-sub">P/S {formatValuationMultiple(valuation.priceToSalesRatio)}</div>
                 </div>
               ) : null}
-              <Link href={`/stock/${encodeURIComponent(symbol)}/earnings`} className="stock-stat-cell stock-earnings-cell" style={{ textDecoration: "none", color: "inherit", border: "1px solid rgba(34,197,94,0.18)", borderRadius: 10, background: "rgba(34,197,94,0.03)" }}>
-                <div className="stock-stat-label">Earnings read</div>
-                <EarningsReadScale earnings={earnings} loading={earningsLoading} />
-              </Link>
             </div>
           ) : null}
           {!priceLoading && !err ? (
@@ -752,94 +731,8 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
                 </div>
               </div>
 
-              {/* Earnings summary card */}
-              <div style={sideCardStyle()}>
-                <div style={{ ...sideCardHeaderStyle(), display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                  <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Earnings read</div>
-                    <div style={{ marginTop: 3, fontSize: 14, fontWeight: 700, letterSpacing: "-0.02em" }}>{symbol} earnings</div>
-                  </div>
-                  <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 6, border: toneBorder(earningsPanelT), background: toneSoftBackground(earningsPanelT), color: toneColor(earningsPanelT), whiteSpace: "nowrap" }}>
-                    {earningsLoading ? "Loading" : earnings?.toneLabel ?? "Unavailable"}
-                  </span>
-                </div>
-                <div style={sideCardBodyStyle()}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
-                    <span style={{ fontSize: 12, opacity: 0.55 }}>Score</span>
-                    <span style={{ fontSize: 18, fontWeight: 800, color: toneColor(earningsScTone) }}>{typeof earningsScore === "number" ? `${earningsScore}/100` : "—"}</span>
-                  </div>
-                  <div aria-hidden="true" style={{ position: "relative", height: 6, borderRadius: 999, background: "linear-gradient(90deg, rgba(239,68,68,0.85), rgba(250,204,21,0.85), rgba(34,197,94,0.85))" }}>
-                    <span style={{ position: "absolute", top: "50%", left: `${typeof earningsScore === "number" ? earningsScore : 50}%`, width: 12, height: 12, borderRadius: 999, background: "#f8fafc", border: `2px solid ${toneColor(earningsScTone)}`, transform: "translate(-50%, -50%)" }} />
-                  </div>
-                  <div style={{ marginTop: 4, display: "flex", justifyContent: "space-between", fontSize: 9, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "rgba(226,232,240,0.40)" }}>
-                    <span>Weak</span><span>Mixed</span><span>Strong</span>
-                  </div>
-                  <div style={{ marginTop: 4, fontSize: 11, opacity: 0.55 }}>{earningsScaleSummary(earnings, earningsLoading)}</div>
-                  {!earningsLoading && earnings?.hasStructuredData ? (
-                    <div style={{ marginTop: 10, fontSize: 12, opacity: 0.55, lineHeight: 1.5 }}>
-                      Latest: {formatShortDate(earnings.reportDate)}<br />
-                      Next: {formatShortDate(earnings.nextEarningsDate)}
-                    </div>
-                  ) : null}
-                  <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 10px" }}>
-                    {[
-                      { label: "EPS", value: earningsLoading ? "—" : formatEps(earnings?.actualEps ?? null), tone: metricToneFromPct(earnings?.epsSurprisePercent ?? null) },
-                      { label: "EPS beat", value: earningsLoading ? "—" : formatSignedPercent(earnings?.epsSurprisePercent ?? null), tone: metricToneFromPct(earnings?.epsSurprisePercent ?? null) },
-                      { label: "Revenue", value: earningsLoading ? "—" : formatMoneyCompact(earnings?.revenue ?? null), tone: metricToneFromPct(earnings?.revenueSurprisePercent ?? null) },
-                      { label: "Rev beat", value: earningsLoading ? "—" : formatSignedPercent(earnings?.revenueSurprisePercent ?? null), tone: metricToneFromPct(earnings?.revenueSurprisePercent ?? null) },
-                    ].map((m) => (
-                      <div key={m.label} style={{ padding: "7px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", opacity: 0.50 }}>{m.label}</div>
-                        <div style={{ marginTop: 2, fontSize: 15, fontWeight: 800, color: toneColor(m.tone) }}>{m.value}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {earnings?.yearlySummaries?.length ? (
-                    <div style={{ marginTop: 12 }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", opacity: 0.50, marginBottom: 6 }}>Yearly trend</div>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(44px, 1fr))", gap: 5 }}>
-                        {earnings.yearlySummaries.map((item) => (
-                          <div key={item.year} style={{ textAlign: "center", padding: "5px 4px", borderRadius: 7, border: toneBorder(item.tone), background: toneSoftBackground(item.tone) }}>
-                            <div style={{ fontSize: 9, opacity: 0.55 }}>{item.year}</div>
-                            <div style={{ fontSize: 11, fontWeight: 700, color: toneColor(item.tone) }}>{item.toneLabel}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-                  <Link href={`/stock/${encodeURIComponent(symbol)}/earnings`} style={{ display: "block", marginTop: 14, textAlign: "center", fontSize: 12, fontWeight: 700, color: "rgba(148,163,184,0.65)", textDecoration: "none", padding: "7px 0", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8 }}>
-                    Full earnings breakdown →
-                  </Link>
-                </div>
-              </div>
-
-              {/* Company outlook scores card */}
-              {aiAnalysis ? (
-                <div style={sideCardStyle()}>
-                  <div style={sideCardHeaderStyle()}>
-                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Company outlook</div>
-                    <div style={{ marginTop: 3, fontSize: 14, fontWeight: 700, letterSpacing: "-0.02em" }}>{symbol} scores</div>
-                  </div>
-                  <div>
-                    {[
-                      { key: "fundamentals" as const, label: "Fundamentals", score: aiAnalysis.fundamentalsScore },
-                      { key: "future" as const, label: "Future potential", score: aiAnalysis.futurePotentialScore },
-                    ].map((s, i) => (
-                      <div key={s.key} style={{ padding: "12px 14px", borderBottom: i === 0 ? "1px solid rgba(255,255,255,0.07)" : "none", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, position: "relative" }}>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.80 }}>{s.label}</div>
-                          <div style={{ fontSize: 11, opacity: 0.45, marginTop: 2 }}>{scoreBandLabel(s.score)}</div>
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{ fontSize: 20, fontWeight: 800, color: toneColor(scoreTone(s.score)) }}>{s.score}/100</span>
-                          <button type="button" onClick={(e) => { e.stopPropagation(); setOpenScoreHelp(openScoreHelp === s.key ? null : s.key); }} style={{ ...scoreHelpButtonStyle, position: "relative", top: "auto", right: "auto" }}>?</button>
-                        </div>
-                        {openScoreHelp === s.key ? <div onClick={(e) => e.stopPropagation()} style={{ ...scoreHelpInlineBoxStyle, top: "100%", right: 14 }}>{scoreExplainText(s.key, s.score)}</div> : null}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
+              {/* Earnings snapshot — sidebar */}
+              <LatestEarningsCard earnings={latestEarnings} symbol={symbol} />
 
             </aside>
 
@@ -917,67 +810,6 @@ export default function StockSymbolPageClient({ symbol, aiAnalysis, seed }: Stoc
                   ))}
                 </div>
               </section>
-
-              {/* ── AI / Company outlook ──────────────────────────── */}
-              {aiAnalysis ? (
-                <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
-                  <div style={sectionLabelStyle}>Company Outlook</div>
-                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap", marginBottom: 20 }}>
-                    <div>
-                      <h2 style={sectionHeadingStyle}>Company snapshot &amp; outlook for {symbol}</h2>
-                      <p style={{ margin: "6px 0 0", fontSize: 14, lineHeight: 1.6, opacity: 0.60, maxWidth: 680 }}>Review a broader business snapshot, outlook summary, and key points investors may want to watch.</p>
-                    </div>
-                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                      {[
-                        { key: "fundamentals" as const, label: "Fundamentals", score: aiAnalysis.fundamentalsScore },
-                        { key: "future" as const, label: "Future potential", score: aiAnalysis.futurePotentialScore },
-                      ].map((s) => (
-                        <div key={s.key} style={scoreChipStyle(scoreTone(s.score))}>
-                          <span style={{ opacity: 0.60, fontWeight: 500, fontSize: 11 }}>{s.label}</span>
-                          <span style={{ fontSize: 20, fontWeight: 800, color: toneColor(scoreTone(s.score)) }}>{s.score}/100</span>
-                          <span style={{ fontSize: 11, opacity: 0.50 }}>{scoreBandLabel(s.score)}</span>
-                          <button type="button" onClick={(e) => { e.stopPropagation(); setOpenScoreHelp(openScoreHelp === s.key ? null : s.key); }} style={scoreHelpButtonStyle}>?</button>
-                          {openScoreHelp === s.key ? <div onClick={(e) => e.stopPropagation()} style={scoreHelpInlineBoxStyle}>{scoreExplainText(s.key, s.score)}</div> : null}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div style={{ display: "grid", gap: 18 }}>
-                    {[
-                      { label: "What this company broadly does", text: aiAnalysis.businessSummary },
-                      { label: "Fundamentals read", text: aiAnalysis.fundamentalsSummary },
-                      { label: "Future potential", text: aiAnalysis.futurePotentialSummary },
-                    ].map((item) => (
-                      <div key={item.label}>
-                        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 5, opacity: 0.65, textTransform: "uppercase", letterSpacing: "0.04em" }}>{item.label}</div>
-                        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.75, opacity: 0.82 }}>{item.text}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="factor-grid" style={{ marginTop: 20 }}>
-                    {[
-                      { label: "Bullish factors", dot: "#22c55e", items: aiAnalysis.bullishFactors },
-                      { label: "Risk factors", dot: "#ef4444", items: aiAnalysis.bearishFactors },
-                      { label: "What to watch", dot: "#eab308", items: aiAnalysis.watchPoints },
-                    ].map((col) => (
-                      <div key={col.label}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
-                          <span style={{ width: 6, height: 6, borderRadius: 999, background: col.dot, flex: "0 0 auto" }} />
-                          <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", opacity: 0.60 }}>{col.label}</span>
-                        </div>
-                        <div style={{ display: "grid", gap: 8 }}>
-                          {col.items.map((item) => (
-                            <div key={item} style={{ fontSize: 13, lineHeight: 1.65, opacity: 0.80, paddingLeft: 12, borderLeft: `2px solid ${col.dot}44` }}>{item}</div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ marginTop: 10, fontSize: 11, opacity: 0.35 }}>Summary last updated: {formatAiUpdatedLabel(aiAnalysis.generatedAt)}</div>
-                </section>
-              ) : null}
-
-              <StockEarningsPanel symbol={symbol} earnings={earnings} loading={earningsLoading} />
 
               {/* ── Learn more ────────────────────────────────────── */}
               <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
