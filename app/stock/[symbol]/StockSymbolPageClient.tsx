@@ -398,6 +398,38 @@ function buildLongSummary(args: { symbol: string; companyName: string; quote: Qu
   return { trendParagraph, momentumParagraph, structureParagraph };
 }
 
+// Short one-sentence lede shown right under the H1/company name — gives crawlers
+// and readers a real summary of the page above the fold instead of a bare ticker.
+function buildHeroLede(args: {
+  symbol: string;
+  companyName: string;
+  trend: "Uptrend" | "Downtrend" | "Range / Mixed";
+  trendScore: { passed: number; total: number };
+  rsi: number | null;
+  lastClose: number | null;
+  ma50: number | null;
+  ma200: number | null;
+}): string {
+  const { symbol, companyName, trend, trendScore, rsi, lastClose, ma50, ma200 } = args;
+  const lead = companyName ? `${companyName} (${symbol})` : symbol;
+  const trendText = trend === "Range / Mixed" ? "a range/mixed trend" : trend === "Uptrend" ? "an uptrend" : "a downtrend";
+
+  let maPhrase = "";
+  if (typeof lastClose === "number" && typeof ma50 === "number" && typeof ma200 === "number") {
+    const aboveMa50 = lastClose > ma50, aboveMa200 = lastClose > ma200;
+    if (aboveMa50 && aboveMa200) maPhrase = ", trading above both the 50-day and 200-day moving averages";
+    else if (!aboveMa50 && !aboveMa200) maPhrase = ", trading below both the 50-day and 200-day moving averages";
+    else if (aboveMa200) maPhrase = ", above the 200-day MA but below the 50-day MA";
+    else maPhrase = ", above the 50-day MA but below the 200-day MA";
+  }
+
+  const rsiPhrase = typeof rsi === "number"
+    ? ` RSI is at ${rsi.toFixed(1)}${rsi >= 70 ? " (overbought)" : rsi <= 30 ? " (oversold)" : ""}, with ${trendScore.passed}/${trendScore.total} trend checks passing.`
+    : ` ${trendScore.passed}/${trendScore.total} trend checks are currently passing.`;
+
+  return `${lead} is currently in ${trendText}${maPhrase}.${rsiPhrase}`;
+}
+
 type ContextTone = "green" | "yellow" | "red" | "blue";
 type TradeContextResult = { alignment: "Strong" | "Constructive" | "Early" | "Mixed" | "Conflict" | "Weak"; tone: ContextTone; businessContext: string; technicalContext: string; riskContext: string; read: string; watch: string; };
 
@@ -665,6 +697,7 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
   const trend = useMemo(() => trendLabel({ lastClose, ma50: typeof lastMA50 === "number" ? lastMA50 : null, ma200: typeof lastMA200 === "number" ? lastMA200 : null }), [lastClose, lastMA50, lastMA200]);
   const trendTone: "green" | "yellow" | "red" = trendScore.passed >= 3 ? "green" : trendScore.passed === 2 ? "yellow" : "red";
   const longSummary = useMemo(() => buildLongSummary({ symbol, companyName, quote, lastClose, ma50: typeof lastMA50 === "number" ? lastMA50 : null, ma200: typeof lastMA200 === "number" ? lastMA200 : null, trend, trendScore, rsi: typeof lastRsi === "number" ? lastRsi : null }), [symbol, companyName, quote, lastClose, lastMA50, lastMA200, trend, trendScore, lastRsi]);
+  const heroLede = useMemo(() => buildHeroLede({ symbol, companyName, trend, trendScore, rsi: typeof lastRsi === "number" ? lastRsi : null, lastClose, ma50: typeof lastMA50 === "number" ? lastMA50 : null, ma200: typeof lastMA200 === "number" ? lastMA200 : null }), [symbol, companyName, trend, trendScore, lastRsi, lastClose, lastMA50, lastMA200]);
   const ma50Pct = pctFromBase(lastClose, typeof lastMA50 === "number" ? lastMA50 : null);
   const ma200Pct = pctFromBase(lastClose, typeof lastMA200 === "number" ? lastMA200 : null);
   const macroSupport = useMemo(() => computeMacroSupport(history, lastClose), [history, lastClose]);
@@ -684,6 +717,7 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
           <div style={{ marginTop: 10 }}>
             <h1 style={{ margin: 0, fontSize: 28, lineHeight: 1.1, fontWeight: 800, letterSpacing: "-0.04em" }}>{symbol}</h1>
             {companyName ? <p style={{ margin: "3px 0 0", fontSize: 15, opacity: 0.60, fontWeight: 400 }}>{companyName}</p> : null}
+            {lastClose !== null ? <p style={{ margin: "10px 0 0", fontSize: 15, lineHeight: 1.6, opacity: 0.78, maxWidth: 720 }}>{heroLede}</p> : null}
           </div>
           {!priceLoading && !err ? (
             <div className="stock-header-stats" style={{ marginTop: 16 }}>
@@ -781,9 +815,6 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
                 <StockPriceChart symbol={symbol} data={history.slice(-240)} ma50={ma50.slice(-240)} ma200={ma200.slice(-240)} height={360} />
               </section>
 
-              {/* -- Company profile (FMP) --------------------------- */}
-              {profile ? <CompanyProfile profile={profile} symbol={symbol} /> : null}
-
               {/* -- Technical indicators ---------------------------- */}
               <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
                 <div style={sectionLabelStyle}>Technical Indicators</div>
@@ -830,6 +861,9 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
                   ))}
                 </div>
               </section>
+
+              {/* -- Company profile (FMP) --------------------------- */}
+              {profile ? <CompanyProfile profile={profile} symbol={symbol} /> : null}
 
               {/* -- Learn more -------------------------------------- */}
               <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
