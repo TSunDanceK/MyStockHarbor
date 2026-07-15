@@ -173,7 +173,57 @@ function parseRss(xml: string): NewsItem[] {
   return items;
 }
 
+// Live quote: FMP is the primary source (same endpoint/key already used
+// elsewhere on the site for metadata + company profile - reliable, and a
+// real API key is configured). Stooq is kept only as a fallback for when
+// FMP_API_KEY is missing or the FMP call fails outright.
+//
+// Both paths require price > 0, not just a finite number: Stooq's CSV feed
+// is known to return a literal "0" (not "N/D"/blank) for some tickers
+// instead of failing cleanly, which previously rendered as a real "$0.00"
+// price on the page (formatMoney only shows "-" for null/undefined, not
+// for an actual zero). Treating a non-positive price as "no data" avoids
+// that class of bug regardless of which upstream returns it.
 async function fetchQuote(symbol: string): Promise<Quote | null> {
+  const fmpQuote = await fetchFmpQuote(symbol);
+  if (fmpQuote) return fmpQuote;
+  return fetchStooqQuote(symbol);
+}
+
+async function fetchFmpQuote(symbol: string): Promise<Quote | null> {
+  const apiKey = process.env.FMP_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(apiKey)}`;
+    const res = await fetch(url, {
+      next: { revalidate: 60 },
+      headers: { accept: "application/json" },
+    });
+
+    if (!res.ok) return null;
+
+    const json = await res.json();
+    const row = Array.isArray(json) ? json[0] : json;
+    const price = typeof row?.price === "number" && Number.isFinite(row.price) ? row.price : null;
+    if (price == null || price <= 0) return null;
+
+    const timestampMs = typeof row?.timestamp === "number" ? row.timestamp * 1000 : Date.now();
+    const d = new Date(timestampMs);
+
+    return {
+      symbol,
+      price,
+      date: Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10),
+      time: Number.isNaN(d.getTime()) ? null : d.toISOString().slice(11, 19),
+      source: "FMP",
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchStooqQuote(symbol: string): Promise<Quote | null> {
   const stooqSymbol = `${symbol.toLowerCase()}.us`;
   const url = `https://stooq.com/q/l/?s=${stooqSymbol}&f=sd2t2l&h&e=csv`;
 
@@ -190,10 +240,11 @@ async function fetchQuote(symbol: string): Promise<Quote | null> {
 
     const row = lines[1].split(",");
     const price = Number(row[3] ?? "");
+    if (!Number.isFinite(price) || price <= 0) return null;
 
     return {
       symbol,
-      price: Number.isFinite(price) ? price : null,
+      price,
       date: row[1] ?? null,
       time: row[2] ?? null,
       source: "Stooq",
@@ -228,7 +279,10 @@ async function fetchHistory(symbol: string): Promise<Point[]> {
       const close = Number(String(cols[4] ?? "").replace(/\r/g, ""));
       const volume = Number(String(cols[5] ?? "").replace(/\r/g, ""));
 
-      if (!date || !Number.isFinite(close)) continue;
+      // Same zero-price guard as fetchStooqQuote above: a finite-but-zero
+      // close from Stooq's daily feed would otherwise corrupt lastClose /
+      // moving averages / RSI for this symbol.
+      if (!date || !Number.isFinite(close) || close <= 0) continue;
 
       points.push({
         date,
