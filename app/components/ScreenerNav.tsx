@@ -46,7 +46,6 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: "/stocks-near-200-day-moving-average", label: "Near 200-Day", icon: "◇", tone: "yellow" },
       { href: "/stocks-near-weekly-200-day-moving-average", label: "Weekly MA200", icon: "◆", tone: "yellow" },
-      { href: "/macro-support-resistance-stocks", label: "Macro S/R", icon: "⇄", tone: "blue" },
     ],
   },
   {
@@ -61,6 +60,7 @@ const GROUPS: NavGroup[] = [
     heading: "Chart Plays",
     headingColor: "#c084fc",
     items: [
+      { href: "/macro-support-resistance-stocks", label: "Macro S/R", icon: "⇄", tone: "blue" },
       { href: "/plays", label: "Ascending Triangles", icon: "△", tone: "green" },
       { href: "/plays/bull-flags", label: "Bull Flags", icon: "⚑", tone: "green" },
       { href: "/plays/descending-triangles", label: "Descending Triangles", icon: "▽", tone: "red" },

@@ -16,6 +16,7 @@ import {
   addToDynamicUniverse,
   readDynamicUniverse,
 } from "../../../lib/server/dynamicUniverseCache";
+import { getCompanyNameMap } from "../../../lib/server/companyNames";
 
 type Point = {
   date: string;
@@ -56,6 +57,7 @@ type PlayChartPoint = {
 
 type PlayItem = {
   symbol: string;
+  companyName?: string;
   play: "bullFlag";
   timeframe: "M" | "ST" | "D" | "W";
   score: number;
@@ -933,7 +935,7 @@ async function buildPlaysPayload(
                 260,
                 320,
               ]),
-              
+
             };
           }
 
@@ -1042,6 +1044,22 @@ async function buildPlaysPayload(
       take: 24,
     }),
   ];
+
+  // Best-effort company names for the card display line. Never blocks or
+  // breaks the page: any symbol that doesn't resolve just shows the ticker.
+  try {
+    const nameMap = await getCompanyNameMap();
+    if (nameMap.size) {
+      for (const section of sections) {
+        for (const item of section.items) {
+          const name = nameMap.get(item.symbol);
+          if (name) item.companyName = name;
+        }
+      }
+    }
+  } catch {
+    // names are optional
+  }
 
   return {
     updatedAt: new Date().toISOString(),
