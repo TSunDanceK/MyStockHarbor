@@ -66,6 +66,16 @@ export async function GET(request: Request) {
         )
       : null;
 
+  // Checking whether a bulk-but-cheaper quote endpoint exists: batch-quote
+  // (full) is confirmed 402 on this plan (see app/api/debug/index-changes).
+  // batch-quote-short might be a separate, lower tier -- if reachable it
+  // could solve "rank ~2000 daily reporters by liquidity" in one call
+  // instead of one quote call per symbol just to find out which ones matter.
+  const quoteSymbols = (searchParams.get("symbols") || "AAPL,MSFT,DANOY").trim();
+  const batchQuoteShort = await fetchJson(
+    `${base}/batch-quote-short?symbols=${encodeURIComponent(quoteSymbols)}&apikey=${FMP_API_KEY}`
+  );
+
   return NextResponse.json({
     checkedEndpoint: "/stable/earnings-calendar",
     from,
@@ -82,6 +92,11 @@ export async function GET(request: Request) {
       count: Array.isArray(stockList.json) ? stockList.json.length : null,
       sample: Array.isArray(stockList.json) ? stockList.json.slice(0, 5) : stockList,
       findSymbolMatch: stockListMatch,
+    },
+    batchQuoteShort: {
+      status: batchQuoteShort.status,
+      ok: batchQuoteShort.ok,
+      body: batchQuoteShort.json ?? batchQuoteShort.rawText,
     },
     note: "API key is not returned by this debug route.",
   });
