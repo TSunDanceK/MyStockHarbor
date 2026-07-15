@@ -91,35 +91,24 @@ export default function EarningsSymbolPicker({
         }
 
         const data = (await res.json()) as { results?: SymbolResult[] };
-        const rows = Array.isArray(data.results) ? data.results : [];
-        const cleanedQuery = q.toUpperCase();
-
-        const sortedRows = [...rows].sort((a, b) => {
-          const aSymbol = a.symbol.toUpperCase();
-          const bSymbol = b.symbol.toUpperCase();
-
-          if (aSymbol === cleanedQuery && bSymbol !== cleanedQuery) return -1;
-          if (bSymbol === cleanedQuery && aSymbol !== cleanedQuery) return 1;
-
-          if (aSymbol.startsWith(cleanedQuery) && !bSymbol.startsWith(cleanedQuery)) {
-            return -1;
-          }
-
-          if (bSymbol.startsWith(cleanedQuery) && !aSymbol.startsWith(cleanedQuery)) {
-            return 1;
-          }
-
-          return aSymbol.localeCompare(bSymbol);
-        });
-
-        setResults(sortedRows);
+        // /api/symbols already returns results in relevance order (exact
+        // symbol > symbol prefix > name prefix > name word prefix). Do NOT
+        // re-sort here: an earlier client-side alphabetical sort is what
+        // buried MSFT below MBOT/MCHP for the query "micro".
+        setResults(Array.isArray(data.results) ? data.results : []);
       } catch {
         setResults([]);
       }
     }, 250);
 
     return () => window.clearTimeout(timer);
-  }, [query, results, selected?.symbol]);
+    // `results` is intentionally NOT a dependency even though it's read above:
+    // this effect calls setResults, so including it re-triggered the effect on
+    // every fetch and left the picker fetching /api/symbols in a loop for as
+    // long as the query stayed put. Reading a slightly stale `results` to
+    // resolve an exact-symbol match is fine, and matches StockTickerJump.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, selected?.symbol]);
 
   const canGo = Boolean(selected?.symbol);
 
