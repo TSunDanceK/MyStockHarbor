@@ -1,18 +1,21 @@
 import type { CSSProperties } from "react";
-import { Suspense } from "react";
 import StockNewsTickerJump from "./StockNewsTickerJump";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { getStockNewsBaseData } from "@/lib/stock-news-data";
 import {
-  getStockNewsBaseData,
-  getStockNewsAiData,
-} from "@/lib/stock-news-data";
+  buildWhyItMatters,
+  buildBeyondHeadline,
+  buildWhatItMeans,
+} from "@/lib/stock-news-templates";
 import { getDailyHistory } from "@/lib/server/historyCache";
 import {
   computeIndicatorSeed,
   type Point,
 } from "@/lib/indicators";
 import PageShareBar from "@/app/components/PageShareBar";
+import WhyThisMatters from "./WhyThisMatters";
+import AiInsightCard from "./AiInsightCard";
 
 export const runtime = "nodejs";
 
@@ -1140,36 +1143,6 @@ function buildNewsSummary(item: NewsItem, symbol: string, trend: string, newsSco
   return `${source} is drawing attention to a recent development around ${symbol}. Traders will usually care most about whether the stock shows real follow-through after the market has time to digest the headline.`;
 }
 
-function buildWhyItMatters(item: NewsItem, symbol: string, trend: string, newsScore: NewsScoreResult) {
-  const lower = item.title.toLowerCase();
-
-  if (keywordHits(lower, ["earnings","results","revenue","guidance","quarter"])) {
-    return `Quarterly updates can reset expectations quickly, so even one earnings-related headline can change how investors frame ${symbol} in the near term.`;
-  }
-  if (keywordHits(lower, ["upgrade","downgrade","price target","analyst"])) {
-    return `Analyst calls can shift attention fast, but they usually matter more when price action starts confirming the same message.`;
-  }
-  if (keywordHits(lower, ["delivery","deliveries","production","factory","supply"])) {
-    return `Execution headlines matter because investors want proof that the business story is holding up in real operations, not just in market hype.`;
-  }
-  if (keywordHits(lower, ["lawsuit","probe","investigation","recall"])) {
-    return `Risk headlines can weigh on sentiment because uncertainty often stays in the stock until the market sees the issue is contained.`;
-  }
-  if (keywordHits(lower, ["ai","chip","product","launch","software"])) {
-    return `Product and theme headlines matter when traders are trying to decide whether a stock still has a strong reason to stay in focus.`;
-  }
-  if (keywordHits(lower, ["market","sector","fed","rates","tariff"])) {
-    return `Sometimes a stock reacts more to the environment around it than to company-specific news, so broader context can matter more than one isolated headline.`;
-  }
-  if (newsScore.tone === "green" && trend === "Bullish trend") {
-    return `The headline matters more when the chart is already supportive, because news and price structure are pulling in the same direction.`;
-  }
-  if (newsScore.tone === "red" && trend === "Bearish trend") {
-    return `The headline matters more when the chart is already weak, because bad news has less technical support underneath it.`;
-  }
-  return `This matters mainly because traders now watch whether the chart absorbs the headline calmly or starts to break in response.`;
-}
-
 function isLowValueNewsItem(item: NewsItem) {
   const title = item.title.toLowerCase();
   const source = (item.source ?? "").toLowerCase();
@@ -1232,64 +1205,6 @@ function scoreNewsItem(item: NewsItem) {
   }
 
   return score;
-}
-
-function buildWhatItMeans(args: {
-  symbol: string;
-  trend: string;
-  newsScore: NewsScoreResult;
-  rsi: number | null;
-  priceVs50: number | null;
-}) {
-  const { symbol, trend, newsScore, rsi, priceVs50 } = args;
-  const lines: string[] = [];
-
-  if (newsScore.tone === "green" && trend === "Bullish trend") {
-    lines.push(`${symbol} has a cleaner backdrop when positive headlines are landing into an already supportive chart, because the news and the structure are pointing in the same direction.`);
-  } else if (newsScore.tone === "green") {
-    lines.push(`The recent headline flow for ${symbol} looks better than the chart structure, so traders may now watch for stronger price confirmation rather than assuming the story has already fully improved.`);
-  } else if (newsScore.tone === "red" && trend === "Bearish trend") {
-    lines.push(`${symbol} looks more vulnerable when weaker headlines arrive into an already soft chart, because negative news has less technical support underneath it.`);
-  } else if (newsScore.tone === "red") {
-    lines.push(`The chart may still be holding up better than the recent headline tone, but traders will watch whether weaker coverage starts damaging support or simply gets absorbed.`);
-  } else {
-    lines.push(`${symbol} currently sits in a more mixed zone where headline tone alone is unlikely to settle the next move without clearer price confirmation.`);
-  }
-
-  if (typeof rsi === "number" && rsi >= 70) {
-    lines.push(`Momentum already looks warm, so even strong news may lead to pause-and-hold behaviour before the next cleaner move higher.`);
-  } else if (typeof rsi === "number" && rsi <= 35) {
-    lines.push(`Momentum is softer, which means modestly better news could matter more than usual if traders start looking for stabilisation or rebound attempts.`);
-  }
-
-  if (typeof priceVs50 === "number" && priceVs50 >= 10) {
-    lines.push(`Because ${symbol} is already stretched above the 50-day average, the next bullish step often depends on support holding rather than on endless excitement.`);
-  } else if (typeof priceVs50 === "number" && priceVs50 <= -10) {
-    lines.push(`Because ${symbol} is trading well below the 50-day average, stronger headlines may first need to repair damage before the market treats them as a fresh uptrend signal.`);
-  }
-
-  return lines.slice(0, 3);
-}
-
-function buildBeyondHeadline(args: {
-  symbol: string;
-  newsScore: NewsScoreResult;
-  trend: string;
-  recentHigh: number | null;
-  recentLow: number | null;
-}) {
-  const { symbol, newsScore, trend, recentHigh, recentLow } = args;
-
-  if (newsScore.tone === "red" && trend !== "Bearish trend") {
-    return `The outside-the-box read for ${symbol} is that apparently bad news does not always become lasting damage. If price keeps holding above important structure despite weaker headlines, that can mean some fear was already priced in or that stronger hands are still supporting the stock.`;
-  }
-  if (newsScore.tone === "green" && trend === "Bearish trend") {
-    return `The outside-the-box read for ${symbol} is that good news can still disappoint if the chart remains weak. Traders often want to see reclaim attempts and better price behaviour before assuming the headlines have truly changed the bigger trend.`;
-  }
-  if (typeof recentHigh === "number" && typeof recentLow === "number") {
-    return `${symbol} may not need perfect headlines to improve. Sometimes the more important clue is whether the stock stops making lower lows near ${formatMoney(recentLow)} and starts building toward resistance near ${formatMoney(recentHigh)}. That kind of behaviour can quietly matter more than a dramatic headline.`;
-  }
-  return `The deeper read for ${symbol} is that headlines often matter most when they confirm or challenge the chart at a key moment. Good news is most useful when it attracts follow-through. Bad news is most dangerous when support is already fragile.`;
 }
 
 function buildTechnicalRead(args: {
@@ -1377,7 +1292,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title,
     description,
     robots: {
-      index: false,
+      index: true,
       follow: true,
     },
     alternates: { canonical: `https://www.mystockharbor.com/stock/${upper}/news` },
@@ -1398,10 +1313,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-async function DetailedNewsAiSection({
-  aiData, symbol, companyName, trend, newsScore, detailedNews, compactNews,
+// Renders immediately via SSR (no AI, no network round-trip). Per-article
+// "Why this matters" now starts collapsed and is handled by the client-side
+// <WhyThisMatters> component: it shows the algorithmic fallback text (built
+// below with buildWhyItMatters) instantly on expand, then optionally
+// upgrades to an AI-generated line if /api/stock-news/why-it-matters returns
+// one. This keeps the whole page fast and indexable while still offering an
+// AI read on demand.
+function DetailedNewsSection({
+  symbol, companyName, trend, newsScore, detailedNews, compactNews,
 }: {
-  aiData: Awaited<ReturnType<typeof getStockNewsAiData>>;
   symbol: string;
   companyName: string;
   trend: string;
@@ -1409,140 +1330,6 @@ async function DetailedNewsAiSection({
   detailedNews: NewsItem[];
   compactNews: NewsItem[];
 }) {
-  return (
-    <section style={editorialCardStyle}>
-      <div style={sectionEyebrowStyle}>Latest briefing</div>
-      <h2 style={sectionTitleStyle}>What's happening with {symbol}</h2>
-      <div style={{ display: "grid", gap: 14, marginTop: 16 }}>
-        {detailedNews.length ? (
-          detailedNews.map((item, index) => {
-            const aiBrief = aiData.aiBriefs[index];
-            const hasAi = !!aiBrief?.summary?.trim() && !!aiBrief?.whyItMatters?.trim();
-            return (
-              <article key={`${item.link}-${index}`} style={{ ...newsLeadCardStyle, borderLeft: index === 0 ? "3px solid rgba(59,130,246,0.75)" : "3px solid rgba(255,255,255,0.08)" }}>
-                {item.image ? (
-                  <div style={newsThumbWrapStyle}>
-                    <img src={item.image} alt="" loading="lazy" style={newsThumbImgStyle} />
-                  </div>
-                ) : null}
-                <div style={newsMetaRowStyle}>
-                  <span style={newsSourcePillStyle}>{compactSource(item.source)}</span>
-                  <span style={newsDateStyle}>{formatDate(item.pubDate)}</span>
-                </div>
-                <h3 style={newsHeadlineStyle}>{item.title}</h3>
-                <p style={newsSummaryStyle}>{getArticleSnippet(item, symbol)}</p>
-                <div style={whyItMattersBoxStyle}>
-                  <div style={whyItMattersLabelStyle}>Why this matters</div>
-                  <div style={whyItMattersTextStyle}>{hasAi ? aiBrief!.whyItMatters : buildWhyItMatters(item, symbol, trend, newsScore)}</div>
-                </div>
-                <div style={{ ...sourceFooterStyle, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                  <span>Article excerpt provided by the FMP news feed. AI is used only for the short investor read above.</span>
-                  <a href={item.link} target="_blank" rel="noopener noreferrer" style={readArticleLinkStyle}>Read full article ↗</a>
-                </div>
-              </article>
-            );
-          })
-        ) : (
-          <div style={newsLeadCardStyle}>
-            <h3 style={{ ...newsHeadlineStyle, marginTop: 0 }}>No fresh headline set available</h3>
-            <p style={newsSummaryStyle}>This page still works as a stock-news analysis hub, but the current news feed is light.</p>
-          </div>
-        )}
-      </div>
-      {compactNews.length ? (
-        <div style={{ marginTop: 16 }}>
-          <div style={compactFeedLabelStyle}>Older updates drop into a lighter feed</div>
-          <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-            {compactNews.map((item, index) => (
-              <article key={`${item.link}-compact-${index}`} className="compactNewsRow" style={compactNewsRowStyle}>
-                {item.image ? (
-                  <img src={item.image} alt="" loading="lazy" style={compactThumbStyle} />
-                ) : null}
-                <div style={{ minWidth: 88, flexShrink: 0 }}>
-                  <div style={compactSourceStyle}>{compactSource(item.source)}</div>
-                  <div style={compactDateStyle}>{formatDate(item.pubDate)}</div>
-                </div>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={compactHeadlineStyle}>{item.title}</div>
-                </div>
-                <a href={item.link} target="_blank" rel="noopener noreferrer" style={compactMutedLinkStyle}>Read ↗</a>
-              </article>
-            ))}
-          </div>
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
-async function InsightAiCard({
-  aiData, symbol, companyName, trend, newsScore, earningsScore, lastRsi, priceVs50,
-  priceVs200, recentHigh, recentLow, detailedNews, fallbackBeyondHeadline,
-}: {
-  aiData: Awaited<ReturnType<typeof getStockNewsAiData>>;
-  symbol: string; companyName: string; trend: string; newsScore: NewsScoreResult;
-  earningsScore: { score: number; label: string; tone: ScoreTone; reason: string; };
-  lastRsi: number | null; priceVs50: number | null; priceVs200: number | null;
-  recentHigh: number | null; recentLow: number | null; detailedNews: NewsItem[];
-  fallbackBeyondHeadline: string;
-}) {
-  const displayBeyondHeadline = aiData.aiInsight?.beyondHeadline?.trim() ? aiData.aiInsight.beyondHeadline : fallbackBeyondHeadline;
-  const hasAiInsight = !!aiData.aiInsight?.beyondHeadline?.trim() && Array.isArray(aiData.aiInsight?.whatItMeans) && aiData.aiInsight.whatItMeans.length > 0;
-  return (
-    <section style={{ ...featuredInsightShellStyle, position: "relative" }}>
-      <div style={sectionEyebrowStyle}>Beyond the headline</div>
-      <h2 style={sectionTitleStyle}>A deeper look for beginners</h2>
-      <p style={bodyCopyStyle}>{displayBeyondHeadline}</p>
-      <div style={{ position: "absolute", right: 16, bottom: 14, fontSize: 10, opacity: 0.18, fontWeight: 700, letterSpacing: "0.08em" }}>{hasAiInsight ? "1" : "0"}</div>
-    </section>
-  );
-}
-
-async function GoingForwardAiCard({
-  aiData, symbol, companyName, trend, newsScore, earningsScore, lastRsi, priceVs50,
-  priceVs200, recentHigh, recentLow, detailedNews, fallbackWhatItMeans,
-}: {
-  aiData: Awaited<ReturnType<typeof getStockNewsAiData>>;
-  symbol: string; companyName: string; trend: string; newsScore: NewsScoreResult;
-  earningsScore: { score: number; label: string; tone: ScoreTone; reason: string; };
-  lastRsi: number | null; priceVs50: number | null; priceVs200: number | null;
-  recentHigh: number | null; recentLow: number | null; detailedNews: NewsItem[];
-  fallbackWhatItMeans: string[];
-}) {
-  const displayWhatItMeans = aiData.aiInsight?.whatItMeans?.length ? aiData.aiInsight.whatItMeans : fallbackWhatItMeans;
-  const hasAiInsight = !!aiData.aiInsight?.beyondHeadline?.trim() && Array.isArray(aiData.aiInsight?.whatItMeans) && aiData.aiInsight.whatItMeans.length > 0;
-  return (
-    <section style={{ ...sidebarCardStyle, position: "relative" }}>
-      <div style={sectionEyebrowStyle}>What this could mean</div>
-      <h2 style={sectionTitleSmallStyle}>Going Forward</h2>
-      <div style={{ display: "grid", gap: 12, marginTop: 14 }}>
-        {displayWhatItMeans.map((line) => (
-          <div key={line} style={bulletRowStyle}>
-            <div style={bulletDotStyle} />
-            <div style={bulletTextStyle}>{line}</div>
-          </div>
-        ))}
-      </div>
-      <div style={{ position: "absolute", right: 16, bottom: 14, fontSize: 10, opacity: 0.18, fontWeight: 700, letterSpacing: "0.08em" }}>{hasAiInsight ? "1" : "0"}</div>
-    </section>
-  );
-}
-
-function loadingBarStyle(width: string): CSSProperties {
-  return { width, height: 12, borderRadius: 999, background: "rgba(30,41,59,0.9)" };
-}
-
-function loadingParagraphStyle(widths: string[]) {
-  return (
-    <div style={{ display: "grid", gap: 10 }}>
-      {widths.map((width, index) => (
-        <div key={`${width}-${index}`} className="shimmer" style={loadingBarStyle(width)} />
-      ))}
-    </div>
-  );
-}
-
-function DetailedNewsFallback({ symbol, detailedNews, compactNews }: { symbol: string; detailedNews: NewsItem[]; compactNews: NewsItem[]; }) {
   return (
     <section style={editorialCardStyle}>
       <div style={sectionEyebrowStyle}>Latest briefing</div>
@@ -1562,12 +1349,22 @@ function DetailedNewsFallback({ symbol, detailedNews, compactNews }: { symbol: s
               </div>
               <h3 style={newsHeadlineStyle}>{item.title}</h3>
               <p style={newsSummaryStyle}>{getArticleSnippet(item, symbol)}</p>
-              <div style={whyItMattersBoxStyle}>
-                <div style={whyItMattersLabelStyle}>Why this matters</div>
-                <div style={whyItMattersTextStyle}>The source item may affect how investors interpret {symbol}'s latest news flow.</div>
-              </div>
+              <WhyThisMatters
+                symbol={symbol}
+                companyName={companyName}
+                trend={trend}
+                newsScoreLabel={newsScore.label}
+                item={{
+                  title: item.title,
+                  link: item.link,
+                  source: item.source,
+                  pubDate: item.pubDate,
+                  description: item.description,
+                }}
+                fallbackText={buildWhyItMatters(item, symbol, trend, newsScore)}
+              />
               <div style={{ ...sourceFooterStyle, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                <span>Article excerpt provided by the FMP news feed.</span>
+                <span>Article excerpt provided by the FMP news feed. AI is used only for the optional "Why this matters" read.</span>
                 <a href={item.link} target="_blank" rel="noopener noreferrer" style={readArticleLinkStyle}>Read full article ↗</a>
               </div>
             </article>
@@ -1601,36 +1398,6 @@ function DetailedNewsFallback({ symbol, detailedNews, compactNews }: { symbol: s
           </div>
         </div>
       ) : null}
-    </section>
-  );
-}
-
-function InsightFallbackCard() {
-  return (
-    <section style={{ ...featuredInsightShellStyle, position: "relative" }}>
-      <div style={sectionEyebrowStyle}>Beyond the headline</div>
-      <h2 style={sectionTitleStyle}>A deeper look for beginners</h2>
-      <div style={{ marginTop: 16 }}>{loadingParagraphStyle(["96%", "90%", "86%", "68%"])}</div>
-    </section>
-  );
-}
-
-function GoingForwardFallbackCard() {
-  return (
-    <section style={{ ...sidebarCardStyle, position: "relative" }}>
-      <div style={sectionEyebrowStyle}>What this could mean</div>
-      <h2 style={sectionTitleSmallStyle}>Going Forward</h2>
-      <div style={{ display: "grid", gap: 12, marginTop: 14 }}>
-        {[1, 2, 3].map((item) => (
-          <div key={item} style={bulletRowStyle}>
-            <div style={bulletDotStyle} />
-            <div style={{ display: "grid", gap: 8 }}>
-              <div style={loadingBarStyle(item === 1 ? "92%" : item === 2 ? "86%" : "78%")} />
-              <div style={loadingBarStyle(item === 1 ? "76%" : item === 2 ? "68%" : "62%")} />
-            </div>
-          </div>
-        ))}
-      </div>
     </section>
   );
 }
@@ -1779,7 +1546,7 @@ export default async function StockNewsPage({ params }: Props) {
 
   const {
     quote, history, companyName, news, trend, lastClose, lastMA50, lastMA200,
-    lastRsi, isInvalidTicker, isDataUnavailable, priceVs50, priceVs200,
+    lastRsi, isDataUnavailable, priceVs50, priceVs200,
     recentHigh, recentLow, newsScore, earningsScore, detailedNews, compactNews,
   } = newsData;
 
@@ -1793,16 +1560,6 @@ export default async function StockNewsPage({ params }: Props) {
 
   const summaryByTitle = Object.fromEntries(
     detailedNews.map((item) => [item.title, getArticleSnippet(item, upper)]),
-  );
-
-  const aiData = await getStockNewsAiData(
-    {
-      symbol: upper, companyName, quote: null, history: [], news: [], trend,
-      lastClose: null, lastMA50: null, lastMA200: null, lastRsi, priceVs50, priceVs200,
-      recentHigh, recentLow, isInvalidTicker, isDataUnavailable, newsScore, earningsScore,
-      rankedNews: detailedNews, detailedNews, compactNews,
-    },
-    { includeInsight: true },
   );
 
   return (
@@ -1908,13 +1665,28 @@ export default async function StockNewsPage({ params }: Props) {
 
         <section className="newsGrid" style={newsGridStyle}>
           <div className="newsMainColumn" style={{ display: "grid", gap: 18 }}>
-            <Suspense fallback={<DetailedNewsFallback symbol={upper} detailedNews={detailedNews} compactNews={compactNews} />}>
-              <DetailedNewsAiSection aiData={aiData} symbol={upper} companyName={companyName} trend={trend} newsScore={newsScore} detailedNews={detailedNews} compactNews={compactNews} />
-            </Suspense>
+            <DetailedNewsSection symbol={upper} companyName={companyName} trend={trend} newsScore={newsScore} detailedNews={detailedNews} compactNews={compactNews} />
             <EarningsNewsSection symbol={upper} earningsNews={earningsNewsItems} latestEarnings={latestEarnings} />
-            <Suspense fallback={<InsightFallbackCard />}>
-              <InsightAiCard aiData={aiData} symbol={upper} companyName={companyName} trend={trend} newsScore={newsScore} earningsScore={earningsScore} lastRsi={lastRsi} priceVs50={priceVs50} priceVs200={priceVs200} recentHigh={recentHigh} recentLow={recentLow} detailedNews={detailedNews} fallbackBeyondHeadline={beyondHeadline} />
-            </Suspense>
+            <AiInsightCard
+              symbol={upper}
+              companyName={companyName}
+              trend={trend}
+              newsScore={{ score: newsScore.score, tone: newsScore.tone, label: newsScore.label }}
+              earningsScore={{ label: earningsScore.label }}
+              lastRsi={lastRsi}
+              priceVs50={priceVs50}
+              priceVs200={priceVs200}
+              recentHigh={recentHigh}
+              recentLow={recentLow}
+              items={detailedNews.map((item) => ({
+                title: item.title,
+                source: item.source,
+                pubDate: item.pubDate,
+                description: item.description,
+              }))}
+              fallbackBeyondHeadline={beyondHeadline}
+              fallbackWhatItMeans={whatItMeans}
+            />
           </div>
 
           <aside className="newsSidebar" style={{ display: "grid", gap: 18 }}>
@@ -1934,9 +1706,6 @@ export default async function StockNewsPage({ params }: Props) {
               </div>
             </section>
             <LatestEarningsCard earnings={latestEarnings} symbol={upper} />
-            <Suspense fallback={<GoingForwardFallbackCard />}>
-              <GoingForwardAiCard aiData={aiData} symbol={upper} companyName={companyName} trend={trend} newsScore={newsScore} earningsScore={earningsScore} lastRsi={lastRsi} priceVs50={priceVs50} priceVs200={priceVs200} recentHigh={recentHigh} recentLow={recentLow} detailedNews={detailedNews} fallbackWhatItMeans={whatItMeans} />
-            </Suspense>
             <section style={sidebarCardStyle}>
               <div style={sectionEyebrowStyle}>Chart context</div>
               <h2 style={sectionTitleSmallStyle}>Technical Picture</h2>
@@ -1975,8 +1744,6 @@ export default async function StockNewsPage({ params }: Props) {
         @media (max-width: 1180px) { .newsWrap { padding: 22px 24px 38px; } .newsHeroShell { grid-template-columns: 1fr !important; } .newsGrid { grid-template-columns: 1fr !important; } }
         @media (max-width: 820px) { .newsWrap { padding: 18px 16px 32px; } .newsHeroTitle { font-size: 34px !important; line-height: 1.06 !important; letter-spacing: -0.045em !important; } .newsHeroLead { font-size: 15px !important; line-height: 1.7 !important; } .newsHeroMetricRow { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } .newsHeroCtaRow { flex-direction: column !important; align-items: stretch !important; } .newsHeroBtn { width: 100%; justify-content: center !important; } .newsBottomStrip { flex-direction: column !important; align-items: stretch !important; } .newsBottomActions { width: 100%; } }
         @media (max-width: 560px) { .newsWrap { padding: 14px 12px 26px; } .newsHeroShell { grid-template-columns: 1fr !important; border-radius: 22px !important; padding: 16px !important; } .newsHeroTitle { font-size: 28px !important; line-height: 1.08 !important; letter-spacing: -0.035em !important; } .newsHeroLead { font-size: 14px !important; line-height: 1.65 !important; } .newsHeroMetricRow { grid-template-columns: 1fr !important; } .compactNewsRow { grid-template-columns: 1fr !important; } .newsBottomActions { display: grid !important; grid-template-columns: 1fr !important; width: 100%; } .newsBottomActions a { width: 100%; justify-content: center !important; } .newsMainColumn, .newsSidebar { min-width: 0; } .newsSidebar section, .newsMainColumn section, .compactNewsRow, .newsHeroRight > div, .newsHeroMetricRow > div { min-width: 0; } }
-        @keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
-        .shimmer { background: linear-gradient(90deg, rgba(30,41,59,0.9) 0%, rgba(71,85,105,0.55) 50%, rgba(30,41,59,0.9) 100%); background-size: 800px 100%; animation: shimmer 1.4s infinite linear; }
       `}</style>
     </main>
   );
@@ -2052,7 +1819,6 @@ const miniScoreNumberStyle: CSSProperties = { marginTop: 8, fontSize: 24, lineHe
 const miniScoreLabelStyle: CSSProperties = { marginTop: 6, fontSize: 13, color: "rgba(241,245,249,0.76)" };
 const newsGridStyle: CSSProperties = {};
 const editorialCardStyle: CSSProperties = { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 24, padding: 20, background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.025))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" };
-const featuredInsightShellStyle: CSSProperties = { border: "1px solid rgba(59,130,246,0.22)", borderRadius: 24, padding: 20, background: "linear-gradient(135deg, rgba(59,130,246,0.10), rgba(7,12,22,0.96))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" };
 function earningsCardStyle(tone: ScoreTone): CSSProperties { const toneMap = { green: { border: "rgba(34,197,94,0.24)", bg: "linear-gradient(135deg, rgba(34,197,94,0.09), rgba(255,255,255,0.022))" }, yellow: { border: "rgba(250,204,21,0.24)", bg: "linear-gradient(135deg, rgba(250,204,21,0.09), rgba(255,255,255,0.022))" }, red: { border: "rgba(239,68,68,0.26)", bg: "linear-gradient(135deg, rgba(239,68,68,0.10), rgba(255,255,255,0.022))" } } as const; return { border: `1px solid ${toneMap[tone].border}`, borderRadius: 20, padding: 18, background: toneMap[tone].bg, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" }; }
 function earningsTonePillStyle(tone: ScoreTone): CSSProperties { const toneMap = { green: { border: "rgba(34,197,94,0.32)", color: "#bbf7d0", bg: "rgba(34,197,94,0.12)" }, yellow: { border: "rgba(250,204,21,0.32)", color: "#fde68a", bg: "rgba(250,204,21,0.12)" }, red: { border: "rgba(239,68,68,0.34)", color: "#fecaca", bg: "rgba(239,68,68,0.13)" } } as const; return { display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "7px 10px", borderRadius: 999, border: `1px solid ${toneMap[tone].border}`, background: toneMap[tone].bg, color: toneMap[tone].color, fontSize: 12, fontWeight: 950, textTransform: "uppercase", letterSpacing: "0.06em" }; }
 const earningsDateRowStyle: CSSProperties = { marginTop: 14, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 };
@@ -2089,9 +1855,6 @@ const newsSourcePillStyle: CSSProperties = { display: "inline-flex", alignItems:
 const newsDateStyle: CSSProperties = { fontSize: 12, fontWeight: 700, color: "rgba(241,245,249,0.58)" };
 const newsHeadlineStyle: CSSProperties = { margin: "12px 0 0 0", fontSize: 22, lineHeight: 1.32, letterSpacing: "-0.02em", color: "#f8fafc" };
 const newsSummaryStyle: CSSProperties = { margin: "10px 0 0 0", fontSize: 15, lineHeight: 1.72, color: "rgba(241,245,249,0.82)" };
-const whyItMattersBoxStyle: CSSProperties = { marginTop: 14, border: "1px solid rgba(59,130,246,0.16)", borderRadius: 14, padding: 12, background: "linear-gradient(135deg, rgba(59,130,246,0.08), rgba(255,255,255,0.02))" };
-const whyItMattersLabelStyle: CSSProperties = { fontSize: 11, fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(191,219,254,0.86)" };
-const whyItMattersTextStyle: CSSProperties = { marginTop: 7, fontSize: 14, lineHeight: 1.65, color: "rgba(241,245,249,0.82)" };
 const sourceFooterStyle: CSSProperties = { marginTop: 12, fontSize: 12, lineHeight: 1.5, color: "rgba(241,245,249,0.48)" };
 const compactFeedLabelStyle: CSSProperties = { fontSize: 12, fontWeight: 850, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(241,245,249,0.56)" };
 const compactNewsRowStyle: CSSProperties = { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 14, padding: 12, background: "rgba(255,255,255,0.02)" };
@@ -2106,9 +1869,6 @@ function signalBoxStyle(tone: "green" | "red"): CSSProperties { return { border:
 const signalBoxTitleStyle: CSSProperties = { fontSize: 12, fontWeight: 900, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(241,245,249,0.8)" };
 const signalBoxItemStyle: CSSProperties = { marginTop: 8, fontSize: 13, lineHeight: 1.55, color: "rgba(241,245,249,0.78)" };
 const signalBoxEmptyStyle: CSSProperties = { marginTop: 8, fontSize: 13, lineHeight: 1.55, color: "rgba(241,245,249,0.58)" };
-const bulletRowStyle: CSSProperties = { display: "grid", gridTemplateColumns: "10px minmax(0, 1fr)", gap: 12, alignItems: "start" };
-const bulletDotStyle: CSSProperties = { width: 10, height: 10, borderRadius: 999, marginTop: 7, background: "linear-gradient(135deg, #60a5fa, #22c55e)", boxShadow: "0 0 0 4px rgba(59,130,246,0.10)" };
-const bulletTextStyle: CSSProperties = { fontSize: 15, lineHeight: 1.7, color: "rgba(241,245,249,0.84)" };
 const bottomStripStyle: CSSProperties = { marginTop: 22, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 22, padding: 18, background: "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02))", display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "center" };
 const bottomStripTitleStyle: CSSProperties = { fontSize: 22, lineHeight: 1.1, fontWeight: 900, letterSpacing: "-0.03em" };
 const bottomStripTextStyle: CSSProperties = { marginTop: 8, maxWidth: 760, fontSize: 14, lineHeight: 1.65, color: "rgba(241,245,249,0.76)" };
