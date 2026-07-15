@@ -196,7 +196,7 @@ function ChartWatermark() {
           whiteSpace: "nowrap",
         }}
       >
-        MyStockHarbor.com
+        MyStockHarbor
       </span>
     </div>
   );
