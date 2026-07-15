@@ -1,7 +1,11 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import type React from "react";
-import { getUpcomingConfirmedIpos, type ConfirmedIpo } from "@/lib/server/ipoCalendar";
+import {
+  getUpcomingConfirmedIpos,
+  getRecentIpos,
+  type ConfirmedIpo,
+} from "@/lib/server/ipoCalendar";
 
 const PAGE_TITLE = "Upcoming IPOs This Month | Confirmed IPO Calendar | MyStockHarbor";
 const PAGE_DESCRIPTION =
@@ -79,8 +83,86 @@ function formatCompact(value: number | null) {
   return value.toLocaleString("en-US");
 }
 
+function IpoTable({
+  ipos,
+  emptyMessage,
+  dateColumnLabel,
+}: {
+  ipos: ConfirmedIpo[];
+  emptyMessage: string;
+  dateColumnLabel: string;
+}) {
+  if (ipos.length === 0) {
+    return (
+      <div style={{ padding: 32, textAlign: "center", opacity: 0.75, fontSize: 15 }}>
+        {emptyMessage}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table
+        className="ipoCalendarTable"
+        style={{
+          width: "100%",
+          borderCollapse: "collapse",
+          fontSize: 14,
+          minWidth: 880,
+        }}
+      >
+        <thead>
+          <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.12)" }}>
+            <th style={thStyle}>{dateColumnLabel}</th>
+            <th style={thStyle}>Symbol</th>
+            <th style={thStyle}>Company Name</th>
+            <th style={thStyle}>Exchange</th>
+            <th style={{ ...thStyle, textAlign: "right" }}>Price Range</th>
+            <th style={{ ...thStyle, textAlign: "right" }}>Shares Offered</th>
+            <th style={{ ...thStyle, textAlign: "right" }}>Deal Size</th>
+            <th style={{ ...thStyle, textAlign: "right" }}>Market Cap</th>
+            <th style={{ ...thStyle, textAlign: "right" }}>Revenue</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ipos.map((ipo: ConfirmedIpo) => (
+            <tr
+              key={`${ipo.symbol}-${ipo.date}`}
+              style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+            >
+              <td style={tdStyle}>{formatDate(ipo.date)}</td>
+              <td style={tdStyle}>
+                <Link
+                  href={`/stock/${encodeURIComponent(ipo.symbol)}`}
+                  style={{ color: "#93c5fd", textDecoration: "none", fontWeight: 700 }}
+                >
+                  {ipo.symbol}
+                </Link>
+              </td>
+              <td style={tdStyle}>{ipo.company}</td>
+              <td style={tdStyle}>{ipo.exchange ?? "-"}</td>
+              <td style={{ ...tdStyle, textAlign: "right" }}>
+                {formatPriceRange(ipo.priceRangeLow, ipo.priceRangeHigh)}
+              </td>
+              <td style={{ ...tdStyle, textAlign: "right" }}>
+                {formatShares(ipo.sharesOffered)}
+              </td>
+              <td style={{ ...tdStyle, textAlign: "right" }}>{formatCompact(ipo.dealSize)}</td>
+              <td style={{ ...tdStyle, textAlign: "right" }}>{formatCompact(ipo.marketCap)}</td>
+              <td style={{ ...tdStyle, textAlign: "right" }}>{formatCompact(ipo.revenue)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default async function UpcomingIposPage() {
-  const ipos = await getUpcomingConfirmedIpos();
+  const [ipos, recentIpos] = await Promise.all([
+    getUpcomingConfirmedIpos(),
+    getRecentIpos(),
+  ]);
 
   const ipoJsonLd = {
     "@context": "https://schema.org",
@@ -212,75 +294,59 @@ export default async function UpcomingIposPage() {
               borderRadius: 16,
               overflow: "hidden",
               boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
+              marginBottom: 32,
             }}
           >
-            {ipos.length === 0 ? (
-              <div style={{ padding: 32, textAlign: "center", opacity: 0.75, fontSize: 15 }}>
-                No confirmed IPOs are currently scheduled in the next 30 days.
-                Check back soon — this list updates as new deals are priced.
-              </div>
-            ) : (
-              <div style={{ overflowX: "auto" }}>
-                <table
-                  className="ipoCalendarTable"
-                  style={{
-                    width: "100%",
-                    borderCollapse: "collapse",
-                    fontSize: 14,
-                    minWidth: 880,
-                  }}
-                >
-                  <thead>
-                    <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.12)" }}>
-                      <th style={thStyle}>IPO Date</th>
-                      <th style={thStyle}>Symbol</th>
-                      <th style={thStyle}>Company Name</th>
-                      <th style={thStyle}>Exchange</th>
-                      <th style={{ ...thStyle, textAlign: "right" }}>Price Range</th>
-                      <th style={{ ...thStyle, textAlign: "right" }}>Shares Offered</th>
-                      <th style={{ ...thStyle, textAlign: "right" }}>Deal Size</th>
-                      <th style={{ ...thStyle, textAlign: "right" }}>Market Cap</th>
-                      <th style={{ ...thStyle, textAlign: "right" }}>Revenue</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ipos.map((ipo: ConfirmedIpo) => (
-                      <tr
-                        key={`${ipo.symbol}-${ipo.date}`}
-                        style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
-                      >
-                        <td style={tdStyle}>{formatDate(ipo.date)}</td>
-                        <td style={tdStyle}>
-                          <Link
-                            href={`/stock/${encodeURIComponent(ipo.symbol)}`}
-                            style={{ color: "#93c5fd", textDecoration: "none", fontWeight: 700 }}
-                          >
-                            {ipo.symbol}
-                          </Link>
-                        </td>
-                        <td style={tdStyle}>{ipo.company}</td>
-                        <td style={tdStyle}>{ipo.exchange ?? "-"}</td>
-                        <td style={{ ...tdStyle, textAlign: "right" }}>
-                          {formatPriceRange(ipo.priceRangeLow, ipo.priceRangeHigh)}
-                        </td>
-                        <td style={{ ...tdStyle, textAlign: "right" }}>
-                          {formatShares(ipo.sharesOffered)}
-                        </td>
-                        <td style={{ ...tdStyle, textAlign: "right" }}>
-                          {formatCompact(ipo.dealSize)}
-                        </td>
-                        <td style={{ ...tdStyle, textAlign: "right" }}>
-                          {formatCompact(ipo.marketCap)}
-                        </td>
-                        <td style={{ ...tdStyle, textAlign: "right" }}>
-                          {formatCompact(ipo.revenue)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <IpoTable
+              ipos={ipos}
+              dateColumnLabel="IPO Date"
+              emptyMessage="No confirmed IPOs are currently scheduled in the next 30 days. Check back soon — this list updates as new deals are priced."
+            />
+          </section>
+
+          <section
+            className="ipoCalendarIntroCard"
+            style={{
+              background: "#0b1220",
+              border: "1px solid rgba(255,255,255,0.12)",
+              borderRadius: 16,
+              padding: 24,
+              boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
+              marginBottom: 24,
+            }}
+          >
+            <h2
+              style={{
+                marginTop: 0,
+                marginBottom: 12,
+                fontSize: 26,
+                lineHeight: 1.1,
+                fontWeight: 900,
+              }}
+            >
+              Recent IPOs
+            </h2>
+
+            <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92, marginBottom: 0 }}>
+              Confirmed IPOs that listed within the last 30 days, most recent
+              first.
+            </p>
+          </section>
+
+          <section
+            style={{
+              background: "#0b1220",
+              border: "1px solid rgba(255,255,255,0.12)",
+              borderRadius: 16,
+              overflow: "hidden",
+              boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
+            }}
+          >
+            <IpoTable
+              ipos={recentIpos}
+              dateColumnLabel="Listing Date"
+              emptyMessage="No confirmed IPOs listed in the last 30 days."
+            />
           </section>
 
           <p style={{ fontSize: 12.5, opacity: 0.55, marginTop: 16 }}>
