@@ -52,6 +52,13 @@ export async function GET(request: Request) {
 
   const earningsCalendar = await fetchJson(url);
 
+  // Also check whether a bulk symbol->name/exchange list is reachable, since
+  // earnings-calendar rows only carry symbol/date/EPS/revenue -- no company
+  // name or exchange -- and enriching ~2000+ rows one profile call at a time
+  // isn't viable. If this is accessible, one cached daily fetch could supply
+  // name+exchange for every row instead.
+  const stockList = await fetchJson(`${base}/stock-list?apikey=${FMP_API_KEY}`);
+
   return NextResponse.json({
     checkedEndpoint: "/stable/earnings-calendar",
     from,
@@ -62,6 +69,12 @@ export async function GET(request: Request) {
     sample: Array.isArray(earningsCalendar.json)
       ? earningsCalendar.json.slice(0, 5)
       : earningsCalendar,
+    stockList: {
+      status: stockList.status,
+      ok: stockList.ok,
+      count: Array.isArray(stockList.json) ? stockList.json.length : null,
+      sample: Array.isArray(stockList.json) ? stockList.json.slice(0, 5) : stockList,
+    },
     note: "API key is not returned by this debug route.",
   });
 }
