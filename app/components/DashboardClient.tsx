@@ -227,13 +227,6 @@ const CANDLE_ICON = (
     <line x1="12" y1="2.5" x2="12" y2="12.5" /><rect x="10" y="5.5" width="4" height="4.6" rx="0.6" />
   </svg>
 );
-// "Fit all history" bracket-frame icon (replaces the worded MAX button).
-const FIT_ICON = (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M2 5.5 V2.5 H5.5" /><path d="M10.5 2.5 H13.5 V5.5" /><path d="M13.5 10.5 V13.5 H10.5" /><path d="M5.5 13.5 H2.5 V10.5" />
-  </svg>
-);
-
 type ChartFocus = { kind: "ath" | "rangeHigh"; price: number; date: string; label: string };
 
 // Finds the offset (bars back from "now") that puts the bar nearest `iso`
@@ -613,16 +606,6 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
       </div>
     );
   }
-  // "Fit all history" button (was the worded MAX button) — sits with the zoom
-  // controls on line 2.
-  function MaxButton() {
-    return (
-      <button type="button" onClick={() => { setVisibleBars(Math.max(totalPoints, 2)); setWindowOffset(0); }} title="Show all history" aria-label="Show all history"
-        style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 36, height: 34, borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, cursor: "pointer", flex: "0 0 auto" }}>
-        {FIT_ICON}
-      </button>
-    );
-  }
   function AssetTypeToggle(props: { compact?: boolean }) {
     const opts: { key: AssetType; label: string }[] = [{ key: "stock", label: "Stocks" }, { key: "crypto", label: "Crypto" }];
     return (<div style={{ display: "flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3 }}>
@@ -633,14 +616,15 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     return (<section style={{ border: `1px solid ${COLORS.border}`, borderRadius: 16, background: COLORS.cardBg, color: COLORS.cardFg, overflow: props.allowOverflow ? "visible" : "hidden", minWidth: 0, ...props.style }}>{props.title || props.right ? <div style={{ padding: "13px 16px", borderBottom: `1px solid ${COLORS.borderSoft}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}><div style={{ fontWeight: 800, fontSize: 14, color: COLORS.mutedFg }}>{props.title}</div>{props.right}</div> : null}<div style={{ padding: 16, ...props.bodyStyle }}>{props.children}</div></section>);
   }
   function BreakdownHelpButton() { return (<div style={{ display: "flex", alignItems: "center", gap: 10 }}><HelpTip text={customMode ? "This breakdown is showing the indicators you currently selected on the chart." : "Breakdown shows the main dashboard indicators including trend, momentum, stretch, volatility and divergence clues."} isDark={true} /><Link href="/learn" style={{ color: "#9cc0ff", textDecoration: "none", fontWeight: 800, fontSize: 12 }}>Learn more →</Link></div>); }
+  // Zoom + / − cluster. On Basic this now rides on the mode-switch line (line 1)
+  // rather than line 2, so the whole toolbar collapses to 2 lines on phone
+  // portrait. Pan (← →) lives as overlay arrows on the chart; the fit-all
+  // bracket button and the ⤢ expand button were removed to save space.
   function ChartToolbar() {
     const zBtn: React.CSSProperties = { padding: "7px 11px", borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, cursor: "pointer", fontWeight: 800, lineHeight: 1, fontSize: 14 };
-    // Pan (← →) now lives as overlay arrows on the chart; the bar count and the
-    // ⤢ expand button were removed to save vertical space on mobile.
-    return (<div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "nowrap" }}>
-      <button onClick={() => { setVisibleBars(d => Math.max(2, Math.floor(d * 0.8))); setWindowOffset(0); }} title="Zoom in" style={zBtn}>+</button>
-      <button onClick={() => { setVisibleBars(d => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25))); setWindowOffset(0); }} title="Zoom out" style={zBtn}>−</button>
-      <MaxButton />
+    return (<div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "nowrap", flex: "0 0 auto" }}>
+      <button type="button" onClick={() => { setVisibleBars(d => Math.max(2, Math.floor(d * 0.8))); setWindowOffset(0); }} title="Zoom in" aria-label="Zoom in" style={zBtn}>+</button>
+      <button type="button" onClick={() => { setVisibleBars(d => Math.min(Math.max(2, totalPoints || d), Math.ceil(d * 1.25))); setWindowOffset(0); }} title="Zoom out" aria-label="Zoom out" style={zBtn}>−</button>
     </div>);
   }
 
@@ -772,11 +756,11 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
             {!isMobile ? <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>{modeTitle}</div> : null}
             <div style={{ display: "flex", gap: isMobile ? 6 : 8, alignItems: "center", flexWrap: "wrap" }}>
               <ChartModeSwitcher compact={isMobile} />
-              {/* On Basic: D/W/M toggle sits on this line (the mode-switch line).
-                  Fullscreen is hidden on Basic (no benefit); shown on the other
-                  modes. The "fit all" button lives with the zoom controls on
-                  line 2. */}
-              {chartMode === "basic" ? <TimeframeToggle /> : null}
+              {/* On Basic: the zoom + / − controls ride on this (mode-switch)
+                  line so the toolbar fits in 2 lines on phone portrait. D/W/M
+                  and the Indicator + Line/Candle controls sit on line 2 below.
+                  Fullscreen is hidden on Basic (no benefit); shown elsewhere. */}
+              {chartMode === "basic" ? <ChartToolbar /> : null}
               {chartMode !== "basic" ? <FullscreenButton /> : null}
             </div>
           </div>
@@ -794,7 +778,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
                 </div> : null}
               </div>
               <div style={{ display: "flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3, flex: "0 0 auto" }}>{(["line", "candles"] as const).map(type => <button key={type} type="button" onClick={() => setChartType(type)} title={type === "line" ? "Line" : "Candles"} aria-label={type === "line" ? "Line" : "Candles"} aria-pressed={chartType === type} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: 7, padding: "6px 11px", background: chartType === type ? "rgba(47,107,255,0.28)" : "transparent", color: chartType === type ? "#dbeafe" : COLORS.mutedFg, cursor: "pointer", boxShadow: chartType === type ? "inset 0 0 0 1px rgba(96,165,250,0.36)" : "none" }}>{type === "line" ? LINE_ICON : CANDLE_ICON}</button>)}</div>
-              <div style={{ flex: "0 0 auto" }}><ChartToolbar /></div>
+              <div style={{ flex: "0 0 auto" }}><TimeframeToggle /></div>
             </div>
           ) : null}
         </div>
