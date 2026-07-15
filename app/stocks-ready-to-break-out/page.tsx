@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     title: "Stocks Ready to Break Out | MyStockHarbor",
     description:
       "Learn how traders identify stocks that may be approaching breakout setups.",
-    url: "https://mystockharbor.com/stocks-ready-to-break-out",
+    url: "https://www.mystockharbor.com/stocks-ready-to-break-out",
     siteName: "MyStockHarbor",
     type: "article",
   },

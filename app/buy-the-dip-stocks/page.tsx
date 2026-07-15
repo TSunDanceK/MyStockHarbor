@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     title: "Buy the Dip Stocks | MyStockHarbor",
     description:
       "A beginner-friendly guide to buy-the-dip stocks, pullback setups and how to explore live stock ideas.",
-    url: "https://mystockharbor.com/buy-the-dip-stocks",
+    url: "https://www.mystockharbor.com/buy-the-dip-stocks",
     siteName: "MyStockHarbor",
     type: "article",
   },
@@ -627,4 +627,3 @@ const inlineLinkStyle: React.CSSProperties = {
   fontWeight: 800,
   textDecoration: "none",
 };
-
