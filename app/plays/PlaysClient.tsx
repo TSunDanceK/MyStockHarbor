@@ -18,6 +18,7 @@ type PlayChartPoint = {
 
 type PlayItem = {
   symbol: string;
+  companyName?: string;
   play: "ascendingTriangle";
   timeframe: "M" | "ST" | "D" | "W";
   score: number;
@@ -80,13 +81,6 @@ function toneBackground(tone?: PlayTone) {
   if (tone === "orange") return "rgba(251,146,60,0.12)";
   if (tone === "red") return "rgba(239,68,68,0.12)";
   return "rgba(255,255,255,0.05)";
-}
-
-function setupLabel(score: number) {
-  if (score >= 80) return "A+ setup";
-  if (score >= 70) return "Strong setup";
-  if (score >= 60) return "Developing setup";
-  return "Loose setup";
 }
 
 function timeframeLabel(timeframe: "M" | "ST" | "D" | "W") {
@@ -474,15 +468,15 @@ export default function PlaysClient() {
                         justifyContent: "space-between",
                         gap: 12,
                         alignItems: "start",
-                        flexWrap: "wrap",
                       }}
                     >
-                      <div>
+                      <div style={{ minWidth: 0, flex: "1 1 auto" }}>
                         <div
                           style={{
                             display: "flex",
                             alignItems: "center",
                             gap: 8,
+                            minWidth: 0,
                           }}
                         >
                           <span
@@ -492,6 +486,7 @@ export default function PlaysClient() {
                               borderRadius: "50%",
                               background: toneColour(item.tone),
                               boxShadow: `0 0 18px ${toneColour(item.tone)}`,
+                              flex: "0 0 auto",
                             }}
                           />
                           <h3
@@ -500,10 +495,26 @@ export default function PlaysClient() {
                               color: "#f8fafc",
                               fontSize: 24,
                               letterSpacing: "-0.04em",
+                              flex: "0 0 auto",
                             }}
                           >
                             {item.symbol}
                           </h3>
+                          {item.companyName ? (
+                            <span
+                              style={{
+                                minWidth: 0,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                color: "#94a3b8",
+                                fontSize: 13,
+                                fontWeight: 700,
+                              }}
+                            >
+                              {item.companyName}
+                            </span>
+                          ) : null}
                         </div>
 
                         <div
@@ -525,6 +536,7 @@ export default function PlaysClient() {
                           borderRadius: 14,
                           background: toneBackground(item.tone),
                           border: `1px solid ${toneColour(item.tone)}55`,
+                          flex: "0 0 auto",
                         }}
                       >
                         <div
@@ -545,7 +557,7 @@ export default function PlaysClient() {
                             fontWeight: 900,
                           }}
                         >
-                          {setupLabel(item.score)}
+                          Score
                         </div>
                       </div>
                     </div>
