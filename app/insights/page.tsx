@@ -1,32 +1,59 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { getAllPosts } from "@/lib/blog";
+import { getPaginatedPosts } from "@/lib/blog";
 import { getLatestYouTubeVideos } from "@/lib/youtube";
 import { getAllVideoMeta } from "@/lib/videoContent";
 import InsightsPageClient from "./InsightsPageClient";
 
-export const metadata: Metadata = {
-  title: "Stock Market Insights, Trade Ideas & Market Analysis | MyStockHarbor",
-  description:
-    "Read daily stock market insights, chart-based trade ideas, technical analysis updates, and broader market analysis from MyStockHarbor.",
-  alternates: { canonical: "https://www.mystockharbor.com/insights" },
-  openGraph: {
-    title: "Stock Market Insights, Trade Ideas & Market Analysis | MyStockHarbor",
-    description: "Read daily stock market insights, chart-based trade ideas, technical analysis updates, and broader market analysis from MyStockHarbor.",
-    url: "https://www.mystockharbor.com/insights",
-    siteName: "MyStockHarbor",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Stock Market Insights, Trade Ideas & Market Analysis | MyStockHarbor",
-    description: "Read daily stock market insights, chart-based trade ideas, technical analysis updates, and broader market analysis from MyStockHarbor.",
-  },
+const PAGE_SIZE = 20;
+const BASE_URL = "https://www.mystockharbor.com/insights";
+const TITLE = "Stock Market Insights, Trade Ideas & Market Analysis | MyStockHarbor";
+const DESCRIPTION =
+  "Read daily stock market insights, chart-based trade ideas, technical analysis updates, and broader market analysis from MyStockHarbor.";
+
+type Props = {
+  searchParams: Promise<{ page?: string }>;
 };
 
-export default async function InsightsPage() {
-  const [posts, videos, videoMeta] = await Promise.all([
-    Promise.resolve(getAllPosts()),
+function parsePage(value: string | undefined): number {
+  const parsed = Number.parseInt(value ?? "1", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+}
+
+export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
+  const { page: pageParam } = await searchParams;
+  const requestedPage = parsePage(pageParam);
+
+  // Give every paginated page its own canonical instead of pointing them
+  // all back at page 1 - avoids duplicate-content canonical confusion as
+  // the archive grows into many pages.
+  const canonical = requestedPage > 1 ? `${BASE_URL}?page=${requestedPage}` : BASE_URL;
+  const title = requestedPage > 1 ? `${TITLE} — Page ${requestedPage}` : TITLE;
+
+  return {
+    title,
+    description: DESCRIPTION,
+    alternates: { canonical },
+    openGraph: {
+      title,
+      description: DESCRIPTION,
+      url: canonical,
+      siteName: "MyStockHarbor",
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description: DESCRIPTION,
+    },
+  };
+}
+
+export default async function InsightsPage({ searchParams }: Props) {
+  const { page: pageParam } = await searchParams;
+  const requestedPage = parsePage(pageParam);
+
+  const [{ posts, page, totalPages, totalCount }, videos, videoMeta] = await Promise.all([
+    Promise.resolve(getPaginatedPosts(requestedPage, PAGE_SIZE)),
     getLatestYouTubeVideos(20),
     Promise.resolve(getAllVideoMeta()),
   ]);
@@ -46,7 +73,7 @@ export default async function InsightsPage() {
         "@id": "https://www.mystockharbor.com/insights#webpage",
         url: "https://www.mystockharbor.com/insights",
         name: "Stock Market Insights & Trade Ideas",
-        description: "Read daily stock market insights, chart-based trade ideas, and technical analysis updates from MyStockHarbor.",
+        description: DESCRIPTION,
         isPartOf: { "@type": "WebSite", "@id": "https://www.mystockharbor.com/#website", name: "MyStockHarbor", url: "https://www.mystockharbor.com" },
         about: { "@type": "Thing", name: "Stock market insights and technical analysis" },
         publisher: { "@id": "https://www.mystockharbor.com/#organization" },
@@ -87,7 +114,14 @@ export default async function InsightsPage() {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(insightsJsonLd) }} />
-      <InsightsPageClient posts={posts} videos={videos} videoMeta={videoMeta} />
+      <InsightsPageClient
+        posts={posts}
+        videos={videos}
+        videoMeta={videoMeta}
+        page={page}
+        totalPages={totalPages}
+        totalCount={totalCount}
+      />
     </>
   );
 }
