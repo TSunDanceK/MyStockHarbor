@@ -1,0 +1,67 @@
+import { NextResponse } from "next/server";
+
+// Debug-only route (same shape as app/api/debug/ipo-calendar/route.ts) to
+// confirm the earnings-calendar endpoint is actually reachable on the
+// current FMP subscription and see its real field names, before building
+// any UI on top of it. The historical index-constituent endpoints turned
+// out to be plan-restricted (HTTP 402) despite looking like they should be
+// covered, so this check happens first every time now. Not linked from
+// anywhere in the UI.
+
+const FMP_API_KEY = process.env.FMP_API_KEY;
+
+async function fetchJson(url: string) {
+  const response = await fetch(url, { next: { revalidate: 0 } });
+  const text = await response.text();
+
+  try {
+    return { ok: response.ok, status: response.status, json: JSON.parse(text) };
+  } catch {
+    return {
+      ok: response.ok,
+      status: response.status,
+      json: null,
+      rawText: text.slice(0, 1000),
+    };
+  }
+}
+
+function toIsoDate(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+export async function GET(request: Request) {
+  if (!FMP_API_KEY) {
+    return NextResponse.json(
+      { error: "Missing FMP_API_KEY environment variable." },
+      { status: 500 }
+    );
+  }
+
+  const { searchParams } = new URL(request.url);
+  const now = new Date();
+  const in14Days = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+  const from = searchParams.get("from") || toIsoDate(now);
+  const to = searchParams.get("to") || toIsoDate(in14Days);
+
+  const base = "https://financialmodelingprep.com/stable";
+  const url = `${base}/earnings-calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(
+    to
+  )}&apikey=${FMP_API_KEY}`;
+
+  const earningsCalendar = await fetchJson(url);
+
+  return NextResponse.json({
+    checkedEndpoint: "/stable/earnings-calendar",
+    from,
+    to,
+    status: earningsCalendar.status,
+    ok: earningsCalendar.ok,
+    count: Array.isArray(earningsCalendar.json) ? earningsCalendar.json.length : null,
+    sample: Array.isArray(earningsCalendar.json)
+      ? earningsCalendar.json.slice(0, 5)
+      : earningsCalendar,
+    note: "API key is not returned by this debug route.",
+  });
+}
