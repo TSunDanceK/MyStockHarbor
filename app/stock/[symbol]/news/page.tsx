@@ -1854,6 +1854,28 @@ export default async function StockNewsPage({ params }: Props) {
 
           <div className="newsHeroRight" style={heroRightStyle}>
             <div style={scorePanelStyle(newsScore.tone)}>
+              <div
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  top: 14,
+                  right: 16,
+                  pointerEvents: "none",
+                  userSelect: "none",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 16,
+                    fontWeight: 800,
+                    letterSpacing: "0.03em",
+                    textTransform: "uppercase",
+                    color: "rgba(226,232,240,0.30)",
+                  }}
+                >
+                  MyStockHarbor
+                </span>
+              </div>
               <NewsScoreGauge newsScore={newsScore} />
             </div>
             <div style={miniScoreGridStyle}>
@@ -1973,9 +1995,9 @@ const heroSecondaryCtaStyle: CSSProperties = { display: "inline-flex", alignItem
 const heroSubCopyStyle: CSSProperties = { marginTop: 10, fontSize: 13, lineHeight: 1.6, color: "rgba(241,245,249,0.62)" };
 
 function scorePanelStyle(tone: ScoreTone): CSSProperties {
-  if (tone === "green") return { border: "1px solid rgba(34,197,94,0.26)", borderRadius: 20, padding: 18, background: "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(7,16,12,0.96))" };
-  if (tone === "red") return { border: "1px solid rgba(248,113,113,0.24)", borderRadius: 20, padding: 18, background: "linear-gradient(135deg, rgba(248,113,113,0.16), rgba(18,10,10,0.96))" };
-  return { border: "1px solid rgba(250,204,21,0.24)", borderRadius: 20, padding: 18, background: "linear-gradient(135deg, rgba(250,204,21,0.14), rgba(18,16,8,0.96))" };
+  if (tone === "green") return { position: "relative", border: "1px solid rgba(34,197,94,0.26)", borderRadius: 20, padding: 18, background: "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(7,16,12,0.96))" };
+  if (tone === "red") return { position: "relative", border: "1px solid rgba(248,113,113,0.24)", borderRadius: 20, padding: 18, background: "linear-gradient(135deg, rgba(248,113,113,0.16), rgba(18,10,10,0.96))" };
+  return { position: "relative", border: "1px solid rgba(250,204,21,0.24)", borderRadius: 20, padding: 18, background: "linear-gradient(135deg, rgba(250,204,21,0.14), rgba(18,16,8,0.96))" };
 }
 
 const scorePanelKickerStyle: CSSProperties = { fontSize: 11, fontWeight: 950, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(255,255,255,0.76)" };
@@ -2003,31 +2025,6 @@ function NewsScoreGauge({ newsScore }: { newsScore: NewsScoreResult }) {
           <path d="M 24 122 A 96 96 0 0 1 216 122" fill="none" stroke="url(#newsGaugeWarmGradient)" strokeWidth="22" strokeLinecap="round" strokeDasharray={`${safeScore} 100`} pathLength={100} style={{ filter: `drop-shadow(0 0 10px ${colour}55)` }} />
           <circle cx={markerX} cy={markerY} r="8" fill={colour} stroke="rgba(255,255,255,0.88)" strokeWidth="3" style={{ filter: `drop-shadow(0 0 10px ${colour}88)` }} />
         </svg>
-        <div
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            top: 4,
-            left: 0,
-            right: 0,
-            display: "flex",
-            justifyContent: "center",
-            pointerEvents: "none",
-            userSelect: "none",
-          }}
-        >
-          <span
-            style={{
-              fontSize: 11,
-              fontWeight: 800,
-              letterSpacing: "0.05em",
-              textTransform: "uppercase",
-              color: "rgba(226,232,240,0.24)",
-            }}
-          >
-            MyStockHarbor
-          </span>
-        </div>
         <div style={{ position: "absolute", left: 0, right: 0, bottom: 18, display: "grid", justifyItems: "center", pointerEvents: "none" }}>
           <div style={scoreValueStyle}>{safeScore}/100</div>
           <div style={scoreLabelStyle(newsScore.tone)}>{newsScore.label}</div>
