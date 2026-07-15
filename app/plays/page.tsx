@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
-import PlaysClient from "./PlaysClient";
+import { headers } from "next/headers";
+import PlaysClient, { type PlaysPayload } from "./PlaysClient";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Stock Plays | Ascending Triangle Chart Setups | MyStockHarbor",
@@ -24,7 +27,45 @@ export const metadata: Metadata = {
   },
 };
 
-export default function PlaysPage() {
+async function getOriginFromHeaders() {
+  const headerStore = await headers();
+  const host =
+    headerStore.get("x-forwarded-host") ||
+    headerStore.get("host") ||
+    "www.mystockharbor.com";
+
+  const proto =
+    headerStore.get("x-forwarded-proto") ||
+    (host.includes("localhost") ? "http" : "https");
+
+  return `${proto}://${host}`;
+}
+
+// Server-side fetch of the same payload PlaysClient fetches client-side, so
+// crawlers (and the very first paint for real users) see the real scan
+// results instead of the "Loading chart-pattern plays..." skeleton. Cached
+// via Next's fetch Data Cache for a few minutes -- the /api/plays route
+// itself is also memoized (in-memory + Redis) for ~6 minutes, so this
+// rarely triggers a fresh scan.
+async function getInitialPlaysPayload(): Promise<PlaysPayload | null> {
+  try {
+    const origin = await getOriginFromHeaders();
+    const res = await fetch(`${origin}/api/plays`, {
+      next: { revalidate: 300 },
+    });
+
+    if (!res.ok) return null;
+
+    const data = (await res.json()) as PlaysPayload;
+    if (data?.error) return null;
+
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+export default async function PlaysPage() {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
@@ -39,6 +80,8 @@ export default function PlaysPage() {
     },
   };
 
+  const initialPayload = await getInitialPlaysPayload();
+
   return (
     <>
       <script
@@ -47,7 +90,7 @@ export default function PlaysPage() {
           __html: JSON.stringify(jsonLd),
         }}
       />
-      <PlaysClient />
+      <PlaysClient initialPayload={initialPayload} />
     </>
   );
 }

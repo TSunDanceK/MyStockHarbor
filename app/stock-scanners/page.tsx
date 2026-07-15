@@ -1,4 +1,40 @@
 import Link from "next/link";
+import type { Metadata } from "next";
+
+const PAGE_TITLE = "Stock Scanners Explained | How Traders Screen for Setups | MyStockHarbor";
+const PAGE_DESCRIPTION =
+  "Learn how traders use stock scanners to narrow the market down to a shortlist of setups worth reviewing - breakouts, oversold conditions, unusual volume and swing-trading indicators.";
+const PAGE_URL = "https://www.mystockharbor.com/stock-scanners";
+const OG_IMAGE_URL = "https://www.mystockharbor.com/og-image-v2.png";
+
+export const metadata: Metadata = {
+  title: PAGE_TITLE,
+  description: PAGE_DESCRIPTION,
+  alternates: { canonical: PAGE_URL },
+  robots: { index: true, follow: true },
+  openGraph: {
+    title: PAGE_TITLE,
+    description: PAGE_DESCRIPTION,
+    url: PAGE_URL,
+    siteName: "MyStockHarbor",
+    images: [
+      {
+        url: OG_IMAGE_URL,
+        width: 1200,
+        height: 630,
+        alt: "MyStockHarbor stock scanners guide",
+      },
+    ],
+    locale: "en_GB",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: PAGE_TITLE,
+    description: PAGE_DESCRIPTION,
+    images: [OG_IMAGE_URL],
+  },
+};
 
 export default function StockScannersPage() {
   return (
@@ -404,4 +440,3 @@ function ScannerCard({
     </Link>
   );
 }
-
