@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 
-// ── Company profile card ─────────────────────────────────────────────────────
+// -- Company profile card -----------------------------------------------------
 // Server-rendered "About" block built from the FMP company profile endpoint.
 // Presentational only (no hooks) so it renders into the crawlable initial HTML.
 
