@@ -152,6 +152,14 @@ type Props = {
   // elsewhere on the page instead.
   showTradingViewLink?: boolean;
   showTradeLink?: boolean;
+
+  // When true, PriceChart renders ONLY its own Basic SVG chart and hides its
+  // built-in "MyStockHarbor | TradingView" source toggle. Used by
+  // DashboardClient, which owns a 3-way Basic / Interactive / TradingView mode
+  // switch itself and renders the TradingView embed and Interactive chart
+  // separately. Default false preserves the standalone behaviour for other
+  // callers (SPXChartClient, InsightPostClient).
+  hideSourceToggle?: boolean;
 };
 
 // Fixed, non-interactive brand watermark rendered on top of the chart
@@ -229,6 +237,7 @@ export default function PriceChart(props: Props) {
     onToggleTradingView,
     showTradingViewLink = true,
     showTradeLink = true,
+    hideSourceToggle = false,
   } = props;
 
   const width = 760;
@@ -239,7 +248,13 @@ export default function PriceChart(props: Props) {
   // (see Props above); otherwise managed internally.
   const [internalShowTradingView, setInternalShowTradingView] = useState(false);
   const isTradingViewControlled = tradingViewActive !== undefined;
-  const showTradingView = isTradingViewControlled ? tradingViewActive! : internalShowTradingView;
+  // When hideSourceToggle is set, this component is Basic-only (the parent owns
+  // the mode switch), so never mount the internal TradingView embed.
+  const showTradingView = hideSourceToggle
+    ? false
+    : isTradingViewControlled
+    ? tradingViewActive!
+    : internalShowTradingView;
 
   function setTradingViewMode(next: boolean) {
     if (onToggleTradingView) onToggleTradingView(next);
@@ -1121,6 +1136,7 @@ export default function PriceChart(props: Props) {
               : `From ${series[0].date} → ${series[series.length - 1].date}`}
           </div>
 
+          {!hideSourceToggle ? (
           <div
             style={{
               display: "inline-flex",
@@ -1173,6 +1189,7 @@ export default function PriceChart(props: Props) {
               TradingView
             </button>
           </div>
+          ) : null}
         </div>
 
         {showTradingViewLink || showTradeLink ? (
