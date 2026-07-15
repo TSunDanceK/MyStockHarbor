@@ -2,6 +2,7 @@
 import type { Metadata } from "next";
 import { getDailyHistory } from "@/lib/server/historyCache";
 import type { LatestEarningsData } from "@/app/components/LatestEarningsCard";
+import type { CompanyProfile } from "@/app/components/CompanyProfile";
 import {
   computeIndicatorSeed,
   buildSeoTitle,
@@ -91,10 +92,10 @@ function emptyEarnings(): LatestEarningsData {
 
 // Fetch the structured earnings snapshot on the SERVER (same /api/stock-earnings
 // pipeline the Earnings page uses) and pass it down as a prop. This removes the
-// old client-side earnings round-trip and its loading flash. NOTE: the main
-// layout is still gated behind the client price/history load, so this data is
-// hydrated in — to get it into the crawlable initial HTML, de-gate the layout
-// from `priceLoading` (tracked follow-up) and flip the page's robots noindex.
+// old client-side earnings round-trip and its loading flash. The client is also
+// seeded with server-computed indicators (seed) and recent history
+// (initialHistory), so the whole layout renders into the crawlable initial HTML
+// instead of behind a "Loading…" gate.
 async function fetchLatestEarnings(symbol: string): Promise<LatestEarningsData> {
   try {
     const url = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mystockharbor.com"}/api/stock-earnings/${encodeURIComponent(symbol)}`;
@@ -104,6 +105,85 @@ async function fetchLatestEarnings(symbol: string): Promise<LatestEarningsData> 
   } catch {
     return emptyEarnings();
   }
+}
+
+function num(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value.replace(/,/g, ""));
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function str(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+// Fetch the FMP company profile on the SERVER so the description + fundamentals
+// render into the crawlable initial HTML (real per-company content = strong
+// "information gain" for indexing). Tries the stable endpoint first, then the
+// legacy v3 profile; maps both field-name variants defensively.
+async function fetchCompanyProfile(symbol: string): Promise<CompanyProfile | null> {
+  const apiKey = process.env.FMP_API_KEY;
+  if (!apiKey) return null;
+  const enc = encodeURIComponent(symbol);
+  const key = encodeURIComponent(apiKey);
+  const urls = [
+    `https://financialmodelingprep.com/stable/profile?symbol=${enc}&apikey=${key}`,
+    `https://financialmodelingprep.com/api/v3/profile/${enc}?apikey=${key}`,
+  ];
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { next: { revalidate: 60 * 60 * 24 } });
+      if (!res.ok) continue;
+      const json = await res.json();
+      const row = Array.isArray(json) ? json[0] : json;
+      if (!row || typeof row !== "object") continue;
+
+      // FMP splits the 52-week range as "164.08-260.10".
+      let rangeLow: number | null = null;
+      let rangeHigh: number | null = null;
+      const range = str(row.range);
+      if (range) {
+        const parts = range.split("-").map((p) => num(p.trim()));
+        if (parts.length === 2 && parts[0] != null && parts[1] != null) {
+          rangeLow = Math.min(parts[0], parts[1]);
+          rangeHigh = Math.max(parts[0], parts[1]);
+        }
+      }
+
+      const profile: CompanyProfile = {
+        companyName: str(row.companyName),
+        description: str(row.description),
+        sector: str(row.sector),
+        industry: str(row.industry),
+        ceo: str(row.ceo),
+        website: str(row.website),
+        employees: num(row.fullTimeEmployees) ?? num(row.employees),
+        exchange: str(row.exchangeShortName) ?? str(row.exchange),
+        country: str(row.country),
+        ipoDate: str(row.ipoDate),
+        isin: str(row.isin),
+        cusip: str(row.cusip),
+        marketCap: num(row.marketCap) ?? num(row.mktCap),
+        beta: num(row.beta),
+        price: num(row.price),
+        rangeLow,
+        rangeHigh,
+        lastDividend: num(row.lastDividend) ?? num(row.lastDiv),
+        currency: str(row.currency),
+      };
+
+      // Only treat as usable if we actually got some substance.
+      if (profile.description || profile.sector || profile.industry || profile.marketCap != null) {
+        return profile;
+      }
+    } catch {
+      // try next url
+    }
+  }
+  return null;
 }
 
 // ── Metadata (dynamic, data-driven) ─────────────────────────────────────────
@@ -130,7 +210,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title,
     description,
     robots: {
-      index: false,
+      index: true,
       follow: true,
     },
     alternates: {
@@ -167,12 +247,13 @@ export default async function StockPage({ params }: Props) {
   const upper = symbol.toUpperCase();
 
   // Fetch everything in parallel — none of these block each other.
-  const [rawHistory, { price, date }, companyName, latestEarnings] =
+  const [rawHistory, { price, date }, companyName, latestEarnings, profile] =
     await Promise.all([
       getDailyHistory(upper).catch(() => [] as Point[]),
       fetchQuotePrice(upper),
       fetchCompanyName(upper),
       fetchLatestEarnings(upper),
+      fetchCompanyProfile(upper).catch(() => null),
     ]);
 
   const points: Point[] = (rawHistory as Point[]).filter(
@@ -284,7 +365,9 @@ export default async function StockPage({ params }: Props) {
       <StockSymbolPageClient
         symbol={upper}
         latestEarnings={latestEarnings}
+        profile={profile}
         seed={seed}
+        initialHistory={points.slice(-300)}
       />
     </>
   );
