@@ -15,3 +15,5 @@ type Point = { date: string; open?: number; close: number; high?: number; low?: 
 type ChartInterval = "d" | "w" | "m";
 type ChartMode = "basic" | "interactive" | "tradingview";
 type SymbolResult = { symbol: string; name: string; exchange: string };
+type BenchItem = { key: string; label: string; symbol: string; date: string | null; time: string | null; close: number | null; prevClose: number | null; changePct: number | null; };
+type BenchPayload = { updatedAt: string; scope: string; items: BenchItem[]; };
