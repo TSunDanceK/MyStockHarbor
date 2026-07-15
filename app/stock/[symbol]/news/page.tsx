@@ -2003,6 +2003,31 @@ function NewsScoreGauge({ newsScore }: { newsScore: NewsScoreResult }) {
           <path d="M 24 122 A 96 96 0 0 1 216 122" fill="none" stroke="url(#newsGaugeWarmGradient)" strokeWidth="22" strokeLinecap="round" strokeDasharray={`${safeScore} 100`} pathLength={100} style={{ filter: `drop-shadow(0 0 10px ${colour}55)` }} />
           <circle cx={markerX} cy={markerY} r="8" fill={colour} stroke="rgba(255,255,255,0.88)" strokeWidth="3" style={{ filter: `drop-shadow(0 0 10px ${colour}88)` }} />
         </svg>
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            top: 4,
+            left: 0,
+            right: 0,
+            display: "flex",
+            justifyContent: "center",
+            pointerEvents: "none",
+            userSelect: "none",
+          }}
+        >
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 800,
+              letterSpacing: "0.05em",
+              textTransform: "uppercase",
+              color: "rgba(226,232,240,0.24)",
+            }}
+          >
+            MyStockHarbor
+          </span>
+        </div>
         <div style={{ position: "absolute", left: 0, right: 0, bottom: 18, display: "grid", justifyItems: "center", pointerEvents: "none" }}>
           <div style={scoreValueStyle}>{safeScore}/100</div>
           <div style={scoreLabelStyle(newsScore.tone)}>{newsScore.label}</div>
