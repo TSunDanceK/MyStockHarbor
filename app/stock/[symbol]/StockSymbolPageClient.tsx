@@ -8,6 +8,9 @@ import StockTickerJump from "./StockTickerJump";
 import LatestEarningsCard, {
   type LatestEarningsData,
 } from "@/app/components/LatestEarningsCard";
+import CompanyProfile, {
+  type CompanyProfile as CompanyProfileData,
+} from "@/app/components/CompanyProfile";
 
 type Quote = {
   symbol: string;
@@ -87,7 +90,12 @@ type SymbolResult = {
 type StockSymbolPageClientProps = {
   symbol: string;
   latestEarnings: LatestEarningsData;
+  profile: CompanyProfileData | null;
   seed?: IndicatorSeed | null;
+  // Recent daily history computed on the server. Seeds `history` so the page
+  // renders real chart/indicator content on the server (crawlable), not behind
+  // a client "Loading…" gate. The client still refreshes it in the background.
+  initialHistory?: Point[];
 };
 
 function movingAverage(values: number[], window: number): (number | null)[] {
@@ -587,13 +595,16 @@ function sideCardBodyStyle(): React.CSSProperties {
   return { padding: "14px 14px" };
 }
 
-export default function StockSymbolPageClient({ symbol, latestEarnings, seed }: StockSymbolPageClientProps) {
+export default function StockSymbolPageClient({ symbol, latestEarnings, profile, seed, initialHistory }: StockSymbolPageClientProps) {
+  const seededHistory = (initialHistory?.length ?? 0) > 0;
   const [quote, setQuote] = useState<Quote | null>(
     seed?.price != null ? { symbol, price: seed.price, date: seed.priceDate, time: null, source: "ssr" } : null
   );
-  const [history, setHistory] = useState<Point[]>([]);
+  const [history, setHistory] = useState<Point[]>(initialHistory ?? []);
   const [companyName, setCompanyName] = useState(seed?.companyName ?? "");
-  const [priceLoading, setPriceLoading] = useState(true);
+  // When we have server-seeded history, the layout renders immediately (no gate);
+  // the effect below still refreshes data in the background.
+  const [priceLoading, setPriceLoading] = useState(!seededHistory);
   const [err, setErr] = useState<string | null>(null);
   const [valuation, setValuation] = useState<StockValuationData | null>(null);
   const [valuationLoading, setValuationLoading] = useState(true);
@@ -602,7 +613,8 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, seed }: 
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      setPriceLoading(true); setErr(null);
+      setErr(null);
+      if (!seededHistory) setPriceLoading(true);
       try {
         const [quoteRes, historyRes, symbolsRes] = await Promise.all([
           fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" }),
@@ -619,7 +631,12 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, seed }: 
         const ptsRaw = Array.isArray(historyData.points) ? historyData.points : [];
         const pts: Point[] = ptsRaw.map((p: any) => ({ date: String(p?.date ?? ""), close: Number(p?.close), high: p?.high == null ? undefined : Number(p.high), low: p?.low == null ? undefined : Number(p.low), volume: p?.volume == null ? undefined : Number(p.volume) })).filter((p) => p.date && Number.isFinite(p.close));
         setQuote(quoteData); setHistory(pts); setCompanyName(name);
-      } catch { if (cancelled) return; setErr("Failed to load stock page."); setQuote(null); setHistory([]); setCompanyName(""); }
+      } catch {
+        if (cancelled) return;
+        // A failed background refresh must not wipe server-seeded content.
+        if (seededHistory) return;
+        setErr("Failed to load stock page."); setQuote(null); setHistory([]); setCompanyName("");
+      }
       finally { if (!cancelled) setPriceLoading(false); }
     }
     load();
@@ -657,7 +674,7 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, seed }: 
     <main onClick={() => setOpenScoreHelp(null)} style={{ minHeight: "100vh", background: "#06080d", color: "#f1f5f9", fontFamily: "system-ui, Arial" }}>
       <div className="stock-wrap">
 
-        {/* ── Page header ──────────────────────────────────────────── */}
+        {/* -- Page header -------------------------------------------- */}
         <header style={{ paddingTop: 24, paddingBottom: 20, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
             <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Stock Analysis</span>
@@ -717,7 +734,7 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, seed }: 
         ) : (
           <div className="stock-page-layout" style={{ paddingTop: 24 }}>
 
-            {/* ════ LEFT SIDEBAR ═══════════════════════════════════ */}
+            {/* ---- LEFT SIDEBAR ----------------------------------- */}
             <aside className="stock-page-sidebar">
 
               {/* Change stock — desktop only (hidden on mobile via CSS) */}
@@ -736,10 +753,10 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, seed }: 
 
             </aside>
 
-            {/* ════ MAIN COLUMN ════════════════════════════════════ */}
+            {/* ---- MAIN COLUMN ------------------------------------ */}
             <div className="stock-page-main">
 
-              {/* ── Change stock — mobile only, above chart ────────── */}
+              {/* -- Change stock — mobile only, above chart ---------- */}
               <div className="mobile-change-stock" style={sideCardStyle()}>
                 <div style={sideCardHeaderStyle()}>
                   <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Change stock</div>
@@ -750,7 +767,7 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, seed }: 
                 </div>
               </div>
 
-              {/* ── Chart section ─────────────────────────────────── */}
+              {/* -- Chart section ----------------------------------- */}
               <section style={{ marginTop: 20 }}>
                 <div style={sectionLabelStyle}>Chart View</div>
                 <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
@@ -764,7 +781,10 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, seed }: 
                 <StockPriceChart symbol={symbol} data={history.slice(-240)} ma50={ma50.slice(-240)} ma200={ma200.slice(-240)} height={360} />
               </section>
 
-              {/* ── Technical indicators ──────────────────────────── */}
+              {/* -- Company profile (FMP) --------------------------- */}
+              {profile ? <CompanyProfile profile={profile} symbol={symbol} /> : null}
+
+              {/* -- Technical indicators ---------------------------- */}
               <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
                 <div style={sectionLabelStyle}>Technical Indicators</div>
                 <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>Key levels &amp; signals</h2>
@@ -791,7 +811,7 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, seed }: 
                 </div>
               </section>
 
-              {/* ── Chart summaries ───────────────────────────────── */}
+              {/* -- Chart summaries --------------------------------- */}
               <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
                 <div style={sectionLabelStyle}>Chart Summary</div>
                 <div>
@@ -811,7 +831,7 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, seed }: 
                 </div>
               </section>
 
-              {/* ── Learn more ────────────────────────────────────── */}
+              {/* -- Learn more -------------------------------------- */}
               <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
                 <div style={sectionLabelStyle}>Learn More</div>
                 <h2 style={{ ...sectionHeadingStyle, marginBottom: 14 }}>Learn the indicators behind this page</h2>
@@ -822,7 +842,7 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, seed }: 
                 </div>
               </section>
 
-              {/* ── Explore more ──────────────────────────────────── */}
+              {/* -- Explore more ------------------------------------ */}
               <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
                 <div style={sectionLabelStyle}>Explore More</div>
                 <h2 style={{ ...sectionHeadingStyle, marginBottom: 14 }}>More stock opportunities</h2>
@@ -844,7 +864,7 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, seed }: 
                 </div>
               </section>
 
-              {/* ── FAQ ───────────────────────────────────────────── */}
+              {/* -- FAQ --------------------------------------------- */}
               <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24, paddingBottom: 40 }}>
                 <div style={sectionLabelStyle}>FAQ</div>
                 <h2 style={{ ...sectionHeadingStyle, marginBottom: 18 }}>Common questions about {symbol}</h2>
