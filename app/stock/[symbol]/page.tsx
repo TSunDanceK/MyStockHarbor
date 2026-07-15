@@ -1,7 +1,7 @@
 // app/stock/[symbol]/page.tsx
 import type { Metadata } from "next";
 import { getDailyHistory } from "@/lib/server/historyCache";
-import { getAiStockAnalysis } from "@/lib/ai-stock-analysis";
+import type { LatestEarningsData } from "@/app/components/LatestEarningsCard";
 import {
   computeIndicatorSeed,
   buildSeoTitle,
@@ -59,6 +59,50 @@ async function fetchCompanyName(symbol: string): Promise<string> {
     return exact?.name ?? "";
   } catch {
     return "";
+  }
+}
+
+function emptyEarnings(): LatestEarningsData {
+  return {
+    hasStructuredData: false,
+    tone: "yellow",
+    toneLabel: "Unavailable",
+    score: null,
+    reportDate: null,
+    fiscalDate: null,
+    actualEps: null,
+    estimatedEps: null,
+    epsSurprise: null,
+    epsSurprisePercent: null,
+    revenue: null,
+    revenueEstimate: null,
+    revenueSurprise: null,
+    revenueSurprisePercent: null,
+    grossMargin: null,
+    operatingMargin: null,
+    netIncome: null,
+    guidanceSummary: null,
+    nextEarningsDate: null,
+    recentReports: [],
+    yearlySummaries: [],
+    sourceNote: "Structured earnings data is unavailable right now.",
+  };
+}
+
+// Fetch the structured earnings snapshot on the SERVER (same /api/stock-earnings
+// pipeline the Earnings page uses) and pass it down as a prop. This removes the
+// old client-side earnings round-trip and its loading flash. NOTE: the main
+// layout is still gated behind the client price/history load, so this data is
+// hydrated in — to get it into the crawlable initial HTML, de-gate the layout
+// from `priceLoading` (tracked follow-up) and flip the page's robots noindex.
+async function fetchLatestEarnings(symbol: string): Promise<LatestEarningsData> {
+  try {
+    const url = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mystockharbor.com"}/api/stock-earnings/${encodeURIComponent(symbol)}`;
+    const res = await fetch(url, { next: { revalidate: 60 * 60 * 6 } });
+    if (!res.ok) return emptyEarnings();
+    return (await res.json()) as LatestEarningsData;
+  } catch {
+    return emptyEarnings();
   }
 }
 
@@ -123,12 +167,12 @@ export default async function StockPage({ params }: Props) {
   const upper = symbol.toUpperCase();
 
   // Fetch everything in parallel — none of these block each other.
-  const [rawHistory, { price, date }, companyName, aiAnalysis] =
+  const [rawHistory, { price, date }, companyName, latestEarnings] =
     await Promise.all([
       getDailyHistory(upper).catch(() => [] as Point[]),
       fetchQuotePrice(upper),
       fetchCompanyName(upper),
-      getAiStockAnalysis(upper).catch(() => null),
+      fetchLatestEarnings(upper),
     ]);
 
   const points: Point[] = (rawHistory as Point[]).filter(
@@ -239,7 +283,7 @@ export default async function StockPage({ params }: Props) {
 
       <StockSymbolPageClient
         symbol={upper}
-        aiAnalysis={aiAnalysis}
+        latestEarnings={latestEarnings}
         seed={seed}
       />
     </>
