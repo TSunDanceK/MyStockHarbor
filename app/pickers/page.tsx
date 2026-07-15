@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import PickersClient from "./PickersClient";
+import type { PickersPayload } from "./PickersClient";
 import BookmarkPromptButton from "./BookmarkPromptButton";
 import PageShareBar from "@/app/components/PageShareBar";
 import { getAllPosts } from "@/lib/blog";
@@ -61,7 +62,31 @@ const SETUP_LINKS: { label: string; href: string }[] = [
   { label: "Stocks With Strong Earnings Growth", href: "/stocks-with-strong-earnings-growth" },
 ];
 
-export default function PickersPage() {
+// Fetch the screened-picks payload on the SERVER (same /api/pickers pipeline
+// PickersClient uses client-side) and pass it down as an initial prop. This
+// removes the old "loading skeleton on first paint" problem -- crawlers (and
+// users) get the real Screened Results content baked into the initial HTML
+// instead of an empty shell that only fills in after a post-mount fetch.
+//
+// /api/pickers itself is backed by a ~6-minute Redis cache plus a 60s
+// in-process memo (see lib/server/pickersBuilder.ts), and is kept warm by
+// the daily automation/pickers-warm cron job, so this call is normally cheap
+// -- it's hitting a warm cache, not recomputing the screen. We layer Next's
+// own data-cache revalidate on top (shorter than the upstream 6-minute
+// window) so repeated page requests within that window don't even need to
+// re-hit the route.
+async function fetchInitialPickersPayload(): Promise<PickersPayload | null> {
+  try {
+    const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mystockharbor.com";
+    const res = await fetch(`${base}/api/pickers`, { next: { revalidate: 300 } });
+    if (!res.ok) return null;
+    return (await res.json()) as PickersPayload;
+  } catch {
+    return null;
+  }
+}
+
+export default async function PickersPage() {
   // Cheap, local read (frontmatter off disk, already sorted newest-first) --
   // no new API route, no extra Active CPU cost on the pickers request path.
   // Powers the accordion sidebar's "From the Insights blog" widget.
@@ -73,6 +98,8 @@ export default function PickersPage() {
       date: post.date,
       symbol: post.symbol ?? null,
     }));
+
+  const initialPickersPayload = await fetchInitialPickersPayload();
 
   return (
     <main style={{ padding: 0, fontFamily: "system-ui, Arial", background: "#06080d", color: "#f1f5f9", minHeight: "100vh" }}>
@@ -129,7 +156,7 @@ export default function PickersPage() {
             </p>
           </div>
           <div style={{ padding: 18, boxSizing: "border-box" }}>
-            <PickersClient latestInsights={latestInsights} />
+            <PickersClient latestInsights={latestInsights} initialPickersPayload={initialPickersPayload ?? undefined} />
           </div>
         </section>
 
