@@ -1,1 +1,681 @@
-import type { Metadata } from \"next\";\nimport { headers } from \"next/headers\";\nimport Link from \"next/link\";\nimport EarningsSymbolPicker from \"./EarningsSymbolPicker\";\nimport { getDailyHistory } from \"@/lib/server/historyCache\";\nimport {\n  computeIndicatorSeed,\n  type Point,\n} from \"@/lib/indicators\";\nimport PageShareBar from \"@/app/components/PageShareBar\";\n\nexport const dynamic = \"force-dynamic\";\n\ntype Props = {\n  params: Promise<{ symbol: string }>;\n};\n\ntype EarningsTone = \"good\" | \"neutral\" | \"weak\";\n\ntype FmpEarningsRow = {\n  symbol?: string;\n  date?: string;\n  fiscalLabel?: string;\n  fiscalYear?: string;\n  periodEndDate?: string;\n  epsActual?: number | null;\n  epsEstimated?: number | null;\n  revenueActual?: number | null;\n  revenueEstimated?: number | null;\n  lastUpdated?: string;\n};\n\ntype FmpIncomeStatementRow = {\n  date?: string;\n  calendarYear?: string;\n  period?: string;\n  revenue?: number | null;\n  grossProfit?: number | null;\n  operatingIncome?: number | null;\n  netIncome?: number | null;\n  eps?: number | null;\n  epsDiluted?: number | null;\n};\n\ntype FmpHistoricalEarningCalendarRow = {\n  date?: string;\n  epsActual?: number | null;\n  epsEstimated?: number | null;\n};\n\ntype EarningsTrendPoint = {\n  label: string;\n  tone: EarningsTone;\n  epsActual: number | null;\n  epsEstimated: number | null;\n  revenueActual: number | null;\n  revenueEstimated: number | null;\n};\n\ntype YearlySummary = {\n  year: string;\n  tone: EarningsTone;\n  toneLabel: string;\n  positiveCount: number;\n  totalCount: number;\n};\n\ntype SharedEarningsScore = {\n  score: number | null;\n  tone: \"green\" | \"yellow\" | \"red\";\n  toneLabel: \"Good\" | \"Neutral\" | \"Weak\" | \"Unavailable\";\n};\n\nconst FMP_BASE = \"https://financialmodelingprep.com/stable\";\n\nfunction cleanSymbol(value: string) {\n  return String(value || \"\")\n    .toUpperCase()\n    .replace(/[^A-Z0-9.-]/g, \"\")\n    .trim();\n}\n\nfunction asNumber(value: unknown): number | null {\n  if (typeof value === \"number\" && Number.isFinite(value)) return value;\n  if (typeof value === \"string\" && value.trim()) {\n    const parsed = Number(value.replace(/,/g, \"\"));\n    return Number.isFinite(parsed) ? parsed : null;\n  }\n  return null;\n}\n\nfunction formatDate(value?: string | null) {\n  if (!value) return \"Unavailable\";\n  const dt = new Date(`${value}T00:00:00Z`);\n  if (Number.isNaN(dt.getTime())) return value;\n  return dt.toLocaleDateString(\"en-GB\", { day: \"numeric\", month: \"short\", year: \"numeric\" });\n}\n\nfunction formatMoney(value: number | null | undefined, compact = false) {\n  if (typeof value !== \"number\" || !Number.isFinite(value)) return \"\\u2014\";\n  const abs = Math.abs(value);\n  if (compact) {\n    if (abs >= 1_000_000_000) return `${value < 0 ? \"-\" : \"\"}$${(abs / 1_000_000_000).toFixed(2)}B`;\n    if (abs >= 1_000_000) return `${value < 0 ? \"-\" : \"\"}$${(abs / 1_000_000).toFixed(1)}M`;\n    if (abs >= 1_000) return `${value < 0 ? \"-\" : \"\"}$${(abs / 1_000).toFixed(1)}K`;\n  }\n  return `${value < 0 ? \"-\" : \"\"}$${abs.toFixed(2)}`;\n}\n\nfunction formatPercent(value: number | null | undefined, digits = 1) {\n  if (typeof value !== \"number\" || !Number.isFinite(value)) return \"\\u2014\";\n  return `${value >= 0 ? \"+\" : \"\"}${value.toFixed(digits)}%`;\n}\n\nfunction calcDifference(actual: number | null, estimate: number | null) {\n  if (actual == null || estimate == null) return null;\n  return actual - estimate;\n}\n\nfunction calcPercentDifference(actual: number | null, estimate: number | null) {\n  if (actual == null || estimate == null || estimate === 0) return null;\n  return ((actual - estimate) / Math.abs(estimate)) * 100;\n}\n\nfunction calcGrowth(current: number | null, previous: number | null) {\n  if (current == null || previous == null || previous === 0) return null;\n  return ((current - previous) / Math.abs(previous)) * 100;\n}\n\nfunction quarterLabel(date?: string | null) {\n  if (!date) return \"\\u2014\";\n  const dt = new Date(`${date}T00:00:00Z`);\n  if (Number.isNaN(dt.getTime())) return date;\n  const month = dt.getUTCMonth();\n  const quarter = Math.floor(month / 3) + 1;\n  const year = String(dt.getUTCFullYear()).slice(-2);\n  return `Q${quarter} ${year}`;\n}\n\nfunction fiscalLabelFromStatement(row?: FmpIncomeStatementRow | null) {\n  if (!row) return null;\n  const period = String(row.period || \"\").toUpperCase();\n  const year = row.calendarYear || (row.date && row.date.length >= 4 ? row.date.slice(0, 4) : \"\");\n  if (/^Q[1-4]$/.test(period) && year) return `${period} ${String(year).slice(-2)}`;\n  return row.date ? quarterLabel(row.date) : null;\n}\n\nfunction displayQuarterLabel(row?: FmpEarningsRow | null) {\n  if (!row) return \"\\u2014\";\n  return row.fiscalLabel || quarterLabel(row.date);\n}\n\nfunction classifyQuarter(row: FmpEarningsRow): EarningsTone {\n  const epsPct = calcPercentDifference(asNumber(row.epsActual), asNumber(row.epsEstimated));\n  const revenuePct = calcPercentDifference(asNumber(row.revenueActual), asNumber(row.revenueEstimated));\n  let score = 0;\n  if (epsPct != null) { if (epsPct > 2) score += 1; else if (epsPct < -2) score -= 1; }\n  if (revenuePct != null) { if (revenuePct > 1) score += 1; else if (revenuePct < -1) score -= 1; }\n  if (asNumber(row.epsActual) != null) score += Number(row.epsActual) > 0 ? 0.5 : -0.5;\n  if (score >= 1.25) return \"good\";\n  if (score <= -1.25) return \"weak\";\n  return \"neutral\";\n}\n\nfunction toneLabel(tone: EarningsTone) {\n  if (tone === \"good\") return \"Good\";\n  if (tone === \"weak\") return \"Weak\";\n  return \"Mixed\";\n}\n\nfunction toneColor(tone: EarningsTone) {\n  if (tone === \"good\") return \"#22c55e\";\n  if (tone === \"weak\") return \"#ef4444\";\n  return \"#facc15\";\n}\n\nfunction toneBg(tone: EarningsTone) {\n  if (tone === \"good\") return \"rgba(34,197,94,0.10)\";\n  if (tone === \"weak\") return \"rgba(239,68,68,0.10)\";\n  return \"rgba(250,204,21,0.10)\";\n}\n\nfunction sharedToneToEarningsTone(tone: SharedEarningsScore[\"tone\"]): EarningsTone {\n  if (tone === \"green\") return \"good\";\n  if (tone === \"red\") return \"weak\";\n  return \"neutral\";\n}\n\nfunction scoreExplanation(tone: EarningsTone) {\n  if (tone === \"good\") return \"The latest earnings read is constructive because the report shows stronger-than-expected fundamentals or improving year-over-year momentum.\";\n  if (tone === \"weak\") return \"The latest earnings read is weak because the report shows pressure in estimates, profitability, revenue momentum, or recent consistency.\";\n  return \"The latest earnings read is mixed, so investors should focus on whether future reports confirm improvement or reveal more pressure.\";\n}\n\nfunction buildScoreResult(score: number, tone: EarningsTone) {\n  return { score, tone, label: toneLabel(tone), explanation: scoreExplanation(tone) };\n}\n\nasync function getOriginFromHeaders() {\n  const headerStore = await headers();\n  const host = headerStore.get(\"x-forwarded-host\") || headerStore.get(\"host\") || \"www.mystockharbor.com\";\n  const proto = headerStore.get(\"x-forwarded-proto\") || (host.includes(\"localhost\") ? \"http\" : \"https\");\n  return `${proto}://${host}`;\n}\n\nasync function fetchSharedEarningsScore(symbol: string) {\n  try {\n    const origin = await getOriginFromHeaders();\n    const response = await fetch(`${origin}/api/stock-earnings/${encodeURIComponent(symbol)}`, { cache: \"no-store\" });\n    if (!response.ok) return null;\n    const data = (await response.json()) as SharedEarningsScore;\n    if (typeof data.score !== \"number\" || !Number.isFinite(data.score)) return null;\n    return buildScoreResult(data.score, sharedToneToEarningsTone(data.tone));\n  } catch { return null; }\n}\n\nfunction getMetricHelp(label: string) {\n  if (label === \"FMP EPS\") return \"EPS means earnings per share. This value comes from FMP earnings data and may differ from GAAP EPS or adjusted EPS quoted in company headlines.\";\n  if (label === \"EPS surprise\") return \"EPS surprise compares FMP EPS with the FMP analyst estimate. A positive number means EPS came in better than FMP's estimate.\";\n  if (label === \"Revenue surprise\") return \"Revenue surprise compares actual revenue with the analyst estimate. A positive number means sales came in better than expected.\";\n  if (label === \"Revenue\") return \"Revenue is the company's sales for the quarter before expenses are removed.\";\n  if (label === \"YoY EPS growth\") return \"Year-over-year EPS growth compares this quarter's FMP EPS with the same quarter last year.\";\n  if (label === \"YoY revenue growth\") return \"Year-over-year revenue growth compares this quarter's revenue with the same quarter last year.\";\n  return \"This metric helps investors judge whether the latest earnings report was stronger, weaker, or broadly in line with expectations.\";\n}\n\nfunction MetricLabelWithHelp({ label }: { label: string }) {\n  return (\n    <div className=\"metricLabelWrap\">\n      <span className=\"metricLabel\">{label}</span>\n      <span className=\"metricHelp\" tabIndex={0} aria-label={`${label} explanation`}>\n        ?\n        <span className=\"metricHelpBubble\">{getMetricHelp(label)}</span>\n      </span>\n    </div>\n  );\n}\n\nfunction clamp(value: number, min: number, max: number) {\n  return Math.max(min, Math.min(max, value));\n}\n\nfunction scoreEarnings(args: { latest: FmpEarningsRow | null; sameQuarterLastYear: FmpEarningsRow | null; completedRows: FmpEarningsRow[]; }) {\n  const { latest, sameQuarterLastYear, completedRows } = args;\n  if (!latest) return { score: 50, tone: \"neutral\" as EarningsTone, label: \"Unavailable\", explanation: \"Structured earnings data is not available for this symbol yet.\" };\n  const epsActual = asNumber(latest.epsActual);\n  const epsEstimated = asNumber(latest.epsEstimated);\n  const revenueActual = asNumber(latest.revenueActual);\n  const revenueEstimated = asNumber(latest.revenueEstimated);\n  const epsSurprisePct = calcPercentDifference(epsActual, epsEstimated);\n  const revenueSurprisePct = calcPercentDifference(revenueActual, revenueEstimated);\n  const yoyEpsGrowth = calcGrowth(epsActual, asNumber(sameQuarterLastYear?.epsActual));\n  const yoyRevenueGrowth = calcGrowth(revenueActual, asNumber(sameQuarterLastYear?.revenueActual));\n  let score = 50;\n  if (epsSurprisePct != null) score += clamp(epsSurprisePct * 1.35, -22, 22);\n  if (revenueSurprisePct != null) score += clamp(revenueSurprisePct * 3.2, -20, 20);\n  if (epsActual != null) score += epsActual > 0 ? 6 : -8;\n  if (yoyEpsGrowth != null) score += clamp(yoyEpsGrowth * 0.18, -10, 10);\n  if (yoyRevenueGrowth != null) score += clamp(yoyRevenueGrowth * 0.22, -10, 10);\n  const recent = completedRows.slice(0, 4);\n  for (const row of recent) { const tone = classifyQuarter(row); if (tone === \"good\") score += 2.5; if (tone === \"weak\") score -= 2.5; }\n  const recentTones = completedRows.slice(0, 6).map(classifyQuarter);\n  const weakRecentCount = recentTones.filter((item) => item === \"weak\").length;\n  const mixedRecentCount = recentTones.filter((item) => item === \"neutral\").length;\n  const maxScore = weakRecentCount > 0 ? 92 : mixedRecentCount > 0 ? 95 : 100;\n  const rounded = Math.round(clamp(score, 0, maxScore));\n  const tone: EarningsTone = rounded >= 66 ? \"good\" : rounded <= 39 ? \"weak\" : \"neutral\";\n  return buildScoreResult(rounded, tone);\n}\n\nfunction makeYearlySummaries(rows: FmpEarningsRow[]): YearlySummary[] {\n  const groups = new Map<string, FmpEarningsRow[]>();\n  for (const row of rows) {\n    if (!row.date) continue;\n    const year = row.fiscalYear || row.date.slice(0, 4);\n    if (!groups.has(year)) groups.set(year, []);\n    groups.get(year)?.push(row);\n  }\n  return Array.from(groups.entries())\n    .sort(([a], [b]) => Number(b) - Number(a))\n    .slice(0, 5)\n    .map(([year, group]) => {\n      const tones = group.map(classifyQuarter);\n      const goodCount = tones.filter((x) => x === \"good\").length;\n      const weakCount = tones.filter((x) => x === \"weak\").length;\n      const totalCount = tones.length;\n      let tone: EarningsTone = \"neutral\";\n      if (goodCount > weakCount && goodCount >= Math.ceil(totalCount / 2)) tone = \"good\";\n      if (weakCount > goodCount && weakCount >= Math.ceil(totalCount / 2)) tone = \"weak\";\n      return { year, tone, toneLabel: toneLabel(tone), positiveCount: goodCount, totalCount };\n    });\n}\n\nasync function fetchFmpJson<T>(path: string): Promise<T | null> {\n  const apiKey = process.env.FMP_API_KEY;\n  if (!apiKey) return null;\n  const url = `${FMP_BASE}${path}${path.includes(\"?\") ? \"&\" : \"?\"}apikey=${apiKey}`;\n  try {\n    const response = await fetch(url, { next: { revalidate: 60 * 60 * 6 } });\n    if (!response.ok) return null;\n    return (await response.json()) as T;\n  } catch { return null; }\n}\n\nasync function fetchFmpLegacyJson<T>(path: string): Promise<T | null> {\n  const apiKey = process.env.FMP_API_KEY;\n  if (!apiKey) return null;\n  const url = `https://financialmodelingprep.com/api/v3${path}${path.includes(\"?\") ? \"&\" : \"?\"}apikey=${apiKey}`;\n  try {\n    const response = await fetch(url, { next: { revalidate: 60 * 60 * 6 } });\n    if (!response.ok) return null;\n    return (await response.json()) as T;\n  } catch { return null; }\n}\n\nasync function getEarningsData(symbol: string) {\n  const [earningsJson, incomeJson, historicalCalendarJson] = await Promise.all([\n    fetchFmpJson<unknown[]>(`/earnings?symbol=${encodeURIComponent(symbol)}`),\n    fetchFmpJson<unknown[]>(`/income-statement?symbol=${encodeURIComponent(symbol)}&period=quarter&limit=12`),\n    fetchFmpLegacyJson<unknown[]>(`/historical/earning_calendar/${encodeURIComponent(symbol)}`),\n  ]);\n\n  const earningsRows: FmpEarningsRow[] = Array.isArray(earningsJson)\n    ? earningsJson.map((item) => { const row = item as Record<string, unknown>; return { symbol, date: typeof row.date === \"string\" ? row.date : \"\", epsActual: asNumber(row.epsActual), epsEstimated: asNumber(row.epsEstimated), revenueActual: asNumber(row.revenueActual), revenueEstimated: asNumber(row.revenueEstimated), lastUpdated: typeof row.lastUpdated === \"string\" ? row.lastUpdated : \"\" }; }).filter((row) => Boolean(row.date)).sort((a, b) => String(b.date).localeCompare(String(a.date)))\n    : [];\n\n  const incomeRows: FmpIncomeStatementRow[] = Array.isArray(incomeJson)\n    ? incomeJson.map((item) => { const row = item as Record<string, unknown>; return { date: typeof row.date === \"string\" ? row.date : \"\", calendarYear: typeof row.calendarYear === \"string\" ? row.calendarYear : \"\", period: typeof row.period === \"string\" ? row.period : \"\", revenue: asNumber(row.revenue), grossProfit: asNumber(row.grossProfit), operatingIncome: asNumber(row.operatingIncome), netIncome: asNumber(row.netIncome), eps: asNumber(row.eps), epsDiluted: asNumber(row.epsDiluted) }; }).filter((row) => Boolean(row.date))\n    : [];\n\n  const historicalCalendarRows: FmpHistoricalEarningCalendarRow[] = Array.isArray(historicalCalendarJson)\n    ? historicalCalendarJson.map((item) => { const row = item as Record<string, unknown>; return { date: typeof row.date === \"string\" ? row.date : \"\", epsActual: asNumber(row.actualEarningResult) ?? asNumber(row.epsActual) ?? asNumber(row.actualEPS), epsEstimated: asNumber(row.estimatedEarning) ?? asNumber(row.epsEstimated) ?? asNumber(row.estimatedEPS) }; }).filter((row) => Boolean(row.date)).sort((a, b) => String(b.date).localeCompare(String(a.date)))\n    : [];\n\n  const historicalByDate = new Map(historicalCalendarRows.map((row) => [row.date, row]));\n  const today = new Date();\n\n  const completedRows = earningsRows\n    .filter((row) => row.epsActual != null || row.revenueActual != null)\n    .map((row, index) => {\n      const matchingCalendar = row.date ? historicalByDate.get(row.date) : null;\n      const matchingIncome = incomeRows[index] ?? null;\n      const incomeEps = matchingIncome?.epsDiluted ?? matchingIncome?.eps ?? null;\n      return { ...row, fiscalLabel: fiscalLabelFromStatement(matchingIncome) ?? undefined, fiscalYear: matchingIncome?.calendarYear || matchingIncome?.date?.slice(0, 4) || row.date?.slice(0, 4), periodEndDate: matchingIncome?.date, epsActual: row.epsActual ?? matchingCalendar?.epsActual ?? incomeEps ?? null, epsEstimated: matchingCalendar?.epsEstimated ?? row.epsEstimated ?? null, revenueActual: matchingIncome?.revenue ?? row.revenueActual ?? null };\n    });\n\n  const latest = completedRows[0] ?? null;\n  const next = earningsRows.find((row) => { if (!row.date) return false; const dt = new Date(`${row.date}T00:00:00Z`); return dt.getTime() > today.getTime() && row.epsActual == null && row.revenueActual == null; }) ?? null;\n\n  const latestFiscalQuarter = latest?.fiscalLabel?.split(\" \")[0] ?? null;\n  const latestFiscalYear = latest?.fiscalYear && Number.isFinite(Number(latest.fiscalYear)) ? Number(latest.fiscalYear) : null;\n  const sameQuarterLastYear = latestFiscalQuarter && latestFiscalYear\n    ? completedRows.find((row) => { if (!row.date || row.date === latest?.date) return false; const rowQuarter = row.fiscalLabel?.split(\" \")[0] ?? null; const rowYear = row.fiscalYear && Number.isFinite(Number(row.fiscalYear)) ? Number(row.fiscalYear) : null; return rowQuarter === latestFiscalQuarter && rowYear === latestFiscalYear - 1; }) ?? null\n    : completedRows[4] ?? null;\n\n  const matchingIncome = latest?.periodEndDate ? incomeRows.find((row) => row.date === latest.periodEndDate) ?? incomeRows[0] ?? null : incomeRows[0] ?? null;\n  const grossMargin = matchingIncome?.grossProfit != null && matchingIncome?.revenue != null && matchingIncome.revenue !== 0 ? (matchingIncome.grossProfit / Math.abs(matchingIncome.revenue)) * 100 : null;\n  const operatingMargin = matchingIncome?.operatingIncome != null && matchingIncome?.revenue != null && matchingIncome.revenue !== 0 ? (matchingIncome.operatingIncome / Math.abs(matchingIncome.revenue)) * 100 : null;\n  const netIncome = matchingIncome?.netIncome ?? null;\n  const recentTrend: EarningsTrendPoint[] = completedRows.slice(0, 6).reverse().map((row) => ({ label: displayQuarterLabel(row), tone: classifyQuarter(row), epsActual: row.epsActual ?? null, epsEstimated: row.epsEstimated ?? null, revenueActual: row.revenueActual ?? null, revenueEstimated: row.revenueEstimated ?? null }));\n  const yearlySummaries = makeYearlySummaries(completedRows);\n  const localScore = scoreEarnings({ latest, sameQuarterLastYear, completedRows });\n  const sharedScore = await fetchSharedEarningsScore(symbol);\n  const score = sharedScore ?? localScore;\n\n  return { rows: earningsRows, completedRows, latest, next, sameQuarterLastYear, grossMargin, operatingMargin, netIncome, recentTrend, yearlySummaries, score };\n}\n\nfunction metricCardStyle(tone: EarningsTone | \"default\" = \"default\") {\n  const border = tone === \"good\" ? \"rgba(34,197,94,0.22)\" : tone === \"weak\" ? \"rgba(239,68,68,0.22)\" : tone === \"neutral\" ? \"rgba(250,204,21,0.22)\" : \"rgba(255,255,255,0.08)\";\n  const bg = tone === \"good\" ? \"linear-gradient(135deg, rgba(34,197,94,0.10), rgba(15,23,42,0.22))\" : tone === \"weak\" ? \"linear-gradient(135deg, rgba(239,68,68,0.10), rgba(15,23,42,0.22))\" : tone === \"neutral\" ? \"linear-gradient(135deg, rgba(250,204,21,0.10), rgba(15,23,42,0.22))\" : \"rgba(255,255,255,0.035)\";\n  return { border: `1px solid ${border}`, borderRadius: 18, padding: 16, background: bg, boxShadow: \"inset 0 1px 0 rgba(255,255,255,0.035)\" };\n}\n\nasync function fetchQuoteForMeta(symbol: string): Promise<{ price: number | null; date: string | null }> {\n  const apiKey = process.env.FMP_API_KEY;\n  if (!apiKey) return { price: null, date: null };\n  try {\n    const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(apiKey)}`;\n    const res = await fetch(url, { next: { revalidate: 900 }, headers: { accept: \"application/json\" } });\n    if (!res.ok) return { price: null, date: null };\n    const json = await res.json();\n    const row = Array.isArray(json) ? json[0] : json;\n    const price = typeof row?.price === \"number\" && Number.isFinite(row.price) ? (row.price as number) : null;\n    return { price, date: new Date().toISOString().slice(0, 10) };\n  } catch { return { price: null, date: null }; }\n}\n\nexport async function generateMetadata({ params }: Props): Promise<Metadata> {\n  const { symbol } = await params;\n  const clean = cleanSymbol(symbol);\n  const [rawHistory, { price, date }] = await Promise.all([getDailyHistory(clean).catch(() => []), fetchQuoteForMeta(clean)]);\n  const points: Point[] = (rawHistory as Point[]).filter((p) => p.date && Number.isFinite(p.close));\n  const seed = computeIndicatorSeed(points, \"\", price, date);\n  const priceStr = seed.lastClose != null ? ` \\u2014 Price $${seed.lastClose.toFixed(2)}` : \"\";\n  const trendStr = seed.trend ? `, ${seed.trend}` : \"\";\n  const title = `${clean} Earnings, EPS & Revenue${priceStr} | MyStockHarbor`;\n  const description = `Review ${clean} stock earnings, EPS surprise, revenue surprise${trendStr} and a simple earnings score. Historical trend and yearly breakdown on MyStockHarbor.`;\n  return {\n    title, description,\n    robots: {\n      index: true,\n      follow: true,\n    },\n    alternates: { canonical: `https://www.mystockharbor.com/stock/${clean}/earnings` },\n    openGraph: { title: `${clean} Earnings & Earnings Score | MyStockHarbor`, description, url: `https://www.mystockharbor.com/stock/${clean}/earnings`, siteName: \"MyStockHarbor\", type: \"article\", images: [{ url: \"https://www.mystockharbor.com/og-image-v2.png\", width: 1200, height: 630, alt: \"MyStockHarbor earnings dashboard\" }] },\n    twitter: { card: \"summary_large_image\", title: `${clean} Earnings & Earnings Score | MyStockHarbor`, description, images: [\"https://www.mystockharbor.com/og-image-v2.png\"] },\n  };\n}\n\nexport default async function StockEarningsPage({ params }: Props) {\n  const { symbol } = await params;\n  const clean = cleanSymbol(symbol);\n  const data = await getEarningsData(clean);\n\n  const latest = data.latest;\n  const next = data.next;\n  const epsActual = latest?.epsActual ?? null;\n  const epsEstimated = latest?.epsEstimated ?? null;\n  const epsSurprise = calcDifference(epsActual, epsEstimated);\n  const epsSurprisePct = calcPercentDifference(epsActual, epsEstimated);\n  const revenueActual = latest?.revenueActual ?? null;\n  const revenueEstimated = latest?.revenueEstimated ?? null;\n  const revenueSurprise = calcDifference(revenueActual, revenueEstimated);\n  const revenueSurprisePct = calcPercentDifference(revenueActual, revenueEstimated);\n  const yoyEpsGrowth = calcGrowth(epsActual, data.sameQuarterLastYear?.epsActual ?? null);\n  const yoyRevenueGrowth = calcGrowth(revenueActual, data.sameQuarterLastYear?.revenueActual ?? null);\n  const score = data.score;\n\n  const pageJsonLd = {\n    \"@context\": \"https://schema.org\", \"@type\": \"WebPage\",\n    name: `${clean} Stock Earnings`,\n    url: `https://www.mystockharbor.com/stock/${clean}/earnings`,\n    description: `${clean} stock earnings, EPS, revenue and earnings score.`,\n    breadcrumb: { \"@type\": \"BreadcrumbList\", itemListElement: [\n      { \"@type\": \"ListItem\", position: 1, name: \"Home\", item: \"https://www.mystockharbor.com/\" },\n      { \"@type\": \"ListItem\", position: 2, name: clean, item: `https://www.mystockharbor.com/stock/${clean}` },\n      { \"@type\": \"ListItem\", position: 3, name: \"Earnings\", item: `https://www.mystockharbor.com/stock/${clean}/earnings` },\n    ]},\n  };\n\n  return (\n    <main className=\"earningsPage\">\n      <script type=\"application/ld+json\" dangerouslySetInnerHTML={{ __html: JSON.stringify(pageJsonLd) }} />\n\n      <style>{`\n        .earningsPage { min-height: 100vh; background: radial-gradient(circle at top left, rgba(59,130,246,0.12), transparent 28%), radial-gradient(circle at top right, rgba(34,197,94,0.09), transparent 26%), #06080d; color: #f1f5f9; font-family: system-ui, Arial; }\n        .earningsWrap { max-width: 1240px; margin: 0 auto; padding: 24px 18px 52px; }\n        .topLinks { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }\n        .topLinks a, .earningsSearchRow button, .actionLink { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 10px 14px; border-radius: 12px; border: 1px solid rgba(59,130,246,0.32); background: rgba(59,130,246,0.10); color: #dbeafe; text-decoration: none; font-weight: 900; font-size: 13px; cursor: pointer; }\n        .topLinks a.green, .actionLink.green { border-color: rgba(34,197,94,0.32); background: rgba(34,197,94,0.10); color: #dcfce7; }\n        .hero { border: 1px solid rgba(255,255,255,0.08); border-radius: 28px; padding: 24px; background: linear-gradient(135deg, rgba(15,23,42,0.96), rgba(6,10,18,0.98)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 18px 38px rgba(0,0,0,0.24); display: grid; grid-template-columns: minmax(0, 1fr) 410px; gap: 24px; align-items: stretch; }\n        .eyebrow, .smallLabel { font-size: 12px; font-weight: 950; text-transform: uppercase; letter-spacing: 0.08em; color: #93c5fd; }\n        .hero h1 { margin: 12px 0 0; font-size: 46px; line-height: 1.04; letter-spacing: -0.055em; }\n        .hero p { margin: 12px 0 0; color: rgba(226,232,240,0.80); line-height: 1.7; font-size: 16px; max-width: 760px; }\n        .scoreCard { border: 1px solid ${toneColor(score.tone)}55; border-radius: 22px; padding: 18px; background: linear-gradient(135deg, ${toneBg(score.tone)}, rgba(255,255,255,0.026)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.045); }\n        .scoreTop { display: flex; justify-content: space-between; gap: 12px; align-items: center; }\n        .scorePill { display: inline-flex; align-items: center; justify-content: center; border: 1px solid ${toneColor(score.tone)}66; background: ${toneBg(score.tone)}; color: ${toneColor(score.tone)}; border-radius: 999px; padding: 8px 11px; font-weight: 950; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }\n        .scoreNumberRow { margin-top: 14px; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }\n        .scoreNumber { font-size: 48px; line-height: 1; font-weight: 950; letter-spacing: -0.06em; }\n        .scoreWatermark { font-size: 15px; font-weight: 850; letter-spacing: 0.02em; color: rgba(255,255,255,0.24); }\n        .scoreBar { position: relative; margin-top: 18px; height: 14px; border-radius: 999px; background: linear-gradient(90deg, #ef4444, #facc15, #22c55e); overflow: hidden; }\n        .scoreNeedle { position: absolute; top: -5px; left: calc(${score.score}% - 9px); width: 18px; height: 24px; border-radius: 999px; background: #f8fafc; border: 3px solid ${toneColor(score.tone)}; box-shadow: 0 8px 20px rgba(0,0,0,0.32); }\n        .scoreLabels { display: flex; justify-content: space-between; margin-top: 9px; color: rgba(226,232,240,0.70); font-size: 11px; font-weight: 950; text-transform: uppercase; letter-spacing: 0.07em; }\n        .contentGrid { margin-top: 22px; display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr); gap: 22px; align-items: start; }\n        .card { border: 1px solid rgba(255,255,255,0.08); border-radius: 22px; padding: 18px; background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.022)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.035); overflow: visible; }\n        .card h2, .card h3 { margin: 8px 0 0; letter-spacing: -0.035em; line-height: 1.15; }\n        .card h2 { font-size: 26px; } .card h3 { font-size: 22px; }\n        .card p { color: rgba(226,232,240,0.82); line-height: 1.7; }\n        .metricGrid { margin-top: 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; overflow: visible; }\n        .metricLabelWrap { position: relative; display: inline-flex; align-items: center; gap: 7px; max-width: 100%; overflow: visible; }\n        .metricLabel { font-size: 11px; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(203,213,225,0.72); }\n        .metricHelp { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 999px; border: 1px solid rgba(147,197,253,0.30); background: #1e293b; color: #dbeafe; font-size: 11px; font-weight: 950; line-height: 1; cursor: help; z-index: 20; flex: 0 0 auto; }\n        .metricHelpBubble { position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%); width: 260px; max-width: min(260px, 72vw); padding: 11px 12px; border-radius: 13px; border: 1px solid rgba(147,197,253,0.22); background: #020617; color: #e5e7eb; box-shadow: 0 18px 44px rgba(0,0,0,0.55); font-size: 12px; font-weight: 750; letter-spacing: 0; line-height: 1.55; text-transform: none; text-align: left; opacity: 0; visibility: hidden; pointer-events: none; white-space: normal; z-index: 9999; }\n        .metricHelpBubble::after { content: \"\"; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); border-width: 7px; border-style: solid; border-color: #020617 transparent transparent transparent; }\n        .metricHelp:hover .metricHelpBubble, .metricHelp:focus .metricHelpBubble, .metricHelp:focus-visible .metricHelpBubble { opacity: 1; visibility: visible; }\n        .metricValue { margin-top: 8px; font-size: 24px; font-weight: 950; letter-spacing: -0.035em; }\n        .earningsDataNote { margin: 10px 0 0; color: rgba(148,163,184,0.78); font-size: 12px; line-height: 1.45; }\n        .metricSub { margin-top: 8px; font-size: 12px; line-height: 1.5; color: rgba(226,232,240,0.66); }\n        .trendDots { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 14px; }\n        .trendDot { text-align: center; min-width: 52px; }\n        .trendDot span { display: inline-flex; width: 18px; height: 18px; border-radius: 999px; box-shadow: 0 0 0 6px rgba(255,255,255,0.04); }\n        .trendDot strong { display: block; margin-top: 9px; font-size: 11px; color: rgba(241,245,249,0.86); }\n        .yearGrid { margin-top: 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }\n        .yearBadge { display: flex; justify-content: space-between; gap: 10px; align-items: center; border-radius: 13px; padding: 10px 12px; font-size: 13px; font-weight: 950; border: 1px solid rgba(255,255,255,0.10); }\n        .historyTable { width: 100%; border-collapse: separate; border-spacing: 0 10px; margin-top: 14px; }\n        .historyTable th { text-align: left; color: rgba(203,213,225,0.68); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; padding: 0 10px; }\n        .historyTable td { background: rgba(255,255,255,0.035); border-top: 1px solid rgba(255,255,255,0.07); border-bottom: 1px solid rgba(255,255,255,0.07); padding: 12px 10px; font-size: 13px; }\n        .historyTable td:first-child { border-left: 1px solid rgba(255,255,255,0.07); border-radius: 12px 0 0 12px; font-weight: 900; }\n        .historyTable td:last-child { border-right: 1px solid rgba(255,255,255,0.07); border-radius: 0 12px 12px 0; }\n        .sideColumn { position: sticky; top: 18px; display: grid; gap: 16px; }\n        .bulletList { margin: 14px 0 0; padding: 0; list-style: none; display: grid; gap: 12px; }\n        .bulletList li { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 10px; color: rgba(226,232,240,0.84); line-height: 1.65; }\n        .bulletList li::before { content: \"\"; width: 9px; height: 9px; border-radius: 999px; margin-top: 8px; background: #22c55e; box-shadow: 0 0 0 4px rgba(34,197,94,0.10); }\n        @media (max-width: 980px) { .hero, .contentGrid { grid-template-columns: 1fr; } .sideColumn { position: static; } .metricGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }\n        @media (max-width: 720px) {\n          .earningsPage, .earningsPage * { box-sizing: border-box; }\n          .earningsWrap { width: 100%; padding: 14px 10px 38px; overflow-x: hidden; }\n          .topLinks { display: grid; grid-template-columns: 1fr; justify-content: stretch; gap: 8px; margin-bottom: 12px; }\n          .topLinks a, .actionLink { width: 100%; min-height: 44px; padding: 10px 12px; text-align: center; }\n          .hero { padding: 16px; border-radius: 20px; gap: 18px; }\n          .hero h1 { margin-top: 10px; font-size: clamp(29px, 9vw, 36px); line-height: 1.08; letter-spacing: -0.045em; }\n          .hero p { font-size: 14px; line-height: 1.65; }\n          .scoreCard, .card { width: 100%; min-width: 0; border-radius: 18px; padding: 15px; }\n          .scoreTop { align-items: flex-start; }\n          .scoreNumberRow { margin-top: 18px; }\n          .scoreNumber { font-size: 42px; }\n          .scoreNeedle { left: calc(${score.score}% - 8px); width: 16px; height: 22px; }\n          .contentGrid { gap: 16px; }\n          .card h2 { font-size: 23px; } .card h3 { font-size: 20px; }\n          .card p, .bulletList li { font-size: 14px; line-height: 1.6; }\n          .metricGrid, .yearGrid, .earningsSearchRow { grid-template-columns: 1fr; }\n          .metricGrid { gap: 10px; }\n          .metricValue { font-size: 22px; word-break: break-word; }\n          .metricHelpBubble { position: fixed; left: 12px; right: 12px; bottom: auto; top: 92px; transform: none; width: auto; max-width: none; }\n          .metricHelpBubble::after { display: none; }\n          .trendDots { gap: 12px; justify-content: flex-start; }\n          .trendDot { min-width: 48px; }\n          .historyTable { display: block; width: 100%; border-spacing: 0; margin-top: 12px; }\n          .historyTable thead { display: none; }\n          .historyTable tbody, .historyTable tr, .historyTable td { display: block; width: 100%; }\n          .historyTable tr { margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; background: rgba(255,255,255,0.035); overflow: hidden; }\n          .historyTable td { display: flex; align-items: center; justify-content: space-between; gap: 14px; border: none; border-bottom: 1px solid rgba(255,255,255,0.07); border-radius: 0; background: transparent; padding: 11px 12px; font-size: 13px; text-align: right; }\n          .historyTable td:first-child, .historyTable td:last-child { border-radius: 0; border-left: none; border-right: none; }\n          .historyTable td:last-child { border-bottom: none; }\n          .historyTable td::before { content: \"\"; flex: 0 0 auto; color: rgba(203,213,225,0.70); font-size: 11px; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; text-align: left; }\n          .historyTable td:nth-child(1)::before { content: \"Quarter\"; }\n          .historyTable td:nth-child(2)::before { content: \"EPS\"; }\n          .historyTable td:nth-child(3)::before { content: \"EPS Est.\"; }\n          .historyTable td:nth-child(4)::before { content: \"EPS Surprise\"; }\n          .historyTable td:nth-child(5)::before { content: \"Revenue\"; }\n          .historyTable td:nth-child(6)::before { content: \"Revenue Surprise\"; }\n          .historyTable td:nth-child(7)::before { content: \"Read\"; }\n        }\n        @media (max-width: 380px) { .earningsWrap { padding-left: 8px; padding-right: 8px; } .hero, .scoreCard, .card { padding: 13px; } .scoreNumber { font-size: 38px; } }\n      `}</style>\n\n      <div className=\"earningsWrap\">\n        <PageShareBar\n          url={`https://www.mystockharbor.com/stock/${clean}/earnings`}\n          title={`${clean} Earnings & Earnings Score | MyStockHarbor`}\n          text={`${clean} earnings \\u2014 EPS, revenue & earnings score \\uD83D\\uDCCA MyStockHarbor`}\n        />\n\n        <section className=\"hero\">\n          <div>\n            <div className=\"eyebrow\">Earnings desk</div>\n            <h1>{clean} Stock Earnings, EPS & Revenue Breakdown</h1>\n            <p>Review the latest reported earnings for {clean}, including actual EPS, estimates, revenue surprise, year-over-year context, recent earnings consistency and a simple earnings score.</p>\n            <EarningsSymbolPicker currentSymbol={clean} />\n          </div>\n          <aside className=\"scoreCard\">\n            <div className=\"scoreTop\">\n              <div className=\"smallLabel\">Earnings score</div>\n              <div className=\"scorePill\">{score.label}</div>\n            </div>\n            <div className=\"scoreNumberRow\">\n              <div className=\"scoreNumber\">{score.score}/100</div>\n              <div className=\"scoreWatermark\">MyStockHarbor</div>\n            </div>\n            <div className=\"scoreBar\" aria-hidden=\"true\"><div className=\"scoreNeedle\" /></div>\n            <div className=\"scoreLabels\"><span>Weak</span><span>Mixed</span><span>Strong</span></div>\n            <p style={{ marginTop: 16 }}>{score.explanation}</p>\n          </aside>\n        </section>\n\n        <section className=\"contentGrid\">\n          <div style={{ display: \"grid\", gap: 18 }}>\n            <section className=\"card\">\n              <div className=\"eyebrow\">Latest report</div>\n              <h2>{clean} latest earnings snapshot</h2>\n              <p>Latest completed report: <strong>{formatDate(latest?.date)}</strong>. Next expected earnings date: <strong>{formatDate(next?.date)}</strong>.</p>\n              {!latest ? (\n                <p>Structured earnings data is not available for this symbol yet.</p>\n              ) : (\n                <>\n                  <div className=\"metricGrid\">\n                    <div style={metricCardStyle(score.tone)}><MetricLabelWithHelp label=\"FMP EPS\" /><div className=\"metricValue\">{formatMoney(epsActual)}</div><div className=\"metricSub\">FMP estimate: {formatMoney(epsEstimated)}</div></div>\n                    <div style={metricCardStyle(epsSurprise != null && epsSurprise >= 0 ? \"good\" : \"weak\")}><MetricLabelWithHelp label=\"EPS surprise\" /><div className=\"metricValue\">{formatMoney(epsSurprise)}</div><div className=\"metricSub\">{formatPercent(epsSurprisePct)}</div></div>\n                    <div style={metricCardStyle(revenueSurprise != null && revenueSurprise >= 0 ? \"good\" : \"weak\")}><MetricLabelWithHelp label=\"Revenue surprise\" /><div className=\"metricValue\">{formatMoney(revenueSurprise, true)}</div><div className=\"metricSub\">{formatPercent(revenueSurprisePct)}</div></div>\n                    <div style={metricCardStyle(\"default\")}><MetricLabelWithHelp label=\"Revenue\" /><div className=\"metricValue\">{formatMoney(revenueActual, true)}</div><div className=\"metricSub\">Estimate: {formatMoney(revenueEstimated, true)}</div></div>\n                    <div style={metricCardStyle(yoyEpsGrowth != null && yoyEpsGrowth >= 0 ? \"good\" : \"weak\")}><MetricLabelWithHelp label=\"YoY EPS growth\" /><div className=\"metricValue\">{formatPercent(yoyEpsGrowth)}</div><div className=\"metricSub\">Compared with {displayQuarterLabel(data.sameQuarterLastYear)}</div></div>\n                    <div style={metricCardStyle(yoyRevenueGrowth != null && yoyRevenueGrowth >= 0 ? \"good\" : \"weak\")}><MetricLabelWithHelp label=\"YoY revenue growth\" /><div className=\"metricValue\">{formatPercent(yoyRevenueGrowth)}</div><div className=\"metricSub\">Compared with {displayQuarterLabel(data.sameQuarterLastYear)}</div></div>\n                  </div>\n                  <p className=\"earningsDataNote\">EPS fields are shown from FMP earnings data. They can differ from GAAP EPS or adjusted EPS quoted in earnings headlines.</p>\n                </>\n              )}\n            </section>\n\n            <section className=\"card\">\n              <div className=\"eyebrow\">Recent earnings trend</div>\n              <h2>How recent earnings have been landing</h2>\n              <p>The dots below simplify recent earnings into good, mixed or weak reads based on EPS surprise, revenue surprise and whether the report was profitable.</p>\n              {data.recentTrend.length ? (\n                <div className=\"trendDots\">\n                  {data.recentTrend.map((item) => (\n                    <div key={item.label} className=\"trendDot\">\n                      <span style={{ background: toneColor(item.tone) }} title={`${item.label}: ${toneLabel(item.tone)}`} />\n                      <strong>{item.label}</strong>\n                    </div>\n                  ))}\n                </div>\n              ) : <p>No recent completed earnings trend is available yet.</p>}\n            </section>\n\n            <section className=\"card\">\n              <div className=\"eyebrow\">Earnings history</div>\n              <h2>Recent reported quarters</h2>\n              {data.completedRows.length ? (\n                <table className=\"historyTable\">\n                  <thead><tr><th>Quarter</th><th>EPS</th><th>EPS Est.</th><th>EPS Surprise</th><th>Revenue</th><th>Revenue Surprise</th><th>Read</th></tr></thead>\n                  <tbody>\n                    {data.completedRows.slice(0, 8).map((row) => {\n                      const rowEpsActual = asNumber(row.epsActual);\n                      const rowEpsEstimated = asNumber(row.epsEstimated);\n                      const rowRevenueActual = asNumber(row.revenueActual);\n                      const rowRevenueEstimated = asNumber(row.revenueEstimated);\n                      const rowTone = classifyQuarter(row);\n                      return (\n                        <tr key={`${row.date}-${row.epsActual}-${row.revenueActual}`}>\n                          <td>{displayQuarterLabel(row)}</td>\n                          <td>{formatMoney(rowEpsActual)}</td>\n                          <td>{formatMoney(rowEpsEstimated)}</td>\n                          <td>{formatPercent(calcPercentDifference(rowEpsActual, rowEpsEstimated))}</td>\n                          <td>{formatMoney(rowRevenueActual, true)}</td>\n                          <td>{formatPercent(calcPercentDifference(rowRevenueActual, rowRevenueEstimated))}</td>\n                          <td><span style={{ color: toneColor(rowTone), fontWeight: 950 }}>{toneLabel(rowTone)}</span></td>\n                        </tr>\n                      );\n                    })}\n                  </tbody>\n                </table>\n              ) : <p>No completed earnings history is available yet.</p>}\n            </section>\n          </div>\n\n          <aside className=\"sideColumn\">\n            <section className=\"card\">\n              <div className=\"eyebrow\">What it means</div>\n              <h3>Investor read</h3>\n              <p>{score.explanation}</p>\n              <ul className=\"bulletList\">\n                <li>EPS surprise shows whether profit landed above or below analyst expectations.</li>\n                <li>Revenue surprise shows whether demand was stronger or weaker than expected.</li>\n                <li>Year-over-year growth helps separate one-quarter noise from a real earnings trend.</li>\n              </ul>\n            </section>\n            <section className=\"card\">\n              <div className=\"eyebrow\">Why it matters</div>\n              <h3>Earnings can reset the stock narrative</h3>\n              <p>Earnings matter because they test whether the company story is being supported by actual revenue, profit and estimate performance.</p>\n            </section>\n            <section className=\"card\">\n              <div className=\"eyebrow\">Yearly earnings read</div>\n              <h3>Recent yearly pattern</h3>\n              {data.yearlySummaries.length ? (\n                <div className=\"yearGrid\">\n                  {data.yearlySummaries.map((item) => (\n                    <div key={item.year} className=\"yearBadge\" style={{ color: \"#f8fafc\", borderColor: `${toneColor(item.tone)}55`, background: toneBg(item.tone) }}>\n                      <span>{item.year}</span><span style={{ color: toneColor(item.tone) }}>{item.toneLabel}</span>\n                    </div>\n                  ))}\n                </div>\n              ) : <p>No yearly earnings pattern is available yet.</p>}\n            </section>\n            <section className=\"card\">\n              <div className=\"eyebrow\">Next step</div>\n              <h3>Connect earnings with price action</h3>\n              <p>Use this page for the earnings read, then compare it with the stock page and latest news.</p>\n              <div style={{ display: \"grid\", gap: 10, marginTop: 14 }}>\n                <Link className=\"actionLink\" href={`/stock/${encodeURIComponent(clean)}`}>Open {clean} stock page &rarr;</Link>\n                <Link className=\"actionLink green\" href={`/stock/${encodeURIComponent(clean)}/news`}>Read {clean} news &rarr;</Link>\n                <Link className=\"actionLink\" href=\"/pickers\">Open stock pickers &rarr;</Link>\n              </div>\n            </section>\n          </aside>\n        </section>\n      </div>\n    </main>\n  );\n}\n
+import type { Metadata } from "next";
+import { headers } from "next/headers";
+import Link from "next/link";
+import EarningsSymbolPicker from "./EarningsSymbolPicker";
+import { getDailyHistory } from "@/lib/server/historyCache";
+import {
+  computeIndicatorSeed,
+  type Point,
+} from "@/lib/indicators";
+import PageShareBar from "@/app/components/PageShareBar";
+
+export const dynamic = "force-dynamic";
+
+type Props = {
+  params: Promise<{ symbol: string }>;
+};
+
+type EarningsTone = "good" | "neutral" | "weak";
+
+type FmpEarningsRow = {
+  symbol?: string;
+  date?: string;
+  fiscalLabel?: string;
+  fiscalYear?: string;
+  periodEndDate?: string;
+  epsActual?: number | null;
+  epsEstimated?: number | null;
+  revenueActual?: number | null;
+  revenueEstimated?: number | null;
+  lastUpdated?: string;
+};
+
+type FmpIncomeStatementRow = {
+  date?: string;
+  calendarYear?: string;
+  period?: string;
+  revenue?: number | null;
+  grossProfit?: number | null;
+  operatingIncome?: number | null;
+  netIncome?: number | null;
+  eps?: number | null;
+  epsDiluted?: number | null;
+};
+
+type FmpHistoricalEarningCalendarRow = {
+  date?: string;
+  epsActual?: number | null;
+  epsEstimated?: number | null;
+};
+
+type EarningsTrendPoint = {
+  label: string;
+  tone: EarningsTone;
+  epsActual: number | null;
+  epsEstimated: number | null;
+  revenueActual: number | null;
+  revenueEstimated: number | null;
+};
+
+type YearlySummary = {
+  year: string;
+  tone: EarningsTone;
+  toneLabel: string;
+  positiveCount: number;
+  totalCount: number;
+};
+
+type SharedEarningsScore = {
+  score: number | null;
+  tone: "green" | "yellow" | "red";
+  toneLabel: "Good" | "Neutral" | "Weak" | "Unavailable";
+};
+
+const FMP_BASE = "https://financialmodelingprep.com/stable";
+
+function cleanSymbol(value: string) {
+  return String(value || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9.-]/g, "")
+    .trim();
+}
+
+function asNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value.replace(/,/g, ""));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return "Unavailable";
+  const dt = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(dt.getTime())) return value;
+  return dt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function formatMoney(value: number | null | undefined, compact = false) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "\\u2014";
+  const abs = Math.abs(value);
+  if (compact) {
+    if (abs >= 1_000_000_000) return `${value < 0 ? "-" : ""}$${(abs / 1_000_000_000).toFixed(2)}B`;
+    if (abs >= 1_000_000) return `${value < 0 ? "-" : ""}$${(abs / 1_000_000).toFixed(1)}M`;
+    if (abs >= 1_000) return `${value < 0 ? "-" : ""}$${(abs / 1_000).toFixed(1)}K`;
+  }
+  return `${value < 0 ? "-" : ""}$${abs.toFixed(2)}`;
+}
+
+function formatPercent(value: number | null | undefined, digits = 1) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "\\u2014";
+  return `${value >= 0 ? "+" : ""}${value.toFixed(digits)}%`;
+}
+
+function calcDifference(actual: number | null, estimate: number | null) {
+  if (actual == null || estimate == null) return null;
+  return actual - estimate;
+}
+
+function calcPercentDifference(actual: number | null, estimate: number | null) {
+  if (actual == null || estimate == null || estimate === 0) return null;
+  return ((actual - estimate) / Math.abs(estimate)) * 100;
+}
+
+function calcGrowth(current: number | null, previous: number | null) {
+  if (current == null || previous == null || previous === 0) return null;
+  return ((current - previous) / Math.abs(previous)) * 100;
+}
+
+function quarterLabel(date?: string | null) {
+  if (!date) return "\\u2014";
+  const dt = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(dt.getTime())) return date;
+  const month = dt.getUTCMonth();
+  const quarter = Math.floor(month / 3) + 1;
+  const year = String(dt.getUTCFullYear()).slice(-2);
+  return `Q${quarter} ${year}`;
+}
+
+function fiscalLabelFromStatement(row?: FmpIncomeStatementRow | null) {
+  if (!row) return null;
+  const period = String(row.period || "").toUpperCase();
+  const year = row.calendarYear || (row.date && row.date.length >= 4 ? row.date.slice(0, 4) : "");
+  if (/^Q[1-4]$/.test(period) && year) return `${period} ${String(year).slice(-2)}`;
+  return row.date ? quarterLabel(row.date) : null;
+}
+
+function displayQuarterLabel(row?: FmpEarningsRow | null) {
+  if (!row) return "\\u2014";
+  return row.fiscalLabel || quarterLabel(row.date);
+}
+
+function classifyQuarter(row: FmpEarningsRow): EarningsTone {
+  const epsPct = calcPercentDifference(asNumber(row.epsActual), asNumber(row.epsEstimated));
+  const revenuePct = calcPercentDifference(asNumber(row.revenueActual), asNumber(row.revenueEstimated));
+  let score = 0;
+  if (epsPct != null) { if (epsPct > 2) score += 1; else if (epsPct < -2) score -= 1; }
+  if (revenuePct != null) { if (revenuePct > 1) score += 1; else if (revenuePct < -1) score -= 1; }
+  if (asNumber(row.epsActual) != null) score += Number(row.epsActual) > 0 ? 0.5 : -0.5;
+  if (score >= 1.25) return "good";
+  if (score <= -1.25) return "weak";
+  return "neutral";
+}
+
+function toneLabel(tone: EarningsTone) {
+  if (tone === "good") return "Good";
+  if (tone === "weak") return "Weak";
+  return "Mixed";
+}
+
+function toneColor(tone: EarningsTone) {
+  if (tone === "good") return "#22c55e";
+  if (tone === "weak") return "#ef4444";
+  return "#facc15";
+}
+
+function toneBg(tone: EarningsTone) {
+  if (tone === "good") return "rgba(34,197,94,0.10)";
+  if (tone === "weak") return "rgba(239,68,68,0.10)";
+  return "rgba(250,204,21,0.10)";
+}
+
+function sharedToneToEarningsTone(tone: SharedEarningsScore["tone"]): EarningsTone {
+  if (tone === "green") return "good";
+  if (tone === "red") return "weak";
+  return "neutral";
+}
+
+function scoreExplanation(tone: EarningsTone) {
+  if (tone === "good") return "The latest earnings read is constructive because the report shows stronger-than-expected fundamentals or improving year-over-year momentum.";
+  if (tone === "weak") return "The latest earnings read is weak because the report shows pressure in estimates, profitability, revenue momentum, or recent consistency.";
+  return "The latest earnings read is mixed, so investors should focus on whether future reports confirm improvement or reveal more pressure.";
+}
+
+function buildScoreResult(score: number, tone: EarningsTone) {
+  return { score, tone, label: toneLabel(tone), explanation: scoreExplanation(tone) };
+}
+
+async function getOriginFromHeaders() {
+  const headerStore = await headers();
+  const host = headerStore.get("x-forwarded-host") || headerStore.get("host") || "www.mystockharbor.com";
+  const proto = headerStore.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
+  return `${proto}://${host}`;
+}
+
+async function fetchSharedEarningsScore(symbol: string) {
+  try {
+    const origin = await getOriginFromHeaders();
+    const response = await fetch(`${origin}/api/stock-earnings/${encodeURIComponent(symbol)}`, { cache: "no-store" });
+    if (!response.ok) return null;
+    const data = (await response.json()) as SharedEarningsScore;
+    if (typeof data.score !== "number" || !Number.isFinite(data.score)) return null;
+    return buildScoreResult(data.score, sharedToneToEarningsTone(data.tone));
+  } catch { return null; }
+}
+
+function getMetricHelp(label: string) {
+  if (label === "FMP EPS") return "EPS means earnings per share. This value comes from FMP earnings data and may differ from GAAP EPS or adjusted EPS quoted in company headlines.";
+  if (label === "EPS surprise") return "EPS surprise compares FMP EPS with the FMP analyst estimate. A positive number means EPS came in better than FMP's estimate.";
+  if (label === "Revenue surprise") return "Revenue surprise compares actual revenue with the analyst estimate. A positive number means sales came in better than expected.";
+  if (label === "Revenue") return "Revenue is the company's sales for the quarter before expenses are removed.";
+  if (label === "YoY EPS growth") return "Year-over-year EPS growth compares this quarter's FMP EPS with the same quarter last year.";
+  if (label === "YoY revenue growth") return "Year-over-year revenue growth compares this quarter's revenue with the same quarter last year.";
+  return "This metric helps investors judge whether the latest earnings report was stronger, weaker, or broadly in line with expectations.";
+}
+
+function MetricLabelWithHelp({ label }: { label: string }) {
+  return (
+    <div className="metricLabelWrap">
+      <span className="metricLabel">{label}</span>
+      <span className="metricHelp" tabIndex={0} aria-label={`${label} explanation`}>
+        ?
+        <span className="metricHelpBubble">{getMetricHelp(label)}</span>
+      </span>
+    </div>
+  );
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function scoreEarnings(args: { latest: FmpEarningsRow | null; sameQuarterLastYear: FmpEarningsRow | null; completedRows: FmpEarningsRow[]; }) {
+  const { latest, sameQuarterLastYear, completedRows } = args;
+  if (!latest) return { score: 50, tone: "neutral" as EarningsTone, label: "Unavailable", explanation: "Structured earnings data is not available for this symbol yet." };
+  const epsActual = asNumber(latest.epsActual);
+  const epsEstimated = asNumber(latest.epsEstimated);
+  const revenueActual = asNumber(latest.revenueActual);
+  const revenueEstimated = asNumber(latest.revenueEstimated);
+  const epsSurprisePct = calcPercentDifference(epsActual, epsEstimated);
+  const revenueSurprisePct = calcPercentDifference(revenueActual, revenueEstimated);
+  const yoyEpsGrowth = calcGrowth(epsActual, asNumber(sameQuarterLastYear?.epsActual));
+  const yoyRevenueGrowth = calcGrowth(revenueActual, asNumber(sameQuarterLastYear?.revenueActual));
+  let score = 50;
+  if (epsSurprisePct != null) score += clamp(epsSurprisePct * 1.35, -22, 22);
+  if (revenueSurprisePct != null) score += clamp(revenueSurprisePct * 3.2, -20, 20);
+  if (epsActual != null) score += epsActual > 0 ? 6 : -8;
+  if (yoyEpsGrowth != null) score += clamp(yoyEpsGrowth * 0.18, -10, 10);
+  if (yoyRevenueGrowth != null) score += clamp(yoyRevenueGrowth * 0.22, -10, 10);
+  const recent = completedRows.slice(0, 4);
+  for (const row of recent) { const tone = classifyQuarter(row); if (tone === "good") score += 2.5; if (tone === "weak") score -= 2.5; }
+  const recentTones = completedRows.slice(0, 6).map(classifyQuarter);
+  const weakRecentCount = recentTones.filter((item) => item === "weak").length;
+  const mixedRecentCount = recentTones.filter((item) => item === "neutral").length;
+  const maxScore = weakRecentCount > 0 ? 92 : mixedRecentCount > 0 ? 95 : 100;
+  const rounded = Math.round(clamp(score, 0, maxScore));
+  const tone: EarningsTone = rounded >= 66 ? "good" : rounded <= 39 ? "weak" : "neutral";
+  return buildScoreResult(rounded, tone);
+}
+
+function makeYearlySummaries(rows: FmpEarningsRow[]): YearlySummary[] {
+  const groups = new Map<string, FmpEarningsRow[]>();
+  for (const row of rows) {
+    if (!row.date) continue;
+    const year = row.fiscalYear || row.date.slice(0, 4);
+    if (!groups.has(year)) groups.set(year, []);
+    groups.get(year)?.push(row);
+  }
+  return Array.from(groups.entries())
+    .sort(([a], [b]) => Number(b) - Number(a))
+    .slice(0, 5)
+    .map(([year, group]) => {
+      const tones = group.map(classifyQuarter);
+      const goodCount = tones.filter((x) => x === "good").length;
+      const weakCount = tones.filter((x) => x === "weak").length;
+      const totalCount = tones.length;
+      let tone: EarningsTone = "neutral";
+      if (goodCount > weakCount && goodCount >= Math.ceil(totalCount / 2)) tone = "good";
+      if (weakCount > goodCount && weakCount >= Math.ceil(totalCount / 2)) tone = "weak";
+      return { year, tone, toneLabel: toneLabel(tone), positiveCount: goodCount, totalCount };
+    });
+}
+
+async function fetchFmpJson<T>(path: string): Promise<T | null> {
+  const apiKey = process.env.FMP_API_KEY;
+  if (!apiKey) return null;
+  const url = `${FMP_BASE}${path}${path.includes("?") ? "&" : "?"}apikey=${apiKey}`;
+  try {
+    const response = await fetch(url, { next: { revalidate: 60 * 60 * 6 } });
+    if (!response.ok) return null;
+    return (await response.json()) as T;
+  } catch { return null; }
+}
+
+async function fetchFmpLegacyJson<T>(path: string): Promise<T | null> {
+  const apiKey = process.env.FMP_API_KEY;
+  if (!apiKey) return null;
+  const url = `https://financialmodelingprep.com/api/v3${path}${path.includes("?") ? "&" : "?"}apikey=${apiKey}`;
+  try {
+    const response = await fetch(url, { next: { revalidate: 60 * 60 * 6 } });
+    if (!response.ok) return null;
+    return (await response.json()) as T;
+  } catch { return null; }
+}
+
+async function getEarningsData(symbol: string) {
+  const [earningsJson, incomeJson, historicalCalendarJson] = await Promise.all([
+    fetchFmpJson<unknown[]>(`/earnings?symbol=${encodeURIComponent(symbol)}`),
+    fetchFmpJson<unknown[]>(`/income-statement?symbol=${encodeURIComponent(symbol)}&period=quarter&limit=12`),
+    fetchFmpLegacyJson<unknown[]>(`/historical/earning_calendar/${encodeURIComponent(symbol)}`),
+  ]);
+
+  const earningsRows: FmpEarningsRow[] = Array.isArray(earningsJson)
+    ? earningsJson.map((item) => { const row = item as Record<string, unknown>; return { symbol, date: typeof row.date === "string" ? row.date : "", epsActual: asNumber(row.epsActual), epsEstimated: asNumber(row.epsEstimated), revenueActual: asNumber(row.revenueActual), revenueEstimated: asNumber(row.revenueEstimated), lastUpdated: typeof row.lastUpdated === "string" ? row.lastUpdated : "" }; }).filter((row) => Boolean(row.date)).sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    : [];
+
+  const incomeRows: FmpIncomeStatementRow[] = Array.isArray(incomeJson)
+    ? incomeJson.map((item) => { const row = item as Record<string, unknown>; return { date: typeof row.date === "string" ? row.date : "", calendarYear: typeof row.calendarYear === "string" ? row.calendarYear : "", period: typeof row.period === "string" ? row.period : "", revenue: asNumber(row.revenue), grossProfit: asNumber(row.grossProfit), operatingIncome: asNumber(row.operatingIncome), netIncome: asNumber(row.netIncome), eps: asNumber(row.eps), epsDiluted: asNumber(row.epsDiluted) }; }).filter((row) => Boolean(row.date))
+    : [];
+
+  const historicalCalendarRows: FmpHistoricalEarningCalendarRow[] = Array.isArray(historicalCalendarJson)
+    ? historicalCalendarJson.map((item) => { const row = item as Record<string, unknown>; return { date: typeof row.date === "string" ? row.date : "", epsActual: asNumber(row.actualEarningResult) ?? asNumber(row.epsActual) ?? asNumber(row.actualEPS), epsEstimated: asNumber(row.estimatedEarning) ?? asNumber(row.epsEstimated) ?? asNumber(row.estimatedEPS) }; }).filter((row) => Boolean(row.date)).sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    : [];
+
+  const historicalByDate = new Map(historicalCalendarRows.map((row) => [row.date, row]));
+  const today = new Date();
+
+  const completedRows = earningsRows
+    .filter((row) => row.epsActual != null || row.revenueActual != null)
+    .map((row, index) => {
+      const matchingCalendar = row.date ? historicalByDate.get(row.date) : null;
+      const matchingIncome = incomeRows[index] ?? null;
+      const incomeEps = matchingIncome?.epsDiluted ?? matchingIncome?.eps ?? null;
+      return { ...row, fiscalLabel: fiscalLabelFromStatement(matchingIncome) ?? undefined, fiscalYear: matchingIncome?.calendarYear || matchingIncome?.date?.slice(0, 4) || row.date?.slice(0, 4), periodEndDate: matchingIncome?.date, epsActual: row.epsActual ?? matchingCalendar?.epsActual ?? incomeEps ?? null, epsEstimated: matchingCalendar?.epsEstimated ?? row.epsEstimated ?? null, revenueActual: matchingIncome?.revenue ?? row.revenueActual ?? null };
+    });
+
+  const latest = completedRows[0] ?? null;
+  const next = earningsRows.find((row) => { if (!row.date) return false; const dt = new Date(`${row.date}T00:00:00Z`); return dt.getTime() > today.getTime() && row.epsActual == null && row.revenueActual == null; }) ?? null;
+
+  const latestFiscalQuarter = latest?.fiscalLabel?.split(" ")[0] ?? null;
+  const latestFiscalYear = latest?.fiscalYear && Number.isFinite(Number(latest.fiscalYear)) ? Number(latest.fiscalYear) : null;
+  const sameQuarterLastYear = latestFiscalQuarter && latestFiscalYear
+    ? completedRows.find((row) => { if (!row.date || row.date === latest?.date) return false; const rowQuarter = row.fiscalLabel?.split(" ")[0] ?? null; const rowYear = row.fiscalYear && Number.isFinite(Number(row.fiscalYear)) ? Number(row.fiscalYear) : null; return rowQuarter === latestFiscalQuarter && rowYear === latestFiscalYear - 1; }) ?? null
+    : completedRows[4] ?? null;
+
+  const matchingIncome = latest?.periodEndDate ? incomeRows.find((row) => row.date === latest.periodEndDate) ?? incomeRows[0] ?? null : incomeRows[0] ?? null;
+  const grossMargin = matchingIncome?.grossProfit != null && matchingIncome?.revenue != null && matchingIncome.revenue !== 0 ? (matchingIncome.grossProfit / Math.abs(matchingIncome.revenue)) * 100 : null;
+  const operatingMargin = matchingIncome?.operatingIncome != null && matchingIncome?.revenue != null && matchingIncome.revenue !== 0 ? (matchingIncome.operatingIncome / Math.abs(matchingIncome.revenue)) * 100 : null;
+  const netIncome = matchingIncome?.netIncome ?? null;
+  const recentTrend: EarningsTrendPoint[] = completedRows.slice(0, 6).reverse().map((row) => ({ label: displayQuarterLabel(row), tone: classifyQuarter(row), epsActual: row.epsActual ?? null, epsEstimated: row.epsEstimated ?? null, revenueActual: row.revenueActual ?? null, revenueEstimated: row.revenueEstimated ?? null }));
+  const yearlySummaries = makeYearlySummaries(completedRows);
+  const localScore = scoreEarnings({ latest, sameQuarterLastYear, completedRows });
+  const sharedScore = await fetchSharedEarningsScore(symbol);
+  const score = sharedScore ?? localScore;
+
+  return { rows: earningsRows, completedRows, latest, next, sameQuarterLastYear, grossMargin, operatingMargin, netIncome, recentTrend, yearlySummaries, score };
+}
+
+function metricCardStyle(tone: EarningsTone | "default" = "default") {
+  const border = tone === "good" ? "rgba(34,197,94,0.22)" : tone === "weak" ? "rgba(239,68,68,0.22)" : tone === "neutral" ? "rgba(250,204,21,0.22)" : "rgba(255,255,255,0.08)";
+  const bg = tone === "good" ? "linear-gradient(135deg, rgba(34,197,94,0.10), rgba(15,23,42,0.22))" : tone === "weak" ? "linear-gradient(135deg, rgba(239,68,68,0.10), rgba(15,23,42,0.22))" : tone === "neutral" ? "linear-gradient(135deg, rgba(250,204,21,0.10), rgba(15,23,42,0.22))" : "rgba(255,255,255,0.035)";
+  return { border: `1px solid ${border}`, borderRadius: 18, padding: 16, background: bg, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035)" };
+}
+
+async function fetchQuoteForMeta(symbol: string): Promise<{ price: number | null; date: string | null }> {
+  const apiKey = process.env.FMP_API_KEY;
+  if (!apiKey) return { price: null, date: null };
+  try {
+    const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(apiKey)}`;
+    const res = await fetch(url, { next: { revalidate: 900 }, headers: { accept: "application/json" } });
+    if (!res.ok) return { price: null, date: null };
+    const json = await res.json();
+    const row = Array.isArray(json) ? json[0] : json;
+    const price = typeof row?.price === "number" && Number.isFinite(row.price) ? (row.price as number) : null;
+    return { price, date: new Date().toISOString().slice(0, 10) };
+  } catch { return { price: null, date: null }; }
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { symbol } = await params;
+  const clean = cleanSymbol(symbol);
+  const [rawHistory, { price, date }] = await Promise.all([getDailyHistory(clean).catch(() => []), fetchQuoteForMeta(clean)]);
+  const points: Point[] = (rawHistory as Point[]).filter((p) => p.date && Number.isFinite(p.close));
+  const seed = computeIndicatorSeed(points, "", price, date);
+  const priceStr = seed.lastClose != null ? ` \\u2014 Price $${seed.lastClose.toFixed(2)}` : "";
+  const trendStr = seed.trend ? `, ${seed.trend}` : "";
+  const title = `${clean} Earnings, EPS & Revenue${priceStr} | MyStockHarbor`;
+  const description = `Review ${clean} stock earnings, EPS surprise, revenue surprise${trendStr} and a simple earnings score. Historical trend and yearly breakdown on MyStockHarbor.`;
+  return {
+    title, description,
+    robots: {
+      index: true,
+      follow: true,
+    },
+    alternates: { canonical: `https://www.mystockharbor.com/stock/${clean}/earnings` },
+    openGraph: { title: `${clean} Earnings & Earnings Score | MyStockHarbor`, description, url: `https://www.mystockharbor.com/stock/${clean}/earnings`, siteName: "MyStockHarbor", type: "article", images: [{ url: "https://www.mystockharbor.com/og-image-v2.png", width: 1200, height: 630, alt: "MyStockHarbor earnings dashboard" }] },
+    twitter: { card: "summary_large_image", title: `${clean} Earnings & Earnings Score | MyStockHarbor`, description, images: ["https://www.mystockharbor.com/og-image-v2.png"] },
+  };
+}
+
+export default async function StockEarningsPage({ params }: Props) {
+  const { symbol } = await params;
+  const clean = cleanSymbol(symbol);
+  const data = await getEarningsData(clean);
+
+  const latest = data.latest;
+  const next = data.next;
+  const epsActual = latest?.epsActual ?? null;
+  const epsEstimated = latest?.epsEstimated ?? null;
+  const epsSurprise = calcDifference(epsActual, epsEstimated);
+  const epsSurprisePct = calcPercentDifference(epsActual, epsEstimated);
+  const revenueActual = latest?.revenueActual ?? null;
+  const revenueEstimated = latest?.revenueEstimated ?? null;
+  const revenueSurprise = calcDifference(revenueActual, revenueEstimated);
+  const revenueSurprisePct = calcPercentDifference(revenueActual, revenueEstimated);
+  const yoyEpsGrowth = calcGrowth(epsActual, data.sameQuarterLastYear?.epsActual ?? null);
+  const yoyRevenueGrowth = calcGrowth(revenueActual, data.sameQuarterLastYear?.revenueActual ?? null);
+  const score = data.score;
+
+  const pageJsonLd = {
+    "@context": "https://schema.org", "@type": "WebPage",
+    name: `${clean} Stock Earnings`,
+    url: `https://www.mystockharbor.com/stock/${clean}/earnings`,
+    description: `${clean} stock earnings, EPS, revenue and earnings score.`,
+    breadcrumb: { "@type": "BreadcrumbList", itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: "https://www.mystockharbor.com/" },
+      { "@type": "ListItem", position: 2, name: clean, item: `https://www.mystockharbor.com/stock/${clean}` },
+      { "@type": "ListItem", position: 3, name: "Earnings", item: `https://www.mystockharbor.com/stock/${clean}/earnings` },
+    ]},
+  };
+
+  return (
+    <main className="earningsPage">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(pageJsonLd) }} />
+
+      <style>{`
+        .earningsPage { min-height: 100vh; background: radial-gradient(circle at top left, rgba(59,130,246,0.12), transparent 28%), radial-gradient(circle at top right, rgba(34,197,94,0.09), transparent 26%), #06080d; color: #f1f5f9; font-family: system-ui, Arial; }
+        .earningsWrap { max-width: 1240px; margin: 0 auto; padding: 24px 18px 52px; }
+        .topLinks { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+        .topLinks a, .earningsSearchRow button, .actionLink { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 10px 14px; border-radius: 12px; border: 1px solid rgba(59,130,246,0.32); background: rgba(59,130,246,0.10); color: #dbeafe; text-decoration: none; font-weight: 900; font-size: 13px; cursor: pointer; }
+        .topLinks a.green, .actionLink.green { border-color: rgba(34,197,94,0.32); background: rgba(34,197,94,0.10); color: #dcfce7; }
+        .hero { border: 1px solid rgba(255,255,255,0.08); border-radius: 28px; padding: 24px; background: linear-gradient(135deg, rgba(15,23,42,0.96), rgba(6,10,18,0.98)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 18px 38px rgba(0,0,0,0.24); display: grid; grid-template-columns: minmax(0, 1fr) 410px; gap: 24px; align-items: stretch; }
+        .eyebrow, .smallLabel { font-size: 12px; font-weight: 950; text-transform: uppercase; letter-spacing: 0.08em; color: #93c5fd; }
+        .hero h1 { margin: 12px 0 0; font-size: 46px; line-height: 1.04; letter-spacing: -0.055em; }
+        .hero p { margin: 12px 0 0; color: rgba(226,232,240,0.80); line-height: 1.7; font-size: 16px; max-width: 760px; }
+        .scoreCard { border: 1px solid ${toneColor(score.tone)}55; border-radius: 22px; padding: 18px; background: linear-gradient(135deg, ${toneBg(score.tone)}, rgba(255,255,255,0.026)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.045); }
+        .scoreTop { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+        .scorePill { display: inline-flex; align-items: center; justify-content: center; border: 1px solid ${toneColor(score.tone)}66; background: ${toneBg(score.tone)}; color: ${toneColor(score.tone)}; border-radius: 999px; padding: 8px 11px; font-weight: 950; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+        .scoreNumberRow { margin-top: 14px; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+        .scoreNumber { font-size: 48px; line-height: 1; font-weight: 950; letter-spacing: -0.06em; }
+        .scoreWatermark { font-size: 15px; font-weight: 850; letter-spacing: 0.02em; color: rgba(255,255,255,0.24); }
+        .scoreBar { position: relative; margin-top: 18px; height: 14px; border-radius: 999px; background: linear-gradient(90deg, #ef4444, #facc15, #22c55e); overflow: hidden; }
+        .scoreNeedle { position: absolute; top: -5px; left: calc(${score.score}% - 9px); width: 18px; height: 24px; border-radius: 999px; background: #f8fafc; border: 3px solid ${toneColor(score.tone)}; box-shadow: 0 8px 20px rgba(0,0,0,0.32); }
+        .scoreLabels { display: flex; justify-content: space-between; margin-top: 9px; color: rgba(226,232,240,0.70); font-size: 11px; font-weight: 950; text-transform: uppercase; letter-spacing: 0.07em; }
+        .contentGrid { margin-top: 22px; display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr); gap: 22px; align-items: start; }
+        .card { border: 1px solid rgba(255,255,255,0.08); border-radius: 22px; padding: 18px; background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.022)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.035); overflow: visible; }
+        .card h2, .card h3 { margin: 8px 0 0; letter-spacing: -0.035em; line-height: 1.15; }
+        .card h2 { font-size: 26px; } .card h3 { font-size: 22px; }
+        .card p { color: rgba(226,232,240,0.82); line-height: 1.7; }
+        .metricGrid { margin-top: 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; overflow: visible; }
+        .metricLabelWrap { position: relative; display: inline-flex; align-items: center; gap: 7px; max-width: 100%; overflow: visible; }
+        .metricLabel { font-size: 11px; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(203,213,225,0.72); }
+        .metricHelp { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 999px; border: 1px solid rgba(147,197,253,0.30); background: #1e293b; color: #dbeafe; font-size: 11px; font-weight: 950; line-height: 1; cursor: help; z-index: 20; flex: 0 0 auto; }
+        .metricHelpBubble { position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%); width: 260px; max-width: min(260px, 72vw); padding: 11px 12px; border-radius: 13px; border: 1px solid rgba(147,197,253,0.22); background: #020617; color: #e5e7eb; box-shadow: 0 18px 44px rgba(0,0,0,0.55); font-size: 12px; font-weight: 750; letter-spacing: 0; line-height: 1.55; text-transform: none; text-align: left; opacity: 0; visibility: hidden; pointer-events: none; white-space: normal; z-index: 9999; }
+        .metricHelpBubble::after { content: ""; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); border-width: 7px; border-style: solid; border-color: #020617 transparent transparent transparent; }
+        .metricHelp:hover .metricHelpBubble, .metricHelp:focus .metricHelpBubble, .metricHelp:focus-visible .metricHelpBubble { opacity: 1; visibility: visible; }
+        .metricValue { margin-top: 8px; font-size: 24px; font-weight: 950; letter-spacing: -0.035em; }
+        .earningsDataNote { margin: 10px 0 0; color: rgba(148,163,184,0.78); font-size: 12px; line-height: 1.45; }
+        .metricSub { margin-top: 8px; font-size: 12px; line-height: 1.5; color: rgba(226,232,240,0.66); }
+        .trendDots { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 14px; }
+        .trendDot { text-align: center; min-width: 52px; }
+        .trendDot span { display: inline-flex; width: 18px; height: 18px; border-radius: 999px; box-shadow: 0 0 0 6px rgba(255,255,255,0.04); }
+        .trendDot strong { display: block; margin-top: 9px; font-size: 11px; color: rgba(241,245,249,0.86); }
+        .yearGrid { margin-top: 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+        .yearBadge { display: flex; justify-content: space-between; gap: 10px; align-items: center; border-radius: 13px; padding: 10px 12px; font-size: 13px; font-weight: 950; border: 1px solid rgba(255,255,255,0.10); }
+        .historyTable { width: 100%; border-collapse: separate; border-spacing: 0 10px; margin-top: 14px; }
+        .historyTable th { text-align: left; color: rgba(203,213,225,0.68); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; padding: 0 10px; }
+        .historyTable td { background: rgba(255,255,255,0.035); border-top: 1px solid rgba(255,255,255,0.07); border-bottom: 1px solid rgba(255,255,255,0.07); padding: 12px 10px; font-size: 13px; }
+        .historyTable td:first-child { border-left: 1px solid rgba(255,255,255,0.07); border-radius: 12px 0 0 12px; font-weight: 900; }
+        .historyTable td:last-child { border-right: 1px solid rgba(255,255,255,0.07); border-radius: 0 12px 12px 0; }
+        .sideColumn { position: sticky; top: 18px; display: grid; gap: 16px; }
+        .bulletList { margin: 14px 0 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+        .bulletList li { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 10px; color: rgba(226,232,240,0.84); line-height: 1.65; }
+        .bulletList li::before { content: ""; width: 9px; height: 9px; border-radius: 999px; margin-top: 8px; background: #22c55e; box-shadow: 0 0 0 4px rgba(34,197,94,0.10); }
+        @media (max-width: 980px) { .hero, .contentGrid { grid-template-columns: 1fr; } .sideColumn { position: static; } .metricGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        @media (max-width: 720px) {
+          .earningsPage, .earningsPage * { box-sizing: border-box; }
+          .earningsWrap { width: 100%; padding: 14px 10px 38px; overflow-x: hidden; }
+          .topLinks { display: grid; grid-template-columns: 1fr; justify-content: stretch; gap: 8px; margin-bottom: 12px; }
+          .topLinks a, .actionLink { width: 100%; min-height: 44px; padding: 10px 12px; text-align: center; }
+          .hero { padding: 16px; border-radius: 20px; gap: 18px; }
+          .hero h1 { margin-top: 10px; font-size: clamp(29px, 9vw, 36px); line-height: 1.08; letter-spacing: -0.045em; }
+          .hero p { font-size: 14px; line-height: 1.65; }
+          .scoreCard, .card { width: 100%; min-width: 0; border-radius: 18px; padding: 15px; }
+          .scoreTop { align-items: flex-start; }
+          .scoreNumberRow { margin-top: 18px; }
+          .scoreNumber { font-size: 42px; }
+          .scoreNeedle { left: calc(${score.score}% - 8px); width: 16px; height: 22px; }
+          .contentGrid { gap: 16px; }
+          .card h2 { font-size: 23px; } .card h3 { font-size: 20px; }
+          .card p, .bulletList li { font-size: 14px; line-height: 1.6; }
+          .metricGrid, .yearGrid, .earningsSearchRow { grid-template-columns: 1fr; }
+          .metricGrid { gap: 10px; }
+          .metricValue { font-size: 22px; word-break: break-word; }
+          .metricHelpBubble { position: fixed; left: 12px; right: 12px; bottom: auto; top: 92px; transform: none; width: auto; max-width: none; }
+          .metricHelpBubble::after { display: none; }
+          .trendDots { gap: 12px; justify-content: flex-start; }
+          .trendDot { min-width: 48px; }
+          .historyTable { display: block; width: 100%; border-spacing: 0; margin-top: 12px; }
+          .historyTable thead { display: none; }
+          .historyTable tbody, .historyTable tr, .historyTable td { display: block; width: 100%; }
+          .historyTable tr { margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; background: rgba(255,255,255,0.035); overflow: hidden; }
+          .historyTable td { display: flex; align-items: center; justify-content: space-between; gap: 14px; border: none; border-bottom: 1px solid rgba(255,255,255,0.07); border-radius: 0; background: transparent; padding: 11px 12px; font-size: 13px; text-align: right; }
+          .historyTable td:first-child, .historyTable td:last-child { border-radius: 0; border-left: none; border-right: none; }
+          .historyTable td:last-child { border-bottom: none; }
+          .historyTable td::before { content: ""; flex: 0 0 auto; color: rgba(203,213,225,0.70); font-size: 11px; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; text-align: left; }
+          .historyTable td:nth-child(1)::before { content: "Quarter"; }
+          .historyTable td:nth-child(2)::before { content: "EPS"; }
+          .historyTable td:nth-child(3)::before { content: "EPS Est."; }
+          .historyTable td:nth-child(4)::before { content: "EPS Surprise"; }
+          .historyTable td:nth-child(5)::before { content: "Revenue"; }
+          .historyTable td:nth-child(6)::before { content: "Revenue Surprise"; }
+          .historyTable td:nth-child(7)::before { content: "Read"; }
+        }
+        @media (max-width: 380px) { .earningsWrap { padding-left: 8px; padding-right: 8px; } .hero, .scoreCard, .card { padding: 13px; } .scoreNumber { font-size: 38px; } }
+      `}</style>
+
+      <div className="earningsWrap">
+        <PageShareBar
+          url={`https://www.mystockharbor.com/stock/${clean}/earnings`}
+          title={`${clean} Earnings & Earnings Score | MyStockHarbor`}
+          text={`${clean} earnings \\u2014 EPS, revenue & earnings score \\uD83D\\uDCCA MyStockHarbor`}
+        />
+
+        <section className="hero">
+          <div>
+            <div className="eyebrow">Earnings desk</div>
+            <h1>{clean} Stock Earnings, EPS & Revenue Breakdown</h1>
+            <p>Review the latest reported earnings for {clean}, including actual EPS, estimates, revenue surprise, year-over-year context, recent earnings consistency and a simple earnings score.</p>
+            <EarningsSymbolPicker currentSymbol={clean} />
+          </div>
+          <aside className="scoreCard">
+            <div className="scoreTop">
+              <div className="smallLabel">Earnings score</div>
+              <div className="scorePill">{score.label}</div>
+            </div>
+            <div className="scoreNumberRow">
+              <div className="scoreNumber">{score.score}/100</div>
+              <div className="scoreWatermark">MyStockHarbor</div>
+            </div>
+            <div className="scoreBar" aria-hidden="true"><div className="scoreNeedle" /></div>
+            <div className="scoreLabels"><span>Weak</span><span>Mixed</span><span>Strong</span></div>
+            <p style={{ marginTop: 16 }}>{score.explanation}</p>
+          </aside>
+        </section>
+
+        <section className="contentGrid">
+          <div style={{ display: "grid", gap: 18 }}>
+            <section className="card">
+              <div className="eyebrow">Latest report</div>
+              <h2>{clean} latest earnings snapshot</h2>
+              <p>Latest completed report: <strong>{formatDate(latest?.date)}</strong>. Next expected earnings date: <strong>{formatDate(next?.date)}</strong>.</p>
+              {!latest ? (
+                <p>Structured earnings data is not available for this symbol yet.</p>
+              ) : (
+                <>
+                  <div className="metricGrid">
+                    <div style={metricCardStyle(score.tone)}><MetricLabelWithHelp label="FMP EPS" /><div className="metricValue">{formatMoney(epsActual)}</div><div className="metricSub">FMP estimate: {formatMoney(epsEstimated)}</div></div>
+                    <div style={metricCardStyle(epsSurprise != null && epsSurprise >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="EPS surprise" /><div className="metricValue">{formatMoney(epsSurprise)}</div><div className="metricSub">{formatPercent(epsSurprisePct)}</div></div>
+                    <div style={metricCardStyle(revenueSurprise != null && revenueSurprise >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="Revenue surprise" /><div className="metricValue">{formatMoney(revenueSurprise, true)}</div><div className="metricSub">{formatPercent(revenueSurprisePct)}</div></div>
+                    <div style={metricCardStyle("default")}><MetricLabelWithHelp label="Revenue" /><div className="metricValue">{formatMoney(revenueActual, true)}</div><div className="metricSub">Estimate: {formatMoney(revenueEstimated, true)}</div></div>
+                    <div style={metricCardStyle(yoyEpsGrowth != null && yoyEpsGrowth >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="YoY EPS growth" /><div className="metricValue">{formatPercent(yoyEpsGrowth)}</div><div className="metricSub">Compared with {displayQuarterLabel(data.sameQuarterLastYear)}</div></div>
+                    <div style={metricCardStyle(yoyRevenueGrowth != null && yoyRevenueGrowth >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="YoY revenue growth" /><div className="metricValue">{formatPercent(yoyRevenueGrowth)}</div><div className="metricSub">Compared with {displayQuarterLabel(data.sameQuarterLastYear)}</div></div>
+                  </div>
+                  <p className="earningsDataNote">EPS fields are shown from FMP earnings data. They can differ from GAAP EPS or adjusted EPS quoted in earnings headlines.</p>
+                </>
+              )}
+            </section>
+
+            <section className="card">
+              <div className="eyebrow">Recent earnings trend</div>
+              <h2>How recent earnings have been landing</h2>
+              <p>The dots below simplify recent earnings into good, mixed or weak reads based on EPS surprise, revenue surprise and whether the report was profitable.</p>
+              {data.recentTrend.length ? (
+                <div className="trendDots">
+                  {data.recentTrend.map((item) => (
+                    <div key={item.label} className="trendDot">
+                      <span style={{ background: toneColor(item.tone) }} title={`${item.label}: ${toneLabel(item.tone)}`} />
+                      <strong>{item.label}</strong>
+                    </div>
+                  ))}
+                </div>
+              ) : <p>No recent completed earnings trend is available yet.</p>}
+            </section>
+
+            <section className="card">
+              <div className="eyebrow">Earnings history</div>
+              <h2>Recent reported quarters</h2>
+              {data.completedRows.length ? (
+                <table className="historyTable">
+                  <thead><tr><th>Quarter</th><th>EPS</th><th>EPS Est.</th><th>EPS Surprise</th><th>Revenue</th><th>Revenue Surprise</th><th>Read</th></tr></thead>
+                  <tbody>
+                    {data.completedRows.slice(0, 8).map((row) => {
+                      const rowEpsActual = asNumber(row.epsActual);
+                      const rowEpsEstimated = asNumber(row.epsEstimated);
+                      const rowRevenueActual = asNumber(row.revenueActual);
+                      const rowRevenueEstimated = asNumber(row.revenueEstimated);
+                      const rowTone = classifyQuarter(row);
+                      return (
+                        <tr key={`${row.date}-${row.epsActual}-${row.revenueActual}`}>
+                          <td>{displayQuarterLabel(row)}</td>
+                          <td>{formatMoney(rowEpsActual)}</td>
+                          <td>{formatMoney(rowEpsEstimated)}</td>
+                          <td>{formatPercent(calcPercentDifference(rowEpsActual, rowEpsEstimated))}</td>
+                          <td>{formatMoney(rowRevenueActual, true)}</td>
+                          <td>{formatPercent(calcPercentDifference(rowRevenueActual, rowRevenueEstimated))}</td>
+                          <td><span style={{ color: toneColor(rowTone), fontWeight: 950 }}>{toneLabel(rowTone)}</span></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : <p>No completed earnings history is available yet.</p>}
+            </section>
+          </div>
+
+          <aside className="sideColumn">
+            <section className="card">
+              <div className="eyebrow">What it means</div>
+              <h3>Investor read</h3>
+              <p>{score.explanation}</p>
+              <ul className="bulletList">
+                <li>EPS surprise shows whether profit landed above or below analyst expectations.</li>
+                <li>Revenue surprise shows whether demand was stronger or weaker than expected.</li>
+                <li>Year-over-year growth helps separate one-quarter noise from a real earnings trend.</li>
+              </ul>
+            </section>
+            <section className="card">
+              <div className="eyebrow">Why it matters</div>
+              <h3>Earnings can reset the stock narrative</h3>
+              <p>Earnings matter because they test whether the company story is being supported by actual revenue, profit and estimate performance.</p>
+            </section>
+            <section className="card">
+              <div className="eyebrow">Yearly earnings read</div>
+              <h3>Recent yearly pattern</h3>
+              {data.yearlySummaries.length ? (
+                <div className="yearGrid">
+                  {data.yearlySummaries.map((item) => (
+                    <div key={item.year} className="yearBadge" style={{ color: "#f8fafc", borderColor: `${toneColor(item.tone)}55`, background: toneBg(item.tone) }}>
+                      <span>{item.year}</span><span style={{ color: toneColor(item.tone) }}>{item.toneLabel}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : <p>No yearly earnings pattern is available yet.</p>}
+            </section>
+            <section className="card">
+              <div className="eyebrow">Next step</div>
+              <h3>Connect earnings with price action</h3>
+              <p>Use this page for the earnings read, then compare it with the stock page and latest news.</p>
+              <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
+                <Link className="actionLink" href={`/stock/${encodeURIComponent(clean)}`}>Open {clean} stock page &rarr;</Link>
+                <Link className="actionLink green" href={`/stock/${encodeURIComponent(clean)}/news`}>Read {clean} news &rarr;</Link>
+                <Link className="actionLink" href="/pickers">Open stock pickers &rarr;</Link>
+              </div>
+            </section>
+          </aside>
+        </section>
+      </div>
+    </main>
+  );
+}
