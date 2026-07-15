@@ -452,7 +452,7 @@ export default async function StockEarningsPage({ params }: Props) {
         .scoreCard { border: 1px solid ${toneColor(score.tone)}55; border-radius: 22px; padding: 18px; background: linear-gradient(135deg, ${toneBg(score.tone)}, rgba(255,255,255,0.026)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.045); }
         .scoreTop { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
         .scorePill { display: inline-flex; align-items: center; justify-content: center; border: 1px solid ${toneColor(score.tone)}66; background: ${toneBg(score.tone)}; color: ${toneColor(score.tone)}; border-radius: 999px; padding: 8px 11px; font-weight: 950; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
-        .scoreWatermark { margin-top: 8px; font-size: 10px; font-weight: 850; letter-spacing: 0.09em; text-transform: uppercase; color: rgba(255,255,255,0.22); }
+        .scoreWatermark { margin-top: 8px; font-size: 15px; font-weight: 850; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(255,255,255,0.24); }
         .scoreNumber { margin-top: 14px; font-size: 48px; line-height: 1; font-weight: 950; letter-spacing: -0.06em; }
         .scoreBar { position: relative; margin-top: 18px; height: 14px; border-radius: 999px; background: linear-gradient(90deg, #ef4444, #facc15, #22c55e); overflow: hidden; }
         .scoreNeedle { position: absolute; top: -5px; left: calc(${score.score}% - 9px); width: 18px; height: 24px; border-radius: 999px; background: #f8fafc; border: 3px solid ${toneColor(score.tone)}; box-shadow: 0 8px 20px rgba(0,0,0,0.32); }
