@@ -1,4 +1,40 @@
 import Link from "next/link";
+import type { Metadata } from "next";
+
+const PAGE_TITLE = "Stock Indicators Explained | RSI, MACD, Moving Averages | MyStockHarbor";
+const PAGE_DESCRIPTION =
+  "Understand the technical indicators behind MyStockHarbor's screened stock ideas - RSI, MACD, moving averages and volume - with guides on what each one measures and how traders use it.";
+const PAGE_URL = "https://www.mystockharbor.com/stock-indicators";
+const OG_IMAGE_URL = "https://www.mystockharbor.com/og-image-v2.png";
+
+export const metadata: Metadata = {
+  title: PAGE_TITLE,
+  description: PAGE_DESCRIPTION,
+  alternates: { canonical: PAGE_URL },
+  robots: { index: true, follow: true },
+  openGraph: {
+    title: PAGE_TITLE,
+    description: PAGE_DESCRIPTION,
+    url: PAGE_URL,
+    siteName: "MyStockHarbor",
+    images: [
+      {
+        url: OG_IMAGE_URL,
+        width: 1200,
+        height: 630,
+        alt: "MyStockHarbor stock indicators guide",
+      },
+    ],
+    locale: "en_GB",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: PAGE_TITLE,
+    description: PAGE_DESCRIPTION,
+    images: [OG_IMAGE_URL],
+  },
+};
 
 export default function StockIndicatorsPage() {
   return (
@@ -391,4 +427,3 @@ function IndicatorCard({
     </Link>
   );
 }
-
