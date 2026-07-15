@@ -41,6 +41,22 @@ const FMP_BASE = "https://financialmodelingprep.com/stable";
 // exchanges the rest of the site can actually chart.
 const ALLOWED_EXCHANGES = new Set(["NASDAQ", "NYSE", "AMEX"]);
 
+// Widely-searched large caps + index ETFs. Used only as a tiebreak *within* a
+// relevance tier, never to override it. Without this, "micro" put MicroAlgo,
+// Microsemi and MicroVision above Microsoft -- all of them match "Micro" just
+// as literally, so structural ranking alone can't separate them, and FMP's own
+// result order doesn't reliably favour the mega cap. Adding a symbol here only
+// helps it beat equally-relevant matches; it can never jump an exact-symbol hit.
+const POPULAR_SYMBOLS = new Set([
+  "AAPL", "ABBV", "ABT", "ADBE", "AMD", "AMZN", "ARM", "AVGO", "BA", "BAC",
+  "BRK.B", "C", "CAT", "COIN", "COST", "CRM", "CSCO", "CVX", "DIA", "DIS",
+  "F", "GE", "GM", "GOOG", "GOOGL", "GS", "HD", "IBM", "INTC", "IWM",
+  "JNJ", "JPM", "KO", "LLY", "MA", "MCD", "META", "MRK", "MSFT", "MU",
+  "NFLX", "NKE", "NVDA", "ORCL", "PEP", "PFE", "PG", "PLTR", "PYPL", "QCOM",
+  "QQQ", "RIVN", "SBUX", "SHOP", "SMCI", "SNAP", "SOFI", "SPY", "T", "TGT",
+  "TSLA", "TSM", "TXN", "UBER", "UNH", "V", "VZ", "WFC", "WMT", "XOM",
+]);
+
 function getFmpApiKey() {
   return (
     process.env.FMP_API_KEY ||
@@ -51,6 +67,17 @@ function getFmpApiKey() {
 
 function normalise(value: string) {
   return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+// Preferred series (ARR-PC), warrants, units and rights. These share their
+// parent company's name, so they match name queries exactly as well as the
+// common stock does and can outrank it -- a warrant (VENAW, "MicroAlgo Inc.")
+// was the top hit for "micro". Demoted rather than dropped: they're real
+// tradable symbols, just almost never what a name search is looking for.
+function isDerivativeSymbol(symbol: string) {
+  if (symbol.includes("-")) return true;
+  if (symbol.length === 5 && /[WUR]$/.test(symbol)) return true;
+  return false;
 }
 
 type FmpSearchRow = {
@@ -88,29 +115,39 @@ async function fetchFmpSearch(path: string, query: string): Promise<SymbolRow[]>
   }
 }
 
-// Structural relevance. Deliberately has no "name contains query anywhere"
-// tier -- that's what produced the Pharmaceuticals-for-"arm" results. A word
-// inside the name starting with the query (e.g. "Advanced Micro Devices" for
-// "micro") is a real match and is ranked, just below a name that leads with it
-// (e.g. "Microsoft Corporation").
+// Structural relevance, lower = better. Deliberately has no "name contains
+// query anywhere" tier -- that's what produced the Pharmaceuticals-for-"arm"
+// results. A word inside the name starting with the query (e.g. "Advanced
+// Micro Devices" for "micro") is a real match and is ranked, just below a name
+// that leads with it (e.g. "Microsoft Corporation").
 function rankResult(item: SymbolRow, query: string) {
   const q = normalise(query);
   if (!q) return 99;
 
-  const symbol = normalise(item.symbol);
+  const symbol = item.symbol.toUpperCase();
+  const symbolNorm = normalise(item.symbol);
   const nameUpper = item.name.toUpperCase();
   const nameNorm = normalise(item.name);
 
-  if (symbol === q) return 0;
-  if (symbol.startsWith(q)) return 10;
-  if (nameNorm.startsWith(q)) return 20;
+  let base: number;
 
-  const words = nameUpper.split(/[^A-Z0-9]+/).filter(Boolean);
-  if (words.some((word) => word.startsWith(q))) return 30;
+  if (symbolNorm === q) base = 0;
+  else if (symbolNorm.startsWith(q)) base = 10;
+  else if (nameNorm.startsWith(q)) base = 20;
+  else {
+    const words = nameUpper.split(/[^A-Z0-9]+/).filter(Boolean);
+    if (words.some((word) => word.startsWith(q))) base = 30;
+    else if (symbolNorm.includes(q)) base = 40;
+    else base = 50;
+  }
 
-  if (symbol.includes(q)) return 40;
+  // An exact ticker match is always the top hit -- typing "ARM" means ARM.
+  if (base === 0) return 0;
 
-  return 50;
+  let score = base;
+  if (POPULAR_SYMBOLS.has(symbol)) score -= 5;
+  if (isDerivativeSymbol(symbol)) score += 4;
+  return score;
 }
 
 // Small, deliberately narrow set of USD crypto pairs for the dashboard's
