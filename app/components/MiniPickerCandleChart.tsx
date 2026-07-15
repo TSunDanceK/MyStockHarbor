@@ -184,7 +184,7 @@ function MiniChartWatermark() {
           whiteSpace: "nowrap",
         }}
       >
-        MyStockHarbor.com
+        MyStockHarbor
       </span>
     </div>
   );
