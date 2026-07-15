@@ -907,6 +907,7 @@ export default function SiteHeader() {
         isActive: (path) =>
           /^\/stock\/[^/]+\/news$/.test(path) ||
           path === "/upcoming-ipos" ||
+          path === "/recently-added-to-index" ||
           path === "/headlines",
         entries: [
           {
@@ -921,6 +922,12 @@ export default function SiteHeader() {
             label: "Upcoming IPO's",
             href: "/upcoming-ipos",
             isActive: (path) => path === "/upcoming-ipos",
+          },
+          {
+            kind: "link",
+            label: "Recently Added to Index",
+            href: "/recently-added-to-index",
+            isActive: (path) => path === "/recently-added-to-index",
           },
           {
             kind: "link",
