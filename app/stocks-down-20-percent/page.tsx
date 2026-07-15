@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     title: "Stocks Down 20 Percent | MyStockHarbor",
     description:
       "Learn how traders review stocks down 20 percent and bigger pullback setups.",
-    url: "https://mystockharbor.com/stocks-down-20-percent",
+    url: "https://www.mystockharbor.com/stocks-down-20-percent",
     siteName: "MyStockHarbor",
     type: "article",
   },
