@@ -452,8 +452,9 @@ export default async function StockEarningsPage({ params }: Props) {
         .scoreCard { border: 1px solid ${toneColor(score.tone)}55; border-radius: 22px; padding: 18px; background: linear-gradient(135deg, ${toneBg(score.tone)}, rgba(255,255,255,0.026)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.045); }
         .scoreTop { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
         .scorePill { display: inline-flex; align-items: center; justify-content: center; border: 1px solid ${toneColor(score.tone)}66; background: ${toneBg(score.tone)}; color: ${toneColor(score.tone)}; border-radius: 999px; padding: 8px 11px; font-weight: 950; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
-        .scoreWatermark { margin-top: 8px; font-size: 15px; font-weight: 850; letter-spacing: 0.02em; color: rgba(255,255,255,0.24); }
-        .scoreNumber { margin-top: 14px; font-size: 48px; line-height: 1; font-weight: 950; letter-spacing: -0.06em; }
+        .scoreNumberRow { margin-top: 14px; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+        .scoreNumber { font-size: 48px; line-height: 1; font-weight: 950; letter-spacing: -0.06em; }
+        .scoreWatermark { font-size: 15px; font-weight: 850; letter-spacing: 0.02em; color: rgba(255,255,255,0.24); }
         .scoreBar { position: relative; margin-top: 18px; height: 14px; border-radius: 999px; background: linear-gradient(90deg, #ef4444, #facc15, #22c55e); overflow: hidden; }
         .scoreNeedle { position: absolute; top: -5px; left: calc(${score.score}% - 9px); width: 18px; height: 24px; border-radius: 999px; background: #f8fafc; border: 3px solid ${toneColor(score.tone)}; box-shadow: 0 8px 20px rgba(0,0,0,0.32); }
         .scoreLabels { display: flex; justify-content: space-between; margin-top: 9px; color: rgba(226,232,240,0.70); font-size: 11px; font-weight: 950; text-transform: uppercase; letter-spacing: 0.07em; }
@@ -498,7 +499,8 @@ export default async function StockEarningsPage({ params }: Props) {
           .hero p { font-size: 14px; line-height: 1.65; }
           .scoreCard, .card { width: 100%; min-width: 0; border-radius: 18px; padding: 15px; }
           .scoreTop { align-items: flex-start; }
-          .scoreNumber { margin-top: 18px; font-size: 42px; }
+          .scoreNumberRow { margin-top: 18px; }
+          .scoreNumber { font-size: 42px; }
           .scoreNeedle { left: calc(${score.score}% - 8px); width: 16px; height: 22px; }
           .contentGrid { gap: 16px; }
           .card h2 { font-size: 23px; } .card h3 { font-size: 20px; }
@@ -548,8 +550,10 @@ export default async function StockEarningsPage({ params }: Props) {
               <div className="smallLabel">Earnings score</div>
               <div className="scorePill">{score.label}</div>
             </div>
-            <div className="scoreWatermark">MyStockHarbor</div>
-            <div className="scoreNumber">{score.score}/100</div>
+            <div className="scoreNumberRow">
+              <div className="scoreNumber">{score.score}/100</div>
+              <div className="scoreWatermark">MyStockHarbor</div>
+            </div>
             <div className="scoreBar" aria-hidden="true"><div className="scoreNeedle" /></div>
             <div className="scoreLabels"><span>Weak</span><span>Mixed</span><span>Strong</span></div>
             <p style={{ marginTop: 16 }}>{score.explanation}</p>
