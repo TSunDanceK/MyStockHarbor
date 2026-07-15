@@ -442,7 +442,11 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   }, [symbol, activeTimeframe, selectedTimeframe, chartInterval, symbolCache]);
   useEffect(() => {
     let c = false; const q = query.trim(); if (!q) { setResults([]); return; }
-    const t = setTimeout(async () => { try { const typeParam = assetType === "crypto" ? "&type=crypto" : ""; const r = await fetch(`/api/symbols?q=${encodeURIComponent(q)}${typeParam}`); const d = (await r.json()) as { results: SymbolResult[] }; if (c) return; const rows = Array.isArray(d.results) ? d.results : []; const cu = q.toUpperCase(); setResults([...rows].sort((a, b) => { const aS = a.symbol.toUpperCase(), bS = b.symbol.toUpperCase(); if (aS === cu && bS !== cu) return -1; if (bS === cu && aS !== cu) return 1; if (aS.startsWith(cu) && !bS.startsWith(cu)) return -1; if (bS.startsWith(cu) && !aS.startsWith(cu)) return 1; return aS.localeCompare(bS); })); } catch { if (c) return; setResults([]); } }, 250);
+    // /api/symbols already returns results in relevance order (exact symbol >
+    // symbol prefix > name prefix > name word prefix). Do NOT re-sort here: a
+    // client-side alphabetical sort is what buried MSFT below MBOT/MCHP for
+    // the query "micro", and hid ARM behind ARMK/ARMP.
+    const t = setTimeout(async () => { try { const typeParam = assetType === "crypto" ? "&type=crypto" : ""; const r = await fetch(`/api/symbols?q=${encodeURIComponent(q)}${typeParam}`); const d = (await r.json()) as { results: SymbolResult[] }; if (c) return; setResults(Array.isArray(d.results) ? d.results : []); } catch { if (c) return; setResults([]); } }, 250);
     return () => { c = true; clearTimeout(t); };
   }, [query, assetType]);
   useEffect(() => { let c = false; async function lb() { try { const scope = assetType === "crypto" ? "crypto" : "stock"; const r = await fetch(`/api/benchmarks?scope=${scope}`); if (!r.ok) throw new Error(""); const raw = (await r.json()) as any; if (!c) setBench({ updatedAt: typeof raw?.updatedAt === "string" ? raw.updatedAt : new Date().toISOString(), scope: typeof raw?.scope === "string" ? raw.scope : "Benchmarks", items: Array.isArray(raw?.items) ? raw.items : [] }); } catch { if (!c) setBench({ updatedAt: new Date().toISOString(), scope: "Benchmarks", items: [] }); } } lb(); return () => { c = true; }; }, [assetType]);
