@@ -139,7 +139,7 @@ function PlayChartWatermark() {
           whiteSpace: "nowrap",
         }}
       >
-        MyStockHarbor.com
+        MyStockHarbor
       </span>
     </div>
   );
