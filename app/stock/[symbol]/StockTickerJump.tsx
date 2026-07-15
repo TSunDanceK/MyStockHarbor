@@ -92,18 +92,11 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
         const res = await fetch(`/api/symbols?q=${encodeURIComponent(q)}`);
         if (!res.ok) { setResults([]); return; }
         const data = (await res.json()) as { results?: SymbolResult[] };
-        const rows = Array.isArray(data.results) ? data.results : [];
-        const cleanedQuery = q.toUpperCase();
-        const sortedRows = [...rows].sort((a, b) => {
-          const aSymbol = a.symbol.toUpperCase();
-          const bSymbol = b.symbol.toUpperCase();
-          if (aSymbol === cleanedQuery && bSymbol !== cleanedQuery) return -1;
-          if (bSymbol === cleanedQuery && aSymbol !== cleanedQuery) return 1;
-          if (aSymbol.startsWith(cleanedQuery) && !bSymbol.startsWith(cleanedQuery)) return -1;
-          if (bSymbol.startsWith(cleanedQuery) && !aSymbol.startsWith(cleanedQuery)) return 1;
-          return aSymbol.localeCompare(bSymbol);
-        });
-        setResults(sortedRows);
+        // /api/symbols already returns results in relevance order (exact
+        // symbol > symbol prefix > name prefix > name word prefix). Do NOT
+        // re-sort here: an earlier client-side alphabetical sort is what
+        // buried MSFT below MBOT/MCHP for the query "micro".
+        setResults(Array.isArray(data.results) ? data.results : []);
       } catch {
         setResults([]);
       }
