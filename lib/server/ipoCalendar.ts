@@ -15,6 +15,10 @@
 // cap left null, then fills them in once underwriters finalize the deal.
 // Only rows with that pricing information present are shown, so the page
 // doesn't list speculative/unpriced listings.
+//
+// Both "upcoming" (next 30 days) and "recent" (past 30 days) views hit the
+// same FMP endpoint, just with the date range flipped, and are cached
+// separately below.
 
 export type ConfirmedIpo = {
   symbol: string;
@@ -32,7 +36,7 @@ export type ConfirmedIpo = {
 type FmpIpoRow = Record<string, unknown>;
 
 const CACHE_MS = 30 * 60_000;
-let cache: { at: number; items: ConfirmedIpo[] } | null = null;
+const caches: Record<string, { at: number; items: ConfirmedIpo[] }> = {};
 
 function toIsoDate(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -144,18 +148,18 @@ function parseRow(row: FmpIpoRow): ConfirmedIpo | null {
   };
 }
 
-export async function getUpcomingConfirmedIpos(): Promise<ConfirmedIpo[]> {
-  if (cache && Date.now() - cache.at < CACHE_MS) {
-    return cache.items;
+async function fetchConfirmedIpos(
+  from: string,
+  to: string,
+  cacheKey: string
+): Promise<ConfirmedIpo[]> {
+  const cached = caches[cacheKey];
+  if (cached && Date.now() - cached.at < CACHE_MS) {
+    return cached.items;
   }
 
   const apiKey = process.env.FMP_API_KEY;
-  if (!apiKey) return cache?.items ?? [];
-
-  const now = new Date();
-  const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-  const from = toIsoDate(now);
-  const to = toIsoDate(in30Days);
+  if (!apiKey) return cached?.items ?? [];
 
   const url = `https://financialmodelingprep.com/stable/ipos-calendar?from=${encodeURIComponent(
     from
@@ -173,11 +177,26 @@ export async function getUpcomingConfirmedIpos(): Promise<ConfirmedIpo[]> {
       .filter((row): row is ConfirmedIpo => row !== null)
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    cache = { at: Date.now(), items };
+    caches[cacheKey] = { at: Date.now(), items };
     return items;
   } catch {
     // Serve the last good cache (even if stale) rather than an empty page
     // on a transient FMP failure; fall back to empty only on a cold start.
-    return cache?.items ?? [];
+    return cached?.items ?? [];
   }
+}
+
+export async function getUpcomingConfirmedIpos(): Promise<ConfirmedIpo[]> {
+  const now = new Date();
+  const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  return fetchConfirmedIpos(toIsoDate(now), toIsoDate(in30Days), "upcoming");
+}
+
+// Confirmed IPOs that priced/listed within the last 30 days, most recent
+// first.
+export async function getRecentIpos(): Promise<ConfirmedIpo[]> {
+  const now = new Date();
+  const past30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const items = await fetchConfirmedIpos(toIsoDate(past30Days), toIsoDate(now), "recent");
+  return [...items].sort((a, b) => b.date.localeCompare(a.date));
 }
