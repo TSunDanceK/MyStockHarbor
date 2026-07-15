@@ -16,7 +16,7 @@ type Props = {
   params: Promise<{ symbol: string }>;
 };
 
-// ── Server-side data fetching ────────────────────────────────────────────────────
+// ── Server-side data fetching ────────────────────────────────────────────────
 
 async function fetchQuotePrice(
   symbol: string
@@ -106,7 +106,7 @@ async function fetchLatestEarnings(symbol: string): Promise<LatestEarningsData> 
   }
 }
 
-// ── Metadata (dynamic, data-driven) ──────────────────────────────────────────
+// ── Metadata (dynamic, data-driven) ─────────────────────────────────────────
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { symbol } = await params;
@@ -160,7 +160,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-// ── Page (SSR seed + AI analysis both resolved server-side) ────────────────────
+// ── Page (SSR seed + AI analysis both resolved server-side) ─────────────────
 
 export default async function StockPage({ params }: Props) {
   const { symbol } = await params;
