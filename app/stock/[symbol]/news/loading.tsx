@@ -2,20 +2,26 @@
 
 import { useEffect, useState, useRef } from "react";
 
+// AI generation no longer runs on the initial page load (it is now
+// triggered on-demand by the reader via buttons on the page itself), so
+// this skeleton only represents the real remaining work: the base news,
+// price, and earnings fetch that the Server Component still awaits before
+// it can render. No step here should imply AI is running during load.
 const STEPS = [
   { label: "Fetching latest headlines",  sub: "News feed"    },
   { label: "Pulling price & chart data", sub: "Market data"  },
   { label: "Scoring headline sentiment", sub: "News score"   },
   { label: "Loading earnings data",      sub: "Earnings"     },
-  { label: "Running AI analysis",        sub: "AI"           },
   { label: "Assembling your briefing",   sub: "Almost there" },
 ];
 
-// Approximate time each step takes before advancing.
-// The last step holds indefinitely — the page resolves when the server is done.
-const STEP_DURATIONS_MS = [900, 700, 650, 1100, 99999, 500];
+// Approximate time each step takes before advancing. The page itself
+// resolves as soon as the server is done, so this is just a reasonable
+// guess at pacing -- if the real fetch finishes first, this skeleton is
+// simply unmounted mid-animation, which is fine.
+const STEP_DURATIONS_MS = [650, 550, 450, 650, 900];
 
-const TARGET_PCTS = [12, 24, 38, 55, 88, 100];
+const TARGET_PCTS = [20, 40, 60, 82, 100];
 
 type StepState = "pending" | "active" | "done";
 
@@ -93,9 +99,8 @@ export default function StockNewsLoading() {
   const pct = useAnimatedPct(targetPct);
 
   useEffect(() => {
-    if (current >= STEPS.length) return;
+    if (current >= STEPS.length - 1) return;
     const dur = STEP_DURATIONS_MS[current];
-    if (dur >= 99000) return; // hold indefinitely on AI step
     const t = setTimeout(() => setCurrent((c) => c + 1), dur);
     return () => clearTimeout(t);
   }, [current]);
@@ -164,7 +169,7 @@ export default function StockNewsLoading() {
   );
 }
 
-/* ─── styles ─────────────────────────────────────────────── */
+/* --- styles --- */
 
 const mainStyle: React.CSSProperties = {
   minHeight: "100vh",
