@@ -1376,6 +1376,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title,
     description,
+    robots: {
+      index: false,
+      follow: true,
+    },
     alternates: { canonical: `https://www.mystockharbor.com/stock/${upper}/news` },
     openGraph: {
       title: `${upper} Stock News & Analysis | MyStockHarbor`,
