@@ -146,9 +146,55 @@ function computeMacroSupportResistanceZones(points: Point[], lastClose: number |
     else { if (lastClose > upper * 1.03) continue; dp = lastClose <= lower ? ((lower - lastClose) / lastClose) * 100 : 0; if (dp > 40) continue; }
     candidates.push({ kind: pivot.kind, lower, upper, touches: members.length, distancePct: dp, score: Math.min(members.length / 5, 1) * 40 + Math.max(0, 1 - dp / 40) * 34 + Math.min(sw / 80, 1) * 16 + Math.max(0, 1 - zwp / maxZ) * 10, label: `${pivot.kind === "support" ? "Macro support" : "Macro resistance"} (${members.length} touches)` });
   }
-  const bs = candidates.filter(c => c.kind === "support").sort((a, b) => b.score - a.score || a.distancePct - b.distancePct)[0];
-  const br = candidates.filter(c => c.kind === "resistance").sort((a, b) => b.score - a.score || a.distancePct - b.distancePct)[0];
-  return [bs, br].filter(Boolean) as SupportResistanceZone[];
+  if (!candidates.length) return [];
+
+  // Only one zone is ever drawn. Picking the best support AND the best
+  // resistance independently (as before) let each win purely on its own
+  // kind's score -- which could place a "resistance" zone below a
+  // "support" zone on the chart, reading as contradictory. Instead: pick
+  // the single strongest zone across both kinds, then label it support or
+  // resistance based on where price is sitting relative to that zone right
+  // now -- mirroring the same live-price-relative classification the
+  // picker backend's macro support/resistance computation already uses.
+  const deduped = candidates.filter((cluster, index, all) => {
+    const clusterMid = (cluster.lower + cluster.upper) / 2;
+    const dup = all.findIndex(c => {
+      if (c.kind !== cluster.kind) return false;
+      const mid = (c.lower + c.upper) / 2;
+      return clusterMid > 0 && Math.abs(((mid - clusterMid) / clusterMid) * 100) <= 1.2;
+    });
+    return dup === index;
+  });
+
+  const best = deduped.sort((a, b) => b.score - a.score || a.distancePct - b.distancePct)[0];
+  if (!best) return [];
+
+  let kind: "support" | "resistance";
+  if (lastClose < best.lower) {
+    kind = "resistance";
+  } else if (lastClose > best.upper) {
+    kind = "support";
+  } else {
+    // Price sits inside the zone -- ambiguous; break the tie using the
+    // previous few weekly bars (excluding the current one), falling back
+    // to the zone's original structural classification.
+    const level = (best.lower + best.upper) / 2;
+    const priorBars = weekly.slice(-4, -1);
+    let below = 0, above = 0;
+    for (const bar of priorBars) {
+      if (!Number.isFinite(bar.close)) continue;
+      if (bar.close < level) below++;
+      else if (bar.close > level) above++;
+    }
+    kind = below > above ? "resistance" : above > below ? "support" : best.kind;
+  }
+
+  return [{
+    kind,
+    lower: best.lower,
+    upper: best.upper,
+    label: `${kind === "support" ? "Macro support" : "Macro resistance"} (${best.touches} touches)`,
+  }];
 }
 
 function divStateForIndicator(div: ReturnType<typeof detectDivergenceFromHistory> | null, which: "rsi" | "macd"): DivergenceState {
@@ -491,12 +537,14 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
   const lastClose = displayedHistory.length ? displayedHistory[displayedHistory.length - 1].close : null;
   const localSupportResistanceZones = useMemo(() => computeMacroSupportResistanceZones(historyAll, lastClose), [historyAll, lastClose]);
   const supportResistanceZones = useMemo(() => {
-    if (!externalZone) return localSupportResistanceZones;
-    // Deep-linked zone (the exact zone that qualified this symbol for the
-    // Macro Support/Resistance picker category) takes priority -- drop any
-    // locally-computed zone of the same kind so they don't visually clash.
-    const rest = localSupportResistanceZones.filter(z => z.kind !== externalZone.kind);
-    return [externalZone, ...rest];
+    // Only one zone is ever shown. The deep-linked zone (the exact zone
+    // that qualified this symbol for the Macro Support/Resistance picker
+    // category) takes full priority when present -- the locally-computed
+    // zone is dropped entirely rather than merged in, since showing both
+    // could again put a support zone and a resistance zone at conflicting
+    // price levels on the same chart.
+    if (externalZone) return [externalZone];
+    return localSupportResistanceZones.slice(0, 1);
   }, [localSupportResistanceZones, externalZone]);
   const referenceLines = useMemo(() => (chartFocus ? [{ price: chartFocus.price, label: chartFocus.label }] : []), [chartFocus]);
   const lastMA50 = lastNum(ma50), lastMA200 = lastNum(ma200);
@@ -1004,7 +1052,7 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
           <div onClick={e => e.stopPropagation()} style={{ width: "min(1280px, 100%)", maxHeight: "92vh", overflow: "auto", borderRadius: 18, border: `1px solid ${COLORS.border}`, background: COLORS.cardBg, boxShadow: "0 24px 60px rgba(0,0,0,0.45)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 16px", borderBottom: `1px solid ${COLORS.border}` }}>
               <div style={{ fontWeight: 800, fontSize: 14 }}>Expanded Chart ({chartIndicatorName})</div>
-              <button type="button" onClick={() => setExpanded(false)} style={{ padding: "7px 10px", borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 700, cursor: "pointer" }}>✕</button>
+              <button type="button" onClick={() => setExpanded(false)} style={{ padding: "7px 10px", borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, cursor: "pointer", fontWeight: 700 }}>✕</button>
             </div>
             <div style={{ padding: 16 }}>
               <PriceChart symbol={symbol} data={displayedHistory} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} referenceLines={referenceLines} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={isMobile ? 280 : 520} hideSourceToggle showTradingViewLink={false} showTradeLink={false} />
