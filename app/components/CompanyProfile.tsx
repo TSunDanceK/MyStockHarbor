@@ -107,51 +107,77 @@ export default function CompanyProfile({
     },
   ].filter((r) => r.value);
 
-  const hasAnything = Boolean(profile.description) || rows.length > 0;
+  const hasDescription = Boolean(profile.description);
+  const hasRows = rows.length > 0;
+  const hasAnything = hasDescription || hasRows;
   if (!hasAnything) return null;
+
+  const statBoxes = rows.map((r) => (
+    <div key={r.label} style={cellStyle}>
+      <div style={cellLabelStyle}>{r.label}</div>
+      {r.href ? (
+        <a
+          href={r.href}
+          target="_blank"
+          rel="noopener noreferrer nofollow"
+          style={{ ...cellValueStyle, color: "#93c5fd", textDecoration: "none" }}
+        >
+          {r.value}
+        </a>
+      ) : (
+        <div style={cellValueStyle}>{r.value}</div>
+      )}
+    </div>
+  ));
 
   return (
     <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
       <div style={eyebrowStyle}>Company profile</div>
       <h2 style={headingStyle}>About {name}</h2>
 
-      {profile.description ? (
-        <p style={descStyle}>{profile.description}</p>
-      ) : null}
-
-      {rows.length ? (
-        <div style={gridStyle}>
-          {rows.map((r) => (
-            <div key={r.label} style={cellStyle}>
-              <div style={cellLabelStyle}>{r.label}</div>
-              {r.href ? (
-                <a
-                  href={r.href}
-                  target="_blank"
-                  rel="noopener noreferrer nofollow"
-                  style={{ ...cellValueStyle, color: "#93c5fd", textDecoration: "none" }}
-                >
-                  {r.value}
-                </a>
-              ) : (
-                <div style={cellValueStyle}>{r.value}</div>
-              )}
-            </div>
-          ))}
+      {/* Desktop: description in a wide left column, the stat boxes in a
+          narrow right column. Mobile: single column — description, then
+          the stat boxes stacked below it (source order, no reordering). */}
+      {hasDescription && hasRows ? (
+        <div className="cp-columns">
+          <p style={descStyle}>{profile.description}</p>
+          <div className="cp-stats">{statBoxes}</div>
         </div>
-      ) : null}
+      ) : hasDescription ? (
+        <p style={descStyle}>{profile.description}</p>
+      ) : (
+        <div style={gridStyle}>{statBoxes}</div>
+      )}
 
       <div style={sourceStyle}>
         Company profile data from Financial Modeling Prep. {symbol} listed on{" "}
         {profile.exchange ?? "its exchange"}.
       </div>
+
+      <style>{`
+        .cp-columns {
+          margin-top: 18px;
+          display: grid;
+          grid-template-columns: 1fr 260px;
+          gap: 24px;
+          align-items: start;
+        }
+        .cp-stats {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        @media (max-width: 720px) {
+          .cp-columns { grid-template-columns: 1fr !important; gap: 18px !important; }
+        }
+      `}</style>
     </section>
   );
 }
 
 const eyebrowStyle: CSSProperties = { fontSize: 11, fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)", marginBottom: 6 };
 const headingStyle: CSSProperties = { margin: 0, fontSize: 22, lineHeight: 1.15, letterSpacing: "-0.025em", fontWeight: 700 };
-const descStyle: CSSProperties = { margin: "12px 0 0", fontSize: 15, lineHeight: 1.75, color: "rgba(241,245,249,0.82)" };
+const descStyle: CSSProperties = { margin: 0, fontSize: 15, lineHeight: 1.75, color: "rgba(241,245,249,0.82)" };
 const gridStyle: CSSProperties = { marginTop: 18, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 };
 const cellStyle: CSSProperties = { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "10px 12px", background: "rgba(255,255,255,0.02)", minWidth: 0 };
 const cellLabelStyle: CSSProperties = { fontSize: 10, fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(148,163,184,0.62)" };
