@@ -398,6 +398,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const description = `Review ${clean} stock earnings, EPS surprise, revenue surprise${trendStr} and a simple earnings score. Historical trend and yearly breakdown on MyStockHarbor.`;
   return {
     title, description,
+    robots: {
+      index: false,
+      follow: true,
+    },
     alternates: { canonical: `https://www.mystockharbor.com/stock/${clean}/earnings` },
     openGraph: { title: `${clean} Earnings & Earnings Score | MyStockHarbor`, description, url: `https://www.mystockharbor.com/stock/${clean}/earnings`, siteName: "MyStockHarbor", type: "article", images: [{ url: "https://www.mystockharbor.com/og-image-v2.png", width: 1200, height: 630, alt: "MyStockHarbor earnings dashboard" }] },
     twitter: { card: "summary_large_image", title: `${clean} Earnings & Earnings Score | MyStockHarbor`, description, images: ["https://www.mystockharbor.com/og-image-v2.png"] },
