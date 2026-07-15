@@ -97,7 +97,7 @@ function formatDate(value?: string | null) {
 }
 
 function formatMoney(value: number | null | undefined, compact = false) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  if (typeof value !== "number" || !Number.isFinite(value)) return "\\u2014";
   const abs = Math.abs(value);
   if (compact) {
     if (abs >= 1_000_000_000) return `${value < 0 ? "-" : ""}$${(abs / 1_000_000_000).toFixed(2)}B`;
@@ -108,7 +108,7 @@ function formatMoney(value: number | null | undefined, compact = false) {
 }
 
 function formatPercent(value: number | null | undefined, digits = 1) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  if (typeof value !== "number" || !Number.isFinite(value)) return "\\u2014";
   return `${value >= 0 ? "+" : ""}${value.toFixed(digits)}%`;
 }
 
@@ -128,7 +128,7 @@ function calcGrowth(current: number | null, previous: number | null) {
 }
 
 function quarterLabel(date?: string | null) {
-  if (!date) return "—";
+  if (!date) return "\\u2014";
   const dt = new Date(`${date}T00:00:00Z`);
   if (Number.isNaN(dt.getTime())) return date;
   const month = dt.getUTCMonth();
@@ -146,7 +146,7 @@ function fiscalLabelFromStatement(row?: FmpIncomeStatementRow | null) {
 }
 
 function displayQuarterLabel(row?: FmpEarningsRow | null) {
-  if (!row) return "—";
+  if (!row) return "\\u2014";
   return row.fiscalLabel || quarterLabel(row.date);
 }
 
@@ -392,7 +392,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const [rawHistory, { price, date }] = await Promise.all([getDailyHistory(clean).catch(() => []), fetchQuoteForMeta(clean)]);
   const points: Point[] = (rawHistory as Point[]).filter((p) => p.date && Number.isFinite(p.close));
   const seed = computeIndicatorSeed(points, "", price, date);
-  const priceStr = seed.lastClose != null ? ` — Price $${seed.lastClose.toFixed(2)}` : "";
+  const priceStr = seed.lastClose != null ? ` \\u2014 Price $${seed.lastClose.toFixed(2)}` : "";
   const trendStr = seed.trend ? `, ${seed.trend}` : "";
   const title = `${clean} Earnings, EPS & Revenue${priceStr} | MyStockHarbor`;
   const description = `Review ${clean} stock earnings, EPS surprise, revenue surprise${trendStr} and a simple earnings score. Historical trend and yearly breakdown on MyStockHarbor.`;
@@ -539,7 +539,7 @@ export default async function StockEarningsPage({ params }: Props) {
         <PageShareBar
           url={`https://www.mystockharbor.com/stock/${clean}/earnings`}
           title={`${clean} Earnings & Earnings Score | MyStockHarbor`}
-          text={`${clean} earnings — EPS, revenue & earnings score 📊 MyStockHarbor`}
+          text={`${clean} earnings \\u2014 EPS, revenue & earnings score \\uD83D\\uDCCA MyStockHarbor`}
         />
 
         <section className="hero">
