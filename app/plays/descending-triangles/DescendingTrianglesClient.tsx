@@ -57,7 +57,7 @@ type PlaySection = {
   items: PlayItem[];
 };
 
-type PlaysPayload = {
+export type PlaysPayload = {
   updatedAt?: string;
   universeSize?: number;
   dynamicUniverseCount?: number;
@@ -66,6 +66,30 @@ type PlaysPayload = {
   sections?: PlaySection[];
   error?: string;
 };
+
+function normalizeInitialPayload(payload?: PlaysPayload | null) {
+  const sections = Array.isArray(payload?.sections) ? payload!.sections : [];
+  const updatedAt =
+    typeof payload?.updatedAt === "string" ? payload.updatedAt : null;
+  const universeSize =
+    typeof payload?.universeSize === "number" ? payload.universeSize : null;
+  const dynamicUniverseCount =
+    typeof payload?.dynamicUniverseCount === "number"
+      ? payload.dynamicUniverseCount
+      : null;
+  const estimatedApiCalls =
+    typeof payload?.estimatedApiCalls === "number"
+      ? payload.estimatedApiCalls
+      : null;
+
+  return {
+    sections,
+    updatedAt,
+    universeSize,
+    dynamicUniverseCount,
+    estimatedApiCalls,
+  };
+}
 
 function toneColour(tone?: PlayTone) {
   if (tone === "green") return "#22c55e";
@@ -172,26 +196,37 @@ function useIsNarrowScreen() {
   return isNarrow;
 }
 
-export default function DescendingTrianglesClient() {
-  const [sections, setSections] = useState<PlaySection[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function DescendingTrianglesClient({
+  initialPayload,
+}: {
+  initialPayload?: PlaysPayload | null;
+} = {}) {
+  const initial = normalizeInitialPayload(initialPayload);
+
+  const [sections, setSections] = useState<PlaySection[]>(initial.sections);
+  const [loading, setLoading] = useState(!initialPayload);
   const [forceRefreshing, setForceRefreshing] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
-  const [universeSize, setUniverseSize] = useState<number | null>(null);
-  const [dynamicUniverseCount, setDynamicUniverseCount] = useState<number | null>(
-    null
+  const [updatedAt, setUpdatedAt] = useState<string | null>(initial.updatedAt);
+  const [universeSize, setUniverseSize] = useState<number | null>(
+    initial.universeSize
   );
-  const [estimatedApiCalls, setEstimatedApiCalls] = useState<number | null>(null);
+  const [dynamicUniverseCount, setDynamicUniverseCount] = useState<number | null>(
+    initial.dynamicUniverseCount
+  );
+  const [estimatedApiCalls, setEstimatedApiCalls] = useState<number | null>(
+    initial.estimatedApiCalls
+  );
   const [selectedTimeframe, setSelectedTimeframe] = useState<
     "ALL" | "M" | "W" | "D" | "ST"
   >("ALL");
   const isNarrow = useIsNarrowScreen();
 
-  async function loadPlays(force = false) {
+  async function loadPlays(force = false, options: { silent?: boolean } = {}) {
+    const silent = options.silent ?? false;
     const setBusy = force ? setForceRefreshing : setLoading;
 
-    setBusy(true);
+    if (!silent) setBusy(true);
     setErr(null);
 
     try {
@@ -223,13 +258,15 @@ export default function DescendingTrianglesClient() {
           : null
       );
     } catch {
-      setErr(
-        force
-          ? "Force refresh failed."
-          : "Failed to load descending triangle plays."
-      );
+      if (!silent) {
+        setErr(
+          force
+            ? "Force refresh failed."
+            : "Failed to load descending triangle plays."
+        );
+      }
 
-      if (!force) {
+      if (!force && !silent) {
         setSections([]);
         setUpdatedAt(null);
         setUniverseSize(null);
@@ -237,7 +274,7 @@ export default function DescendingTrianglesClient() {
         setEstimatedApiCalls(null);
       }
     } finally {
-      setBusy(false);
+      if (!silent) setBusy(false);
     }
   }
 
@@ -245,52 +282,16 @@ export default function DescendingTrianglesClient() {
     const params = new URLSearchParams(window.location.search);
     const forceInitialLoad = params.get("force") === "1";
 
-    async function runInitialLoad() {
-      setLoading(true);
-      setForceRefreshing(false);
-      setErr(null);
-
-      try {
-        const url = forceInitialLoad
-          ? `/api/descending-triangles?force=1&t=${Date.now()}`
-          : `/api/descending-triangles?t=${Date.now()}`;
-
-        const res = await fetch(url, { cache: "no-store" });
-
-        if (!res.ok) throw new Error("Descending triangles API failed");
-
-        const data = (await res.json()) as PlaysPayload;
-
-        if (data?.error) throw new Error(data.error);
-
-        setSections(Array.isArray(data?.sections) ? data.sections : []);
-        setUpdatedAt(typeof data?.updatedAt === "string" ? data.updatedAt : null);
-        setUniverseSize(
-          typeof data?.universeSize === "number" ? data.universeSize : null
-        );
-        setDynamicUniverseCount(
-          typeof data?.dynamicUniverseCount === "number"
-            ? data.dynamicUniverseCount
-            : null
-        );
-        setEstimatedApiCalls(
-          typeof data?.estimatedApiCalls === "number"
-            ? data.estimatedApiCalls
-            : null
-        );
-      } catch {
-        setErr("Failed to load descending triangle plays.");
-        setSections([]);
-        setUpdatedAt(null);
-        setUniverseSize(null);
-        setDynamicUniverseCount(null);
-        setEstimatedApiCalls(null);
-      } finally {
-        setLoading(false);
-      }
+    if (forceInitialLoad) {
+      loadPlays(true);
+    } else {
+      // We may already have server-rendered data for the very first paint
+      // (see app/plays/descending-triangles/page.tsx). In that case,
+      // refresh quietly in the background instead of re-showing the
+      // loading skeleton.
+      loadPlays(false, { silent: Boolean(initialPayload) });
     }
-
-    runInitialLoad();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const safeSections = useMemo(() => {
