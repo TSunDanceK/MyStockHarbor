@@ -303,6 +303,9 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
     // On phones the Interactive chart is only usable at full size, so open it
     // fullscreen straight away (it can then be viewed in portrait or landscape).
     if (next === "interactive" && isMobile) setFullscreen(true);
+    // Switching back to Basic drops out of fullscreen — Basic has no fullscreen
+    // of its own, so returning to it should restore the normal dashboard view.
+    else if (next === "basic") setFullscreen(false);
   }
 
   const theme = "dark" as const;
