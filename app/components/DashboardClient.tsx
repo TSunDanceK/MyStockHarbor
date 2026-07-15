@@ -1015,17 +1015,17 @@ export default function DashboardClient({ defaultSymbol = "SPY" }: { defaultSymb
         // close button into the chart's own single toolbar line instead.
         const injectToolbar = isInteractive && fsLandscape;
         const closeBtn = (
-          <button key="fs-close" type="button" onClick={() => setFullscreen(false)} aria-label="Close fullscreen" style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: injectToolbar ? "5px 8px" : "8px 13px", borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, fontWeight: 800, fontSize: 13, cursor: "pointer", minHeight: injectToolbar ? 30 : 40, whiteSpace: "nowrap" }}>
-            <span style={{ fontSize: 15, lineHeight: 1 }}>✕</span>{!injectToolbar ? " Close" : ""}
+          <button key="fs-close" type="button" onClick={() => setFullscreen(false)} aria-label="Close fullscreen" title="Close" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: injectToolbar ? 30 : 34, height: injectToolbar ? 30 : 34, flex: "0 0 auto", borderRadius: 9, border: "1px solid rgba(240,68,68,0.45)", background: "rgba(127,29,29,0.22)", color: "#f87171", fontWeight: 800, fontSize: 16, lineHeight: 1, cursor: "pointer" }}>
+            ✕
           </button>
         );
         const trailing = injectToolbar ? (<><ChartModeSwitcher compact />{closeBtn}</>) : undefined;
         return (
         <div ref={fsOverlayRef} style={{ position: "fixed", inset: 0, zIndex: 130, background: "#0b1220", display: "flex", flexDirection: "column" }}>
           {!injectToolbar ? (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: isMobile ? "8px 10px" : "10px 14px", borderBottom: `1px solid ${COLORS.border}`, flexWrap: "wrap" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                <div style={{ fontWeight: 800, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{symbol}</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: isMobile ? "8px 10px" : "10px 14px", borderBottom: `1px solid ${COLORS.border}`, flexWrap: "nowrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: "1 1 auto", overflow: "hidden" }}>
+                <div style={{ fontWeight: 800, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: "0 1 auto" }}>{symbol}</div>
                 <ChartModeSwitcher compact />
               </div>
               {closeBtn}
