@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
 
-// There's no general "all tickers" news feed - AI-scored headlines are
-// generated per symbol (see app/stock/[symbol]/news). Previously /news had
-// no route at all and 404'd whenever someone clicked "News" in the top nav
-// without already having a ticker in context. Default to a high-profile,
-// always-active ticker so the link always resolves to something useful.
+// General market news landing. Previously redirected to a single ticker's
+// news page (/stock/TSLA/news) because there was no general "all tickers"
+// feed yet - that meant anyone clicking "News" without a ticker in context
+// landed on a single noindexed stock page. /headlines (added later) is a
+// proper general market headlines feed - plain FMP headlines, no AI - and
+// is itself indexable, so redirect here instead.
 export default function NewsIndexRedirect() {
-  redirect("/stock/TSLA/news");
+  redirect("/headlines");
 }
