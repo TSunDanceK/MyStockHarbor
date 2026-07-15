@@ -43,7 +43,7 @@ type SignalRecord = {
   isDynamicUniverse?: boolean;
 };
 
-type PickersPayload = {
+export type PickersPayload = {
   updatedAt?: string; universeSize?: number; dynamicUniverseCount?: number;
   dynamicUniversePreview?: string[]; dynamicSymbols?: string[];
   estimatedApiCalls?: number; sections?: PickerSection[]; signalRecords?: SignalRecord[];
@@ -462,22 +462,36 @@ function PickerRowContent({ symbol, note, companyName }: { symbol: string; note?
 
 type InsightSummary = { slug: string; title: string; date: string; symbol: string | null };
 
-export default function PickersClient({ latestInsights = [] }: { latestInsights?: InsightSummary[] }) {
+export default function PickersClient({ latestInsights = [], initialPickersPayload }: { latestInsights?: InsightSummary[]; initialPickersPayload?: PickersPayload }) {
   const SHOW_FORCE_FETCH_BUTTON = false;
 
-  const [sections, setSections] = useState<PickerSection[]>([]);
-  const [signalRecords, setSignalRecords] = useState<SignalRecord[]>([]);
+  // Server-rendered seed data (fetched in app/pickers/page.tsx) lets the real
+  // screened-stock content ship in the initial HTML instead of behind a
+  // client-side loading skeleton -- important for crawlers, which don't wait
+  // around for the post-mount fetch below. When present, we start already
+  // "loaded" and treat the mount-time fetch as a silent background refresh
+  // rather than a blocking load. See claude/stock-page-consolidation.md.
+  const hasInitialDataRef = React.useRef(
+    Boolean(
+      initialPickersPayload &&
+      (Array.isArray(initialPickersPayload.sections) && initialPickersPayload.sections.length > 0 ||
+        Array.isArray(initialPickersPayload.signalRecords) && initialPickersPayload.signalRecords.length > 0)
+    )
+  );
+
+  const [sections, setSections] = useState<PickerSection[]>(() => Array.isArray(initialPickersPayload?.sections) ? initialPickersPayload!.sections : []);
+  const [signalRecords, setSignalRecords] = useState<SignalRecord[]>(() => Array.isArray(initialPickersPayload?.signalRecords) ? initialPickersPayload!.signalRecords : []);
   const [selectedFilters, setSelectedFilters] = useState<FilterKey[]>([]);
   const [screenerOpen, setScreenerOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!hasInitialDataRef.current);
   const [forceRefreshing, setForceRefreshing] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
-  const [universeSize, setUniverseSize] = useState<number | null>(null);
-  const [dynamicUniverseCount, setDynamicUniverseCount] = useState<number | null>(null);
-  const [dynamicUniversePreview, setDynamicUniversePreview] = useState<string[] | null>(null);
-  const [dynamicSymbols, setDynamicSymbols] = useState<string[]>([]);
-  const [estimatedApiCalls, setEstimatedApiCalls] = useState<number | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(() => typeof initialPickersPayload?.updatedAt === "string" ? initialPickersPayload!.updatedAt : null);
+  const [universeSize, setUniverseSize] = useState<number | null>(() => typeof initialPickersPayload?.universeSize === "number" ? initialPickersPayload!.universeSize : null);
+  const [dynamicUniverseCount, setDynamicUniverseCount] = useState<number | null>(() => typeof initialPickersPayload?.dynamicUniverseCount === "number" ? initialPickersPayload!.dynamicUniverseCount : null);
+  const [dynamicUniversePreview, setDynamicUniversePreview] = useState<string[] | null>(() => Array.isArray(initialPickersPayload?.dynamicUniversePreview) ? initialPickersPayload!.dynamicUniversePreview : null);
+  const [dynamicSymbols, setDynamicSymbols] = useState<string[]>(() => Array.isArray(initialPickersPayload?.dynamicSymbols) ? initialPickersPayload!.dynamicSymbols.map((x) => String(x).trim().toUpperCase()).filter(Boolean) : []);
+  const [estimatedApiCalls, setEstimatedApiCalls] = useState<number | null>(() => typeof initialPickersPayload?.estimatedApiCalls === "number" ? initialPickersPayload!.estimatedApiCalls : null);
   const [earningsFetchBusy, setEarningsFetchBusy] = useState(false);
   const [earningsFetchLockedUntil, setEarningsFetchLockedUntil] = useState(0);
   const [earningsFetchTick, setEarningsFetchTick] = useState(0);
@@ -605,8 +619,15 @@ export default function PickersClient({ latestInsights = [] }: { latestInsights?
 
   useEffect(() => {
     let cancelled = false;
+    // If the server already seeded real data (see PickersPayload prop above),
+    // this mount-time fetch is just a silent background refresh -- no
+    // loading spinner, and a failure here shouldn't blank out the perfectly
+    // good server-rendered content that's already on screen. Only show the
+    // loading state / clear-on-error behavior when we started truly empty.
+    const hadInitialData = hasInitialDataRef.current;
     async function load() {
-      setLoading(true); setErr(null);
+      if (!hadInitialData) { setLoading(true); }
+      setErr(null);
       try {
         const res = await fetch(`/api/pickers?t=${Date.now()}`, { cache: "no-store" });
         if (!res.ok) throw new Error("Pickers API failed");
@@ -622,8 +643,13 @@ export default function PickersClient({ latestInsights = [] }: { latestInsights?
           setEstimatedApiCalls(typeof data?.estimatedApiCalls === "number" ? data.estimatedApiCalls : null);
         }
       } catch {
-        if (!cancelled) { setErr("Failed to load stock ideas."); setSections([]); setSignalRecords([]); setUpdatedAt(null); setUniverseSize(null); setDynamicUniverseCount(null); setDynamicUniversePreview(null); setDynamicSymbols([]); setEstimatedApiCalls(null); }
-      } finally { if (!cancelled) setLoading(false); }
+        if (!cancelled && !hadInitialData) {
+          setErr("Failed to load stock ideas.");
+          setSections([]); setSignalRecords([]); setUpdatedAt(null); setUniverseSize(null); setDynamicUniverseCount(null); setDynamicUniversePreview(null); setDynamicSymbols([]); setEstimatedApiCalls(null);
+        }
+        // else: keep showing the server-seeded data; the background refresh
+        // just didn't pan out this time.
+      } finally { if (!cancelled && !hadInitialData) setLoading(false); }
     }
     load();
     return () => { cancelled = true; };
