@@ -58,6 +58,13 @@ export async function GET(request: Request) {
   // isn't viable. If this is accessible, one cached daily fetch could supply
   // name+exchange for every row instead.
   const stockList = await fetchJson(`${base}/stock-list?apikey=${FMP_API_KEY}`);
+  const findSymbol = (searchParams.get("findSymbol") || "").trim().toUpperCase();
+  const stockListMatch =
+    findSymbol && Array.isArray(stockList.json)
+      ? (stockList.json as Array<Record<string, unknown>>).find(
+          (row) => String(row.symbol ?? "").toUpperCase() === findSymbol
+        )
+      : null;
 
   return NextResponse.json({
     checkedEndpoint: "/stable/earnings-calendar",
@@ -74,6 +81,7 @@ export async function GET(request: Request) {
       ok: stockList.ok,
       count: Array.isArray(stockList.json) ? stockList.json.length : null,
       sample: Array.isArray(stockList.json) ? stockList.json.slice(0, 5) : stockList,
+      findSymbolMatch: stockListMatch,
     },
     note: "API key is not returned by this debug route.",
   });
