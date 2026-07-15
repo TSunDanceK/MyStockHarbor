@@ -1869,7 +1869,6 @@ export default async function StockNewsPage({ params }: Props) {
                     fontSize: 16,
                     fontWeight: 800,
                     letterSpacing: "0.03em",
-                    textTransform: "uppercase",
                     color: "rgba(226,232,240,0.30)",
                   }}
                 >
