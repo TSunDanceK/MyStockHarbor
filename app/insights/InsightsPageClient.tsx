@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import type { BlogPost } from "@/lib/blog";
+import { useEffect, useMemo, useState } from "react";
+import type { BlogPost, InsightSearchResult } from "@/lib/blog";
 import type { YouTubeVideo } from "@/lib/youtube";
 import type { VideoMeta } from "@/lib/videoContent";
 import ShareButton from "@/app/components/ShareButton";
 
 const YOUTUBE_CHANNEL_URL = "https://www.youtube.com/@MyStockHarbor";
+const MIN_QUERY_LENGTH = 2;
+const SEARCH_DEBOUNCE_MS = 300;
 
 function formatVideoDate(value: string) {
   const dt = new Date(value);
@@ -19,9 +21,20 @@ type Props = {
   posts: BlogPost[];
   videos: YouTubeVideo[];
   videoMeta: VideoMeta[];
+  page: number;
+  totalPages: number;
+  totalCount: number;
 };
 
-function PostCard({ post }: { post: BlogPost }) {
+type ListPost = {
+  slug: string;
+  title: string;
+  date: string;
+  excerpt: string;
+  symbol?: string | null;
+};
+
+function PostCard({ post }: { post: ListPost }) {
   return (
     <Link
       href={`/insights/${post.slug}`}
@@ -126,8 +139,9 @@ function VideoCard({ video }: { video: YouTubeVideo }) {
 }
 
 // Static card — rendered from content/videos/*.md, no YouTube API needed.
-// These links are in the SSR HTML so Googlebot can discover and index the
-// video pages without depending on client-side JS or the YouTube API.
+// These <Link> elements are in the SSR HTML so Googlebot can discover and
+// index the video pages without depending on client-side JS or the
+// YouTube API.
 function StaticVideoCard({ meta }: { meta: VideoMeta }) {
   return (
     <Link
@@ -205,11 +219,136 @@ function StaticVideoCard({ meta }: { meta: VideoMeta }) {
   );
 }
 
-export default function InsightsPageClient({ posts, videos, videoMeta }: Props) {
+function PaginationNav({ page, totalPages }: { page: number; totalPages: number }) {
+  if (totalPages <= 1) return null;
+
+  const linkStyle = (disabled: boolean): React.CSSProperties => ({
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "9px 16px",
+    borderRadius: 10,
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: disabled ? "rgba(255,255,255,0.02)" : "rgba(255,255,255,0.05)",
+    color: disabled ? "rgba(241,245,249,0.35)" : "#f1f5f9",
+    textDecoration: "none",
+    fontWeight: 700,
+    fontSize: 13,
+    pointerEvents: disabled ? "none" : "auto",
+  });
+
+  return (
+    <div style={{ marginTop: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+      {page > 1 ? (
+        <Link href={page - 1 === 1 ? "/insights" : `/insights?page=${page - 1}`} style={linkStyle(false)}>
+          ← Newer
+        </Link>
+      ) : (
+        <span style={linkStyle(true)}>← Newer</span>
+      )}
+
+      <span style={{ fontSize: 12, opacity: 0.55, fontWeight: 700, whiteSpace: "nowrap" }}>
+        Page {page} of {totalPages}
+      </span>
+
+      {page < totalPages ? (
+        <Link href={`/insights?page=${page + 1}`} style={linkStyle(false)}>
+          Older →
+        </Link>
+      ) : (
+        <span style={linkStyle(true)}>Older →</span>
+      )}
+    </div>
+  );
+}
+
+function SearchBox({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <input
+      type="text"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder="Search all insights by ticker or title..."
+      aria-label="Search all insight posts by ticker or title"
+      style={{
+        width: "100%",
+        boxSizing: "border-box",
+        padding: "12px 16px",
+        borderRadius: 12,
+        border: "1px solid rgba(255,255,255,0.14)",
+        background: "rgba(255,255,255,0.04)",
+        color: "#f1f5f9",
+        fontSize: 15,
+        outline: "none",
+      }}
+    />
+  );
+}
+
+export default function InsightsPageClient({ posts, videos, videoMeta, page, totalPages, totalCount }: Props) {
   const [mobileTab, setMobileTab] = useState<"insights" | "videos">("insights");
+  const [query, setQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<InsightSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState(false);
+
+  const trimmedQuery = query.trim();
+  const isSearchActive = trimmedQuery.length >= MIN_QUERY_LENGTH;
+
+  useEffect(() => {
+    if (!isSearchActive) {
+      setSearchResults([]);
+      setSearching(false);
+      setSearchError(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      setSearchError(false);
+      try {
+        const res = await fetch(`/api/insights/search?q=${encodeURIComponent(trimmedQuery)}`, {
+          signal: controller.signal,
+        });
+        if (!res.ok) throw new Error("search request failed");
+        const data = await res.json();
+        setSearchResults(Array.isArray(data.results) ? data.results : []);
+      } catch (err) {
+        if ((err as { name?: string })?.name !== "AbortError") {
+          setSearchError(true);
+          setSearchResults([]);
+        }
+      } finally {
+        setSearching(false);
+      }
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [trimmedQuery, isSearchActive]);
+
+  const visiblePosts: ListPost[] = useMemo(
+    () => (isSearchActive ? searchResults : posts),
+    [isSearchActive, searchResults, posts]
+  );
 
   const pageUrl = "https://www.mystockharbor.com/insights";
   const shareText = "Daily stock market insights, chart setups & technical analysis on MyStockHarbor 📊";
+
+  const listLabel = isSearchActive
+    ? searching
+      ? "Searching…"
+      : `${searchResults.length} match${searchResults.length === 1 ? "" : "es"}`
+    : `Latest insights — ${totalCount} total`;
+
+  const emptyMessage = isSearchActive
+    ? searchError
+      ? "Search is unavailable right now — try again in a moment."
+      : `No insights match "${trimmedQuery}".`
+    : "No insight posts yet.";
 
   return (
     <main style={{ minHeight: "100vh", background: "#06080d", color: "#f1f5f9", fontFamily: "system-ui, Arial" }}>
@@ -250,6 +389,7 @@ export default function InsightsPageClient({ posts, videos, videoMeta }: Props) 
             Rendered from content/videos/*.md — no YouTube API.
             These <Link> elements are in the SSR HTML, so Googlebot can
             discover and crawl every video page from this anchor point.
+            Renders independently of search/pagination state below.
         ──────────────────────────────────────────────────────────────────────── */}
         {videoMeta.length > 0 && (
           <section style={{ marginTop: 28 }}>
@@ -310,12 +450,19 @@ export default function InsightsPageClient({ posts, videos, videoMeta }: Props) 
           </div>
 
           {mobileTab === "insights" && (
-            <div style={{ marginTop: 14, display: "grid", gap: 8 }}>
-              {posts.length === 0 ? (
-                <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", padding: 16, opacity: 0.7 }}>No insight posts yet.</div>
-              ) : (
-                posts.map((post) => <PostCard key={post.slug} post={post} />)
-              )}
+            <div style={{ marginTop: 14 }}>
+              <SearchBox value={query} onChange={setQuery} />
+              <div style={{ marginTop: 12, fontSize: 11, opacity: 0.55, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase" }}>
+                {listLabel}
+              </div>
+              <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                {visiblePosts.length === 0 ? (
+                  <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", padding: 16, opacity: 0.7 }}>{emptyMessage}</div>
+                ) : (
+                  visiblePosts.map((post) => <PostCard key={post.slug} post={post} />)
+                )}
+              </div>
+              {!isSearchActive && <PaginationNav page={page} totalPages={totalPages} />}
             </div>
           )}
 
@@ -336,14 +483,18 @@ export default function InsightsPageClient({ posts, videos, videoMeta }: Props) 
         {/* ── DESKTOP: two-column layout ── */}
         <section className="desktopLayout" style={{ marginTop: 24, display: "grid", gridTemplateColumns: "minmax(0, 1.4fr) minmax(300px, 1fr)", gap: 22, alignItems: "start" }}>
           <div>
-            <div style={{ fontSize: 11, opacity: 0.55, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 12 }}>Latest insights</div>
-            {posts.length === 0 ? (
-              <div style={{ borderRadius: 14, border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.03)", padding: 16, opacity: 0.7 }}>No insight posts yet.</div>
+            <SearchBox value={query} onChange={setQuery} />
+            <div style={{ marginTop: 16, marginBottom: 12, fontSize: 11, opacity: 0.55, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase" }}>
+              {listLabel}
+            </div>
+            {visiblePosts.length === 0 ? (
+              <div style={{ borderRadius: 14, border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.03)", padding: 16, opacity: 0.7 }}>{emptyMessage}</div>
             ) : (
               <div style={{ maxHeight: "80vh", overflowY: "auto", display: "grid", gap: 8, scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.15) transparent", touchAction: "pan-y" }}>
-                {posts.map((post) => <PostCard key={post.slug} post={post} />)}
+                {visiblePosts.map((post) => <PostCard key={post.slug} post={post} />)}
               </div>
             )}
+            {!isSearchActive && <PaginationNav page={page} totalPages={totalPages} />}
           </div>
 
           <aside className="desktopVideos" style={{ position: "sticky", top: 24 }}>
