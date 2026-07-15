@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { getPaginatedPosts } from "@/lib/blog";
 import { getLatestYouTubeVideos } from "@/lib/youtube";
-import { getAllVideoMeta } from "@/lib/videoContent";
 import InsightsPageClient from "./InsightsPageClient";
 
 const PAGE_SIZE = 20;
@@ -52,10 +51,9 @@ export default async function InsightsPage({ searchParams }: Props) {
   const { page: pageParam } = await searchParams;
   const requestedPage = parsePage(pageParam);
 
-  const [{ posts, page, totalPages, totalCount }, videos, videoMeta] = await Promise.all([
+  const [{ posts, page, totalPages, totalCount }, videos] = await Promise.all([
     Promise.resolve(getPaginatedPosts(requestedPage, PAGE_SIZE)),
     getLatestYouTubeVideos(20),
-    Promise.resolve(getAllVideoMeta()),
   ]);
 
   const insightsJsonLd = {
@@ -117,7 +115,6 @@ export default async function InsightsPage({ searchParams }: Props) {
       <InsightsPageClient
         posts={posts}
         videos={videos}
-        videoMeta={videoMeta}
         page={page}
         totalPages={totalPages}
         totalCount={totalCount}
