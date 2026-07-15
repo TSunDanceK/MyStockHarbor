@@ -895,11 +895,24 @@ export default function SiteHeader() {
           path === "/bottlenecks" || path.startsWith("/bottlenecks/"),
       },
       {
-        kind: "link",
+        kind: "dropdown",
         label: "Earnings",
-        href: stockHref(lastSymbol, "earnings"),
-        stockNav: "earnings",
-        isActive: (path) => /^\/stock\/[^/]+\/earnings$/.test(path),
+        isActive: (path) => /^\/stock\/[^/]+\/earnings$/.test(path) || path === "/earnings-calendar",
+        entries: [
+          {
+            kind: "link",
+            label: "Company Earnings",
+            href: stockHref(lastSymbol, "earnings"),
+            stockNav: "earnings",
+            isActive: (path) => /^\/stock\/[^/]+\/earnings$/.test(path),
+          },
+          {
+            kind: "link",
+            label: "Earnings Calendar",
+            href: "/earnings-calendar",
+            isActive: (path) => path === "/earnings-calendar",
+          },
+        ],
       },
       {
         kind: "dropdown",
