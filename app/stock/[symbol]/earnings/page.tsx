@@ -8,6 +8,7 @@ import {
   type Point,
 } from "@/lib/indicators";
 import PageShareBar from "@/app/components/PageShareBar";
+import { WatermarkVisibilityProvider, HideWatermarksBar, EarningsScoreWatermark } from "@/app/components/WatermarkVisibility";
 
 export const dynamic = "force-dynamic";
 
@@ -440,10 +441,11 @@ export default async function StockEarningsPage({ params }: Props) {
   };
 
   return (
-    <main className="earningsPage">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(pageJsonLd) }} />
+    <WatermarkVisibilityProvider>
+      <main className="earningsPage">
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(pageJsonLd) }} />
 
-      <style>{`
+        <style>{`
         .earningsPage { min-height: 100vh; background: radial-gradient(circle at top left, rgba(59,130,246,0.12), transparent 28%), radial-gradient(circle at top right, rgba(34,197,94,0.09), transparent 26%), #06080d; color: #f1f5f9; font-family: system-ui, Arial; }
         .earningsWrap { max-width: 1240px; margin: 0 auto; padding: 24px 18px 52px; }
         .topLinks { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
@@ -535,147 +537,150 @@ export default async function StockEarningsPage({ params }: Props) {
         @media (max-width: 380px) { .earningsWrap { padding-left: 8px; padding-right: 8px; } .hero, .scoreCard, .card { padding: 13px; } .scoreNumber { font-size: 38px; } }
       `}</style>
 
-      <div className="earningsWrap">
-        <PageShareBar
-          url={`https://www.mystockharbor.com/stock/${clean}/earnings`}
-          title={`${clean} Earnings & Earnings Score | MyStockHarbor`}
-          text={`${clean} earnings — EPS, revenue & earnings score 📊 MyStockHarbor`}
-        />
+        <div className="earningsWrap">
+          <PageShareBar
+            url={`https://www.mystockharbor.com/stock/${clean}/earnings`}
+            title={`${clean} Earnings & Earnings Score | MyStockHarbor`}
+            text={`${clean} earnings — EPS, revenue & earnings score 📊 MyStockHarbor`}
+          />
 
-        <section className="hero">
-          <div>
-            <div className="eyebrow">Earnings desk</div>
-            <h1>{clean} Stock Earnings, EPS & Revenue Breakdown</h1>
-            <p>Review the latest reported earnings for {clean}, including actual EPS, estimates, revenue surprise, year-over-year context, recent earnings consistency and a simple earnings score.</p>
-            <EarningsSymbolPicker currentSymbol={clean} />
-          </div>
-          <aside className="scoreCard">
-            <div className="scoreTop">
-              <div className="smallLabel">Earnings score</div>
-              <div className="scorePill">{score.label}</div>
+          <section className="hero">
+            <div>
+              <div className="eyebrow">Earnings desk</div>
+              <h1>{clean} Stock Earnings, EPS & Revenue Breakdown</h1>
+              <p>Review the latest reported earnings for {clean}, including actual EPS, estimates, revenue surprise, year-over-year context, recent earnings consistency and a simple earnings score.</p>
+              <EarningsSymbolPicker currentSymbol={clean} />
             </div>
-            <div className="scoreNumberRow">
-              <div className="scoreNumber">{score.score}/100</div>
-              <div className="scoreWatermark">MyStockHarbor</div>
-            </div>
-            <div className="scoreBar" aria-hidden="true"><div className="scoreNeedle" /></div>
-            <div className="scoreLabels"><span>Weak</span><span>Mixed</span><span>Strong</span></div>
-            <p style={{ marginTop: 16 }}>{score.explanation}</p>
-          </aside>
-        </section>
-
-        <section className="contentGrid">
-          <div style={{ display: "grid", gap: 18 }}>
-            <section className="card">
-              <div className="eyebrow">Latest report</div>
-              <h2>{clean} latest earnings snapshot</h2>
-              <p>Latest completed report: <strong>{formatDate(latest?.date)}</strong>. Next expected earnings date: <strong>{formatDate(next?.date)}</strong>.</p>
-              {!latest ? (
-                <p>Structured earnings data is not available for this symbol yet.</p>
-              ) : (
-                <>
-                  <div className="metricGrid">
-                    <div style={metricCardStyle(score.tone)}><MetricLabelWithHelp label="FMP EPS" /><div className="metricValue">{formatMoney(epsActual)}</div><div className="metricSub">FMP estimate: {formatMoney(epsEstimated)}</div></div>
-                    <div style={metricCardStyle(epsSurprise != null && epsSurprise >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="EPS surprise" /><div className="metricValue">{formatMoney(epsSurprise)}</div><div className="metricSub">{formatPercent(epsSurprisePct)}</div></div>
-                    <div style={metricCardStyle(revenueSurprise != null && revenueSurprise >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="Revenue surprise" /><div className="metricValue">{formatMoney(revenueSurprise, true)}</div><div className="metricSub">{formatPercent(revenueSurprisePct)}</div></div>
-                    <div style={metricCardStyle("default")}><MetricLabelWithHelp label="Revenue" /><div className="metricValue">{formatMoney(revenueActual, true)}</div><div className="metricSub">Estimate: {formatMoney(revenueEstimated, true)}</div></div>
-                    <div style={metricCardStyle(yoyEpsGrowth != null && yoyEpsGrowth >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="YoY EPS growth" /><div className="metricValue">{formatPercent(yoyEpsGrowth)}</div><div className="metricSub">Compared with {displayQuarterLabel(data.sameQuarterLastYear)}</div></div>
-                    <div style={metricCardStyle(yoyRevenueGrowth != null && yoyRevenueGrowth >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="YoY revenue growth" /><div className="metricValue">{formatPercent(yoyRevenueGrowth)}</div><div className="metricSub">Compared with {displayQuarterLabel(data.sameQuarterLastYear)}</div></div>
-                  </div>
-                  <p className="earningsDataNote">EPS fields are shown from FMP earnings data. They can differ from GAAP EPS or adjusted EPS quoted in earnings headlines.</p>
-                </>
-              )}
-            </section>
-
-            <section className="card">
-              <div className="eyebrow">Recent earnings trend</div>
-              <h2>How recent earnings have been landing</h2>
-              <p>The dots below simplify recent earnings into good, mixed or weak reads based on EPS surprise, revenue surprise and whether the report was profitable.</p>
-              {data.recentTrend.length ? (
-                <div className="trendDots">
-                  {data.recentTrend.map((item) => (
-                    <div key={item.label} className="trendDot">
-                      <span style={{ background: toneColor(item.tone) }} title={`${item.label}: ${toneLabel(item.tone)}`} />
-                      <strong>{item.label}</strong>
-                    </div>
-                  ))}
-                </div>
-              ) : <p>No recent completed earnings trend is available yet.</p>}
-            </section>
-
-            <section className="card">
-              <div className="eyebrow">Earnings history</div>
-              <h2>Recent reported quarters</h2>
-              {data.completedRows.length ? (
-                <table className="historyTable">
-                  <thead><tr><th>Quarter</th><th>EPS</th><th>EPS Est.</th><th>EPS Surprise</th><th>Revenue</th><th>Revenue Surprise</th><th>Read</th></tr></thead>
-                  <tbody>
-                    {data.completedRows.slice(0, 8).map((row) => {
-                      const rowEpsActual = asNumber(row.epsActual);
-                      const rowEpsEstimated = asNumber(row.epsEstimated);
-                      const rowRevenueActual = asNumber(row.revenueActual);
-                      const rowRevenueEstimated = asNumber(row.revenueEstimated);
-                      const rowTone = classifyQuarter(row);
-                      return (
-                        <tr key={`${row.date}-${row.epsActual}-${row.revenueActual}`}>
-                          <td>{displayQuarterLabel(row)}</td>
-                          <td>{formatMoney(rowEpsActual)}</td>
-                          <td>{formatMoney(rowEpsEstimated)}</td>
-                          <td>{formatPercent(calcPercentDifference(rowEpsActual, rowEpsEstimated))}</td>
-                          <td>{formatMoney(rowRevenueActual, true)}</td>
-                          <td>{formatPercent(calcPercentDifference(rowRevenueActual, rowRevenueEstimated))}</td>
-                          <td><span style={{ color: toneColor(rowTone), fontWeight: 950 }}>{toneLabel(rowTone)}</span></td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              ) : <p>No completed earnings history is available yet.</p>}
-            </section>
-          </div>
-
-          <aside className="sideColumn">
-            <section className="card">
-              <div className="eyebrow">What it means</div>
-              <h3>Investor read</h3>
-              <p>{score.explanation}</p>
-              <ul className="bulletList">
-                <li>EPS surprise shows whether profit landed above or below analyst expectations.</li>
-                <li>Revenue surprise shows whether demand was stronger or weaker than expected.</li>
-                <li>Year-over-year growth helps separate one-quarter noise from a real earnings trend.</li>
-              </ul>
-            </section>
-            <section className="card">
-              <div className="eyebrow">Why it matters</div>
-              <h3>Earnings can reset the stock narrative</h3>
-              <p>Earnings matter because they test whether the company story is being supported by actual revenue, profit and estimate performance.</p>
-            </section>
-            <section className="card">
-              <div className="eyebrow">Yearly earnings read</div>
-              <h3>Recent yearly pattern</h3>
-              {data.yearlySummaries.length ? (
-                <div className="yearGrid">
-                  {data.yearlySummaries.map((item) => (
-                    <div key={item.year} className="yearBadge" style={{ color: "#f8fafc", borderColor: `${toneColor(item.tone)}55`, background: toneBg(item.tone) }}>
-                      <span>{item.year}</span><span style={{ color: toneColor(item.tone) }}>{item.toneLabel}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : <p>No yearly earnings pattern is available yet.</p>}
-            </section>
-            <section className="card">
-              <div className="eyebrow">Next step</div>
-              <h3>Connect earnings with price action</h3>
-              <p>Use this page for the earnings read, then compare it with the stock page and latest news.</p>
-              <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
-                <Link className="actionLink" href={`/stock/${encodeURIComponent(clean)}`}>Open {clean} stock page &rarr;</Link>
-                <Link className="actionLink green" href={`/stock/${encodeURIComponent(clean)}/news`}>Read {clean} news &rarr;</Link>
-                <Link className="actionLink" href="/pickers">Open stock pickers &rarr;</Link>
+            <aside className="scoreCard">
+              <div className="scoreTop">
+                <div className="smallLabel">Earnings score</div>
+                <div className="scorePill">{score.label}</div>
               </div>
-            </section>
-          </aside>
-        </section>
-      </div>
-    </main>
+              <div className="scoreNumberRow">
+                <div className="scoreNumber">{score.score}/100</div>
+                <EarningsScoreWatermark />
+              </div>
+              <div className="scoreBar" aria-hidden="true"><div className="scoreNeedle" /></div>
+              <div className="scoreLabels"><span>Weak</span><span>Mixed</span><span>Strong</span></div>
+              <p style={{ marginTop: 16 }}>{score.explanation}</p>
+            </aside>
+          </section>
+
+          <section className="contentGrid">
+            <div style={{ display: "grid", gap: 18 }}>
+              <section className="card">
+                <div className="eyebrow">Latest report</div>
+                <h2>{clean} latest earnings snapshot</h2>
+                <p>Latest completed report: <strong>{formatDate(latest?.date)}</strong>. Next expected earnings date: <strong>{formatDate(next?.date)}</strong>.</p>
+                {!latest ? (
+                  <p>Structured earnings data is not available for this symbol yet.</p>
+                ) : (
+                  <>
+                    <div className="metricGrid">
+                      <div style={metricCardStyle(score.tone)}><MetricLabelWithHelp label="FMP EPS" /><div className="metricValue">{formatMoney(epsActual)}</div><div className="metricSub">FMP estimate: {formatMoney(epsEstimated)}</div></div>
+                      <div style={metricCardStyle(epsSurprise != null && epsSurprise >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="EPS surprise" /><div className="metricValue">{formatMoney(epsSurprise)}</div><div className="metricSub">{formatPercent(epsSurprisePct)}</div></div>
+                      <div style={metricCardStyle(revenueSurprise != null && revenueSurprise >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="Revenue surprise" /><div className="metricValue">{formatMoney(revenueSurprise, true)}</div><div className="metricSub">{formatPercent(revenueSurprisePct)}</div></div>
+                      <div style={metricCardStyle("default")}><MetricLabelWithHelp label="Revenue" /><div className="metricValue">{formatMoney(revenueActual, true)}</div><div className="metricSub">Estimate: {formatMoney(revenueEstimated, true)}</div></div>
+                      <div style={metricCardStyle(yoyEpsGrowth != null && yoyEpsGrowth >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="YoY EPS growth" /><div className="metricValue">{formatPercent(yoyEpsGrowth)}</div><div className="metricSub">Compared with {displayQuarterLabel(data.sameQuarterLastYear)}</div></div>
+                      <div style={metricCardStyle(yoyRevenueGrowth != null && yoyRevenueGrowth >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="YoY revenue growth" /><div className="metricValue">{formatPercent(yoyRevenueGrowth)}</div><div className="metricSub">Compared with {displayQuarterLabel(data.sameQuarterLastYear)}</div></div>
+                    </div>
+                    <p className="earningsDataNote">EPS fields are shown from FMP earnings data. They can differ from GAAP EPS or adjusted EPS quoted in earnings headlines.</p>
+                  </>
+                )}
+              </section>
+
+              <section className="card">
+                <div className="eyebrow">Recent earnings trend</div>
+                <h2>How recent earnings have been landing</h2>
+                <p>The dots below simplify recent earnings into good, mixed or weak reads based on EPS surprise, revenue surprise and whether the report was profitable.</p>
+                {data.recentTrend.length ? (
+                  <div className="trendDots">
+                    {data.recentTrend.map((item) => (
+                      <div key={item.label} className="trendDot">
+                        <span style={{ background: toneColor(item.tone) }} title={`${item.label}: ${toneLabel(item.tone)}`} />
+                        <strong>{item.label}</strong>
+                      </div>
+                    ))}
+                  </div>
+                ) : <p>No recent completed earnings trend is available yet.</p>}
+              </section>
+
+              <section className="card">
+                <div className="eyebrow">Earnings history</div>
+                <h2>Recent reported quarters</h2>
+                {data.completedRows.length ? (
+                  <table className="historyTable">
+                    <thead><tr><th>Quarter</th><th>EPS</th><th>EPS Est.</th><th>EPS Surprise</th><th>Revenue</th><th>Revenue Surprise</th><th>Read</th></tr></thead>
+                    <tbody>
+                      {data.completedRows.slice(0, 8).map((row) => {
+                        const rowEpsActual = asNumber(row.epsActual);
+                        const rowEpsEstimated = asNumber(row.epsEstimated);
+                        const rowRevenueActual = asNumber(row.revenueActual);
+                        const rowRevenueEstimated = asNumber(row.revenueEstimated);
+                        const rowTone = classifyQuarter(row);
+                        return (
+                          <tr key={`${row.date}-${row.epsActual}-${row.revenueActual}`}>
+                            <td>{displayQuarterLabel(row)}</td>
+                            <td>{formatMoney(rowEpsActual)}</td>
+                            <td>{formatMoney(rowEpsEstimated)}</td>
+                            <td>{formatPercent(calcPercentDifference(rowEpsActual, rowEpsEstimated))}</td>
+                            <td>{formatMoney(rowRevenueActual, true)}</td>
+                            <td>{formatPercent(calcPercentDifference(rowRevenueActual, rowRevenueEstimated))}</td>
+                            <td><span style={{ color: toneColor(rowTone), fontWeight: 950 }}>{toneLabel(rowTone)}</span></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                ) : <p>No completed earnings history is available yet.</p>}
+              </section>
+            </div>
+
+            <aside className="sideColumn">
+              <section className="card">
+                <div className="eyebrow">What it means</div>
+                <h3>Investor read</h3>
+                <p>{score.explanation}</p>
+                <ul className="bulletList">
+                  <li>EPS surprise shows whether profit landed above or below analyst expectations.</li>
+                  <li>Revenue surprise shows whether demand was stronger or weaker than expected.</li>
+                  <li>Year-over-year growth helps separate one-quarter noise from a real earnings trend.</li>
+                </ul>
+              </section>
+              <section className="card">
+                <div className="eyebrow">Why it matters</div>
+                <h3>Earnings can reset the stock narrative</h3>
+                <p>Earnings matter because they test whether the company story is being supported by actual revenue, profit and estimate performance.</p>
+              </section>
+              <section className="card">
+                <div className="eyebrow">Yearly earnings read</div>
+                <h3>Recent yearly pattern</h3>
+                {data.yearlySummaries.length ? (
+                  <div className="yearGrid">
+                    {data.yearlySummaries.map((item) => (
+                      <div key={item.year} className="yearBadge" style={{ color: "#f8fafc", borderColor: `${toneColor(item.tone)}55`, background: toneBg(item.tone) }}>
+                        <span>{item.year}</span><span style={{ color: toneColor(item.tone) }}>{item.toneLabel}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : <p>No yearly earnings pattern is available yet.</p>}
+              </section>
+              <section className="card">
+                <div className="eyebrow">Next step</div>
+                <h3>Connect earnings with price action</h3>
+                <p>Use this page for the earnings read, then compare it with the stock page and latest news.</p>
+                <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
+                  <Link className="actionLink" href={`/stock/${encodeURIComponent(clean)}`}>Open {clean} stock page &rarr;</Link>
+                  <Link className="actionLink green" href={`/stock/${encodeURIComponent(clean)}/news`}>Read {clean} news &rarr;</Link>
+                  <Link className="actionLink" href="/pickers">Open stock pickers &rarr;</Link>
+                </div>
+              </section>
+            </aside>
+          </section>
+
+          <HideWatermarksBar />
+        </div>
+      </main>
+    </WatermarkVisibilityProvider>
   );
 }
