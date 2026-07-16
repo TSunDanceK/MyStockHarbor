@@ -979,7 +979,7 @@ export default function DashboardClient({
                   ) : null}
                   <div style={{ fontWeight: 800, lineHeight: 1.4, fontSize: 14 }}>{item.title}</div>
                 </div>
-                <div style={{ fontSize: 13, lineHeight: 1.6, color: COLORS.mutedFg }}>{item.summary}</div>
+                <div style={{ fontSize: 13, lineHeight: 1.6, color: COLORS.mutedFg, display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden" } as React.CSSProperties}>{item.summary}</div>
                 {item.link ? <a href={item.link} target="_blank" rel="noopener noreferrer" style={{ justifySelf: "start", color: "#9cc0ff", textDecoration: "none", fontWeight: 700, fontSize: 12 }}>Read full article ↗</a> : null}
               </div>
             ))}
