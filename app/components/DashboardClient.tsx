@@ -17,7 +17,7 @@ type ChartMode = "basic" | "interactive" | "tradingview";
 type SymbolResult = { symbol: string; name: string; exchange: string };
 type BenchItem = { key: string; label: string; symbol: string; date: string | null; time: string | null; close: number | null; prevClose: number | null; changePct: number | null; };
 export type BenchPayload = { updatedAt: string; scope: string; items: BenchItem[]; };
-type InternalNewsCard = { title: string; source: string | null; pubDate: string | null; summary: string; whyItMatters: string; debugAiUsed: 0 | 1; image?: string | null; link?: string | null; };
+type InternalNewsCard = { title: string; source: string | null; pubDate: string | null; summary: string; image?: string | null; link?: string | null; };
 export type NewsPayload = { symbol: string; companyName: string; isInvalidTicker: boolean; trend: string; newsScoreLabel: string; newsScoreValue: number; cards: InternalNewsCard[]; ctaHref: string; };
 export type StockEarningsSummary = { hasStructuredData?: boolean; tone?: "green" | "yellow" | "red"; toneLabel?: "Good" | "Neutral" | "Weak" | "Unavailable"; reportDate?: string | null; epsSurprisePercent?: number | null; revenueSurprisePercent?: number | null; };
 type CachedSymbolData = { quote: Quote | null; history: Point[]; };
@@ -148,6 +148,14 @@ function computeMacroSupportResistanceZones(points: Point[], lastClose: number |
   }
   if (!candidates.length) return [];
 
+  // Only one zone is ever drawn. Picking the best support AND the best
+  // resistance independently (as before) let each win purely on its own
+  // kind's score -- which could place a "resistance" zone below a
+  // "support" zone on the chart, reading as contradictory. Instead: pick
+  // the single strongest zone across both kinds, then label it support or
+  // resistance based on where price is sitting relative to that zone right
+  // now -- mirroring the same live-price-relative classification the
+  // picker backend's macro support/resistance computation already uses.
   const deduped = candidates.filter((cluster, index, all) => {
     const clusterMid = (cluster.lower + cluster.upper) / 2;
     const dup = all.findIndex(c => {
@@ -167,6 +175,9 @@ function computeMacroSupportResistanceZones(points: Point[], lastClose: number |
   } else if (lastClose > best.upper) {
     kind = "support";
   } else {
+    // Price sits inside the zone -- ambiguous; break the tie using the
+    // previous few weekly bars (excluding the current one), falling back
+    // to the zone's original structural classification.
     const level = (best.lower + best.upper) / 2;
     const priorBars = weekly.slice(-4, -1);
     let below = 0, above = 0;
@@ -252,6 +263,7 @@ const ALL_OVERLAY_OPTIONS: string[] = [...PRICE_OVERLAY_OPTIONS, ...LOWER_OVERLA
 function isLowerOverlay(v: Overlay) { return LOWER_OVERLAY_OPTIONS.includes(v); }
 function fmtPrice(v: number) { return `$${v.toFixed(v >= 100 ? 0 : 2)}`; }
 
+// Icons for the Line / Candles toggle (inherit the button's currentColor).
 const LINE_ICON = (
   <svg width="17" height="15" viewBox="0 0 17 15" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1,11 5,6 9,8 15,2" /></svg>
 );
@@ -263,6 +275,10 @@ const CANDLE_ICON = (
 );
 type ChartFocus = { kind: "ath" | "rangeHigh"; price: number; date: string; label: string };
 
+// Finds the offset (bars back from "now") that puts the bar nearest `iso`
+// at the left edge of the visible window (plus a small left margin), so a
+// deep-linked reference price/date (e.g. an all-time high) is guaranteed
+// visible without the user needing to manually zoom/pan.
 function computeFocusWindow(historyAll: Point[], iso: string, leftMargin = 15) {
   if (!iso || !historyAll.length) return null;
   const idx = historyAll.findIndex(p => p.date >= iso);
@@ -293,6 +309,13 @@ export default function DashboardClient({
   const [assetType, setAssetType] = useState<AssetType>("stock");
   const [symbol, setSymbol] = useState(() => { if (typeof window === "undefined") return defaultSymbol; const s = window.localStorage.getItem("msh_last_symbol"); return s && s.trim() ? s.trim().toUpperCase() : defaultSymbol; });
   const [lastStockSymbol, setLastStockSymbol] = useState(() => { if (typeof window === "undefined") return defaultSymbol; const s = window.localStorage.getItem("msh_last_symbol"); return s && s.trim() ? s.trim().toUpperCase() : defaultSymbol; });
+  // Server-rendered seed data (quote/history/benchmarks/news/earnings) only
+  // matches `symbol` when this render landed on the same symbol the server
+  // fetched for (the common case: a fresh visitor or crawler with no
+  // remembered "last symbol" in localStorage). A returning visitor whose
+  // localStorage points at a different symbol just falls through to the
+  // pre-existing client-fetch-on-mount behaviour for that symbol below --
+  // no regression, the seed is simply unused in that case.
   const seedMatchesSymbol = symbol === defaultSymbol;
   const [symbolName, setSymbolName] = useState(() => (seedMatchesSymbol ? initialSymbolName : ""));
   const [activeTimeframe, setActiveTimeframe] = useState("D");
@@ -310,6 +333,10 @@ export default function DashboardClient({
   const [historyAll, setHistoryAll] = useState<Point[]>(() => (seedMatchesSymbol ? initialHistory : []));
   const [symbolCache, setSymbolCache] = useState<Record<string, CachedSymbolData>>(() => {
     if (!seedMatchesSymbol || (!initialHistory.length && !initialQuote)) return {};
+    // Matches the cache-key shape the main data-loading effect below
+    // computes, for the "D" timeframe this component always starts on --
+    // seeding this lets that effect find a "hit" on first run and skip its
+    // own fetch entirely, using this server-fetched data instead.
     const seedTf = TIMEFRAMES[0];
     const key = `${defaultSymbol}:D:${seedTf.fetchBars}:${seedTf.interval}`;
     return { [key]: { quote: initialQuote, history: initialHistory } };
@@ -327,14 +354,28 @@ export default function DashboardClient({
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const [externalZone, setExternalZone] = useState<SupportResistanceZone | null>(null);
   const [chartFocus, setChartFocus] = useState<ChartFocus | null>(null);
+  // One-shot flags: skip the very first run of the corresponding fetch
+  // effect when server-seeded data for the current symbol is already
+  // sitting in state above. Each effect below flips its own flag back to
+  // false immediately after honouring it once, so every later
+  // symbol/asset-type change still fetches normally.
   const seededSymbolNameRef = useRef(seedMatchesSymbol && Boolean(initialSymbolName));
   const seededBenchRef = useRef(Boolean(initialBenchmarks));
   const seededNewsRef = useRef(seedMatchesSymbol && Boolean(initialNews));
   const seededEarningsRef = useRef(seedMatchesSymbol && Boolean(initialEarningsSummary));
+  // Three-way chart mode: "basic" (custom SVG chart, the only mode that shows
+  // picker deep-link drawings), "interactive" (KLineChart engine) and
+  // "tradingview" (TradingView Advanced Chart embed). This component owns the
+  // switch and renders each engine itself, so PriceChart runs Basic-only via
+  // hideSourceToggle. Defaults to "basic" so picker deep-links still land on
+  // the drawing-capable chart.
   const [chartMode, setChartMode] = useState<ChartMode>("basic");
   const isInteractive = chartMode === "interactive";
+  // True fullscreen (fill-viewport) overlay, available in every mode.
   const [fullscreen, setFullscreen] = useState(false);
   const fsOverlayRef = useRef<HTMLDivElement | null>(null);
+  // Short + landscape viewport (a phone rotated sideways in fullscreen): drives
+  // the single-row icon-only toolbar so the chart keeps its vertical space.
   const [fsLandscape, setFsLandscape] = useState(false);
   useEffect(() => {
     if (!fullscreen) { setFsLandscape(false); return; }
@@ -347,7 +388,11 @@ export default function DashboardClient({
 
   function selectChartMode(next: ChartMode) {
     setChartMode(next);
+    // On phones the Interactive chart is only usable at full size, so open it
+    // fullscreen straight away (it can then be viewed in portrait or landscape).
     if (next === "interactive" && isMobile) setFullscreen(true);
+    // Switching back to Basic drops out of fullscreen — Basic has no fullscreen
+    // of its own, so returning to it should restore the normal dashboard view.
     else if (next === "basic") setFullscreen(false);
   }
 
@@ -366,12 +411,17 @@ export default function DashboardClient({
     setSymbol(cleaned); setQuery(cleaned); setResults([]); setOpen(false);
     setActiveTimeframe(tf === "D" || tf === "W" || tf === "M" ? tf : "D");
 
+    // Deep-link support/resistance zone (from the /pickers Macro Support /
+    // Resistance category) -- an externally-supplied zone rather than the
+    // locally-computed one, merged in below.
     const srLower = Number(searchParams.get("srLower"));
     const srUpper = Number(searchParams.get("srUpper"));
     const srKind = searchParams.get("srKind");
     const hasExternalZone = Number.isFinite(srLower) && Number.isFinite(srUpper) && (srKind === "support" || srKind === "resistance");
     setExternalZone(hasExternalZone ? { kind: srKind as "support" | "resistance", lower: Math.min(srLower, srUpper), upper: Math.max(srLower, srUpper), label: srKind === "support" ? "Macro support" : "Macro resistance" } : null);
 
+    // Deep-link reference line + auto-zoom (ATH breakout / down-20%-from-ATH
+    // / 3-month-high breakout picks from /pickers).
     const athPrice = Number(searchParams.get("athPrice"));
     const rangeHighPrice = Number(searchParams.get("rangeHighPrice"));
     if (Number.isFinite(athPrice) && athPrice > 0) {
@@ -384,6 +434,11 @@ export default function DashboardClient({
       setChartFocus(null);
     }
 
+    // Indicator selection: `indicators` (comma-separated) wins for
+    // multi-select deep links (e.g. Best Trend Score -> MA50,MA200);
+    // otherwise fall back to the single `indicator` param. Any value from
+    // the chart's own supported overlay/oscillator lists is accepted, not
+    // just the original 3 hardcoded ones.
     const requested = indicatorsRaw
       ? indicatorsRaw.split(",").map(s => s.trim()).filter(Boolean)
       : indi
@@ -412,6 +467,10 @@ export default function DashboardClient({
   useEffect(() => { if (!symbol.trim()) return; if (assetType === "stock") { window.localStorage.setItem("msh_last_symbol", symbol.trim().toUpperCase()); setLastStockSymbol(symbol.trim().toUpperCase()); } }, [symbol, assetType]);
   useEffect(() => { if (!expanded) return; const k = (e: KeyboardEvent) => { if (e.key === "Escape") setExpanded(false); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [expanded]);
 
+  // Fullscreen overlay: Escape closes it, and we best-effort request true
+  // browser fullscreen on desktop (harmless no-op where unsupported, e.g. iOS,
+  // where the fixed-position overlay already fills the screen). If the user
+  // exits native fullscreen (Esc / browser UI), keep our state in sync.
   useEffect(() => {
     if (!fullscreen) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setFullscreen(false); };
@@ -472,6 +531,10 @@ export default function DashboardClient({
   }, [symbol, activeTimeframe, selectedTimeframe, chartInterval, symbolCache]);
   useEffect(() => {
     let c = false; const q = query.trim(); if (!q) { setResults([]); return; }
+    // /api/symbols already returns results in relevance order (exact symbol >
+    // symbol prefix > name prefix > name word prefix). Do NOT re-sort here: a
+    // client-side alphabetical sort is what buried MSFT below MBOT/MCHP for
+    // the query "micro", and hid ARM behind ARMK/ARMP.
     const t = setTimeout(async () => { try { const typeParam = assetType === "crypto" ? "&type=crypto" : ""; const r = await fetch(`/api/symbols?q=${encodeURIComponent(q)}${typeParam}`); const d = (await r.json()) as { results: SymbolResult[] }; if (c) return; setResults(Array.isArray(d.results) ? d.results : []); } catch { if (c) return; setResults([]); } }, 250);
     return () => { c = true; clearTimeout(t); };
   }, [query, assetType]);
@@ -517,6 +580,12 @@ export default function DashboardClient({
   const lastClose = displayedHistory.length ? displayedHistory[displayedHistory.length - 1].close : null;
   const localSupportResistanceZones = useMemo(() => computeMacroSupportResistanceZones(historyAll, lastClose), [historyAll, lastClose]);
   const supportResistanceZones = useMemo(() => {
+    // Only one zone is ever shown. The deep-linked zone (the exact zone
+    // that qualified this symbol for the Macro Support/Resistance picker
+    // category) takes full priority when present -- the locally-computed
+    // zone is dropped entirely rather than merged in, since showing both
+    // could again put a support zone and a resistance zone at conflicting
+    // price levels on the same chart.
     if (externalZone) return [externalZone];
     return localSupportResistanceZones.slice(0, 1);
   }, [localSupportResistanceZones, externalZone]);
@@ -620,6 +689,9 @@ export default function DashboardClient({
     const [ot, setOt] = useState(false);
     return (<span style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", width: 18, height: 18, borderRadius: "50%", background: "rgba(255,255,255,0.12)", color: "#fff", fontSize: 11, fontWeight: 900, cursor: "pointer", marginLeft: 6, flex: "0 0 auto", zIndex: 6 }} onMouseEnter={() => setOt(true)} onMouseLeave={() => setOt(false)} onClick={() => setOt(v => !v)}>?{ot ? <div style={{ position: "absolute", top: "calc(100% + 10px)", right: 0, width: 260, maxWidth: "min(260px, calc(100vw - 32px))", padding: 12, borderRadius: 12, backgroundColor: "#0f172a", border: "1px solid rgba(255,255,255,0.14)", color: "#f1f5f9", fontSize: 12, lineHeight: 1.5, fontWeight: 600, zIndex: 80, boxShadow: "0 10px 24px rgba(0,0,0,0.28)", pointerEvents: "none", whiteSpace: "normal" }}>{props.text}</div> : null}</span>);
   }
+  // D/W/M as a compact segmented toggle (matches the mode switch / Line-Candle
+  // toggle), so it can sit on the same line as the Basic/Interactive/TradingView
+  // switch.
   function TimeframeToggle() {
     return (
       <div style={{ display: "inline-flex", background: COLORS.controlBg, border: `1px solid ${COLORS.controlBorder}`, borderRadius: 10, padding: 3, gap: 3, flex: "0 0 auto" }} role="group" aria-label="Timeframe">
@@ -642,6 +714,10 @@ export default function DashboardClient({
     return (<section style={{ border: `1px solid ${COLORS.border}`, borderRadius: 16, background: COLORS.cardBg, color: COLORS.cardFg, overflow: props.allowOverflow ? "visible" : "hidden", minWidth: 0, ...props.style }}>{props.title || props.right ? <div style={{ padding: "13px 16px", borderBottom: `1px solid ${COLORS.borderSoft}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}><div style={{ fontWeight: 800, fontSize: 14, color: COLORS.mutedFg }}>{props.title}</div>{props.right}</div> : null}<div style={{ padding: 16, ...props.bodyStyle }}>{props.children}</div></section>);
   }
   function BreakdownHelpButton() { return (<div style={{ display: "flex", alignItems: "center", gap: 10 }}><HelpTip text={customMode ? "This breakdown is showing the indicators you currently selected on the chart." : "Breakdown shows the main dashboard indicators including trend, momentum, stretch, volatility and divergence clues."} isDark={true} /><Link href="/learn" style={{ color: "#9cc0ff", textDecoration: "none", fontWeight: 800, fontSize: 12 }}>Learn more →</Link></div>); }
+  // Zoom + / − cluster. On Basic this now rides on the mode-switch line (line 1)
+  // rather than line 2, so the whole toolbar collapses to 2 lines on phone
+  // portrait. Pan (← →) lives as overlay arrows on the chart; the fit-all
+  // bracket button and the ⤢ expand button were removed to save space.
   function ChartToolbar() {
     const zBtn: React.CSSProperties = { padding: "7px 11px", borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, cursor: "pointer", fontWeight: 800, lineHeight: 1, fontSize: 14 };
     return (<div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "nowrap", flex: "0 0 auto" }}>
@@ -650,6 +726,8 @@ export default function DashboardClient({
     </div>);
   }
 
+  // Pan arrows overlaid on the left/right edge of the Basic chart (replaces the
+  // old ← → toolbar buttons). Fade out when there's nothing further to pan to.
   function PanArrow({ dir, onClick, disabled }: { dir: "left" | "right"; onClick: () => void; disabled: boolean }) {
     return (
       <button type="button" onClick={onClick} disabled={disabled} aria-label={dir === "left" ? "Pan back in time" : "Pan forward in time"}
@@ -723,6 +801,8 @@ export default function DashboardClient({
     </section>);
   }
 
+  // Three-way Basic / Interactive / TradingView switch. Rendered both in the
+  // chart card header and in the fullscreen overlay.
   function ChartModeSwitcher({ compact }: { compact?: boolean } = {}) {
     const modes: { key: ChartMode; label: string }[] = [
       { key: "basic", label: "Basic" },
@@ -750,6 +830,10 @@ export default function DashboardClient({
     );
   }
 
+  // Renders the actual chart engine for the current mode. `full` = fullscreen
+  // overlay (fill the container, no inline footers). The Interactive engine
+  // never receives picker drawing props (support/resistance zones, reference
+  // lines) -- those belong to the Basic chart only.
   function ChartEngine({ full, compact, trailing }: { full?: boolean; compact?: boolean; trailing?: React.ReactNode } = {}) {
     if (chartMode === "interactive") {
       return <InteractiveChart symbol={symbol} seed={historyAll} isMobile={isMobile} fill={full} height={full ? undefined : 520} compact={compact} trailing={trailing} />;
@@ -770,6 +854,10 @@ export default function DashboardClient({
             {!isMobile ? <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>{modeTitle}</div> : null}
             <div style={{ display: "flex", gap: isMobile ? 6 : 8, alignItems: "center", flexWrap: "wrap" }}>
               <ChartModeSwitcher compact={isMobile} />
+              {/* On Basic: the zoom + / − controls ride on this (mode-switch)
+                  line so the toolbar fits in 2 lines on phone portrait. D/W/M
+                  and the Indicator + Line/Candle controls sit on line 2 below.
+                  Fullscreen is hidden on Basic (no benefit); shown elsewhere. */}
               {chartMode === "basic" ? <ChartToolbar /> : null}
               {chartMode !== "basic" ? <FullscreenButton /> : null}
             </div>
@@ -892,7 +980,6 @@ export default function DashboardClient({
                   <div style={{ fontWeight: 800, lineHeight: 1.4, fontSize: 14 }}>{item.title}</div>
                 </div>
                 <div style={{ fontSize: 13, lineHeight: 1.6, color: COLORS.mutedFg }}>{item.summary}</div>
-                <div style={{ padding: 9, borderRadius: 10, background: "rgba(255,255,255,0.03)", border: `1px solid ${COLORS.borderSoft}`, fontSize: 12, lineHeight: 1.55 }}><span style={{ fontWeight: 800 }}>Why this matters:</span> {item.whyItMatters}</div>
                 {item.link ? <a href={item.link} target="_blank" rel="noopener noreferrer" style={{ justifySelf: "start", color: "#9cc0ff", textDecoration: "none", fontWeight: 700, fontSize: 12 }}>Read full article ↗</a> : null}
               </div>
             ))}
@@ -1017,6 +1104,9 @@ export default function DashboardClient({
       ) : null}
 
       {fullscreen ? (() => {
+        // In landscape on a phone, the Interactive chart has no room for a
+        // separate header row -- so we drop it and inject the mode switch +
+        // close button into the chart's own single toolbar line instead.
         const injectToolbar = isInteractive && fsLandscape;
         const closeBtn = (
           <button key="fs-close" type="button" onClick={() => setFullscreen(false)} aria-label="Close fullscreen" title="Close" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: injectToolbar ? 30 : 34, height: injectToolbar ? 30 : 34, flex: "0 0 auto", borderRadius: 9, border: "1px solid rgba(240,68,68,0.45)", background: "rgba(127,29,29,0.22)", color: "#f87171", fontWeight: 800, fontSize: 16, lineHeight: 1, cursor: "pointer" }}>
@@ -1036,6 +1126,9 @@ export default function DashboardClient({
             </div>
           ) : null}
           <div style={{ flex: 1, minHeight: 0, padding: injectToolbar ? "6px 8px 4px" : isMobile ? 8 : 14, display: "flex", flexDirection: "column", overflow: isInteractive ? "hidden" : "auto" }}>
+            {/* Direct call (not <ChartEngine/>) so the fullscreen engine keeps
+                its props updated across re-renders (e.g. a phone rotation that
+                flips isMobile) instead of remounting and losing zoom/drawings. */}
             {ChartEngine({ full: true, compact: fsLandscape, trailing })}
           </div>
         </div>
