@@ -137,7 +137,7 @@ export default function EarningsDayList({
         </div>
       ) : (
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: 760 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: 900 }}>
             <thead>
               <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.12)" }}>
                 <th style={thStyle}>Symbol</th>
@@ -166,24 +166,17 @@ export default function EarningsDayList({
                   <td style={{ ...tdStyle, textAlign: "right" }}>{formatPrice(item.price)}</td>
                   <td style={{ ...tdStyle, textAlign: "right" }}>{formatCompact(item.marketCap)}</td>
                   <td style={{ ...tdStyle, textAlign: "right" }}>
-                    <Link
-                      href={`/dashboard?symbol=${encodeURIComponent(item.symbol)}`}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        padding: "4px 10px",
-                        borderRadius: 8,
-                        border: "1px solid rgba(147,197,253,0.28)",
-                        background: "rgba(147,197,253,0.10)",
-                        color: "#93c5fd",
-                        textDecoration: "none",
-                        fontWeight: 700,
-                        fontSize: 12,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      Chart →
-                    </Link>
+                    <div style={{ display: "inline-flex", gap: 6, flexWrap: "nowrap" }}>
+                      <Link href={`/stock/${encodeURIComponent(item.symbol)}`} style={pillStyle}>
+                        Analysis →
+                      </Link>
+                      <Link href={`/dashboard?symbol=${encodeURIComponent(item.symbol)}`} style={pillStyle}>
+                        Chart →
+                      </Link>
+                      <Link href={`/stock/${encodeURIComponent(item.symbol)}/news`} style={pillStyle}>
+                        News →
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -240,5 +233,19 @@ const thStyle: React.CSSProperties = {
 
 const tdStyle: React.CSSProperties = {
   padding: "12px 16px",
+  whiteSpace: "nowrap",
+};
+
+const pillStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "4px 10px",
+  borderRadius: 8,
+  border: "1px solid rgba(147,197,253,0.28)",
+  background: "rgba(147,197,253,0.10)",
+  color: "#93c5fd",
+  textDecoration: "none",
+  fontWeight: 700,
+  fontSize: 12,
   whiteSpace: "nowrap",
 };
