@@ -8,6 +8,8 @@ import type { BottleneckPost } from "@/lib/bottlenecks";
 const VISIBLE_ROWS = 12;
 const ROW_GAP = 8;
 
+type SortMode = "date" | "title";
+
 function formatUpdatedDate(value: string) {
   if (!value) return "";
   const dt = new Date(value);
@@ -28,6 +30,10 @@ const clampLine: React.CSSProperties = {
 
 export default function BottleneckList({ posts }: { posts: BottleneckPost[] }) {
   const [query, setQuery] = useState("");
+  // Defaults to newest-first, matching the server-side sort in
+  // app/bottlenecks/page.tsx so there's no visible re-order between the
+  // SSR paint and this component taking over on hydration.
+  const [sortMode, setSortMode] = useState<SortMode>("date");
   const [rowHeight, setRowHeight] = useState<number | null>(null);
   const firstItemRef = useRef<HTMLAnchorElement | null>(null);
 
@@ -40,6 +46,20 @@ export default function BottleneckList({ posts }: { posts: BottleneckPost[] }) {
         post.symbol.toLowerCase().includes(q)
     );
   }, [posts, query]);
+
+  const sorted = useMemo(() => {
+    const arr = [...filtered];
+    if (sortMode === "title") {
+      arr.sort((a, b) => a.companyName.localeCompare(b.companyName));
+    } else {
+      arr.sort((a, b) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        return dateB - dateA;
+      });
+    }
+    return arr;
+  }, [filtered, sortMode]);
 
   useEffect(() => {
     const measure = () => {
@@ -83,21 +103,89 @@ export default function BottleneckList({ posts }: { posts: BottleneckPost[] }) {
 
       <div
         style={{
-          fontSize: 11,
-          opacity: 0.55,
-          fontWeight: 800,
-          letterSpacing: "0.07em",
-          textTransform: "uppercase",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 10,
           marginBottom: 12,
         }}
       >
-        Built so far
-        {query
-          ? ` — ${filtered.length} match${filtered.length === 1 ? "" : "es"}`
-          : ""}
+        <div
+          style={{
+            fontSize: 11,
+            opacity: 0.55,
+            fontWeight: 800,
+            letterSpacing: "0.07em",
+            textTransform: "uppercase",
+          }}
+        >
+          Built so far
+          {query
+            ? ` — ${sorted.length} match${sorted.length === 1 ? "" : "es"}`
+            : ""}
+        </div>
+
+        <div
+          role="group"
+          aria-label="Sort order"
+          style={{
+            display: "inline-flex",
+            gap: 4,
+            padding: 4,
+            background: "rgba(255,255,255,0.04)",
+            border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: 999,
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setSortMode("date")}
+            aria-pressed={sortMode === "date"}
+            style={{
+              cursor: "pointer",
+              border: "none",
+              borderRadius: 999,
+              padding: "6px 14px",
+              fontSize: 12.5,
+              fontWeight: 800,
+              letterSpacing: 0.2,
+              background:
+                sortMode === "date" ? "rgba(147, 197, 253, 0.16)" : "transparent",
+              color: sortMode === "date" ? "#93c5fd" : "#8a97ad",
+              boxShadow:
+                sortMode === "date" ? "0 0 12px rgba(147, 197, 253, 0.3)" : "none",
+              transition: "all 0.18s ease",
+            }}
+          >
+            Latest
+          </button>
+          <button
+            type="button"
+            onClick={() => setSortMode("title")}
+            aria-pressed={sortMode === "title"}
+            style={{
+              cursor: "pointer",
+              border: "none",
+              borderRadius: 999,
+              padding: "6px 14px",
+              fontSize: 12.5,
+              fontWeight: 800,
+              letterSpacing: 0.2,
+              background:
+                sortMode === "title" ? "rgba(95, 212, 199, 0.16)" : "transparent",
+              color: sortMode === "title" ? "#5FD4C7" : "#8a97ad",
+              boxShadow:
+                sortMode === "title" ? "0 0 12px rgba(95, 212, 199, 0.3)" : "none",
+              transition: "all 0.18s ease",
+            }}
+          >
+            A–Z
+          </button>
+        </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {sorted.length === 0 ? (
         <div
           style={{
             borderRadius: 14,
@@ -148,7 +236,7 @@ export default function BottleneckList({ posts }: { posts: BottleneckPost[] }) {
             scrollbarColor: "rgba(255,255,255,0.15) transparent",
           }}
         >
-          {filtered.map((post, index) => (
+          {sorted.map((post, index) => (
             <Link
               key={post.slug}
               ref={index === 0 ? firstItemRef : undefined}

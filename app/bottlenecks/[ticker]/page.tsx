@@ -81,6 +81,60 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 }
 
+// Bottom-of-page internal-linking block, same on every bottleneck page.
+// These four destinations (Headlines, Upcoming IPOs, Earnings Calendar,
+// Pickers) only otherwise appear inside SiteHeader's client-rendered
+// dropdown menus, which don't mount their links into the DOM until a user
+// opens them - so this is the first static, always-crawlable path to those
+// pages from the Bottlenecks section.
+const CONTINUE_EXPLORING_LINKS = [
+  { href: "/headlines", label: "Market Headlines →", variant: "blue" },
+  { href: "/upcoming-ipos", label: "Upcoming IPOs →", variant: "teal" },
+  { href: "/earnings-calendar", label: "Earnings Calendar →", variant: "purple" },
+  { href: "/pickers", label: "Stock Pickers →", variant: "amber" },
+] as const;
+
+function ContinueExploring() {
+  return (
+    <section
+      style={{
+        marginTop: 32,
+        background: "#0b1220",
+        border: "1px solid rgba(255,255,255,0.12)",
+        borderRadius: 16,
+        padding: 24,
+        boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
+      }}
+    >
+      <h2
+        style={{
+          marginTop: 0,
+          marginBottom: 6,
+          fontSize: 20,
+          fontWeight: 850,
+        }}
+      >
+        Continue Exploring
+      </h2>
+      <p style={{ fontSize: 14, lineHeight: 1.6, opacity: 0.75, marginBottom: 16 }}>
+        More ways to dig into the market on MyStockHarbor.
+      </p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+        {CONTINUE_EXPLORING_LINKS.map((link) => (
+          <Link
+            key={link.href}
+            href={link.href}
+            className={`bnActionBtn bnActionBtn--${link.variant}`}
+            style={{ fontSize: 13.5, padding: "8px 16px" }}
+          >
+            {link.label}
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default async function BottleneckPage({ params }: Props) {
   const { ticker } = await params;
 
@@ -233,6 +287,8 @@ export default async function BottleneckPage({ params }: Props) {
           >
             {post.disclaimer}
           </p>
+
+          <ContinueExploring />
         </div>
 
         <style>{`
@@ -296,6 +352,26 @@ export default async function BottleneckPage({ params }: Props) {
             background: rgba(95, 212, 199, 0.12);
             border-color: rgba(95, 212, 199, 0.6);
             box-shadow: 0 0 12px rgba(95, 212, 199, 0.35);
+            transform: scale(1.06);
+          }
+          .bnActionBtn--purple {
+            color: #c4a6ff;
+          }
+          .bnActionBtn--purple:hover,
+          .bnActionBtn--purple:focus-visible {
+            background: rgba(196, 166, 255, 0.12);
+            border-color: rgba(196, 166, 255, 0.6);
+            box-shadow: 0 0 12px rgba(196, 166, 255, 0.35);
+            transform: scale(1.06);
+          }
+          .bnActionBtn--amber {
+            color: #ffcb74;
+          }
+          .bnActionBtn--amber:hover,
+          .bnActionBtn--amber:focus-visible {
+            background: rgba(255, 203, 116, 0.12);
+            border-color: rgba(255, 203, 116, 0.6);
+            box-shadow: 0 0 12px rgba(255, 203, 116, 0.35);
             transform: scale(1.06);
           }
         `}</style>
