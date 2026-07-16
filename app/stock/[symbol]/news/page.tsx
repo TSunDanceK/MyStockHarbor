@@ -16,6 +16,7 @@ import {
 import PageShareBar from "@/app/components/PageShareBar";
 import WhyThisMatters from "./WhyThisMatters";
 import AiInsightCard from "./AiInsightCard";
+import { WatermarkVisibilityProvider, HideWatermarksBar, NewsScoreWatermark } from "@/app/components/WatermarkVisibility";
 
 export const runtime = "nodejs";
 
@@ -1563,6 +1564,7 @@ export default async function StockNewsPage({ params }: Props) {
   );
 
   return (
+    <WatermarkVisibilityProvider>
     <main
       style={{
         minHeight: "100vh",
@@ -1615,27 +1617,7 @@ export default async function StockNewsPage({ params }: Props) {
 
           <div className="newsHeroRight" style={heroRightStyle}>
             <div style={scorePanelStyle(newsScore.tone)}>
-              <div
-                aria-hidden="true"
-                style={{
-                  position: "absolute",
-                  top: 14,
-                  right: 16,
-                  pointerEvents: "none",
-                  userSelect: "none",
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 16,
-                    fontWeight: 800,
-                    letterSpacing: "0.03em",
-                    color: "rgba(226,232,240,0.30)",
-                  }}
-                >
-                  MyStockHarbor
-                </span>
-              </div>
+              <NewsScoreWatermark />
               <NewsScoreGauge newsScore={newsScore} />
             </div>
             <div style={miniScoreGridStyle}>
@@ -1729,6 +1711,8 @@ export default async function StockNewsPage({ params }: Props) {
             <Link href="/platforms" style={bottomActionStyle("red")}>TRADE THIS STOCK</Link>
           </div>
         </section>
+
+        <HideWatermarksBar />
       </div>
 
       <style>{`
@@ -1746,6 +1730,7 @@ export default async function StockNewsPage({ params }: Props) {
         @media (max-width: 560px) { .newsWrap { padding: 14px 12px 26px; } .newsHeroShell { grid-template-columns: 1fr !important; border-radius: 22px !important; padding: 16px !important; } .newsHeroTitle { font-size: 28px !important; line-height: 1.08 !important; letter-spacing: -0.035em !important; } .newsHeroLead { font-size: 14px !important; line-height: 1.65 !important; } .newsHeroMetricRow { grid-template-columns: 1fr !important; } .compactNewsRow { grid-template-columns: 1fr !important; } .newsBottomActions { display: grid !important; grid-template-columns: 1fr !important; width: 100%; } .newsBottomActions a { width: 100%; justify-content: center !important; } .newsMainColumn, .newsSidebar { min-width: 0; } .newsSidebar section, .newsMainColumn section, .compactNewsRow, .newsHeroRight > div, .newsHeroMetricRow > div { min-width: 0; } }
       `}</style>
     </main>
+    </WatermarkVisibilityProvider>
   );
 }
 
