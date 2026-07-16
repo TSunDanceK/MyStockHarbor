@@ -1,4 +1,4 @@
-import { unstable_cache } from "next/cache";
+ import { unstable_cache } from "next/cache";
 import {
   getAiNewsBriefs,
   getAiNewsInsight,
@@ -124,20 +124,43 @@ function decodeHtml(value: string) {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ");
 }
 
-function cleanRssDescription(value: string | null) {
-  if (!value) return null;
-
-  const cleaned = decodeHtml(
+// Some upstream sources (mainly the Google News RSS fallback used for
+// thin-coverage / freshly-listed tickers) occasionally hand back a
+// title/description that is itself a raw HTML snippet -- e.g.
+// `<a href="...">Headline</a>&nbsp;<font color="#6f6f6f">Source</font>` --
+// rather than plain text. Since titles/descriptions are rendered as plain
+// React text (never dangerouslySetInnerHTML'd), any literal "<...>" that
+// slips through shows up as visible, broken-looking markup on the page.
+// stripHtmlTags is the one place that unwraps CDATA, strips tags, and
+// collapses whitespace; both cleanRssDescription (below) and the title
+// handling in parseRss/fetchFmpStockNews route through it so there's a
+// single implementation to keep in sync.
+function stripHtmlTags(value: string) {
+  return decodeHtml(
     value
       .replace(/<!\[CDATA\[(.*?)\]\]>/g, "$1")
       .replace(/<[^>]+>/g, " ")
       .replace(/\s+/g, " ")
       .trim()
   );
+}
 
+// A legitimate headline never contains a literal HTML tag. When one does
+// (see stripHtmlTags' comment above), that's a strong signal the whole item
+// is a malformed auto-generated snippet rather than real editorial content
+// -- better to drop it than show a "cleaned" but still nonsensical
+// duplicate-of-itself headline.
+function containsHtmlMarkup(value: string) {
+  return /<[a-z][^>]*>/i.test(value);
+}
+
+function cleanRssDescription(value: string | null) {
+  if (!value) return null;
+  const cleaned = stripHtmlTags(value);
   return cleaned || null;
 }
 
@@ -159,9 +182,9 @@ function parseRss(xml: string): NewsItem[] {
       block.match(/<description>(.*?)<\/description>/)?.[1] ??
       null;
 
-    if (title && link) {
+    if (title && link && !containsHtmlMarkup(title)) {
       items.push({
-        title: decodeHtml(title.replace(/\s+-\s+Google News$/i, "").trim()),
+        title: stripHtmlTags(title.replace(/\s+-\s+Google News$/i, "").trim()),
         link: link.trim(),
         pubDate,
         source: source ? decodeHtml(source.trim()) : null,
@@ -401,6 +424,7 @@ async function fetchFmpStockNews(symbol: string): Promise<NewsItem[]> {
                 : "";
 
           if (!title || !link) return null;
+          if (containsHtmlMarkup(title)) return null;
 
           const fmpSymbols = extractFmpSymbols(item, symbol);
           const descriptionSource =
@@ -413,7 +437,7 @@ async function fetchFmpStockNews(symbol: string): Promise<NewsItem[]> {
                   : "";
 
           return {
-            title: decodeHtml(title),
+            title: stripHtmlTags(title),
             link,
             pubDate:
               typeof item.publishedDate === "string" && item.publishedDate.trim()
@@ -722,6 +746,10 @@ function isLowValueNewsItem(item: NewsItem) {
     "defense world",
     "ticker report",
     "best stocks",
+    // Google News RSS occasionally attributes thin-coverage tickers'
+    // auto-generated search-result snippets (stock-quote-page titles, not
+    // real editorial articles) to "TradingView" as the source.
+    "tradingview",
   ];
 
   if (keywordHits(title, lowValuePatterns)) return true;
