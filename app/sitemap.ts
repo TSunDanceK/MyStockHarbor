@@ -223,15 +223,42 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.68,
   }));
 
-  // NOTE: /stock/[symbol] (and its /news, /earnings subpages) are
-  // intentionally excluded from the sitemap. Those pages are set to
-  // noindex,follow (see app/stock/[symbol]/*/page.tsx generateMetadata)
-  // because per-ticker content is thin/templated and Google should not
-  // spend crawl budget indexing every symbol. priorityStocks/uniqueEtfs
-  // are kept here (unused in entries) as the source list in case a
-  // future curated subset of tickers is made indexable again.
-  void priorityStocks;
-  void uniqueEtfs;
+  // /stock/[symbol] (and its /news, /earnings subpages) now carry real,
+  // non-thin content -- FMP company profile + fundamentals
+  // (CompanyProfile.tsx), a shared earnings snapshot (LatestEarningsCard.tsx)
+  // and a dedicated earnings-history page (PR #100/#101/#105) -- and
+  // generateMetadata on all three routes already sets
+  // robots: { index: true, follow: true }. This file was the only place
+  // still treating them as excluded (stale comment/void from before that
+  // indexing change landed). We submit the curated priorityStocks/uniqueEtfs
+  // universe below (mega caps, retail-interest names, recognizable mid caps,
+  // major ETFs) rather than every possible symbol, so Google has an explicit
+  // discovery path into the highest-traffic tickers without ballooning the
+  // sitemap with the full long-tail universe -- those stay reachable (and
+  // indexable, since they're index:true too) via internal links from
+  // pickers/plays/screener pages, just without a sitemap entry of their own.
+  const stockSymbols = Array.from(new Set([...priorityStocks, ...uniqueEtfs]));
+
+  const stockPageEntries: MetadataRoute.Sitemap = stockSymbols.map((symbol) => ({
+    url: toAbsoluteUrl(`/stock/${symbol}`),
+    lastModified: now,
+    changeFrequency: "daily" as const,
+    priority: 0.78,
+  }));
+
+  const stockNewsEntries: MetadataRoute.Sitemap = stockSymbols.map((symbol) => ({
+    url: toAbsoluteUrl(`/stock/${symbol}/news`),
+    lastModified: now,
+    changeFrequency: "hourly" as const,
+    priority: 0.7,
+  }));
+
+  const stockEarningsEntries: MetadataRoute.Sitemap = stockSymbols.map((symbol) => ({
+    url: toAbsoluteUrl(`/stock/${symbol}/earnings`),
+    lastModified: now,
+    changeFrequency: "weekly" as const,
+    priority: 0.68,
+  }));
 
   const entries: MetadataRoute.Sitemap = [
     ...mainPageEntries,
@@ -241,6 +268,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
     ...bottleneckEntries,
     ...videoEntries,
     ...learnEntries,
+    ...stockPageEntries,
+    ...stockNewsEntries,
+    ...stockEarningsEntries,
   ];
 
   // Safety guard: only return clean canonical www HTTPS URLs once.
