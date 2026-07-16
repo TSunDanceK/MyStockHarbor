@@ -11,7 +11,7 @@ import {
   type IndicatorSeed,
   type Point,
 } from "@/lib/indicators";
-import StockSymbolPageClient from "./StockSymbolPageClient";
+import StockSymbolPageClient, { type InitialQuote } from "./StockSymbolPageClient";
 import PageShareBar from "@/app/components/PageShareBar";
 
 type Props = {
@@ -20,11 +20,28 @@ type Props = {
 
 // ── Server-side data fetching ────────────────────────────────────────────────
 
-async function fetchQuotePrice(
-  symbol: string
-): Promise<{ price: number | null; date: string | null }> {
+// Fetches the FMP stable/quote payload once on the server. Beyond the
+// price/date pair used for SEO + indicator seeding, this also captures the
+// day range, volume vs average volume, previous close and change — all
+// included in the same response — so the header "quote snapshot" can render
+// real numbers in the initial HTML instead of waiting on a client refetch.
+async function fetchQuote(symbol: string): Promise<InitialQuote> {
   const apiKey = process.env.FMP_API_KEY;
-  if (!apiKey) return { price: null, date: null };
+  const empty: InitialQuote = {
+    price: null,
+    date: null,
+    open: null,
+    previousClose: null,
+    change: null,
+    changePercentage: null,
+    dayLow: null,
+    dayHigh: null,
+    yearLow: null,
+    yearHigh: null,
+    volume: null,
+    avgVolume: null,
+  };
+  if (!apiKey) return empty;
   try {
     const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(
       symbol
@@ -33,16 +50,27 @@ async function fetchQuotePrice(
       next: { revalidate: 900 },
       headers: { accept: "application/json" },
     });
-    if (!res.ok) return { price: null, date: null };
+    if (!res.ok) return empty;
     const json = await res.json();
     const row = Array.isArray(json) ? json[0] : json;
-    const price =
-      typeof row?.price === "number" && Number.isFinite(row.price)
-        ? (row.price as number)
-        : null;
-    return { price, date: new Date().toISOString().slice(0, 10) };
+    const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+    const price = num(row?.price);
+    return {
+      price,
+      date: price != null ? new Date().toISOString().slice(0, 10) : null,
+      open: num(row?.open),
+      previousClose: num(row?.previousClose),
+      change: num(row?.change),
+      changePercentage: num(row?.changePercentage),
+      dayLow: num(row?.dayLow),
+      dayHigh: num(row?.dayHigh),
+      yearLow: num(row?.yearLow),
+      yearHigh: num(row?.yearHigh),
+      volume: num(row?.volume),
+      avgVolume: num(row?.avgVolume),
+    };
   } catch {
-    return { price: null, date: null };
+    return empty;
   }
 }
 
@@ -264,16 +292,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const upper = symbol.toUpperCase();
 
   // Run history + quote in parallel; we only need these for meta generation.
-  const [rawHistory, { price, date }] = await Promise.all([
+  const [rawHistory, quote] = await Promise.all([
     getDailyHistory(upper).catch(() => []),
-    fetchQuotePrice(upper),
+    fetchQuote(upper),
   ]);
 
   const points: Point[] = (rawHistory as Point[]).filter(
     (p) => p.date && Number.isFinite(p.close)
   );
 
-  const seed = computeIndicatorSeed(points, "", price, date);
+  const seed = computeIndicatorSeed(points, "", quote.price, quote.date);
   const title = buildSeoTitle(upper, seed);
   const description = buildSeoDescription(upper, seed);
 
@@ -318,10 +346,10 @@ export default async function StockPage({ params }: Props) {
   const upper = symbol.toUpperCase();
 
   // Fetch everything in parallel — none of these block each other.
-  const [rawHistory, { price, date }, companyName, latestEarnings, profile, shareHistory] =
+  const [rawHistory, quote, companyName, latestEarnings, profile, shareHistory] =
     await Promise.all([
       getDailyHistory(upper).catch(() => [] as Point[]),
-      fetchQuotePrice(upper),
+      fetchQuote(upper),
       fetchCompanyName(upper),
       fetchLatestEarnings(upper),
       fetchCompanyProfile(upper).catch(() => null),
@@ -337,8 +365,8 @@ export default async function StockPage({ params }: Props) {
   const seed: IndicatorSeed = computeIndicatorSeed(
     points,
     companyName,
-    price,
-    date
+    quote.price,
+    quote.date
   );
 
   const seoTitle = buildSeoTitle(upper, seed);
@@ -441,6 +469,7 @@ export default async function StockPage({ params }: Props) {
         shareHistory={shareHistory}
         seed={seed}
         initialHistory={points.slice(-300)}
+        initialQuote={quote}
       />
     </>
   );
