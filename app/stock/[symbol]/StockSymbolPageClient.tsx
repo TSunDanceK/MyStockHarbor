@@ -657,6 +657,34 @@ function earningsPanelTone(earnings: StockEarningsData | null): "green" | "yello
 // analyst targets plotted on the right at their relative price height, with
 // a connecting line from price to each target colour-coded by whether that
 // target implies upside (green), downside (red), or is roughly flat (yellow).
+function declutterLabelYs(
+  items: Array<{ key: string; y: number }>,
+  minGap: number,
+  lowBound: number,
+  highBound: number
+): Map<string, number> {
+  const sorted = items.map((item) => ({ ...item })).sort((a, b) => a.y - b.y);
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].y - sorted[i - 1].y < minGap) {
+      sorted[i].y = sorted[i - 1].y + minGap;
+    }
+  }
+  const overflow = sorted.length ? sorted[sorted.length - 1].y - highBound : 0;
+  if (overflow > 0) {
+    for (let i = 0; i < sorted.length; i++) sorted[i].y -= overflow;
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i].y - sorted[i - 1].y < minGap) sorted[i].y = sorted[i - 1].y + minGap;
+    }
+  }
+  if (sorted.length && sorted[0].y < lowBound) {
+    const shiftUp = lowBound - sorted[0].y;
+    for (let i = 0; i < sorted.length; i++) sorted[i].y += shiftUp;
+  }
+  const map = new Map<string, number>();
+  sorted.forEach((item) => map.set(item.key, item.y));
+  return map;
+}
+
 function AnalystTargetChart({
   price,
   low,
@@ -712,14 +740,29 @@ function AnalystTargetChart({
 
   const priceY = yFor(priceValue);
 
+  // Dots plot at the mathematically true y for each target's price. When two
+  // or three targets are close in price (common — analyst high/avg/low
+  // targets often cluster), their true y positions land close together too,
+  // and the 3-line text block next to each dot (label / value / % diff,
+  // ~42px tall) would visually overlap. This pass keeps the dots and the
+  // NOW-to-target connecting lines at the true positions, but pushes the
+  // LABEL text blocks apart to a minimum 46px gap so they never blend
+  // together, adding a short dashed leader line back to the dot whenever a
+  // label ends up meaningfully offset from its true position.
+  const labelMinGap = 46;
+  const labelLowBound = padTop + 8;
+  const labelHighBound = height - padBottom - 8;
+  const trueYs = targets.map((t) => ({ key: t.key, y: yFor(t.value) }));
+  const labelYs = declutterLabelYs(trueYs, labelMinGap, labelLowBound, labelHighBound);
+
   return (
     <div style={{ width: "100%", overflowX: "auto" }}>
       <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} style={{ display: "block", minWidth: 420, overflow: "visible" }}>
         {targets.map((t) => {
           const tone = targetTone(t.value);
-          const y = yFor(t.value);
+          const trueY = yFor(t.value);
           return (
-            <line key={`line-${t.key}`} x1={leftX} y1={priceY} x2={rightX} y2={y} stroke={toneColor(tone)} strokeWidth={1.75} strokeOpacity={0.55} />
+            <line key={`line-${t.key}`} x1={leftX} y1={priceY} x2={rightX} y2={trueY} stroke={toneColor(tone)} strokeWidth={1.75} strokeOpacity={0.55} />
           );
         })}
 
@@ -728,17 +771,31 @@ function AnalystTargetChart({
         <text x={leftX} y={priceY - 16} textAnchor="middle" fontSize={10} fontWeight={800} letterSpacing="0.05em" fill="rgba(226,232,240,0.55)">NOW</text>
         <text x={leftX} y={priceY + 24} textAnchor="middle" fontSize={13} fontWeight={800} fill="#f8fafc">{`$${priceValue.toFixed(2)}`}</text>
 
-        {/* Target markers + labels */}
+        {/* Target markers + decluttered labels */}
         {targets.map((t) => {
           const tone = targetTone(t.value);
-          const y = yFor(t.value);
+          const trueY = yFor(t.value);
+          const labelY = labelYs.get(t.key) ?? trueY;
+          const isOffset = Math.abs(labelY - trueY) > 3;
           const diffPct = ((t.value - priceValue) / priceValue) * 100;
           return (
             <g key={`target-${t.key}`}>
-              <circle cx={rightX} cy={y} r={5} fill={toneColor(tone)} />
-              <text x={rightX + 12} y={y - 3} fontSize={10} fontWeight={800} letterSpacing="0.05em" fill="rgba(226,232,240,0.55)">{t.label}</text>
-              <text x={rightX + 12} y={y + 13} fontSize={14} fontWeight={800} fill={toneColor(tone)}>{`$${t.value.toFixed(2)}`}</text>
-              <text x={rightX + 12} y={y + 26} fontSize={10} fill="rgba(226,232,240,0.45)">{`${diffPct >= 0 ? "+" : ""}${diffPct.toFixed(1)}%`}</text>
+              <circle cx={rightX} cy={trueY} r={5} fill={toneColor(tone)} />
+              {isOffset ? (
+                <line
+                  x1={rightX + 3}
+                  y1={trueY}
+                  x2={rightX + 10}
+                  y2={labelY}
+                  stroke={toneColor(tone)}
+                  strokeWidth={1}
+                  strokeDasharray="2,2"
+                  strokeOpacity={0.5}
+                />
+              ) : null}
+              <text x={rightX + 14} y={labelY - 3} fontSize={10} fontWeight={800} letterSpacing="0.05em" fill="rgba(226,232,240,0.55)">{t.label}</text>
+              <text x={rightX + 14} y={labelY + 13} fontSize={14} fontWeight={800} fill={toneColor(tone)}>{`$${t.value.toFixed(2)}`}</text>
+              <text x={rightX + 14} y={labelY + 26} fontSize={10} fill="rgba(226,232,240,0.45)">{`${diffPct >= 0 ? "+" : ""}${diffPct.toFixed(1)}%`}</text>
             </g>
           );
         })}
@@ -746,6 +803,7 @@ function AnalystTargetChart({
     </div>
   );
 }
+
 
 function StockEarningsPanel({ symbol, earnings, loading }: { symbol: string; earnings: StockEarningsData | null; loading: boolean }) {
   const tone = earningsPanelTone(earnings);
