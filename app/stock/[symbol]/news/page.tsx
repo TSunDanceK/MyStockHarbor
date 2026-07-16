@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+ import type { CSSProperties } from "react";
 import StockNewsTickerJump from "./StockNewsTickerJump";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -850,9 +850,9 @@ function getEarningsNewsItems(news: NewsItem[]) {
 
 function EarningsNewsSection({ symbol, earningsNews, latestEarnings }: { symbol: string; earningsNews: NewsItem[]; latestEarnings: LatestEarningsData; }) {
   return (
-    <section style={editorialCardStyle}>
+    <section style={sidebarCardStyle}>
       <div style={sectionEyebrowStyle}>Earnings news</div>
-      <h2 style={sectionTitleStyle}>{symbol} earnings headlines</h2>
+      <h2 style={sectionTitleSmallStyle}>{symbol} earnings headlines</h2>
       <p style={bodyCopyStyle}>This section is separated from the general news feed so investors can quickly connect the latest headlines with the structured earnings report.</p>
       <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
         {earningsNews.length ? (
@@ -992,7 +992,6 @@ export default async function StockNewsPage({ params }: Props) {
         <section className="newsGrid" style={newsGridStyle}>
           <div className="newsMainColumn" style={{ display: "grid", gap: 18 }}>
             <DetailedNewsSection symbol={upper} companyName={companyName} trend={trend} newsScore={newsScore} detailedNews={detailedNews} compactNews={compactNews} />
-            <EarningsNewsSection symbol={upper} earningsNews={earningsNewsItems} latestEarnings={latestEarnings} />
             <AiInsightCard
               symbol={upper}
               companyName={companyName}
@@ -1032,6 +1031,7 @@ export default async function StockNewsPage({ params }: Props) {
               </div>
             </section>
             <SharedLatestEarningsCard earnings={latestEarnings} symbol={upper} />
+            <EarningsNewsSection symbol={upper} earningsNews={earningsNewsItems} latestEarnings={latestEarnings} />
             <section style={sidebarCardStyle}>
               <div style={sectionEyebrowStyle}>Chart context</div>
               <h2 style={sectionTitleSmallStyle}>Technical Picture</h2>
