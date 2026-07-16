@@ -61,8 +61,13 @@ export default function DilutionHistory({
     : "Roughly flat";
 
   // -- Chart geometry (server-rendered SVG, no client JS) --------------------
-  const width = 640;
-  const height = 180;
+  // Chart now spans the full width of the middle column (previously it shared
+  // a row with a fixed 220px stat sidebar, which left the stat cells looking
+  // sparse/disconnected on wide viewports). The three stat cells now sit in a
+  // row underneath instead, same pattern as .earningsMetricGrid elsewhere on
+  // this page.
+  const width = 900;
+  const height = 220;
   const padX = 6;
   const padTop = 14;
   const padBottom = 26;
@@ -100,64 +105,62 @@ export default function DilutionHistory({
         buybacks.
       </p>
 
-      <div className="dh-columns">
-        <div>
-          <svg
-            viewBox={`0 0 ${width} ${height}`}
-            width={width}
-            height={height}
-            role="img"
-            aria-label={`${symbol} shares outstanding from ${fmtDateShort(first.date)} to ${fmtDateShort(last.date)}`}
-            style={{ width: "100%", height: "auto", maxWidth: "100%", display: "block" }}
-          >
-            <defs>
-              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={trendColor} stopOpacity={0.35} />
-                <stop offset="100%" stopColor={trendColor} stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <path d={areaPath} fill={`url(#${gradientId})`} />
-            <polyline
-              points={polyline}
-              fill="none"
-              stroke={trendColor}
-              strokeWidth={2.25}
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-            {coords.map((c, i) => (
-              <circle key={i} cx={c.x} cy={c.y} r={i === coords.length - 1 ? 3.5 : 2} fill={trendColor}>
-                <title>
-                  {fmtDateShort(c.p.date)}: {fmtShares(c.p.shares)} shares outstanding
-                </title>
-              </circle>
-            ))}
-            <text x={padX} y={height - 8} fontSize={11} fill="rgba(203,213,225,0.55)">
-              {fmtDateShort(first.date)}
-            </text>
-            <text x={width - padX} y={height - 8} fontSize={11} fill="rgba(203,213,225,0.55)" textAnchor="end">
-              {fmtDateShort(last.date)}
-            </text>
-          </svg>
-        </div>
+      <div style={{ marginTop: 18 }}>
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          width={width}
+          height={height}
+          role="img"
+          aria-label={`${symbol} shares outstanding from ${fmtDateShort(first.date)} to ${fmtDateShort(last.date)}`}
+          style={{ width: "100%", height: "auto", maxWidth: "100%", display: "block" }}
+        >
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={trendColor} stopOpacity={0.35} />
+              <stop offset="100%" stopColor={trendColor} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <path d={areaPath} fill={`url(#${gradientId})`} />
+          <polyline
+            points={polyline}
+            fill="none"
+            stroke={trendColor}
+            strokeWidth={2.25}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+          {coords.map((c, i) => (
+            <circle key={i} cx={c.x} cy={c.y} r={i === coords.length - 1 ? 3.5 : 2} fill={trendColor}>
+              <title>
+                {fmtDateShort(c.p.date)}: {fmtShares(c.p.shares)} shares outstanding
+              </title>
+            </circle>
+          ))}
+          <text x={padX} y={height - 8} fontSize={11} fill="rgba(203,213,225,0.55)">
+            {fmtDateShort(first.date)}
+          </text>
+          <text x={width - padX} y={height - 8} fontSize={11} fill="rgba(203,213,225,0.55)" textAnchor="end">
+            {fmtDateShort(last.date)}
+          </text>
+        </svg>
+      </div>
 
-        <div className="dh-stats">
-          <div style={cellStyle}>
-            <div style={cellLabelStyle}>Shares outstanding (latest)</div>
-            <div style={cellValueStyle}>{fmtShares(last.shares)}</div>
+      <div className="dh-stats-row">
+        <div style={cellStyle}>
+          <div style={cellLabelStyle}>Shares outstanding (latest)</div>
+          <div style={cellValueStyle}>{fmtShares(last.shares)}</div>
+        </div>
+        <div style={cellStyle}>
+          <div style={cellLabelStyle}>Since {fmtDateShort(first.date)}</div>
+          <div style={{ ...cellValueStyle, color: trendColor }}>
+            {typeof changePercent === "number"
+              ? `${changePercent >= 0 ? "+" : ""}${changePercent.toFixed(1)}%`
+              : "—"}
           </div>
-          <div style={cellStyle}>
-            <div style={cellLabelStyle}>Since {fmtDateShort(first.date)}</div>
-            <div style={{ ...cellValueStyle, color: trendColor }}>
-              {typeof changePercent === "number"
-                ? `${changePercent >= 0 ? "+" : ""}${changePercent.toFixed(1)}%`
-                : "—"}
-            </div>
-          </div>
-          <div style={cellStyle}>
-            <div style={cellLabelStyle}>Trend</div>
-            <div style={{ ...cellValueStyle, color: trendColor, fontSize: 13 }}>{trendLabel}</div>
-          </div>
+        </div>
+        <div style={cellStyle}>
+          <div style={cellLabelStyle}>Trend</div>
+          <div style={{ ...cellValueStyle, color: trendColor, fontSize: 13 }}>{trendLabel}</div>
         </div>
       </div>
 
@@ -167,20 +170,14 @@ export default function DilutionHistory({
       </div>
 
       <style>{`
-        .dh-columns {
-          margin-top: 18px;
+        .dh-stats-row {
+          margin-top: 16px;
           display: grid;
-          grid-template-columns: 1fr 220px;
-          gap: 24px;
-          align-items: start;
-        }
-        .dh-stats {
-          display: flex;
-          flex-direction: column;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 10px;
         }
-        @media (max-width: 720px) {
-          .dh-columns { grid-template-columns: 1fr !important; gap: 18px !important; }
+        @media (max-width: 640px) {
+          .dh-stats-row { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </section>
