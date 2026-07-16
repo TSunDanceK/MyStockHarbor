@@ -674,7 +674,16 @@ function MobileNavOverlay({
   );
 }
 
-export default function SiteHeader() {
+export default function SiteHeader({
+  latestVideoId,
+}: {
+  // Whichever YouTube video is currently newest, resolved server-side in
+  // app/layout.tsx (cached hourly — see lib/youtube.ts) and threaded down
+  // as a prop so this client component never needs its own fetch. `null`
+  // when the YouTube lookup is unavailable (missing API key, quota, etc.)
+  // -- the "Video Breakdowns" nav entry falls back to /insights in that case.
+  latestVideoId: string | null;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const activePathname = normalisePathname(pathname);
@@ -882,10 +891,30 @@ export default function SiteHeader() {
         ],
       },
       {
-        kind: "link",
+        kind: "dropdown",
         label: "Insights",
-        href: "/insights",
         isActive: (path) => path === "/insights" || path.startsWith("/insights/"),
+        entries: [
+          {
+            kind: "link",
+            label: "Insights",
+            href: "/insights",
+            isActive: (path) =>
+              path === "/insights" ||
+              (path.startsWith("/insights/") && !path.startsWith("/insights/videos")),
+            emphasize: true,
+          },
+          {
+            kind: "link",
+            // Always points at whichever video is currently newest (see
+            // `latestVideoId` above) -- never a hardcoded video ID, so this
+            // link never goes stale as new videos get posted. Falls back to
+            // /insights if the YouTube lookup didn't resolve a video.
+            label: "Video Breakdowns",
+            href: latestVideoId ? `/insights/videos/${latestVideoId}` : "/insights",
+            isActive: (path) => path.startsWith("/insights/videos"),
+          },
+        ],
       },
       {
         kind: "link",
@@ -969,7 +998,7 @@ export default function SiteHeader() {
         isActive: (path) => path === "/learn" || path.startsWith("/learn/"),
       },
     ],
-    [lastSymbol]
+    [lastSymbol, latestVideoId]
   );
 
   return (

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import SiteHeader from "./components/SiteHeader";
+import { getLatestYouTubeVideos } from "@/lib/youtube";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -56,11 +57,18 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Fetched here (Server Component, cached hourly via unstable_cache inside
+  // getLatestYouTubeVideos — see lib/youtube.ts) so the global header's
+  // "Video Breakdowns" nav link always points at whichever video is
+  // currently newest, without any client-side fetch or hardcoded video ID.
+  const [latestVideo] = await getLatestYouTubeVideos(1);
+  const latestVideoId = latestVideo?.id ?? null;
+
   const footerLinkStyle: React.CSSProperties = {
     color: "rgba(241,245,249,0.68)",
     textDecoration: "none",
@@ -139,7 +147,7 @@ export default function RootLayout({
             flexDirection: "column",
           }}
         >
-          <SiteHeader />
+          <SiteHeader latestVideoId={latestVideoId} />
           <div style={{ flex: 1 }}>{children}</div>
 
           <footer
