@@ -141,19 +141,19 @@ function CompanyRow({
           </Link>
           <Link
             href={`/stock/${encodeURIComponent(company.ticker)}/earnings`}
-            className="bnActionBtn bnActionBtn--teal"
+            className="bnActionBtn bnActionBtn--blue"
           >
             Earnings →
           </Link>
           <Link
             href={`/dashboard?symbol=${encodeURIComponent(company.ticker)}`}
-            className="bnActionBtn bnActionBtn--purple"
+            className="bnActionBtn bnActionBtn--blue"
           >
             Chart →
           </Link>
           <Link
             href={`/stock/${encodeURIComponent(company.ticker)}/news`}
-            className="bnActionBtn bnActionBtn--amber"
+            className="bnActionBtn bnActionBtn--blue"
           >
             Stock News →
           </Link>
