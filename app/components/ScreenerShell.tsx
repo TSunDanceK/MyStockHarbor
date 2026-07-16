@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import ScreenerNav from "@/app/components/ScreenerNav";
 import HowToCollapse from "@/app/components/HowToCollapse";
+import { WatermarkVisibilityProvider, HideWatermarksBar } from "@/app/components/WatermarkVisibility";
 
 type Tone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -52,8 +53,9 @@ export default function ScreenerShell({
   children: ReactNode;
 }) {
   return (
-    <main className="screenerShellPage">
-      <style>{`
+    <WatermarkVisibilityProvider>
+      <main className="screenerShellPage">
+        <style>{`
         .screenerShellPage { min-height: 100vh; background: radial-gradient(circle at 12% 0%, rgba(59,130,246,0.16), transparent 30%), radial-gradient(circle at 92% 4%, rgba(34,197,94,0.08), transparent 28%), #06080d; color: #f1f5f9; font-family: system-ui, Arial; }
         .resultWrap { max-width: 1280px; margin: 0 auto; padding: 26px 18px 58px; }
         .resultShell { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 22px; align-items: start; }
@@ -86,31 +88,34 @@ export default function ScreenerShell({
         @media (max-width: 390px) { .resultWrap { padding-left: 8px; padding-right: 8px; } .hero { padding: 12px; } }
       `}</style>
 
-      <div className="resultWrap">
-        <div className="resultShell">
-          <ScreenerNav currentHref={currentHref} variant="sidebar" />
+        <div className="resultWrap">
+          <div className="resultShell">
+            <ScreenerNav currentHref={currentHref} variant="sidebar" />
 
-          <div className="resultMain">
-            <section className="hero">
-              <div className="eyebrow">
-                <span style={{ color: toneColour(tone) }}>●</span>
-                {eyebrow}
+            <div className="resultMain">
+              <section className="hero">
+                <div className="eyebrow">
+                  <span style={{ color: toneColour(tone) }}>●</span>
+                  {eyebrow}
+                </div>
+                <h1>{title}</h1>
+                <p>{description}</p>
+                <HowToCollapse title={explainerTitle} body={explainerBody} />
+              </section>
+
+              <div className="screenerTriggerWrap">
+                <ScreenerNav currentHref={currentHref} variant="trigger" />
               </div>
-              <h1>{title}</h1>
-              <p>{description}</p>
-              <HowToCollapse title={explainerTitle} body={explainerBody} />
-            </section>
 
-            <div className="screenerTriggerWrap">
-              <ScreenerNav currentHref={currentHref} variant="trigger" />
+              <div className="screenerShellResults">{children}</div>
+
+              {footer ? <div className="scanDebug">{footer}</div> : null}
+
+              <HideWatermarksBar />
             </div>
-
-            <div className="screenerShellResults">{children}</div>
-
-            {footer ? <div className="scanDebug">{footer}</div> : null}
           </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </WatermarkVisibilityProvider>
   );
 }
