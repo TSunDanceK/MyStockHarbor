@@ -770,8 +770,8 @@ export default async function StockEarningsPage({ params }: Props) {
         .chartLegend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; }
         .chartRow { display: flex; align-items: stretch; gap: 8px; }
         .chartPlot { flex: 1 1 auto; min-width: 0; }
-        .chartScale { position: relative; width: 48px; flex: 0 0 auto; border-left: 1px solid rgba(255,255,255,0.08); }
-        .chartScale span { position: absolute; left: 8px; right: 2px; font-size: 11px; font-weight: 800; color: rgba(203,213,225,0.62); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .chartScale { position: relative; width: 66px; flex: 0 0 auto; border-left: 1px solid rgba(255,255,255,0.08); }
+        .chartScale span { position: absolute; right: 4px; left: 4px; font-size: 11px; font-weight: 800; color: rgba(203,213,225,0.62); white-space: nowrap; text-align: right; overflow: visible; }
         .chartScale .scaleTop { top: 0; }
         .chartScale .scaleMid { top: 50%; transform: translateY(-50%); }
         .chartScale .scaleBottom { bottom: 0; }
@@ -816,8 +816,8 @@ export default async function StockEarningsPage({ params }: Props) {
           .metricHelpBubble::after { display: none; }
           .trendDots { gap: 12px; justify-content: flex-start; }
           .trendDot { min-width: 48px; }
-          .chartScale { width: 40px; }
-          .chartScale span { font-size: 10px; left: 6px; }
+          .chartScale { width: 58px; }
+          .chartScale span { font-size: 10px; left: 2px; right: 2px; }
           .chartCategories span { font-size: 9.5px; }
           .historyTable { display: block; width: 100%; border-spacing: 0; margin-top: 12px; }
           .historyTable thead { display: none; }
