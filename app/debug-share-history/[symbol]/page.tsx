@@ -19,9 +19,9 @@ export default async function DebugShareHistoryPage({
   const enc = encodeURIComponent(symbol);
   const key = encodeURIComponent(apiKey);
   const candidates = [
-    { label: "stable/historical-shares-float", url: `https://financialmodelingprep.com/stable/historical-shares-float?symbol=${enc}&apikey=${key}` },
-    { label: "api/v3/historical/shares_float", url: `https://financialmodelingprep.com/api/v3/historical/shares_float/${enc}?apikey=${key}` },
-    { label: "stable/shares-float", url: `https://financialmodelingprep.com/stable/shares-float?symbol=${enc}&apikey=${key}` },
+    { label: "stable/income-statement (annual)", url: `https://financialmodelingprep.com/stable/income-statement?symbol=${enc}&period=annual&limit=10&apikey=${key}` },
+    { label: "stable/income-statement (quarter)", url: `https://financialmodelingprep.com/stable/income-statement?symbol=${enc}&period=quarter&limit=8&apikey=${key}` },
+    { label: "stable/key-metrics (annual)", url: `https://financialmodelingprep.com/stable/key-metrics?symbol=${enc}&period=annual&limit=10&apikey=${key}` },
   ];
 
   const results: Array<{ label: string; status?: number; ok?: boolean; bodyPreview?: string; error?: string }> = [];
