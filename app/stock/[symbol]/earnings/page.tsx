@@ -82,6 +82,9 @@ type EarningsGrowthMarginPoint = {
 type EarningsReactionPoint = {
   label: string;
   reactionPct: number | null;
+  volumeMultiple: number | null;
+  drift5Pct: number | null;
+  drift20Pct: number | null;
 };
 
 type YearlySummary = {
@@ -171,24 +174,52 @@ function marginPct(numerator: number | null | undefined, revenue: number | null 
   return (numerator / Math.abs(revenue)) * 100;
 }
 
-function computeEarningsPriceReaction(row: FmpEarningsRow, points: Point[]): number | null {
-  if (!row.date || !points.length) return null;
+function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { reactionPct: number | null; volumeMultiple: number | null; drift5Pct: number | null; drift20Pct: number | null } {
+  const empty = { reactionPct: null, volumeMultiple: null, drift5Pct: null, drift20Pct: null };
+  if (!row.date || !points.length) return empty;
   const dates = points.map((p) => p.date);
   let idx = dates.indexOf(row.date);
   if (idx === -1) {
     idx = dates.findIndex((d) => d >= String(row.date));
   }
-  if (idx === -1) return null;
+  if (idx === -1) return empty;
   const time = (row.time || "").toLowerCase();
   let baseIdx: number;
   let reactIdx: number;
   if (time === "bmo") { baseIdx = idx - 1; reactIdx = idx; }
   else if (time === "amc") { baseIdx = idx; reactIdx = idx + 1; }
   else { baseIdx = idx - 1; reactIdx = idx + 1; }
+
   const base = points[baseIdx]?.close;
   const react = points[reactIdx]?.close;
-  if (typeof base !== "number" || typeof react !== "number" || !Number.isFinite(base) || !Number.isFinite(react) || base === 0) return null;
-  return ((react - base) / Math.abs(base)) * 100;
+  const reactionPct = typeof base === "number" && typeof react === "number" && Number.isFinite(base) && Number.isFinite(react) && base !== 0
+    ? ((react - base) / Math.abs(base)) * 100
+    : null;
+
+  const reactionVolume = points[reactIdx]?.volume;
+  let volumeMultiple: number | null = null;
+  if (typeof reactionVolume === "number" && Number.isFinite(reactionVolume) && reactionVolume > 0) {
+    const lookback = 20;
+    const windowStart = Math.max(0, baseIdx - lookback + 1);
+    const window = points.slice(windowStart, baseIdx + 1)
+      .map((p) => p.volume)
+      .filter((v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0);
+    if (window.length) {
+      const avgVolume = window.reduce((a, b) => a + b, 0) / window.length;
+      if (avgVolume > 0) volumeMultiple = reactionVolume / avgVolume;
+    }
+  }
+
+  let drift5Pct: number | null = null;
+  let drift20Pct: number | null = null;
+  if (typeof base === "number" && Number.isFinite(base) && base !== 0) {
+    const close5 = points[reactIdx + 4]?.close;
+    const close20 = points[reactIdx + 19]?.close;
+    if (typeof close5 === "number" && Number.isFinite(close5)) drift5Pct = ((close5 - base) / Math.abs(base)) * 100;
+    if (typeof close20 === "number" && Number.isFinite(close20)) drift20Pct = ((close20 - base) / Math.abs(base)) * 100;
+  }
+
+  return { reactionPct, volumeMultiple, drift5Pct, drift20Pct };
 }
 
 function quarterLabel(date?: string | null) {
@@ -443,15 +474,27 @@ async function getEarningsData(symbol: string) {
     };
   });
   const yearlySummaries = makeYearlySummaries(completedRows);
-  const priceReactionQuarters: EarningsReactionPoint[] = completedRows.slice(0, 8).reverse().map((row) => ({
-    label: displayQuarterLabel(row),
-    reactionPct: computeEarningsPriceReaction(row, dailyHistory as Point[]),
-  }));
+  const priceReactionQuarters: EarningsReactionPoint[] = completedRows.slice(0, 8).reverse().map((row) => {
+    const detail = computeEarningsReactionDetail(row, dailyHistory as Point[]);
+    return { label: displayQuarterLabel(row), ...detail };
+  });
+  const epsBeatFlags = completedRows.slice(0, 8).map((row) => (row.epsActual != null && row.epsEstimated != null ? row.epsActual >= row.epsEstimated : null));
+  const epsBeatConsidered = epsBeatFlags.filter((v): v is boolean => v != null);
+  const epsBeatCount = epsBeatConsidered.filter(Boolean).length;
+  const epsBeatTotal = epsBeatConsidered.length;
+  let currentStreakCount = 0;
+  let currentStreakType: "beat" | "miss" | null = null;
+  for (const flag of epsBeatFlags) {
+    if (flag == null) break;
+    if (currentStreakType == null) { currentStreakType = flag ? "beat" : "miss"; currentStreakCount = 1; }
+    else if ((flag && currentStreakType === "beat") || (!flag && currentStreakType === "miss")) currentStreakCount += 1;
+    else break;
+  }
   const localScore = scoreEarnings({ latest, sameQuarterLastYear, completedRows });
   const sharedScore = await fetchSharedEarningsScore(symbol);
   const score = sharedScore ?? localScore;
 
-  return { rows: earningsRows, completedRows, latest, next, nextEstimate, sameQuarterLastYear, grossMargin, operatingMargin, netIncome, recentTrend, chartQuarters, growthMarginQuarters, priceReactionQuarters, yearlySummaries, score };
+  return { rows: earningsRows, completedRows, latest, next, nextEstimate, sameQuarterLastYear, grossMargin, operatingMargin, netIncome, recentTrend, chartQuarters, growthMarginQuarters, priceReactionQuarters, yearlySummaries, score, epsBeatCount, epsBeatTotal, currentStreakCount, currentStreakType };
 }
 
 function metricCardStyle(tone: EarningsTone | "default" = "default") {
@@ -709,6 +752,15 @@ export default async function StockEarningsPage({ params }: Props) {
   ];
   const reactionData: SingleBarPoint[] = data.priceReactionQuarters.map((q) => ({ label: q.label, value: q.reactionPct }));
   const hasAnyReaction = reactionData.some((d) => d.value != null);
+  const driftLabels = data.priceReactionQuarters.map((q) => q.label);
+  const driftSeries: LineSeries[] = [
+    { name: "Day of reaction", color: "#60a5fa", values: data.priceReactionQuarters.map((q) => q.reactionPct) },
+    { name: "+5 trading days", color: "#facc15", values: data.priceReactionQuarters.map((q) => q.drift5Pct) },
+    { name: "+20 trading days", color: "#22c55e", values: data.priceReactionQuarters.map((q) => q.drift20Pct) },
+  ];
+  const hasAnyDrift = driftSeries.some((s) => s.values.some((v) => v != null));
+  const latestReaction = [...data.priceReactionQuarters].reverse().find((q) => q.reactionPct != null) ?? null;
+  const epsBeatPct = data.epsBeatTotal > 0 ? Math.round((data.epsBeatCount / data.epsBeatTotal) * 100) : null;
 
   const pageJsonLd = {
     "@context": "https://schema.org", "@type": "WebPage",
@@ -919,6 +971,9 @@ export default async function StockEarningsPage({ params }: Props) {
                 <div className="eyebrow">Recent earnings trend</div>
                 <h2>How recent earnings have been landing</h2>
                 <p>The dots below simplify recent earnings into good, mixed or weak reads based on EPS surprise, revenue surprise and whether the report was profitable.</p>
+                {epsBeatPct != null ? (
+                  <p><strong>{clean}</strong> has beaten EPS estimates in <strong>{data.epsBeatCount} of the last {data.epsBeatTotal}</strong> quarters ({epsBeatPct}%){data.currentStreakType ? `, including a current streak of ${data.currentStreakCount} straight ${data.currentStreakType === "beat" ? "beats" : "misses"}` : ""}.</p>
+                ) : null}
                 {data.recentTrend.length ? (
                   <div className="trendDots">
                     {data.recentTrend.map((item) => (
@@ -972,6 +1027,9 @@ export default async function StockEarningsPage({ params }: Props) {
                 <div className="eyebrow">Price reaction</div>
                 <h2>How has {clean} actually traded around its last reports?</h2>
                 <p>This shows the stock&apos;s closing-price move around each report: for reports released before market open, it&apos;s the move from the prior close into the report-day close; for reports released after market close, it&apos;s the move from the report-day close into the next day&apos;s close. When exact timing isn&apos;t available, it spans the day before the report to the day after.</p>
+                {latestReaction && (latestReaction.reactionPct != null || latestReaction.volumeMultiple != null) && (
+                  <p><strong>Most recent reaction ({latestReaction.label}):</strong> {formatPercent(latestReaction.reactionPct)}{latestReaction.volumeMultiple != null ? ` on ${latestReaction.volumeMultiple.toFixed(1)}x average volume` : ""}.</p>
+                )}
                 {hasAnyReaction ? (
                   <>
                     <div className="chartBlock">
@@ -982,6 +1040,16 @@ export default async function StockEarningsPage({ params }: Props) {
                   </>
                 ) : (
                   <p>Not enough price history is available yet to chart the reaction around earnings.</p>
+                )}
+                {hasAnyDrift && (
+                  <>
+                    <div className="chartBlock">
+                      <div className="chartBlockTitle">Did the move hold? Price vs. pre-earnings close, over time</div>
+                      <MultiLineChart labels={driftLabels} series={driftSeries} />
+                      <SeriesLegend items={[{ label: "Day of reaction", color: "#60a5fa" }, { label: "+5 trading days", color: "#facc15" }, { label: "+20 trading days", color: "#22c55e" }]} />
+                    </div>
+                    <p className="earningsDataNote">This tracks the stock from just before each report through the following weeks, to show whether the initial reaction stuck, faded, or reversed. The most recent quarters may not have a full 20 trading days of data yet.</p>
+                  </>
                 )}
               </section>
 
