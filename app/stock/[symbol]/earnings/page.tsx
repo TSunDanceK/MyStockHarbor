@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 import EarningsSymbolPicker from "./EarningsSymbolPicker";
@@ -505,6 +505,15 @@ function metricCardStyle(tone: EarningsTone | "default" = "default") {
 
 type BarChartPoint = { label: string; actual: number | null; estimate: number | null };
 
+// Nominal width (in "user units") for the chart SVGs below. Choosing a
+// realistic pixel-scale number here -- rather than an abstract 0-100 -- and
+// then letting the SVG scale uniformly (width: 100%, height: auto, no
+// preserveAspectRatio="none") keeps x and y scaled by very nearly the same
+// factor. That's what keeps circles round and strokes a consistent thin
+// line instead of the squashed-ellipse / stretched-line look you get from
+// forcing a near-square viewBox to fill a wide card non-uniformly.
+const CHART_VIEW_W = 640;
+
 function ChartFrame({ height, labels, scaleTop, scaleMid, scaleBottom, children }: { height: number; labels: string[]; scaleTop?: string; scaleMid?: string; scaleBottom?: string; children: import("react").ReactNode; }) {
   const hasScale = scaleTop != null || scaleMid != null || scaleBottom != null;
   return (
@@ -512,15 +521,22 @@ function ChartFrame({ height, labels, scaleTop, scaleMid, scaleBottom, children 
       <div className="chartRow">
         <div className="chartPlot">{children}</div>
         {hasScale && (
-          <div className="chartScale" style={{ height }}>
+          <div className="chartScale">
             {scaleTop != null && <span className="scaleTop">{scaleTop}</span>}
             {scaleMid != null && <span className="scaleMid">{scaleMid}</span>}
             {scaleBottom != null && <span className="scaleBottom">{scaleBottom}</span>}
           </div>
         )}
       </div>
-      <div className="chartCategories">
-        {labels.map((l, i) => <span key={`${l}-${i}`}>{l}</span>)}
+      {/* Mirrors the row above (same flex structure + spacer) so the quarter
+          labels line up under the actual bars/dots instead of being centered
+          across the full card width while the plot itself is narrower by the
+          Y-axis scale column. */}
+      <div className="chartRow">
+        <div className="chartCategories">
+          {labels.map((l, i) => <span key={`${l}-${i}`}>{l}</span>)}
+        </div>
+        {hasScale && <div className="chartScaleSpacer" aria-hidden="true" />}
       </div>
     </div>
   );
@@ -531,7 +547,7 @@ function EarningsBarChart({ data, formatValue, height = 168 }: { data: BarChartP
   const maxAbs = values.length ? Math.max(...values.map((v) => Math.abs(v)), 0.0001) : 1;
   const zeroY = height / 2;
   const usable = zeroY - 10;
-  const groupW = 100 / Math.max(data.length, 1);
+  const groupW = CHART_VIEW_W / Math.max(data.length, 1);
 
   return (
     <ChartFrame
@@ -541,11 +557,11 @@ function EarningsBarChart({ data, formatValue, height = 168 }: { data: BarChartP
       scaleMid={values.length ? formatValue(0) : undefined}
       scaleBottom={values.length ? formatValue(-maxAbs) : undefined}
     >
-      <svg viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" style={{ width: "100%", height, display: "block" }} role="img" aria-label="Actual versus estimate chart">
-        <line x1="0" y1={zeroY} x2="100" y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeWidth="0.35" />
+      <svg viewBox={`0 0 ${CHART_VIEW_W} ${height}`} style={{ width: "100%", height: "auto", display: "block" }} role="img" aria-label="Actual versus estimate chart">
+        <line x1="0" y1={zeroY} x2={CHART_VIEW_W} y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeWidth="1" />
         {data.map((d, i) => {
           const cx = i * groupW + groupW / 2;
-          const barW = Math.min(groupW * 0.30, 7);
+          const barW = Math.min(groupW * 0.30, 26);
           const estH = d.estimate != null ? (Math.abs(d.estimate) / maxAbs) * usable : 0;
           const actH = d.actual != null ? (Math.abs(d.actual) / maxAbs) * usable : 0;
           const estUp = (d.estimate ?? 0) >= 0;
@@ -556,22 +572,22 @@ function EarningsBarChart({ data, formatValue, height = 168 }: { data: BarChartP
             <g key={`${d.label}-${i}`}>
               {d.estimate != null && (
                 <rect
-                  x={cx - barW - 0.6}
+                  x={cx - barW - 3}
                   y={estUp ? zeroY - estH : zeroY}
                   width={barW}
-                  height={Math.max(estH, 0.6)}
+                  height={Math.max(estH, 2)}
                   fill="rgba(148,163,184,0.38)"
-                  rx="1"
+                  rx="3"
                 />
               )}
               {d.actual != null && (
                 <rect
-                  x={cx + 0.6}
+                  x={cx + 3}
                   y={actUp ? zeroY - actH : zeroY}
                   width={barW}
-                  height={Math.max(actH, 0.6)}
+                  height={Math.max(actH, 2)}
                   fill={actualColor}
-                  rx="1"
+                  rx="3"
                 />
               )}
             </g>
@@ -599,7 +615,7 @@ function MultiLineChart({ labels, series, height = 168, formatValue = (v: number
   const maxAbs = allValues.length ? Math.max(...allValues.map((v) => Math.abs(v)), 0.5) : 1;
   const zeroY = height / 2;
   const usable = zeroY - 10;
-  const groupW = 100 / Math.max(labels.length, 1);
+  const groupW = CHART_VIEW_W / Math.max(labels.length, 1);
 
   function yFor(v: number) {
     return zeroY - (v / maxAbs) * usable;
@@ -626,12 +642,12 @@ function MultiLineChart({ labels, series, height = 168, formatValue = (v: number
       scaleMid={allValues.length ? formatValue(0) : undefined}
       scaleBottom={allValues.length ? formatValue(-maxAbs) : undefined}
     >
-      <svg viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" style={{ width: "100%", height, display: "block" }} role="img" aria-label="Trend chart">
-        <line x1="0" y1={zeroY} x2="100" y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeWidth="0.35" />
+      <svg viewBox={`0 0 ${CHART_VIEW_W} ${height}`} style={{ width: "100%", height: "auto", display: "block" }} role="img" aria-label="Trend chart">
+        <line x1="0" y1={zeroY} x2={CHART_VIEW_W} y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeWidth="1" />
         {series.map((s) => (
           <g key={s.name}>
-            <path d={pathFor(s.values)} fill="none" stroke={s.color} strokeWidth="1.4" />
-            {s.values.map((v, i) => (v != null && Number.isFinite(v) ? <circle key={i} cx={i * groupW + groupW / 2} cy={yFor(v)} r="1.5" fill={s.color} /> : null))}
+            <path d={pathFor(s.values)} fill="none" stroke={s.color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+            {s.values.map((v, i) => (v != null && Number.isFinite(v) ? <circle key={i} cx={i * groupW + groupW / 2} cy={yFor(v)} r="3.5" fill={s.color} /> : null))}
           </g>
         ))}
       </svg>
@@ -656,7 +672,7 @@ function SingleValueBarChart({ data, height = 168, formatValue = (v: number) => 
   const maxAbs = values.length ? Math.max(...values.map((v) => Math.abs(v)), 0.5) : 1;
   const zeroY = height / 2;
   const usable = zeroY - 10;
-  const groupW = 100 / Math.max(data.length, 1);
+  const groupW = CHART_VIEW_W / Math.max(data.length, 1);
 
   return (
     <ChartFrame
@@ -666,16 +682,16 @@ function SingleValueBarChart({ data, height = 168, formatValue = (v: number) => 
       scaleMid={values.length ? formatValue(0) : undefined}
       scaleBottom={values.length ? formatValue(-maxAbs) : undefined}
     >
-      <svg viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" style={{ width: "100%", height, display: "block" }} role="img" aria-label="Price reaction chart">
-        <line x1="0" y1={zeroY} x2="100" y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeWidth="0.35" />
+      <svg viewBox={`0 0 ${CHART_VIEW_W} ${height}`} style={{ width: "100%", height: "auto", display: "block" }} role="img" aria-label="Price reaction chart">
+        <line x1="0" y1={zeroY} x2={CHART_VIEW_W} y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeWidth="1" />
         {data.map((d, i) => {
           const cx = i * groupW + groupW / 2;
-          const barW = Math.min(groupW * 0.42, 9);
+          const barW = Math.min(groupW * 0.42, 38);
           const h = d.value != null ? (Math.abs(d.value) / maxAbs) * usable : 0;
           const up = (d.value ?? 0) >= 0;
           const color = d.value == null ? "rgba(148,163,184,0.35)" : up ? "#22c55e" : "#ef4444";
           return d.value != null ? (
-            <rect key={`${d.label}-${i}`} x={cx - barW / 2} y={up ? zeroY - h : zeroY} width={barW} height={Math.max(h, 0.6)} fill={color} rx="1" />
+            <rect key={`${d.label}-${i}`} x={cx - barW / 2} y={up ? zeroY - h : zeroY} width={barW} height={Math.max(h, 2)} fill={color} rx="3" />
           ) : null;
         })}
       </svg>
@@ -827,7 +843,8 @@ export default async function StockEarningsPage({ params }: Props) {
         .chartScale .scaleTop { top: 0; }
         .chartScale .scaleMid { top: 50%; transform: translateY(-50%); }
         .chartScale .scaleBottom { bottom: 0; }
-        .chartCategories { display: flex; margin-top: 6px; }
+        .chartScaleSpacer { width: 66px; flex: 0 0 auto; }
+        .chartCategories { display: flex; flex: 1 1 auto; min-width: 0; margin-top: 6px; }
         .chartCategories span { flex: 1 1 0; text-align: center; font-size: 11px; font-weight: 800; color: rgba(203,213,225,0.68); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 1px; }
         .chartBlock { margin-top: 14px; }
         .chartBlock + .chartBlock { margin-top: 26px; }
@@ -873,6 +890,7 @@ export default async function StockEarningsPage({ params }: Props) {
           .trendDots { gap: 12px; justify-content: flex-start; }
           .trendDot { min-width: 48px; }
           .chartScale { width: 58px; }
+          .chartScaleSpacer { width: 58px; }
           .chartScale span { font-size: 10px; left: 2px; right: 2px; }
           .chartCategories span { font-size: 9.5px; }
           .historyTable { display: block; width: 100%; border-spacing: 0; margin-top: 12px; }
