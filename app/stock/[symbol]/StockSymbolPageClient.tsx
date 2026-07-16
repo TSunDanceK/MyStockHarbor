@@ -60,6 +60,21 @@ type StockValuationData = {
   sourceNote: string;
 };
 
+type AnalystRatingData = {
+  consensusRating: string | null;
+  strongBuy: number | null;
+  buy: number | null;
+  hold: number | null;
+  sell: number | null;
+  strongSell: number | null;
+  totalAnalysts: number | null;
+  targetHigh: number | null;
+  targetLow: number | null;
+  targetMedian: number | null;
+  targetConsensus: number | null;
+  sourceNote: string;
+};
+
 type ScoreTone = "green" | "yellow" | "red";
 
 type EarningsPeriodSummary = {
@@ -195,6 +210,25 @@ function formatValuationMultiple(value: number | null | undefined) {
   if (value >= 100) return `${Math.round(value)}×`;
   if (value >= 10) return `${value.toFixed(1)}×`;
   return `${value.toFixed(2)}×`;
+}
+
+// -- Analyst rating helpers ---------------------------------------------
+function formatTargetPrice(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  return `$${value.toFixed(2)}`;
+}
+
+function consensusTone(rating: string | null): "green" | "yellow" | "red" {
+  if (!rating) return "yellow";
+  const normalized = rating.toLowerCase();
+  if (normalized.includes("strong buy") || normalized === "buy") return "green";
+  if (normalized.includes("sell")) return "red";
+  return "yellow";
+}
+
+function computeUpsidePct(target: number | null | undefined, price: number | null | undefined) {
+  if (typeof target !== "number" || typeof price !== "number" || !Number.isFinite(target) || !Number.isFinite(price) || price === 0) return null;
+  return ((target - price) / price) * 100;
 }
 
 function toneColor(tone: "green" | "yellow" | "red") {
@@ -731,6 +765,8 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
   const [err, setErr] = useState<string | null>(null);
   const [valuation, setValuation] = useState<StockValuationData | null>(null);
   const [valuationLoading, setValuationLoading] = useState(true);
+  const [analystRating, setAnalystRating] = useState<AnalystRatingData | null>(null);
+  const [analystRatingLoading, setAnalystRatingLoading] = useState(true);
   const [openScoreHelp, setOpenScoreHelp] = useState<"fundamentals" | "future" | null>(null);
 
   useEffect(() => {
@@ -775,6 +811,18 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
       finally { if (!cancelled) setValuationLoading(false); }
     }
     loadValuation();
+    return () => { cancelled = true; };
+  }, [symbol]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadAnalystRating() {
+      setAnalystRatingLoading(true);
+      try { const res = await fetch(`/api/stock-analyst-rating/${encodeURIComponent(symbol)}?t=${Date.now()}`, { cache: "no-store" }); if (!res.ok) throw new Error("Analyst rating fetch failed"); const data = (await res.json()) as AnalystRatingData; if (!cancelled) setAnalystRating(data); }
+      catch { if (!cancelled) setAnalystRating(null); }
+      finally { if (!cancelled) setAnalystRatingLoading(false); }
+    }
+    loadAnalystRating();
     return () => { cancelled = true; };
   }, [symbol]);
 
@@ -967,6 +1015,68 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
                 <div style={{ marginTop: 12, fontSize: 12, lineHeight: 1.6, opacity: 0.45 }}>{valuation?.sourceNote ?? "Valuation multiples are provided by Financial Modeling Prep when available."}</div>
               </section>
 
+              {/* -- Analyst ratings & price targets (FMP) ------------ */}
+              <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+                <div style={sectionLabelStyle}>Analyst Ratings</div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexWrap: "wrap", marginBottom: 16 }}>
+                  <h2 style={sectionHeadingStyle}>{symbol} analyst consensus</h2>
+                  {!analystRatingLoading && analystRating?.consensusRating ? (
+                    <span style={{ fontSize: 12, fontWeight: 700, padding: "4px 10px", borderRadius: 7, border: toneBorder(consensusTone(analystRating.consensusRating)), background: toneSoftBackground(consensusTone(analystRating.consensusRating)), color: toneColor(consensusTone(analystRating.consensusRating)) }}>
+                      {analystRating.consensusRating}
+                      {typeof analystRating.totalAnalysts === "number" ? ` · ${analystRating.totalAnalysts} analysts` : ""}
+                    </span>
+                  ) : null}
+                </div>
+                {!analystRatingLoading && !analystRating?.consensusRating && analystRating?.targetConsensus == null ? (
+                  <p style={{ margin: 0, fontSize: 13, opacity: 0.55 }}>{analystRating?.sourceNote ?? "Analyst rating data is unavailable right now."}</p>
+                ) : (
+                  <>
+                    <div className="valuationGrid">
+                      {[
+                        {
+                          label: "Avg Price Target",
+                          value: analystRatingLoading ? "—" : formatTargetPrice(analystRating?.targetConsensus ?? analystRating?.targetMedian),
+                          sub: (() => {
+                            const upside = computeUpsidePct(analystRating?.targetConsensus ?? analystRating?.targetMedian, quote?.price);
+                            return typeof upside === "number" ? `${upside >= 0 ? "+" : ""}${upside.toFixed(1)}% vs price` : null;
+                          })(),
+                        },
+                        { label: "High Target", value: analystRatingLoading ? "—" : formatTargetPrice(analystRating?.targetHigh), sub: null },
+                        { label: "Low Target", value: analystRatingLoading ? "—" : formatTargetPrice(analystRating?.targetLow), sub: null },
+                        { label: "Analyst Coverage", value: analystRatingLoading ? "—" : (typeof analystRating?.totalAnalysts === "number" ? `${analystRating.totalAnalysts}` : "—"), sub: null },
+                      ].map((item) => (
+                        <div key={item.label} style={{ padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+                          <div style={miniLabelStyle}>{item.label}</div>
+                          <div style={{ marginTop: 4, fontSize: 20, fontWeight: 800, letterSpacing: "-0.02em" }}>{item.value}</div>
+                          {item.sub ? <div style={{ marginTop: 2, fontSize: 12, opacity: 0.55 }}>{item.sub}</div> : null}
+                        </div>
+                      ))}
+                    </div>
+                    {!analystRatingLoading && analystRating && [analystRating.strongBuy, analystRating.buy, analystRating.hold, analystRating.sell, analystRating.strongSell].some((v) => typeof v === "number") ? (
+                      <div style={{ marginTop: 16 }}>
+                        <div style={miniLabelStyle}>Rating breakdown</div>
+                        <div className="ratingBreakdownGrid" style={{ marginTop: 10 }}>
+                          {[
+                            { label: "Strong Buy", value: analystRating.strongBuy, tone: "green" as const },
+                            { label: "Buy", value: analystRating.buy, tone: "green" as const },
+                            { label: "Hold", value: analystRating.hold, tone: "yellow" as const },
+                            { label: "Sell", value: analystRating.sell, tone: "red" as const },
+                            { label: "Strong Sell", value: analystRating.strongSell, tone: "red" as const },
+                          ].map((item) => (
+                            <div key={item.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "8px 10px", borderRadius: 9, border: toneBorder(item.tone), background: toneSoftBackground(item.tone), fontSize: 13, fontWeight: 700 }}>
+                              <span style={{ opacity: 0.85 }}>{item.label}</span>
+                              <span style={{ color: toneColor(item.tone) }}>{item.value ?? 0}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </>
+                )}
+                <div style={{ marginTop: 12, fontSize: 12, lineHeight: 1.6, opacity: 0.45 }}>{analystRating?.sourceNote ?? "Analyst ratings and price targets are provided by Financial Modeling Prep when available."}</div>
+              </section>
+
+
               {/* -- Chart summaries --------------------------------- */}
               <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
                 <div style={sectionLabelStyle}>Chart Summary</div>
@@ -1141,6 +1251,7 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
         }
 
         .valuationGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 20px; }
+        .ratingBreakdownGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
 
         .factor-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
         .earningsMetricGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; }
