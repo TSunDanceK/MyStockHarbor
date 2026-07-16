@@ -145,6 +145,18 @@ function CompanyRow({
           >
             Earnings →
           </Link>
+          <Link
+            href={`/dashboard?symbol=${encodeURIComponent(company.ticker)}`}
+            className="bnActionBtn bnActionBtn--purple"
+          >
+            Chart →
+          </Link>
+          <Link
+            href={`/stock/${encodeURIComponent(company.ticker)}/news`}
+            className="bnActionBtn bnActionBtn--amber"
+          >
+            Stock News →
+          </Link>
         </div>
       ) : null}
     </div>
