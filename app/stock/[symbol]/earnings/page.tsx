@@ -29,6 +29,7 @@ type FmpEarningsRow = {
   revenueActual?: number | null;
   revenueEstimated?: number | null;
   lastUpdated?: string;
+  time?: string;
 };
 
 type FmpIncomeStatementRow = {
@@ -49,6 +50,18 @@ type FmpHistoricalEarningCalendarRow = {
   epsEstimated?: number | null;
 };
 
+type FmpAnalystEstimateRow = {
+  date?: string;
+  revenueLow?: number | null;
+  revenueHigh?: number | null;
+  revenueAvg?: number | null;
+  epsLow?: number | null;
+  epsHigh?: number | null;
+  epsAvg?: number | null;
+  numAnalystsRevenue?: number | null;
+  numAnalystsEps?: number | null;
+};
+
 type EarningsTrendPoint = {
   label: string;
   tone: EarningsTone;
@@ -56,6 +69,22 @@ type EarningsTrendPoint = {
   epsEstimated: number | null;
   revenueActual: number | null;
   revenueEstimated: number | null;
+};
+
+type EarningsGrowthMarginPoint = {
+  label: string;
+  yoyEpsGrowth: number | null;
+  yoyRevenueGrowth: number | null;
+  grossMarginPct: number | null;
+  operatingMarginPct: number | null;
+};
+
+type EarningsReactionPoint = {
+  label: string;
+  reactionPct: number | null;
+  volumeMultiple: number | null;
+  drift5Pct: number | null;
+  drift20Pct: number | null;
 };
 
 type YearlySummary = {
@@ -126,6 +155,71 @@ function calcPercentDifference(actual: number | null, estimate: number | null) {
 function calcGrowth(current: number | null, previous: number | null) {
   if (current == null || previous == null || previous === 0) return null;
   return ((current - previous) / Math.abs(previous)) * 100;
+}
+
+function findSameQuarterLastYear(row: FmpEarningsRow, rows: FmpEarningsRow[]): FmpEarningsRow | null {
+  const rowQuarter = row.fiscalLabel?.split(" ")[0] ?? null;
+  const rowYear = row.fiscalYear && Number.isFinite(Number(row.fiscalYear)) ? Number(row.fiscalYear) : null;
+  if (!rowQuarter || rowYear == null) return null;
+  return rows.find((candidate) => {
+    if (!candidate.date || candidate.date === row.date) return false;
+    const candidateQuarter = candidate.fiscalLabel?.split(" ")[0] ?? null;
+    const candidateYear = candidate.fiscalYear && Number.isFinite(Number(candidate.fiscalYear)) ? Number(candidate.fiscalYear) : null;
+    return candidateQuarter === rowQuarter && candidateYear === rowYear - 1;
+  }) ?? null;
+}
+
+function marginPct(numerator: number | null | undefined, revenue: number | null | undefined) {
+  if (typeof numerator !== "number" || typeof revenue !== "number" || !Number.isFinite(numerator) || !Number.isFinite(revenue) || revenue === 0) return null;
+  return (numerator / Math.abs(revenue)) * 100;
+}
+
+function computeEarningsReactionDetail(row: FmpEarningsRow, points: Point[]): { reactionPct: number | null; volumeMultiple: number | null; drift5Pct: number | null; drift20Pct: number | null } {
+  const empty = { reactionPct: null, volumeMultiple: null, drift5Pct: null, drift20Pct: null };
+  if (!row.date || !points.length) return empty;
+  const dates = points.map((p) => p.date);
+  let idx = dates.indexOf(row.date);
+  if (idx === -1) {
+    idx = dates.findIndex((d) => d >= String(row.date));
+  }
+  if (idx === -1) return empty;
+  const time = (row.time || "").toLowerCase();
+  let baseIdx: number;
+  let reactIdx: number;
+  if (time === "bmo") { baseIdx = idx - 1; reactIdx = idx; }
+  else if (time === "amc") { baseIdx = idx; reactIdx = idx + 1; }
+  else { baseIdx = idx - 1; reactIdx = idx + 1; }
+
+  const base = points[baseIdx]?.close;
+  const react = points[reactIdx]?.close;
+  const reactionPct = typeof base === "number" && typeof react === "number" && Number.isFinite(base) && Number.isFinite(react) && base !== 0
+    ? ((react - base) / Math.abs(base)) * 100
+    : null;
+
+  const reactionVolume = points[reactIdx]?.volume;
+  let volumeMultiple: number | null = null;
+  if (typeof reactionVolume === "number" && Number.isFinite(reactionVolume) && reactionVolume > 0) {
+    const lookback = 20;
+    const windowStart = Math.max(0, baseIdx - lookback + 1);
+    const window = points.slice(windowStart, baseIdx + 1)
+      .map((p) => p.volume)
+      .filter((v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0);
+    if (window.length) {
+      const avgVolume = window.reduce((a, b) => a + b, 0) / window.length;
+      if (avgVolume > 0) volumeMultiple = reactionVolume / avgVolume;
+    }
+  }
+
+  let drift5Pct: number | null = null;
+  let drift20Pct: number | null = null;
+  if (typeof base === "number" && Number.isFinite(base) && base !== 0) {
+    const close5 = points[reactIdx + 4]?.close;
+    const close20 = points[reactIdx + 19]?.close;
+    if (typeof close5 === "number" && Number.isFinite(close5)) drift5Pct = ((close5 - base) / Math.abs(base)) * 100;
+    if (typeof close20 === "number" && Number.isFinite(close20)) drift20Pct = ((close20 - base) / Math.abs(base)) * 100;
+  }
+
+  return { reactionPct, volumeMultiple, drift5Pct, drift20Pct };
 }
 
 function quarterLabel(date?: string | null) {
@@ -315,14 +409,16 @@ async function fetchFmpLegacyJson<T>(path: string): Promise<T | null> {
 }
 
 async function getEarningsData(symbol: string) {
-  const [earningsJson, incomeJson, historicalCalendarJson] = await Promise.all([
+  const [earningsJson, incomeJson, historicalCalendarJson, analystEstimatesJson, dailyHistory] = await Promise.all([
     fetchFmpJson<unknown[]>(`/earnings?symbol=${encodeURIComponent(symbol)}`),
     fetchFmpJson<unknown[]>(`/income-statement?symbol=${encodeURIComponent(symbol)}&period=quarter&limit=12`),
     fetchFmpLegacyJson<unknown[]>(`/historical/earning_calendar/${encodeURIComponent(symbol)}`),
+    fetchFmpJson<unknown[]>(`/analyst-estimates?symbol=${encodeURIComponent(symbol)}&period=quarter&limit=8`),
+    getDailyHistory(symbol).catch(() => [] as Point[]),
   ]);
 
   const earningsRows: FmpEarningsRow[] = Array.isArray(earningsJson)
-    ? earningsJson.map((item) => { const row = item as Record<string, unknown>; return { symbol, date: typeof row.date === "string" ? row.date : "", epsActual: asNumber(row.epsActual), epsEstimated: asNumber(row.epsEstimated), revenueActual: asNumber(row.revenueActual), revenueEstimated: asNumber(row.revenueEstimated), lastUpdated: typeof row.lastUpdated === "string" ? row.lastUpdated : "" }; }).filter((row) => Boolean(row.date)).sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    ? earningsJson.map((item) => { const row = item as Record<string, unknown>; return { symbol, date: typeof row.date === "string" ? row.date : "", epsActual: asNumber(row.epsActual), epsEstimated: asNumber(row.epsEstimated), revenueActual: asNumber(row.revenueActual), revenueEstimated: asNumber(row.revenueEstimated), lastUpdated: typeof row.lastUpdated === "string" ? row.lastUpdated : "", time: typeof row.time === "string" ? row.time.toLowerCase() : undefined }; }).filter((row) => Boolean(row.date)).sort((a, b) => String(b.date).localeCompare(String(a.date)))
     : [];
 
   const incomeRows: FmpIncomeStatementRow[] = Array.isArray(incomeJson)
@@ -333,8 +429,13 @@ async function getEarningsData(symbol: string) {
     ? historicalCalendarJson.map((item) => { const row = item as Record<string, unknown>; return { date: typeof row.date === "string" ? row.date : "", epsActual: asNumber(row.actualEarningResult) ?? asNumber(row.epsActual) ?? asNumber(row.actualEPS), epsEstimated: asNumber(row.estimatedEarning) ?? asNumber(row.epsEstimated) ?? asNumber(row.estimatedEPS) }; }).filter((row) => Boolean(row.date)).sort((a, b) => String(b.date).localeCompare(String(a.date)))
     : [];
 
+  const analystEstimateRows: FmpAnalystEstimateRow[] = Array.isArray(analystEstimatesJson)
+    ? analystEstimatesJson.map((item) => { const row = item as Record<string, unknown>; return { date: typeof row.date === "string" ? row.date : "", revenueLow: asNumber(row.revenueLow), revenueHigh: asNumber(row.revenueHigh), revenueAvg: asNumber(row.revenueAvg), epsLow: asNumber(row.epsLow), epsHigh: asNumber(row.epsHigh), epsAvg: asNumber(row.epsAvg), numAnalystsRevenue: asNumber(row.numAnalystsRevenue), numAnalystsEps: asNumber(row.numAnalystsEps) }; }).filter((row) => Boolean(row.date)).sort((a, b) => String(a.date).localeCompare(String(b.date)))
+    : [];
+
   const historicalByDate = new Map(historicalCalendarRows.map((row) => [row.date, row]));
   const today = new Date();
+  const todayIso = today.toISOString().slice(0, 10);
 
   const completedRows = earningsRows
     .filter((row) => row.epsActual != null || row.revenueActual != null)
@@ -342,11 +443,13 @@ async function getEarningsData(symbol: string) {
       const matchingCalendar = row.date ? historicalByDate.get(row.date) : null;
       const matchingIncome = incomeRows[index] ?? null;
       const incomeEps = matchingIncome?.epsDiluted ?? matchingIncome?.eps ?? null;
-      return { ...row, fiscalLabel: fiscalLabelFromStatement(matchingIncome) ?? undefined, fiscalYear: matchingIncome?.calendarYear || matchingIncome?.date?.slice(0, 4) || row.date?.slice(0, 4), periodEndDate: matchingIncome?.date, epsActual: row.epsActual ?? matchingCalendar?.epsActual ?? incomeEps ?? null, epsEstimated: matchingCalendar?.epsEstimated ?? row.epsEstimated ?? null, revenueActual: matchingIncome?.revenue ?? row.revenueActual ?? null };
+      return { ...row, fiscalLabel: fiscalLabelFromStatement(matchingIncome) ?? undefined, fiscalYear: matchingIncome?.calendarYear || matchingIncome?.date?.slice(0, 4) || row.date?.slice(0, 4), periodEndDate: matchingIncome?.date, epsActual: row.epsActual ?? matchingCalendar?.epsActual ?? incomeEps ?? null, epsEstimated: matchingCalendar?.epsEstimated ?? row.epsEstimated ?? null, revenueActual: matchingIncome?.revenue ?? row.revenueActual ?? null, grossProfit: matchingIncome?.grossProfit ?? null, operatingIncome: matchingIncome?.operatingIncome ?? null };
     });
 
   const latest = completedRows[0] ?? null;
   const next = earningsRows.find((row) => { if (!row.date) return false; const dt = new Date(`${row.date}T00:00:00Z`); return dt.getTime() > today.getTime() && row.epsActual == null && row.revenueActual == null; }) ?? null;
+
+  const nextEstimate = analystEstimateRows.find((row) => Boolean(row.date) && String(row.date) >= todayIso && (row.epsAvg != null || row.revenueAvg != null)) ?? null;
 
   const latestFiscalQuarter = latest?.fiscalLabel?.split(" ")[0] ?? null;
   const latestFiscalYear = latest?.fiscalYear && Number.isFinite(Number(latest.fiscalYear)) ? Number(latest.fiscalYear) : null;
@@ -359,18 +462,225 @@ async function getEarningsData(symbol: string) {
   const operatingMargin = matchingIncome?.operatingIncome != null && matchingIncome?.revenue != null && matchingIncome.revenue !== 0 ? (matchingIncome.operatingIncome / Math.abs(matchingIncome.revenue)) * 100 : null;
   const netIncome = matchingIncome?.netIncome ?? null;
   const recentTrend: EarningsTrendPoint[] = completedRows.slice(0, 6).reverse().map((row) => ({ label: displayQuarterLabel(row), tone: classifyQuarter(row), epsActual: row.epsActual ?? null, epsEstimated: row.epsEstimated ?? null, revenueActual: row.revenueActual ?? null, revenueEstimated: row.revenueEstimated ?? null }));
+  const chartQuarters: EarningsTrendPoint[] = completedRows.slice(0, 8).reverse().map((row) => ({ label: displayQuarterLabel(row), tone: classifyQuarter(row), epsActual: row.epsActual ?? null, epsEstimated: row.epsEstimated ?? null, revenueActual: row.revenueActual ?? null, revenueEstimated: row.revenueEstimated ?? null }));
+  const growthMarginQuarters: EarningsGrowthMarginPoint[] = completedRows.slice(0, 8).reverse().map((row) => {
+    const priorYearRow = findSameQuarterLastYear(row, completedRows);
+    return {
+      label: displayQuarterLabel(row),
+      yoyEpsGrowth: calcGrowth(asNumber(row.epsActual), asNumber(priorYearRow?.epsActual)),
+      yoyRevenueGrowth: calcGrowth(asNumber(row.revenueActual), asNumber(priorYearRow?.revenueActual)),
+      grossMarginPct: marginPct(row.grossProfit, row.revenueActual),
+      operatingMarginPct: marginPct(row.operatingIncome, row.revenueActual),
+    };
+  });
   const yearlySummaries = makeYearlySummaries(completedRows);
+  const priceReactionQuarters: EarningsReactionPoint[] = completedRows.slice(0, 8).reverse().map((row) => {
+    const detail = computeEarningsReactionDetail(row, dailyHistory as Point[]);
+    return { label: displayQuarterLabel(row), ...detail };
+  });
+  const epsBeatFlags = completedRows.slice(0, 8).map((row) => (row.epsActual != null && row.epsEstimated != null ? row.epsActual >= row.epsEstimated : null));
+  const epsBeatConsidered = epsBeatFlags.filter((v): v is boolean => v != null);
+  const epsBeatCount = epsBeatConsidered.filter(Boolean).length;
+  const epsBeatTotal = epsBeatConsidered.length;
+  let currentStreakCount = 0;
+  let currentStreakType: "beat" | "miss" | null = null;
+  for (const flag of epsBeatFlags) {
+    if (flag == null) break;
+    if (currentStreakType == null) { currentStreakType = flag ? "beat" : "miss"; currentStreakCount = 1; }
+    else if ((flag && currentStreakType === "beat") || (!flag && currentStreakType === "miss")) currentStreakCount += 1;
+    else break;
+  }
   const localScore = scoreEarnings({ latest, sameQuarterLastYear, completedRows });
   const sharedScore = await fetchSharedEarningsScore(symbol);
   const score = sharedScore ?? localScore;
 
-  return { rows: earningsRows, completedRows, latest, next, sameQuarterLastYear, grossMargin, operatingMargin, netIncome, recentTrend, yearlySummaries, score };
+  return { rows: earningsRows, completedRows, latest, next, nextEstimate, sameQuarterLastYear, grossMargin, operatingMargin, netIncome, recentTrend, chartQuarters, growthMarginQuarters, priceReactionQuarters, yearlySummaries, score, epsBeatCount, epsBeatTotal, currentStreakCount, currentStreakType };
 }
 
 function metricCardStyle(tone: EarningsTone | "default" = "default") {
   const border = tone === "good" ? "rgba(34,197,94,0.22)" : tone === "weak" ? "rgba(239,68,68,0.22)" : tone === "neutral" ? "rgba(250,204,21,0.22)" : "rgba(255,255,255,0.08)";
   const bg = tone === "good" ? "linear-gradient(135deg, rgba(34,197,94,0.10), rgba(15,23,42,0.22))" : tone === "weak" ? "linear-gradient(135deg, rgba(239,68,68,0.10), rgba(15,23,42,0.22))" : tone === "neutral" ? "linear-gradient(135deg, rgba(250,204,21,0.10), rgba(15,23,42,0.22))" : "rgba(255,255,255,0.035)";
   return { border: `1px solid ${border}`, borderRadius: 18, padding: 16, background: bg, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035)" };
+}
+
+type BarChartPoint = { label: string; actual: number | null; estimate: number | null };
+
+function ChartFrame({ height, labels, scaleTop, scaleMid, scaleBottom, children }: { height: number; labels: string[]; scaleTop?: string; scaleMid?: string; scaleBottom?: string; children: import("react").ReactNode; }) {
+  const hasScale = scaleTop != null || scaleMid != null || scaleBottom != null;
+  return (
+    <div>
+      <div className="chartRow">
+        <div className="chartPlot">{children}</div>
+        {hasScale && (
+          <div className="chartScale" style={{ height }}>
+            {scaleTop != null && <span className="scaleTop">{scaleTop}</span>}
+            {scaleMid != null && <span className="scaleMid">{scaleMid}</span>}
+            {scaleBottom != null && <span className="scaleBottom">{scaleBottom}</span>}
+          </div>
+        )}
+      </div>
+      <div className="chartCategories">
+        {labels.map((l, i) => <span key={`${l}-${i}`}>{l}</span>)}
+      </div>
+    </div>
+  );
+}
+
+function EarningsBarChart({ data, formatValue, height = 168 }: { data: BarChartPoint[]; formatValue: (v: number) => string; height?: number; }) {
+  const values = data.flatMap((d) => [d.actual, d.estimate]).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+  const maxAbs = values.length ? Math.max(...values.map((v) => Math.abs(v)), 0.0001) : 1;
+  const zeroY = height / 2;
+  const usable = zeroY - 10;
+  const groupW = 100 / Math.max(data.length, 1);
+
+  return (
+    <ChartFrame
+      height={height}
+      labels={data.map((d) => d.label)}
+      scaleTop={values.length ? formatValue(maxAbs) : undefined}
+      scaleMid={values.length ? formatValue(0) : undefined}
+      scaleBottom={values.length ? formatValue(-maxAbs) : undefined}
+    >
+      <svg viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" style={{ width: "100%", height, display: "block" }} role="img" aria-label="Actual versus estimate chart">
+        <line x1="0" y1={zeroY} x2="100" y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeWidth="0.35" />
+        {data.map((d, i) => {
+          const cx = i * groupW + groupW / 2;
+          const barW = Math.min(groupW * 0.30, 7);
+          const estH = d.estimate != null ? (Math.abs(d.estimate) / maxAbs) * usable : 0;
+          const actH = d.actual != null ? (Math.abs(d.actual) / maxAbs) * usable : 0;
+          const estUp = (d.estimate ?? 0) >= 0;
+          const actUp = (d.actual ?? 0) >= 0;
+          const beat = d.actual != null && d.estimate != null ? d.actual >= d.estimate : null;
+          const actualColor = beat == null ? "#60a5fa" : beat ? "#22c55e" : "#ef4444";
+          return (
+            <g key={`${d.label}-${i}`}>
+              {d.estimate != null && (
+                <rect
+                  x={cx - barW - 0.6}
+                  y={estUp ? zeroY - estH : zeroY}
+                  width={barW}
+                  height={Math.max(estH, 0.6)}
+                  fill="rgba(148,163,184,0.38)"
+                  rx="1"
+                />
+              )}
+              {d.actual != null && (
+                <rect
+                  x={cx + 0.6}
+                  y={actUp ? zeroY - actH : zeroY}
+                  width={barW}
+                  height={Math.max(actH, 0.6)}
+                  fill={actualColor}
+                  rx="1"
+                />
+              )}
+            </g>
+          );
+        })}
+      </svg>
+    </ChartFrame>
+  );
+}
+
+function ChartLegend({ actualLabel = "Actual" }: { actualLabel?: string }) {
+  return (
+    <div className="chartLegend">
+      <span><i style={{ background: "#22c55e" }} /> {actualLabel} (beat)</span>
+      <span><i style={{ background: "#ef4444" }} /> {actualLabel} (miss)</span>
+      <span><i style={{ background: "rgba(148,163,184,0.6)" }} /> Estimate</span>
+    </div>
+  );
+}
+
+type LineSeries = { name: string; color: string; values: (number | null)[] };
+
+function MultiLineChart({ labels, series, height = 168, formatValue = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(0)}%` }: { labels: string[]; series: LineSeries[]; height?: number; formatValue?: (v: number) => string; }) {
+  const allValues = series.flatMap((s) => s.values).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+  const maxAbs = allValues.length ? Math.max(...allValues.map((v) => Math.abs(v)), 0.5) : 1;
+  const zeroY = height / 2;
+  const usable = zeroY - 10;
+  const groupW = 100 / Math.max(labels.length, 1);
+
+  function yFor(v: number) {
+    return zeroY - (v / maxAbs) * usable;
+  }
+
+  function pathFor(values: (number | null)[]) {
+    let d = "";
+    let started = false;
+    values.forEach((v, i) => {
+      if (v == null || !Number.isFinite(v)) { started = false; return; }
+      const x = i * groupW + groupW / 2;
+      const y = yFor(v);
+      d += `${started ? "L" : "M"}${x},${y} `;
+      started = true;
+    });
+    return d.trim();
+  }
+
+  return (
+    <ChartFrame
+      height={height}
+      labels={labels}
+      scaleTop={allValues.length ? formatValue(maxAbs) : undefined}
+      scaleMid={allValues.length ? formatValue(0) : undefined}
+      scaleBottom={allValues.length ? formatValue(-maxAbs) : undefined}
+    >
+      <svg viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" style={{ width: "100%", height, display: "block" }} role="img" aria-label="Trend chart">
+        <line x1="0" y1={zeroY} x2="100" y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeWidth="0.35" />
+        {series.map((s) => (
+          <g key={s.name}>
+            <path d={pathFor(s.values)} fill="none" stroke={s.color} strokeWidth="1.4" />
+            {s.values.map((v, i) => (v != null && Number.isFinite(v) ? <circle key={i} cx={i * groupW + groupW / 2} cy={yFor(v)} r="1.5" fill={s.color} /> : null))}
+          </g>
+        ))}
+      </svg>
+    </ChartFrame>
+  );
+}
+
+function SeriesLegend({ items }: { items: { label: string; color: string }[] }) {
+  return (
+    <div className="chartLegend">
+      {items.map((item) => (
+        <span key={item.label}><i style={{ background: item.color }} /> {item.label}</span>
+      ))}
+    </div>
+  );
+}
+
+type SingleBarPoint = { label: string; value: number | null };
+
+function SingleValueBarChart({ data, height = 168, formatValue = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(0)}%` }: { data: SingleBarPoint[]; height?: number; formatValue?: (v: number) => string; }) {
+  const values = data.map((d) => d.value).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+  const maxAbs = values.length ? Math.max(...values.map((v) => Math.abs(v)), 0.5) : 1;
+  const zeroY = height / 2;
+  const usable = zeroY - 10;
+  const groupW = 100 / Math.max(data.length, 1);
+
+  return (
+    <ChartFrame
+      height={height}
+      labels={data.map((d) => d.label)}
+      scaleTop={values.length ? formatValue(maxAbs) : undefined}
+      scaleMid={values.length ? formatValue(0) : undefined}
+      scaleBottom={values.length ? formatValue(-maxAbs) : undefined}
+    >
+      <svg viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" style={{ width: "100%", height, display: "block" }} role="img" aria-label="Price reaction chart">
+        <line x1="0" y1={zeroY} x2="100" y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeWidth="0.35" />
+        {data.map((d, i) => {
+          const cx = i * groupW + groupW / 2;
+          const barW = Math.min(groupW * 0.42, 9);
+          const h = d.value != null ? (Math.abs(d.value) / maxAbs) * usable : 0;
+          const up = (d.value ?? 0) >= 0;
+          const color = d.value == null ? "rgba(148,163,184,0.35)" : up ? "#22c55e" : "#ef4444";
+          return d.value != null ? (
+            <rect key={`${d.label}-${i}`} x={cx - barW / 2} y={up ? zeroY - h : zeroY} width={barW} height={Math.max(h, 0.6)} fill={color} rx="1" />
+          ) : null;
+        })}
+      </svg>
+    </ChartFrame>
+  );
 }
 
 async function fetchQuoteForMeta(symbol: string): Promise<{ price: number | null; date: string | null }> {
@@ -416,6 +726,7 @@ export default async function StockEarningsPage({ params }: Props) {
 
   const latest = data.latest;
   const next = data.next;
+  const nextEstimate = data.nextEstimate;
   const epsActual = latest?.epsActual ?? null;
   const epsEstimated = latest?.epsEstimated ?? null;
   const epsSurprise = calcDifference(epsActual, epsEstimated);
@@ -427,6 +738,29 @@ export default async function StockEarningsPage({ params }: Props) {
   const yoyEpsGrowth = calcGrowth(epsActual, data.sameQuarterLastYear?.epsActual ?? null);
   const yoyRevenueGrowth = calcGrowth(revenueActual, data.sameQuarterLastYear?.revenueActual ?? null);
   const score = data.score;
+
+  const epsChartData: BarChartPoint[] = data.chartQuarters.map((q) => ({ label: q.label, actual: q.epsActual, estimate: q.epsEstimated }));
+  const revenueChartData: BarChartPoint[] = data.chartQuarters.map((q) => ({ label: q.label, actual: q.revenueActual, estimate: q.revenueEstimated }));
+  const growthLabels = data.growthMarginQuarters.map((q) => q.label);
+  const growthSeries: LineSeries[] = [
+    { name: "Revenue growth", color: "#60a5fa", values: data.growthMarginQuarters.map((q) => q.yoyRevenueGrowth) },
+    { name: "EPS growth", color: "#22c55e", values: data.growthMarginQuarters.map((q) => q.yoyEpsGrowth) },
+  ];
+  const marginSeries: LineSeries[] = [
+    { name: "Gross margin", color: "#38bdf8", values: data.growthMarginQuarters.map((q) => q.grossMarginPct) },
+    { name: "Operating margin", color: "#facc15", values: data.growthMarginQuarters.map((q) => q.operatingMarginPct) },
+  ];
+  const reactionData: SingleBarPoint[] = data.priceReactionQuarters.map((q) => ({ label: q.label, value: q.reactionPct }));
+  const hasAnyReaction = reactionData.some((d) => d.value != null);
+  const driftLabels = data.priceReactionQuarters.map((q) => q.label);
+  const driftSeries: LineSeries[] = [
+    { name: "Day of reaction", color: "#60a5fa", values: data.priceReactionQuarters.map((q) => q.reactionPct) },
+    { name: "+5 trading days", color: "#facc15", values: data.priceReactionQuarters.map((q) => q.drift5Pct) },
+    { name: "+20 trading days", color: "#22c55e", values: data.priceReactionQuarters.map((q) => q.drift20Pct) },
+  ];
+  const hasAnyDrift = driftSeries.some((s) => s.values.some((v) => v != null));
+  const latestReaction = [...data.priceReactionQuarters].reverse().find((q) => q.reactionPct != null) ?? null;
+  const epsBeatPct = data.epsBeatTotal > 0 ? Math.round((data.epsBeatCount / data.epsBeatTotal) * 100) : null;
 
   const pageJsonLd = {
     "@context": "https://schema.org", "@type": "WebPage",
@@ -483,6 +817,21 @@ export default async function StockEarningsPage({ params }: Props) {
         .trendDot { text-align: center; min-width: 52px; }
         .trendDot span { display: inline-flex; width: 18px; height: 18px; border-radius: 999px; box-shadow: 0 0 0 6px rgba(255,255,255,0.04); }
         .trendDot strong { display: block; margin-top: 9px; font-size: 11px; color: rgba(241,245,249,0.86); }
+        .chartLegend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px; font-size: 11px; font-weight: 800; color: rgba(226,232,240,0.72); }
+        .chartLegend span { display: inline-flex; align-items: center; gap: 6px; }
+        .chartLegend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; }
+        .chartRow { display: flex; align-items: stretch; gap: 8px; }
+        .chartPlot { flex: 1 1 auto; min-width: 0; }
+        .chartScale { position: relative; width: 66px; flex: 0 0 auto; border-left: 1px solid rgba(255,255,255,0.08); }
+        .chartScale span { position: absolute; right: 4px; left: 4px; font-size: 11px; font-weight: 800; color: rgba(203,213,225,0.62); white-space: nowrap; text-align: right; overflow: visible; }
+        .chartScale .scaleTop { top: 0; }
+        .chartScale .scaleMid { top: 50%; transform: translateY(-50%); }
+        .chartScale .scaleBottom { bottom: 0; }
+        .chartCategories { display: flex; margin-top: 6px; }
+        .chartCategories span { flex: 1 1 0; text-align: center; font-size: 11px; font-weight: 800; color: rgba(203,213,225,0.68); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 1px; }
+        .chartBlock { margin-top: 14px; }
+        .chartBlock + .chartBlock { margin-top: 26px; }
+        .chartBlockTitle { font-size: 13px; font-weight: 900; color: rgba(226,232,240,0.85); margin-bottom: 4px; }
         .yearGrid { margin-top: 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
         .yearBadge { display: flex; justify-content: space-between; gap: 10px; align-items: center; border-radius: 13px; padding: 10px 12px; font-size: 13px; font-weight: 950; border: 1px solid rgba(255,255,255,0.10); }
         .historyTable { width: 100%; border-collapse: separate; border-spacing: 0 10px; margin-top: 14px; }
@@ -494,6 +843,7 @@ export default async function StockEarningsPage({ params }: Props) {
         .bulletList { margin: 14px 0 0; padding: 0; list-style: none; display: grid; gap: 12px; }
         .bulletList li { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 10px; color: rgba(226,232,240,0.84); line-height: 1.65; }
         .bulletList li::before { content: ""; width: 9px; height: 9px; border-radius: 999px; margin-top: 8px; background: #22c55e; box-shadow: 0 0 0 4px rgba(34,197,94,0.10); }
+        .estimateGrid { margin-top: 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
         @media (max-width: 980px) { .hero, .contentGrid { grid-template-columns: 1fr; } .sideColumn { position: static; } .metricGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
         @media (max-width: 720px) {
           .earningsPage, .earningsPage * { box-sizing: border-box; }
@@ -511,13 +861,20 @@ export default async function StockEarningsPage({ params }: Props) {
           .contentGrid { gap: 16px; }
           .card h2 { font-size: 23px; } .card h3 { font-size: 20px; }
           .card p, .bulletList li { font-size: 14px; line-height: 1.6; }
-          .metricGrid, .yearGrid, .earningsSearchRow { grid-template-columns: 1fr; }
-          .metricGrid { gap: 10px; }
-          .metricValue { font-size: 22px; word-break: break-word; }
+          .yearGrid, .earningsSearchRow, .estimateGrid { grid-template-columns: 1fr; }
+          .metricGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+          .metricCard { padding: 10px !important; border-radius: 14px !important; }
+          .metricValue { font-size: 18px; word-break: break-word; }
+          .metricLabel { font-size: 9.5px; }
+          .metricSub { font-size: 10.5px; margin-top: 5px; }
+          .metricHelp { width: 14px; height: 14px; font-size: 9px; }
           .metricHelpBubble { position: fixed; left: 12px; right: 12px; bottom: auto; top: 92px; transform: none; width: auto; max-width: none; }
           .metricHelpBubble::after { display: none; }
           .trendDots { gap: 12px; justify-content: flex-start; }
           .trendDot { min-width: 48px; }
+          .chartScale { width: 58px; }
+          .chartScale span { font-size: 10px; left: 2px; right: 2px; }
+          .chartCategories span { font-size: 9.5px; }
           .historyTable { display: block; width: 100%; border-spacing: 0; margin-top: 12px; }
           .historyTable thead { display: none; }
           .historyTable tbody, .historyTable tr, .historyTable td { display: block; width: 100%; }
@@ -577,12 +934,12 @@ export default async function StockEarningsPage({ params }: Props) {
                 ) : (
                   <>
                     <div className="metricGrid">
-                      <div style={metricCardStyle(score.tone)}><MetricLabelWithHelp label="FMP EPS" /><div className="metricValue">{formatMoney(epsActual)}</div><div className="metricSub">FMP estimate: {formatMoney(epsEstimated)}</div></div>
-                      <div style={metricCardStyle(epsSurprise != null && epsSurprise >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="EPS surprise" /><div className="metricValue">{formatMoney(epsSurprise)}</div><div className="metricSub">{formatPercent(epsSurprisePct)}</div></div>
-                      <div style={metricCardStyle(revenueSurprise != null && revenueSurprise >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="Revenue surprise" /><div className="metricValue">{formatMoney(revenueSurprise, true)}</div><div className="metricSub">{formatPercent(revenueSurprisePct)}</div></div>
-                      <div style={metricCardStyle("default")}><MetricLabelWithHelp label="Revenue" /><div className="metricValue">{formatMoney(revenueActual, true)}</div><div className="metricSub">Estimate: {formatMoney(revenueEstimated, true)}</div></div>
-                      <div style={metricCardStyle(yoyEpsGrowth != null && yoyEpsGrowth >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="YoY EPS growth" /><div className="metricValue">{formatPercent(yoyEpsGrowth)}</div><div className="metricSub">Compared with {displayQuarterLabel(data.sameQuarterLastYear)}</div></div>
-                      <div style={metricCardStyle(yoyRevenueGrowth != null && yoyRevenueGrowth >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="YoY revenue growth" /><div className="metricValue">{formatPercent(yoyRevenueGrowth)}</div><div className="metricSub">Compared with {displayQuarterLabel(data.sameQuarterLastYear)}</div></div>
+                      <div className="metricCard" style={metricCardStyle(score.tone)}><MetricLabelWithHelp label="FMP EPS" /><div className="metricValue">{formatMoney(epsActual)}</div><div className="metricSub">FMP estimate: {formatMoney(epsEstimated)}</div></div>
+                      <div className="metricCard" style={metricCardStyle(epsSurprise != null && epsSurprise >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="EPS surprise" /><div className="metricValue">{formatMoney(epsSurprise)}</div><div className="metricSub">{formatPercent(epsSurprisePct)}</div></div>
+                      <div className="metricCard" style={metricCardStyle(revenueSurprise != null && revenueSurprise >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="Revenue surprise" /><div className="metricValue">{formatMoney(revenueSurprise, true)}</div><div className="metricSub">{formatPercent(revenueSurprisePct)}</div></div>
+                      <div className="metricCard" style={metricCardStyle("default")}><MetricLabelWithHelp label="Revenue" /><div className="metricValue">{formatMoney(revenueActual, true)}</div><div className="metricSub">Estimate: {formatMoney(revenueEstimated, true)}</div></div>
+                      <div className="metricCard" style={metricCardStyle(yoyEpsGrowth != null && yoyEpsGrowth >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="YoY EPS growth" /><div className="metricValue">{formatPercent(yoyEpsGrowth)}</div><div className="metricSub">Compared with {displayQuarterLabel(data.sameQuarterLastYear)}</div></div>
+                      <div className="metricCard" style={metricCardStyle(yoyRevenueGrowth != null && yoyRevenueGrowth >= 0 ? "good" : "weak")}><MetricLabelWithHelp label="YoY revenue growth" /><div className="metricValue">{formatPercent(yoyRevenueGrowth)}</div><div className="metricSub">Compared with {displayQuarterLabel(data.sameQuarterLastYear)}</div></div>
                     </div>
                     <p className="earningsDataNote">EPS fields are shown from FMP earnings data. They can differ from GAAP EPS or adjusted EPS quoted in earnings headlines.</p>
                   </>
@@ -590,9 +947,37 @@ export default async function StockEarningsPage({ params }: Props) {
               </section>
 
               <section className="card">
+                <div className="eyebrow">Wall Street expectations</div>
+                <h2>Analyst estimates for the next report</h2>
+                {nextEstimate ? (
+                  <>
+                    <p>Consensus estimates for the period ending around <strong>{formatDate(nextEstimate.date)}</strong>, based on covering analysts.</p>
+                    <div className="estimateGrid">
+                      <div style={metricCardStyle("default")}>
+                        <div className="metricLabel">Consensus EPS</div>
+                        <div className="metricValue">{formatMoney(nextEstimate.epsAvg)}</div>
+                        <div className="metricSub">Range {formatMoney(nextEstimate.epsLow)} – {formatMoney(nextEstimate.epsHigh)}{nextEstimate.numAnalystsEps ? ` · ${nextEstimate.numAnalystsEps} analysts` : ""}</div>
+                      </div>
+                      <div style={metricCardStyle("default")}>
+                        <div className="metricLabel">Consensus revenue</div>
+                        <div className="metricValue">{formatMoney(nextEstimate.revenueAvg, true)}</div>
+                        <div className="metricSub">Range {formatMoney(nextEstimate.revenueLow, true)} – {formatMoney(nextEstimate.revenueHigh, true)}{nextEstimate.numAnalystsRevenue ? ` · ${nextEstimate.numAnalystsRevenue} analysts` : ""}</div>
+                      </div>
+                    </div>
+                    <p className="earningsDataNote">Analyst estimates come from FMP&apos;s covering-analyst consensus and can change as the report date approaches.</p>
+                  </>
+                ) : (
+                  <p>Analyst consensus estimates for the next report are not available for this symbol yet.</p>
+                )}
+              </section>
+
+              <section className="card">
                 <div className="eyebrow">Recent earnings trend</div>
                 <h2>How recent earnings have been landing</h2>
                 <p>The dots below simplify recent earnings into good, mixed or weak reads based on EPS surprise, revenue surprise and whether the report was profitable.</p>
+                {epsBeatPct != null ? (
+                  <p><strong>{clean}</strong> has beaten EPS estimates in <strong>{data.epsBeatCount} of the last {data.epsBeatTotal}</strong> quarters ({epsBeatPct}%){data.currentStreakType ? `, including a current streak of ${data.currentStreakCount} straight ${data.currentStreakType === "beat" ? "beats" : "misses"}` : ""}.</p>
+                ) : null}
                 {data.recentTrend.length ? (
                   <div className="trendDots">
                     {data.recentTrend.map((item) => (
@@ -603,6 +988,73 @@ export default async function StockEarningsPage({ params }: Props) {
                     ))}
                   </div>
                 ) : <p>No recent completed earnings trend is available yet.</p>}
+
+                {data.chartQuarters.length ? (
+                  <>
+                    <div className="chartBlock">
+                      <div className="chartBlockTitle">EPS: actual vs. estimate by quarter</div>
+                      <EarningsBarChart data={epsChartData} formatValue={(v) => formatMoney(v)} />
+                    </div>
+                    <div className="chartBlock">
+                      <div className="chartBlockTitle">Revenue: actual vs. estimate by quarter</div>
+                      <EarningsBarChart data={revenueChartData} formatValue={(v) => formatMoney(v, true)} />
+                    </div>
+                    <ChartLegend />
+                  </>
+                ) : null}
+              </section>
+
+              <section className="card">
+                <div className="eyebrow">Growth &amp; margins</div>
+                <h2>Is growth accelerating, and are margins holding up?</h2>
+                <p>A single quarter&apos;s beat matters less than the trend behind it. These lines show whether year-over-year growth is speeding up or slowing down, and whether margins are expanding or getting squeezed.</p>
+                {growthLabels.length ? (
+                  <>
+                    <div className="chartBlock">
+                      <div className="chartBlockTitle">YoY revenue &amp; EPS growth by quarter</div>
+                      <MultiLineChart labels={growthLabels} series={growthSeries} />
+                      <SeriesLegend items={[{ label: "Revenue growth", color: "#60a5fa" }, { label: "EPS growth", color: "#22c55e" }]} />
+                    </div>
+                    <div className="chartBlock">
+                      <div className="chartBlockTitle">Gross &amp; operating margin by quarter</div>
+                      <MultiLineChart labels={growthLabels} series={marginSeries} />
+                      <SeriesLegend items={[{ label: "Gross margin", color: "#38bdf8" }, { label: "Operating margin", color: "#facc15" }]} />
+                    </div>
+                    <p className="earningsDataNote">Growth compares each quarter with the same quarter a year earlier. Margins are gross profit and operating income as a share of revenue for that quarter.</p>
+                  </>
+                ) : (
+                  <p>Not enough quarterly history is available yet to chart growth and margin trends.</p>
+                )}
+              </section>
+
+              <section className="card">
+                <div className="eyebrow">Price reaction</div>
+                <h2>How has {clean} actually traded around its last reports?</h2>
+                <p>This shows the stock&apos;s closing-price move around each report: for reports released before market open, it&apos;s the move from the prior close into the report-day close; for reports released after market close, it&apos;s the move from the report-day close into the next day&apos;s close. When exact timing isn&apos;t available, it spans the day before the report to the day after.</p>
+                {latestReaction && (latestReaction.reactionPct != null || latestReaction.volumeMultiple != null) && (
+                  <p><strong>Most recent reaction ({latestReaction.label}):</strong> {formatPercent(latestReaction.reactionPct)}{latestReaction.volumeMultiple != null ? ` on ${latestReaction.volumeMultiple.toFixed(1)}x average volume` : ""}.</p>
+                )}
+                {hasAnyReaction ? (
+                  <>
+                    <div className="chartBlock">
+                      <SingleValueBarChart data={reactionData} />
+                    </div>
+                    <SeriesLegend items={[{ label: "Rose after report", color: "#22c55e" }, { label: "Fell after report", color: "#ef4444" }]} />
+                    <p className="earningsDataNote">This reflects the stock&apos;s actual price move, which can be driven by broader market moves as well as the earnings report itself &mdash; it isn&apos;t a clean read of earnings reaction alone.</p>
+                  </>
+                ) : (
+                  <p>Not enough price history is available yet to chart the reaction around earnings.</p>
+                )}
+                {hasAnyDrift && (
+                  <>
+                    <div className="chartBlock">
+                      <div className="chartBlockTitle">Did the move hold? Price vs. pre-earnings close, over time</div>
+                      <MultiLineChart labels={driftLabels} series={driftSeries} />
+                      <SeriesLegend items={[{ label: "Day of reaction", color: "#60a5fa" }, { label: "+5 trading days", color: "#facc15" }, { label: "+20 trading days", color: "#22c55e" }]} />
+                    </div>
+                    <p className="earningsDataNote">This tracks the stock from just before each report through the following weeks, to show whether the initial reaction stuck, faded, or reversed. The most recent quarters may not have a full 20 trading days of data yet.</p>
+                  </>
+                )}
               </section>
 
               <section className="card">
