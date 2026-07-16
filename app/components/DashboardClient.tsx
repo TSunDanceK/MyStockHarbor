@@ -975,7 +975,7 @@ export default function DashboardClient({
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: COLORS.mutedFg2, textTransform: "uppercase" }}>{item.source ?? "Publisher"}</div><div style={{ fontSize: 10, color: COLORS.mutedFg2 }}>{item.pubDate ? new Date(item.pubDate).toLocaleDateString() : "Recent"}</div></div>
                 <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
                   {item.image ? (
-                    <img src={item.image} alt="" loading="lazy" style={{ width: 52, height: 52, borderRadius: 8, objectFit: "cover", flexShrink: 0, background: "rgba(255,255,255,0.04)" }} />
+                    <img src={item.image} alt="" loading="lazy" style={{ width: isMobile ? 52 : 104, height: isMobile ? 52 : 104, borderRadius: 8, objectFit: "cover", flexShrink: 0, background: "rgba(255,255,255,0.04)" }} />
                   ) : null}
                   <div style={{ fontWeight: 800, lineHeight: 1.4, fontSize: 14 }}>{item.title}</div>
                 </div>
