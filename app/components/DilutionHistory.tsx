@@ -38,9 +38,17 @@ const BLUE = "#60a5fa";
 export default function DilutionHistory({
   data,
   symbol,
+  embedded,
 }: {
   data: DilutionHistoryData | null;
   symbol: string;
+  // true when rendered inside another card (currently: CompanyProfile's
+  // description column, filling the space that column would otherwise
+  // leave empty next to the taller stat-box column) rather than as its own
+  // standalone full-width section further down the page. Drops the
+  // section-level border/heading spacing that would otherwise double up
+  // with the parent card's own border.
+  embedded?: boolean;
 }) {
   const points = data?.points ?? [];
   // Need a real spread of points to show a meaningful trend — a single
@@ -61,11 +69,9 @@ export default function DilutionHistory({
     : "Roughly flat";
 
   // -- Chart geometry (server-rendered SVG, no client JS) --------------------
-  // Chart now spans the full width of the middle column (previously it shared
-  // a row with a fixed 220px stat sidebar, which left the stat cells looking
-  // sparse/disconnected on wide viewports). The three stat cells now sit in a
-  // row underneath instead, same pattern as .earningsMetricGrid elsewhere on
-  // this page.
+  // viewBox is a fixed aspect ratio; actual rendered size always scales to
+  // 100% of whatever column it's placed in (full middle column standalone,
+  // or the narrower description column when embedded).
   const width = 900;
   const height = 220;
   const padX = 6;
@@ -92,12 +98,12 @@ export default function DilutionHistory({
     coords.map((c) => `L ${c.x.toFixed(1)} ${c.y.toFixed(1)}`).join(" ") +
     ` L ${coords[coords.length - 1].x.toFixed(1)} ${(padTop + plotH).toFixed(1)} Z`;
 
-  const gradientId = `dilutionArea-${symbol}`;
+  const gradientId = `dilutionArea-${symbol}${embedded ? "-embedded" : ""}`;
 
-  return (
-    <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+  const body = (
+    <>
       <div style={eyebrowStyle}>Share dilution</div>
-      <h2 style={headingStyle}>{symbol} shares outstanding over time</h2>
+      <h2 style={embedded ? embeddedHeadingStyle : headingStyle}>{symbol} shares outstanding over time</h2>
       <p style={subStyle}>
         Tracking total shares outstanding is one way to spot dilution — a rising line means the company
         has issued more shares (stock-based compensation, secondary offerings, convertible debt), which
@@ -180,12 +186,23 @@ export default function DilutionHistory({
           .dh-stats-row { grid-template-columns: 1fr !important; }
         }
       `}</style>
+    </>
+  );
+
+  if (embedded) {
+    return <div style={{ marginTop: 24 }}>{body}</div>;
+  }
+
+  return (
+    <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+      {body}
     </section>
   );
 }
 
 const eyebrowStyle: CSSProperties = { fontSize: 11, fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)", marginBottom: 6 };
 const headingStyle: CSSProperties = { margin: 0, fontSize: 22, lineHeight: 1.15, letterSpacing: "-0.025em", fontWeight: 700 };
+const embeddedHeadingStyle: CSSProperties = { margin: 0, fontSize: 17, lineHeight: 1.2, letterSpacing: "-0.02em", fontWeight: 700 };
 const subStyle: CSSProperties = { marginTop: 10, marginBottom: 0, fontSize: 14, lineHeight: 1.7, color: "rgba(241,245,249,0.72)", maxWidth: 760 };
 const cellStyle: CSSProperties = { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "10px 12px", background: "rgba(255,255,255,0.02)", minWidth: 0 };
 const cellLabelStyle: CSSProperties = { fontSize: 10, fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(148,163,184,0.62)" };

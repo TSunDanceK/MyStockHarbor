@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 // -- Company profile card -----------------------------------------------------
 // Server-rendered "About" block built from the FMP company profile endpoint.
@@ -66,9 +66,19 @@ function hostname(url: string | null) {
 export default function CompanyProfile({
   profile,
   symbol,
+  belowDescription,
 }: {
   profile: CompanyProfile;
   symbol: string;
+  // Optional extra content (e.g. the share-dilution chart) rendered directly
+  // under the description paragraph, in the same left-hand column as the
+  // description. On desktop the description is almost always much shorter
+  // than the stat-box column next to it, which used to leave a large empty
+  // gap in that column — this slot lets a caller fill that space instead of
+  // pushing the content into its own separate full-width section further
+  // down the page. Falls back to normal in-flow placement (after the
+  // description) when there are no stat rows to create the column mismatch.
+  belowDescription?: ReactNode;
 }) {
   const name = profile.companyName || symbol;
   const dividend =
@@ -135,19 +145,30 @@ export default function CompanyProfile({
       <div style={eyebrowStyle}>Company profile</div>
       <h2 style={headingStyle}>About {name}</h2>
 
-      {/* Desktop: description in a wide left column, the stat boxes in a
-          narrow right column. Mobile: single column layout — description,
-          then the stat boxes below it, laid out 2-per-row (source order,
-          no reordering) so the cards don't eat the whole screen. */}
+      {/* Desktop: description (+ any belowDescription content, e.g. the
+          share-dilution chart) in a wide left column, the stat boxes in a
+          narrow right column. Mobile: single column layout — description
+          and belowDescription content, then the stat boxes below, laid out
+          2-per-row (source order, no reordering) so the cards don't eat the
+          whole screen. */}
       {hasDescription && hasRows ? (
         <div className="cp-columns">
-          <p style={descStyle}>{profile.description}</p>
+          <div>
+            <p style={descStyle}>{profile.description}</p>
+            {belowDescription}
+          </div>
           <div className="cp-stats">{statBoxes}</div>
         </div>
       ) : hasDescription ? (
-        <p style={descStyle}>{profile.description}</p>
+        <>
+          <p style={descStyle}>{profile.description}</p>
+          {belowDescription}
+        </>
       ) : (
-        <div style={gridStyle} className="cp-grid-fallback">{statBoxes}</div>
+        <>
+          <div style={gridStyle} className="cp-grid-fallback">{statBoxes}</div>
+          {belowDescription}
+        </>
       )}
 
       <div style={sourceStyle}>
