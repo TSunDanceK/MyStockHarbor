@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { getDailyHistory } from "@/lib/server/historyCache";
 import type { LatestEarningsData } from "@/app/components/LatestEarningsCard";
 import type { CompanyProfile } from "@/app/components/CompanyProfile";
+import type { DilutionHistoryData } from "@/app/components/DilutionHistory";
 import {
   computeIndicatorSeed,
   buildSeoTitle,
@@ -186,6 +187,86 @@ async function fetchCompanyProfile(symbol: string): Promise<CompanyProfile | nul
   return null;
 }
 
+// Fetch historical shares-outstanding data on the SERVER for the "share
+// dilution" chart (DilutionHistory.tsx), same SSR pattern as the company
+// profile above — real data in the crawlable initial HTML, no client loading
+// gate. Tries the current "stable" endpoint first, then the long-standing
+// legacy v3 path; field names are mapped defensively (several plausible
+// variants tried per field) since FMP's own docs site did not reliably
+// confirm the current stable-tier response shape when this was written — if
+// FMP's shape differs from all of these, this degrades to null (the
+// DilutionHistory component simply doesn't render) rather than throwing.
+async function fetchShareHistory(symbol: string): Promise<DilutionHistoryData | null> {
+  const apiKey = process.env.FMP_API_KEY;
+  if (!apiKey) return null;
+  const enc = encodeURIComponent(symbol);
+  const key = encodeURIComponent(apiKey);
+  const urls = [
+    `https://financialmodelingprep.com/stable/historical-shares-float?symbol=${enc}&apikey=${key}`,
+    `https://financialmodelingprep.com/api/v3/historical/shares_float/${enc}?apikey=${key}`,
+  ];
+
+  type ShareRow = { date: string; shares: number };
+
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { next: { revalidate: 60 * 60 * 24 } });
+      if (!res.ok) continue;
+      const json = await res.json();
+      const rows: unknown[] = Array.isArray(json)
+        ? json
+        : Array.isArray((json as { historical?: unknown[] })?.historical)
+        ? (json as { historical: unknown[] }).historical
+        : [];
+      if (!rows.length) continue;
+
+      const raw: ShareRow[] = rows
+        .map((r) => {
+          const row = r as Record<string, unknown>;
+          const date = str(row.date);
+          const shares =
+            num(row.outstandingShares) ??
+            num(row.sharesOutstanding) ??
+            num(row.freeFloatShares) ??
+            num(row.floatShares);
+          if (!date || shares == null || shares <= 0) return null;
+          return { date, shares };
+        })
+        .filter((r): r is ShareRow => r !== null)
+        // FMP typically returns newest-first; normalize to ascending by date.
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      if (raw.length < 3) continue;
+
+      // Downsample to roughly one point per quarter so the chart reads as a
+      // trend, not thousands of daily wiggles. Keep the LAST datapoint seen
+      // within each quarter bucket.
+      const buckets = new Map<string, ShareRow>();
+      for (const r of raw) {
+        const [y, m] = r.date.split("-");
+        const q = Math.ceil(Number(m) / 3);
+        buckets.set(`${y}-Q${q}`, r);
+      }
+      const points = Array.from(buckets.values()).sort((a, b) => a.date.localeCompare(b.date));
+
+      // Always keep the true first/last real datapoints so the chart's
+      // start/end labels and % change are exact, not bucket-rounded.
+      if (points[0].date !== raw[0].date) points.unshift(raw[0]);
+      const lastRaw = raw[raw.length - 1];
+      if (points[points.length - 1].date !== lastRaw.date) points.push(lastRaw);
+
+      // Cap at a reasonable number of points for the SVG (last ~28 quarters / ~7yrs).
+      const capped = points.slice(-28);
+      if (capped.length < 3) continue;
+
+      return { points: capped };
+    } catch {
+      // try next url
+    }
+  }
+  return null;
+}
+
 // ── Metadata (dynamic, data-driven) ─────────────────────────────────────────
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -247,13 +328,14 @@ export default async function StockPage({ params }: Props) {
   const upper = symbol.toUpperCase();
 
   // Fetch everything in parallel — none of these block each other.
-  const [rawHistory, { price, date }, companyName, latestEarnings, profile] =
+  const [rawHistory, { price, date }, companyName, latestEarnings, profile, shareHistory] =
     await Promise.all([
       getDailyHistory(upper).catch(() => [] as Point[]),
       fetchQuotePrice(upper),
       fetchCompanyName(upper),
       fetchLatestEarnings(upper),
       fetchCompanyProfile(upper).catch(() => null),
+      fetchShareHistory(upper).catch(() => null),
     ]);
 
   const points: Point[] = (rawHistory as Point[]).filter(
@@ -366,6 +448,7 @@ export default async function StockPage({ params }: Props) {
         symbol={upper}
         latestEarnings={latestEarnings}
         profile={profile}
+        shareHistory={shareHistory}
         seed={seed}
         initialHistory={points.slice(-300)}
       />
