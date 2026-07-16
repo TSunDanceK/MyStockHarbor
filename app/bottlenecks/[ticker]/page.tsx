@@ -88,10 +88,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 // opens them - so this is the first static, always-crawlable path to those
 // pages from the Bottlenecks section.
 const CONTINUE_EXPLORING_LINKS = [
-  { href: "/headlines", label: "Market Headlines →", variant: "blue" },
-  { href: "/upcoming-ipos", label: "Upcoming IPOs →", variant: "teal" },
-  { href: "/earnings-calendar", label: "Earnings Calendar →", variant: "purple" },
-  { href: "/pickers", label: "Stock Pickers →", variant: "amber" },
+  { href: "/headlines", label: "Market Headlines →" },
+  { href: "/upcoming-ipos", label: "Upcoming IPOs →" },
+  { href: "/earnings-calendar", label: "Earnings Calendar →" },
+  { href: "/pickers", label: "Stock Pickers →" },
 ] as const;
 
 function ContinueExploring() {
@@ -124,7 +124,7 @@ function ContinueExploring() {
           <Link
             key={link.href}
             href={link.href}
-            className={`bnActionBtn bnActionBtn--${link.variant}`}
+            className="bnActionBtn bnActionBtn--blue"
             style={{ fontSize: 13.5, padding: "8px 16px" }}
           >
             {link.label}
@@ -342,36 +342,6 @@ export default async function BottleneckPage({ params }: Props) {
             background: rgba(147, 197, 253, 0.12);
             border-color: rgba(147, 197, 253, 0.6);
             box-shadow: 0 0 12px rgba(147, 197, 253, 0.35);
-            transform: scale(1.06);
-          }
-          .bnActionBtn--teal {
-            color: #5fd4c7;
-          }
-          .bnActionBtn--teal:hover,
-          .bnActionBtn--teal:focus-visible {
-            background: rgba(95, 212, 199, 0.12);
-            border-color: rgba(95, 212, 199, 0.6);
-            box-shadow: 0 0 12px rgba(95, 212, 199, 0.35);
-            transform: scale(1.06);
-          }
-          .bnActionBtn--purple {
-            color: #c4a6ff;
-          }
-          .bnActionBtn--purple:hover,
-          .bnActionBtn--purple:focus-visible {
-            background: rgba(196, 166, 255, 0.12);
-            border-color: rgba(196, 166, 255, 0.6);
-            box-shadow: 0 0 12px rgba(196, 166, 255, 0.35);
-            transform: scale(1.06);
-          }
-          .bnActionBtn--amber {
-            color: #ffcb74;
-          }
-          .bnActionBtn--amber:hover,
-          .bnActionBtn--amber:focus-visible {
-            background: rgba(255, 203, 116, 0.12);
-            border-color: rgba(255, 203, 116, 0.6);
-            box-shadow: 0 0 12px rgba(255, 203, 116, 0.35);
             transform: scale(1.06);
           }
         `}</style>
