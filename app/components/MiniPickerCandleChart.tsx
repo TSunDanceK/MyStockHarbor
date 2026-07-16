@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { useWatermarkHidden } from "@/app/components/WatermarkVisibility";
 
 export type MiniCandlePoint = {
   date: string;
@@ -157,8 +158,13 @@ function fallbackMacdHist(values: number[]) {
 // regardless of which overlay/zone is drawn or how many candles are
 // shown. Opacity is kept low so it never competes with the candles
 // themselves, and sitting horizontally at the very top keeps it clear of
-// the price action.
+// the price action. Can be hidden per-page via the "Hide watermarks"
+// toggle (see WatermarkVisibility.tsx) -- resets back to visible on
+// refresh/navigation.
 function MiniChartWatermark() {
+  const hidden = useWatermarkHidden();
+  if (hidden) return null;
+
   return (
     <div
       aria-hidden="true"
@@ -184,7 +190,7 @@ function MiniChartWatermark() {
           whiteSpace: "nowrap",
         }}
       >
-        MyStockHarbor
+        MyStockHarbor.com
       </span>
     </div>
   );
