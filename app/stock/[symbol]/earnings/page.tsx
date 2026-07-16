@@ -29,6 +29,7 @@ type FmpEarningsRow = {
   revenueActual?: number | null;
   revenueEstimated?: number | null;
   lastUpdated?: string;
+  time?: string;
 };
 
 type FmpIncomeStatementRow = {
@@ -76,6 +77,11 @@ type EarningsGrowthMarginPoint = {
   yoyRevenueGrowth: number | null;
   grossMarginPct: number | null;
   operatingMarginPct: number | null;
+};
+
+type EarningsReactionPoint = {
+  label: string;
+  reactionPct: number | null;
 };
 
 type YearlySummary = {
@@ -163,6 +169,26 @@ function findSameQuarterLastYear(row: FmpEarningsRow, rows: FmpEarningsRow[]): F
 function marginPct(numerator: number | null | undefined, revenue: number | null | undefined) {
   if (typeof numerator !== "number" || typeof revenue !== "number" || !Number.isFinite(numerator) || !Number.isFinite(revenue) || revenue === 0) return null;
   return (numerator / Math.abs(revenue)) * 100;
+}
+
+function computeEarningsPriceReaction(row: FmpEarningsRow, points: Point[]): number | null {
+  if (!row.date || !points.length) return null;
+  const dates = points.map((p) => p.date);
+  let idx = dates.indexOf(row.date);
+  if (idx === -1) {
+    idx = dates.findIndex((d) => d >= String(row.date));
+  }
+  if (idx === -1) return null;
+  const time = (row.time || "").toLowerCase();
+  let baseIdx: number;
+  let reactIdx: number;
+  if (time === "bmo") { baseIdx = idx - 1; reactIdx = idx; }
+  else if (time === "amc") { baseIdx = idx; reactIdx = idx + 1; }
+  else { baseIdx = idx - 1; reactIdx = idx + 1; }
+  const base = points[baseIdx]?.close;
+  const react = points[reactIdx]?.close;
+  if (typeof base !== "number" || typeof react !== "number" || !Number.isFinite(base) || !Number.isFinite(react) || base === 0) return null;
+  return ((react - base) / Math.abs(base)) * 100;
 }
 
 function quarterLabel(date?: string | null) {
@@ -352,15 +378,16 @@ async function fetchFmpLegacyJson<T>(path: string): Promise<T | null> {
 }
 
 async function getEarningsData(symbol: string) {
-  const [earningsJson, incomeJson, historicalCalendarJson, analystEstimatesJson] = await Promise.all([
+  const [earningsJson, incomeJson, historicalCalendarJson, analystEstimatesJson, dailyHistory] = await Promise.all([
     fetchFmpJson<unknown[]>(`/earnings?symbol=${encodeURIComponent(symbol)}`),
     fetchFmpJson<unknown[]>(`/income-statement?symbol=${encodeURIComponent(symbol)}&period=quarter&limit=12`),
     fetchFmpLegacyJson<unknown[]>(`/historical/earning_calendar/${encodeURIComponent(symbol)}`),
     fetchFmpJson<unknown[]>(`/analyst-estimates?symbol=${encodeURIComponent(symbol)}&period=quarter&limit=8`),
+    getDailyHistory(symbol).catch(() => [] as Point[]),
   ]);
 
   const earningsRows: FmpEarningsRow[] = Array.isArray(earningsJson)
-    ? earningsJson.map((item) => { const row = item as Record<string, unknown>; return { symbol, date: typeof row.date === "string" ? row.date : "", epsActual: asNumber(row.epsActual), epsEstimated: asNumber(row.epsEstimated), revenueActual: asNumber(row.revenueActual), revenueEstimated: asNumber(row.revenueEstimated), lastUpdated: typeof row.lastUpdated === "string" ? row.lastUpdated : "" }; }).filter((row) => Boolean(row.date)).sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    ? earningsJson.map((item) => { const row = item as Record<string, unknown>; return { symbol, date: typeof row.date === "string" ? row.date : "", epsActual: asNumber(row.epsActual), epsEstimated: asNumber(row.epsEstimated), revenueActual: asNumber(row.revenueActual), revenueEstimated: asNumber(row.revenueEstimated), lastUpdated: typeof row.lastUpdated === "string" ? row.lastUpdated : "", time: typeof row.time === "string" ? row.time.toLowerCase() : undefined }; }).filter((row) => Boolean(row.date)).sort((a, b) => String(b.date).localeCompare(String(a.date)))
     : [];
 
   const incomeRows: FmpIncomeStatementRow[] = Array.isArray(incomeJson)
@@ -416,11 +443,15 @@ async function getEarningsData(symbol: string) {
     };
   });
   const yearlySummaries = makeYearlySummaries(completedRows);
+  const priceReactionQuarters: EarningsReactionPoint[] = completedRows.slice(0, 8).reverse().map((row) => ({
+    label: displayQuarterLabel(row),
+    reactionPct: computeEarningsPriceReaction(row, dailyHistory as Point[]),
+  }));
   const localScore = scoreEarnings({ latest, sameQuarterLastYear, completedRows });
   const sharedScore = await fetchSharedEarningsScore(symbol);
   const score = sharedScore ?? localScore;
 
-  return { rows: earningsRows, completedRows, latest, next, nextEstimate, sameQuarterLastYear, grossMargin, operatingMargin, netIncome, recentTrend, chartQuarters, growthMarginQuarters, yearlySummaries, score };
+  return { rows: earningsRows, completedRows, latest, next, nextEstimate, sameQuarterLastYear, grossMargin, operatingMargin, netIncome, recentTrend, chartQuarters, growthMarginQuarters, priceReactionQuarters, yearlySummaries, score };
 }
 
 function metricCardStyle(tone: EarningsTone | "default" = "default") {
@@ -542,6 +573,37 @@ function SeriesLegend({ items }: { items: { label: string; color: string }[] }) 
   );
 }
 
+type SingleBarPoint = { label: string; value: number | null };
+
+function SingleValueBarChart({ data, height = 168 }: { data: SingleBarPoint[]; height?: number; }) {
+  const values = data.map((d) => d.value).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+  const maxAbs = values.length ? Math.max(...values.map((v) => Math.abs(v)), 0.5) : 1;
+  const zeroY = height / 2;
+  const usable = zeroY - 20;
+  const groupW = 100 / Math.max(data.length, 1);
+
+  return (
+    <svg viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" style={{ width: "100%", height, display: "block", overflow: "visible" }} role="img" aria-label="Price reaction chart">
+      <line x1="0" y1={zeroY} x2="100" y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeWidth="0.35" />
+      {data.map((d, i) => {
+        const cx = i * groupW + groupW / 2;
+        const barW = Math.min(groupW * 0.42, 9);
+        const h = d.value != null ? (Math.abs(d.value) / maxAbs) * usable : 0;
+        const up = (d.value ?? 0) >= 0;
+        const color = d.value == null ? "rgba(148,163,184,0.35)" : up ? "#22c55e" : "#ef4444";
+        return (
+          <g key={`${d.label}-${i}`}>
+            {d.value != null && (
+              <rect x={cx - barW / 2} y={up ? zeroY - h : zeroY} width={barW} height={Math.max(h, 0.6)} fill={color} rx="1" />
+            )}
+            <text x={cx} y={height - 6} fontSize="6.6" textAnchor="middle" fill="rgba(203,213,225,0.68)" fontWeight={700}>{d.label}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 async function fetchQuoteForMeta(symbol: string): Promise<{ price: number | null; date: string | null }> {
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) return { price: null, date: null };
@@ -609,6 +671,8 @@ export default async function StockEarningsPage({ params }: Props) {
     { name: "Gross margin", color: "#38bdf8", values: data.growthMarginQuarters.map((q) => q.grossMarginPct) },
     { name: "Operating margin", color: "#facc15", values: data.growthMarginQuarters.map((q) => q.operatingMarginPct) },
   ];
+  const reactionData: SingleBarPoint[] = data.priceReactionQuarters.map((q) => ({ label: q.label, value: q.reactionPct }));
+  const hasAnyReaction = reactionData.some((d) => d.value != null);
 
   const pageJsonLd = {
     "@context": "https://schema.org", "@type": "WebPage",
@@ -853,6 +917,23 @@ export default async function StockEarningsPage({ params }: Props) {
                   </>
                 ) : (
                   <p>Not enough quarterly history is available yet to chart growth and margin trends.</p>
+                )}
+              </section>
+
+              <section className="card">
+                <div className="eyebrow">Price reaction</div>
+                <h2>How has {clean} actually traded around its last reports?</h2>
+                <p>This shows the stock&apos;s closing-price move around each report: for reports released before market open, it&apos;s the move from the prior close into the report-day close; for reports released after market close, it&apos;s the move from the report-day close into the next day&apos;s close. When exact timing isn&apos;t available, it spans the day before the report to the day after.</p>
+                {hasAnyReaction ? (
+                  <>
+                    <div className="chartBlock">
+                      <SingleValueBarChart data={reactionData} />
+                    </div>
+                    <SeriesLegend items={[{ label: "Rose after report", color: "#22c55e" }, { label: "Fell after report", color: "#ef4444" }]} />
+                    <p className="earningsDataNote">This reflects the stock&apos;s actual price move, which can be driven by broader market moves as well as the earnings report itself &mdash; it isn&apos;t a clean read of earnings reaction alone.</p>
+                  </>
+                ) : (
+                  <p>Not enough price history is available yet to chart the reaction around earnings.</p>
                 )}
               </section>
 
