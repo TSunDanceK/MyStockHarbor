@@ -1201,11 +1201,21 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
                 </div>
               </section>
 
-              {/* -- Company profile (FMP) --------------------------- */}
-              {profile ? <CompanyProfile profile={profile} symbol={symbol} /> : null}
-
-              {/* -- Share dilution history (FMP) --------------------- */}
-              <DilutionHistory data={shareHistory} symbol={symbol} />
+              {/* -- Company profile (FMP), with the share-dilution chart
+                     folded into the description column so it fills the gap
+                     that column leaves next to the (usually taller) stat-box
+                     column, instead of sitting in its own full-width section
+                     further down the page. Falls back to a standalone
+                     section when there's no profile to attach it to. -- */}
+              {profile ? (
+                <CompanyProfile
+                  profile={profile}
+                  symbol={symbol}
+                  belowDescription={<DilutionHistory data={shareHistory} symbol={symbol} embedded />}
+                />
+              ) : (
+                <DilutionHistory data={shareHistory} symbol={symbol} />
+              )}
 
               {/* -- Learn more -------------------------------------- */}
               <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
