@@ -137,7 +137,16 @@ export default function EarningsDayList({
         </div>
       ) : (
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: 900 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: 900, tableLayout: "fixed" }}>
+            <colgroup>
+              <col style={{ width: 90 }} />
+              <col style={{ width: 220 }} />
+              <col style={{ width: 100 }} />
+              <col style={{ width: 120 }} />
+              <col style={{ width: 90 }} />
+              <col style={{ width: 100 }} />
+              <col style={{ width: 260 }} />
+            </colgroup>
             <thead>
               <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.12)" }}>
                 <th style={thStyle}>Symbol</th>
@@ -160,7 +169,9 @@ export default function EarningsDayList({
                       {item.symbol}
                     </Link>
                   </td>
-                  <td style={tdStyle}>{item.company}</td>
+                  <td style={companyTdStyle} title={item.company}>
+                    {item.company}
+                  </td>
                   <td style={{ ...tdStyle, textAlign: "right" }}>{formatEps(item.epsEstimated)}</td>
                   <td style={{ ...tdStyle, textAlign: "right" }}>{formatCompact(item.revenueEstimated)}</td>
                   <td style={{ ...tdStyle, textAlign: "right" }}>{formatPrice(item.price)}</td>
@@ -234,6 +245,20 @@ const thStyle: React.CSSProperties = {
 const tdStyle: React.CSSProperties = {
   padding: "12px 16px",
   whiteSpace: "nowrap",
+};
+
+// Company names vary wildly in length ("GE Aerospace" vs "Taiwan
+// Semiconductor Manufacturing Company Limited") and the column used to grow
+// to fit the longest one, pushing the Analysis/Chart/News pills off the
+// right edge of the card on long names. Instead: fix the column to a set
+// width (see the <col> width above) and truncate with an ellipsis. The full
+// name is still available via the native `title` tooltip on hover, and
+// nothing here removes the symbol itself, which is the more important
+// identifier and is never truncated.
+const companyTdStyle: React.CSSProperties = {
+  ...tdStyle,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
 };
 
 const pillStyle: React.CSSProperties = {
