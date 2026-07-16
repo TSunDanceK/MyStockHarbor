@@ -51,9 +51,17 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default function BottlenecksIndexPage() {
-  const posts = [...getAllBottleneckPosts()].sort((a, b) =>
-    a.companyName.localeCompare(b.companyName)
-  );
+  // Newest-first by default (was alphabetical by company name) so freshly
+  // built/refreshed pages surface immediately for both readers and
+  // crawlers instead of being buried wherever they land alphabetically.
+  // BottleneckList still owns its own client-side Latest/A-Z toggle -- this
+  // server-side order just has to match that toggle's default state so
+  // there's no order flash between SSR paint and hydration.
+  const posts = [...getAllBottleneckPosts()].sort((a, b) => {
+    const dateA = new Date(a.date).getTime();
+    const dateB = new Date(b.date).getTime();
+    return dateB - dateA;
+  });
   const counts = getBottleneckCompanyCounts();
 
   const bottlenecksJsonLd = {
