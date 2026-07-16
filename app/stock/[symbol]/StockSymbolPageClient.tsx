@@ -11,6 +11,9 @@ import LatestEarningsCard, {
 import CompanyProfile, {
   type CompanyProfile as CompanyProfileData,
 } from "@/app/components/CompanyProfile";
+import DilutionHistory, {
+  type DilutionHistoryData,
+} from "@/app/components/DilutionHistory";
 
 type Quote = {
   symbol: string;
@@ -91,6 +94,7 @@ type StockSymbolPageClientProps = {
   symbol: string;
   latestEarnings: LatestEarningsData;
   profile: CompanyProfileData | null;
+  shareHistory: DilutionHistoryData | null;
   seed?: IndicatorSeed | null;
   // Recent daily history computed on the server. Seeds `history` so the page
   // renders real chart/indicator content on the server (crawlable), not behind
@@ -627,7 +631,7 @@ function sideCardBodyStyle(): React.CSSProperties {
   return { padding: "14px 14px" };
 }
 
-export default function StockSymbolPageClient({ symbol, latestEarnings, profile, seed, initialHistory }: StockSymbolPageClientProps) {
+export default function StockSymbolPageClient({ symbol, latestEarnings, profile, shareHistory, seed, initialHistory }: StockSymbolPageClientProps) {
   const seededHistory = (initialHistory?.length ?? 0) > 0;
   const [quote, setQuote] = useState<Quote | null>(
     seed?.price != null ? { symbol, price: seed.price, date: seed.priceDate, time: null, source: "ssr" } : null
@@ -864,6 +868,9 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
 
               {/* -- Company profile (FMP) --------------------------- */}
               {profile ? <CompanyProfile profile={profile} symbol={symbol} /> : null}
+
+              {/* -- Share dilution history (FMP) --------------------- */}
+              <DilutionHistory data={shareHistory} symbol={symbol} />
 
               {/* -- Learn more -------------------------------------- */}
               <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
