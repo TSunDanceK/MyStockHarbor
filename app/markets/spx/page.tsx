@@ -433,7 +433,7 @@ export default async function SPXPage() {
                   opacity: 0.92,
                 }}
               >
-                The S&amp;P 500 hit a fresh all-time high of 7,620 on June 2, 2026, and is now pulling back slightly from that peak. Sentiment is firmly in Extreme Greed territory — but a hawkish Fed surprise and narrowing breadth beneath the surface are worth watching carefully.
+                The S&amp;P 500 set a record close near 7,600 in early June 2026, then pulled back on a hawkish Fed surprise before rallying back to within roughly 1% of that high by mid-July as inflation cooled. Sentiment has actually eased into "Fear" territory even with price near record levels — and a separate AI-valuation scare has hit chip stocks hard beneath the surface.
               </div>
 
               <div
@@ -640,7 +640,7 @@ export default async function SPXPage() {
 
   <div>
     <strong style={{ color: "#4ade80", letterSpacing: "0.02em" }}>SIMPLE VIEW:</strong>{" "}
-    the SPX is near all-time highs and sentiment is greedy — but a hawkish Fed, tech selling, and weak market breadth are creating a wobble beneath the surface. The weekly structure is still very much intact.
+    the SPX is within about 1% of its all-time high, but it hasn't been a straight line getting there — a hawkish Fed scare in June gave way to a rally back toward the highs in July after inflation cooled. Under the surface, a separate AI-valuation scare has hammered semiconductor stocks even as broader market breadth has actually improved. The weekly structure remains solidly bullish.
   </div>
 </div>
           </section>
@@ -771,12 +771,12 @@ export default async function SPXPage() {
                     Near all-time high
                   </div>
                   <div style={{ marginTop: 5, fontSize: 21, fontWeight: 950 }}>
-                    Greed is elevated
+                    Sentiment has cooled
                   </div>
                 </div>
               </div>
               <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                The SPX hit 7,620 on June 2 — a fresh ATH. Sentiment is firmly in Extreme Greed, which historically raises the bar for new buyers.
+                The SPX closed at 7,543.59 on July 14 — about 1% below its early-June record close near 7,600. Yet the CNN Fear &amp; Greed Index has slipped to around 43 ("Fear"), a sharp reversal from the Extreme Greed readings seen back in June.
               </div>
             </div>
 
@@ -800,12 +800,12 @@ export default async function SPXPage() {
                     Under the surface
                   </div>
                   <div style={{ marginTop: 5, fontSize: 21, fontWeight: 950 }}>
-                    Breadth is thinning
+                    Breadth has improved
                   </div>
                 </div>
               </div>
               <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                Fewer than half of S&amp;P 500 members are above their own 200-day MA. The index is being held up by a shrinking group of large-cap names.
+                Roughly two-thirds of S&amp;P 500 members now trade above their own 200-day moving average — a healthier picture than earlier this year. The real stress is concentrated in semiconductors, where AI-valuation worries wiped out an estimated $1.3 trillion in value this month.
               </div>
             </div>
 
@@ -822,7 +822,7 @@ export default async function SPXPage() {
                 </div>
               </div>
               <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                The weekly MA50 sits near 6,840 — well below current price. Until that level is seriously threatened, the longer-term uptrend remains in place.
+                The daily MA50 sits near 7,179 and the daily MA200 near 6,864 — both well below spot. Daily RSI is a neutral ~50, and the weekly chart remains comfortably above its longer-run moving averages.
               </div>
             </div>
           </section>
@@ -856,11 +856,11 @@ export default async function SPXPage() {
               }}
             >
               <p style={{ margin: 0 }}>
-                The S&amp;P 500 is in a strong 2026 uptrend, driven by AI infrastructure spending, resilient corporate earnings, and a risk-on backdrop. Goldman Sachs raised its year-end SPX target to 8,000 in May, citing 24% projected EPS growth. The index set a fresh all-time high of <strong>7,620 on June 2</strong> before pulling back roughly 3–4% to the current ~7,365 level.
+                The S&amp;P 500 remains in a strong 2026 uptrend, up more than 10% year-to-date, driven by resilient corporate earnings, cooling inflation, and continued AI infrastructure spending. Wall Street keeps raising its targets to match: Goldman Sachs sees <strong>8,000</strong> by year-end, and Wells Fargo lifted its target to <strong>7,950</strong> in June on stronger EPS estimates. The index set a record close near <strong>7,600 in early June</strong> before slipping on a hawkish Fed surprise, then clawed back to roughly <strong>7,540–7,575</strong> by mid-July — within about 1% of that high.
               </p>
 
               <p style={{ margin: 0 }}>
-                That pullback has a clear catalyst: the <strong>June FOMC meeting</strong> delivered a hawkish surprise. New Fed Chair Kevin Warsh held rates at 3.50–3.75% as expected, but dot plots showed 9 officials projecting potential hikes, with 6 of those pencilling in two or more 25bp increases this year. That rattled markets and pushed 2-year yields higher.
+                The catalyst behind the July recovery is fairly simple: June's CPI report showed headline inflation falling 0.4% month-over-month — the largest single-month decline since 2020 — pulling the annual rate down to 3.5%. That gave Fed Chair Kevin Warsh room to hold rates steady rather than follow through on the more hawkish signals flagged after the June FOMC meeting, and his testimony before the Senate Banking Committee this week reinforced a steady, on-hold message. Earnings season has helped too: JPMorgan, Morgan Stanley and BlackRock all posted strong results, and ASML lifted its full-year sales forecast on AI-related demand.
               </p>
 
               <div
@@ -877,12 +877,12 @@ export default async function SPXPage() {
               >
                 <div style={overviewIconStyle("red")}>⚠️</div>
                 <div style={{ lineHeight: 1.65 }}>
-                  <strong style={{ color: "#fca5a5" }}>Watch the breadth:</strong> even as the index held near ATHs, major tech names sold off sharply — Alphabet fell 5%, NVDA 3%, TSLA 5%, AMD 5.5%. Less than half of S&amp;P 500 members are currently trading above their own 200-day moving average. When the index rises but most stocks don't, that divergence tends to resolve with the index catching down.
+                  <strong style={{ color: "#fca5a5" }}>Watch the chip stocks:</strong> even as the broader index sits near record highs, semiconductors have taken a separate hit — Intel fell 21%, Micron dropped 22%, and the Philadelphia Semiconductor Index lost nearly 11% in a matter of days, erasing an estimated $1.3 trillion in sector value. The worry isn't collapsing AI demand, it's whether the sheer scale of AI capital spending (hyperscaler capex up an estimated 67% this year) can be justified by returns. Whether that stays contained to chips, or spreads to the broader index, is the key swing factor right now.
                 </div>
               </div>
 
               <p style={{ margin: 0 }}>
-                The <strong>weekly chart</strong>, however, puts this in context. Price remains comfortably above the weekly MA50 (~6,840) and well above the weekly MA200 (~5,400). By any longer-term measure, this is still a bull market, and the current pullback looks more like consolidation after a strong run than the start of something more serious.
+                Zooming out to the <strong>weekly chart</strong> smooths over most of this noise. Price remains solidly above its longer-run moving averages, daily RSI sits near a neutral 50, and — perhaps most notably — market breadth has actually strengthened, with roughly two-thirds of S&amp;P 500 members now trading above their own 200-day moving average. That's a healthier underlying picture than the narrow, mega-cap-led rally many worried about earlier this year.
               </p>
             </div>
           </section>
@@ -923,19 +923,19 @@ export default async function SPXPage() {
                 }}
               >
                 <p style={{ margin: 0 }}>
-                  The weekly MA50 at ~6,840 is more than 500 points below current price. The weekly MA200 at ~5,400 is over 1,900 points away. Neither is being remotely tested — which means the long-term trend structure is firmly bullish.
+                  The daily MA50 sits near 7,179 and the daily MA200 near 6,864 — both well below the current ~7,540–7,575 range, meaning short-term wobbles have plenty of room before they'd threaten the longer-term trend. On the weekly chart, price remains comfortably above its own 50-week and 200-week moving averages, which sit meaningfully lower still.
                 </p>
 
                 <p style={{ margin: 0 }}>
-                  Short-term wobbles around the daily MA50 (~7,316) are normal and expected after a strong run. The daily RSI has cooled from overbought levels, which is healthy rather than alarming.
+                  The bigger picture: despite a hawkish Fed scare in June and a roughly $1.3 trillion semiconductor selloff in July, the index is still within about 1% of its all-time high, and daily RSI near 50 shows no overbought extreme left to unwind.
                 </p>
 
                 <p style={{ margin: 0 }}>
-                  The real question is not whether this pullback is happening — it clearly is. The question is whether it's a routine reset after the June ATH, or the beginning of a more sustained move lower driven by the Fed's hawkish shift and softening breadth.
+                  The real question isn't whether volatility is showing up — clearly it is, in both directions. It's whether the AI-valuation jitters hitting chipmakers stay contained to that corner of the market, or start dragging down the broader index the way the June Fed scare briefly did.
                 </p>
 
                 <p style={{ margin: 0 }}>
-                  <strong>Until the weekly MA50 is under pressure, the trend gets the benefit of the doubt.</strong>
+                  <strong>Until the daily MA50 near 7,179 is seriously tested, the trend gets the benefit of the doubt.</strong>
                 </p>
               </div>
             </div>
@@ -957,10 +957,10 @@ export default async function SPXPage() {
 
               <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
                 {[
-                  ["📈", "ATH", "7,620 hit on June 2, 2026"],
-                  ["⚠️", "Risk", "hawkish Fed + narrowing breadth"],
-                  ["🔎", "Weekly structure", "still bullish — MA50 far below price"],
-                  ["🟡", "Current stance", "pullback looks normal until proven otherwise"],
+                  ["📈", "ATH", "record close near 7,600 in early June 2026; SPX now ~1% below that"],
+                  ["⚠️", "Risk", "AI-valuation selloff in chip stocks; Fed testimony and inflation/retail data this week"],
+                  ["🔎", "Weekly structure", "still bullish — price well above weekly and daily moving averages"],
+                  ["🟡", "Current stance", "near-record price despite cooler sentiment — a divergence worth watching"],
                 ].map(([icon, label, text]) => (
                   <div
                     key={label}
@@ -1023,7 +1023,7 @@ export default async function SPXPage() {
                 maxWidth: 920,
               }}
             >
-              The weekly chart shows a market well above both major moving averages after a strong 2026 recovery from the April lows. The current dip from the June 2 ATH looks modest in this context — price is consolidating near recent highs, not breaking down.
+              The weekly chart shows the S&amp;P 500 holding just under its early-June record close, having absorbed both a hawkish Fed scare and a sharp semiconductor selloff without breaking its longer-term uptrend. Momentum has cooled from the extremes seen earlier this year — RSI near a neutral 50 rather than deeply overbought — while the index continues to grind sideways-to-higher just below all-time highs.
             </div>
 
             <div style={{ marginTop: 18 }}>
@@ -1079,16 +1079,16 @@ export default async function SPXPage() {
 
                 <ul style={{ margin: "12px 0 0", paddingLeft: 18, display: "grid", gap: 8 }}>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    SPX loses the daily MA50 (~7,316) on a closing basis
+                    SPX loses the daily MA50 (~7,179) on a closing basis
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Market breadth continues deteriorating — fewer stocks participating
+                    Semiconductor weakness spreads beyond chips into broader tech
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Further hawkish Fed signals or a hotter-than-expected inflation print
+                    A hotter-than-expected PPI or retail sales print revives rate-hike worries
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Weekly close below 7,000 — the key institutional support zone
+                    Weekly close below 7,300 — the recent higher-low support zone
                   </li>
                 </ul>
               </div>
@@ -1103,16 +1103,16 @@ export default async function SPXPage() {
 
                 <ul style={{ margin: "12px 0 0", paddingLeft: 18, display: "grid", gap: 8 }}>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Price reclaims and holds above 7,450–7,500 resistance
+                    Price closes above ~7,600, confirming a fresh all-time high
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Breadth improves — more members trading above their 200 DMA
+                    Chip stocks stabilise and the Philadelphia Semiconductor Index finds a floor
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Tech names stabilise and rejoin the rally
+                    Breadth keeps improving beyond the current ~two-thirds of members above their 200-day MA
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Soft inflation data or Fed language shift eases rate-hike fears
+                    Fed testimony and upcoming data keep reinforcing a steady, on-hold rate path
                   </li>
                 </ul>
               </div>
@@ -1148,7 +1148,7 @@ export default async function SPXPage() {
               }}
             >
               <p style={{ margin: 0 }}>
-                The honest answer depends on timeframe. The weekly trend is clearly bullish — the SPX is well above its major moving averages, AI-driven earnings growth is real, and Goldman Sachs is targeting 8,000 by year-end. None of that has changed.
+                The honest answer depends on timeframe. The weekly trend is clearly bullish — the SPX is up more than 10% year-to-date, comfortably above its major moving averages, and Wall Street keeps raising targets (Goldman Sachs at 8,000, Wells Fargo at 7,950 for year-end). None of that has changed.
               </p>
 
               <div
@@ -1165,12 +1165,12 @@ export default async function SPXPage() {
               >
                 <div style={overviewIconStyle("blue")}>🧭</div>
                 <div style={{ lineHeight: 1.65 }}>
-                  <strong style={{ color: "#93c5fd" }}>The nuance:</strong> Extreme Greed readings at cycle highs historically compress future returns. When sentiment is this stretched, it doesn't take much — a hot CPI print, an escalation in the Middle East, a further hawkish Fed signal — to trigger a sharper correction. The setup rewards patience over aggression right now.
+                  <strong style={{ color: "#93c5fd" }}>The nuance:</strong> sentiment has actually cooled to the Fear zone even with the index near record highs — a less euphoric setup than the Extreme Greed readings seen back in June, which themselves preceded a pullback. That's arguably healthier, but the AI-valuation selloff hitting semiconductor stocks is a real reminder that a large share of this year's gains still rest on a narrow set of very expensive names. It wouldn't take much — a disappointing hyperscaler earnings call, a hot inflation surprise — to reignite that worry.
                 </div>
               </div>
 
               <p style={{ margin: 0 }}>
-                The SPX at ~7,365 is still only ~3% off its all-time high. That is not a crisis. But the combination of a hawkish Fed surprise, thin breadth, and Extreme Greed sentiment means the <strong>risk-reward for chasing new highs immediately is less compelling</strong> than it was a month ago. Watching for a cleaner re-entry — either a breadth improvement or a pullback to the daily MA50 — makes more sense than forcing a trade at current levels.
+                The SPX at roughly 7,540–7,575 is within about 1% of its all-time high — not remotely a crisis level. But with sentiment mixed, semiconductor valuations under real scrutiny, and more data due this week (PPI, retail sales, further bank and tech earnings), chasing new highs immediately looks less compelling than waiting for either a confirmed breakout above ~7,600 or a cleaner pullback toward the daily MA50.
               </p>
             </div>
           </section>
