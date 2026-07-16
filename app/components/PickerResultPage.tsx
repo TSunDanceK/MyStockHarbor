@@ -8,6 +8,7 @@ import PickerHighlightScroller from "@/app/components/PickerHighlightScroller";
 import ScreenerNav from "@/app/components/ScreenerNav";
 import HowToCollapse from "@/app/components/HowToCollapse";
 import { getCompanyNameMap } from "@/lib/server/companyNames";
+import { WatermarkVisibilityProvider, HideWatermarksBar } from "@/app/components/WatermarkVisibility";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -462,10 +463,11 @@ export default async function PickerResultPage({
   };
 
   return (
-    <main className="pickerResultPage">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+    <WatermarkVisibilityProvider>
+      <main className="pickerResultPage">
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
-      <style>{`
+        <style>{`
         .pickerResultPage { min-height: 100vh; background: radial-gradient(circle at 12% 0%, rgba(59,130,246,0.16), transparent 30%), radial-gradient(circle at 92% 4%, rgba(34,197,94,0.08), transparent 28%), #06080d; color: #f1f5f9; font-family: system-ui, Arial; }
         .resultWrap { max-width: 1280px; margin: 0 auto; padding: 26px 18px 58px; }
         .resultShell { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 22px; align-items: start; }
@@ -538,95 +540,98 @@ export default async function PickerResultPage({
         @media (max-width: 390px) { .resultWrap { padding-left: 8px; padding-right: 8px; } .hero, .resultCard { padding: 12px; } }
       `}</style>
 
-      <div className="resultWrap">
-        <div className="resultShell">
-          <ScreenerNav currentHref={config.href} variant="sidebar" />
+        <div className="resultWrap">
+          <div className="resultShell">
+            <ScreenerNav currentHref={config.href} variant="sidebar" />
 
-          <div className="resultMain">
-            <section className="hero">
-              <div className="eyebrow">
-                <span style={{ color: toneColour(config.tone) }}>●</span>
-                {config.eyebrow}
-              </div>
-              <h1>{config.title}</h1>
-              <p>{config.description}</p>
-              <HowToCollapse title={config.explainerTitle} body={config.explainerBody} />
-            </section>
-
-            <div className="screenerTriggerWrap">
-              <ScreenerNav currentHref={config.href} variant="trigger" />
-            </div>
-
-            <section>
-              <div className="resultsHeader">
-                <div>
-                  <h2>Current screened results</h2>
-                  <p>Each card shows a mini candle preview — select any stock to open its full view.</p>
+            <div className="resultMain">
+              <section className="hero">
+                <div className="eyebrow">
+                  <span style={{ color: toneColour(config.tone) }}>●</span>
+                  {config.eyebrow}
                 </div>
+                <h1>{config.title}</h1>
+                <p>{config.description}</p>
+                <HowToCollapse title={config.explainerTitle} body={config.explainerBody} />
+              </section>
+
+              <div className="screenerTriggerWrap">
+                <ScreenerNav currentHref={config.href} variant="trigger" />
               </div>
 
-              {highlightSymbol ? <PickerHighlightScroller symbol={highlightSymbol} /> : null}
+              <section>
+                <div className="resultsHeader">
+                  <div>
+                    <h2>Current screened results</h2>
+                    <p>Each card shows a mini candle preview — select any stock to open its full view.</p>
+                  </div>
+                </div>
 
-              {entries.length ? (
-                <div className="resultsGrid">
-                  {entries.map((entry) => {
-                    const cardHref = isEarningsPickerPage(config)
-                      ? `/stock/${encodeURIComponent(entry.symbol)}/earnings`
-                      : entry.chartHref;
-                    const scoreValue = scoreLabelForEntry(entry);
-                    return (
-                      <Link
-                        key={`${entry.symbol}-${entry.note}`}
-                        id={`picker-${entry.symbol}`}
-                        href={cardHref}
-                        className="resultCard"
-                      >
-                        <div className="resultCardTop">
-                          <div className="resultCardHead">
-                            <div className="symbolLine">
-                              <span className="dot" style={{ background: toneColour(entry.tone) }} aria-hidden="true" />
-                              <h3>{entry.symbol}</h3>
-                              {entry.companyName ? <span className="companyName">{entry.companyName}</span> : null}
+                {highlightSymbol ? <PickerHighlightScroller symbol={highlightSymbol} /> : null}
+
+                {entries.length ? (
+                  <div className="resultsGrid">
+                    {entries.map((entry) => {
+                      const cardHref = isEarningsPickerPage(config)
+                        ? `/stock/${encodeURIComponent(entry.symbol)}/earnings`
+                        : entry.chartHref;
+                      const scoreValue = scoreLabelForEntry(entry);
+                      return (
+                        <Link
+                          key={`${entry.symbol}-${entry.note}`}
+                          id={`picker-${entry.symbol}`}
+                          href={cardHref}
+                          className="resultCard"
+                        >
+                          <div className="resultCardTop">
+                            <div className="resultCardHead">
+                              <div className="symbolLine">
+                                <span className="dot" style={{ background: toneColour(entry.tone) }} aria-hidden="true" />
+                                <h3>{entry.symbol}</h3>
+                                {entry.companyName ? <span className="companyName">{entry.companyName}</span> : null}
+                              </div>
+                              {entry.badge ? <div className="badge" style={{ marginTop: 8 }}>{entry.badge}</div> : null}
                             </div>
-                            {entry.badge ? <div className="badge" style={{ marginTop: 8 }}>{entry.badge}</div> : null}
+                            {scoreValue != null ? (
+                              <div className="scorePill">
+                                <strong>{scoreValue}</strong>
+                                <span>Score</span>
+                              </div>
+                            ) : null}
                           </div>
-                          {scoreValue != null ? (
-                            <div className="scorePill">
-                              <strong>{scoreValue}</strong>
-                              <span>Score</span>
+                          {entry.reasons && entry.reasons.length > 0 ? (
+                            <div className="reasonChips">
+                              {entry.reasons.map((reason) => (
+                                <span
+                                  key={reason}
+                                  className="reasonChip"
+                                  style={{ borderColor: toneBorder(entry.tone), color: toneColour(entry.tone) }}
+                                >
+                                  {reason}
+                                </span>
+                              ))}
                             </div>
                           ) : null}
-                        </div>
-                        {entry.reasons && entry.reasons.length > 0 ? (
-                          <div className="reasonChips">
-                            {entry.reasons.map((reason) => (
-                              <span
-                                key={reason}
-                                className="reasonChip"
-                                style={{ borderColor: toneBorder(entry.tone), color: toneColour(entry.tone) }}
-                              >
-                                {reason}
-                              </span>
-                            ))}
-                          </div>
-                        ) : null}
-                        <MiniPickerCandleChart points={entry.chartPoints} tone={config.tone} overlay={chartOverlayForEntry(config, entry)} supportResistanceZone={entry.supportResistanceZone} />
-                        <div className="note">{entry.note}</div>
-                      </Link>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="emptyBox">{config.emptyText}</div>
-              )}
-            </section>
+                          <MiniPickerCandleChart points={entry.chartPoints} tone={config.tone} overlay={chartOverlayForEntry(config, entry)} supportResistanceZone={entry.supportResistanceZone} />
+                          <div className="note">{entry.note}</div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="emptyBox">{config.emptyText}</div>
+                )}
+              </section>
 
-            <div className="scanDebug">
-              Current scan · Live matches {foundCount} · Shown {entries.length} · Universe {combinedUniverseSize ?? "Live"} · Updated {formatUpdatedAt(updatedAt)}
+              <div className="scanDebug">
+                Current scan · Live matches {foundCount} · Shown {entries.length} · Universe {combinedUniverseSize ?? "Live"} · Updated {formatUpdatedAt(updatedAt)}
+              </div>
+
+              <HideWatermarksBar />
             </div>
           </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </WatermarkVisibilityProvider>
   );
 }
