@@ -470,8 +470,9 @@ function EarningsBarChart({ data, formatValue, height = 168 }: { data: BarChartP
   const groupW = 100 / Math.max(data.length, 1);
 
   return (
-    <svg viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" style={{ width: "100%", height, display: "block", overflow: "visible" }} role="img" aria-label="Actual versus estimate chart">
+    <svg viewBox={`0 0 124 ${height}`} preserveAspectRatio="none" style={{ width: "100%", height, display: "block", overflow: "visible" }} role="img" aria-label="Actual versus estimate chart">
       <line x1="0" y1={zeroY} x2="100" y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeWidth="0.35" />
+      <line x1="100.5" y1="0" x2="100.5" y2={height} stroke="rgba(255,255,255,0.07)" strokeWidth="0.3" />
       {data.map((d, i) => {
         const cx = i * groupW + groupW / 2;
         const barW = Math.min(groupW * 0.30, 7);
@@ -507,6 +508,13 @@ function EarningsBarChart({ data, formatValue, height = 168 }: { data: BarChartP
           </g>
         );
       })}
+      {values.length > 0 && (
+        <>
+          <text x="103" y={20 + 2.2} fontSize="6.4" fill="rgba(203,213,225,0.62)" fontWeight={700}>{formatValue(maxAbs)}</text>
+          <text x="103" y={zeroY + 2.2} fontSize="6.4" fill="rgba(203,213,225,0.62)" fontWeight={700}>{formatValue(0)}</text>
+          <text x="103" y={height - 20 + 2.2} fontSize="6.4" fill="rgba(203,213,225,0.62)" fontWeight={700}>{formatValue(-maxAbs)}</text>
+        </>
+      )}
     </svg>
   );
 }
@@ -523,7 +531,7 @@ function ChartLegend({ actualLabel = "Actual" }: { actualLabel?: string }) {
 
 type LineSeries = { name: string; color: string; values: (number | null)[] };
 
-function MultiLineChart({ labels, series, height = 168 }: { labels: string[]; series: LineSeries[]; height?: number; }) {
+function MultiLineChart({ labels, series, height = 168, formatValue = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(0)}%` }: { labels: string[]; series: LineSeries[]; height?: number; formatValue?: (v: number) => string; }) {
   const allValues = series.flatMap((s) => s.values).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
   const maxAbs = allValues.length ? Math.max(...allValues.map((v) => Math.abs(v)), 0.5) : 1;
   const zeroY = height / 2;
@@ -548,8 +556,9 @@ function MultiLineChart({ labels, series, height = 168 }: { labels: string[]; se
   }
 
   return (
-    <svg viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" style={{ width: "100%", height, display: "block", overflow: "visible" }} role="img" aria-label="Trend chart">
+    <svg viewBox={`0 0 124 ${height}`} preserveAspectRatio="none" style={{ width: "100%", height, display: "block", overflow: "visible" }} role="img" aria-label="Trend chart">
       <line x1="0" y1={zeroY} x2="100" y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeWidth="0.35" />
+      <line x1="100.5" y1="0" x2="100.5" y2={height} stroke="rgba(255,255,255,0.07)" strokeWidth="0.3" />
       {series.map((s) => (
         <g key={s.name}>
           <path d={pathFor(s.values)} fill="none" stroke={s.color} strokeWidth="1.4" />
@@ -559,6 +568,13 @@ function MultiLineChart({ labels, series, height = 168 }: { labels: string[]; se
       {labels.map((l, i) => (
         <text key={`${l}-${i}`} x={i * stepX} y={height - 6} fontSize="6.6" textAnchor="middle" fill="rgba(203,213,225,0.68)" fontWeight={700}>{l}</text>
       ))}
+      {allValues.length > 0 && (
+        <>
+          <text x="103" y={20 + 2.2} fontSize="6.4" fill="rgba(203,213,225,0.62)" fontWeight={700}>{formatValue(maxAbs)}</text>
+          <text x="103" y={zeroY + 2.2} fontSize="6.4" fill="rgba(203,213,225,0.62)" fontWeight={700}>{formatValue(0)}</text>
+          <text x="103" y={height - 20 + 2.2} fontSize="6.4" fill="rgba(203,213,225,0.62)" fontWeight={700}>{formatValue(-maxAbs)}</text>
+        </>
+      )}
     </svg>
   );
 }
@@ -575,7 +591,7 @@ function SeriesLegend({ items }: { items: { label: string; color: string }[] }) 
 
 type SingleBarPoint = { label: string; value: number | null };
 
-function SingleValueBarChart({ data, height = 168 }: { data: SingleBarPoint[]; height?: number; }) {
+function SingleValueBarChart({ data, height = 168, formatValue = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(0)}%` }: { data: SingleBarPoint[]; height?: number; formatValue?: (v: number) => string; }) {
   const values = data.map((d) => d.value).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
   const maxAbs = values.length ? Math.max(...values.map((v) => Math.abs(v)), 0.5) : 1;
   const zeroY = height / 2;
@@ -583,8 +599,9 @@ function SingleValueBarChart({ data, height = 168 }: { data: SingleBarPoint[]; h
   const groupW = 100 / Math.max(data.length, 1);
 
   return (
-    <svg viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" style={{ width: "100%", height, display: "block", overflow: "visible" }} role="img" aria-label="Price reaction chart">
+    <svg viewBox={`0 0 124 ${height}`} preserveAspectRatio="none" style={{ width: "100%", height, display: "block", overflow: "visible" }} role="img" aria-label="Price reaction chart">
       <line x1="0" y1={zeroY} x2="100" y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeWidth="0.35" />
+      <line x1="100.5" y1="0" x2="100.5" y2={height} stroke="rgba(255,255,255,0.07)" strokeWidth="0.3" />
       {data.map((d, i) => {
         const cx = i * groupW + groupW / 2;
         const barW = Math.min(groupW * 0.42, 9);
@@ -600,6 +617,13 @@ function SingleValueBarChart({ data, height = 168 }: { data: SingleBarPoint[]; h
           </g>
         );
       })}
+      {values.length > 0 && (
+        <>
+          <text x="103" y={20 + 2.2} fontSize="6.4" fill="rgba(203,213,225,0.62)" fontWeight={700}>{formatValue(maxAbs)}</text>
+          <text x="103" y={zeroY + 2.2} fontSize="6.4" fill="rgba(203,213,225,0.62)" fontWeight={700}>{formatValue(0)}</text>
+          <text x="103" y={height - 20 + 2.2} fontSize="6.4" fill="rgba(203,213,225,0.62)" fontWeight={700}>{formatValue(-maxAbs)}</text>
+        </>
+      )}
     </svg>
   );
 }
