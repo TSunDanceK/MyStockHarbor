@@ -136,8 +136,9 @@ export default function CompanyProfile({
       <h2 style={headingStyle}>About {name}</h2>
 
       {/* Desktop: description in a wide left column, the stat boxes in a
-          narrow right column. Mobile: single column — description, then
-          the stat boxes stacked below it (source order, no reordering). */}
+          narrow right column. Mobile: single column layout — description,
+          then the stat boxes below it, laid out 2-per-row (source order,
+          no reordering) so the cards don't eat the whole screen. */}
       {hasDescription && hasRows ? (
         <div className="cp-columns">
           <p style={descStyle}>{profile.description}</p>
@@ -146,7 +147,7 @@ export default function CompanyProfile({
       ) : hasDescription ? (
         <p style={descStyle}>{profile.description}</p>
       ) : (
-        <div style={gridStyle}>{statBoxes}</div>
+        <div style={gridStyle} className="cp-grid-fallback">{statBoxes}</div>
       )}
 
       <div style={sourceStyle}>
@@ -169,6 +170,18 @@ export default function CompanyProfile({
         }
         @media (max-width: 720px) {
           .cp-columns { grid-template-columns: 1fr !important; gap: 18px !important; }
+          .cp-stats {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 10px !important;
+          }
+          .cp-grid-fallback {
+            grid-template-columns: 1fr 1fr !important;
+          }
+        }
+        @media (max-width: 340px) {
+          .cp-stats { grid-template-columns: 1fr !important; }
+          .cp-grid-fallback { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </section>
