@@ -462,60 +462,80 @@ function metricCardStyle(tone: EarningsTone | "default" = "default") {
 
 type BarChartPoint = { label: string; actual: number | null; estimate: number | null };
 
+function ChartFrame({ height, labels, scaleTop, scaleMid, scaleBottom, children }: { height: number; labels: string[]; scaleTop?: string; scaleMid?: string; scaleBottom?: string; children: import("react").ReactNode; }) {
+  const hasScale = scaleTop != null || scaleMid != null || scaleBottom != null;
+  return (
+    <div>
+      <div className="chartRow">
+        <div className="chartPlot">{children}</div>
+        {hasScale && (
+          <div className="chartScale" style={{ height }}>
+            {scaleTop != null && <span className="scaleTop">{scaleTop}</span>}
+            {scaleMid != null && <span className="scaleMid">{scaleMid}</span>}
+            {scaleBottom != null && <span className="scaleBottom">{scaleBottom}</span>}
+          </div>
+        )}
+      </div>
+      <div className="chartCategories">
+        {labels.map((l, i) => <span key={`${l}-${i}`}>{l}</span>)}
+      </div>
+    </div>
+  );
+}
+
 function EarningsBarChart({ data, formatValue, height = 168 }: { data: BarChartPoint[]; formatValue: (v: number) => string; height?: number; }) {
   const values = data.flatMap((d) => [d.actual, d.estimate]).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
   const maxAbs = values.length ? Math.max(...values.map((v) => Math.abs(v)), 0.0001) : 1;
   const zeroY = height / 2;
-  const usable = zeroY - 20;
+  const usable = zeroY - 10;
   const groupW = 100 / Math.max(data.length, 1);
 
   return (
-    <svg viewBox={`0 0 124 ${height}`} preserveAspectRatio="none" style={{ width: "100%", height, display: "block", overflow: "visible" }} role="img" aria-label="Actual versus estimate chart">
-      <line x1="0" y1={zeroY} x2="100" y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeWidth="0.35" />
-      <line x1="100.5" y1="0" x2="100.5" y2={height} stroke="rgba(255,255,255,0.07)" strokeWidth="0.3" />
-      {data.map((d, i) => {
-        const cx = i * groupW + groupW / 2;
-        const barW = Math.min(groupW * 0.30, 7);
-        const estH = d.estimate != null ? (Math.abs(d.estimate) / maxAbs) * usable : 0;
-        const actH = d.actual != null ? (Math.abs(d.actual) / maxAbs) * usable : 0;
-        const estUp = (d.estimate ?? 0) >= 0;
-        const actUp = (d.actual ?? 0) >= 0;
-        const beat = d.actual != null && d.estimate != null ? d.actual >= d.estimate : null;
-        const actualColor = beat == null ? "#60a5fa" : beat ? "#22c55e" : "#ef4444";
-        return (
-          <g key={`${d.label}-${i}`}>
-            {d.estimate != null && (
-              <rect
-                x={cx - barW - 0.6}
-                y={estUp ? zeroY - estH : zeroY}
-                width={barW}
-                height={Math.max(estH, 0.6)}
-                fill="rgba(148,163,184,0.38)"
-                rx="1"
-              />
-            )}
-            {d.actual != null && (
-              <rect
-                x={cx + 0.6}
-                y={actUp ? zeroY - actH : zeroY}
-                width={barW}
-                height={Math.max(actH, 0.6)}
-                fill={actualColor}
-                rx="1"
-              />
-            )}
-            <text x={cx} y={height - 6} fontSize="6.6" textAnchor="middle" fill="rgba(203,213,225,0.68)" fontWeight={700}>{d.label}</text>
-          </g>
-        );
-      })}
-      {values.length > 0 && (
-        <>
-          <text x="103" y={20 + 2.2} fontSize="6.4" fill="rgba(203,213,225,0.62)" fontWeight={700}>{formatValue(maxAbs)}</text>
-          <text x="103" y={zeroY + 2.2} fontSize="6.4" fill="rgba(203,213,225,0.62)" fontWeight={700}>{formatValue(0)}</text>
-          <text x="103" y={height - 20 + 2.2} fontSize="6.4" fill="rgba(203,213,225,0.62)" fontWeight={700}>{formatValue(-maxAbs)}</text>
-        </>
-      )}
-    </svg>
+    <ChartFrame
+      height={height}
+      labels={data.map((d) => d.label)}
+      scaleTop={values.length ? formatValue(maxAbs) : undefined}
+      scaleMid={values.length ? formatValue(0) : undefined}
+      scaleBottom={values.length ? formatValue(-maxAbs) : undefined}
+    >
+      <svg viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" style={{ width: "100%", height, display: "block" }} role="img" aria-label="Actual versus estimate chart">
+        <line x1="0" y1={zeroY} x2="100" y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeWidth="0.35" />
+        {data.map((d, i) => {
+          const cx = i * groupW + groupW / 2;
+          const barW = Math.min(groupW * 0.30, 7);
+          const estH = d.estimate != null ? (Math.abs(d.estimate) / maxAbs) * usable : 0;
+          const actH = d.actual != null ? (Math.abs(d.actual) / maxAbs) * usable : 0;
+          const estUp = (d.estimate ?? 0) >= 0;
+          const actUp = (d.actual ?? 0) >= 0;
+          const beat = d.actual != null && d.estimate != null ? d.actual >= d.estimate : null;
+          const actualColor = beat == null ? "#60a5fa" : beat ? "#22c55e" : "#ef4444";
+          return (
+            <g key={`${d.label}-${i}`}>
+              {d.estimate != null && (
+                <rect
+                  x={cx - barW - 0.6}
+                  y={estUp ? zeroY - estH : zeroY}
+                  width={barW}
+                  height={Math.max(estH, 0.6)}
+                  fill="rgba(148,163,184,0.38)"
+                  rx="1"
+                />
+              )}
+              {d.actual != null && (
+                <rect
+                  x={cx + 0.6}
+                  y={actUp ? zeroY - actH : zeroY}
+                  width={barW}
+                  height={Math.max(actH, 0.6)}
+                  fill={actualColor}
+                  rx="1"
+                />
+              )}
+            </g>
+          );
+        })}
+      </svg>
+    </ChartFrame>
   );
 }
 
@@ -535,8 +555,8 @@ function MultiLineChart({ labels, series, height = 168, formatValue = (v: number
   const allValues = series.flatMap((s) => s.values).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
   const maxAbs = allValues.length ? Math.max(...allValues.map((v) => Math.abs(v)), 0.5) : 1;
   const zeroY = height / 2;
-  const usable = zeroY - 20;
-  const stepX = labels.length > 1 ? 100 / (labels.length - 1) : 100;
+  const usable = zeroY - 10;
+  const groupW = 100 / Math.max(labels.length, 1);
 
   function yFor(v: number) {
     return zeroY - (v / maxAbs) * usable;
@@ -547,7 +567,7 @@ function MultiLineChart({ labels, series, height = 168, formatValue = (v: number
     let started = false;
     values.forEach((v, i) => {
       if (v == null || !Number.isFinite(v)) { started = false; return; }
-      const x = i * stepX;
+      const x = i * groupW + groupW / 2;
       const y = yFor(v);
       d += `${started ? "L" : "M"}${x},${y} `;
       started = true;
@@ -556,26 +576,23 @@ function MultiLineChart({ labels, series, height = 168, formatValue = (v: number
   }
 
   return (
-    <svg viewBox={`0 0 124 ${height}`} preserveAspectRatio="none" style={{ width: "100%", height, display: "block", overflow: "visible" }} role="img" aria-label="Trend chart">
-      <line x1="0" y1={zeroY} x2="100" y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeWidth="0.35" />
-      <line x1="100.5" y1="0" x2="100.5" y2={height} stroke="rgba(255,255,255,0.07)" strokeWidth="0.3" />
-      {series.map((s) => (
-        <g key={s.name}>
-          <path d={pathFor(s.values)} fill="none" stroke={s.color} strokeWidth="1.4" />
-          {s.values.map((v, i) => (v != null && Number.isFinite(v) ? <circle key={i} cx={i * stepX} cy={yFor(v)} r="1.5" fill={s.color} /> : null))}
-        </g>
-      ))}
-      {labels.map((l, i) => (
-        <text key={`${l}-${i}`} x={i * stepX} y={height - 6} fontSize="6.6" textAnchor="middle" fill="rgba(203,213,225,0.68)" fontWeight={700}>{l}</text>
-      ))}
-      {allValues.length > 0 && (
-        <>
-          <text x="103" y={20 + 2.2} fontSize="6.4" fill="rgba(203,213,225,0.62)" fontWeight={700}>{formatValue(maxAbs)}</text>
-          <text x="103" y={zeroY + 2.2} fontSize="6.4" fill="rgba(203,213,225,0.62)" fontWeight={700}>{formatValue(0)}</text>
-          <text x="103" y={height - 20 + 2.2} fontSize="6.4" fill="rgba(203,213,225,0.62)" fontWeight={700}>{formatValue(-maxAbs)}</text>
-        </>
-      )}
-    </svg>
+    <ChartFrame
+      height={height}
+      labels={labels}
+      scaleTop={allValues.length ? formatValue(maxAbs) : undefined}
+      scaleMid={allValues.length ? formatValue(0) : undefined}
+      scaleBottom={allValues.length ? formatValue(-maxAbs) : undefined}
+    >
+      <svg viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" style={{ width: "100%", height, display: "block" }} role="img" aria-label="Trend chart">
+        <line x1="0" y1={zeroY} x2="100" y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeWidth="0.35" />
+        {series.map((s) => (
+          <g key={s.name}>
+            <path d={pathFor(s.values)} fill="none" stroke={s.color} strokeWidth="1.4" />
+            {s.values.map((v, i) => (v != null && Number.isFinite(v) ? <circle key={i} cx={i * groupW + groupW / 2} cy={yFor(v)} r="1.5" fill={s.color} /> : null))}
+          </g>
+        ))}
+      </svg>
+    </ChartFrame>
   );
 }
 
@@ -595,36 +612,31 @@ function SingleValueBarChart({ data, height = 168, formatValue = (v: number) => 
   const values = data.map((d) => d.value).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
   const maxAbs = values.length ? Math.max(...values.map((v) => Math.abs(v)), 0.5) : 1;
   const zeroY = height / 2;
-  const usable = zeroY - 20;
+  const usable = zeroY - 10;
   const groupW = 100 / Math.max(data.length, 1);
 
   return (
-    <svg viewBox={`0 0 124 ${height}`} preserveAspectRatio="none" style={{ width: "100%", height, display: "block", overflow: "visible" }} role="img" aria-label="Price reaction chart">
-      <line x1="0" y1={zeroY} x2="100" y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeWidth="0.35" />
-      <line x1="100.5" y1="0" x2="100.5" y2={height} stroke="rgba(255,255,255,0.07)" strokeWidth="0.3" />
-      {data.map((d, i) => {
-        const cx = i * groupW + groupW / 2;
-        const barW = Math.min(groupW * 0.42, 9);
-        const h = d.value != null ? (Math.abs(d.value) / maxAbs) * usable : 0;
-        const up = (d.value ?? 0) >= 0;
-        const color = d.value == null ? "rgba(148,163,184,0.35)" : up ? "#22c55e" : "#ef4444";
-        return (
-          <g key={`${d.label}-${i}`}>
-            {d.value != null && (
-              <rect x={cx - barW / 2} y={up ? zeroY - h : zeroY} width={barW} height={Math.max(h, 0.6)} fill={color} rx="1" />
-            )}
-            <text x={cx} y={height - 6} fontSize="6.6" textAnchor="middle" fill="rgba(203,213,225,0.68)" fontWeight={700}>{d.label}</text>
-          </g>
-        );
-      })}
-      {values.length > 0 && (
-        <>
-          <text x="103" y={20 + 2.2} fontSize="6.4" fill="rgba(203,213,225,0.62)" fontWeight={700}>{formatValue(maxAbs)}</text>
-          <text x="103" y={zeroY + 2.2} fontSize="6.4" fill="rgba(203,213,225,0.62)" fontWeight={700}>{formatValue(0)}</text>
-          <text x="103" y={height - 20 + 2.2} fontSize="6.4" fill="rgba(203,213,225,0.62)" fontWeight={700}>{formatValue(-maxAbs)}</text>
-        </>
-      )}
-    </svg>
+    <ChartFrame
+      height={height}
+      labels={data.map((d) => d.label)}
+      scaleTop={values.length ? formatValue(maxAbs) : undefined}
+      scaleMid={values.length ? formatValue(0) : undefined}
+      scaleBottom={values.length ? formatValue(-maxAbs) : undefined}
+    >
+      <svg viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" style={{ width: "100%", height, display: "block" }} role="img" aria-label="Price reaction chart">
+        <line x1="0" y1={zeroY} x2="100" y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeWidth="0.35" />
+        {data.map((d, i) => {
+          const cx = i * groupW + groupW / 2;
+          const barW = Math.min(groupW * 0.42, 9);
+          const h = d.value != null ? (Math.abs(d.value) / maxAbs) * usable : 0;
+          const up = (d.value ?? 0) >= 0;
+          const color = d.value == null ? "rgba(148,163,184,0.35)" : up ? "#22c55e" : "#ef4444";
+          return d.value != null ? (
+            <rect key={`${d.label}-${i}`} x={cx - barW / 2} y={up ? zeroY - h : zeroY} width={barW} height={Math.max(h, 0.6)} fill={color} rx="1" />
+          ) : null;
+        })}
+      </svg>
+    </ChartFrame>
   );
 }
 
@@ -756,6 +768,15 @@ export default async function StockEarningsPage({ params }: Props) {
         .chartLegend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px; font-size: 11px; font-weight: 800; color: rgba(226,232,240,0.72); }
         .chartLegend span { display: inline-flex; align-items: center; gap: 6px; }
         .chartLegend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; }
+        .chartRow { display: flex; align-items: stretch; gap: 8px; }
+        .chartPlot { flex: 1 1 auto; min-width: 0; }
+        .chartScale { position: relative; width: 48px; flex: 0 0 auto; border-left: 1px solid rgba(255,255,255,0.08); }
+        .chartScale span { position: absolute; left: 8px; right: 2px; font-size: 11px; font-weight: 800; color: rgba(203,213,225,0.62); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .chartScale .scaleTop { top: 0; }
+        .chartScale .scaleMid { top: 50%; transform: translateY(-50%); }
+        .chartScale .scaleBottom { bottom: 0; }
+        .chartCategories { display: flex; margin-top: 6px; }
+        .chartCategories span { flex: 1 1 0; text-align: center; font-size: 11px; font-weight: 800; color: rgba(203,213,225,0.68); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 1px; }
         .chartBlock { margin-top: 14px; }
         .chartBlock + .chartBlock { margin-top: 26px; }
         .chartBlockTitle { font-size: 13px; font-weight: 900; color: rgba(226,232,240,0.85); margin-bottom: 4px; }
@@ -795,6 +816,9 @@ export default async function StockEarningsPage({ params }: Props) {
           .metricHelpBubble::after { display: none; }
           .trendDots { gap: 12px; justify-content: flex-start; }
           .trendDot { min-width: 48px; }
+          .chartScale { width: 40px; }
+          .chartScale span { font-size: 10px; left: 6px; }
+          .chartCategories span { font-size: 9.5px; }
           .historyTable { display: block; width: 100%; border-spacing: 0; margin-top: 12px; }
           .historyTable thead { display: none; }
           .historyTable tbody, .historyTable tr, .historyTable td { display: block; width: 100%; }
