@@ -70,6 +70,14 @@ type EarningsTrendPoint = {
   revenueEstimated: number | null;
 };
 
+type EarningsGrowthMarginPoint = {
+  label: string;
+  yoyEpsGrowth: number | null;
+  yoyRevenueGrowth: number | null;
+  grossMarginPct: number | null;
+  operatingMarginPct: number | null;
+};
+
 type YearlySummary = {
   year: string;
   tone: EarningsTone;
@@ -138,6 +146,23 @@ function calcPercentDifference(actual: number | null, estimate: number | null) {
 function calcGrowth(current: number | null, previous: number | null) {
   if (current == null || previous == null || previous === 0) return null;
   return ((current - previous) / Math.abs(previous)) * 100;
+}
+
+function findSameQuarterLastYear(row: FmpEarningsRow, rows: FmpEarningsRow[]): FmpEarningsRow | null {
+  const rowQuarter = row.fiscalLabel?.split(" ")[0] ?? null;
+  const rowYear = row.fiscalYear && Number.isFinite(Number(row.fiscalYear)) ? Number(row.fiscalYear) : null;
+  if (!rowQuarter || rowYear == null) return null;
+  return rows.find((candidate) => {
+    if (!candidate.date || candidate.date === row.date) return false;
+    const candidateQuarter = candidate.fiscalLabel?.split(" ")[0] ?? null;
+    const candidateYear = candidate.fiscalYear && Number.isFinite(Number(candidate.fiscalYear)) ? Number(candidate.fiscalYear) : null;
+    return candidateQuarter === rowQuarter && candidateYear === rowYear - 1;
+  }) ?? null;
+}
+
+function marginPct(numerator: number | null | undefined, revenue: number | null | undefined) {
+  if (typeof numerator !== "number" || typeof revenue !== "number" || !Number.isFinite(numerator) || !Number.isFinite(revenue) || revenue === 0) return null;
+  return (numerator / Math.abs(revenue)) * 100;
 }
 
 function quarterLabel(date?: string | null) {
@@ -360,7 +385,7 @@ async function getEarningsData(symbol: string) {
       const matchingCalendar = row.date ? historicalByDate.get(row.date) : null;
       const matchingIncome = incomeRows[index] ?? null;
       const incomeEps = matchingIncome?.epsDiluted ?? matchingIncome?.eps ?? null;
-      return { ...row, fiscalLabel: fiscalLabelFromStatement(matchingIncome) ?? undefined, fiscalYear: matchingIncome?.calendarYear || matchingIncome?.date?.slice(0, 4) || row.date?.slice(0, 4), periodEndDate: matchingIncome?.date, epsActual: row.epsActual ?? matchingCalendar?.epsActual ?? incomeEps ?? null, epsEstimated: matchingCalendar?.epsEstimated ?? row.epsEstimated ?? null, revenueActual: matchingIncome?.revenue ?? row.revenueActual ?? null };
+      return { ...row, fiscalLabel: fiscalLabelFromStatement(matchingIncome) ?? undefined, fiscalYear: matchingIncome?.calendarYear || matchingIncome?.date?.slice(0, 4) || row.date?.slice(0, 4), periodEndDate: matchingIncome?.date, epsActual: row.epsActual ?? matchingCalendar?.epsActual ?? incomeEps ?? null, epsEstimated: matchingCalendar?.epsEstimated ?? row.epsEstimated ?? null, revenueActual: matchingIncome?.revenue ?? row.revenueActual ?? null, grossProfit: matchingIncome?.grossProfit ?? null, operatingIncome: matchingIncome?.operatingIncome ?? null };
     });
 
   const latest = completedRows[0] ?? null;
@@ -380,12 +405,22 @@ async function getEarningsData(symbol: string) {
   const netIncome = matchingIncome?.netIncome ?? null;
   const recentTrend: EarningsTrendPoint[] = completedRows.slice(0, 6).reverse().map((row) => ({ label: displayQuarterLabel(row), tone: classifyQuarter(row), epsActual: row.epsActual ?? null, epsEstimated: row.epsEstimated ?? null, revenueActual: row.revenueActual ?? null, revenueEstimated: row.revenueEstimated ?? null }));
   const chartQuarters: EarningsTrendPoint[] = completedRows.slice(0, 8).reverse().map((row) => ({ label: displayQuarterLabel(row), tone: classifyQuarter(row), epsActual: row.epsActual ?? null, epsEstimated: row.epsEstimated ?? null, revenueActual: row.revenueActual ?? null, revenueEstimated: row.revenueEstimated ?? null }));
+  const growthMarginQuarters: EarningsGrowthMarginPoint[] = completedRows.slice(0, 8).reverse().map((row) => {
+    const priorYearRow = findSameQuarterLastYear(row, completedRows);
+    return {
+      label: displayQuarterLabel(row),
+      yoyEpsGrowth: calcGrowth(asNumber(row.epsActual), asNumber(priorYearRow?.epsActual)),
+      yoyRevenueGrowth: calcGrowth(asNumber(row.revenueActual), asNumber(priorYearRow?.revenueActual)),
+      grossMarginPct: marginPct(row.grossProfit, row.revenueActual),
+      operatingMarginPct: marginPct(row.operatingIncome, row.revenueActual),
+    };
+  });
   const yearlySummaries = makeYearlySummaries(completedRows);
   const localScore = scoreEarnings({ latest, sameQuarterLastYear, completedRows });
   const sharedScore = await fetchSharedEarningsScore(symbol);
   const score = sharedScore ?? localScore;
 
-  return { rows: earningsRows, completedRows, latest, next, nextEstimate, sameQuarterLastYear, grossMargin, operatingMargin, netIncome, recentTrend, chartQuarters, yearlySummaries, score };
+  return { rows: earningsRows, completedRows, latest, next, nextEstimate, sameQuarterLastYear, grossMargin, operatingMargin, netIncome, recentTrend, chartQuarters, growthMarginQuarters, yearlySummaries, score };
 }
 
 function metricCardStyle(tone: EarningsTone | "default" = "default") {
@@ -455,6 +490,58 @@ function ChartLegend({ actualLabel = "Actual" }: { actualLabel?: string }) {
   );
 }
 
+type LineSeries = { name: string; color: string; values: (number | null)[] };
+
+function MultiLineChart({ labels, series, height = 168 }: { labels: string[]; series: LineSeries[]; height?: number; }) {
+  const allValues = series.flatMap((s) => s.values).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+  const maxAbs = allValues.length ? Math.max(...allValues.map((v) => Math.abs(v)), 0.5) : 1;
+  const zeroY = height / 2;
+  const usable = zeroY - 20;
+  const stepX = labels.length > 1 ? 100 / (labels.length - 1) : 100;
+
+  function yFor(v: number) {
+    return zeroY - (v / maxAbs) * usable;
+  }
+
+  function pathFor(values: (number | null)[]) {
+    let d = "";
+    let started = false;
+    values.forEach((v, i) => {
+      if (v == null || !Number.isFinite(v)) { started = false; return; }
+      const x = i * stepX;
+      const y = yFor(v);
+      d += `${started ? "L" : "M"}${x},${y} `;
+      started = true;
+    });
+    return d.trim();
+  }
+
+  return (
+    <svg viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" style={{ width: "100%", height, display: "block", overflow: "visible" }} role="img" aria-label="Trend chart">
+      <line x1="0" y1={zeroY} x2="100" y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeWidth="0.35" />
+      {series.map((s) => (
+        <g key={s.name}>
+          <path d={pathFor(s.values)} fill="none" stroke={s.color} strokeWidth="1.4" />
+          {s.values.map((v, i) => (v != null && Number.isFinite(v) ? <circle key={i} cx={i * stepX} cy={yFor(v)} r="1.5" fill={s.color} /> : null))}
+        </g>
+      ))}
+      {labels.map((l, i) => (
+        <text key={`${l}-${i}`} x={i * stepX} y={height - 6} fontSize="6.6" textAnchor="middle" fill="rgba(203,213,225,0.68)" fontWeight={700}>{l}</text>
+      ))}
+    </svg>
+  );
+}
+
+function SeriesLegend({ items }: { items: { label: string; color: string }[] }) {
+  return (
+    <div className="chartLegend">
+      {items.map((item) => (
+        <span key={item.label}><i style={{ background: item.color }} /> {item.label}</span>
+      ))}
+    </div>
+  );
+}
+
 async function fetchQuoteForMeta(symbol: string): Promise<{ price: number | null; date: string | null }> {
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) return { price: null, date: null };
@@ -513,6 +600,15 @@ export default async function StockEarningsPage({ params }: Props) {
 
   const epsChartData: BarChartPoint[] = data.chartQuarters.map((q) => ({ label: q.label, actual: q.epsActual, estimate: q.epsEstimated }));
   const revenueChartData: BarChartPoint[] = data.chartQuarters.map((q) => ({ label: q.label, actual: q.revenueActual, estimate: q.revenueEstimated }));
+  const growthLabels = data.growthMarginQuarters.map((q) => q.label);
+  const growthSeries: LineSeries[] = [
+    { name: "Revenue growth", color: "#60a5fa", values: data.growthMarginQuarters.map((q) => q.yoyRevenueGrowth) },
+    { name: "EPS growth", color: "#22c55e", values: data.growthMarginQuarters.map((q) => q.yoyEpsGrowth) },
+  ];
+  const marginSeries: LineSeries[] = [
+    { name: "Gross margin", color: "#38bdf8", values: data.growthMarginQuarters.map((q) => q.grossMarginPct) },
+    { name: "Operating margin", color: "#facc15", values: data.growthMarginQuarters.map((q) => q.operatingMarginPct) },
+  ];
 
   const pageJsonLd = {
     "@context": "https://schema.org", "@type": "WebPage",
@@ -735,6 +831,29 @@ export default async function StockEarningsPage({ params }: Props) {
                     <ChartLegend />
                   </>
                 ) : null}
+              </section>
+
+              <section className="card">
+                <div className="eyebrow">Growth &amp; margins</div>
+                <h2>Is growth accelerating, and are margins holding up?</h2>
+                <p>A single quarter&apos;s beat matters less than the trend behind it. These lines show whether year-over-year growth is speeding up or slowing down, and whether margins are expanding or getting squeezed.</p>
+                {growthLabels.length ? (
+                  <>
+                    <div className="chartBlock">
+                      <div className="chartBlockTitle">YoY revenue &amp; EPS growth by quarter</div>
+                      <MultiLineChart labels={growthLabels} series={growthSeries} />
+                      <SeriesLegend items={[{ label: "Revenue growth", color: "#60a5fa" }, { label: "EPS growth", color: "#22c55e" }]} />
+                    </div>
+                    <div className="chartBlock">
+                      <div className="chartBlockTitle">Gross &amp; operating margin by quarter</div>
+                      <MultiLineChart labels={growthLabels} series={marginSeries} />
+                      <SeriesLegend items={[{ label: "Gross margin", color: "#38bdf8" }, { label: "Operating margin", color: "#facc15" }]} />
+                    </div>
+                    <p className="earningsDataNote">Growth compares each quarter with the same quarter a year earlier. Margins are gross profit and operating income as a share of revenue for that quarter.</p>
+                  </>
+                ) : (
+                  <p>Not enough quarterly history is available yet to chart growth and margin trends.</p>
+                )}
               </section>
 
               <section className="card">
