@@ -4,6 +4,7 @@ import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
 import ScreenerShell from "@/app/components/ScreenerShell";
 import TimeframeFilterDropdown from "@/app/components/TimeframeFilterDropdown";
+import { useWatermarkHidden } from "@/app/components/WatermarkVisibility";
 
 type PlayTone = "green" | "yellow" | "orange" | "red";
 
@@ -136,8 +137,13 @@ function formatNumber(value: number, digits = 2) {
 // Fixed, non-interactive brand watermark right at the top edge of each
 // mini play chart. Positioned with CSS against the chart's own fixed-size
 // wrapper -- never against the SVG's data-derived coordinates -- so it
-// stays put regardless of pattern shape or candle count.
+// stays put regardless of pattern shape or candle count. Can be hidden
+// per-page via the "Hide watermarks" toggle (see WatermarkVisibility.tsx)
+// -- resets back to visible on refresh/navigation.
 function PlayChartWatermark() {
+  const hidden = useWatermarkHidden();
+  if (hidden) return null;
+
   return (
     <div
       aria-hidden="true"
@@ -163,7 +169,7 @@ function PlayChartWatermark() {
           whiteSpace: "nowrap",
         }}
       >
-        MyStockHarbor
+        MyStockHarbor.com
       </span>
     </div>
   );
