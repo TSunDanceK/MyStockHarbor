@@ -859,10 +859,14 @@ function EarningsNewsSection({ symbol, earningsNews, latestEarnings }: { symbol:
           earningsNews.slice(0, 2).map((item, index) => (
             <a key={`${item.link}-${index}`} href={item.link} target="_blank" rel="noopener noreferrer" style={earningsNewsRowStyle}>
               <div style={earningsNewsNumberStyle}>{index + 1}</div>
-              {item.image ? (
-                <img src={item.image} alt="" loading="lazy" style={earningsThumbStyle} />
-              ) : null}
-              <div style={{ minWidth: 0 }}>
+              {/* The thumbnail floats at the top-right of this content column so the
+                  meta row / heading / description wrap around it, instead of sitting
+                  in its own flex slot and forcing everything else into a tall,
+                  separate text column below a fixed-height image. */}
+              <div style={{ minWidth: 0, overflow: "hidden" }}>
+                {item.image ? (
+                  <img src={item.image} alt="" loading="lazy" style={earningsThumbStyle} />
+                ) : null}
                 <div style={newsMetaRowStyle}>
                   <span style={newsSourcePillStyle}>{compactSource(item.source)}</span>
                   <span style={newsDateStyle}>{formatDate(item.pubDate)}</span>
@@ -1150,7 +1154,7 @@ const newsGridStyle: CSSProperties = {};
 const editorialCardStyle: CSSProperties = { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 24, padding: 20, background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.025))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" };
 const earningsNewsRowStyle: CSSProperties = { display: "flex", alignItems: "flex-start", gap: 12, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.035)", borderRadius: 16, padding: 14, color: "#f1f5f9", textDecoration: "none" };
 const earningsNewsNumberStyle: CSSProperties = { width: 28, height: 28, borderRadius: 999, display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(59,130,246,0.36)", background: "rgba(59,130,246,0.14)", color: "#bfdbfe", fontSize: 13, fontWeight: 950, flexShrink: 0 };
-const earningsThumbStyle: CSSProperties = { width: 64, height: 64, borderRadius: 10, objectFit: "cover", flexShrink: 0, background: "rgba(255,255,255,0.04)" };
+const earningsThumbStyle: CSSProperties = { float: "right", width: 64, height: 64, borderRadius: 10, objectFit: "cover", marginLeft: 12, marginBottom: 6, background: "rgba(255,255,255,0.04)" };
 const earningsNewsHeadlineStyle: CSSProperties = { margin: "9px 0 0", fontSize: 16, lineHeight: 1.38, color: "#f8fafc" };
 const earningsNewsTextStyle: CSSProperties = { margin: "8px 0 0", fontSize: 13, lineHeight: 1.6, color: "rgba(226,232,240,0.76)" };
 const earningsNoNewsStyle: CSSProperties = { border: "1px solid rgba(250,204,21,0.20)", background: "rgba(250,204,21,0.07)", borderRadius: 16, padding: 14, display: "grid", gap: 6, color: "rgba(254,249,195,0.88)", fontSize: 14, lineHeight: 1.55 };
