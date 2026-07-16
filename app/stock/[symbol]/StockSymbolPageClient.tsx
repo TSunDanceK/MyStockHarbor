@@ -653,6 +653,93 @@ function earningsPanelTone(earnings: StockEarningsData | null): "green" | "yello
   return earnings.tone;
 }
 
+// Visual price-target chart: current price plotted on the left, Low/Avg/High
+// analyst targets plotted on the right at their relative price height, with
+// a connecting line from price to each target colour-coded by whether that
+// target implies upside (green), downside (red), or is roughly flat (yellow).
+function AnalystTargetChart({
+  price,
+  low,
+  avg: avgTarget,
+  high,
+}: {
+  price: number | null;
+  low: number | null;
+  avg: number | null;
+  high: number | null;
+}) {
+  if (typeof price !== "number" || !Number.isFinite(price) || typeof low !== "number" || typeof high !== "number") return null;
+
+  const width = 640;
+  const height = 200;
+  const padTop = 26;
+  const padBottom = 26;
+  const leftX = 64;
+  const rightX = width - 172;
+
+  const values = [price, low, high, ...(typeof avgTarget === "number" ? [avgTarget] : [])];
+  const rawMin = Math.min(...values);
+  const rawMax = Math.max(...values);
+  const span = rawMax - rawMin || Math.max(price * 0.05, 1);
+  const min = rawMin - span * 0.18;
+  const max = rawMax + span * 0.18;
+  const usableHeight = height - padTop - padBottom;
+
+  function yFor(value: number) {
+    const clamped = Math.max(min, Math.min(max, value));
+    return height - padBottom - ((clamped - min) / (max - min || 1)) * usableHeight;
+  }
+
+  function targetTone(value: number): "green" | "yellow" | "red" {
+    const diffPct = ((value - price) / price) * 100;
+    if (diffPct > 1.5) return "green";
+    if (diffPct < -1.5) return "red";
+    return "yellow";
+  }
+
+  const targets: Array<{ key: string; label: string; value: number }> = [
+    { key: "high", label: "HIGH", value: high },
+    ...(typeof avgTarget === "number" ? [{ key: "avg", label: "AVG", value: avgTarget }] : []),
+    { key: "low", label: "LOW", value: low },
+  ];
+
+  const priceY = yFor(price);
+
+  return (
+    <div style={{ width: "100%", overflowX: "auto" }}>
+      <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} style={{ display: "block", minWidth: 420, overflow: "visible" }}>
+        {targets.map((t) => {
+          const tone = targetTone(t.value);
+          const y = yFor(t.value);
+          return (
+            <line key={`line-${t.key}`} x1={leftX} y1={priceY} x2={rightX} y2={y} stroke={toneColor(tone)} strokeWidth={1.75} strokeOpacity={0.55} />
+          );
+        })}
+
+        {/* Current price marker */}
+        <circle cx={leftX} cy={priceY} r={6} fill="#f8fafc" stroke="#06080d" strokeWidth={2} />
+        <text x={leftX} y={priceY - 16} textAnchor="middle" fontSize={10} fontWeight={800} letterSpacing="0.05em" fill="rgba(226,232,240,0.55)">NOW</text>
+        <text x={leftX} y={priceY + 24} textAnchor="middle" fontSize={13} fontWeight={800} fill="#f8fafc">{`$${price.toFixed(2)}`}</text>
+
+        {/* Target markers + labels */}
+        {targets.map((t) => {
+          const tone = targetTone(t.value);
+          const y = yFor(t.value);
+          const diffPct = ((t.value - price) / price) * 100;
+          return (
+            <g key={`target-${t.key}`}>
+              <circle cx={rightX} cy={y} r={5} fill={toneColor(tone)} />
+              <text x={rightX + 12} y={y - 3} fontSize={10} fontWeight={800} letterSpacing="0.05em" fill="rgba(226,232,240,0.55)">{t.label}</text>
+              <text x={rightX + 12} y={y + 13} fontSize={14} fontWeight={800} fill={toneColor(tone)}>{`$${t.value.toFixed(2)}`}</text>
+              <text x={rightX + 12} y={y + 26} fontSize={10} fill="rgba(226,232,240,0.45)">{`${diffPct >= 0 ? "+" : ""}${diffPct.toFixed(1)}%`}</text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
 function StockEarningsPanel({ symbol, earnings, loading }: { symbol: string; earnings: StockEarningsData | null; loading: boolean }) {
   const tone = earningsPanelTone(earnings);
   return (
@@ -1031,6 +1118,16 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
                   <p style={{ margin: 0, fontSize: 13, opacity: 0.55 }}>{analystRating?.sourceNote ?? "Analyst rating data is unavailable right now."}</p>
                 ) : (
                   <>
+                    {!analystRatingLoading ? (
+                      <div style={{ marginBottom: 18 }}>
+                        <AnalystTargetChart
+                          price={quote?.price ?? null}
+                          low={analystRating?.targetLow ?? null}
+                          avg={analystRating?.targetConsensus ?? analystRating?.targetMedian ?? null}
+                          high={analystRating?.targetHigh ?? null}
+                        />
+                      </div>
+                    ) : null}
                     <div className="valuationGrid">
                       {[
                         {
