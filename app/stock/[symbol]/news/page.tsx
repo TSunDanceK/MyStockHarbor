@@ -1,4 +1,4 @@
- import type { CSSProperties } from "react";
+import type { CSSProperties } from "react";
 import StockNewsTickerJump from "./StockNewsTickerJump";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -964,6 +964,7 @@ export default async function StockNewsPage({ params }: Props) {
           url={`https://www.mystockharbor.com/stock/${upper}/news`}
           title={`${upper} Stock News & Analysis | MyStockHarbor`}
           text={`${upper} stock news — headline sentiment, earnings context & chart analysis 📊 MyStockHarbor`}
+          showFeedback
         />
 
         <section className="newsHeroShell" style={heroShellStyle}>
