@@ -1,4 +1,4 @@
- import type { Metadata } from "next";
+import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 import EarningsSymbolPicker from "./EarningsSymbolPicker";
@@ -917,6 +917,7 @@ export default async function StockEarningsPage({ params }: Props) {
             url={`https://www.mystockharbor.com/stock/${clean}/earnings`}
             title={`${clean} Earnings & Earnings Score | MyStockHarbor`}
             text={`${clean} earnings — EPS, revenue & earnings score 📊 MyStockHarbor`}
+            showFeedback
           />
 
           <section className="hero">
