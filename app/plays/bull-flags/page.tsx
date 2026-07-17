@@ -44,14 +44,14 @@ async function getOriginFromHeaders() {
 // Server-side fetch of the same payload BullFlagsClient fetches client-side,
 // so crawlers (and the very first paint for real users) see the real scan
 // results instead of the "Loading chart-pattern plays..." skeleton. Cached
-// via Next's fetch Data Cache for a few minutes -- the /api/bull-flags
-// route itself is also memoized (in-memory + Redis) for ~6 minutes, so this
+// via Next's fetch Data Cache for up to an hour -- the /api/bull-flags
+// route itself is also memoized (in-memory + Redis) for ~60 minutes, so this
 // rarely triggers a fresh scan.
 async function getInitialBullFlagsPayload(): Promise<PlaysPayload | null> {
   try {
     const origin = await getOriginFromHeaders();
     const res = await fetch(`${origin}/api/bull-flags`, {
-      next: { revalidate: 300 },
+      next: { revalidate: 3600 },
     });
 
     if (!res.ok) return null;

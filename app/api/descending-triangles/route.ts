@@ -113,7 +113,6 @@ type CachedPlaysPayload = {
 
 type AggregatedPoint = {
   date: string;
-  open?: number;
   close: number;
   high?: number;
   low?: number;
@@ -240,11 +239,11 @@ const redis =
     : null;
 
 const MEMORY_CACHE_MS = 60_000;
-const CACHE_SECONDS = 60 * 6;
-const STALE_SECONDS = 60 * 6;
+const CACHE_SECONDS = 60 * 60;
+const STALE_SECONDS = 60 * 60;
 
 const DESCENDING_REDIS_KEY = "msh:descending-triangles:v4:main";
-const DESCENDING_REDIS_TTL_SECONDS = 6 * 60;
+const DESCENDING_REDIS_TTL_SECONDS = 60 * 60;
 const DESCENDING_LOCK_KEY = "msh:descending-triangles:v4:main:lock";
 const DESCENDING_LOCK_TTL_SECONDS = 120;
 
