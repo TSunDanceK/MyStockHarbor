@@ -282,12 +282,12 @@ let memo:
     }
   | null = null;
 
-const CACHE_SECONDS = 60 * 6; // 6 minutes
-const STALE_SECONDS = 60 * 6; // 6 minutes
+const CACHE_SECONDS = 60 * 60; // 60 minutes
+const STALE_SECONDS = 60 * 60; // 60 minutes
 const MEMORY_CACHE_MS = 60_000;
 
 const PICKERS_REDIS_KEY = "msh:pickers:v8:macro-sr-cache";
-const PICKERS_REDIS_TTL_SECONDS = 6 * 60;
+const PICKERS_REDIS_TTL_SECONDS = 60 * 60;
 const PICKERS_LOCK_KEY = "msh:pickers:v8:macro-sr-cache:lock";
 const PICKERS_LOCK_TTL_SECONDS = 120;
 
