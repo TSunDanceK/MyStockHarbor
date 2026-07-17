@@ -1,7 +1,13 @@
 import Link from "next/link";
+import { after } from "next/server";
 import type { Metadata } from "next";
 import type React from "react";
-import { getMonthDayCounts, getDayEarningsPage, daysInMonth } from "@/lib/server/earningsCalendar";
+import {
+  getMonthDayCounts,
+  getDayEarningsPage,
+  populateNextMissingDate,
+  daysInMonth,
+} from "@/lib/server/earningsCalendar";
 import EarningsDayList from "./EarningsDayList";
 import EarningsTickerSearch from "./EarningsTickerSearch";
 
@@ -86,9 +92,22 @@ function formatDateLabel(dateStr: string) {
 export default async function EarningsCalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ year?: string; month?: string; date?: string }>;
+  searchParams: Promise<{ year?: string; month?: string; date?: string; backfillKey?: string }>;
 }) {
   const params = await searchParams;
+
+  // Owner-only escape hatch: a page load carrying the right secret in
+  // ?backfillKey= bypasses the hourly new-quote cap entirely for the date
+  // it loads, and asks the background auto-populate pass (below) to do the
+  // same for a few dates ahead. Lets the owner catch up several months of
+  // calendar data in one clicking session without waiting on the normal
+  // 50/hour budget. Set EARNINGS_BACKFILL_KEY in Vercel's project env vars
+  // to enable -- if it's unset, this can never match and the page behaves
+  // exactly as it does for everyone else. See app/api/earnings-calendar/
+  // backfill/route.ts for a lower-effort alternative (no manual clicking).
+  const backfillKey = process.env.EARNINGS_BACKFILL_KEY;
+  const bypassCap = Boolean(backfillKey) && params.backfillKey === backfillKey;
+  const backfillQuery = bypassCap ? `backfillKey=${encodeURIComponent(params.backfillKey ?? "")}` : null;
 
   const now = new Date();
   const todayYear = now.getUTCFullYear();
@@ -113,13 +132,29 @@ export default async function EarningsCalendarPage({
 
   const prevMonthDate = new Date(Date.UTC(year, month - 2, 1));
   const nextMonthDate = new Date(Date.UTC(year, month, 1));
-  const prevHref = `/earnings-calendar?year=${prevMonthDate.getUTCFullYear()}&month=${prevMonthDate.getUTCMonth() + 1}`;
-  const nextHref = `/earnings-calendar?year=${nextMonthDate.getUTCFullYear()}&month=${nextMonthDate.getUTCMonth() + 1}`;
+  const prevHref = `/earnings-calendar?year=${prevMonthDate.getUTCFullYear()}&month=${prevMonthDate.getUTCMonth() + 1}${backfillQuery ? `&${backfillQuery}` : ""}`;
+  const nextHref = `/earnings-calendar?year=${nextMonthDate.getUTCFullYear()}&month=${nextMonthDate.getUTCMonth() + 1}${backfillQuery ? `&${backfillQuery}` : ""}`;
+  const todayHref = `/earnings-calendar${backfillQuery ? `?${backfillQuery}` : ""}`;
 
   const [dayCounts, dayPage] = await Promise.all([
     getMonthDayCounts(year, month),
-    getDayEarningsPage(selectedDate, 0),
+    getDayEarningsPage(selectedDate, 0, { bypassCap }),
   ]);
+
+  // Background auto-populate: after this response is sent, quietly fill in
+  // the next upcoming date(s) that aren't fully quoted yet -- a couple at a
+  // time on normal traffic (and respecting the hourly cap), or more at once
+  // when this load is itself a backfill run. This is what keeps the
+  // calendar populated further ahead purely from real page views, so the
+  // "click through and hit the cap" experience doesn't recur once the near
+  // future is caught up. See lib/server/earningsCalendar.ts for details.
+  after(async () => {
+    try {
+      await populateNextMissingDate({ bypassCap, maxDates: bypassCap ? 5 : 2 });
+    } catch {
+      // best-effort background job; failures shouldn't affect any page load
+    }
+  });
 
   const weeks = buildCalendarWeeks(year, month);
 
@@ -228,6 +263,23 @@ export default async function EarningsCalendarPage({
               Earnings Calendar
             </h1>
 
+            {bypassCap ? (
+              <div
+                style={{
+                  marginBottom: 16,
+                  padding: "8px 12px",
+                  borderRadius: 8,
+                  background: "rgba(250,204,21,0.12)",
+                  border: "1px solid rgba(250,204,21,0.3)",
+                  color: "#fde68a",
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                }}
+              >
+                Backfill mode active -- the hourly quote cap is bypassed for this session.
+              </div>
+            ) : null}
+
             <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92, marginBottom: 20 }}>
               See how many companies report each day, then drill into any date
               for tickers, EPS/revenue estimates, price and market cap.
@@ -266,11 +318,12 @@ export default async function EarningsCalendarPage({
                     to this same route -- enough on its own to trip the
                     Vercel firewall's per-IP rate limit on ordinary browsing.
                     See lib/server/earningsCalendar.ts for the matching
-                    server-side guard (hourly cap on new ticker quotes). */}
+                    server-side guard (hourly cap on new ticker quotes) and
+                    the background auto-populate system. */}
                 <Link href={prevHref} prefetch={false} style={navBtnStyle}>
                   ← Prev
                 </Link>
-                <Link href="/earnings-calendar" prefetch={false} style={navBtnStyle}>
+                <Link href={todayHref} prefetch={false} style={navBtnStyle}>
                   Today
                 </Link>
                 <Link href={nextHref} prefetch={false} style={navBtnStyle}>
@@ -310,7 +363,7 @@ export default async function EarningsCalendarPage({
                   return (
                     <Link
                       key={cellDate}
-                      href={`/earnings-calendar?year=${year}&month=${month}&date=${cellDate}`}
+                      href={`/earnings-calendar?year=${year}&month=${month}&date=${cellDate}${backfillQuery ? `&${backfillQuery}` : ""}`}
                       prefetch={false}
                       style={{
                         display: "flex",
