@@ -63,8 +63,17 @@
 // couple of months), GET /api/earnings-calendar/backfill?key=... bypasses
 // the hourly cap entirely for that call -- gated behind EARNINGS_BACKFILL_KEY
 // so only the site owner can trigger it. See that route for usage.
+//
+// bypassCap only ever bypasses THIS file's own 50/hour budget -- it never
+// bypasses the site-wide FMP account budget (reserveFmpCallSlot, imported
+// from historyCache.ts, ~300 calls/minute across every FMP-calling route on
+// the site). Every real quote call, backfill or not, still waits for a slot
+// there first, so a large backfill run can't itself trip FMP's real
+// plan-level rate limit or starve other pages' FMP calls -- it just runs
+// slower under contention instead.
 
 import { Redis } from "@upstash/redis";
+import { reserveFmpCallSlot } from "./historyCache";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -438,6 +447,20 @@ async function quoteOne(symbol: string, bypassCap: boolean): Promise<QuoteResult
     if (!allowed && !bypassCap) {
       return { price: null, marketCap: null, exchange: null, capped: true };
     }
+  }
+
+  // Site-wide FMP account budget (~300 calls/minute across every
+  // FMP-calling route) -- enforced unconditionally, bypassCap or not, since
+  // this protects FMP's real plan-level rate limit rather than our own
+  // internal cost cap. reserveFmpCallSlot waits for a slot rather than
+  // failing immediately; if it still can't get one within its own timeout,
+  // treat this symbol as capped (not "no data") so the date isn't marked
+  // complete and gets retried on the next pass instead of silently missing
+  // this ticker forever.
+  try {
+    await reserveFmpCallSlot();
+  } catch {
+    return { price: null, marketCap: null, exchange: null, capped: true };
   }
 
   try {
