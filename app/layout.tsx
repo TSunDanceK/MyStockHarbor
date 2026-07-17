@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import SiteHeader from "./components/SiteHeader";
-import FeedbackButton from "./components/FeedbackButton";
 import { getLatestYouTubeVideos } from "@/lib/youtube";
 import "./globals.css";
 
@@ -150,7 +149,6 @@ export default async function RootLayout({
         >
           <SiteHeader latestVideoId={latestVideoId} />
           <div style={{ flex: 1 }}>{children}</div>
-          <FeedbackButton />
 
           <footer
             className="site-footer"
