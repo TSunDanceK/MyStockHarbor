@@ -229,7 +229,7 @@ async function fetchFmpQuote(symbol: string): Promise<Quote | null> {
   try {
     const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(apiKey)}`;
     const res = await fetch(url, {
-      next: { revalidate: 60 },
+      next: { revalidate: 3600 },
       headers: { accept: "application/json" },
     });
 
@@ -261,7 +261,7 @@ async function fetchStooqQuote(symbol: string): Promise<Quote | null> {
 
   try {
     const res = await fetch(url, {
-      next: { revalidate: 60 },
+      next: { revalidate: 3600 },
     });
 
     if (!res.ok) return null;
@@ -310,7 +310,7 @@ async function fetchYahooChart(
 
   try {
     const res = await fetch(url, {
-      next: { revalidate: 60 },
+      next: { revalidate: 3600 },
       headers: YAHOO_FETCH_HEADERS,
     });
 
@@ -2180,7 +2180,7 @@ const getCachedStockNewsBaseData = unstable_cache(
   },
   ["msh-stock-news-base-data-v25-yahoo-fallback"],
   {
-    revalidate: 60,
+    revalidate: 3600,
   }
 );
 
