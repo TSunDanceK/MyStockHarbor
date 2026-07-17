@@ -1,4 +1,4 @@
- import { unstable_cache } from "next/cache";
+import { unstable_cache } from "next/cache";
 import {
   getAiNewsBriefs,
   getAiNewsInsight,
@@ -198,11 +198,16 @@ function parseRss(xml: string): NewsItem[] {
 
 // Live quote: FMP is the primary source (same endpoint/key already used
 // elsewhere on the site for metadata + company profile - reliable, and a
-// real API key is configured). Stooq is kept only as a fallback for when
-// FMP_API_KEY is missing or the FMP call fails outright.
+// real API key is configured). Stooq is the next fallback for when
+// FMP_API_KEY is missing or the FMP call fails outright. Yahoo Finance's
+// unofficial chart endpoint (no key required) is the final fallback -- it
+// tends to pick up freshly-listed/thin-coverage tickers (new IPOs, SPAC
+// units) days before Stooq does, so a ticker that would otherwise show
+// "DATA UNAVAILABLE" right after listing often gets a real price/history
+// from here instead.
 //
-// Both paths require price > 0, not just a finite number: Stooq's CSV feed
-// is known to return a literal "0" (not "N/D"/blank) for some tickers
+// All three paths require price > 0, not just a finite number: Stooq's CSV
+// feed is known to return a literal "0" (not "N/D"/blank) for some tickers
 // instead of failing cleanly, which previously rendered as a real "$0.00"
 // price on the page (formatMoney only shows "-" for null/undefined, not
 // for an actual zero). Treating a non-positive price as "no data" avoids
@@ -210,7 +215,11 @@ function parseRss(xml: string): NewsItem[] {
 async function fetchQuote(symbol: string): Promise<Quote | null> {
   const fmpQuote = await fetchFmpQuote(symbol);
   if (fmpQuote) return fmpQuote;
-  return fetchStooqQuote(symbol);
+
+  const stooqQuote = await fetchStooqQuote(symbol);
+  if (stooqQuote) return stooqQuote;
+
+  return fetchYahooQuote(symbol);
 }
 
 async function fetchFmpQuote(symbol: string): Promise<Quote | null> {
@@ -277,7 +286,79 @@ async function fetchStooqQuote(symbol: string): Promise<Quote | null> {
   }
 }
 
+// Yahoo Finance's unofficial "v8 chart" endpoint. No API key, widely used
+// (it's what the `yfinance` Python library and many other unofficial
+// integrations call under the hood). A realistic desktop-browser User-Agent
+// avoids the occasional 429 Yahoo returns to bare/no-UA requests. Kept as
+// the last-resort fallback (after FMP and Stooq) specifically because it
+// tends to have quote/history for freshly-listed tickers sooner than Stooq
+// does -- it's not more authoritative than FMP, just faster to pick up new
+// listings including SPAC unit/warrant tickers.
+const YAHOO_FETCH_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  accept: "application/json",
+};
+
+async function fetchYahooChart(
+  symbol: string,
+  range: string
+): Promise<any | null> {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+    symbol
+  )}?interval=1d&range=${range}`;
+
+  try {
+    const res = await fetch(url, {
+      next: { revalidate: 60 },
+      headers: YAHOO_FETCH_HEADERS,
+    });
+
+    if (!res.ok) return null;
+
+    const json = await res.json();
+    const result = json?.chart?.result?.[0];
+    return result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchYahooQuote(symbol: string): Promise<Quote | null> {
+  const result = await fetchYahooChart(symbol, "5d");
+  if (!result) return null;
+
+  const meta = result.meta ?? {};
+  const price =
+    typeof meta.regularMarketPrice === "number" && Number.isFinite(meta.regularMarketPrice)
+      ? meta.regularMarketPrice
+      : null;
+  if (price == null || price <= 0) return null;
+
+  const timestampMs =
+    typeof meta.regularMarketTime === "number" ? meta.regularMarketTime * 1000 : Date.now();
+  const d = new Date(timestampMs);
+
+  return {
+    symbol,
+    price,
+    date: Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10),
+    time: Number.isNaN(d.getTime()) ? null : d.toISOString().slice(11, 19),
+    source: "Yahoo",
+  };
+}
+
+// Daily history: Stooq first (existing behavior, unchanged), then Yahoo
+// Finance's chart endpoint as a fallback for tickers Stooq has nothing for
+// yet -- same freshly-listed-ticker rationale as fetchYahooQuote above.
 async function fetchHistory(symbol: string): Promise<Point[]> {
+  const stooqPoints = await fetchStooqHistory(symbol);
+  if (stooqPoints.length) return stooqPoints;
+
+  return fetchYahooHistory(symbol);
+}
+
+async function fetchStooqHistory(symbol: string): Promise<Point[]> {
   const stooqSymbol = `${symbol.toLowerCase()}.us`;
   const url = `https://stooq.com/q/d/l/?s=${stooqSymbol}&i=d`;
 
@@ -320,6 +401,44 @@ async function fetchHistory(symbol: string): Promise<Point[]> {
   } catch {
     return [];
   }
+}
+
+async function fetchYahooHistory(symbol: string): Promise<Point[]> {
+  const result = await fetchYahooChart(symbol, "2y");
+  if (!result) return [];
+
+  const timestamps: number[] = Array.isArray(result.timestamp) ? result.timestamp : [];
+  const quote = result.indicators?.quote?.[0] ?? {};
+  const closes: (number | null)[] = Array.isArray(quote.close) ? quote.close : [];
+  const highs: (number | null)[] = Array.isArray(quote.high) ? quote.high : [];
+  const lows: (number | null)[] = Array.isArray(quote.low) ? quote.low : [];
+  const volumes: (number | null)[] = Array.isArray(quote.volume) ? quote.volume : [];
+
+  const points: Point[] = [];
+
+  for (let i = 0; i < timestamps.length; i++) {
+    const ts = timestamps[i];
+    const close = closes[i];
+
+    if (typeof ts !== "number" || typeof close !== "number" || !Number.isFinite(close) || close <= 0) {
+      continue;
+    }
+
+    const date = new Date(ts * 1000).toISOString().slice(0, 10);
+    const high = highs[i];
+    const low = lows[i];
+    const volume = volumes[i];
+
+    points.push({
+      date,
+      close,
+      high: typeof high === "number" && Number.isFinite(high) ? high : undefined,
+      low: typeof low === "number" && Number.isFinite(low) ? low : undefined,
+      volume: typeof volume === "number" && Number.isFinite(volume) ? volume : undefined,
+    });
+  }
+
+  return points.slice(-320);
 }
 
 async function fetchCompanyName(symbol: string): Promise<string> {
@@ -2059,7 +2178,7 @@ const getCachedStockNewsBaseData = unstable_cache(
 
     return buildStockNewsBaseData(parsed.symbol, parsed.options);
   },
-  ["msh-stock-news-base-data-v24-render-safety-net"],
+  ["msh-stock-news-base-data-v25-yahoo-fallback"],
   {
     revalidate: 60,
   }
