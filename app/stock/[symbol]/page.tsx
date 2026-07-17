@@ -459,6 +459,7 @@ export default async function StockPage({ params }: Props) {
           url={`https://www.mystockharbor.com/stock/${upper}`}
           title={`${upper} Stock Analysis | MyStockHarbor`}
           text={shareText}
+          showFeedback
         />
       </div>
 
