@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import PriceChart, { type Overlay } from "@/app/components/PriceChart";
 import type { InsightSnapshot } from "@/lib/blog";
 import ShareButton from "@/app/components/ShareButton";
+import FeedbackButton from "@/app/components/FeedbackButton";
 
 type Point = {
   date: string;
@@ -644,6 +645,8 @@ export default function InsightPostClient({
                 Latest news
               </Link>
             ) : null}
+
+            <FeedbackButton />
 
             <ShareButton
               url={postUrl}
