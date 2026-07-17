@@ -59,10 +59,14 @@
 // gets marked complete on its first pass at zero API cost (every quoteOne
 // call for it hits the "already quoted" fast path).
 //
-// For a one-off catch-up across many dates at once (e.g. seeding the next
-// couple of months), GET /api/earnings-calendar/backfill?key=... bypasses
-// the hourly cap entirely for that call -- gated behind EARNINGS_BACKFILL_KEY
-// so only the site owner can trigger it. See that route for usage.
+// For manual catch-up on a single date at a time (e.g. seeding the next
+// couple of months by clicking through), the site owner can use the
+// "Backfill" button rendered on app/earnings-calendar/page.tsx (visible
+// whenever a date isn't yet fully populated). It posts to
+// app/api/earnings-calendar/backfill-date/route.ts with the secret key and
+// bypasses the hourly cap entirely for that one date -- gated behind
+// EARNINGS_BACKFILL_KEY (lib/server/backfillAuth.ts) so only the owner can
+// trigger it, with a 3-attempts/10-minute IP lockout on wrong keys.
 //
 // bypassCap only ever bypasses THIS file's own 50/hour budget -- it never
 // bypasses the site-wide FMP account budget (reserveFmpCallSlot, imported
@@ -174,6 +178,13 @@ async function isDateComplete(date: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// Public wrapper so callers outside this file (the earnings-calendar page,
+// to decide whether to grey out its "Backfill" button) can check whether a
+// given date has already had every candidate quoted.
+export async function isDateFullyPopulated(date: string): Promise<boolean> {
+  return isDateComplete(date);
 }
 
 async function markDateComplete(date: string) {
@@ -594,9 +605,10 @@ async function findNextIncompleteDate(): Promise<string | null> {
 //     time and respecting the normal hourly cap -- this is what keeps the
 //     calendar populated further into the future purely from organic
 //     traffic, without ever exceeding QUOTE_HOURLY_CAP in a given hour.
-//   - Manually via GET /api/earnings-calendar/backfill?key=... with
-//     bypassCap:true, for a one-time owner-run catch-up pass across many
-//     dates at once.
+//   - getDayEarningsPage itself, called directly with bypassCap:true from
+//     app/api/earnings-calendar/backfill-date/route.ts (the in-page
+//     "Backfill" button), for a one-time owner-run catch-up on a single
+//     date at a time.
 export async function populateNextMissingDate(
   opts: { bypassCap?: boolean; maxDates?: number } = {}
 ): Promise<{ populated: string[] }> {
