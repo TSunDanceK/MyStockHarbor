@@ -258,13 +258,22 @@ export default async function EarningsCalendarPage({
             >
               <div style={{ fontSize: 20, fontWeight: 800 }}>{monthLabel(year, month)}</div>
               <div style={{ display: "flex", gap: 8 }}>
-                <Link href={prevHref} style={navBtnStyle}>
+                {/* prefetch=false on every Link in this section: without it,
+                    Next.js silently issues a background request for each
+                    link the instant it's in the viewport. The month grid
+                    below puts ~30-35 day cells on screen at once, so a
+                    single page view was quietly firing 30+ extra requests
+                    to this same route -- enough on its own to trip the
+                    Vercel firewall's per-IP rate limit on ordinary browsing.
+                    See lib/server/earningsCalendar.ts for the matching
+                    server-side guard (hourly cap on new ticker quotes). */}
+                <Link href={prevHref} prefetch={false} style={navBtnStyle}>
                   ← Prev
                 </Link>
-                <Link href="/earnings-calendar" style={navBtnStyle}>
+                <Link href="/earnings-calendar" prefetch={false} style={navBtnStyle}>
                   Today
                 </Link>
-                <Link href={nextHref} style={navBtnStyle}>
+                <Link href={nextHref} prefetch={false} style={navBtnStyle}>
                   Next →
                 </Link>
               </div>
@@ -302,6 +311,7 @@ export default async function EarningsCalendarPage({
                     <Link
                       key={cellDate}
                       href={`/earnings-calendar?year=${year}&month=${month}&date=${cellDate}`}
+                      prefetch={false}
                       style={{
                         display: "flex",
                         flexDirection: "column",

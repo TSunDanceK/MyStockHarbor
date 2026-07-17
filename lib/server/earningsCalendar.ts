@@ -32,6 +32,98 @@
 // date+batch only spends real FMP calls once per month regardless of how
 // many people view it -- the "Show more" button's cooldown (client-side) is
 // there to stop rapid double-clicks, not to work around a lack of caching.
+//
+// On top of that fetch cache, a second, independent guard rail: a Redis-
+// backed hourly cap (QUOTE_HOURLY_CAP) on how many *new* (never-quoted-
+// before) symbols this feature is allowed to spend a real FMP /quote call
+// on, shared across every visitor. Added 2026-07-17 after the site owner's
+// own routine browsing across calendar dates tripped the Vercel firewall's
+// per-IP rate limit -- Next's automatic Link prefetching was silently
+// firing a background request per visible day cell (~30-35 per month grid)
+// on every page load, and each of those, on a never-before-viewed date,
+// would have gone on to quote up to 100 symbols. The fetch-cache TTL alone
+// doesn't bound *first-time* cost; this does. See also: prefetch={false}
+// added to the calendar's day/nav Links in app/earnings-calendar/page.tsx,
+// which addresses the request-count side of the same incident.
+
+import { Redis } from "@upstash/redis";
+
+const redis =
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+    ? Redis.fromEnv()
+    : null;
+
+// Hard ceiling on real, per-symbol FMP /quote calls this feature is allowed
+// to spend in any rolling hour -- global across all visitors, not per-IP.
+// Site owner requested 50/hour. Symbols already quoted within the last
+// ~30 days (QUOTED_SYMBOL_TTL_SECONDS, matching the underlying fetch
+// cache's revalidate window) don't consume a slot at all, since re-showing
+// them costs nothing new -- only genuinely first-time symbols count against
+// the cap, which is what keeps "batch should load mainly from cache" true
+// even while the cap is in effect.
+const QUOTE_HOURLY_CAP = 50;
+const QUOTE_COUNTER_PREFIX = "msh:earnings-quote-calls:v1";
+const QUOTED_SYMBOL_PREFIX = "msh:earnings-quoted-symbol:v1";
+
+function getHourBucket(now = new Date()) {
+  return (
+    `${now.getUTCFullYear()}` +
+    `${String(now.getUTCMonth() + 1).padStart(2, "0")}` +
+    `${String(now.getUTCDate()).padStart(2, "0")}` +
+    `${String(now.getUTCHours()).padStart(2, "0")}`
+  );
+}
+
+// Has this symbol already been through a real FMP quote call recently
+// enough that Next's own fetch cache is expected to still be warm for it?
+// Backed by a separate Redis marker (not a read of Next's cache, which
+// isn't inspectable this way) with the same TTL as the fetch cache's
+// revalidate window, so the two stay in sync.
+async function wasRecentlyQuoted(symbol: string): Promise<boolean> {
+  if (!redis) return false;
+
+  try {
+    const hit = await redis.get(`${QUOTED_SYMBOL_PREFIX}:${symbol}`);
+    return hit != null;
+  } catch {
+    return false;
+  }
+}
+
+async function markQuoted(symbol: string) {
+  if (!redis) return;
+
+  try {
+    await redis.set(`${QUOTED_SYMBOL_PREFIX}:${symbol}`, 1, {
+      ex: QUOTE_REVALIDATE_SECONDS,
+    });
+  } catch {
+    // fail open -- worst case this symbol re-spends a slot next time
+  }
+}
+
+// Atomically claims one of this hour's new-quote slots. Returns true if
+// the caller may actually hit FMP, false if the hour's budget is already
+// spent (caller should skip the fetch and leave price/marketCap null
+// rather than quote anyway -- it'll be picked up next hour, or sooner if
+// someone revisits after the fetch cache would've expired anyway). Fails
+// open if Redis isn't configured or errors, matching this file's existing
+// fail-open posture elsewhere.
+async function reserveQuoteSlot(): Promise<boolean> {
+  if (!redis) return true;
+
+  const key = `${QUOTE_COUNTER_PREFIX}:${getHourBucket()}`;
+
+  try {
+    const current = await redis.incr(key);
+    if (current === 1) {
+      await redis.expire(key, 70 * 60); // just over an hour, covers clock skew
+    }
+    return current <= QUOTE_HOURLY_CAP;
+  } catch {
+    return true;
+  }
+}
 
 export type EarningsCandidate = {
   symbol: string;
@@ -263,6 +355,14 @@ async function quoteOne(symbol: string): Promise<QuoteResult> {
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) return { price: null, marketCap: null, exchange: null };
 
+  // Symbols already quoted within the fetch-cache window don't spend an
+  // hourly slot -- only genuinely new symbols compete for the cap.
+  const alreadyQuoted = await wasRecentlyQuoted(symbol);
+  if (!alreadyQuoted) {
+    const allowed = await reserveQuoteSlot();
+    if (!allowed) return { price: null, marketCap: null, exchange: null };
+  }
+
   try {
     const res = await fetch(
       `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(symbol)}&apikey=${apiKey}`,
@@ -271,6 +371,9 @@ async function quoteOne(symbol: string): Promise<QuoteResult> {
     if (!res.ok) return { price: null, marketCap: null, exchange: null };
     const json = await res.json();
     const row = Array.isArray(json) ? json[0] : json;
+
+    if (!alreadyQuoted) await markQuoted(symbol);
+
     return {
       price: num(row?.price),
       marketCap: num(row?.marketCap),
@@ -294,9 +397,11 @@ async function quoteBatch(symbols: string[]): Promise<Record<string, QuoteResult
 }
 
 // The one function that spends real, per-symbol API calls -- capped at
-// BATCH_SIZE (100) candidates per call. batchIndex 0 is the first 100
-// (coarse-sorted) candidates for the date, batchIndex 1 is the next 100,
-// etc. ("Show more" on the client advances batchIndex.)
+// BATCH_SIZE (100) candidates per call, and further capped globally by
+// QUOTE_HOURLY_CAP new symbols per hour (see quoteOne/reserveQuoteSlot
+// above). batchIndex 0 is the first 100 (coarse-sorted) candidates for the
+// date, batchIndex 1 is the next 100, etc. ("Show more" on the client
+// advances batchIndex.)
 export async function getDayEarningsPage(date: string, batchIndex: number): Promise<DayEarningsPage> {
   const candidates = await getDayCandidates(date);
   const start = batchIndex * BATCH_SIZE;
