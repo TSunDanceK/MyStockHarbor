@@ -1,45 +1,31 @@
 import Link from "next/link";
 
-// Site-wide floating feedback entry point. Deliberately a plain link to
-// /feedback (not a modal) per owner's preference -- keeps this component a
-// server component with zero client JS, and gives /feedback its own indexable
-// URL rather than trapping the flow inside a client-only overlay.
+// Small inline pill-style link, matching ShareButton's visual weight so it
+// can sit directly next to it -- via PageShareBar's `showFeedback` prop on
+// most pages, or inline in a page's own nav row (e.g. the Insights article
+// page). Deliberately a plain server-rendered <Link> to /feedback: no
+// client JS, no modal, no fixed positioning.
 export default function FeedbackButton() {
   return (
-    <>
-      <Link
-        href="/feedback"
-        className="feedbackFab"
-        style={{
-          position: "fixed",
-          right: 18,
-          bottom: 18,
-          zIndex: 60,
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 8,
-          padding: "12px 18px",
-          borderRadius: 999,
-          border: "1px solid rgba(59,130,246,0.36)",
-          background:
-            "linear-gradient(135deg, rgba(59,130,246,0.94), rgba(37,99,235,0.94))",
-          color: "#f8fafc",
-          textDecoration: "none",
-          fontWeight: 800,
-          fontSize: 13,
-          letterSpacing: "0.02em",
-          boxShadow: "0 10px 26px rgba(37,99,235,0.38)",
-        }}
-      >
-        <span aria-hidden="true">💬</span>
-        <span className="feedbackFabLabel">Feedback</span>
-      </Link>
-      <style>{`
-        @media (max-width: 480px) {
-          .feedbackFabLabel { display: none; }
-          .feedbackFab { padding: 13px !important; }
-        }
-      `}</style>
-    </>
+    <Link
+      href="/feedback"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 7,
+        padding: "8px 14px",
+        borderRadius: 10,
+        border: "1px solid rgba(255,255,255,0.14)",
+        background: "rgba(255,255,255,0.06)",
+        color: "#f1f5f9",
+        fontSize: 13,
+        fontWeight: 700,
+        textDecoration: "none",
+        whiteSpace: "nowrap",
+      }}
+    >
+      <span aria-hidden="true">💬</span>
+      Feedback
+    </Link>
   );
 }
