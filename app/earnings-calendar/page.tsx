@@ -6,10 +6,12 @@ import {
   getMonthDayCounts,
   getDayEarningsPage,
   populateNextMissingDate,
+  isDateFullyPopulated,
   daysInMonth,
 } from "@/lib/server/earningsCalendar";
 import EarningsDayList from "./EarningsDayList";
 import EarningsTickerSearch from "./EarningsTickerSearch";
+import BackfillButton from "./BackfillButton";
 
 const PAGE_TITLE = "Earnings Calendar | MyStockHarbor";
 const PAGE_DESCRIPTION =
@@ -92,22 +94,9 @@ function formatDateLabel(dateStr: string) {
 export default async function EarningsCalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ year?: string; month?: string; date?: string; backfillKey?: string }>;
+  searchParams: Promise<{ year?: string; month?: string; date?: string }>;
 }) {
   const params = await searchParams;
-
-  // Owner-only escape hatch: a page load carrying the right secret in
-  // ?backfillKey= bypasses the hourly new-quote cap entirely for the date
-  // it loads, and asks the background auto-populate pass (below) to do the
-  // same for a few dates ahead. Lets the owner catch up several months of
-  // calendar data in one clicking session without waiting on the normal
-  // 50/hour budget. Set EARNINGS_BACKFILL_KEY in Vercel's project env vars
-  // to enable -- if it's unset, this can never match and the page behaves
-  // exactly as it does for everyone else. See app/api/earnings-calendar/
-  // backfill/route.ts for a lower-effort alternative (no manual clicking).
-  const backfillKey = process.env.EARNINGS_BACKFILL_KEY;
-  const bypassCap = Boolean(backfillKey) && params.backfillKey === backfillKey;
-  const backfillQuery = bypassCap ? `backfillKey=${encodeURIComponent(params.backfillKey ?? "")}` : null;
 
   const now = new Date();
   const todayYear = now.getUTCFullYear();
@@ -132,25 +121,27 @@ export default async function EarningsCalendarPage({
 
   const prevMonthDate = new Date(Date.UTC(year, month - 2, 1));
   const nextMonthDate = new Date(Date.UTC(year, month, 1));
-  const prevHref = `/earnings-calendar?year=${prevMonthDate.getUTCFullYear()}&month=${prevMonthDate.getUTCMonth() + 1}${backfillQuery ? `&${backfillQuery}` : ""}`;
-  const nextHref = `/earnings-calendar?year=${nextMonthDate.getUTCFullYear()}&month=${nextMonthDate.getUTCMonth() + 1}${backfillQuery ? `&${backfillQuery}` : ""}`;
-  const todayHref = `/earnings-calendar${backfillQuery ? `?${backfillQuery}` : ""}`;
+  const prevHref = `/earnings-calendar?year=${prevMonthDate.getUTCFullYear()}&month=${prevMonthDate.getUTCMonth() + 1}`;
+  const nextHref = `/earnings-calendar?year=${nextMonthDate.getUTCFullYear()}&month=${nextMonthDate.getUTCMonth() + 1}`;
+  const todayHref = `/earnings-calendar`;
 
-  const [dayCounts, dayPage] = await Promise.all([
+  const [dayCounts, dayPage, dateComplete] = await Promise.all([
     getMonthDayCounts(year, month),
-    getDayEarningsPage(selectedDate, 0, { bypassCap }),
+    getDayEarningsPage(selectedDate, 0, {}),
+    isDateFullyPopulated(selectedDate),
   ]);
 
   // Background auto-populate: after this response is sent, quietly fill in
   // the next upcoming date(s) that aren't fully quoted yet -- a couple at a
-  // time on normal traffic (and respecting the hourly cap), or more at once
-  // when this load is itself a backfill run. This is what keeps the
-  // calendar populated further ahead purely from real page views, so the
-  // "click through and hit the cap" experience doesn't recur once the near
-  // future is caught up. See lib/server/earningsCalendar.ts for details.
+  // time on normal traffic (and respecting the hourly cap). This is what
+  // keeps the calendar populated further ahead purely from real page views,
+  // so the "click through and hit the cap" experience doesn't recur once
+  // the near future is caught up. See lib/server/earningsCalendar.ts for
+  // details, and BackfillButton.tsx (below) for the manual, owner-only,
+  // single-date catch-up path.
   after(async () => {
     try {
-      await populateNextMissingDate({ bypassCap, maxDates: bypassCap ? 5 : 2 });
+      await populateNextMissingDate({ maxDates: 2 });
     } catch {
       // best-effort background job; failures shouldn't affect any page load
     }
@@ -263,23 +254,6 @@ export default async function EarningsCalendarPage({
               Earnings Calendar
             </h1>
 
-            {bypassCap ? (
-              <div
-                style={{
-                  marginBottom: 16,
-                  padding: "8px 12px",
-                  borderRadius: 8,
-                  background: "rgba(250,204,21,0.12)",
-                  border: "1px solid rgba(250,204,21,0.3)",
-                  color: "#fde68a",
-                  fontSize: 12.5,
-                  fontWeight: 700,
-                }}
-              >
-                Backfill mode active -- the hourly quote cap is bypassed for this session.
-              </div>
-            ) : null}
-
             <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92, marginBottom: 20 }}>
               See how many companies report each day, then drill into any date
               for tickers, EPS/revenue estimates, price and market cap.
@@ -363,7 +337,7 @@ export default async function EarningsCalendarPage({
                   return (
                     <Link
                       key={cellDate}
-                      href={`/earnings-calendar?year=${year}&month=${month}&date=${cellDate}${backfillQuery ? `&${backfillQuery}` : ""}`}
+                      href={`/earnings-calendar?year=${year}&month=${month}&date=${cellDate}`}
                       prefetch={false}
                       style={{
                         display: "flex",
@@ -436,6 +410,10 @@ export default async function EarningsCalendarPage({
               />
             </div>
           </section>
+
+          <div style={{ marginTop: 16 }}>
+            <BackfillButton date={selectedDate} complete={dateComplete} />
+          </div>
 
           <p style={{ fontSize: 12.5, opacity: 0.55, marginTop: 16 }}>
             Data source: financialmodelingprep.com. Estimates can change
