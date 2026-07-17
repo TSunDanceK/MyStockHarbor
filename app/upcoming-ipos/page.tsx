@@ -131,14 +131,7 @@ function IpoTable({
               style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
             >
               <td style={tdStyle}>{formatDate(ipo.date)}</td>
-              <td style={tdStyle}>
-                <Link
-                  href={`/stock/${encodeURIComponent(ipo.symbol)}`}
-                  style={{ color: "#93c5fd", textDecoration: "none", fontWeight: 700 }}
-                >
-                  {ipo.symbol}
-                </Link>
-              </td>
+              <td style={{ ...tdStyle, fontWeight: 700 }}>{ipo.symbol}</td>
               <td style={tdStyle}>{ipo.company}</td>
               <td style={tdStyle}>{ipo.exchange ?? "-"}</td>
               <td style={{ ...tdStyle, textAlign: "right" }}>
