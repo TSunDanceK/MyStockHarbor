@@ -793,6 +793,7 @@ export default function InsightPostClient({
                       atr14={atr14Slice}
                       volume={volumeSlice}
                       height={420}
+                      hideSourceToggle
                     />
                   </div>
 
@@ -1265,11 +1266,6 @@ export default function InsightPostClient({
 
         .insightShell {
           margin-top: 18px;
-          border: 1px solid rgba(59,130,246,0.20);
-          border-radius: 24px;
-          padding: 18px;
-          background: linear-gradient(180deg, rgba(8,14,28,0.94), rgba(6,10,18,0.98));
-          box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
         }
 
         .insightSummaryGrid {
@@ -1656,7 +1652,14 @@ export default function InsightPostClient({
 
           .insightMobileButton {
             font-size: 13px !important;
-            padding: 10px 10px !important;
+            padding: 4px 2px !important;
+            background: transparent !important;
+            border: none !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            justify-content: flex-start !important;
+            text-decoration: underline !important;
+            text-underline-offset: 3px !important;
           }
 
           .insightHeroTitle {
