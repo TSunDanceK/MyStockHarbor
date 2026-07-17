@@ -347,6 +347,16 @@ export default async function UpcomingIposPage() {
             before listing day — treat this as a starting point for further
             research, not investment advice.
           </p>
+
+          <p style={{ fontSize: 14, marginTop: 24 }}>
+            Continue exploring:{" "}
+            <Link
+              href="/earnings-calendar"
+              style={{ color: "#93c5fd", textDecoration: "none", fontWeight: 700 }}
+            >
+              Earnings Calendar →
+            </Link>
+          </p>
         </div>
 
         <style>{`
