@@ -248,11 +248,11 @@ const redis =
     : null;
 
 const MEMORY_CACHE_MS = 60_000;
-const CACHE_SECONDS = 60 * 6;
-const STALE_SECONDS = 60 * 6;
+const CACHE_SECONDS = 60 * 60;
+const STALE_SECONDS = 60 * 60;
 
 const PLAYS_REDIS_KEY = "msh:bull-flags:v1:main";
-const PLAYS_REDIS_TTL_SECONDS = 6 * 60;
+const PLAYS_REDIS_TTL_SECONDS = 60 * 60;
 const PLAYS_LOCK_KEY = "msh:bull-flags:v1:main:lock";
 const PLAYS_LOCK_TTL_SECONDS = 120;
 
