@@ -62,13 +62,13 @@ const YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3";
 const CHANNEL_HANDLE = "@MyStockHarbor";
 
 // How long a result (success OR failure/empty) is reused before we attempt
-// another real call to the YouTube API. This is deliberately short-ish (1h)
-// but exists specifically to stop failed/quota-exceeded lookups from being
-// retried on every single page render — see "quota burn" incident notes in
-// YOUTUBE.md / CLAUDE.md. Without this, a bad key or exhausted quota causes
-// every page view to re-attempt the API call, which is what blew through
-// the 10,000 unit/day quota in a matter of hours.
-const RESULT_CACHE_SECONDS = 60 * 60; // 1 hour
+// another real call to the YouTube API. Extended to 24h -- new videos aren't
+// posted hourly, and this still exists specifically to stop failed/quota-exceeded
+// lookups from being retried on every single page render — see "quota burn"
+// incident notes in YOUTUBE.md / CLAUDE.md. Without this, a bad key or
+// exhausted quota causes every page view to re-attempt the API call, which
+// is what blew through the 10,000 unit/day quota in a matter of hours.
+const RESULT_CACHE_SECONDS = 60 * 60 * 24; // 24 hours
 
 function pickThumbnail(
   thumbs:

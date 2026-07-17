@@ -46,14 +46,14 @@ async function getOriginFromHeaders() {
 // Server-side fetch of the same payload DescendingTrianglesClient fetches
 // client-side, so crawlers (and the very first paint for real users) see
 // the real scan results instead of a loading skeleton. Cached via Next's
-// fetch Data Cache for a few minutes -- the /api/descending-triangles route
-// itself is also memoized (in-memory + Redis) for ~6 minutes, so this
+// fetch Data Cache for up to an hour -- the /api/descending-triangles route
+// itself is also memoized (in-memory + Redis) for ~60 minutes, so this
 // rarely triggers a fresh scan.
 async function getInitialDescendingTrianglesPayload(): Promise<PlaysPayload | null> {
   try {
     const origin = await getOriginFromHeaders();
     const res = await fetch(`${origin}/api/descending-triangles`, {
-      next: { revalidate: 300 },
+      next: { revalidate: 3600 },
     });
 
     if (!res.ok) return null;

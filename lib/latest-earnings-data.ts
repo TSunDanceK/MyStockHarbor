@@ -105,7 +105,7 @@ function findClosestByDate<T extends { date?: string }>(
 async function fetchFmpJson<T>(url: string): Promise<T | null> {
   try {
     const res = await fetch(url, {
-      next: { revalidate: 21600 },
+      next: { revalidate: 86400 },
     });
 
     if (!res.ok) return null;

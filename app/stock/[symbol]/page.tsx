@@ -47,7 +47,7 @@ async function fetchQuote(symbol: string): Promise<InitialQuote> {
       symbol
     )}&apikey=${encodeURIComponent(apiKey)}`;
     const res = await fetch(url, {
-      next: { revalidate: 900 },
+      next: { revalidate: 3600 },
       headers: { accept: "application/json" },
     });
     if (!res.ok) return empty;
@@ -128,7 +128,7 @@ function emptyEarnings(): LatestEarningsData {
 async function fetchLatestEarnings(symbol: string): Promise<LatestEarningsData> {
   try {
     const url = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mystockharbor.com"}/api/stock-earnings/${encodeURIComponent(symbol)}`;
-    const res = await fetch(url, { next: { revalidate: 60 * 60 * 6 } });
+    const res = await fetch(url, { next: { revalidate: 60 * 60 * 24 } });
     if (!res.ok) return emptyEarnings();
     return (await res.json()) as LatestEarningsData;
   } catch {
