@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+ import type { CSSProperties } from "react";
 import StockNewsTickerJump from "./StockNewsTickerJump";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -927,7 +927,6 @@ export default async function StockNewsPage({ params }: Props) {
   const whatItMeans = buildWhatItMeans({ symbol: upper, trend, newsScore, rsi: lastRsi, priceVs50 });
   const beyondHeadline = buildBeyondHeadline({ symbol: upper, newsScore, trend, recentHigh, recentLow });
   const technicalRead = buildTechnicalRead({ symbol: upper, price: quote?.price ?? lastClose, ma50: lastMA50, ma200: lastMA200, trend, rsi: lastRsi, priceVs50, priceVs200 });
-
   const summaryByTitle = Object.fromEntries(
     detailedNews.map((item) => [item.title, getArticleSnippet(item, upper)]),
   );
