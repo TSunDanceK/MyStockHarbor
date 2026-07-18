@@ -128,7 +128,7 @@ export const FUNDAMENTALS_LESSONS = [
       {
         heading: "Earnings per share (EPS)",
         body: [
-          "EPS is net income divided by the number of shares outstanding. It converts total profit into profit per share, which is what actually matters to you as the owner of a few shares rather than the whole company.",
+          "EPS is net income (less any preferred dividends) divided by the weighted-average number of shares outstanding over the period. It converts total profit into profit per share, which is what actually matters to you as the owner of a few shares rather than the whole company.",
           "Because it is per share, EPS can move for two very different reasons: the company earned more, or the share count changed. A company that grows profit but issues lots of new shares can show flat or falling EPS - the pie got bigger but was cut into more slices. This is why the share-dilution chart on MyStockHarbor sits right alongside the earnings data.",
           "You will see 'basic' and 'diluted' EPS. Diluted EPS assumes all options and convertible securities become shares, so it is the more conservative, more honest figure. When in doubt, use diluted.",
         ],
@@ -301,7 +301,7 @@ export const FUNDAMENTALS_LESSONS = [
         heading: "Quality and returns: ROE, ROA, ROIC, margins",
         body: [
           "Return on equity (ROE) is net income divided by shareholders' equity - how much profit the company generates on the money shareholders have invested. Consistently high ROE (often cited as above roughly 15%) is a hallmark of a strong business. But watch the source: ROE can be pumped up by piling on debt, so a high ROE alongside high debt is less impressive than a high ROE with little debt.",
-          "Return on assets (ROA) uses total assets instead of equity, stripping out the leverage effect, so it shows how efficiently the whole asset base is used. Return on invested capital (ROIC) is the most rigorous of the three: it measures returns on all the capital in the business, debt and equity, and comparing it to the cost of that capital tells you whether the company is genuinely creating value.",
+          "Return on assets (ROA) uses total assets instead of equity, so it is far less distorted by borrowing than ROE and shows how efficiently the whole asset base is used (it still reflects some leverage, since net income is after interest). Return on invested capital (ROIC) is the most rigorous of the three: it measures returns on all the capital in the business, debt and equity, and comparing it to the cost of that capital tells you whether the company is genuinely creating value.",
           "Alongside these, the margins from the income statement lesson - gross, operating and net - are the everyday quality gauges. High, stable or rising margins plus high returns on capital is the profile of a quality business.",
         ],
         image: {
