@@ -9,7 +9,7 @@ import {
 } from "@/lib/indicators";
 import ShareButton from "@/app/components/ShareButton";
 import { WatermarkVisibilityProvider, HideWatermarksBar, EarningsScoreWatermark } from "@/app/components/WatermarkVisibility";
-import { IncomeStatementCard, AnnualConsensusCard, type IncomeDetail, type AnnualConsensus } from "./EarningsDetail";
+import { IncomeStatementCard, AnnualConsensusCard, CashFlowCard, SegmentationCard, BalanceSheetCard, type IncomeDetail, type AnnualConsensus, type CashFlow, type BalanceHealth, type SegmentGroup } from "./EarningsDetail";
 
 export const dynamic = "force-dynamic";
 
@@ -418,12 +418,16 @@ async function fetchFmpLegacyJson<T>(path: string): Promise<T | null> {
 }
 
 async function getEarningsData(symbol: string) {
-  const [earningsJson, incomeJson, historicalCalendarJson, analystEstimatesJson, annualEstimatesJson, dailyHistory] = await Promise.all([
+  const [earningsJson, incomeJson, historicalCalendarJson, analystEstimatesJson, annualEstimatesJson, cashFlowJson, balanceJson, productSegJson, geoSegJson, dailyHistory] = await Promise.all([
     fetchFmpJson<unknown[]>(`/earnings?symbol=${encodeURIComponent(symbol)}`),
     fetchFmpJson<unknown[]>(`/income-statement?symbol=${encodeURIComponent(symbol)}&period=quarter&limit=12`),
     fetchFmpLegacyJson<unknown[]>(`/historical/earning_calendar/${encodeURIComponent(symbol)}`),
     fetchFmpJson<unknown[]>(`/analyst-estimates?symbol=${encodeURIComponent(symbol)}&period=quarter&limit=24`),
     fetchFmpJson<unknown[]>(`/analyst-estimates?symbol=${encodeURIComponent(symbol)}&period=annual&limit=6`),
+    fetchFmpJson<unknown[]>(`/cash-flow-statement?symbol=${encodeURIComponent(symbol)}&period=quarter&limit=4`),
+    fetchFmpJson<unknown[]>(`/balance-sheet-statement?symbol=${encodeURIComponent(symbol)}&period=quarter&limit=1`),
+    fetchFmpJson<unknown[]>(`/revenue-product-segmentation?symbol=${encodeURIComponent(symbol)}&period=annual&structure=flat`),
+    fetchFmpJson<unknown[]>(`/revenue-geographic-segmentation?symbol=${encodeURIComponent(symbol)}&period=annual&structure=flat`),
     getDailyHistory(symbol).catch(() => [] as Point[]),
   ]);
 
@@ -532,7 +536,48 @@ async function getEarningsData(symbol: string) {
     weightedAverageShsDil: li.weightedAverageShsDil ?? null,
   } : null;
 
-  return { rows: earningsRows, completedRows, latest, next, nextEstimate, annualEstimate, ttmRevenue, ttmEps, latestIncomeStatement, sameQuarterLastYear, grossMargin, operatingMargin, netIncome, recentTrend, chartQuarters, growthMarginQuarters, priceReactionQuarters, yearlySummaries, score, epsBeatCount, epsBeatTotal, currentStreakCount, currentStreakType };
+  // Cash flow (quality of earnings + FCF), balance-sheet health, and revenue segmentation.
+  const cashRows = Array.isArray(cashFlowJson)
+    ? cashFlowJson.map((item) => { const row = item as Record<string, unknown>; return { date: typeof row.date === "string" ? row.date : "", operatingCashFlow: asNumber(row.netCashProvidedByOperatingActivities) ?? asNumber(row.operatingCashFlow), capex: asNumber(row.capitalExpenditure) ?? asNumber(row.investmentsInPropertyPlantAndEquipment), freeCashFlow: asNumber(row.freeCashFlow), netIncome: asNumber(row.netIncome), stockBasedCompensation: asNumber(row.stockBasedCompensation) }; }).filter((row) => Boolean(row.date)).sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    : [];
+  const cashLatest = (latest?.periodEndDate ? cashRows.find((r) => r.date === latest.periodEndDate) : null) ?? cashRows[0] ?? null;
+  const cashflow = cashLatest ? {
+    periodEnd: cashLatest.date ?? null,
+    operatingCashFlow: cashLatest.operatingCashFlow ?? null,
+    capex: cashLatest.capex ?? null,
+    freeCashFlow: cashLatest.freeCashFlow ?? (cashLatest.operatingCashFlow != null && cashLatest.capex != null ? cashLatest.operatingCashFlow + cashLatest.capex : null),
+    netIncome: cashLatest.netIncome ?? null,
+    stockBasedCompensation: cashLatest.stockBasedCompensation ?? null,
+  } : null;
+
+  const balRow = Array.isArray(balanceJson) && balanceJson.length ? (balanceJson[0] as Record<string, unknown>) : null;
+  const balCash = balRow ? asNumber(balRow.cashAndShortTermInvestments) : null;
+  const balDebt = balRow ? asNumber(balRow.totalDebt) : null;
+  const balNetDebt = balRow ? asNumber(balRow.netDebt) : null;
+  const balCurAssets = balRow ? asNumber(balRow.totalCurrentAssets) : null;
+  const balCurLiab = balRow ? asNumber(balRow.totalCurrentLiabilities) : null;
+  const balance = balRow ? {
+    periodEnd: typeof balRow.date === "string" ? balRow.date : null,
+    cashAndStInvestments: balCash,
+    totalDebt: balDebt,
+    netCash: balCash != null && balDebt != null ? balCash - balDebt : (balNetDebt != null ? -balNetDebt : null),
+    currentRatio: balCurAssets != null && balCurLiab != null && balCurLiab !== 0 ? balCurAssets / balCurLiab : null,
+  } : null;
+
+  const latestSegment = (json: unknown) => {
+    if (!Array.isArray(json)) return { fiscalYear: null as number | string | null, items: [] as { name: string; value: number | null }[] };
+    const rows = json.map((item) => item as Record<string, unknown>).filter((row) => row && typeof row.data === "object" && row.data != null).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const top = rows[0];
+    if (!top) return { fiscalYear: null as number | string | null, items: [] as { name: string; value: number | null }[] };
+    const data = top.data as Record<string, unknown>;
+    const items = Object.entries(data).map(([name, val]) => ({ name, value: asNumber(val) })).filter((s) => s.value != null && s.value !== 0).sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
+    const fiscalYear = (typeof top.fiscalYear === "number" || typeof top.fiscalYear === "string") ? top.fiscalYear : (typeof top.date === "string" ? top.date.slice(0, 4) : null);
+    return { fiscalYear, items };
+  };
+  const productSeg = latestSegment(productSegJson);
+  const geoSeg = latestSegment(geoSegJson);
+
+  return { rows: earningsRows, completedRows, latest, next, nextEstimate, annualEstimate, ttmRevenue, ttmEps, latestIncomeStatement, cashflow, balance, productSeg, geoSeg, sameQuarterLastYear, grossMargin, operatingMargin, netIncome, recentTrend, chartQuarters, growthMarginQuarters, priceReactionQuarters, yearlySummaries, score, epsBeatCount, epsBeatTotal, currentStreakCount, currentStreakType };
 }
 
 function metricCardStyle(tone: EarningsTone | "default" = "default") {
@@ -1021,34 +1066,34 @@ export default async function StockEarningsPage({ params }: Props) {
                 )}
               </section>
 
-              <section className="card">
-                <div className="eyebrow">Wall Street expectations</div>
-                <h2>Analyst estimates for the next report</h2>
-                {nextEstimate ? (
-                  <>
-                    <p>Consensus estimates for the period ending around <strong>{formatDate(nextEstimate.date)}</strong>, based on covering analysts.</p>
-                    <div className="estimateGrid">
-                      <div style={metricCardStyle("default")}>
-                        <div className="metricLabel">Consensus EPS</div>
-                        <div className="metricValue">{formatMoney(nextEstimate.epsAvg)}</div>
-                        <div className="metricSub">Range {formatMoney(nextEstimate.epsLow)} – {formatMoney(nextEstimate.epsHigh)}{nextEstimate.numAnalystsEps ? ` · ${nextEstimate.numAnalystsEps} analysts` : ""}</div>
-                      </div>
-                      <div style={metricCardStyle("default")}>
-                        <div className="metricLabel">Consensus revenue</div>
-                        <div className="metricValue">{formatMoney(nextEstimate.revenueAvg, true)}</div>
-                        <div className="metricSub">Range {formatMoney(nextEstimate.revenueLow, true)} – {formatMoney(nextEstimate.revenueHigh, true)}{nextEstimate.numAnalystsRevenue ? ` · ${nextEstimate.numAnalystsRevenue} analysts` : ""}</div>
-                      </div>
+              {nextEstimate ? (
+                <section className="card">
+                  <div className="eyebrow">Wall Street expectations</div>
+                  <h2>Analyst estimates for the next report</h2>
+                  <p>Consensus estimates for the period ending around <strong>{formatDate(nextEstimate.date)}</strong>, based on covering analysts.</p>
+                  <div className="estimateGrid">
+                    <div style={metricCardStyle("default")}>
+                      <div className="metricLabel">Consensus EPS</div>
+                      <div className="metricValue">{formatMoney(nextEstimate.epsAvg)}</div>
+                      <div className="metricSub">Range {formatMoney(nextEstimate.epsLow)} – {formatMoney(nextEstimate.epsHigh)}{nextEstimate.numAnalystsEps ? ` · ${nextEstimate.numAnalystsEps} analysts` : ""}</div>
                     </div>
-                    <p className="earningsDataNote">Analyst estimates come from FMP&apos;s covering-analyst consensus and can change as the report date approaches.</p>
-                  </>
-                ) : (
-                  <p>Analyst consensus estimates for the next report are not available for this symbol yet.</p>
-                )}
-              </section>
+                    <div style={metricCardStyle("default")}>
+                      <div className="metricLabel">Consensus revenue</div>
+                      <div className="metricValue">{formatMoney(nextEstimate.revenueAvg, true)}</div>
+                      <div className="metricSub">Range {formatMoney(nextEstimate.revenueLow, true)} – {formatMoney(nextEstimate.revenueHigh, true)}{nextEstimate.numAnalystsRevenue ? ` · ${nextEstimate.numAnalystsRevenue} analysts` : ""}</div>
+                    </div>
+                  </div>
+                  <p className="earningsDataNote">Analyst estimates come from FMP&apos;s covering-analyst consensus and can change as the report date approaches.</p>
+                </section>
+              ) : null}
 
               <AnnualConsensusCard estimate={annualConsensus} />
 
-              <IncomeStatementCard income={incomeDetail} />
+              <CashFlowCard cashflow={data.cashflow} />
+
+              <SegmentationCard product={data.productSeg} geographic={data.geoSeg} />
+
+              <BalanceSheetCard balance={data.balance} />
 
               <section className="card">
                 <div className="eyebrow">Recent earnings trend</div>
@@ -1183,6 +1228,7 @@ export default async function StockEarningsPage({ params }: Props) {
                 <h3>Earnings can reset the stock narrative</h3>
                 <p>Earnings matter because they test whether the company story is being supported by actual revenue, profit and estimate performance.</p>
               </section>
+              <IncomeStatementCard income={incomeDetail} />
               <section className="card">
                 <div className="eyebrow">Yearly earnings read</div>
                 <h3>Recent yearly pattern</h3>
