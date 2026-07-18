@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isUnwantedBot } from "@/lib/botid-guard";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,6 +60,10 @@ function emptyQuote(symbol: string): Quote {
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const symbol = (searchParams.get("symbol") || "AAPL").toUpperCase();
+
+  if (await isUnwantedBot()) {
+    return NextResponse.json({ error: "Access denied" }, { status: 403 });
+  }
 
   const apiKey = process.env.FMP_API_KEY;
 
