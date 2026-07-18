@@ -12,7 +12,6 @@ import {
   type Point,
 } from "@/lib/indicators";
 import StockSymbolPageClient, { type InitialQuote } from "./StockSymbolPageClient";
-import PageShareBar from "@/app/components/PageShareBar";
 
 type Props = {
   params: Promise<{ symbol: string }>;
@@ -372,10 +371,6 @@ export default async function StockPage({ params }: Props) {
   const seoTitle = buildSeoTitle(upper, seed);
   const seoDescription = buildSeoDescription(upper, seed);
 
-  const shareText = seed.lastClose != null
-    ? `${upper} stock analysis — Price $${seed.lastClose.toFixed(2)}${seed.trend ? `, ${seed.trend}` : ""} 📊 MyStockHarbor`
-    : `${upper} stock analysis — chart, indicators & technical read 📊 MyStockHarbor`;
-
   return (
     <>
       <script
@@ -453,14 +448,6 @@ export default async function StockPage({ params }: Props) {
           }),
         }}
       />
-
-      <div style={{ maxWidth: 1240, margin: "0 auto", padding: "12px 20px 0" }}>
-        <PageShareBar
-          url={`https://www.mystockharbor.com/stock/${upper}`}
-          title={`${upper} Stock Analysis | MyStockHarbor`}
-          text={shareText}
-        />
-      </div>
 
       <StockSymbolPageClient
         symbol={upper}
