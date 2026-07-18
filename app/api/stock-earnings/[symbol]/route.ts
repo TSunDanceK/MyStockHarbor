@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getLatestEarningsData } from "@/lib/latest-earnings-data";
+import { isUnwantedBot } from "@/lib/botid-guard";
 
 export const runtime = "nodejs";
 
@@ -17,6 +18,10 @@ function cleanSymbol(value: string) {
 // diverged from the News page's numbers; see lib/latest-earnings-data.ts
 // for why that was consolidated.
 export async function GET(_request: Request, { params }: Props) {
+  if (await isUnwantedBot()) {
+    return NextResponse.json({ error: "Access denied" }, { status: 403 });
+  }
+
   const { symbol } = await params;
   const clean = cleanSymbol(symbol);
   const data = await getLatestEarningsData(clean, "yellow");
