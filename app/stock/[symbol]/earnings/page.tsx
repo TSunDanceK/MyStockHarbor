@@ -962,6 +962,7 @@ export default async function StockEarningsPage({ params }: Props) {
         .bulletList li { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 10px; color: rgba(226,232,240,0.84); line-height: 1.65; }
         .bulletList li::before { content: ""; width: 9px; height: 9px; border-radius: 999px; margin-top: 8px; background: #22c55e; box-shadow: 0 0 0 4px rgba(34,197,94,0.10); }
         .estimateGrid { margin-top: 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+        .estimateGridStacked { grid-template-columns: 1fr; }
         @media (max-width: 980px) { .hero, .contentGrid { grid-template-columns: 1fr; } .sideColumn { position: static; } .metricGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
         @media (max-width: 720px) {
           .earningsPage, .earningsPage * { box-sizing: border-box; }
@@ -1066,35 +1067,6 @@ export default async function StockEarningsPage({ params }: Props) {
                 )}
               </section>
 
-              {nextEstimate ? (
-                <section className="card">
-                  <div className="eyebrow">Wall Street expectations</div>
-                  <h2>Analyst estimates for the next report</h2>
-                  <p>Consensus estimates for the period ending around <strong>{formatDate(nextEstimate.date)}</strong>, based on covering analysts.</p>
-                  <div className="estimateGrid">
-                    <div style={metricCardStyle("default")}>
-                      <div className="metricLabel">Consensus EPS</div>
-                      <div className="metricValue">{formatMoney(nextEstimate.epsAvg)}</div>
-                      <div className="metricSub">Range {formatMoney(nextEstimate.epsLow)} – {formatMoney(nextEstimate.epsHigh)}{nextEstimate.numAnalystsEps ? ` · ${nextEstimate.numAnalystsEps} analysts` : ""}</div>
-                    </div>
-                    <div style={metricCardStyle("default")}>
-                      <div className="metricLabel">Consensus revenue</div>
-                      <div className="metricValue">{formatMoney(nextEstimate.revenueAvg, true)}</div>
-                      <div className="metricSub">Range {formatMoney(nextEstimate.revenueLow, true)} – {formatMoney(nextEstimate.revenueHigh, true)}{nextEstimate.numAnalystsRevenue ? ` · ${nextEstimate.numAnalystsRevenue} analysts` : ""}</div>
-                    </div>
-                  </div>
-                  <p className="earningsDataNote">Analyst estimates come from FMP&apos;s covering-analyst consensus and can change as the report date approaches.</p>
-                </section>
-              ) : null}
-
-              <AnnualConsensusCard estimate={annualConsensus} />
-
-              <CashFlowCard cashflow={data.cashflow} />
-
-              <SegmentationCard product={data.productSeg} geographic={data.geoSeg} />
-
-              <BalanceSheetCard balance={data.balance} />
-
               <section className="card">
                 <div className="eyebrow">Recent earnings trend</div>
                 <h2>How recent earnings have been landing</h2>
@@ -1150,6 +1122,12 @@ export default async function StockEarningsPage({ params }: Props) {
                   <p>Not enough quarterly history is available yet to chart growth and margin trends.</p>
                 )}
               </section>
+
+              <CashFlowCard cashflow={data.cashflow} />
+
+              <BalanceSheetCard balance={data.balance} />
+
+              <SegmentationCard product={data.productSeg} geographic={data.geoSeg} />
 
               <section className="card">
                 <div className="eyebrow">Price reaction</div>
@@ -1223,12 +1201,32 @@ export default async function StockEarningsPage({ params }: Props) {
                   <li>Year-over-year growth helps separate one-quarter noise from a real earnings trend.</li>
                 </ul>
               </section>
-              <section className="card">
-                <div className="eyebrow">Why it matters</div>
-                <h3>Earnings can reset the stock narrative</h3>
-                <p>Earnings matter because they test whether the company story is being supported by actual revenue, profit and estimate performance.</p>
-              </section>
+
+              {nextEstimate ? (
+                <section className="card">
+                  <div className="eyebrow">Wall Street expectations</div>
+                  <h3>Analyst estimates for the next report</h3>
+                  <p>Consensus estimates for the period ending around <strong>{formatDate(nextEstimate.date)}</strong>, based on covering analysts.</p>
+                  <div className="estimateGrid estimateGridStacked">
+                    <div style={metricCardStyle("default")}>
+                      <div className="metricLabel">Consensus EPS</div>
+                      <div className="metricValue">{formatMoney(nextEstimate.epsAvg)}</div>
+                      <div className="metricSub">Range {formatMoney(nextEstimate.epsLow)} – {formatMoney(nextEstimate.epsHigh)}{nextEstimate.numAnalystsEps ? ` · ${nextEstimate.numAnalystsEps} analysts` : ""}</div>
+                    </div>
+                    <div style={metricCardStyle("default")}>
+                      <div className="metricLabel">Consensus revenue</div>
+                      <div className="metricValue">{formatMoney(nextEstimate.revenueAvg, true)}</div>
+                      <div className="metricSub">Range {formatMoney(nextEstimate.revenueLow, true)} – {formatMoney(nextEstimate.revenueHigh, true)}{nextEstimate.numAnalystsRevenue ? ` · ${nextEstimate.numAnalystsRevenue} analysts` : ""}</div>
+                    </div>
+                  </div>
+                  <p className="earningsDataNote">Analyst estimates come from FMP&apos;s covering-analyst consensus and can change as the report date approaches.</p>
+                </section>
+              ) : null}
+
+              <AnnualConsensusCard estimate={annualConsensus} stacked />
+
               <IncomeStatementCard income={incomeDetail} />
+
               <section className="card">
                 <div className="eyebrow">Yearly earnings read</div>
                 <h3>Recent yearly pattern</h3>
@@ -1242,6 +1240,13 @@ export default async function StockEarningsPage({ params }: Props) {
                   </div>
                 ) : <p>No yearly earnings pattern is available yet.</p>}
               </section>
+
+              <section className="card">
+                <div className="eyebrow">Why it matters</div>
+                <h3>Earnings can reset the stock narrative</h3>
+                <p>Earnings matter because they test whether the company story is being supported by actual revenue, profit and estimate performance.</p>
+              </section>
+
               <section className="card">
                 <div className="eyebrow">Learn</div>
                 <h3>New to reading earnings?</h3>
@@ -1250,6 +1255,7 @@ export default async function StockEarningsPage({ params }: Props) {
                   <Link className="actionLink green" href="/learn/how-to-read-financial-data">How to Read Financial Data &rarr;</Link>
                 </div>
               </section>
+
               <section className="card">
                 <div className="eyebrow">Next step</div>
                 <h3>Connect earnings with price action</h3>

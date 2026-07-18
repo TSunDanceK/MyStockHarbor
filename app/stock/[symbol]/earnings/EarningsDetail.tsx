@@ -191,7 +191,7 @@ export function IncomeStatementCard({ income }: { income: IncomeDetail | null })
 }
 
 // ---------------------------------------------------------------- forward consensus
-export function AnnualConsensusCard({ estimate }: { estimate: AnnualConsensus | null }) {
+export function AnnualConsensusCard({ estimate, stacked = false }: { estimate: AnnualConsensus | null; stacked?: boolean }) {
   if (!estimate || (estimate.revenueAvg == null && estimate.epsAvg == null)) return null;
 
   const revGrowth =
@@ -206,9 +206,13 @@ export function AnnualConsensusCard({ estimate }: { estimate: AnnualConsensus | 
   return (
     <section className="card">
       <div className="eyebrow">Forward consensus</div>
-      <h2>Full-year analyst estimates — {fyLabel(estimate.date)}</h2>
+      {stacked ? (
+        <h3>Full-year analyst estimates — {fyLabel(estimate.date)}</h3>
+      ) : (
+        <h2>Full-year analyst estimates — {fyLabel(estimate.date)}</h2>
+      )}
       <p>Where covering analysts expect the full year to land. Ranges show the spread between the most and least optimistic.</p>
-      <div className="estimateGrid">
+      <div className={stacked ? "estimateGrid estimateGridStacked" : "estimateGrid"}>
         <div className="metricCard" style={{ border: "1px solid rgba(59,130,246,0.22)", borderRadius: 18, padding: 16, background: "rgba(59,130,246,0.06)" }}>
           <div className="metricLabel">Consensus revenue</div>
           <div className="metricValue">{money(estimate.revenueAvg, true)}</div>
