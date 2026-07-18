@@ -271,6 +271,12 @@ async function writeDayItemsCache(date: string, items: EarningsListItem[]) {
   }
 }
 
+// Read-only accessor for a date's materialised rows -- used by the Show more
+// pagination endpoint (app/api/earnings-calendar/day). Never quotes.
+export async function getCachedDayItems(date: string): Promise<EarningsListItem[]> {
+  return (await readDayItemsCache(date)) ?? [];
+}
+
 // --- Fill frontier (so a full window costs nothing to rescan) ------------
 
 async function getFillFrontier(): Promise<string> {
@@ -337,6 +343,12 @@ const MAX_CANDIDATES_PER_DAY = 600;
 
 // How many dates the background auto-populate loop will attempt per page load.
 const AUTO_POPULATE_MAX_DATES = 2;
+
+// How many candidates the *render path* will quote to paint a never-yet-seen
+// date quickly (they're mega-cap-sorted, so this is the top of the list). The
+// rest of the day is filled in the background / by owner Backfill -- this is
+// the bound that stops a busy day blocking the page on hundreds of quotes.
+const RENDER_SEED_LIMIT = 80;
 
 const ALLOWED_EXCHANGES = new Set(["NASDAQ", "NYSE", "AMEX"]);
 
@@ -555,16 +567,17 @@ async function quoteOne(symbol: string, bypassCap: boolean): Promise<QuoteResult
     if (!allowed && !bypassCap) {
       return { price: null, marketCap: null, exchange: null, capped: true };
     }
-  }
 
-  // Site-wide FMP account budget (~300 calls/minute across every FMP-calling
-  // route) -- enforced unconditionally, bypassCap or not. Waits for a slot;
-  // if it still can't get one within its own timeout, treat this symbol as
-  // capped (retried next pass) rather than "no data".
-  try {
-    await reserveFmpCallSlot();
-  } catch {
-    return { price: null, marketCap: null, exchange: null, capped: true };
+    // Site-wide FMP account budget (~300 calls/minute across every FMP-calling
+    // route). Only a genuinely new symbol makes a real FMP call, so only it
+    // needs a budget slot. Already-quoted symbols resolve from Next's Data
+    // Cache below without hitting FMP -- making them queue behind the budget
+    // too is what made heavy, mostly-cached days take 10-15s to render.
+    try {
+      await reserveFmpCallSlot();
+    } catch {
+      return { price: null, marketCap: null, exchange: null, capped: true };
+    }
   }
 
   try {
@@ -613,30 +626,41 @@ async function quoteBatch(symbols: string[], bypassCap: boolean): Promise<Record
 // by the auto-populate loop and the owner backfill).
 export async function getFullDayEarnings(
   date: string,
-  opts: { bypassCap?: boolean; forceRefresh?: boolean } = {}
+  opts: { bypassCap?: boolean; forceRefresh?: boolean; maxQuote?: number } = {}
 ): Promise<FullDayEarnings> {
   const bypassCap = opts.bypassCap ?? false;
   const forceRefresh = opts.forceRefresh ?? false;
 
-  const candidates = (await getDayCandidates(date)).slice(0, MAX_CANDIDATES_PER_DAY);
-  const totalCandidates = candidates.length;
+  const allCandidates = await getDayCandidates(date);
+  const totalCandidates = allCandidates.length;
 
   if (totalCandidates === 0) {
     return { date, items: [], totalCandidates: 0, usListedCount: 0, complete: false };
   }
 
+  // Fast path: any materialised rows (partial OR full) are served straight
+  // from Redis with zero quoting. This is what keeps changing dates instant --
+  // the render never re-quotes a date it has already touched.
   if (!forceRefresh) {
     const cachedItems = await readDayItemsCache(date);
-    if (cachedItems && (await isDateComplete(date))) {
+    if (cachedItems) {
       return {
         date,
         items: cachedItems,
         totalCandidates,
         usListedCount: cachedItems.length,
-        complete: true,
+        complete: await isDateComplete(date),
       };
     }
   }
+
+  // No materialised rows yet. Quote at most maxQuote candidates (mega-cap
+  // sorted): the render path passes a small seed so a never-seen date still
+  // paints in well under a second, while the background job and owner Backfill
+  // pass no limit and finish the whole set off.
+  const limit = Math.min(opts.maxQuote ?? MAX_CANDIDATES_PER_DAY, MAX_CANDIDATES_PER_DAY);
+  const candidates = allCandidates.slice(0, limit);
+  const quotedEveryCandidate = candidates.length >= Math.min(totalCandidates, MAX_CANDIDATES_PER_DAY);
 
   const quotes = await quoteBatch(candidates.map((c) => c.symbol), bypassCap);
 
@@ -658,14 +682,28 @@ export async function getFullDayEarnings(
     .filter((item): item is EarningsListItem => item !== null)
     .sort((a, b) => (b.marketCap ?? -1) - (a.marketCap ?? -1));
 
-  const complete = !anyCapped;
+  // Always materialise what we have, so the next render -- and Show more --
+  // read it back instead of re-quoting.
+  await writeDayItemsCache(date, items);
+
+  // Only "complete" once every candidate was quoted with nothing skipped by the
+  // cap. A bounded seed render is never complete.
+  const complete = quotedEveryCandidate && !anyCapped;
   if (complete) {
     await markDateComplete(date);
     await storeDateUsCount(date, items.length);
-    await writeDayItemsCache(date, items);
   }
 
   return { date, items, totalCandidates, usListedCount: items.length, complete };
+}
+
+// Render-path entry point: serves any materialised rows instantly, or paints a
+// bounded seed (top RENDER_SEED_LIMIT candidates) for a never-seen date so the
+// page never blocks on hundreds of quotes. The rest is filled in the
+// background (see the page's after() -> getFullDayEarnings forceRefresh) and by
+// owner Backfill.
+export async function getDayEarningsForRender(date: string): Promise<FullDayEarnings> {
+  return getFullDayEarnings(date, { maxQuote: RENDER_SEED_LIMIT });
 }
 
 // Walks the window front-to-back from the fill frontier and returns the first

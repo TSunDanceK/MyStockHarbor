@@ -1,4 +1,7 @@
+"use client";
+
 import type React from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
 type EarningsListItem = {
@@ -14,7 +17,9 @@ type EarningsListItem = {
 };
 
 type Props = {
-  items: EarningsListItem[];
+  date: string;
+  initialItems: EarningsListItem[];
+  initialHasMore: boolean;
   complete: boolean;
 };
 
@@ -34,11 +39,47 @@ function formatEps(value: number | null) {
   return value !== null ? `$${value.toFixed(2)}` : "-";
 }
 
-// Presentational only: the full US-listed set for the date is server-rendered
-// and passed in as `items` (no pagination, no "Show more" -- every reporter is
-// shown at once). Population happens server-side via the calendar's background
-// auto-populate / owner backfill; this component just renders what's ready.
-export default function EarningsDayList({ items, complete }: Props) {
+// The server renders the top 50 US-listed reporters (by market cap) into the
+// initial HTML -- fast and crawlable. "Show more" pulls the next 50 straight
+// from the already-materialised Redis blob via /api/earnings-calendar/day
+// (a pure cache read, no quoting), so paging is cheap and never blocks. As the
+// background job fills a still-populating date, hasMore flips on and more pages
+// become available.
+export default function EarningsDayList({ date, initialItems, initialHasMore, complete }: Props) {
+  const [items, setItems] = useState<EarningsListItem[]>(initialItems);
+  const [hasMore, setHasMore] = useState(initialHasMore);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fresh server navigation to a new date resets everything.
+  useEffect(() => {
+    setItems(initialItems);
+    setHasMore(initialHasMore);
+    setLoading(false);
+    setError(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date]);
+
+  async function loadMore() {
+    if (loading || !hasMore) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/earnings-calendar/day?date=${encodeURIComponent(date)}&offset=${items.length}`
+      );
+      if (!res.ok) throw new Error("");
+      const data = (await res.json()) as { items?: EarningsListItem[]; hasMore?: boolean };
+      const more = Array.isArray(data.items) ? data.items : [];
+      setItems((prev) => [...prev, ...more]);
+      setHasMore(Boolean(data.hasMore));
+    } catch {
+      setError("Couldn't load more right now — try again shortly.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   if (items.length === 0) {
     return (
       <div style={{ padding: 32, textAlign: "center", opacity: 0.75, fontSize: 15 }}>
@@ -110,11 +151,35 @@ export default function EarningsDayList({ items, complete }: Props) {
         </table>
       </div>
 
-      <div style={{ marginTop: 16, textAlign: "center", fontSize: 12.5, opacity: 0.55 }}>
-        {complete
-          ? `Showing all ${items.length} US-listed reporter${items.length === 1 ? "" : "s"} for this date.`
-          : `Showing ${items.length} so far — still populating…`}
-      </div>
+      {error ? <div style={{ marginTop: 12, fontSize: 13, color: "#fecaca", textAlign: "center" }}>{error}</div> : null}
+
+      {hasMore ? (
+        <div style={{ marginTop: 16, display: "flex", justifyContent: "center" }}>
+          <button
+            type="button"
+            onClick={loadMore}
+            disabled={loading}
+            style={{
+              padding: "10px 18px",
+              borderRadius: 10,
+              border: "1px solid rgba(147,197,253,0.28)",
+              background: loading ? "rgba(255,255,255,0.04)" : "rgba(147,197,253,0.10)",
+              color: loading ? "rgba(226,232,240,0.5)" : "#93c5fd",
+              fontWeight: 700,
+              fontSize: 13,
+              cursor: loading ? "default" : "pointer",
+            }}
+          >
+            {loading ? "Loading…" : "Show more"}
+          </button>
+        </div>
+      ) : (
+        <div style={{ marginTop: 16, textAlign: "center", fontSize: 12.5, opacity: 0.55 }}>
+          {complete
+            ? `Showing all ${items.length} US-listed reporter${items.length === 1 ? "" : "s"} for this date.`
+            : `Showing ${items.length} so far — still populating…`}
+        </div>
+      )}
     </div>
   );
 }
