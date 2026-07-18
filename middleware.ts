@@ -20,6 +20,17 @@ export function middleware(request: NextRequest) {
   const pathname = url.pathname;
   const search = url.search;
 
+  // API routes are hit directly by server-to-server callers (Vercel Cron,
+  // the GitHub Actions warm-up workflow, client-side fetch()) that either
+  // don't follow redirects at all or have no need for canonical-host/SEO
+  // redirection the way browser page navigations do. A 308 here silently
+  // kills anything that doesn't follow redirects — which is exactly what
+  // was happening to the scheduled cron hits on /api/jobs/*. Skip the
+  // host redirect entirely for API paths.
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.next();
+  }
+
   const oldStocksMatch = pathname.match(/^\/stocks\/([^/?#]+)\/?$/i);
 
   if (oldStocksMatch) {
