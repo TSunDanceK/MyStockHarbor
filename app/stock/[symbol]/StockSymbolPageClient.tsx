@@ -871,7 +871,7 @@ function StockEarningsPanel({ symbol, earnings, loading }: { symbol: string; ear
 }
 
 const sectionLabelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)", marginBottom: 6 };
-const sectionHeadingStyle: React.CSSProperties = { margin: 0, fontSize: 22, lineHeight: 1.15, letterSpacing: "-0.025em", fontWeight: 700 };
+const sectionHeadingStyle: React.CSSProperties = { margin: 0, fontSize: 26, lineHeight: 1.12, letterSpacing: "-0.03em", fontWeight: 700 };
 const miniLabelStyle: React.CSSProperties = { fontSize: 11, opacity: 0.60, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" };
 const miniMetricSubStyle: React.CSSProperties = { marginTop: 6, fontSize: 13, lineHeight: 1.5, opacity: 0.65 };
 const articleTextStyle: React.CSSProperties = { margin: "10px 0 0 0", fontSize: 15, lineHeight: 1.8, opacity: 0.85 };
@@ -994,24 +994,45 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
   const macroSupport = useMemo(() => computeMacroSupport(history, lastClose), [history, lastClose]);
   const macdSignal = useMemo(() => buildMacd(closes), [closes]);
 
+  // Shared "Learn the indicators" links. Rendered inside the company-profile
+  // right-hand column (under the stat cards) when a profile exists, and as a
+  // standalone section otherwise.
+  const learnRows = (
+    <div className="learn-grid">
+      <Link href="/learn/moving-averages" style={learnRowStyle}><span style={learnDotStyle("blue")} /><div><div style={{ fontWeight: 700, fontSize: 14 }}>Moving Averages</div><div style={{ fontSize: 13, opacity: 0.55, marginTop: 2 }}>How traders use MA50 and MA200 to judge medium and long-term structure.</div></div></Link>
+      <Link href="/learn/rsi" style={learnRowStyle}><span style={learnDotStyle("green")} /><div><div style={{ fontWeight: 700, fontSize: 14 }}>RSI Guide</div><div style={{ fontSize: 13, opacity: 0.55, marginTop: 2 }}>How RSI highlights momentum, overbought and oversold conditions.</div></div></Link>
+      <Link href="/learn/macd" style={learnRowStyle}><span style={learnDotStyle("red")} /><div><div style={{ fontWeight: 700, fontSize: 14 }}>MACD Guide</div><div style={{ fontSize: 13, opacity: 0.55, marginTop: 2 }}>How MACD helps read momentum strength and weakening trend behaviour.</div></div></Link>
+    </div>
+  );
+
+  // Right-column presentation: a compact eyebrow-titled block that sits under
+  // the company stat cards. Spans the full row when the column collapses to a
+  // 2-up grid on mobile.
+  const learnIndicatorsAside = (
+    <div style={{ gridColumn: "1 / -1", marginTop: 4, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+      <div style={{ ...sectionLabelStyle, marginBottom: 8 }}>Learn the indicators</div>
+      {learnRows}
+    </div>
+  );
+
   return (
-    <main onClick={() => setOpenScoreHelp(null)} style={{ minHeight: "100vh", background: "#06080d", color: "#f1f5f9", fontFamily: "system-ui, Arial" }}>
+    <main onClick={() => setOpenScoreHelp(null)} style={{ minHeight: "100vh", background: "radial-gradient(circle at top left, rgba(37,99,235,0.18), transparent 22%), radial-gradient(circle at top right, rgba(34,197,94,0.10), transparent 22%), #06080d", color: "#f1f5f9", fontFamily: "system-ui, Arial" }}>
       <div className="stock-wrap">
 
         {/* -- Page header -------------------------------------------- */}
-        <header style={{ paddingTop: 24, paddingBottom: 20, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(148,163,184,0.55)" }}>Stock Analysis</span>
-            <span style={{ fontSize: 11, color: "rgba(148,163,184,0.30)" }}>·</span>
-            <Link href="/pickers" style={{ fontSize: 11, fontWeight: 600, color: "rgba(148,163,184,0.55)", textDecoration: "none" }}>← Pickers</Link>
+        <header style={{ paddingTop: 24, paddingBottom: 4 }}>
+          <div style={stockHeroBoxStyle}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <span style={stockDeskTagStyle}>Stock Analysis</span>
+            <Link href="/pickers" style={{ fontSize: 12, fontWeight: 600, color: "rgba(148,163,184,0.65)", textDecoration: "none" }}>← Pickers</Link>
           </div>
-          <div style={{ marginTop: 10 }}>
-            <h1 style={{ margin: 0, fontSize: 28, lineHeight: 1.1, fontWeight: 800, letterSpacing: "-0.04em" }}>{symbol}</h1>
-            {companyName ? <p style={{ margin: "3px 0 0", fontSize: 15, opacity: 0.60, fontWeight: 400 }}>{companyName}</p> : null}
-            {lastClose !== null ? <p style={{ margin: "10px 0 0", fontSize: 15, lineHeight: 1.6, opacity: 0.78, maxWidth: 720 }}>{heroLede}</p> : null}
+          <div style={{ marginTop: 14 }}>
+            <h1 style={{ margin: 0, fontSize: 34, lineHeight: 1.05, fontWeight: 800, letterSpacing: "-0.045em" }}>{symbol}</h1>
+            {companyName ? <p style={{ margin: "4px 0 0", fontSize: 16, opacity: 0.60, fontWeight: 400 }}>{companyName}</p> : null}
+            {lastClose !== null ? <p style={{ margin: "12px 0 0", fontSize: 16, lineHeight: 1.7, opacity: 0.82, maxWidth: 760 }}>{heroLede}</p> : null}
           </div>
           {!priceLoading && !err ? (
-            <div className="stock-header-stats" style={{ marginTop: 16 }}>
+            <div className="stock-header-stats" style={{ marginTop: 20 }}>
               <div className="stock-stat-cell">
                 <div className="stock-stat-label">Price</div>
                 <div className="stock-stat-value">{typeof quote?.price === "number" ? `$${quote.price.toFixed(2)}` : "—"}</div>
@@ -1062,6 +1083,7 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
               ))}
             </div>
           ) : null}
+          </div>{/* end hero box */}
         </header>
 
         {priceLoading ? (
@@ -1134,11 +1156,11 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
                     <div key={row.label} className="indicator-row">
                       <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 110, flex: "0 0 auto" }}>
                         <span style={{ width: 7, height: 7, borderRadius: 999, background: toneColor(row.tone), boxShadow: `0 0 5px ${toneColor(row.tone)}66`, flex: "0 0 auto" }} />
-                        <span style={{ fontSize: 13, fontWeight: 700, color: "rgba(226,232,240,0.75)" }}>{row.label}</span>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: "rgba(226,232,240,0.75)" }}>{row.label}</span>
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ fontSize: 15, fontWeight: 800, color: toneColor(row.tone) }}>{row.value}</span>
-                        <span style={{ fontSize: 12, opacity: 0.50, marginLeft: 8 }}>{row.sub}</span>
+                        <span style={{ fontSize: 16, fontWeight: 800, color: toneColor(row.tone) }}>{row.value}</span>
+                        <span style={{ fontSize: 13, opacity: 0.50, marginLeft: 8 }}>{row.sub}</span>
                       </div>
                     </div>
                   ))}
@@ -1158,7 +1180,7 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
                   ].map((item) => (
                     <div key={item.label} style={{ padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
                       <div style={miniLabelStyle}>{item.label}</div>
-                      <div style={{ marginTop: 4, fontSize: 20, fontWeight: 800, letterSpacing: "-0.02em" }}>
+                      <div style={{ marginTop: 4, fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em" }}>
                         {valuationLoading ? "—" : formatValuationMultiple(item.value)}
                       </div>
                     </div>
@@ -1209,8 +1231,8 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
                       ].map((item) => (
                         <div key={item.label} style={{ padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
                           <div style={miniLabelStyle}>{item.label}</div>
-                          <div style={{ marginTop: 4, fontSize: 20, fontWeight: 800, letterSpacing: "-0.02em" }}>{item.value}</div>
-                          {item.sub ? <div style={{ marginTop: 2, fontSize: 12, opacity: 0.55 }}>{item.sub}</div> : null}
+                          <div style={{ marginTop: 4, fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em" }}>{item.value}</div>
+                          {item.sub ? <div style={{ marginTop: 2, fontSize: 13, opacity: 0.55 }}>{item.sub}</div> : null}
                         </div>
                       ))}
                     </div>
@@ -1251,8 +1273,8 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
                     <div key={i} style={{ padding: "18px 0", borderBottom: i < 2 ? "1px solid rgba(255,255,255,0.07)" : "none", display: "flex", gap: 12, alignItems: "flex-start" }}>
                       <span style={{ width: 7, height: 7, borderRadius: 999, background: toneColor(item.dot), marginTop: 6, flex: "0 0 auto", boxShadow: `0 0 5px ${toneColor(item.dot)}66` }} />
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 5 }}>{item.heading}</div>
-                        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.75, opacity: 0.75 }}>{item.text}</p>
+                        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 5 }}>{item.heading}</div>
+                        <p style={{ margin: 0, fontSize: 15.5, lineHeight: 1.8, opacity: 0.78 }}>{item.text}</p>
                       </div>
                     </div>
                   ))}
@@ -1270,21 +1292,21 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
                   profile={profile}
                   symbol={symbol}
                   belowDescription={<DilutionHistory data={shareHistory} symbol={symbol} embedded />}
+                  belowStats={learnIndicatorsAside}
                 />
               ) : (
-                <DilutionHistory data={shareHistory} symbol={symbol} />
-              )}
+                <>
+                  <DilutionHistory data={shareHistory} symbol={symbol} />
 
-              {/* -- Learn more -------------------------------------- */}
-              <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
-                <div style={sectionLabelStyle}>Learn More</div>
-                <h2 style={{ ...sectionHeadingStyle, marginBottom: 14 }}>Learn the indicators behind this page</h2>
-                <div className="learn-grid">
-                  <Link href="/learn/moving-averages" style={learnRowStyle}><span style={learnDotStyle("blue")} /><div><div style={{ fontWeight: 700, fontSize: 14 }}>Moving Averages</div><div style={{ fontSize: 13, opacity: 0.55, marginTop: 2 }}>How traders use MA50 and MA200 to judge medium and long-term structure.</div></div></Link>
-                  <Link href="/learn/rsi" style={learnRowStyle}><span style={learnDotStyle("green")} /><div><div style={{ fontWeight: 700, fontSize: 14 }}>RSI Guide</div><div style={{ fontSize: 13, opacity: 0.55, marginTop: 2 }}>How RSI highlights momentum, overbought and oversold conditions.</div></div></Link>
-                  <Link href="/learn/macd" style={learnRowStyle}><span style={learnDotStyle("red")} /><div><div style={{ fontWeight: 700, fontSize: 14 }}>MACD Guide</div><div style={{ fontSize: 13, opacity: 0.55, marginTop: 2 }}>How MACD helps read momentum strength and weakening trend behaviour.</div></div></Link>
-                </div>
-              </section>
+                  {/* -- Learn more (standalone fallback when no company
+                         profile is available to host it in the right column) -- */}
+                  <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+                    <div style={sectionLabelStyle}>Learn More</div>
+                    <h2 style={{ ...sectionHeadingStyle, marginBottom: 14 }}>Learn the indicators behind this page</h2>
+                    {learnRows}
+                  </section>
+                </>
+              )}
 
               {/* -- Explore more ------------------------------------ */}
               <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
@@ -1319,8 +1341,8 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
                     { q: "What should I do next after reading this page?", a: "Open the full dashboard, review the chart in more detail, compare indicators, and decide whether the setup still makes sense within your own process." },
                   ].map((item) => (
                     <div key={item.q}>
-                      <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>{item.q}</h3>
-                      <p style={{ margin: "5px 0 0", fontSize: 13, lineHeight: 1.7, opacity: 0.65 }}>{item.a}</p>
+                      <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{item.q}</h3>
+                      <p style={{ margin: "6px 0 0", fontSize: 15, lineHeight: 1.75, opacity: 0.7 }}>{item.a}</p>
                     </div>
                   ))}
                 </div>
@@ -1367,8 +1389,8 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
           align-items: stretch;
           flex-wrap: wrap;
           gap: 0;
-          border: 1px solid rgba(255,255,255,0.08);
-          border-radius: 12px;
+          border-top: 1px solid rgba(255,255,255,0.10);
+          padding-top: 4px;
           overflow: hidden;
         }
         .stock-stat-cell {
@@ -1475,5 +1497,14 @@ function learnDotStyle(tone: "blue" | "green" | "red"): React.CSSProperties {
 const learnRowStyle: React.CSSProperties = { display: "flex", alignItems: "flex-start", gap: 10, padding: "11px 0", borderBottom: "1px solid rgba(255,255,255,0.07)", textDecoration: "none", color: "#f1f5f9" };
 
 const exploreCardStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: 10, padding: "11px 13px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)", textDecoration: "none", color: "#f1f5f9" };
+
+// Blue hero box wrapping the ticker header — matches the /news and /earnings
+// page heroes (rounded, blue-tinted gradient panel) so the analysis page opens
+// with the same branded box the rest of the site starts with, incorporating
+// the H1 title, the one-line summary and the key stat strip.
+const stockHeroBoxStyle: React.CSSProperties = { border: "1px solid rgba(255,255,255,0.09)", borderRadius: 24, padding: "22px 24px", background: "linear-gradient(135deg, rgba(10,16,32,0.98), rgba(6,9,15,0.98))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 20px 54px rgba(0,0,0,0.36)" };
+
+// "Stock Analysis" eyebrow pill — mirrors the NEWS DESK / EARNINGS DESK tags.
+const stockDeskTagStyle: React.CSSProperties = { display: "inline-flex", alignItems: "center", padding: "8px 12px", borderRadius: 999, border: "1px solid rgba(59,130,246,0.28)", background: "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.08))", color: "#dbeafe", fontSize: 12, fontWeight: 900, letterSpacing: "0.08em", textTransform: "uppercase" };
 
 export type { EarningsPeriodSummary, EarningsYearSummary };
