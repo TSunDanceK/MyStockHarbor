@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import type React from "react";
 import {
   getMonthDayCounts,
+  getDayEarningsForRender,
   getFullDayEarnings,
   populateNextMissingDate,
   isDateFullyPopulated,
@@ -155,7 +156,7 @@ export default async function EarningsCalendarPage({
 
   const [dayCounts, dayData, dateComplete] = await Promise.all([
     getMonthDayCounts(year, month),
-    getFullDayEarnings(selectedDate, {}),
+    getDayEarningsForRender(selectedDate),
     isDateFullyPopulated(selectedDate),
   ]);
 
@@ -165,6 +166,11 @@ export default async function EarningsCalendarPage({
   // scans short-circuit at zero cost until it rolls forward.
   after(async () => {
     try {
+      // Finish quoting the viewed date beyond the seed the render painted
+      // (cap-limited, mostly cache hits), then keep the window frontier moving.
+      if (!dateComplete) {
+        await getFullDayEarnings(selectedDate, { forceRefresh: true });
+      }
       await populateNextMissingDate({ maxDates: 2 });
     } catch {
       // best-effort background job; failures shouldn't affect any page load
@@ -308,6 +314,12 @@ export default async function EarningsCalendarPage({
             >
               <div style={{ fontSize: 20, fontWeight: 800 }}>{monthLabel(year, month)}</div>
               <div style={{ display: "flex", gap: 8 }}>
+                {/* prefetch=false on every Link in this section: without it,
+                    Next.js silently issues a background request for each
+                    link the instant it's in the viewport. The month grid
+                    below puts ~30-35 day cells on screen at once, so a
+                    single page view was quietly firing 30+ extra requests
+                    to this same route. See lib/server/earningsCalendar.ts. */}
                 {prevDisabled ? (
                   <span style={navBtnDisabledStyle} aria-disabled="true">
                     ← Prev
@@ -362,7 +374,7 @@ export default async function EarningsCalendarPage({
                   const outOfWindow = cellDate < windowStart || cellDate > windowEnd;
 
                   // Greyed, non-clickable archived/out-of-range day: faded
-                  // number + red X, no populate.
+                  // number + red ✕, no populate.
                   if (outOfWindow) {
                     return (
                       <div
@@ -459,7 +471,12 @@ export default async function EarningsCalendarPage({
             </div>
 
             <div style={{ padding: 16 }}>
-              <EarningsDayList items={dayData.items} complete={dateComplete} />
+              <EarningsDayList
+                date={selectedDate}
+                initialItems={dayData.items.slice(0, 50)}
+                initialHasMore={dayData.items.length > 50}
+                complete={dateComplete}
+              />
             </div>
           </section>
 
