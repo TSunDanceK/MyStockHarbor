@@ -46,11 +46,9 @@
 //
 // A date is tracked as "complete" (isDateComplete/markDateComplete) once
 // every one of its candidates has been quoted with nothing skipped by the
-// cap. On completion the accurate US-listed count is stored (per-month Redis
-// hash, so the calendar's green day-badges self-correct from the raw
-// candidate estimate to the real filtered number) and the assembled rows are
-// cached as one blob (DAY_ITEMS_PREFIX) so re-viewing a filled date is a
-// single Redis read rather than a quote lookup per candidate.
+// cap. On completion the assembled rows are cached as one blob
+// (DAY_ITEMS_PREFIX) so re-viewing a filled date is a single Redis read
+// rather than a quote lookup per candidate.
 //
 // For manual catch-up, the site owner can use the "Backfill" button on
 // app/earnings-calendar/page.tsx -> app/api/earnings-calendar/backfill-date,
@@ -76,7 +74,6 @@ const QUOTE_COUNTER_PREFIX = "msh:earnings-quote-calls:v1";
 const QUOTED_SYMBOL_PREFIX = "msh:earnings-quoted-symbol:v1";
 const DAY_COMPLETE_PREFIX = "msh:earnings-day-complete:v2";
 const DAY_ITEMS_PREFIX = "msh:earnings-day-items:v1";
-const US_COUNT_MONTH_PREFIX = "msh:earnings-month-uscount:v1";
 const FILL_FRONTIER_KEY = "msh:earnings-fill-frontier:v2";
 
 // Rolling window bounds.
@@ -211,39 +208,6 @@ async function markDateComplete(date: string) {
     });
   } catch {
     // best-effort
-  }
-}
-
-// --- Accurate US-listed count (self-correcting green badges) -------------
-
-function monthOf(date: string): string {
-  return date.slice(0, 7); // YYYY-MM
-}
-
-async function storeDateUsCount(date: string, count: number) {
-  if (!redis) return;
-  const key = `${US_COUNT_MONTH_PREFIX}:${monthOf(date)}`;
-  try {
-    await redis.hset(key, { [date]: count });
-    await redis.expire(key, QUOTE_REVALIDATE_SECONDS + 3 * 24 * 60 * 60);
-  } catch {
-    // best-effort -- badge just keeps showing the raw estimate
-  }
-}
-
-async function getMonthUsCounts(ym: string): Promise<Record<string, number>> {
-  if (!redis) return {};
-  try {
-    const h = await redis.hgetall<Record<string, unknown>>(`${US_COUNT_MONTH_PREFIX}:${ym}`);
-    if (!h) return {};
-    const out: Record<string, number> = {};
-    for (const [k, v] of Object.entries(h)) {
-      const n = typeof v === "number" ? v : Number(v);
-      if (Number.isFinite(n)) out[k] = n;
-    }
-    return out;
-  } catch {
-    return {};
   }
 }
 
@@ -513,20 +477,17 @@ async function getMonthCandidates(year: number, month: number): Promise<Map<stri
   return byDate;
 }
 
-// Day counts for the calendar grid. Prefers the accurate, stored US-listed
-// count for any date that has already been fully populated; otherwise falls
-// back to the raw candidate estimate (which over-counts, since the true
-// exchange isn't known until a symbol is quoted). So badges start as an
-// estimate and self-correct to the real number once a date fills in.
-export async function getMonthDayCounts(year: number, month: number): Promise<Record<string, number>> {
+// Which in-month dates have at least one company reporting. The calendar grid
+// shows only a presence dot (no number), so this never needs a quote or a
+// stored tally -- it's derived straight from the free, already-cached monthly
+// candidate feed. Nothing to over-count, nothing to self-correct.
+export async function getMonthDaysWithEarnings(year: number, month: number): Promise<Set<string>> {
   const byDate = await getMonthCandidates(year, month);
-  const realCounts = await getMonthUsCounts(monthKey(year, month));
-  const counts: Record<string, number> = {};
+  const days = new Set<string>();
   for (const [date, list] of byDate) {
-    const real = realCounts[date];
-    counts[date] = typeof real === "number" ? real : list.length;
+    if (list.length > 0) days.add(date);
   }
-  return counts;
+  return days;
 }
 
 async function getDayCandidates(date: string): Promise<EarningsCandidate[]> {
@@ -618,8 +579,8 @@ async function quoteBatch(symbols: string[], bypassCap: boolean): Promise<Record
 // candidate for the date (no 100-cap / no pagination -- the whole US-listed
 // set for a day is shown at once), further capped globally by QUOTE_HOURLY_CAP
 // new symbols per hour unless opts.bypassCap is set. Marks the date complete
-// (and stores its accurate US count + assembled rows) when every candidate
-// was quoted with nothing skipped by the cap.
+// (and stores its assembled rows) when every candidate was quoted with nothing
+// skipped by the cap.
 //
 // Fast path: a fully-populated date serves its cached assembled rows in a
 // single Redis read. Pass opts.forceRefresh to skip that and re-quote (used
@@ -691,7 +652,6 @@ export async function getFullDayEarnings(
   const complete = quotedEveryCandidate && !anyCapped;
   if (complete) {
     await markDateComplete(date);
-    await storeDateUsCount(date, items.length);
   }
 
   return { date, items, totalCandidates, usListedCount: items.length, complete };
