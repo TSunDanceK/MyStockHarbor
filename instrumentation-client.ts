@@ -22,11 +22,13 @@ import { initBotId } from "botid/client/core";
  * FOLLOW-UP: confirm each route's HTTP method + dynamic shape, expand this
  * list, and add the matching isUnwantedBot() guard to each handler. Candidate
  * data routes:
- *   /api/quote, /api/history, /api/market, /api/symbols, /api/plays,
- *   /api/pickers, /api/discovery-strip, /api/benchmarks, /api/bull-flags,
- *   /api/descending-triangles, /api/stock-earnings/*, /api/stock-valuation/*,
- *   /api/stock-analyst-rating/*, /api/stock-news/*, /api/news, /api/insights,
- *   /api/earnings-calendar
+ *   /api/market, /api/plays, /api/pickers, /api/discovery-strip,
+ *   /api/benchmarks, /api/bull-flags, /api/descending-triangles,
+ *   /api/stock-valuation/*, /api/stock-analyst-rating/*, /api/stock-news/*,
+ *   /api/news, /api/insights, /api/earnings-calendar
+ *
+ * Wired server-side guards so far: /api/quote, /api/history,
+ * /api/stock-earnings/*, /api/symbols.
  */
 initBotId({
   protect: [
@@ -34,5 +36,6 @@ initBotId({
     { path: "/api/quote", method: "GET" },
     { path: "/api/history", method: "GET" },
     { path: "/api/stock-earnings/*", method: "GET" },
+    { path: "/api/symbols", method: "GET" },
   ],
 });

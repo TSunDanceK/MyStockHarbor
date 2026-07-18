@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isUnwantedBot } from "@/lib/botid-guard";
 
 export const runtime = "nodejs";
 export const revalidate = 86400;
@@ -177,6 +178,10 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const q = (searchParams.get("q") || "").trim().toUpperCase();
   const type = (searchParams.get("type") || "").trim().toLowerCase();
+
+  if (await isUnwantedBot()) {
+    return NextResponse.json({ error: "Access denied" }, { status: 403 });
+  }
 
   if (type === "crypto") {
     return NextResponse.json({ results: searchCryptoPairs(q) }, { headers: CACHE_HEADERS });
