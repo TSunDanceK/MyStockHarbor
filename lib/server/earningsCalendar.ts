@@ -46,9 +46,11 @@
 //
 // A date is tracked as "complete" (isDateComplete/markDateComplete) once
 // every one of its candidates has been quoted with nothing skipped by the
-// cap. On completion the assembled rows are cached as one blob
-// (DAY_ITEMS_PREFIX) so re-viewing a filled date is a single Redis read
-// rather than a quote lookup per candidate.
+// cap. On completion the accurate US-listed count is stored (per-month Redis
+// hash, so the calendar's green day-badges self-correct from the raw
+// candidate estimate to the real filtered number) and the assembled rows are
+// cached as one blob (DAY_ITEMS_PREFIX) so re-viewing a filled date is a
+// single Redis read rather than a quote lookup per candidate.
 //
 // For manual catch-up, the site owner can use the "Backfill" button on
 // app/earnings-calendar/page.tsx -> app/api/earnings-calendar/backfill-date,
@@ -579,8 +581,8 @@ async function quoteBatch(symbols: string[], bypassCap: boolean): Promise<Record
 // candidate for the date (no 100-cap / no pagination -- the whole US-listed
 // set for a day is shown at once), further capped globally by QUOTE_HOURLY_CAP
 // new symbols per hour unless opts.bypassCap is set. Marks the date complete
-// (and stores its assembled rows) when every candidate was quoted with nothing
-// skipped by the cap.
+// (and stores its accurate US count + assembled rows) when every candidate
+// was quoted with nothing skipped by the cap.
 //
 // Fast path: a fully-populated date serves its cached assembled rows in a
 // single Redis read. Pass opts.forceRefresh to skip that and re-quote (used
