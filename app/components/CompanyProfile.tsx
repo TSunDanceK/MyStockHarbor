@@ -67,6 +67,7 @@ export default function CompanyProfile({
   profile,
   symbol,
   belowDescription,
+  belowStats,
 }: {
   profile: CompanyProfile;
   symbol: string;
@@ -79,6 +80,12 @@ export default function CompanyProfile({
   // down the page. Falls back to normal in-flow placement (after the
   // description) when there are no stat rows to create the column mismatch.
   belowDescription?: ReactNode;
+  // Optional extra content rendered in the narrow right-hand column directly
+  // beneath the stat boxes (e.g. the "Learn the indicators" links). On mobile
+  // the right column collapses into a 2-up grid, so callers should let this
+  // block span the full row (gridColumn: "1 / -1"). Falls back to sitting
+  // after the description / stat grid in the single-column layouts.
+  belowStats?: ReactNode;
 }) {
   const name = profile.companyName || symbol;
   const dividend =
@@ -157,17 +164,22 @@ export default function CompanyProfile({
             <p style={descStyle}>{profile.description}</p>
             {belowDescription}
           </div>
-          <div className="cp-stats">{statBoxes}</div>
+          <div className="cp-stats">
+            {statBoxes}
+            {belowStats}
+          </div>
         </div>
       ) : hasDescription ? (
         <>
           <p style={descStyle}>{profile.description}</p>
           {belowDescription}
+          {belowStats}
         </>
       ) : (
         <>
           <div style={gridStyle} className="cp-grid-fallback">{statBoxes}</div>
           {belowDescription}
+          {belowStats}
         </>
       )}
 
@@ -210,10 +222,10 @@ export default function CompanyProfile({
 }
 
 const eyebrowStyle: CSSProperties = { fontSize: 11, fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)", marginBottom: 6 };
-const headingStyle: CSSProperties = { margin: 0, fontSize: 22, lineHeight: 1.15, letterSpacing: "-0.025em", fontWeight: 700 };
-const descStyle: CSSProperties = { margin: 0, fontSize: 15, lineHeight: 1.75, color: "rgba(241,245,249,0.82)" };
+const headingStyle: CSSProperties = { margin: 0, fontSize: 26, lineHeight: 1.12, letterSpacing: "-0.03em", fontWeight: 700 };
+const descStyle: CSSProperties = { margin: 0, fontSize: 16, lineHeight: 1.75, color: "rgba(241,245,249,0.82)" };
 const gridStyle: CSSProperties = { marginTop: 18, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 };
 const cellStyle: CSSProperties = { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "10px 12px", background: "rgba(255,255,255,0.02)", minWidth: 0 };
 const cellLabelStyle: CSSProperties = { fontSize: 10, fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(148,163,184,0.62)" };
-const cellValueStyle: CSSProperties = { marginTop: 4, fontSize: 14, fontWeight: 800, letterSpacing: "-0.01em", color: "#f1f5f9", overflowWrap: "anywhere" };
+const cellValueStyle: CSSProperties = { marginTop: 4, fontSize: 15, fontWeight: 800, letterSpacing: "-0.01em", color: "#f1f5f9", overflowWrap: "anywhere" };
 const sourceStyle: CSSProperties = { marginTop: 12, fontSize: 11, lineHeight: 1.5, color: "rgba(203,213,225,0.55)" };
