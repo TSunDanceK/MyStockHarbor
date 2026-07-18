@@ -4,31 +4,38 @@ import { useState } from "react";
 import type React from "react";
 
 // Owner-only "fill this date in now" control, rendered at the bottom of
-// app/earnings-calendar/page.tsx. Greyed out once the date is already fully
-// quoted (nothing left to fetch). Otherwise reveals an inline code entry
-// that posts to /api/earnings-calendar/backfill-date -- same safety rules
-// as normal browsing (site-wide FMP budget always enforced), just without
-// the hourly cap for this one date. Wrong-code lockout (3 attempts / 10
-// min) is enforced server-side; this component just surfaces the resulting
-// message.
-export default function BackfillButton({ date, complete }: { date: string; complete: boolean }) {
+// app/earnings-calendar/page.tsx. Greyed out when there's nothing to do --
+// either the date has no earnings to pull, or it's already fully quoted.
+// Otherwise reveals an inline code entry that posts to
+// /api/earnings-calendar/backfill-date -- same safety rules as normal browsing
+// (site-wide FMP budget always enforced), just without the hourly cap for this
+// one date. Wrong-code lockout (3 attempts / 10 min) is enforced server-side.
+export default function BackfillButton({
+  date,
+  complete,
+  hasEarnings,
+}: {
+  date: string;
+  complete: boolean;
+  hasEarnings: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [isComplete, setIsComplete] = useState(complete);
 
+  if (!hasEarnings) {
+    return (
+      <button type="button" disabled style={{ ...btnStyle, opacity: 0.35, cursor: "default" }}>
+        Backfill (no earnings on this date)
+      </button>
+    );
+  }
+
   if (isComplete) {
     return (
-      <button
-        type="button"
-        disabled
-        style={{
-          ...btnStyle,
-          opacity: 0.35,
-          cursor: "default",
-        }}
-      >
+      <button type="button" disabled style={{ ...btnStyle, opacity: 0.35, cursor: "default" }}>
         Backfill (this date is fully populated)
       </button>
     );
@@ -68,7 +75,7 @@ export default function BackfillButton({ date, complete }: { date: string; compl
       setStatus("done");
       setIsComplete(Boolean(json?.complete));
       setMessage(
-        `Populated ${json?.fetchedCount ?? "?"} of ${json?.totalCandidates ?? "?"} tickers${
+        `Populated ${json?.usListedCount ?? "?"} US-listed of ${json?.totalCandidates ?? "?"} candidates${
           json?.complete ? " -- date is now fully populated." : " -- some remain, run again if needed."
         }`
       );

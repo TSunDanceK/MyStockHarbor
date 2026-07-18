@@ -4,9 +4,12 @@ import type { Metadata } from "next";
 import type React from "react";
 import {
   getMonthDayCounts,
-  getDayEarningsPage,
+  getFullDayEarnings,
   populateNextMissingDate,
   isDateFullyPopulated,
+  getWindowStartDate,
+  getWindowEndDate,
+  isDateInWindow,
   daysInMonth,
 } from "@/lib/server/earningsCalendar";
 import EarningsDayList from "./EarningsDayList";
@@ -103,21 +106,41 @@ export default async function EarningsCalendarPage({
   const todayMonth = now.getUTCMonth() + 1;
   const todayDate = `${todayYear}-${pad2(todayMonth)}-${pad2(now.getUTCDate())}`;
 
+  // Rolling window bounds and the months that hold them. Everything outside
+  // [windowStart, windowEnd] is greyed out and non-navigable.
+  const windowStart = getWindowStartDate();
+  const windowEnd = getWindowEndDate();
+  const firstYM = windowStart.slice(0, 7);
+  const lastYM = windowEnd.slice(0, 7);
+
   const yearParam = Number(params.year);
   const monthParam = Number(params.month);
 
-  const year = Number.isFinite(yearParam) && yearParam > 0 ? yearParam : todayYear;
-  const month = Number.isFinite(monthParam) && monthParam >= 1 && monthParam <= 12 ? monthParam : todayMonth;
+  let year = Number.isFinite(yearParam) && yearParam > 0 ? yearParam : todayYear;
+  let month = Number.isFinite(monthParam) && monthParam >= 1 && monthParam <= 12 ? monthParam : todayMonth;
+
+  // Clamp the viewed month into the window (a hand-typed or stale URL outside
+  // the window snaps back to the nearest edge rather than 404-ing).
+  let viewedYM = `${year}-${pad2(month)}`;
+  if (viewedYM < firstYM) viewedYM = firstYM;
+  if (viewedYM > lastYM) viewedYM = lastYM;
+  year = Number(viewedYM.slice(0, 4));
+  month = Number(viewedYM.slice(5, 7));
 
   const monthPrefix = `${year}-${pad2(month)}`;
   const requestedDate = params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date) ? params.date : null;
 
+  // The first day of the viewed month that's actually inside the window
+  // (e.g. if the window starts on the 15th, the 1st-14th are greyed and not
+  // selectable).
+  const firstInWindowDay = `${monthPrefix}-01` < windowStart ? windowStart : `${monthPrefix}-01`;
+
   const selectedDate =
-    requestedDate && requestedDate.startsWith(monthPrefix)
+    requestedDate && requestedDate.startsWith(monthPrefix) && isDateInWindow(requestedDate)
       ? requestedDate
-      : year === todayYear && month === todayMonth
+      : year === todayYear && month === todayMonth && isDateInWindow(todayDate)
         ? todayDate
-        : `${monthPrefix}-01`;
+        : firstInWindowDay;
 
   const prevMonthDate = new Date(Date.UTC(year, month - 2, 1));
   const nextMonthDate = new Date(Date.UTC(year, month, 1));
@@ -125,20 +148,21 @@ export default async function EarningsCalendarPage({
   const nextHref = `/earnings-calendar?year=${nextMonthDate.getUTCFullYear()}&month=${nextMonthDate.getUTCMonth() + 1}`;
   const todayHref = `/earnings-calendar`;
 
-  const [dayCounts, dayPage, dateComplete] = await Promise.all([
+  // Nav limits: can't page before the month holding the window start, nor
+  // after the month holding the window end.
+  const prevDisabled = monthPrefix <= firstYM;
+  const nextDisabled = monthPrefix >= lastYM;
+
+  const [dayCounts, dayData, dateComplete] = await Promise.all([
     getMonthDayCounts(year, month),
-    getDayEarningsPage(selectedDate, 0, {}),
+    getFullDayEarnings(selectedDate, {}),
     isDateFullyPopulated(selectedDate),
   ]);
 
-  // Background auto-populate: after this response is sent, quietly fill in
-  // the next upcoming date(s) that aren't fully quoted yet -- a couple at a
-  // time on normal traffic (and respecting the hourly cap). This is what
-  // keeps the calendar populated further ahead purely from real page views,
-  // so the "click through and hit the cap" experience doesn't recur once
-  // the near future is caught up. See lib/server/earningsCalendar.ts for
-  // details, and BackfillButton.tsx (below) for the manual, owner-only,
-  // single-date catch-up path.
+  // Background auto-populate: after this response is sent, quietly fill in the
+  // next not-yet-complete date in the window (front-to-back), a couple at a
+  // time and respecting the hourly cap. Once the whole window is filled these
+  // scans short-circuit at zero cost until it rolls forward.
   after(async () => {
     try {
       await populateNextMissingDate({ maxDates: 2 });
@@ -284,25 +308,27 @@ export default async function EarningsCalendarPage({
             >
               <div style={{ fontSize: 20, fontWeight: 800 }}>{monthLabel(year, month)}</div>
               <div style={{ display: "flex", gap: 8 }}>
-                {/* prefetch=false on every Link in this section: without it,
-                    Next.js silently issues a background request for each
-                    link the instant it's in the viewport. The month grid
-                    below puts ~30-35 day cells on screen at once, so a
-                    single page view was quietly firing 30+ extra requests
-                    to this same route -- enough on its own to trip the
-                    Vercel firewall's per-IP rate limit on ordinary browsing.
-                    See lib/server/earningsCalendar.ts for the matching
-                    server-side guard (hourly cap on new ticker quotes) and
-                    the background auto-populate system. */}
-                <Link href={prevHref} prefetch={false} style={navBtnStyle}>
-                  ← Prev
-                </Link>
+                {prevDisabled ? (
+                  <span style={navBtnDisabledStyle} aria-disabled="true">
+                    ← Prev
+                  </span>
+                ) : (
+                  <Link href={prevHref} prefetch={false} style={navBtnStyle}>
+                    ← Prev
+                  </Link>
+                )}
                 <Link href={todayHref} prefetch={false} style={navBtnStyle}>
                   Today
                 </Link>
-                <Link href={nextHref} prefetch={false} style={navBtnStyle}>
-                  Next →
-                </Link>
+                {nextDisabled ? (
+                  <span style={navBtnDisabledStyle} aria-disabled="true">
+                    Next →
+                  </span>
+                ) : (
+                  <Link href={nextHref} prefetch={false} style={navBtnStyle}>
+                    Next →
+                  </Link>
+                )}
               </div>
             </div>
 
@@ -333,6 +359,38 @@ export default async function EarningsCalendarPage({
                   const count = dayCounts[cellDate] ?? 0;
                   const isSelected = cellDate === selectedDate;
                   const isToday = cellDate === todayDate;
+                  const outOfWindow = cellDate < windowStart || cellDate > windowEnd;
+
+                  // Greyed, non-clickable archived/out-of-range day: faded
+                  // number + red X, no populate.
+                  if (outOfWindow) {
+                    return (
+                      <div
+                        key={cellDate}
+                        aria-disabled="true"
+                        title="Outside the active earnings window"
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 4,
+                          padding: "10px 4px",
+                          minHeight: 62,
+                          borderRadius: 10,
+                          border: "1px solid rgba(255,255,255,0.05)",
+                          background: "rgba(255,255,255,0.015)",
+                          color: "#64748b",
+                          cursor: "default",
+                        }}
+                      >
+                        <span style={{ fontSize: 13, fontWeight: 700, opacity: 0.4 }}>{day}</span>
+                        <span style={{ fontSize: 14, fontWeight: 900, color: "#ef4444", opacity: 0.6 }}>
+                          ✕
+                        </span>
+                      </div>
+                    );
+                  }
 
                   return (
                     <Link
@@ -395,24 +453,22 @@ export default async function EarningsCalendarPage({
             <div style={{ padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
               <div style={{ fontSize: 17, fontWeight: 800 }}>{formatDateLabel(selectedDate)}</div>
               <div style={{ fontSize: 12.5, opacity: 0.6, marginTop: 3 }}>
-                {dayPage.totalCandidates} US-listed compan{dayPage.totalCandidates === 1 ? "y" : "ies"} reporting
+                {dayData.usListedCount} US-listed compan{dayData.usListedCount === 1 ? "y" : "ies"} reporting
+                {!dateComplete && dayData.totalCandidates > 0 ? " · still populating…" : ""}
               </div>
             </div>
 
             <div style={{ padding: 16 }}>
-              <EarningsDayList
-                date={selectedDate}
-                initialItems={dayPage.items}
-                initialTotalCandidates={dayPage.totalCandidates}
-                initialFetchedCount={dayPage.fetchedCount}
-                initialHasMore={dayPage.hasMore}
-                initialNextBatch={dayPage.nextBatch}
-              />
+              <EarningsDayList items={dayData.items} complete={dateComplete} />
             </div>
           </section>
 
           <div style={{ marginTop: 16 }}>
-            <BackfillButton date={selectedDate} complete={dateComplete} />
+            <BackfillButton
+              date={selectedDate}
+              complete={dateComplete}
+              hasEarnings={dayData.totalCandidates > 0}
+            />
           </div>
 
           <p style={{ fontSize: 12.5, opacity: 0.55, marginTop: 16 }}>
@@ -449,4 +505,10 @@ const navBtnStyle: React.CSSProperties = {
   textDecoration: "none",
   fontWeight: 700,
   fontSize: 12.5,
+};
+
+const navBtnDisabledStyle: React.CSSProperties = {
+  ...navBtnStyle,
+  opacity: 0.3,
+  cursor: "default",
 };
