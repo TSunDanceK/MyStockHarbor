@@ -7,7 +7,7 @@ import {
   computeIndicatorSeed,
   type Point,
 } from "@/lib/indicators";
-import PageShareBar from "@/app/components/PageShareBar";
+import ShareButton from "@/app/components/ShareButton";
 import { WatermarkVisibilityProvider, HideWatermarksBar, EarningsScoreWatermark } from "@/app/components/WatermarkVisibility";
 
 export const dynamic = "force-dynamic";
@@ -802,6 +802,7 @@ export default async function StockEarningsPage({ params }: Props) {
         .topLinks a, .earningsSearchRow button, .actionLink { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 10px 14px; border-radius: 12px; border: 1px solid rgba(59,130,246,0.32); background: rgba(59,130,246,0.10); color: #dbeafe; text-decoration: none; font-weight: 900; font-size: 13px; cursor: pointer; }
         .topLinks a.green, .actionLink.green { border-color: rgba(34,197,94,0.32); background: rgba(34,197,94,0.10); color: #dcfce7; }
         .hero { border: 1px solid rgba(255,255,255,0.08); border-radius: 28px; padding: 24px; background: linear-gradient(135deg, rgba(15,23,42,0.96), rgba(6,10,18,0.98)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 18px 38px rgba(0,0,0,0.24); display: grid; grid-template-columns: minmax(0, 1fr) 410px; gap: 24px; align-items: stretch; }
+        .heroTopBar { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
         .eyebrow, .smallLabel { font-size: 12px; font-weight: 950; text-transform: uppercase; letter-spacing: 0.08em; color: #93c5fd; }
         .hero h1 { margin: 12px 0 0; font-size: 46px; line-height: 1.04; letter-spacing: -0.055em; }
         .hero p { margin: 12px 0 0; color: rgba(226,232,240,0.80); line-height: 1.7; font-size: 16px; max-width: 760px; }
@@ -913,15 +914,16 @@ export default async function StockEarningsPage({ params }: Props) {
       `}</style>
 
         <div className="earningsWrap">
-          <PageShareBar
-            url={`https://www.mystockharbor.com/stock/${clean}/earnings`}
-            title={`${clean} Earnings & Earnings Score | MyStockHarbor`}
-            text={`${clean} earnings — EPS, revenue & earnings score 📊 MyStockHarbor`}
-          />
-
           <section className="hero">
-            <div>
+            <div className="heroTopBar">
               <div className="eyebrow">Earnings desk</div>
+              <ShareButton
+                url={`https://www.mystockharbor.com/stock/${clean}/earnings`}
+                title={`${clean} Earnings & Earnings Score | MyStockHarbor`}
+                text={`${clean} earnings — EPS, revenue & earnings score 📊 MyStockHarbor`}
+              />
+            </div>
+            <div>
               <h1>{clean} Stock Earnings, EPS & Revenue Breakdown</h1>
               <p>Review the latest reported earnings for {clean}, including actual EPS, estimates, revenue surprise, year-over-year context, recent earnings consistency and a simple earnings score.</p>
               <EarningsSymbolPicker currentSymbol={clean} />

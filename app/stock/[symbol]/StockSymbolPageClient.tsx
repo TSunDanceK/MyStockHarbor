@@ -14,6 +14,7 @@ import CompanyProfile, {
 import DilutionHistory, {
   type DilutionHistoryData,
 } from "@/app/components/DilutionHistory";
+import ShareButton from "@/app/components/ShareButton";
 
 type Quote = {
   symbol: string;
@@ -1005,6 +1006,16 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
     </div>
   );
 
+  // Share button strings (moved into the hero pill row so Share no longer
+  // occupies its own line above the card). Mirrors the text page.tsx used to
+  // pass to the old standalone PageShareBar.
+  const shareUrl = `https://www.mystockharbor.com/stock/${symbol}`;
+  const shareTitle = `${symbol} Stock Analysis | MyStockHarbor`;
+  const shareText =
+    lastClose != null
+      ? `${symbol} stock analysis — Price $${lastClose.toFixed(2)}${trend ? `, ${trend}` : ""} 📊 MyStockHarbor`
+      : `${symbol} stock analysis — chart, indicators & technical read 📊 MyStockHarbor`;
+
   // Right-column presentation: a compact eyebrow-titled block that sits under
   // the company stat cards. Spans the full row when the column collapses to a
   // 2-up grid on mobile.
@@ -1025,6 +1036,9 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <span style={stockDeskTagStyle}>Stock Analysis</span>
             <Link href="/pickers" style={{ fontSize: 12, fontWeight: 600, color: "rgba(148,163,184,0.65)", textDecoration: "none" }}>← Pickers</Link>
+            <div style={{ marginLeft: "auto" }}>
+              <ShareButton url={shareUrl} title={shareTitle} text={shareText} />
+            </div>
           </div>
           <div style={{ marginTop: 14 }}>
             <h1 style={{ margin: 0, fontSize: 34, lineHeight: 1.05, fontWeight: 800, letterSpacing: "-0.045em" }}>{symbol}</h1>
