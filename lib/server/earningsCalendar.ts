@@ -74,10 +74,10 @@ const redis =
 const QUOTE_HOURLY_CAP = 50;
 const QUOTE_COUNTER_PREFIX = "msh:earnings-quote-calls:v1";
 const QUOTED_SYMBOL_PREFIX = "msh:earnings-quoted-symbol:v1";
-const DAY_COMPLETE_PREFIX = "msh:earnings-day-complete:v1";
+const DAY_COMPLETE_PREFIX = "msh:earnings-day-complete:v2";
 const DAY_ITEMS_PREFIX = "msh:earnings-day-items:v1";
 const US_COUNT_MONTH_PREFIX = "msh:earnings-month-uscount:v1";
-const FILL_FRONTIER_KEY = "msh:earnings-fill-frontier:v1";
+const FILL_FRONTIER_KEY = "msh:earnings-fill-frontier:v2";
 
 // Rolling window bounds.
 const WINDOW_PAST_DAYS = 3; // today and the previous 3 days stay live
