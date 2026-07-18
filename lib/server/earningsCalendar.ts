@@ -237,10 +237,28 @@ async function writeDayItemsCache(date: string, items: EarningsListItem[]) {
   }
 }
 
+// One row per symbol (a symbol repeated in FMP's feed collapses to the first
+// seen), sorted by market cap descending -- largest companies first, unpriced
+// rows (null cap) last. Applied on every serve, so even a blob materialised by
+// older code (which could hold FMP's duplicate rows in raw feed order) still
+// displays clean and correctly ordered.
+function dedupeAndSortItems(items: EarningsListItem[]): EarningsListItem[] {
+  const seen = new Set<string>();
+  const out: EarningsListItem[] = [];
+  for (const it of items) {
+    const key = it.symbol.toUpperCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(it);
+  }
+  out.sort((a, b) => (b.marketCap ?? -1) - (a.marketCap ?? -1));
+  return out;
+}
+
 // Read-only accessor for a date's materialised rows -- used by the Show more
 // pagination endpoint (app/api/earnings-calendar/day). Never quotes.
 export async function getCachedDayItems(date: string): Promise<EarningsListItem[]> {
-  return (await readDayItemsCache(date)) ?? [];
+  return dedupeAndSortItems((await readDayItemsCache(date)) ?? []);
 }
 
 // --- Fill frontier (so a full window costs nothing to rescan) ------------
@@ -431,6 +449,19 @@ async function getNameMap(): Promise<Map<string, string>> {
   }
 }
 
+// How complete an FMP earnings row is -- used to pick the best entry when the
+// feed lists the same symbol more than once (same date, or across dates). A row
+// carrying real estimates/actuals wins over an empty placeholder; ties break to
+// the earlier date.
+function candidateDataScore(c: EarningsCandidate): number {
+  let n = 0;
+  if (c.epsEstimated !== null) n++;
+  if (c.epsActual !== null) n++;
+  if (c.revenueEstimated !== null) n++;
+  if (c.revenueActual !== null) n++;
+  return n;
+}
+
 // Builds, per date-in-month, the full candidate list (name-resolved,
 // heuristically US-filtered, coarse-sorted) -- but does NOT quote anything.
 // This is the free part: two bulk calls total per month (both cached), no
@@ -444,12 +475,20 @@ async function getMonthCandidates(year: number, month: number): Promise<Map<stri
 
   const byDate = new Map<string, EarningsCandidate[]>();
 
+  // Collapse the feed to ONE entry per symbol for the whole month. FMP's
+  // earnings-calendar routinely repeats a symbol -- several rows on the same
+  // date, and/or the same symbol across nearby dates -- which surfaced as
+  // duplicate table rows (e.g. JOE listed 2-4x on 29-31 Jul). A company reports
+  // once per period, so keep the single best entry: most data, ties to the
+  // earliest date.
+  const bySymbol = new Map<string, EarningsCandidate>();
   for (const row of rows) {
     const symbol = str(row.symbol);
     const date = str(row.date);
     if (!symbol || !date) continue;
 
-    const company = nameMap.get(symbol.toUpperCase());
+    const key = symbol.toUpperCase();
+    const company = nameMap.get(key);
     if (!company) continue; // no name match -- rare given stock-list's ~38k coverage, skip rather than show a blank name
 
     if (looksNonUsOrDerivative(symbol)) continue;
@@ -464,13 +503,25 @@ async function getMonthCandidates(year: number, month: number): Promise<Map<stri
       revenueActual: num(row.revenueActual),
     };
 
-    const list = byDate.get(date) ?? [];
-    list.push(candidate);
-    byDate.set(date, list);
+    const existing = bySymbol.get(key);
+    if (
+      !existing ||
+      candidateDataScore(candidate) > candidateDataScore(existing) ||
+      (candidateDataScore(candidate) === candidateDataScore(existing) && candidate.date < existing.date)
+    ) {
+      bySymbol.set(key, candidate);
+    }
   }
 
-  // Coarse sort within each date: known mega-caps first, ties keep FMP's
-  // own original order (Array.sort is stable).
+  for (const candidate of bySymbol.values()) {
+    const list = byDate.get(candidate.date) ?? [];
+    list.push(candidate);
+    byDate.set(candidate.date, list);
+  }
+
+  // Coarse sort within each date: known mega-caps first, ties keep insertion
+  // order (Array.sort is stable). The final market-cap ordering happens once
+  // quotes are in (dedupeAndSortItems).
   for (const list of byDate.values()) {
     list.sort((a, b) => popularRank(a.symbol) - popularRank(b.symbol));
   }
@@ -607,11 +658,17 @@ export async function getFullDayEarnings(
   if (!forceRefresh) {
     const cachedItems = await readDayItemsCache(date);
     if (cachedItems) {
+      const cleaned = dedupeAndSortItems(cachedItems);
+      // Persist the cleaned blob if the stored copy carried duplicate rows, so
+      // the fix sticks and Show more paginates the deduped set -- no re-quoting.
+      if (cleaned.length !== cachedItems.length) {
+        await writeDayItemsCache(date, cleaned);
+      }
       return {
         date,
-        items: cachedItems,
+        items: cleaned,
         totalCandidates,
-        usListedCount: cachedItems.length,
+        usListedCount: cleaned.length,
         complete: await isDateComplete(date),
       };
     }
@@ -628,7 +685,7 @@ export async function getFullDayEarnings(
   const quotes = await quoteBatch(candidates.map((c) => c.symbol), bypassCap);
 
   let anyCapped = false;
-  const items: EarningsListItem[] = candidates
+  const rawItems: EarningsListItem[] = candidates
     .map((candidate): EarningsListItem | null => {
       const quote = quotes[candidate.symbol];
       if (quote?.capped) anyCapped = true;
@@ -642,8 +699,8 @@ export async function getFullDayEarnings(
         marketCap: quote?.marketCap ?? null,
       };
     })
-    .filter((item): item is EarningsListItem => item !== null)
-    .sort((a, b) => (b.marketCap ?? -1) - (a.marketCap ?? -1));
+    .filter((item): item is EarningsListItem => item !== null);
+  const items = dedupeAndSortItems(rawItems);
 
   // Always materialise what we have, so the next render -- and Show more --
   // read it back instead of re-quoting.
