@@ -1,4 +1,4 @@
- import type { Metadata } from "next";
+import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 import EarningsSymbolPicker from "./EarningsSymbolPicker";
@@ -9,6 +9,7 @@ import {
 } from "@/lib/indicators";
 import ShareButton from "@/app/components/ShareButton";
 import { WatermarkVisibilityProvider, HideWatermarksBar, EarningsScoreWatermark } from "@/app/components/WatermarkVisibility";
+import { IncomeStatementCard, AnnualConsensusCard, type IncomeDetail, type AnnualConsensus } from "./EarningsDetail";
 
 export const dynamic = "force-dynamic";
 
@@ -37,11 +38,19 @@ type FmpIncomeStatementRow = {
   calendarYear?: string;
   period?: string;
   revenue?: number | null;
+  costOfRevenue?: number | null;
   grossProfit?: number | null;
+  researchAndDevelopment?: number | null;
+  sga?: number | null;
   operatingIncome?: number | null;
+  ebitda?: number | null;
+  interestExpense?: number | null;
+  incomeBeforeTax?: number | null;
+  incomeTaxExpense?: number | null;
   netIncome?: number | null;
   eps?: number | null;
   epsDiluted?: number | null;
+  weightedAverageShsDil?: number | null;
 };
 
 type FmpHistoricalEarningCalendarRow = {
@@ -409,11 +418,12 @@ async function fetchFmpLegacyJson<T>(path: string): Promise<T | null> {
 }
 
 async function getEarningsData(symbol: string) {
-  const [earningsJson, incomeJson, historicalCalendarJson, analystEstimatesJson, dailyHistory] = await Promise.all([
+  const [earningsJson, incomeJson, historicalCalendarJson, analystEstimatesJson, annualEstimatesJson, dailyHistory] = await Promise.all([
     fetchFmpJson<unknown[]>(`/earnings?symbol=${encodeURIComponent(symbol)}`),
     fetchFmpJson<unknown[]>(`/income-statement?symbol=${encodeURIComponent(symbol)}&period=quarter&limit=12`),
     fetchFmpLegacyJson<unknown[]>(`/historical/earning_calendar/${encodeURIComponent(symbol)}`),
-    fetchFmpJson<unknown[]>(`/analyst-estimates?symbol=${encodeURIComponent(symbol)}&period=quarter&limit=8`),
+    fetchFmpJson<unknown[]>(`/analyst-estimates?symbol=${encodeURIComponent(symbol)}&period=quarter&limit=24`),
+    fetchFmpJson<unknown[]>(`/analyst-estimates?symbol=${encodeURIComponent(symbol)}&period=annual&limit=6`),
     getDailyHistory(symbol).catch(() => [] as Point[]),
   ]);
 
@@ -422,7 +432,7 @@ async function getEarningsData(symbol: string) {
     : [];
 
   const incomeRows: FmpIncomeStatementRow[] = Array.isArray(incomeJson)
-    ? incomeJson.map((item) => { const row = item as Record<string, unknown>; return { date: typeof row.date === "string" ? row.date : "", calendarYear: typeof row.calendarYear === "string" ? row.calendarYear : "", period: typeof row.period === "string" ? row.period : "", revenue: asNumber(row.revenue), grossProfit: asNumber(row.grossProfit), operatingIncome: asNumber(row.operatingIncome), netIncome: asNumber(row.netIncome), eps: asNumber(row.eps), epsDiluted: asNumber(row.epsDiluted) }; }).filter((row) => Boolean(row.date))
+    ? incomeJson.map((item) => { const row = item as Record<string, unknown>; return { date: typeof row.date === "string" ? row.date : "", calendarYear: typeof row.calendarYear === "string" ? row.calendarYear : "", period: typeof row.period === "string" ? row.period : "", revenue: asNumber(row.revenue), costOfRevenue: asNumber(row.costOfRevenue), grossProfit: asNumber(row.grossProfit), researchAndDevelopment: asNumber(row.researchAndDevelopmentExpenses) ?? asNumber(row.researchAndDevelopment), sga: asNumber(row.sellingGeneralAndAdministrativeExpenses) ?? asNumber(row.generalAndAdministrativeExpenses) ?? asNumber(row.sellingAndMarketingExpenses), operatingIncome: asNumber(row.operatingIncome), ebitda: asNumber(row.ebitda), interestExpense: asNumber(row.interestExpense), incomeBeforeTax: asNumber(row.incomeBeforeTax), incomeTaxExpense: asNumber(row.incomeTaxExpense), netIncome: asNumber(row.netIncome), eps: asNumber(row.eps), epsDiluted: asNumber(row.epsDiluted), weightedAverageShsDil: asNumber(row.weightedAverageShsOutDil) ?? asNumber(row.weightedAverageShsOut) }; }).filter((row) => Boolean(row.date))
     : [];
 
   const historicalCalendarRows: FmpHistoricalEarningCalendarRow[] = Array.isArray(historicalCalendarJson)
@@ -431,6 +441,10 @@ async function getEarningsData(symbol: string) {
 
   const analystEstimateRows: FmpAnalystEstimateRow[] = Array.isArray(analystEstimatesJson)
     ? analystEstimatesJson.map((item) => { const row = item as Record<string, unknown>; return { date: typeof row.date === "string" ? row.date : "", revenueLow: asNumber(row.revenueLow), revenueHigh: asNumber(row.revenueHigh), revenueAvg: asNumber(row.revenueAvg), epsLow: asNumber(row.epsLow), epsHigh: asNumber(row.epsHigh), epsAvg: asNumber(row.epsAvg), numAnalystsRevenue: asNumber(row.numAnalystsRevenue), numAnalystsEps: asNumber(row.numAnalystsEps) }; }).filter((row) => Boolean(row.date)).sort((a, b) => String(a.date).localeCompare(String(b.date)))
+    : [];
+
+  const annualEstimateRows: FmpAnalystEstimateRow[] = Array.isArray(annualEstimatesJson)
+    ? annualEstimatesJson.map((item) => { const row = item as Record<string, unknown>; return { date: typeof row.date === "string" ? row.date : "", revenueLow: asNumber(row.revenueLow), revenueHigh: asNumber(row.revenueHigh), revenueAvg: asNumber(row.revenueAvg), epsLow: asNumber(row.epsLow), epsHigh: asNumber(row.epsHigh), epsAvg: asNumber(row.epsAvg), numAnalystsRevenue: asNumber(row.numAnalystsRevenue), numAnalystsEps: asNumber(row.numAnalystsEps) }; }).filter((row) => Boolean(row.date)).sort((a, b) => String(a.date).localeCompare(String(b.date)))
     : [];
 
   const historicalByDate = new Map(historicalCalendarRows.map((row) => [row.date, row]));
@@ -494,7 +508,31 @@ async function getEarningsData(symbol: string) {
   const sharedScore = await fetchSharedEarningsScore(symbol);
   const score = sharedScore ?? localScore;
 
-  return { rows: earningsRows, completedRows, latest, next, nextEstimate, sameQuarterLastYear, grossMargin, operatingMargin, netIncome, recentTrend, chartQuarters, growthMarginQuarters, priceReactionQuarters, yearlySummaries, score, epsBeatCount, epsBeatTotal, currentStreakCount, currentStreakType };
+  // Forward full-year consensus, a trailing-12-month base for growth context, and the full latest P&L.
+  const annualEstimate = annualEstimateRows.find((row) => Boolean(row.date) && String(row.date) >= todayIso && (row.epsAvg != null || row.revenueAvg != null)) ?? null;
+  const last4Income = incomeRows.slice(0, 4);
+  const ttmRevenue = last4Income.length === 4 && last4Income.every((r) => r.revenue != null) ? last4Income.reduce((sum, r) => sum + (r.revenue ?? 0), 0) : null;
+  const ttmEps = last4Income.length === 4 && last4Income.every((r) => (r.epsDiluted ?? r.eps) != null) ? last4Income.reduce((sum, r) => sum + ((r.epsDiluted ?? r.eps) ?? 0), 0) : null;
+  const li = matchingIncome;
+  const latestIncomeStatement = li ? {
+    periodEnd: li.date ?? null,
+    periodLabel: li.period ?? null,
+    revenue: li.revenue ?? null,
+    costOfRevenue: li.costOfRevenue ?? (li.revenue != null && li.grossProfit != null ? li.revenue - li.grossProfit : null),
+    grossProfit: li.grossProfit ?? null,
+    researchAndDevelopment: li.researchAndDevelopment ?? null,
+    sga: li.sga ?? null,
+    operatingIncome: li.operatingIncome ?? null,
+    ebitda: li.ebitda ?? null,
+    interestExpense: li.interestExpense ?? null,
+    incomeBeforeTax: li.incomeBeforeTax ?? null,
+    incomeTaxExpense: li.incomeTaxExpense ?? null,
+    netIncome: li.netIncome ?? null,
+    epsDiluted: li.epsDiluted ?? li.eps ?? null,
+    weightedAverageShsDil: li.weightedAverageShsDil ?? null,
+  } : null;
+
+  return { rows: earningsRows, completedRows, latest, next, nextEstimate, annualEstimate, ttmRevenue, ttmEps, latestIncomeStatement, sameQuarterLastYear, grossMargin, operatingMargin, netIncome, recentTrend, chartQuarters, growthMarginQuarters, priceReactionQuarters, yearlySummaries, score, epsBeatCount, epsBeatTotal, currentStreakCount, currentStreakType };
 }
 
 function metricCardStyle(tone: EarningsTone | "default" = "default") {
@@ -743,6 +781,23 @@ export default async function StockEarningsPage({ params }: Props) {
   const latest = data.latest;
   const next = data.next;
   const nextEstimate = data.nextEstimate;
+  const incomeDetail: IncomeDetail | null = data.latestIncomeStatement;
+  const annualEstimateRow = data.annualEstimate;
+  const annualConsensus: AnnualConsensus | null = annualEstimateRow
+    ? {
+        date: annualEstimateRow.date ?? null,
+        revenueAvg: annualEstimateRow.revenueAvg ?? null,
+        revenueLow: annualEstimateRow.revenueLow ?? null,
+        revenueHigh: annualEstimateRow.revenueHigh ?? null,
+        epsAvg: annualEstimateRow.epsAvg ?? null,
+        epsLow: annualEstimateRow.epsLow ?? null,
+        epsHigh: annualEstimateRow.epsHigh ?? null,
+        numAnalystsRevenue: annualEstimateRow.numAnalystsRevenue ?? null,
+        numAnalystsEps: annualEstimateRow.numAnalystsEps ?? null,
+        ttmRevenue: data.ttmRevenue,
+        ttmEps: data.ttmEps,
+      }
+    : null;
   const epsActual = latest?.epsActual ?? null;
   const epsEstimated = latest?.epsEstimated ?? null;
   const epsSurprise = calcDifference(epsActual, epsEstimated);
@@ -991,6 +1046,10 @@ export default async function StockEarningsPage({ params }: Props) {
                 )}
               </section>
 
+              <AnnualConsensusCard estimate={annualConsensus} />
+
+              <IncomeStatementCard income={incomeDetail} />
+
               <section className="card">
                 <div className="eyebrow">Recent earnings trend</div>
                 <h2>How recent earnings have been landing</h2>
@@ -1136,6 +1195,14 @@ export default async function StockEarningsPage({ params }: Props) {
                     ))}
                   </div>
                 ) : <p>No yearly earnings pattern is available yet.</p>}
+              </section>
+              <section className="card">
+                <div className="eyebrow">Learn</div>
+                <h3>New to reading earnings?</h3>
+                <p>Understand EPS, revenue surprise, margins and the three financial statements behind every earnings report — in plain English.</p>
+                <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
+                  <Link className="actionLink green" href="/learn/how-to-read-financial-data">How to Read Financial Data &rarr;</Link>
+                </div>
               </section>
               <section className="card">
                 <div className="eyebrow">Next step</div>
