@@ -3,7 +3,7 @@ import { after } from "next/server";
 import type { Metadata } from "next";
 import type React from "react";
 import {
-  getMonthDayCounts,
+  getMonthDaysWithEarnings,
   getDayEarningsForRender,
   getFullDayEarnings,
   populateNextMissingDate,
@@ -154,8 +154,8 @@ export default async function EarningsCalendarPage({
   const prevDisabled = monthPrefix <= firstYM;
   const nextDisabled = monthPrefix >= lastYM;
 
-  const [dayCounts, dayData, dateComplete] = await Promise.all([
-    getMonthDayCounts(year, month),
+  const [daysWithEarnings, dayData, dateComplete] = await Promise.all([
+    getMonthDaysWithEarnings(year, month),
     getDayEarningsForRender(selectedDate),
     isDateFullyPopulated(selectedDate),
   ]);
@@ -368,7 +368,7 @@ export default async function EarningsCalendarPage({
                   }
 
                   const cellDate = `${year}-${pad2(month)}-${pad2(day)}`;
-                  const count = dayCounts[cellDate] ?? 0;
+                  const hasEarnings = daysWithEarnings.has(cellDate);
                   const isSelected = cellDate === selectedDate;
                   const isToday = cellDate === todayDate;
                   const outOfWindow = cellDate < windowStart || cellDate > windowEnd;
@@ -430,21 +430,21 @@ export default async function EarningsCalendarPage({
                         {day}
                         {isToday ? " •" : ""}
                       </span>
-                      {count > 0 ? (
+                      {hasEarnings ? (
                         <span
+                          aria-label="Companies report on this date"
+                          title="Companies report on this date"
                           style={{
-                            fontSize: 11,
-                            fontWeight: 700,
-                            padding: "1px 7px",
+                            display: "block",
+                            width: 8,
+                            height: 8,
                             borderRadius: 999,
-                            background: "rgba(34,197,94,0.14)",
-                            color: "#4ade80",
+                            background: "#22c55e",
+                            boxShadow: "0 0 6px rgba(34,197,94,0.55)",
                           }}
-                        >
-                          {count}
-                        </span>
+                        />
                       ) : (
-                        <span style={{ fontSize: 11, opacity: 0.35 }}>—</span>
+                        <span style={{ fontSize: 11, opacity: 0.3 }}>—</span>
                       )}
                     </Link>
                   );
