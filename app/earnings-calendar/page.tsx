@@ -493,6 +493,37 @@ export default async function EarningsCalendarPage({
             before the report date — treat this as a starting point for
             further research, not investment advice.
           </p>
+
+          {/* Continue exploring — server-rendered internal links into other
+              indexable hub pages, to help crawl discovery from this
+              high-ticker-volume page. */}
+          <section
+            style={{
+              marginTop: 28,
+              background: "#0b1220",
+              border: "1px solid rgba(255,255,255,0.12)",
+              borderRadius: 16,
+              padding: 20,
+              boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
+            }}
+          >
+            <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 6 }}>Continue exploring</div>
+            <div style={{ fontSize: 14, lineHeight: 1.6, opacity: 0.75, marginBottom: 14 }}>
+              Track upcoming listings, read the latest chart insights, or scan the
+              supply-chain bottlenecks behind the market.
+            </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <Link href="/upcoming-ipos" style={exploreLinkStyle}>
+                Upcoming IPOs →
+              </Link>
+              <Link href="/insights" style={exploreLinkStyle}>
+                Insights →
+              </Link>
+              <Link href="/bottlenecks" style={exploreLinkStyle}>
+                Bottlenecks →
+              </Link>
+            </div>
+          </section>
         </div>
 
         <style>{`
@@ -528,4 +559,20 @@ const navBtnDisabledStyle: React.CSSProperties = {
   ...navBtnStyle,
   opacity: 0.3,
   cursor: "default",
+};
+
+const exploreLinkStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 42,
+  padding: "10px 16px",
+  borderRadius: 10,
+  border: "1px solid rgba(59,130,246,0.32)",
+  background: "rgba(59,130,246,0.10)",
+  color: "#dbeafe",
+  textDecoration: "none",
+  fontWeight: 800,
+  fontSize: 13,
+  whiteSpace: "nowrap",
 };
