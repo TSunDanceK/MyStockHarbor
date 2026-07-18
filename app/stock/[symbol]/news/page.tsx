@@ -13,7 +13,7 @@ import {
   computeIndicatorSeed,
   type Point,
 } from "@/lib/indicators";
-import PageShareBar from "@/app/components/PageShareBar";
+import ShareButton from "@/app/components/ShareButton";
 import WhyThisMatters from "./WhyThisMatters";
 import AiInsightCard from "./AiInsightCard";
 import { WatermarkVisibilityProvider, HideWatermarksBar, NewsScoreWatermark } from "@/app/components/WatermarkVisibility";
@@ -960,15 +960,16 @@ export default async function StockNewsPage({ params }: Props) {
       />
 
       <div className="newsWrap">
-        <PageShareBar
-          url={`https://www.mystockharbor.com/stock/${upper}/news`}
-          title={`${upper} Stock News & Analysis | MyStockHarbor`}
-          text={`${upper} stock news — headline sentiment, earnings context & chart analysis 📊 MyStockHarbor`}
-        />
-
         <section className="newsHeroShell" style={heroShellStyle}>
-          <div className="newsHeroLeft" style={heroLeftStyle}>
+          <div className="newsHeroTopBar" style={heroTopBarStyle}>
             <div style={newsDeskTagStyle}>NEWS DESK</div>
+            <ShareButton
+              url={`https://www.mystockharbor.com/stock/${upper}/news`}
+              title={`${upper} Stock News & Analysis | MyStockHarbor`}
+              text={`${upper} stock news — headline sentiment, earnings context & chart analysis 📊 MyStockHarbor`}
+            />
+          </div>
+          <div className="newsHeroLeft" style={heroLeftStyle}>
             <h1 className="newsHeroTitle" style={heroTitleStyle}>
               {upper} Stock News, News Score & What It Could Mean
             </h1>
@@ -1105,6 +1106,7 @@ export default async function StockNewsPage({ params }: Props) {
 
 const heroShellStyle: CSSProperties = { display: "grid", gridTemplateColumns: "minmax(0, 1.24fr) minmax(280px, 0.76fr)", gap: 18, border: "1px solid rgba(255,255,255,0.09)", borderRadius: 28, padding: 22, background: "linear-gradient(135deg, rgba(10,16,32,0.98), rgba(6,9,15,0.98))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 20px 54px rgba(0,0,0,0.36)" };
 const heroLeftStyle: CSSProperties = { minWidth: 0 };
+const heroTopBarStyle: CSSProperties = { gridColumn: "1 / -1", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" };
 const heroRightStyle: CSSProperties = { display: "grid", gap: 14, alignContent: "start" };
 const newsDeskTagStyle: CSSProperties = { display: "inline-flex", alignItems: "center", padding: "8px 12px", borderRadius: 999, border: "1px solid rgba(59,130,246,0.28)", background: "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.08))", color: "#dbeafe", fontSize: 12, fontWeight: 950, letterSpacing: "0.08em", textTransform: "uppercase" };
 const heroTitleStyle: CSSProperties = { margin: "14px 0 0 0", fontSize: 44, lineHeight: 1.02, letterSpacing: "-0.055em", maxWidth: 760 };
