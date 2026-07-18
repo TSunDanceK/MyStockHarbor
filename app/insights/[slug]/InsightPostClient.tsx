@@ -1034,7 +1034,7 @@ export default function InsightPostClient({
             <div>
               <div className="insightResearchTitle">Continue with current context</div>
               <div className="insightResearchText">
-                Use the stock page for the current chart and the news page for the latest live headlines.
+                Use the stock page for the current chart, the news page for the latest live headlines, and the earnings page for the latest EPS and revenue read.
               </div>
             </div>
 
@@ -1045,6 +1045,10 @@ export default function InsightPostClient({
 
               <Link href={`/stock/${symbol}/news`} style={bottomActionStyle("green")}>
                 Latest {symbol} news
+              </Link>
+
+              <Link href={`/stock/${symbol}/earnings`} style={bottomActionStyle("gold")}>
+                {symbol} earnings
               </Link>
             </div>
           </section>
@@ -1951,7 +1955,7 @@ function chartActionStyle(
   };
 }
 
-function bottomActionStyle(tint: "blue" | "green"): React.CSSProperties {
+function bottomActionStyle(tint: "blue" | "green" | "gold"): React.CSSProperties {
   return {
     display: "inline-flex",
     alignItems: "center",
@@ -1962,12 +1966,16 @@ function bottomActionStyle(tint: "blue" | "green"): React.CSSProperties {
     border:
       tint === "green"
         ? "1px solid rgba(34,197,94,0.30)"
+        : tint === "gold"
+        ? "1px solid rgba(250,204,21,0.30)"
         : "1px solid rgba(59,130,246,0.34)",
     background:
       tint === "green"
         ? "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))"
+        : tint === "gold"
+        ? "linear-gradient(135deg, rgba(250,204,21,0.16), rgba(202,138,4,0.08))"
         : "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
-    color: tint === "green" ? "#dcfce7" : "#dbeafe",
+    color: tint === "green" ? "#dcfce7" : tint === "gold" ? "#fef3c7" : "#dbeafe",
     textDecoration: "none",
     fontWeight: 900,
     fontSize: 13,
