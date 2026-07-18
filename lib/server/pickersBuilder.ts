@@ -2945,6 +2945,68 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
 
 /* -------------------------------- GET -------------------------------- */
 
+// In-process equivalent of the GET handler below: returns the pickers payload
+// using the same in-memory memo + Redis cache + build lock, WITHOUT any HTTP
+// round trip. Server components (app/components/PickerResultPage.tsx) call this
+// directly, so a picker page render never has to fetch the site's own
+// /api/pickers over the network -- removing a self-request that our own Vercel
+// firewall/bot rules would otherwise treat as an anonymous bot and block. It
+// shares memo/cache/lock with GET (same module), so the public endpoint and
+// SSR stay perfectly consistent.
+export async function getPickersData(
+  origin: string,
+  opts: { forceRefresh?: boolean } = {}
+): Promise<PickersPayload> {
+  const forceRefresh = opts.forceRefresh ?? false;
+  const now = Date.now();
+
+  if (!forceRefresh && memo && now - memo.ts < MEMORY_CACHE_MS) {
+    return memo.data;
+  }
+
+  const cached = forceRefresh ? null : await readPickersCache();
+
+  if (!forceRefresh && cached?.data) {
+    memo = { ts: now, data: cached.data };
+    return cached.data;
+  }
+
+  const lockToken = await acquirePickersLock();
+
+  if (!lockToken && cached?.data) {
+    memo = { ts: now, data: cached.data };
+    return cached.data;
+  }
+
+  try {
+    const data = await buildPickersPayload(origin, forceRefresh);
+
+    const isDegraded =
+      typeof data.degradedSymbolPct === "number" &&
+      data.degradedSymbolPct / 100 >= DEGRADED_BUILD_FAILURE_RATIO;
+
+    if (isDegraded && cached?.data && !forceRefresh) {
+      console.warn(
+        `[pickers] Build degraded (${data.degradedSymbolPct}% symbol failure) -- serving last known-good cache instead.`
+      );
+      memo = { ts: now, data: cached.data };
+      return cached.data;
+    }
+
+    memo = { ts: now, data };
+    await writePickersCache(data);
+    return data;
+  } catch (error) {
+    if (cached?.data) {
+      memo = { ts: now, data: cached.data };
+      return cached.data;
+    }
+    throw error instanceof Error ? error : new Error("Unknown pickers error");
+  } finally {
+    await releasePickersLock(lockToken);
+  }
+}
+
 export async function GET(req: NextRequest) {
   const now = Date.now();
   const forceRefresh = req.nextUrl.searchParams.get("force") === "1";
