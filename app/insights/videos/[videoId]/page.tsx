@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getYouTubeVideoById, getLatestYouTubeVideos } from "@/lib/youtube";
@@ -254,6 +255,46 @@ export default async function VideoPage({ params }: Props) {
               <a href="https://www.youtube.com/@MyStockHarbor" target="_blank" rel="noopener noreferrer" style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "center", padding: "9px 12px", borderRadius: 10, border: "1px solid rgba(239,68,68,0.35)", background: "rgba(239,68,68,0.08)", color: "#fecaca", textDecoration: "none", fontWeight: 800, fontSize: 12 }}>Visit YouTube Channel ↗</a>
             </aside>
           </div>
+
+          {/* Continue exploring — server-rendered internal links for crawlability.
+              Stock-specific videos (ticker present in the .md frontmatter) point at
+              that stock's own pages; generic / multi-stock videos (no ticker) point
+              at the site's evergreen hub pages instead. */}
+          <section style={{ marginTop: 36, border: "1px solid rgba(255,255,255,0.10)", borderRadius: 18, padding: 20, background: "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02))" }}>
+            <div style={{ fontSize: 18, fontWeight: 900, letterSpacing: "-0.02em" }}>Continue exploring</div>
+            <div style={{ marginTop: 6, marginBottom: 14, fontSize: 14, lineHeight: 1.6, opacity: 0.72 }}>
+              {ticker
+                ? `Dig deeper into ${ticker} with the full stock page, the latest earnings breakdown and recent news.`
+                : "Keep researching with supply-chain bottlenecks, the latest market headlines and upcoming earnings dates."}
+            </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {ticker ? (
+                <>
+                  <Link href={`/stock/${encodeURIComponent(ticker)}`} style={exploreLinkStyle("blue")}>
+                    {ticker} stock page →
+                  </Link>
+                  <Link href={`/stock/${encodeURIComponent(ticker)}/earnings`} style={exploreLinkStyle("gold")}>
+                    {ticker} earnings →
+                  </Link>
+                  <Link href={`/stock/${encodeURIComponent(ticker)}/news`} style={exploreLinkStyle("green")}>
+                    {ticker} news →
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link href="/bottlenecks" style={exploreLinkStyle("blue")}>
+                    Bottlenecks →
+                  </Link>
+                  <Link href="/headlines" style={exploreLinkStyle("green")}>
+                    Market headlines →
+                  </Link>
+                  <Link href="/earnings-calendar" style={exploreLinkStyle("gold")}>
+                    Earnings calendar →
+                  </Link>
+                </>
+              )}
+            </div>
+          </section>
         </div>
 
         <style>{`
@@ -277,4 +318,40 @@ export default async function VideoPage({ params }: Props) {
       </main>
     </>
   );
+}
+
+function exploreLinkStyle(tint: "blue" | "green" | "gold"): CSSProperties {
+  const map = {
+    blue: {
+      border: "rgba(59,130,246,0.34)",
+      background: "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
+      color: "#dbeafe",
+    },
+    green: {
+      border: "rgba(34,197,94,0.30)",
+      background: "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))",
+      color: "#dcfce7",
+    },
+    gold: {
+      border: "rgba(250,204,21,0.30)",
+      background: "linear-gradient(135deg, rgba(250,204,21,0.16), rgba(202,138,4,0.08))",
+      color: "#fef3c7",
+    },
+  };
+  const t = map[tint];
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 42,
+    padding: "10px 16px",
+    borderRadius: 12,
+    border: `1px solid ${t.border}`,
+    background: t.background,
+    color: t.color,
+    textDecoration: "none",
+    fontWeight: 900,
+    fontSize: 13,
+    whiteSpace: "nowrap",
+  };
 }
