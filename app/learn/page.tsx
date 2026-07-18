@@ -1,7 +1,7 @@
 // app/learn/page.tsx
 import type { Metadata } from "next";
 import Link from "next/link";
-import { lessonsByCategory } from "./lessons";
+import { lessonsByCategory } from "./all-lessons";
 import LearnShell from "./LearnShell";
 
 export const metadata: Metadata = {
@@ -32,6 +32,7 @@ export default function LearnPage() {
   const basics = lessonsByCategory("Basics");
   const indicators = lessonsByCategory("Indicators");
   const divergencies = lessonsByCategory("Divergencies");
+  const fundamentals = lessonsByCategory("Fundamentals");
 
   return (
     <LearnShell>
@@ -138,6 +139,7 @@ export default function LearnPage() {
           <Section title="BASICS" items={basics} />
           <Section title="INDICATORS" items={indicators} />
           <Section title="DIVERGENCIES" items={divergencies} />
+          <Section title="HOW TO READ FINANCIAL DATA" items={fundamentals} />
 
           {/* ---- In-depth guides (standalone education routes) ---- */}
           <section
@@ -265,6 +267,14 @@ function Section(props: {
           labelBg: "linear-gradient(135deg, rgba(168,85,247,0.18), rgba(139,92,246,0.10))",
           labelBorder: "1px solid rgba(168,85,247,0.34)",
           labelColor: "#f3e8ff",
+        }
+      : title === "HOW TO READ FINANCIAL DATA"
+      ? {
+          border: "1px solid rgba(45,212,191,0.24)",
+          background: "linear-gradient(180deg, rgba(8,20,20,0.96), rgba(6,14,14,0.98))",
+          labelBg: "linear-gradient(135deg, rgba(45,212,191,0.18), rgba(20,184,166,0.10))",
+          labelBorder: "1px solid rgba(45,212,191,0.36)",
+          labelColor: "#ccfbf1",
         }
       : {
           border: "1px solid rgba(234,179,8,0.22)",

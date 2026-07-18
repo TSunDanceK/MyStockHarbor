@@ -2,7 +2,8 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import { getLesson, getNextLesson, LessonImage } from "../lessons";
+import type { LessonImage } from "../lessons";
+import { getLesson, getNextLesson } from "../all-lessons";
 import LearnShell from "../LearnShell";
 
 type Props = {
