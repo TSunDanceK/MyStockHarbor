@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDailyHistory, type Point } from "../../../lib/server/historyCache";
+import { isUnwantedBot } from "@/lib/botid-guard";
 
 export const runtime = "nodejs";
 export const revalidate = 900;
@@ -123,6 +124,10 @@ export async function GET(req: Request) {
   const symbol = (searchParams.get("symbol") || "AAPL").toUpperCase();
   const days = Math.max(30, Math.min(5000, Number(searchParams.get("days") || "365")));
   const interval = parseInterval(searchParams.get("interval"));
+
+  if (await isUnwantedBot()) {
+    return NextResponse.json({ error: "Access denied" }, { status: 403 });
+  }
 
   try {
     const daily = await getDailyHistory(symbol);
