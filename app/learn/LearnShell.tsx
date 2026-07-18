@@ -4,7 +4,7 @@
 // Collapses to a toggleable menu on mobile.
 
 import Link from "next/link";
-import { LESSONS } from "./lessons";
+import { ALL_LESSONS } from "./all-lessons";
 
 type GuideLink = { href: string; title: string };
 
@@ -85,8 +85,8 @@ export default function LearnShell(props: {
   const activeHref =
     props.activeHref ?? (activeSlug ? `/learn/${activeSlug}` : "/learn");
 
-  const byCat = (cat: "Basics" | "Indicators" | "Divergencies") =>
-    LESSONS.filter((l) => l.category === cat).map((l) => ({
+  const byCat = (cat: string) =>
+    ALL_LESSONS.filter((l) => (l.category as string) === cat).map((l) => ({
       href: `/learn/${l.slug}`,
       title: l.title,
     }));
@@ -115,6 +115,12 @@ export default function LearnShell(props: {
         label="Divergences"
         labelColor="rgba(251,191,36,0.95)"
         items={byCat("Divergencies")}
+        activeHref={activeHref}
+      />
+      <NavGroup
+        label="How to Read Financial Data"
+        labelColor="rgba(45,212,191,0.95)"
+        items={byCat("Fundamentals")}
         activeHref={activeHref}
       />
       <NavGroup
