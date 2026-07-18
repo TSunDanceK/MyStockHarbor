@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDayEarningsPage, isDateFullyPopulated } from "@/lib/server/earningsCalendar";
+import { getFullDayEarnings, isDateInWindow } from "@/lib/server/earningsCalendar";
 import {
   getClientIp,
   checkBackfillLockout,
@@ -9,18 +9,18 @@ import {
 } from "@/lib/server/backfillAuth";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// Owner-only and infrequent; a heavy earnings day can be a few hundred quote
+// calls, and the site-wide FMP budget (~300/min) paces them, so give this room
+// to fill a whole day in one call. Pro allows up to 300s.
+export const maxDuration = 300;
 
 // Owner-only, single-date backfill -- triggered by the "Backfill" button on
-// app/earnings-calendar/page.tsx rather than a raw URL. POST { date, key }.
-// Only ever processes the one date it's given (bounded batch loop below),
-// bypassing this feature's own hourly quote cap for that date but never the
-// site-wide FMP account budget (reserveFmpCallSlot, still always enforced
-// inside getDayEarningsPage -> quoteOne). Keeping this to one date per
-// request keeps worst-case execution time bounded, unlike the old
-// multi-date GET route this replaces.
+// app/earnings-calendar/page.tsx. POST { date, key }. Populates every US-listed
+// candidate for the one date (getFullDayEarnings, no 100-cap), bypassing this
+// feature's own hourly quote cap but never the site-wide FMP account budget
+// (reserveFmpCallSlot, still enforced inside quoteOne). Only dates inside the
+// active window can be backfilled.
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const MAX_BATCHES = 5; // safety ceiling -- BATCH_SIZE (100) * 5 = 500 candidates/date, far more than any real day sees
 
 export async function POST(request: Request) {
   const ip = getClientIp(request);
@@ -54,18 +54,17 @@ export async function POST(request: Request) {
 
   await clearBackfillFailures(ip);
 
-  let fetchedCount = 0;
-  let totalCandidates = 0;
-  let hasMore = true;
-
-  for (let batch = 0; batch < MAX_BATCHES && hasMore; batch++) {
-    const page = await getDayEarningsPage(date, batch, { bypassCap: true });
-    totalCandidates = page.totalCandidates;
-    fetchedCount = page.fetchedCount;
-    hasMore = page.hasMore;
+  if (!isDateInWindow(date)) {
+    return NextResponse.json({ error: "Date is outside the active earnings window." }, { status: 400 });
   }
 
-  const complete = await isDateFullyPopulated(date);
+  const result = await getFullDayEarnings(date, { bypassCap: true, forceRefresh: true });
 
-  return NextResponse.json({ date, totalCandidates, fetchedCount, complete });
+  return NextResponse.json({
+    date: result.date,
+    totalCandidates: result.totalCandidates,
+    usListedCount: result.usListedCount,
+    fetchedCount: result.totalCandidates,
+    complete: result.complete,
+  });
 }

@@ -12,28 +12,22 @@
 //
 // Both bulk *quote* endpoints (batch-quote, batch-quote-short) are 402 on
 // this plan -- confirmed via the same debug route. So there is no way to
-// get price/market cap for many symbols in one call; only the single-symbol
-// /stable/quote works, and that's the one part of this file that spends a
-// real API call per symbol -- capped at BATCH_SIZE per page, agreed with
-// the site owner.
+// get price/market cap (or exchange) for many symbols in one call; only the
+// single-symbol /stable/quote works, and that's the one part of this file
+// that spends a real API call per symbol.
 //
-// Because there's no way to know real market cap before quoting, "priority
-// = liquidity" is approximated in two tiers:
-//   1. Free pre-sort (no API cost): known mega-caps/index ETFs first
-//      (POPULAR_SYMBOLS, kept in sync with app/api/symbols/route.ts), then
-//      FMP's own return order for everything else.
-//   2. Only the current page's slice (up to 100 rows) is actually quoted;
-//      once quoted, that slice is re-sorted by real market cap so what's
-//      on screen is accurately ordered -- it's *which* 100 made the cut
-//      that's a heuristic, not the order they're shown in.
+// --- Rolling window (added 2026-07-18) ---
 //
-// Each single quote fetch is cached via Next's fetch cache (shared globally
-// across Vercel's infra, not per-instance memory) for ~30 days, so a given
-// date+batch only spends real FMP calls once per month regardless of how
-// many people view it -- the "Show more" button's cooldown (client-side) is
-// there to stop rapid double-clicks, not to work around a lack of caching.
+// The calendar only ever deals with a bounded, rolling window of dates:
+//   start = today - WINDOW_PAST_DAYS (the last few days stay live so recent
+//           reporters are still visible)
+//   end   = last day of (this month + WINDOW_FUTURE_MONTHS)
+// Anything outside that window is greyed out in the UI and never populated.
+// The window's future edge only advances on the 1st of a month; its past
+// edge advances daily. See getWindowStartDate / getWindowEndDate /
+// isDateInWindow (exported for the page to clamp navigation and grey cells).
 //
-// --- Rate-limiting + auto-populate system (added 2026-07-17/18) ---
+// --- Rate-limiting + auto-populate system ---
 //
 // A Redis-backed hourly cap (QUOTE_HOURLY_CAP) limits how many *new*
 // (never-quoted-before) symbols this feature spends a real FMP /quote call
@@ -42,39 +36,28 @@
 // showing cached data is always free -- only genuinely first-time symbols
 // compete for the cap.
 //
-// That cap alone made first-time browsing across many dates feel broken
-// (a chunk of the month's tickers would just show blank price/cap once the
-// hour's 50 slots were spent). The fix is a background auto-populate loop:
-// every real page load quietly checks whether the next upcoming,
-// not-yet-fully-quoted date needs filling in, and does a bit of that work
-// in the background (see populateNextMissingDate, called from `after()` in
-// app/earnings-calendar/page.tsx) -- so the calendar organically stays
-// populated further into the future over time, purely from normal traffic,
-// without ever exceeding the hourly cap.
+// A background auto-populate loop runs after every real page load: it fills
+// the next not-yet-complete date in the window, front-to-back from the
+// window's start edge (see findNextIncompleteDate / populateNextMissingDate,
+// called from `after()` in app/earnings-calendar/page.tsx). A Redis
+// "frontier" pointer records how far the contiguous front of the window has
+// been filled, so once the whole window is complete these scans short-
+// circuit at zero cost until the window rolls forward the next day/month.
 //
-// A date is tracked as "complete" (isDateComplete/markDateComplete) once a
-// getDayEarningsPage call quotes every one of its candidates with nothing
-// skipped by the cap. This also doubles as a one-time reconciliation: a
-// date whose tickers were already all quoted before this system existed
-// gets marked complete on its first pass at zero API cost (every quoteOne
-// call for it hits the "already quoted" fast path).
+// A date is tracked as "complete" (isDateComplete/markDateComplete) once
+// every one of its candidates has been quoted with nothing skipped by the
+// cap. On completion the accurate US-listed count is stored (per-month Redis
+// hash, so the calendar's green day-badges self-correct from the raw
+// candidate estimate to the real filtered number) and the assembled rows are
+// cached as one blob (DAY_ITEMS_PREFIX) so re-viewing a filled date is a
+// single Redis read rather than a quote lookup per candidate.
 //
-// For manual catch-up on a single date at a time (e.g. seeding the next
-// couple of months by clicking through), the site owner can use the
-// "Backfill" button rendered on app/earnings-calendar/page.tsx (visible
-// whenever a date isn't yet fully populated). It posts to
-// app/api/earnings-calendar/backfill-date/route.ts with the secret key and
-// bypasses the hourly cap entirely for that one date -- gated behind
-// EARNINGS_BACKFILL_KEY (lib/server/backfillAuth.ts) so only the owner can
-// trigger it, with a 3-attempts/10-minute IP lockout on wrong keys.
-//
-// bypassCap only ever bypasses THIS file's own 50/hour budget -- it never
-// bypasses the site-wide FMP account budget (reserveFmpCallSlot, imported
-// from historyCache.ts, ~300 calls/minute across every FMP-calling route on
-// the site). Every real quote call, backfill or not, still waits for a slot
-// there first, so a large backfill run can't itself trip FMP's real
-// plan-level rate limit or starve other pages' FMP calls -- it just runs
-// slower under contention instead.
+// For manual catch-up, the site owner can use the "Backfill" button on
+// app/earnings-calendar/page.tsx -> app/api/earnings-calendar/backfill-date,
+// gated behind EARNINGS_BACKFILL_KEY (lib/server/backfillAuth.ts). It bypasses
+// this file's own hourly cap for one date but never the site-wide FMP account
+// budget (reserveFmpCallSlot from historyCache.ts, ~300 calls/minute), which
+// every real quote call still waits on.
 
 import { Redis } from "@upstash/redis";
 import { reserveFmpCallSlot } from "./historyCache";
@@ -86,14 +69,19 @@ const redis =
 
 // Hard ceiling on real, per-symbol FMP /quote calls this feature is allowed
 // to spend in any rolling hour -- global across all visitors, not per-IP.
-// Site owner requested 50/hour. Symbols already quoted within the last
-// ~30 days (matching the underlying fetch cache's revalidate window) don't
-// consume a slot at all, since re-showing them costs nothing new -- only
-// genuinely first-time symbols count against the cap.
+// Symbols already quoted within the last ~30 days (matching the underlying
+// fetch cache's revalidate window) don't consume a slot at all.
 const QUOTE_HOURLY_CAP = 50;
 const QUOTE_COUNTER_PREFIX = "msh:earnings-quote-calls:v1";
 const QUOTED_SYMBOL_PREFIX = "msh:earnings-quoted-symbol:v1";
 const DAY_COMPLETE_PREFIX = "msh:earnings-day-complete:v1";
+const DAY_ITEMS_PREFIX = "msh:earnings-day-items:v1";
+const US_COUNT_MONTH_PREFIX = "msh:earnings-month-uscount:v1";
+const FILL_FRONTIER_KEY = "msh:earnings-fill-frontier:v1";
+
+// Rolling window bounds.
+const WINDOW_PAST_DAYS = 3; // today and the previous 3 days stay live
+const WINDOW_FUTURE_MONTHS = 3; // through the end of (this month + 3)
 
 function pad2(value: number) {
   return String(value).padStart(2, "0");
@@ -108,11 +96,37 @@ function getHourBucket(now = new Date()) {
   );
 }
 
+// --- Rolling-window helpers ---------------------------------------------
+
+function utcMidnightToday(): Date {
+  const n = new Date();
+  return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate()));
+}
+
+function toDateStr(d: Date): string {
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+}
+
+// First date shown/populatable: today minus WINDOW_PAST_DAYS (so with
+// WINDOW_PAST_DAYS=3, today plus the previous 3 days are live).
+export function getWindowStartDate(): string {
+  const t = utcMidnightToday();
+  return toDateStr(new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate() - WINDOW_PAST_DAYS)));
+}
+
+// Last date shown/populatable: the final day of the month WINDOW_FUTURE_MONTHS
+// ahead. Day 0 of (month + N + 1) is the last day of (month + N).
+export function getWindowEndDate(): string {
+  const t = utcMidnightToday();
+  return toDateStr(new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + WINDOW_FUTURE_MONTHS + 1, 0)));
+}
+
+export function isDateInWindow(date: string): boolean {
+  return date >= getWindowStartDate() && date <= getWindowEndDate();
+}
+
 // Has this symbol already been through a real FMP quote call recently
 // enough that Next's own fetch cache is expected to still be warm for it?
-// Backed by a separate Redis marker (not a read of Next's cache, which
-// isn't inspectable this way) with the same TTL as the fetch cache's
-// revalidate window, so the two stay in sync.
 async function wasRecentlyQuoted(symbol: string): Promise<boolean> {
   if (!redis) return false;
 
@@ -138,10 +152,8 @@ async function markQuoted(symbol: string) {
 
 // Atomically claims one of this hour's new-quote slots. Returns true if
 // the caller may actually hit FMP, false if the hour's budget is already
-// spent. Always increments the counter (even when the caller is going to
-// ignore the result via bypassCap) so getQuoteHourUsage stays an accurate
-// picture of real spend. Fails open if Redis isn't configured or errors,
-// matching this file's existing fail-open posture elsewhere.
+// spent. Always increments the counter (even under bypassCap) so
+// getQuoteHourUsage stays accurate. Fails open on Redis error.
 async function reserveQuoteSlot(): Promise<boolean> {
   if (!redis) return true;
 
@@ -180,9 +192,8 @@ async function isDateComplete(date: string): Promise<boolean> {
   }
 }
 
-// Public wrapper so callers outside this file (the earnings-calendar page,
-// to decide whether to grey out its "Backfill" button) can check whether a
-// given date has already had every candidate quoted.
+// Public wrapper so the earnings-calendar page can decide whether to grey out
+// its "Backfill" button.
 export async function isDateFullyPopulated(date: string): Promise<boolean> {
   return isDateComplete(date);
 }
@@ -203,6 +214,86 @@ async function markDateComplete(date: string) {
   }
 }
 
+// --- Accurate US-listed count (self-correcting green badges) -------------
+
+function monthOf(date: string): string {
+  return date.slice(0, 7); // YYYY-MM
+}
+
+async function storeDateUsCount(date: string, count: number) {
+  if (!redis) return;
+  const key = `${US_COUNT_MONTH_PREFIX}:${monthOf(date)}`;
+  try {
+    await redis.hset(key, { [date]: count });
+    await redis.expire(key, QUOTE_REVALIDATE_SECONDS + 3 * 24 * 60 * 60);
+  } catch {
+    // best-effort -- badge just keeps showing the raw estimate
+  }
+}
+
+async function getMonthUsCounts(ym: string): Promise<Record<string, number>> {
+  if (!redis) return {};
+  try {
+    const h = await redis.hgetall<Record<string, unknown>>(`${US_COUNT_MONTH_PREFIX}:${ym}`);
+    if (!h) return {};
+    const out: Record<string, number> = {};
+    for (const [k, v] of Object.entries(h)) {
+      const n = typeof v === "number" ? v : Number(v);
+      if (Number.isFinite(n)) out[k] = n;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+// --- Materialised per-date row cache -------------------------------------
+
+async function readDayItemsCache(date: string): Promise<EarningsListItem[] | null> {
+  if (!redis) return null;
+  try {
+    const v = await redis.get<EarningsListItem[]>(`${DAY_ITEMS_PREFIX}:${date}`);
+    if (Array.isArray(v)) return v;
+  } catch {
+    // fall through to a live rebuild
+  }
+  return null;
+}
+
+async function writeDayItemsCache(date: string, items: EarningsListItem[]) {
+  if (!redis) return;
+  try {
+    await redis.set(`${DAY_ITEMS_PREFIX}:${date}`, items, {
+      ex: QUOTE_REVALIDATE_SECONDS + 3 * 24 * 60 * 60,
+    });
+  } catch {
+    // best-effort -- next view just rebuilds it
+  }
+}
+
+// --- Fill frontier (so a full window costs nothing to rescan) ------------
+
+async function getFillFrontier(): Promise<string> {
+  const start = getWindowStartDate();
+  if (!redis) return start;
+  try {
+    const v = await redis.get<string>(FILL_FRONTIER_KEY);
+    if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && v > start) return v;
+  } catch {
+    // fall through to window start
+  }
+  return start;
+}
+
+async function setFillFrontier(date: string) {
+  if (!redis) return;
+  try {
+    await redis.set(FILL_FRONTIER_KEY, date);
+  } catch {
+    // best-effort -- worst case the next scan re-checks a few completed dates
+  }
+}
+
 export type EarningsCandidate = {
   symbol: string;
   company: string;
@@ -218,13 +309,12 @@ export type EarningsListItem = EarningsCandidate & {
   marketCap: number | null;
 };
 
-export type DayEarningsPage = {
+export type FullDayEarnings = {
   date: string;
   items: EarningsListItem[];
   totalCandidates: number;
-  fetchedCount: number;
-  hasMore: boolean;
-  nextBatch: number | null;
+  usListedCount: number;
+  complete: boolean;
 };
 
 type RawEarningsRow = {
@@ -238,17 +328,15 @@ type RawEarningsRow = {
 
 const MONTH_CACHE_MS = 6 * 60 * 60_000; // 6 hours -- FMP's own lastUpdated field is daily
 const NAME_MAP_CACHE_MS = 24 * 60 * 60_000; // 24 hours
-const BATCH_SIZE = 100;
 const QUOTE_CONCURRENCY = 10;
 const QUOTE_REVALIDATE_SECONDS = 30 * 24 * 60 * 60; // ~1 month, per site owner's request
 
-// How many dates the background auto-populate loop will attempt in one
-// pass, and how far into the future it's willing to scan looking for the
-// next incomplete one. Kept modest for the organic (non-bypass) path so a
-// single page load's background work stays fast and cheap; the manual
-// backfill route can push more per call via its own maxDates param.
+// Safety ceiling on how many candidates a single date will ever quote -- far
+// more than any real US-listed day sees, guards against a pathological feed.
+const MAX_CANDIDATES_PER_DAY = 600;
+
+// How many dates the background auto-populate loop will attempt per page load.
 const AUTO_POPULATE_MAX_DATES = 2;
-const BACKFILL_SCAN_DAYS = 60;
 
 const ALLOWED_EXCHANGES = new Set(["NASDAQ", "NYSE", "AMEX"]);
 
@@ -282,11 +370,9 @@ function str(value: unknown): string | null {
 // Guess at "is this even worth showing" without any paid lookup: a "." or
 // "-" in the symbol is usually a preferred share or foreign-exchange
 // listing (BRK.B is a deliberate exception -- it's in POPULAR_SYMBOLS,
-// which is only used as a sort tiebreak, not a filter, so it's unaffected
-// by this check running on every candidate). A 5+ letter symbol ending in Y
-// or F is almost always the OTC/ADR representation of a foreign company
-// already reporting under its primary listing elsewhere (seen directly in
-// the raw feed: DANOY, TEFOF, HLTOY, KPELF).
+// which is only used as a sort tiebreak, not a filter). A 5+ letter symbol
+// ending in Y or F is almost always the OTC/ADR representation of a foreign
+// company already reporting under its primary listing elsewhere.
 function looksNonUsOrDerivative(symbol: string): boolean {
   if (symbol.includes(".") || symbol.includes("-")) return true;
   if (symbol.length >= 5 && /[YF]$/.test(symbol)) return true;
@@ -406,8 +492,7 @@ async function getMonthCandidates(year: number, month: number): Promise<Map<stri
   }
 
   // Coarse sort within each date: known mega-caps first, ties keep FMP's
-  // own original order (Array.sort is stable, and `list` was built by
-  // pushing in feed order).
+  // own original order (Array.sort is stable).
   for (const list of byDate.values()) {
     list.sort((a, b) => popularRank(a.symbol) - popularRank(b.symbol));
   }
@@ -416,13 +501,19 @@ async function getMonthCandidates(year: number, month: number): Promise<Map<stri
   return byDate;
 }
 
-// Day counts for the calendar grid -- the "known total" the Show More
-// button counts down from. Uses the same free candidate list as above (no
-// quoting), so it's safe to compute for an entire visible month at once.
+// Day counts for the calendar grid. Prefers the accurate, stored US-listed
+// count for any date that has already been fully populated; otherwise falls
+// back to the raw candidate estimate (which over-counts, since the true
+// exchange isn't known until a symbol is quoted). So badges start as an
+// estimate and self-correct to the real number once a date fills in.
 export async function getMonthDayCounts(year: number, month: number): Promise<Record<string, number>> {
   const byDate = await getMonthCandidates(year, month);
+  const realCounts = await getMonthUsCounts(monthKey(year, month));
   const counts: Record<string, number> = {};
-  for (const [date, list] of byDate) counts[date] = list.length;
+  for (const [date, list] of byDate) {
+    const real = realCounts[date];
+    counts[date] = typeof real === "number" ? real : list.length;
+  }
   return counts;
 }
 
@@ -435,13 +526,19 @@ async function getDayCandidates(date: string): Promise<EarningsCandidate[]> {
   return byDate.get(date) ?? [];
 }
 
+// How many companies are (estimated to be) reporting on a date, without
+// quoting -- used by the page to decide whether the Backfill button has
+// anything to do.
+export async function getDayCandidateCount(date: string): Promise<number> {
+  return (await getDayCandidates(date)).length;
+}
+
 type QuoteResult = {
   price: number | null;
   marketCap: number | null;
   exchange: string | null;
   // True when this symbol was skipped because the hourly cap was already
-  // spent (and bypassCap wasn't set) -- distinct from a real FMP call that
-  // simply returned no usable data. Only used to decide whether a date can
+  // spent (and bypassCap wasn't set). Used only to decide whether a date can
   // be marked "complete"; never shown in the UI.
   capped: boolean;
 };
@@ -460,14 +557,10 @@ async function quoteOne(symbol: string, bypassCap: boolean): Promise<QuoteResult
     }
   }
 
-  // Site-wide FMP account budget (~300 calls/minute across every
-  // FMP-calling route) -- enforced unconditionally, bypassCap or not, since
-  // this protects FMP's real plan-level rate limit rather than our own
-  // internal cost cap. reserveFmpCallSlot waits for a slot rather than
-  // failing immediately; if it still can't get one within its own timeout,
-  // treat this symbol as capped (not "no data") so the date isn't marked
-  // complete and gets retried on the next pass instead of silently missing
-  // this ticker forever.
+  // Site-wide FMP account budget (~300 calls/minute across every FMP-calling
+  // route) -- enforced unconditionally, bypassCap or not. Waits for a slot;
+  // if it still can't get one within its own timeout, treat this symbol as
+  // capped (retried next pass) rather than "no data".
   try {
     await reserveFmpCallSlot();
   } catch {
@@ -508,107 +601,104 @@ async function quoteBatch(symbols: string[], bypassCap: boolean): Promise<Record
   return results;
 }
 
-// The one function that spends real, per-symbol API calls -- capped at
-// BATCH_SIZE (100) candidates per call, and further capped globally by
-// QUOTE_HOURLY_CAP new symbols per hour (see quoteOne/reserveQuoteSlot
-// above) unless opts.bypassCap is set. batchIndex 0 is the first 100
-// (coarse-sorted) candidates for the date, batchIndex 1 is the next 100,
-// etc. ("Show more" on the client advances batchIndex.) Marks the date
-// complete (see markDateComplete) when this call covers every candidate
-// for the date and none were skipped by the cap.
-export async function getDayEarningsPage(
+// The one function that spends real, per-symbol API calls. Quotes *every*
+// candidate for the date (no 100-cap / no pagination -- the whole US-listed
+// set for a day is shown at once), further capped globally by QUOTE_HOURLY_CAP
+// new symbols per hour unless opts.bypassCap is set. Marks the date complete
+// (and stores its accurate US count + assembled rows) when every candidate
+// was quoted with nothing skipped by the cap.
+//
+// Fast path: a fully-populated date serves its cached assembled rows in a
+// single Redis read. Pass opts.forceRefresh to skip that and re-quote (used
+// by the auto-populate loop and the owner backfill).
+export async function getFullDayEarnings(
   date: string,
-  batchIndex: number,
-  opts: { bypassCap?: boolean } = {}
-): Promise<DayEarningsPage> {
+  opts: { bypassCap?: boolean; forceRefresh?: boolean } = {}
+): Promise<FullDayEarnings> {
   const bypassCap = opts.bypassCap ?? false;
-  const candidates = await getDayCandidates(date);
-  const start = batchIndex * BATCH_SIZE;
-  const slice = candidates.slice(start, start + BATCH_SIZE);
+  const forceRefresh = opts.forceRefresh ?? false;
 
-  if (slice.length === 0) {
-    return {
-      date,
-      items: [],
-      totalCandidates: candidates.length,
-      fetchedCount: Math.min(start, candidates.length),
-      hasMore: false,
-      nextBatch: null,
-    };
+  const candidates = (await getDayCandidates(date)).slice(0, MAX_CANDIDATES_PER_DAY);
+  const totalCandidates = candidates.length;
+
+  if (totalCandidates === 0) {
+    return { date, items: [], totalCandidates: 0, usListedCount: 0, complete: false };
   }
 
-  const quotes = await quoteBatch(slice.map((c) => c.symbol), bypassCap);
+  if (!forceRefresh) {
+    const cachedItems = await readDayItemsCache(date);
+    if (cachedItems && (await isDateComplete(date))) {
+      return {
+        date,
+        items: cachedItems,
+        totalCandidates,
+        usListedCount: cachedItems.length,
+        complete: true,
+      };
+    }
+  }
 
-  const quoted: Array<EarningsListItem & { exchangeOk: boolean; capped: boolean }> = slice.map((candidate) => {
-    const quote = quotes[candidate.symbol];
-    return {
-      ...candidate,
-      price: quote?.price ?? null,
-      marketCap: quote?.marketCap ?? null,
-      // Drop anything that, once actually quoted, turns out not to be a US-
-      // listed common stock after all -- the pre-sort filter is symbol-shape
-      // only and can't be perfect without spending the quote call first.
-      exchangeOk: Boolean(quote?.exchange && ALLOWED_EXCHANGES.has(quote.exchange)),
-      capped: quote?.capped ?? false,
-    };
-  });
+  const quotes = await quoteBatch(candidates.map((c) => c.symbol), bypassCap);
 
-  const items: EarningsListItem[] = quoted
-    .filter((item) => item.exchangeOk)
-    .map(({ exchangeOk: _exchangeOk, capped: _capped, ...rest }) => rest)
-    // Real market-cap sort now that we actually have it -- this is the
-    // accurate liquidity order for whatever's on screen, even though which
-    // candidates got quoted in the first place was a heuristic.
+  let anyCapped = false;
+  const items: EarningsListItem[] = candidates
+    .map((candidate): EarningsListItem | null => {
+      const quote = quotes[candidate.symbol];
+      if (quote?.capped) anyCapped = true;
+      // Only US-listed common stock survives -- the pre-sort filter is
+      // symbol-shape only; the exchange isn't known until the quote comes back.
+      const exchangeOk = Boolean(quote?.exchange && ALLOWED_EXCHANGES.has(quote.exchange));
+      if (!exchangeOk) return null;
+      return {
+        ...candidate,
+        price: quote?.price ?? null,
+        marketCap: quote?.marketCap ?? null,
+      };
+    })
+    .filter((item): item is EarningsListItem => item !== null)
     .sort((a, b) => (b.marketCap ?? -1) - (a.marketCap ?? -1));
 
-  const fetchedCount = Math.min(start + BATCH_SIZE, candidates.length);
-  const hasMore = fetchedCount < candidates.length;
-
-  if (!hasMore && candidates.length > 0 && !quoted.some((item) => item.capped)) {
+  const complete = !anyCapped;
+  if (complete) {
     await markDateComplete(date);
+    await storeDateUsCount(date, items.length);
+    await writeDayItemsCache(date, items);
   }
 
-  return {
-    date,
-    items,
-    totalCandidates: candidates.length,
-    fetchedCount,
-    hasMore,
-    nextBatch: hasMore ? batchIndex + 1 : null,
-  };
+  return { date, items, totalCandidates, usListedCount: items.length, complete };
 }
 
-// Walks forward from today (UTC), skipping dates with no reporters at all
-// (weekends/holidays), and returns the first date that isn't fully quoted
-// yet. Returns null if everything within the scan window is already
-// complete (or there's nothing to populate at all).
+// Walks the window front-to-back from the fill frontier and returns the first
+// date that still has candidates left to quote. Dates with no reporters at all
+// (weekends/holidays) count as "done" and are skipped. Advances the frontier
+// so completed leading dates aren't re-scanned; parks it past the window end
+// when everything is filled, so a full window costs one Redis read to confirm.
 async function findNextIncompleteDate(): Promise<string | null> {
-  const now = new Date();
+  const endStr = getWindowEndDate();
+  const endTime = new Date(`${endStr}T00:00:00Z`).getTime();
 
-  for (let i = 0; i < BACKFILL_SCAN_DAYS; i++) {
-    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + i));
-    const dateStr = `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+  const frontierStr = await getFillFrontier();
+  let cur = new Date(`${frontierStr}T00:00:00Z`).getTime();
 
-    const candidates = await getDayCandidates(dateStr);
-    if (candidates.length === 0) continue; // nothing reporting that day -- skip
-
-    if (!(await isDateComplete(dateStr))) return dateStr;
+  while (cur <= endTime) {
+    const ds = toDateStr(new Date(cur));
+    const candidates = await getDayCandidates(ds);
+    if (candidates.length > 0 && !(await isDateComplete(ds))) {
+      await setFillFrontier(ds);
+      return ds;
+    }
+    cur += 86_400_000;
   }
 
+  // Everything in the window is complete -- park the frontier just past the
+  // end so subsequent scans short-circuit until the window rolls forward.
+  await setFillFrontier(toDateStr(new Date(endTime + 86_400_000)));
   return null;
 }
 
-// Finds and populates the next not-yet-complete upcoming date(s). Called
-// two ways:
-//   - Fire-and-forget after every real /earnings-calendar page load (see
-//     `after()` in app/earnings-calendar/page.tsx), a couple of dates at a
-//     time and respecting the normal hourly cap -- this is what keeps the
-//     calendar populated further into the future purely from organic
-//     traffic, without ever exceeding QUOTE_HOURLY_CAP in a given hour.
-//   - getDayEarningsPage itself, called directly with bypassCap:true from
-//     app/api/earnings-calendar/backfill-date/route.ts (the in-page
-//     "Backfill" button), for a one-time owner-run catch-up on a single
-//     date at a time.
+// Finds and populates the next not-yet-complete date(s) in the window, front-
+// to-back. Called fire-and-forget from every real page load (respecting the
+// hourly cap) and directly with bypassCap:true from the owner Backfill route.
 export async function populateNextMissingDate(
   opts: { bypassCap?: boolean; maxDates?: number } = {}
 ): Promise<{ populated: string[] }> {
@@ -625,9 +715,9 @@ export async function populateNextMissingDate(
     }
 
     const nextDate = await findNextIncompleteDate();
-    if (!nextDate) break; // everything in the scan window is already populated
+    if (!nextDate) break; // everything in the window is already populated
 
-    await getDayEarningsPage(nextDate, 0, { bypassCap });
+    await getFullDayEarnings(nextDate, { bypassCap, forceRefresh: true });
     populated.push(nextDate);
   }
 
