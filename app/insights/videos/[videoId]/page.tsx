@@ -267,7 +267,7 @@ export default async function VideoPage({ params }: Props) {
                 ? `Dig deeper into ${ticker} with the full stock page, the latest earnings breakdown and recent news.`
                 : "Keep researching with supply-chain bottlenecks, the latest market headlines and upcoming earnings dates."}
             </div>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <div className="videoExploreActions" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               {ticker ? (
                 <>
                   <Link href={`/stock/${encodeURIComponent(ticker)}`} style={exploreLinkStyle("blue")}>
@@ -313,6 +313,9 @@ export default async function VideoPage({ params }: Props) {
           @media (max-width: 960px) {
             .mobileOnly { display: block; }
             .desktopOnly { display: none !important; }
+          }
+          @media (max-width: 640px) {
+            .videoExploreActions { display: grid !important; grid-template-columns: 1fr !important; gap: 10px !important; }
           }
         `}</style>
       </main>
