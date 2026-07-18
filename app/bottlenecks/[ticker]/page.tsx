@@ -88,10 +88,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 // opens them - so this is the first static, always-crawlable path to those
 // pages from the Bottlenecks section.
 const CONTINUE_EXPLORING_LINKS = [
-  { href: "/headlines", label: "Market Headlines →" },
-  { href: "/upcoming-ipos", label: "Upcoming IPOs →" },
-  { href: "/earnings-calendar", label: "Earnings Calendar →" },
-  { href: "/pickers", label: "Stock Pickers →" },
+  { href: "/headlines", label: "Market Headlines →", tone: "blue" },
+  { href: "/upcoming-ipos", label: "Upcoming IPOs →", tone: "green" },
+  { href: "/earnings-calendar", label: "Earnings Calendar →", tone: "gold" },
+  { href: "/pickers", label: "Stock Pickers →", tone: "purple" },
 ] as const;
 
 function ContinueExploring() {
@@ -119,13 +119,12 @@ function ContinueExploring() {
       <p style={{ fontSize: 14, lineHeight: 1.6, opacity: 0.75, marginBottom: 16 }}>
         More ways to dig into the market on MyStockHarbor.
       </p>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+      <div className="bnExploreGrid">
         {CONTINUE_EXPLORING_LINKS.map((link) => (
           <Link
             key={link.href}
             href={link.href}
-            className="bnActionBtn bnActionBtn--blue"
-            style={{ fontSize: 13.5, padding: "8px 16px" }}
+            className={`bnExploreBtn bnExploreBtn--${link.tone}`}
           >
             {link.label}
           </Link>
@@ -343,6 +342,62 @@ export default async function BottleneckPage({ params }: Props) {
             border-color: rgba(147, 197, 253, 0.6);
             box-shadow: 0 0 12px rgba(147, 197, 253, 0.35);
             transform: scale(1.06);
+          }
+
+          /* "Continue Exploring" buttons — same treatment as the insights
+             "Continue with current context" strip: full-width, centered,
+             colour-tinted. One row on desktop (auto-fit), stacked full-width
+             on mobile. */
+          .bnExploreGrid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 12px;
+          }
+          .bnExploreBtn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 46px;
+            padding: 12px 16px;
+            border-radius: 14px;
+            font-weight: 900;
+            font-size: 13.5px;
+            letter-spacing: 0.02em;
+            text-align: center;
+            text-decoration: none;
+            border: 1px solid transparent;
+            transition: transform 0.16s ease, filter 0.16s ease,
+              border-color 0.16s ease;
+          }
+          .bnExploreBtn:hover,
+          .bnExploreBtn:focus-visible {
+            transform: translateY(-1px);
+            filter: brightness(1.08);
+          }
+          .bnExploreBtn--blue {
+            border-color: rgba(59, 130, 246, 0.34);
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.18), rgba(37, 99, 235, 0.10));
+            color: #dbeafe;
+          }
+          .bnExploreBtn--green {
+            border-color: rgba(34, 197, 94, 0.30);
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.16), rgba(21, 128, 61, 0.08));
+            color: #dcfce7;
+          }
+          .bnExploreBtn--gold {
+            border-color: rgba(250, 204, 21, 0.30);
+            background: linear-gradient(135deg, rgba(250, 204, 21, 0.16), rgba(202, 138, 4, 0.08));
+            color: #fef3c7;
+          }
+          .bnExploreBtn--purple {
+            border-color: rgba(168, 85, 247, 0.30);
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.16), rgba(126, 34, 206, 0.08));
+            color: #f3e8ff;
+          }
+          @media (max-width: 640px) {
+            .bnExploreGrid {
+              grid-template-columns: 1fr;
+            }
           }
         `}</style>
       </main>
