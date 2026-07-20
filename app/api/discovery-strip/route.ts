@@ -4,6 +4,7 @@ import { getStockNewsData } from "@/lib/stock-news-data";
 import { isUnwantedBot } from "@/lib/botid-guard";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export const revalidate = 900;
 
 // Backs the homepage "What's happening across MyStockHarbor" discovery
