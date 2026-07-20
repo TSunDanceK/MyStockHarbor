@@ -140,6 +140,9 @@ type SignalRecord = {
   bullishMacdDivergence: boolean;
   bearishMacdDivergence: boolean;
 
+  positiveLastEarnings: boolean;
+  strongEarningsGrowth: boolean;
+
   preferredTimeframe?: "D" | "W" | "M";
   preferredIndicator?: "MA200" | "RSI(14)" | "MACD(12,26,9)";
   dashboardHref?: string;
@@ -2718,6 +2721,8 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
             bearishRsiDivergence,
             bullishMacdDivergence,
             bearishMacdDivergence,
+            positiveLastEarnings: !!positiveLastEarningsCandidate,
+            strongEarningsGrowth: !!strongEarningsGrowthCandidate,
             preferredTimeframe,
             preferredIndicator: preferredDivergenceIndicator,
             dashboardHref:
