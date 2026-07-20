@@ -1230,10 +1230,6 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
             {universeSize != null ? (
               <div>
                 Universe: {universeSize}
-                {dynamicUniverseCount != null ? <div>{new Date(updatedAt).toLocaleString()}</div> : null}
-            {universeSize != null ? (
-              <div>
-                Universe: {universeSize}
                 {dynamicUniverseCount != null ? ` (incl. ${dynamicUniverseCount} dynamic)` : ""}
               </div>
             ) : null}
