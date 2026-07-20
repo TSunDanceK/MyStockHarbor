@@ -168,11 +168,16 @@ function ChartBlock({
   description,
   companies,
   className,
+  idPrefix,
 }: {
   heading: string;
   description: string;
   companies: BottleneckCompany[];
   className?: string;
+  // Passed straight through to BottleneckPieChart so this chart's glow
+  // filter id never collides with the other ChartBlock's on the same page
+  // (supply-chain + customer-concentration both render one each).
+  idPrefix: string;
 }) {
   const segments = companies.map((company, index) => ({
     name: company.name,
@@ -204,7 +209,7 @@ function ChartBlock({
       </p>
 
       <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
-        <BottleneckPieChart segments={segments} />
+        <BottleneckPieChart segments={segments} idPrefix={idPrefix} />
       </div>
 
       <div>
@@ -340,6 +345,7 @@ export default function BottleneckShockView({ post }: { post: BottleneckPost }) 
           description={supplyChainDescription}
           companies={post.supplyChain}
           className={mobilePanel === "customers" ? "bottleneckMobileHidden" : undefined}
+          idPrefix="supply"
         />
 
         <ChartBlock
@@ -347,6 +353,7 @@ export default function BottleneckShockView({ post }: { post: BottleneckPost }) 
           description={customersDescription}
           companies={post.customers}
           className={mobilePanel === "supply" ? "bottleneckMobileHidden" : undefined}
+          idPrefix="customers"
         />
       </div>
     </>

@@ -67,12 +67,28 @@ function canFitLabel(
   return chordWidth > estimatedTextWidth + 4;
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export default function BottleneckPieChart({
   segments,
   size = 240,
+  idPrefix = "a",
 }: {
   segments: PieSegment[];
   size?: number;
+  // Distinguishes this chart instance's glow filter id from any other
+  // BottleneckPieChart rendered on the same page (e.g. the supply-chain
+  // and customer-concentration charts on a bottleneck ticker page) so two
+  // instances never define the same DOM id="..." twice - this used to be
+  // a hardcoded constant shared by every instance.
+  idPrefix?: string;
 }) {
   const total = segments.reduce((sum, s) => sum + s.pct, 0) || 1;
   const cx = size / 2;
@@ -80,7 +96,7 @@ export default function BottleneckPieChart({
   const r = size / 2 - 10;
   const labelRadius = r * 0.62;
   const fontSize = Math.max(9, Math.min(12, size * 0.05));
-  const glowId = "bnGlow2d";
+  const glowId = `bnGlow2d-${idPrefix}`;
 
   let cumulativeAngle = 0;
 
@@ -94,8 +110,10 @@ export default function BottleneckPieChart({
     const label = segment.ticker ?? "";
     const labelPos = polarToCartesian(cx, cy, labelRadius, midAngle);
     const showLabel = canFitLabel(sweep, label.length, labelRadius, fontSize);
+    const tooltip = `${segment.name}${segment.ticker ? ` (${segment.ticker})` : ""} - ${segment.pct}%`;
+    const tooltipHtml = `<title>${escapeHtml(tooltip)}</title>`;
 
-    return { ...segment, index, startAngle, endAngle, label, labelPos, showLabel };
+    return { ...segment, index, startAngle, endAngle, label, labelPos, showLabel, tooltipHtml };
   });
 
   return (
@@ -136,12 +154,18 @@ export default function BottleneckPieChart({
             d={wedgePath(cx, cy, r, segment.startAngle, segment.endAngle)}
             fill={segment.color}
             fillOpacity={0.5}
-          >
-            <title>
-              {segment.name}
-              {segment.ticker ? ` (${segment.ticker})` : ""} - {segment.pct}%
-            </title>
-          </path>
+            // Raw HTML instead of a JSX <title> child: React 19's server
+            // renderer (or Next's metadata-title bookkeeping layered on
+            // top of it - build logs don't distinguish which) treats a
+            // real React "title" element specially and was stripping its
+            // text on this page, since the page already has a real <head>
+            // title. dangerouslySetInnerHTML never goes through that
+            // element-creation path (React treats it as opaque markup),
+            // so it renders the exact same static <title> child without
+            // being touched by that logic, and doesn't get diffed during
+            // hydration either - both server and client just adopt it.
+            dangerouslySetInnerHTML={{ __html: segment.tooltipHtml }}
+          />
         ))}
 
         {/* bright glowing neon outline on top - the rim arc AND the radial
