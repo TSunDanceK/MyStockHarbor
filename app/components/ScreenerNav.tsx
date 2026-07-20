@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { usePickerFilter } from "@/app/components/PickerFilterContext";
 import { TickerSearch } from "@/app/components/TickerSearchBox";
-import { FILTER_DEFS, toneDotColor, type AnyFilterKey } from "@/lib/pickerFilters";
+import type { AnyFilterKey } from "@/lib/pickerFilters";
 
 type Tone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -16,12 +16,22 @@ type Tone = "green" | "yellow" | "orange" | "red" | "blue";
 // for everything else -- "is this stock also a member of that category's
 // own page right now" (e.g. "Buy Signals" -> `hasBuySignal`), computed for
 // every entry regardless of which page it's on (see buildCategoryFlags in
-// PickerResultPage.tsx). Only the three chart-pattern plays (Ascending
-// Triangles, Bull Flags, Descending Triangles) are left unmapped, since
-// they're built from a separate, more expensive dataset that was
-// deliberately kept out of every other page's payload -- those stay plain
-// links even while filter mode is on.
-type NavItem = { href: string; label: string; icon: string; tone: Tone; filterKey?: AnyFilterKey };
+// PickerResultPage.tsx).
+//
+// `href` is now OPTIONAL: every one of the 18 custom-builder conditions has
+// a home here (either on an existing category link, or as its own
+// checkbox-only row -- see the Momentum/Volume & Volatility/Moving Averages
+// groups below). Conditions with no dedicated live screener page of their
+// own (checked -- the closest-sounding pages on the site, e.g.
+// /stocks-with-unusual-volume or /stocks-above-200-day-moving-average, are
+// static guide articles, not pages built on this picker data) simply have
+// no `href`, so they only ever render as a checkbox once filter mode is on
+// (see NavList) rather than pretending to link somewhere. Only the three
+// chart-pattern plays (Ascending Triangles, Bull Flags, Descending
+// Triangles) have no `filterKey`, since they're built from a separate, more
+// expensive dataset that was deliberately kept out of every other page's
+// payload -- those stay plain links even while filter mode is on.
+type NavItem = { href?: string; label: string; icon: string; tone: Tone; filterKey?: AnyFilterKey };
 type NavGroup = { heading: string; headingColor: string; items: NavItem[] };
 
 // Grouped so the column reads like the Learn sidebar (coloured section
@@ -45,6 +55,13 @@ const GROUPS: NavGroup[] = [
       { href: "/overbought-stocks-today", label: "Overbought", icon: "●", tone: "red", filterKey: "overbought" },
       { href: "/best-trend-score-stocks", label: "Best Trend", icon: "★", tone: "green", filterKey: "bestTrendPick" },
       { href: "/bullish-bearish-divergence-stocks", label: "Divergence", icon: "⚇", tone: "blue", filterKey: "divergencePick" },
+      // Finer-grained divergence conditions -- the combined "Divergence"
+      // row above already covers the one live page this data has, so these
+      // only ever appear as checkboxes once filter mode is on.
+      { label: "Bullish RSI Divergence", icon: "↗", tone: "green", filterKey: "bullishRsiDivergence" },
+      { label: "Bearish RSI Divergence", icon: "↘", tone: "red", filterKey: "bearishRsiDivergence" },
+      { label: "Bullish MACD Divergence", icon: "↗", tone: "green", filterKey: "bullishMacdDivergence" },
+      { label: "Bearish MACD Divergence", icon: "↘", tone: "red", filterKey: "bearishMacdDivergence" },
     ],
   },
   {
@@ -57,11 +74,28 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
+    heading: "Volume & Volatility",
+    headingColor: "#fb923c",
+    items: [
+      // No dedicated live screener page for these three yet -- checkboxes
+      // only, once filter mode is on.
+      { label: "Breakout", icon: "↗", tone: "orange", filterKey: "breakout" },
+      { label: "Volume Spike", icon: "▮", tone: "orange", filterKey: "volumeSpike" },
+      { label: "ATR Spike", icon: "≈", tone: "orange", filterKey: "atrSpike" },
+    ],
+  },
+  {
     heading: "Moving Averages",
     headingColor: "#facc15",
     items: [
       { href: "/stocks-near-200-day-moving-average", label: "Near 200-Day", icon: "◇", tone: "yellow", filterKey: "dailyMa200Proximity" },
       { href: "/stocks-near-weekly-200-day-moving-average", label: "Weekly MA200", icon: "◆", tone: "yellow", filterKey: "weeklyMa200Proximity" },
+      // No dedicated live screener page for plain above/below MA50/MA200
+      // conditions -- checkboxes only, once filter mode is on.
+      { label: "Above MA50", icon: "▲", tone: "yellow", filterKey: "aboveMA50" },
+      { label: "Below MA50", icon: "▼", tone: "yellow", filterKey: "belowMA50" },
+      { label: "Above MA200", icon: "▲", tone: "yellow", filterKey: "aboveMA200" },
+      { label: "Below MA200", icon: "▼", tone: "yellow", filterKey: "belowMA200" },
     ],
   },
   {
@@ -89,19 +123,6 @@ const GROUPS: NavGroup[] = [
   },
 ];
 
-// The FILTER_DEFS conditions with no category of their own above (volume
-// spike, ATR spike, MA50/MA200 above-below, the four raw divergence flags --
-// "Divergence" the category now maps to `divergencePick`, a section-
-// membership flag, so the four raw flags stay here as finer-grained
-// options) -- still reachable while filter mode is on, just grouped
-// separately instead of pretending they map onto a category link.
-const MAPPED_FILTER_KEYS = new Set(
-  GROUPS.flatMap((group) => group.items)
-    .map((item) => item.filterKey)
-    .filter((key): key is AnyFilterKey => Boolean(key))
-);
-const OTHER_FILTER_DEFS = FILTER_DEFS.filter((filter) => !MAPPED_FILTER_KEYS.has(filter.key));
-
 function toneColour(tone: Tone) {
   if (tone === "green") return "#22c55e";
   if (tone === "yellow") return "#facc15";
@@ -110,15 +131,17 @@ function toneColour(tone: Tone) {
   return "#60a5fa";
 }
 
-// Renders the category list. Off, every item is a plain link (legacy
-// behaviour: tap "Oversold", go to the Oversold page). On (`filterMode`),
-// any item with a `filterKey` grows a checkbox in its place -- ticking
-// "Oversold" and "Best Trend" combines them via the same AND logic
-// /pickers' own filter chips use, narrowing *this* page's own results
-// instead of navigating anywhere. Only the three chart-pattern plays have
-// no filterKey (separate dataset, see GROUPS above) and keep working as
-// plain links even in filter mode (with a small "opens page" hint so
-// that's not confusing).
+// Renders the category list. Off, every item with an `href` is a plain
+// link (legacy behaviour: tap "Oversold", go to the Oversold page). On
+// (`filterMode`), any item with a `filterKey` grows a checkbox in its place
+// -- ticking "Oversold" and "Best Trend" combines them via the same AND
+// logic /pickers' own filter chips use, narrowing *this* page's own results
+// instead of navigating anywhere. Items with no `href` (the checkbox-only
+// conditions with no dedicated page -- see GROUPS above) only ever appear
+// once filter mode is on; a whole group is skipped entirely if none of its
+// items would be visible at the current filterMode. The three chart-pattern
+// plays have no filterKey and keep working as plain links even in filter
+// mode (with a small "opens page" hint so that's not confusing).
 function NavList({
   currentHref,
   onNavigate,
@@ -132,58 +155,65 @@ function NavList({
 
   return (
     <div className="screenerNavList">
-      {GROUPS.map((group) => (
-        <div key={group.heading} className="screenerNavGroup">
-          <div className="screenerNavHeading" style={{ color: group.headingColor }}>
-            {group.heading}
-          </div>
-          {group.items.map((item) => {
-            const active = item.href === currentHref;
-            const colour = toneColour(item.tone);
+      {GROUPS.map((group) => {
+        const visibleItems = group.items.filter((item) => filterMode || item.href);
+        if (!visibleItems.length) return null;
 
-            if (filterMode && item.filterKey) {
-              const key = item.filterKey;
-              const checked = selectedFilters.includes(key);
+        return (
+          <div key={group.heading} className="screenerNavGroup">
+            <div className="screenerNavHeading" style={{ color: group.headingColor }}>
+              {group.heading}
+            </div>
+            {visibleItems.map((item) => {
+              const active = item.href === currentHref;
+              const colour = toneColour(item.tone);
+
+              if (filterMode && item.filterKey) {
+                const key = item.filterKey;
+                const checked = selectedFilters.includes(key);
+                return (
+                  <label
+                    key={item.filterKey}
+                    className={checked ? "screenerNavItem screenerNavCheckable checked" : "screenerNavItem screenerNavCheckable"}
+                  >
+                    <input type="checkbox" checked={checked} onChange={() => toggleFilter(key)} />
+                    <span className="screenerNavIcon" style={{ color: colour }}>
+                      {item.icon}
+                    </span>
+                    <span className="screenerNavLabel">{item.label}</span>
+                  </label>
+                );
+              }
+
+              if (!item.href) return null;
+
               return (
-                <label
+                <Link
                   key={item.href}
-                  className={checked ? "screenerNavItem screenerNavCheckable checked" : "screenerNavItem screenerNavCheckable"}
+                  href={item.href}
+                  onClick={onNavigate}
+                  className={active ? "screenerNavItem active" : "screenerNavItem"}
+                  aria-current={active ? "page" : undefined}
+                  style={
+                    active
+                      ? {
+                          borderColor: `${colour}88`,
+                          background: `linear-gradient(135deg, ${colour}22, rgba(15,23,42,0.35))`,
+                        }
+                      : undefined
+                  }
                 >
-                  <input type="checkbox" checked={checked} onChange={() => toggleFilter(key)} />
                   <span className="screenerNavIcon" style={{ color: colour }}>
                     {item.icon}
                   </span>
                   <span className="screenerNavLabel">{item.label}</span>
-                </label>
+                  {filterMode ? <span className="screenerNavHint">opens page</span> : null}
+                </Link>
               );
-            }
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={onNavigate}
-                className={active ? "screenerNavItem active" : "screenerNavItem"}
-                aria-current={active ? "page" : undefined}
-                style={
-                  active
-                    ? {
-                        borderColor: `${colour}88`,
-                        background: `linear-gradient(135deg, ${colour}22, rgba(15,23,42,0.35))`,
-                      }
-                    : undefined
-                }
-              >
-                <span className="screenerNavIcon" style={{ color: colour }}>
-                  {item.icon}
-                </span>
-                <span className="screenerNavLabel">{item.label}</span>
-                {filterMode ? <span className="screenerNavHint">opens page</span> : null}
-              </Link>
-            );
-          })}
-        </div>
-      ))}
+            })}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -192,10 +222,19 @@ function NavList({
 // whether the category list above renders checkboxes (see NavList) or
 // plain links. Mirrors the "Open Filters"/"Hide" wording already used by
 // /pickers' own custom screener toggle (PickersClient.tsx) for consistency.
-// Shows a badge with the active filter count and, once results have
-// reported back a match count (see PickerResultsGrid.tsx), a "N matching"
-// line -- so the count is visible even while the checkbox list is hidden.
-function FilterModeToggle({ filterMode, onToggle }: { filterMode: boolean; onToggle: () => void }) {
+// Shows a badge with the active filter count. `hideMeta` (used in the
+// mobile overlay) suppresses the inline "N matching" + Clear row below the
+// toggle button -- on mobile those live in the always-visible footer
+// instead (see ScreenerNav below), so they don't scroll out of view.
+function FilterModeToggle({
+  filterMode,
+  onToggle,
+  hideMeta = false,
+}: {
+  filterMode: boolean;
+  onToggle: () => void;
+  hideMeta?: boolean;
+}) {
   const { selectedFilters, matchCount, clearFilters } = usePickerFilter();
 
   return (
@@ -208,7 +247,7 @@ function FilterModeToggle({ filterMode, onToggle }: { filterMode: boolean; onTog
         {filterMode ? "Hide" : "Open Filters"}
         {selectedFilters.length ? <span className="screenerFilterModeBadge">{selectedFilters.length}</span> : null}
       </button>
-      {selectedFilters.length ? (
+      {!hideMeta && selectedFilters.length ? (
         <div className="screenerFilterModeMeta">
           {matchCount != null ? <span className="screenerFilterModeCount">{matchCount} matching</span> : <span />}
           <button type="button" className="screenerFilterClear" onClick={clearFilters}>
@@ -216,37 +255,6 @@ function FilterModeToggle({ filterMode, onToggle }: { filterMode: boolean; onTog
           </button>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-// The remaining FILTER_DEFS conditions that don't correspond to a category
-// link above (volume spike, ATR spike, MA50/MA200 above-below, the
-// divergence flags) -- only shown once filter mode is on, so nothing from
-// the old standalone checklist is lost, it's just secondary to the
-// category checkboxes above it.
-function MoreFilters() {
-  const { selectedFilters, toggleFilter } = usePickerFilter();
-
-  if (!OTHER_FILTER_DEFS.length) return null;
-
-  return (
-    <div className="screenerNavGroup screenerMoreFilters">
-      <div className="screenerNavHeading" style={{ color: "#93c5fd" }}>
-        More conditions
-      </div>
-      <div className="screenerFilterList">
-        {OTHER_FILTER_DEFS.map((filter) => {
-          const checked = selectedFilters.includes(filter.key);
-          return (
-            <label key={filter.key} className="screenerFilterItem">
-              <input type="checkbox" checked={checked} onChange={() => toggleFilter(filter.key)} />
-              <span className="screenerFilterDot" style={{ background: toneDotColor(filter.tone) }} aria-hidden="true" />
-              <span className="screenerFilterLabel">{filter.label}</span>
-            </label>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -260,13 +268,13 @@ function MoreFilters() {
 //   - "sidebar": desktop sticky column only, no mobile trigger/overlay
 //   - "trigger": mobile "Select Screener" button + overlay only, no sidebar
 //
-// `showFilters` renders the filter-mode toggle + checkbox-aware NavList +
-// MoreFilters (see above); it does nothing unless the caller also wraps
-// the page in <PickerFilterProvider>. `showSearch` renders the cross-picker
-// TickerSearch box, but only inside the mobile overlay -- on desktop the
-// ticker search now lives on the results header instead (see
-// PickerResultsGrid.tsx's inline-variant TickerSearch), so the sidebar
-// never renders it regardless of this prop.
+// `showFilters` renders the filter-mode toggle + checkbox-aware NavList
+// (see above); it does nothing unless the caller also wraps the page in
+// <PickerFilterProvider>. `showSearch` renders the cross-picker TickerSearch
+// box, but only inside the mobile overlay -- on desktop the ticker search
+// now lives on the results header instead (see PickerResultsGrid.tsx's
+// inline-variant TickerSearch), so the sidebar never renders it regardless
+// of this prop.
 export default function ScreenerNav({
   currentHref,
   variant = "full",
@@ -280,7 +288,7 @@ export default function ScreenerNav({
 }) {
   const [open, setOpen] = useState(false);
   const [filterMode, setFilterMode] = useState(false);
-  const { matchCount } = usePickerFilter();
+  const { matchCount, selectedFilters, clearFilters } = usePickerFilter();
   const showSidebar = variant !== "trigger";
   const showTrigger = variant !== "sidebar";
 
@@ -296,7 +304,6 @@ export default function ScreenerNav({
           <div className="screenerSidebarTitle">Screeners</div>
           {showFilters ? <FilterModeToggle filterMode={filterMode} onToggle={() => setFilterMode((v) => !v)} /> : null}
           <NavList currentHref={currentHref} filterMode={filterMode} />
-          {showFilters && filterMode ? <MoreFilters /> : null}
         </aside>
       ) : null}
 
@@ -342,19 +349,27 @@ export default function ScreenerNav({
                   overlay (unchanged) -- searching does NOT close the
                   overlay, unlike tapping a category link, which navigates
                   and closes it. The filter toggle + checkboxes work exactly
-                  like desktop; the "Go" footer below (always on screen,
-                  not part of this scrolling area) is how you close the
-                  overlay once you're done ticking boxes. */}
+                  like desktop; Clear + Go (always on screen, not part of
+                  this scrolling area) are how you clear/finish once you're
+                  done ticking boxes -- see the footer below. */}
               {showSearch ? <TickerSearch /> : null}
-              {showFilters ? <FilterModeToggle filterMode={filterMode} onToggle={() => setFilterMode((v) => !v)} /> : null}
+              {showFilters ? (
+                <FilterModeToggle filterMode={filterMode} onToggle={() => setFilterMode((v) => !v)} hideMeta />
+              ) : null}
               <NavList currentHref={currentHref} onNavigate={() => setOpen(false)} filterMode={filterMode} />
-              {showFilters && filterMode ? <MoreFilters /> : null}
             </div>
             {showFilters ? (
               <div className="screenerOverlayFooter">
-                <button type="button" className="screenerGoBtn" onClick={() => setOpen(false)}>
-                  Go{matchCount != null ? ` — ${matchCount} matching` : ""}
-                </button>
+                <div className="screenerOverlayFooterRow">
+                  {selectedFilters.length ? (
+                    <button type="button" className="screenerFilterClearFixed" onClick={clearFilters}>
+                      Clear
+                    </button>
+                  ) : null}
+                  <button type="button" className="screenerGoBtn" onClick={() => setOpen(false)}>
+                    Go{matchCount != null ? ` — ${matchCount} matching` : ""}
+                  </button>
+                </div>
               </div>
             ) : null}
           </div>
@@ -416,16 +431,6 @@ export default function ScreenerNav({
         .screenerFilterModeMeta { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; padding: 0 2px; }
         .screenerFilterModeCount { font-size: 11.5px; color: rgba(148,163,184,0.85); font-weight: 700; }
 
-        .screenerMoreFilters { margin-top: 8px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); }
-        .screenerFilterList { display: grid; gap: 2px; }
-        .screenerFilterItem {
-          display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 9px;
-          font-size: 12.5px; font-weight: 700; color: rgba(226,232,240,0.85); cursor: pointer;
-        }
-        .screenerFilterItem:hover { background: rgba(255,255,255,0.04); }
-        .screenerFilterItem input[type="checkbox"] { flex: 0 0 auto; width: 14px; height: 14px; accent-color: #60a5fa; cursor: pointer; }
-        .screenerFilterDot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 999px; }
-        .screenerFilterLabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .screenerFilterClear {
           border: 1px solid rgba(239,68,68,0.28); background: rgba(239,68,68,0.06); color: #fca5a5;
           border-radius: 8px; padding: 4px 9px; font-size: 11px; font-weight: 800; cursor: pointer;
@@ -479,13 +484,20 @@ export default function ScreenerNav({
         .screenerSelectCurrent > :not(.screenerSelectChevron) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .screenerSelectChevron { flex: 0 0 auto; color: #93c5fd; }
 
-        .screenerOverlay { position: fixed; inset: 0; z-index: 70; display: flex; }
+        .screenerOverlay {
+          position: fixed; inset: 0; z-index: 70; display: flex;
+          /* Reserves space at the top for the site's own fixed/sticky
+             header so the overlay's "Select Screener" title + close button
+             (see .screenerOverlayHeader) never render underneath it. */
+          padding-top: calc(64px + env(safe-area-inset-top));
+        }
         .screenerOverlayBackdrop {
           position: absolute; inset: 0; background: rgba(2,6,15,0.72);
           -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
         }
         .screenerOverlayPanel {
-          position: relative; margin-top: auto; width: 100%; max-height: 82vh;
+          position: relative; margin-top: auto; width: 100%;
+          max-height: min(82vh, calc(100vh - 76px - env(safe-area-inset-top)));
           display: flex; flex-direction: column;
           border-top-left-radius: 22px; border-top-right-radius: 22px;
           border: 1px solid rgba(255,255,255,0.10); border-bottom: 0;
@@ -511,11 +523,17 @@ export default function ScreenerNav({
           border-top: 1px solid rgba(255,255,255,0.10);
           background: rgba(7,11,20,1);
         }
+        .screenerOverlayFooterRow { display: flex; align-items: stretch; gap: 10px; }
         .screenerGoBtn {
-          width: 100%; padding: 13px 16px; border-radius: 12px;
+          flex: 1 1 auto; padding: 13px 16px; border-radius: 12px;
           border: 1px solid rgba(34,197,94,0.4);
           background: linear-gradient(135deg, rgba(34,197,94,0.28), rgba(22,163,74,0.18));
           color: #ecfdf5; font-weight: 950; font-size: 14.5px; cursor: pointer;
+        }
+        .screenerFilterClearFixed {
+          flex: 0 0 auto; padding: 13px 18px; border-radius: 12px;
+          border: 1px solid rgba(239,68,68,0.35); background: rgba(239,68,68,0.10);
+          color: #fca5a5; font-weight: 900; font-size: 14px; cursor: pointer; white-space: nowrap;
         }
 
         @media (max-width: 980px) {
