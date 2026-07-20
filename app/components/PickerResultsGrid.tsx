@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import MiniPickerCandleChart from "@/app/components/MiniPickerCandleChart";
 import { usePickerFilter } from "@/app/components/PickerFilterContext";
+import { TickerSearch } from "@/app/components/TickerSearchBox";
 import type { ResultEntry } from "@/app/components/PickerResultPage";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
@@ -99,15 +100,20 @@ export default function PickerResultsGrid({
   return (
     <section>
       <div className="resultsHeader">
-        <div>
+        <div className="resultsHeaderTop">
           <h2>Current screened results</h2>
-          <p>Each card shows a mini candle preview — select any stock to open its full view.</p>
-          {selectedFilters.length ? (
-            <p className="filterMatchLine">
-              {filteredEntries.length} of {entries.length} match your {selectedFilters.length === 1 ? "filter" : `${selectedFilters.length} filters`}.
-            </p>
-          ) : null}
+          {/* Desktop only -- on mobile the same search box already lives
+              in the "Select Screener" overlay (see ScreenerNav.tsx); this
+              inline variant hides itself under 980px so it never doubles
+              up there. */}
+          <TickerSearch variant="inline" />
         </div>
+        <p>Each card shows a mini candle preview — select any stock to open its full view.</p>
+        {selectedFilters.length ? (
+          <p className="filterMatchLine">
+            {filteredEntries.length} of {entries.length} match your {selectedFilters.length === 1 ? "filter" : `${selectedFilters.length} filters`}.
+          </p>
+        ) : null}
       </div>
 
       {shown.length ? (
