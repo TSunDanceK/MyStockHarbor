@@ -51,14 +51,19 @@ import { initBotId } from "botid/client/core";
  * they're excluded above.
  *
  * NOTE on checkLevel: every route below runs Basic (free) unless it sets
- * advancedOptions.checkLevel explicitly. /api/quote is the one exception —
- * it's on Deep Analysis (paid) because it calls FMP live on every request
- * with zero caching, making it the single highest-value target on the site.
- * checkLevel here MUST match the corresponding checkBotId() call server-side
- * (see lib/botid-guard.ts's isUnwantedBot(checkLevel) and its call site in
- * app/api/quote/route.ts) or verification fails outright. See
- * claude/firewall-bot-protection-audit-2026-07-19.md for the full reasoning
- * and why other routes (already well-cached) weren't picked first.
+ * advancedOptions.checkLevel explicitly. Deep Analysis (paid) is reserved for
+ * routes where every hit is a real, billed upstream call with little or no
+ * caching cushion: /api/quote (calls FMP live on every request, zero
+ * caching), and /api/stock-news/insight + /api/stock-news/why-it-matters
+ * (call OpenAI, cached by unstable_cache keyed on the full request payload —
+ * varying attacker-controlled article text forces a fresh, billed OpenAI
+ * call every time). checkLevel here MUST match the corresponding
+ * checkBotId() call server-side (see lib/botid-guard.ts's
+ * isUnwantedBot(checkLevel) and its call sites in app/api/quote/route.ts,
+ * app/api/stock-news/insight/route.ts and
+ * app/api/stock-news/why-it-matters/route.ts) or verification fails
+ * outright. See claude/firewall-bot-protection-audit-2026-07-19.md for the
+ * full reasoning and why other routes (already well-cached) weren't picked.
  *
  * Wired server-side guards so far: /api/quote, /api/history,
  * /api/stock-earnings/*, /api/symbols, /api/plays, /api/bull-flags,
@@ -89,7 +94,16 @@ initBotId({
     { path: "/api/earnings-calendar/backfill-date", method: "POST" },
     { path: "/api/stock-valuation/*", method: "GET" },
     { path: "/api/stock-analyst-rating/*", method: "GET" },
-    { path: "/api/stock-news/insight", method: "POST" },
-    { path: "/api/stock-news/why-it-matters", method: "POST" },
+    {
+      path: "/api/stock-news/insight",
+      method: "POST",
+      advancedOptions: { checkLevel: "deepAnalysis" },
+    },
+    {
+      path: "/api/stock-news/why-it-matters",
+      method: "POST",
+      advancedOptions: { checkLevel: "deepAnalysis" },
+    },
   ],
-});
+}
+);
