@@ -70,9 +70,16 @@ function canFitLabel(
 export default function BottleneckPieChart({
   segments,
   size = 240,
+  idPrefix = "a",
 }: {
   segments: PieSegment[];
   size?: number;
+  // Distinguishes this chart instance's glow filter id from any other
+  // BottleneckPieChart rendered on the same page (e.g. the supply-chain
+  // and customer-concentration charts on a bottleneck ticker page) so two
+  // instances never define the same DOM id="..." twice - this used to be
+  // a hardcoded constant shared by every instance.
+  idPrefix?: string;
 }) {
   const total = segments.reduce((sum, s) => sum + s.pct, 0) || 1;
   const cx = size / 2;
@@ -80,7 +87,7 @@ export default function BottleneckPieChart({
   const r = size / 2 - 10;
   const labelRadius = r * 0.62;
   const fontSize = Math.max(9, Math.min(12, size * 0.05));
-  const glowId = "bnGlow2d";
+  const glowId = `bnGlow2d-${idPrefix}`;
 
   let cumulativeAngle = 0;
 
@@ -94,8 +101,9 @@ export default function BottleneckPieChart({
     const label = segment.ticker ?? "";
     const labelPos = polarToCartesian(cx, cy, labelRadius, midAngle);
     const showLabel = canFitLabel(sweep, label.length, labelRadius, fontSize);
+    const tooltip = `${segment.name}${segment.ticker ? ` (${segment.ticker})` : ""} - ${segment.pct}%`;
 
-    return { ...segment, index, startAngle, endAngle, label, labelPos, showLabel };
+    return { ...segment, index, startAngle, endAngle, label, labelPos, showLabel, tooltip };
   });
 
   return (
@@ -129,19 +137,24 @@ export default function BottleneckPieChart({
         {/* dark backing disc so the glow has somewhere to bleed into */}
         <circle cx={cx} cy={cy} r={r + 3} fill="#06080d" />
 
-        {/* muted, darker fills - this is where the "depth" reads as darker */}
+        {/* muted, darker fills - this is where the "depth" reads as darker.
+            The hover tooltip is a plain `title` attribute (not a nested
+            <title> element) - React 19's document-metadata handling can
+            special-case a rendered <title> element and strip its text
+            during SSR when the page already has its own real <head> title,
+            which produced empty <title></title> tags server-side and a
+            React hydration mismatch (error #418) once the client filled
+            them back in. A plain attribute isn't a "title" element, so
+            it's never touched by that logic, and browsers still show the
+            same native tooltip on hover. */}
         {computed.map((segment) => (
           <path
             key={`fill-${segment.index}`}
             d={wedgePath(cx, cy, r, segment.startAngle, segment.endAngle)}
             fill={segment.color}
             fillOpacity={0.5}
-          >
-            <title>
-              {segment.name}
-              {segment.ticker ? ` (${segment.ticker})` : ""} - {segment.pct}%
-            </title>
-          </path>
+            title={segment.tooltip}
+          />
         ))}
 
         {/* bright glowing neon outline on top - the rim arc AND the radial
