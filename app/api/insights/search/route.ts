@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchPosts } from "@/lib/blog";
+import { isUnwantedBot } from "@/lib/botid-guard";
 
 const MAX_RESULTS = 30;
 const MIN_QUERY_LENGTH = 2;
@@ -11,6 +12,10 @@ const MIN_QUERY_LENGTH = 2;
 export async function GET(request: NextRequest) {
   const rawQuery = request.nextUrl.searchParams.get("q") ?? "";
   const query = rawQuery.trim().slice(0, 100);
+
+  if (await isUnwantedBot()) {
+    return NextResponse.json({ error: "Access denied" }, { status: 403 });
+  }
 
   if (query.length < MIN_QUERY_LENGTH) {
     return NextResponse.json({ query, count: 0, results: [] });

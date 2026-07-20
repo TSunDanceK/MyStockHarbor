@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { getAllPosts } from "@/lib/blog";
 import { getStockNewsData } from "@/lib/stock-news-data";
+import { isUnwantedBot } from "@/lib/botid-guard";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export const revalidate = 900;
 
 // Backs the homepage "What's happening across MyStockHarbor" discovery
@@ -16,6 +18,10 @@ const NEWS_SYMBOL = "SPY";
 const FALLBACK_EARNINGS_SYMBOL = "AAPL";
 
 export async function GET() {
+  if (await isUnwantedBot()) {
+    return NextResponse.json({ error: "Access denied" }, { status: 403 });
+  }
+
   let insight: { slug: string; symbol: string | null } | null = null;
   try {
     const posts = getAllPosts();

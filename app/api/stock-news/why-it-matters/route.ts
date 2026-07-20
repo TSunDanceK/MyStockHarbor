@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
 import { getAiNewsBriefs, type AiNewsBriefInputItem } from "@/lib/ai-news-briefs";
+import { isUnwantedBot } from "@/lib/botid-guard";
 
 export const runtime = "nodejs";
 
@@ -67,6 +68,10 @@ export async function POST(request: NextRequest) {
     body = (await request.json()) as RequestBody;
   } catch {
     return NextResponse.json({ ai: false, whyItMatters: null }, { status: 400 });
+  }
+
+  if (await isUnwantedBot()) {
+    return NextResponse.json({ error: "Access denied" }, { status: 403 });
   }
 
   const symbol = str(body.symbol).toUpperCase();

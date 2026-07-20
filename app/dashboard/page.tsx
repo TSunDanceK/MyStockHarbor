@@ -9,6 +9,7 @@ import DashboardClient, {
   type StockEarningsSummary,
 } from "../components/DashboardClient";
 import { getDailyHistory } from "@/lib/server/historyCache";
+import { getBenchmarksData } from "@/lib/server/benchmarksBuilder";
 
 // Was a plain client-rendered shell (Suspense fallback "Loading dashboard…"
 // with no real content until client effects fetched everything). Now fetches
@@ -21,6 +22,15 @@ import { getDailyHistory } from "@/lib/server/historyCache";
 // symbol it lands on, so this adds no new FMP calls -- the same requests
 // were always going to happen from the client on first load; they're just
 // made once, here, on the server, instead.
+//
+// Benchmarks are read in-process via getBenchmarksData() rather than an
+// HTTP self-fetch to /api/benchmarks: that route is now BotID-guarded, and
+// a server-to-server self-fetch carries no browser BotID header, so it
+// would otherwise itself read as bot traffic and get 403'd -- the same
+// self-fetch-gets-blocked failure mode already documented as a past
+// production outage in claude/pickers-firewall-selfblock-2026-07-17.md.
+// The module's in-memory cache is shared with /api/benchmarks's GET
+// handler, so this stays consistent with the public endpoint.
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
@@ -74,6 +84,16 @@ async function fetchJson<T = Record<string, unknown>>(
   }
 }
 
+async function getInitialBenchmarks(): Promise<BenchPayload | null> {
+  try {
+    const { data, status } = await getBenchmarksData("stock");
+    if (status && status >= 400) return null;
+    return data as unknown as BenchPayload;
+  } catch {
+    return null;
+  }
+}
+
 export default async function DashboardPage({ searchParams }: Props) {
   const params = await searchParams;
   const requested = cleanSymbolParam(params?.symbol);
@@ -86,9 +106,7 @@ export default async function DashboardPage({ searchParams }: Props) {
       fetchJson(`${origin}/api/quote?symbol=${encodeURIComponent(symbol)}`, {
         next: { revalidate: 60 },
       }),
-      fetchJson<BenchPayload>(`${origin}/api/benchmarks?scope=stock`, {
-        next: { revalidate: 300 },
-      }),
+      getInitialBenchmarks(),
       fetchJson<NewsPayload>(
         `${origin}/api/internal-news?symbol=${encodeURIComponent(symbol)}`,
         { next: { revalidate: 900 } }

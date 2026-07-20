@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isUnwantedBot } from "@/lib/botid-guard";
 
 export const runtime = "nodejs";
 
@@ -104,6 +105,11 @@ function deriveConsensusLabel(args: {
 export async function GET(_request: Request, { params }: Props) {
   const { symbol } = await params;
   const clean = cleanSymbol(symbol);
+
+  if (await isUnwantedBot()) {
+    return NextResponse.json({ error: "Access denied" }, { status: 403 });
+  }
+
   const apiKey = process.env.FMP_API_KEY;
 
   if (!clean || !apiKey) {

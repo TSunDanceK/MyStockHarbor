@@ -7,6 +7,7 @@ import {
   clearBackfillFailures,
   checkBackfillKey,
 } from "@/lib/server/backfillAuth";
+import { isUnwantedBot } from "@/lib/botid-guard";
 
 export const runtime = "nodejs";
 // Owner-only and infrequent; a heavy earnings day can be a few hundred quote
@@ -23,6 +24,10 @@ export const maxDuration = 300;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function POST(request: Request) {
+  if (await isUnwantedBot()) {
+    return NextResponse.json({ error: "Access denied" }, { status: 403 });
+  }
+
   const ip = getClientIp(request);
 
   const lockout = await checkBackfillLockout(ip);
