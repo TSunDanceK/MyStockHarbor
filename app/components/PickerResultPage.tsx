@@ -1,15 +1,14 @@
-import Link from "next/link";
 import { headers } from "next/headers";
-import MiniPickerCandleChart, {
-  type MiniCandlePoint,
-  type SupportResistanceZone,
-} from "@/app/components/MiniPickerCandleChart";
+import type { MiniCandlePoint, SupportResistanceZone } from "@/app/components/MiniPickerCandleChart";
 import PickerHighlightScroller from "@/app/components/PickerHighlightScroller";
 import ScreenerNav from "@/app/components/ScreenerNav";
 import HowToCollapse from "@/app/components/HowToCollapse";
+import PickerResultsGrid from "@/app/components/PickerResultsGrid";
+import { PickerFilterProvider } from "@/app/components/PickerFilterContext";
 import { getCompanyNameMap } from "@/lib/server/companyNames";
 import { getPickersData } from "@/lib/server/pickersBuilder";
 import { WatermarkVisibilityProvider, HideWatermarksBar } from "@/app/components/WatermarkVisibility";
+import type { FilterKey } from "@/lib/pickerFilters";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -78,6 +77,8 @@ type SignalRecord = {
   bearishRsiDivergence?: boolean;
   bullishMacdDivergence?: boolean;
   bearishMacdDivergence?: boolean;
+  positiveLastEarnings?: boolean;
+  strongEarningsGrowth?: boolean;
 };
 
 type PickersPayload = {
@@ -88,7 +89,49 @@ type PickersPayload = {
   signalRecords?: SignalRecord[];
 };
 
-type ResultEntry = {
+// The 18 boolean fields the /pickers "custom builder" filter chips match
+// against (see lib/pickerFilters.ts). Carried on every ResultEntry so
+// PickerResultsGrid can apply the exact same filter logic client-side,
+// against data that's already been sent down for this page -- no refetch.
+export type ResultEntryFlags = {
+  oversold?: boolean;
+  overbought?: boolean;
+  buyTheDip?: boolean;
+  breakout?: boolean;
+  volumeSpike?: boolean;
+  atrSpike?: boolean;
+  aboveMA50?: boolean;
+  belowMA50?: boolean;
+  aboveMA200?: boolean;
+  belowMA200?: boolean;
+  dailyMa200Proximity?: boolean;
+  weeklyMa200Proximity?: boolean;
+  bullishRsiDivergence?: boolean;
+  bearishRsiDivergence?: boolean;
+  bullishMacdDivergence?: boolean;
+  bearishMacdDivergence?: boolean;
+  positiveLastEarnings?: boolean;
+  strongEarningsGrowth?: boolean;
+
+  // Category-membership flags (see buildCategoryFlags below) -- "is this
+  // symbol also a member of the Buy Signals / Best Trend / Divergence /
+  // ATH Breakouts / 3-Month Highs / Macro S/R page's own list right now".
+  // Attached to every entry on every page (not just that category's own
+  // page) so ScreenerNav's checkboxes for these categories (see
+  // ScreenerNav.tsx GROUPS) can narrow *any* page's results the same way
+  // the 18 custom-builder conditions already do. Computed for free from
+  // the same full `sections` + `signalRecords` payload every picker page
+  // already fetches -- no extra requests.
+  hasBuySignal?: boolean;
+  hasSellSignal?: boolean;
+  bestTrendPick?: boolean;
+  divergencePick?: boolean;
+  athBreakoutPick?: boolean;
+  threeMonthHighPick?: boolean;
+  macroSrPick?: boolean;
+};
+
+export type ResultEntry = ResultEntryFlags & {
   symbol: string;
   companyName?: string;
   note: string;
@@ -102,30 +145,25 @@ type ResultEntry = {
   supportResistanceZone?: SupportResistanceZone;
 };
 
-function toneColour(tone?: PickerTone) {
-  if (tone === "green") return "#22c55e";
-  if (tone === "yellow") return "#facc15";
-  if (tone === "orange") return "#fb923c";
-  if (tone === "red") return "#ef4444";
-  if (tone === "blue") return "#60a5fa";
-  return "#94a3b8";
-}
+// Deliberately typed as FilterKey (the exact 18-key union from
+// lib/pickerFilters.ts), NOT `keyof ResultEntryFlags` -- ResultEntryFlags
+// also carries the 7 newer category-membership keys (hasBuySignal etc.,
+// see below) which don't exist on SignalRecord. Indexing `record[key]`
+// below needs a key type that's guaranteed to be a real SignalRecord field.
+const FLAG_KEYS: FilterKey[] = [
+  "oversold", "overbought", "buyTheDip", "breakout", "volumeSpike", "atrSpike",
+  "aboveMA50", "belowMA50", "aboveMA200", "belowMA200", "dailyMa200Proximity", "weeklyMa200Proximity",
+  "bullishRsiDivergence", "bearishRsiDivergence", "bullishMacdDivergence", "bearishMacdDivergence",
+  "positiveLastEarnings", "strongEarningsGrowth",
+];
 
-function toneBorder(tone?: PickerTone) {
-  if (tone === "green") return "rgba(34,197,94,0.32)";
-  if (tone === "yellow") return "rgba(250,204,21,0.32)";
-  if (tone === "orange") return "rgba(251,146,60,0.32)";
-  if (tone === "red") return "rgba(239,68,68,0.32)";
-  if (tone === "blue") return "rgba(96,165,250,0.32)";
-  return "rgba(148,163,184,0.24)";
-}
-
-function toneBackground(tone?: PickerTone) {
-  if (tone === "green") return "linear-gradient(180deg, rgba(8,24,18,0.96), rgba(6,12,18,0.98))";
-  if (tone === "yellow") return "linear-gradient(180deg, rgba(28,24,8,0.96), rgba(8,12,18,0.98))";
-  if (tone === "orange") return "linear-gradient(180deg, rgba(32,20,8,0.96), rgba(8,12,18,0.98))";
-  if (tone === "red") return "linear-gradient(180deg, rgba(32,10,14,0.96), rgba(8,12,18,0.98))";
-  return "linear-gradient(180deg, rgba(8,16,32,0.96), rgba(6,10,18,0.98))";
+function flagsFromRecord(record?: SignalRecord): ResultEntryFlags {
+  const flags: ResultEntryFlags = {};
+  if (!record) return flags;
+  for (const key of FLAG_KEYS) {
+    if (record[key] === true) flags[key] = true;
+  }
+  return flags;
 }
 
 function cleanSymbol(value: unknown) {
@@ -277,17 +315,22 @@ function makeRecordMap(records: SignalRecord[]) {
   return map;
 }
 
+// Hard safety ceiling so a pathological universe (or a future symbol-count
+// blowup) can't ship an unbounded payload -- well above anything the
+// current ~200-symbol universe cap can produce, so it never actually
+// truncates real results the way the old per-page maxItems slice did.
+const RESULT_SAFETY_CAP = 500;
+
 function entriesFromSection(args: {
   configHref: string;
   section: PickerSection | undefined;
   recordMap: Map<string, SignalRecord>;
   fallbackTone: PickerTone;
-  maxItems: number;
   filterTimeframe?: "D" | "W";
 }) {
   const items = Array.isArray(args.section?.items) ? args.section.items : [];
   const filteredItems = args.filterTimeframe ? items.filter((item) => item.timeframe === args.filterTimeframe) : items;
-  return filteredItems.slice(0, args.maxItems).map((item): ResultEntry | null => {
+  return filteredItems.slice(0, RESULT_SAFETY_CAP).map((item): ResultEntry | null => {
     const symbol = cleanSymbol(item.symbol);
     if (!symbol) return null;
     const record = args.recordMap.get(symbol);
@@ -304,6 +347,7 @@ function entriesFromSection(args: {
       badge: [item.timeframe, item.indicator].filter(Boolean).join(" · "),
       score: typeof item.score === "number" ? item.score : typeof record?.score === "number" ? record.score : undefined,
       supportResistanceZone: item.supportResistanceZone,
+      ...flagsFromRecord(record),
     };
   }).filter((entry): entry is ResultEntry => Boolean(entry));
 }
@@ -311,7 +355,6 @@ function entriesFromSection(args: {
 function buildEntries(args: { config: PickerResultConfig; sections: PickerSection[]; signalRecords: SignalRecord[] }) {
   const { config, sections, signalRecords } = args;
   const recordMap = makeRecordMap(signalRecords);
-  const maxItems = config.maxItems ?? 36;
 
   if (config.kind === "buySignals") {
     return signalRecords.map((record): ResultEntry | null => {
@@ -329,8 +372,9 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
         stockHref: `/stock/${encodeURIComponent(symbol)}`,
         chartHref: chartHrefFor(symbol, record.dashboardHref),
         chartPoints: Array.isArray(record.chartPoints) ? record.chartPoints : [],
+        ...flagsFromRecord(record),
       };
-    }).filter((entry): entry is ResultEntry => Boolean(entry)).sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.symbol.localeCompare(b.symbol)).slice(0, maxItems);
+    }).filter((entry): entry is ResultEntry => Boolean(entry)).sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.symbol.localeCompare(b.symbol)).slice(0, RESULT_SAFETY_CAP);
   }
 
   if (config.kind === "sellSignals") {
@@ -349,12 +393,61 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
         stockHref: `/stock/${encodeURIComponent(symbol)}`,
         chartHref: chartHrefFor(symbol, record.dashboardHref),
         chartPoints: Array.isArray(record.chartPoints) ? record.chartPoints : [],
+        ...flagsFromRecord(record),
       };
-    }).filter((entry): entry is ResultEntry => Boolean(entry)).sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.symbol.localeCompare(b.symbol)).slice(0, maxItems);
+    }).filter((entry): entry is ResultEntry => Boolean(entry)).sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.symbol.localeCompare(b.symbol)).slice(0, RESULT_SAFETY_CAP);
   }
 
   const section = findSection(sections, config.sectionIncludes ?? []);
-  return entriesFromSection({ configHref: config.href, section, recordMap, fallbackTone: config.tone, maxItems, filterTimeframe: config.filterTimeframe });
+  return entriesFromSection({ configHref: config.href, section, recordMap, fallbackTone: config.tone, filterTimeframe: config.filterTimeframe });
+}
+
+// The same `sectionIncludes` needles each dedicated page's own config
+// already uses to find its section (see e.g. app/best-trend-score-stocks/
+// page.tsx) -- reused here so "is this symbol a member of that category"
+// is computed identically to how that category's own page decides it.
+// kept in one place so the two can't drift apart.
+const CATEGORY_SECTION_DEFS: Array<{ key: keyof ResultEntryFlags; includes: string[] }> = [
+  { key: "bestTrendPick", includes: ["best trend score"] },
+  { key: "divergencePick", includes: ["divergence"] },
+  { key: "macroSrPick", includes: ["macro", "support", "resistance"] },
+  { key: "athBreakoutPick", includes: ["all-time high breakout"] },
+  { key: "threeMonthHighPick", includes: ["3-month high breakout"] },
+];
+
+// Builds a symbol -> category-membership map covering every checkable
+// category that isn't already one of the 18 custom-builder flags (see
+// ResultEntryFlags above) -- Buy/Sell Signals (a computed score threshold,
+// same logic as their own dedicated pages) plus the five section-backed
+// categories (membership in that section's own item list). Runs once per
+// request against data the page already fetched in full (`sections` and
+// `signalRecords` are never trimmed to just the current page's own
+// category), so every page can offer every category as a checkbox with no
+// extra network/API cost.
+function buildCategoryFlags(sections: PickerSection[], signalRecords: SignalRecord[]) {
+  const flags = new Map<string, Partial<ResultEntryFlags>>();
+  const setFlag = (symbol: string, key: keyof ResultEntryFlags) => {
+    const clean = cleanSymbol(symbol);
+    if (!clean) return;
+    const existing = flags.get(clean) ?? {};
+    existing[key] = true;
+    flags.set(clean, existing);
+  };
+
+  for (const def of CATEGORY_SECTION_DEFS) {
+    const section = findSection(sections, def.includes);
+    for (const item of section?.items ?? []) {
+      if (item.symbol) setFlag(item.symbol, def.key);
+    }
+  }
+
+  for (const record of signalRecords) {
+    if (!record.symbol) continue;
+    if (getBuySignalCount(record) > 0) setFlag(record.symbol, "hasBuySignal");
+    if (getSellSignalCount(record) > 0) setFlag(record.symbol, "hasSellSignal");
+  }
+
+  return flags;
 }
 
 async function getPickerData(config: PickerResultConfig) {
@@ -369,7 +462,22 @@ async function getPickerData(config: PickerResultConfig) {
     const sections = Array.isArray(payload.sections) ? payload.sections : [];
     const signalRecords = Array.isArray(payload.signalRecords) ? payload.signalRecords : [];
     const matchedSection = config.kind === "section" ? findSection(sections, config.sectionIncludes ?? []) : undefined;
+    // Full matched set (bounded only by RESULT_SAFETY_CAP, not by
+    // config.maxItems) -- config.maxItems is now just the initial "shown"
+    // batch size for the client-side See More button, not a hard cutoff of
+    // what's computed/sent. See PickerResultsGrid.tsx.
     const entries = buildEntries({ config, sections, signalRecords });
+
+    // Merge in category-membership flags (Buy Signals, Sell Signals, Best
+    // Trend, Divergence, ATH Breakouts, 3-Month Highs, Macro S/R) so
+    // ScreenerNav's checkboxes for those categories can filter *this*
+    // page's entries too, not just the categories that already had a
+    // custom-builder equivalent. See buildCategoryFlags above.
+    const categoryFlags = buildCategoryFlags(sections, signalRecords);
+    for (const entry of entries) {
+      const extra = categoryFlags.get(entry.symbol);
+      if (extra) Object.assign(entry, extra);
+    }
 
     // Best-effort company names for the card display line. Never blocks or
     // breaks the page: any symbol that doesn't resolve just shows the ticker.
@@ -397,25 +505,6 @@ async function getPickerData(config: PickerResultConfig) {
   }
 }
 
-function chartOverlayForEntry(config: PickerResultConfig, entry: ResultEntry) {
-  const href = config.href.toLowerCase();
-  const text = `${config.title} ${entry.badge ?? ""} ${entry.note} ${entry.reasons?.join(" ") ?? ""}`.toLowerCase();
-  if (text.includes("macd")) return "macd" as const;
-  if (text.includes("rsi") || href.includes("overbought") || href.includes("oversold")) return "rsi" as const;
-  if (href.includes("200-day") || href.includes("ma200") || href.includes("best-trend")) return href.includes("best-trend") ? ("trend" as const) : ("ma200" as const);
-  if (href.includes("all-time-high-breakout")) return "ath" as const;
-  if (href.includes("3-month-high")) return "recentHigh" as const;
-  if (href.includes("all-time-highs")) return "ath" as const;
-  return "none" as const;
-}
-
-function scoreLabelForEntry(entry: ResultEntry) {
-  if (typeof entry.score === "number" && Number.isFinite(entry.score)) return Math.round(entry.score);
-  const match = entry.note.match(/(\d+)\s+(?:buy|sell) signal/i);
-  if (match) return Number(match[1]);
-  return null;
-}
-
 function isEarningsPickerPage(config: PickerResultConfig) {
   return config.href.includes("earnings");
 }
@@ -428,6 +517,7 @@ export default async function PickerResultPage({
   searchParams?: Promise<{ symbol?: string | string[] }>;
 }) {
   const { entries, updatedAt, universeSize, dynamicUniverseCount, foundCount } = await getPickerData(config);
+  const initialVisibleCount = config.maxItems ?? 36;
 
   // "Universe" metric is a debug/sanity-check number for confirming the
   // dynamic-universe top-up job is actually running: universeSize is the
@@ -486,8 +576,9 @@ export default async function PickerResultPage({
         .heroHowToChevron { flex: 0 0 auto; margin-left: 10px; color: #93c5fd; font-size: 12px; transition: transform 160ms ease; }
         .heroHowTo p { margin: 7px 0 0; max-width: 860px; color: rgba(226,232,240,0.8); font-size: 14px; line-height: 1.65; }
         .screenerTriggerWrap { margin: 20px 0 4px; }
-        .resultsHeader { margin-top: 22px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: end; }
-        .resultsHeader h2 { margin: 0; font-size: 26px; letter-spacing: -0.04em; }
+        .resultsHeader { margin-top: 22px; }
+        .resultsHeaderTop { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+        .resultsHeaderTop h2 { margin: 0; font-size: 26px; letter-spacing: -0.04em; }
         .resultsHeader p { margin: 8px 0 0; color: rgba(226,232,240,0.70); line-height: 1.6; }
         .resultsGrid { margin-top: 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
         .resultCard { display: block; border: 1px solid rgba(255,255,255,0.09); border-radius: 22px; padding: 15px; background: linear-gradient(180deg, rgba(255,255,255,0.042), rgba(255,255,255,0.022)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.035); text-decoration: none; color: inherit; cursor: pointer; transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease; }
@@ -508,6 +599,10 @@ export default async function PickerResultPage({
         .note { margin: 10px 0 0; color: rgba(226,232,240,0.74); font-size: 13px; line-height: 1.55; min-height: 40px; }
         .emptyBox { margin-top: 16px; border: 1px solid rgba(255,255,255,0.10); border-radius: 18px; padding: 18px; background: rgba(255,255,255,0.035); color: rgba(226,232,240,0.72); line-height: 1.7; }
         .scanDebug { margin-top: 30px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); font-size: 11px; line-height: 1.5; color: rgba(148,163,184,0.5); letter-spacing: 0.02em; }
+        .seeMoreWrap { margin-top: 20px; display: flex; justify-content: center; }
+        .seeMoreBtn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 22px; border-radius: 999px; border: 1px solid rgba(96,165,250,0.4); background: rgba(59,130,246,0.10); color: #dbeafe; font-weight: 800; font-size: 13.5px; cursor: pointer; }
+        .seeMoreBtn:hover { background: rgba(59,130,246,0.16); border-color: rgba(96,165,250,0.6); }
+        .filterMatchLine { margin: 8px 0 0; font-size: 12.5px; color: rgba(226,232,240,0.65); }
         @keyframes pickerHighlightPulse {
           0% { box-shadow: 0 0 0 0 rgba(245,197,66,0); border-color: rgba(255,255,255,0.09); }
           15% { box-shadow: 0 0 0 4px rgba(245,197,66,0.35); border-color: #f5c542; }
@@ -527,8 +622,8 @@ export default async function PickerResultPage({
           .hero h1 { font-size: clamp(28px, 9vw, 36px); line-height: 1.08; letter-spacing: -0.045em; }
           .hero > p { font-size: 14px; line-height: 1.62; }
           .heroHowTo { padding: 12px 13px; }
-          .resultsHeader { margin-top: 18px; align-items: flex-start; }
-          .resultsHeader h2 { font-size: 22px; line-height: 1.14; }
+          .resultsHeader { margin-top: 18px; }
+          .resultsHeaderTop h2 { font-size: 22px; line-height: 1.14; }
           .resultsHeader p { font-size: 14px; line-height: 1.62; }
           .resultsGrid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
           .resultCard { border-radius: 18px; padding: 13px; }
@@ -545,97 +640,73 @@ export default async function PickerResultPage({
       `}</style>
 
         <div className="resultWrap">
-          <div className="resultShell">
-            <ScreenerNav currentHref={config.href} variant="sidebar" />
+          <PickerFilterProvider>
+            <div className="resultShell">
+              <ScreenerNav currentHref={config.href} variant="sidebar" showFilters showSearch />
 
-            <div className="resultMain">
-              <section className="hero">
-                <div className="eyebrow">
-                  <span style={{ color: toneColour(config.tone) }}>●</span>
-                  {config.eyebrow}
-                </div>
-                <h1>{config.title}</h1>
-                <p>{config.description}</p>
-                <HowToCollapse title={config.explainerTitle} body={config.explainerBody} />
-              </section>
-
-              <div className="screenerTriggerWrap">
-                <ScreenerNav currentHref={config.href} variant="trigger" />
-              </div>
-
-              <section>
-                <div className="resultsHeader">
-                  <div>
-                    <h2>Current screened results</h2>
-                    <p>Each card shows a mini candle preview — select any stock to open its full view.</p>
+              <div className="resultMain">
+                <section className="hero">
+                  <div className="eyebrow">
+                    <span style={{ color: toneColour(config.tone) }}>●</span>
+                    {config.eyebrow}
                   </div>
+                  <h1>{config.title}</h1>
+                  <p>{config.description}</p>
+                  <HowToCollapse title={config.explainerTitle} body={config.explainerBody} />
+                </section>
+
+                <div className="screenerTriggerWrap">
+                  <ScreenerNav currentHref={config.href} variant="trigger" showFilters showSearch />
                 </div>
 
                 {highlightSymbol ? <PickerHighlightScroller symbol={highlightSymbol} /> : null}
 
-                {entries.length ? (
-                  <div className="resultsGrid">
-                    {entries.map((entry) => {
-                      const cardHref = isEarningsPickerPage(config)
-                        ? `/stock/${encodeURIComponent(entry.symbol)}/earnings`
-                        : entry.chartHref;
-                      const scoreValue = scoreLabelForEntry(entry);
-                      return (
-                        <Link
-                          key={`${entry.symbol}-${entry.note}`}
-                          id={`picker-${entry.symbol}`}
-                          href={cardHref}
-                          className="resultCard"
-                        >
-                          <div className="resultCardTop">
-                            <div className="resultCardHead">
-                              <div className="symbolLine">
-                                <span className="dot" style={{ background: toneColour(entry.tone) }} aria-hidden="true" />
-                                <h3>{entry.symbol}</h3>
-                                {entry.companyName ? <span className="companyName">{entry.companyName}</span> : null}
-                              </div>
-                              {entry.badge ? <div className="badge" style={{ marginTop: 8 }}>{entry.badge}</div> : null}
-                            </div>
-                            {scoreValue != null ? (
-                              <div className="scorePill">
-                                <strong>{scoreValue}</strong>
-                                <span>Score</span>
-                              </div>
-                            ) : null}
-                          </div>
-                          {entry.reasons && entry.reasons.length > 0 ? (
-                            <div className="reasonChips">
-                              {entry.reasons.map((reason) => (
-                                <span
-                                  key={reason}
-                                  className="reasonChip"
-                                  style={{ borderColor: toneBorder(entry.tone), color: toneColour(entry.tone) }}
-                                >
-                                  {reason}
-                                </span>
-                              ))}
-                            </div>
-                          ) : null}
-                          <MiniPickerCandleChart points={entry.chartPoints} tone={config.tone} overlay={chartOverlayForEntry(config, entry)} supportResistanceZone={entry.supportResistanceZone} />
-                          <div className="note">{entry.note}</div>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="emptyBox">{config.emptyText}</div>
-                )}
-              </section>
+                <PickerResultsGrid
+                  entries={entries}
+                  initialVisibleCount={initialVisibleCount}
+                  configHref={config.href}
+                  configTitle={config.title}
+                  tone={config.tone}
+                  emptyText={config.emptyText}
+                  isEarnings={isEarningsPickerPage(config)}
+                />
 
-              <div className="scanDebug">
-                Current scan · Live matches {foundCount} · Shown {entries.length} · Universe {combinedUniverseSize ?? "Live"} · Updated {formatUpdatedAt(updatedAt)}
+                <div className="scanDebug">
+                  Current scan · Live matches {foundCount} · Shown {entries.length} · Universe {combinedUniverseSize ?? "Live"} · Updated {formatUpdatedAt(updatedAt)}
+                </div>
+
+                <HideWatermarksBar />
               </div>
-
-              <HideWatermarksBar />
             </div>
-          </div>
+          </PickerFilterProvider>
         </div>
       </main>
     </WatermarkVisibilityProvider>
   );
+}
+
+function toneColour(tone?: PickerTone) {
+  if (tone === "green") return "#22c55e";
+  if (tone === "yellow") return "#facc15";
+  if (tone === "orange") return "#fb923c";
+  if (tone === "red") return "#ef4444";
+  if (tone === "blue") return "#60a5fa";
+  return "#94a3b8";
+}
+
+function toneBorder(tone?: PickerTone) {
+  if (tone === "green") return "rgba(34,197,94,0.32)";
+  if (tone === "yellow") return "rgba(250,204,21,0.32)";
+  if (tone === "orange") return "rgba(251,146,60,0.32)";
+  if (tone === "red") return "rgba(239,68,68,0.32)";
+  if (tone === "blue") return "rgba(96,165,250,0.32)";
+  return "rgba(148,163,184,0.24)";
+}
+
+function toneBackground(tone?: PickerTone) {
+  if (tone === "green") return "linear-gradient(180deg, rgba(8,24,18,0.96), rgba(6,12,18,0.98))";
+  if (tone === "yellow") return "linear-gradient(180deg, rgba(28,24,8,0.96), rgba(8,12,18,0.98))";
+  if (tone === "orange") return "linear-gradient(180deg, rgba(32,20,8,0.96), rgba(8,12,18,0.98))";
+  if (tone === "red") return "linear-gradient(180deg, rgba(32,10,14,0.96), rgba(8,12,18,0.98))";
+  return "linear-gradient(180deg, rgba(8,16,32,0.96), rgba(6,10,18,0.98))";
 }
