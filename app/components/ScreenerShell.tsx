@@ -57,8 +57,8 @@ export default function ScreenerShell({
       <main className="screenerShellPage">
         <style>{`
         .screenerShellPage { min-height: 100vh; background: radial-gradient(circle at 12% 0%, rgba(59,130,246,0.16), transparent 30%), radial-gradient(circle at 92% 4%, rgba(34,197,94,0.08), transparent 28%), #06080d; color: #f1f5f9; font-family: system-ui, Arial; }
-        .resultWrap { max-width: 1280px; margin: 0 auto; padding: 26px 18px 58px; }
-        .resultShell { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 22px; align-items: start; }
+        .resultWrap { max-width: 1360px; margin: 0 auto; padding: 26px 18px 58px; }
+        .resultShell { display: grid; grid-template-columns: 288px minmax(0, 1fr); gap: 22px; align-items: start; }
         .resultMain { min-width: 0; }
         .hero { border: 1px solid ${toneBorder(tone)}; border-radius: 28px; padding: 22px; background: ${toneBackground(tone)}; box-shadow: inset 0 1px 0 rgba(255,255,255,0.045), 0 18px 42px rgba(0,0,0,0.26); }
         .eyebrow { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 12px; border-radius: 999px; border: 1px solid ${toneBorder(tone)}; background: rgba(59,130,246,0.10); color: #dbeafe; font-size: 12px; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
