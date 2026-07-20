@@ -8,11 +8,11 @@ import { PickerFilterProvider } from "@/app/components/PickerFilterContext";
 import { getCompanyNameMap } from "@/lib/server/companyNames";
 import { getPickersData } from "@/lib/server/pickersBuilder";
 import { WatermarkVisibilityProvider, HideWatermarksBar } from "@/app/components/WatermarkVisibility";
-import type { FilterKey } from "@/lib/pickerFilters";
+import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type FilterKey } from "@/lib/pickerFilters";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
-export type PickerResultKind = "section" | "buySignals" | "sellSignals";
+export type PickerResultKind = "section" | "buySignals" | "sellSignals" | "allSymbols";
 
 export type PickerResultConfig = {
   href: string;
@@ -284,6 +284,21 @@ function getReasons(record: SignalRecord, defs: Array<{ key: keyof SignalRecord;
   return defs.filter((def) => record[def.key] === true).map((def) => def.label);
 }
 
+// Combined labels for every checkable condition -- the 18 custom-builder
+// FILTER_DEFS plus the 7 category-membership CATEGORY_FILTER_DEFS (both
+// from lib/pickerFilters.ts) -- used only by the "allSymbols" kind (the
+// /custom-screener page) to build reason chips + a score for every
+// analyzed symbol, not just the ones clearing a specific score threshold
+// the way Buy/Sell Signals do.
+const ALL_REASON_DEFS: Array<{ key: keyof ResultEntryFlags; label: string }> = [
+  ...FILTER_DEFS.map((def) => ({ key: def.key as keyof ResultEntryFlags, label: def.label })),
+  ...CATEGORY_FILTER_DEFS.map((def) => ({ key: def.key as keyof ResultEntryFlags, label: def.label })),
+];
+
+function getFlagReasons(flags: ResultEntryFlags, defs: Array<{ key: keyof ResultEntryFlags; label: string }>) {
+  return defs.filter((def) => flags[def.key] === true).map((def) => def.label);
+}
+
 function formatUpdatedAt(value?: string | null) {
   if (!value) return "Live data";
   const dt = new Date(value);
@@ -394,6 +409,36 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
         chartHref: chartHrefFor(symbol, record.dashboardHref),
         chartPoints: Array.isArray(record.chartPoints) ? record.chartPoints : [],
         ...flagsFromRecord(record),
+      };
+    }).filter((entry): entry is ResultEntry => Boolean(entry)).sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.symbol.localeCompare(b.symbol)).slice(0, RESULT_SAFETY_CAP);
+  }
+
+  if (config.kind === "allSymbols") {
+    // Every analyzed symbol is a candidate entry here (no score-based
+    // skipping like buySignals/sellSignals above) -- filtering only
+    // happens client-side, against whatever conditions the visitor checks
+    // (see PickerResultsGrid's hideUntilFiltered mode). Category-membership
+    // flags (Buy Signal, Best Trend, etc.) are computed once up front, same
+    // as getPickerData does for every other kind further down, so they can
+    // be folded into each entry's reasons/score alongside the 18
+    // custom-builder flags.
+    const categoryFlags = buildCategoryFlags(sections, signalRecords);
+    return signalRecords.map((record): ResultEntry | null => {
+      const symbol = cleanSymbol(record.symbol);
+      if (!symbol) return null;
+      const flags: ResultEntryFlags = { ...flagsFromRecord(record), ...(categoryFlags.get(symbol) ?? {}) };
+      const reasons = getFlagReasons(flags, ALL_REASON_DEFS);
+      const score = reasons.length;
+      return {
+        symbol,
+        note: `${score} of ${FILTER_DEFS.length + CATEGORY_FILTER_DEFS.length} tracked conditions met`,
+        tone: config.tone,
+        score,
+        reasons,
+        stockHref: `/stock/${encodeURIComponent(symbol)}`,
+        chartHref: chartHrefFor(symbol, record.dashboardHref),
+        chartPoints: Array.isArray(record.chartPoints) ? record.chartPoints : [],
+        ...flags,
       };
     }).filter((entry): entry is ResultEntry => Boolean(entry)).sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.symbol.localeCompare(b.symbol)).slice(0, RESULT_SAFETY_CAP);
   }
@@ -642,7 +687,7 @@ export default async function PickerResultPage({
         <div className="resultWrap">
           <PickerFilterProvider>
             <div className="resultShell">
-              <ScreenerNav currentHref={config.href} variant="sidebar" showFilters showSearch />
+              <ScreenerNav currentHref={config.href} variant="sidebar" showFilters showSearch alwaysFilterMode={config.kind === "allSymbols"} />
 
               <div className="resultMain">
                 <section className="hero">
@@ -656,7 +701,7 @@ export default async function PickerResultPage({
                 </section>
 
                 <div className="screenerTriggerWrap">
-                  <ScreenerNav currentHref={config.href} variant="trigger" showFilters showSearch />
+                  <ScreenerNav currentHref={config.href} variant="trigger" showFilters showSearch alwaysFilterMode={config.kind === "allSymbols"} />
                 </div>
 
                 {highlightSymbol ? <PickerHighlightScroller symbol={highlightSymbol} /> : null}
@@ -669,6 +714,7 @@ export default async function PickerResultPage({
                   tone={config.tone}
                   emptyText={config.emptyText}
                   isEarnings={isEarningsPickerPage(config)}
+                  hideUntilFiltered={config.kind === "allSymbols"}
                 />
 
                 <div className="scanDebug">

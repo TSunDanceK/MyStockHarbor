@@ -218,76 +218,86 @@ function NavList({
   );
 }
 
-// The button that lives directly above the "Signals" heading -- toggles
-// whether the category list above renders checkboxes (see NavList) or
-// plain links. Mirrors the "Open Filters"/"Hide" wording already used by
-// /pickers' own custom screener toggle (PickersClient.tsx) for consistency.
-// Shows a badge with the active filter count. `hideMeta` (used in the
-// mobile overlay) suppresses the inline "N matching" + Clear row below the
-// toggle button -- on mobile those live in the always-visible footer
-// instead (see ScreenerNav below), so they don't scroll out of view.
-function FilterModeToggle({
-  filterMode,
-  onToggle,
-  hideMeta = false,
-}: {
-  filterMode: boolean;
-  onToggle: () => void;
-  hideMeta?: boolean;
-}) {
+// Plain navigation link that replaces the old in-place filter-mode toggle
+// on every page except the dedicated /custom-screener page (see
+// `alwaysFilterMode` on the default export below). Ticking boxes to combine
+// conditions within a single category's own narrow list was fundamentally
+// broken -- a stock on the Oversold page can never also be Overbought, so
+// any two-condition combination scoped to one category's own short list
+// always showed zero matches -- so in-place filtering has been retired in
+// favour of sending people to /custom-screener, which searches the full
+// analyzed universe instead of one category's own short list.
+function OpenCustomScreenerLink() {
+  return (
+    <div className="screenerFilterModeBar">
+      <Link href="/custom-screener" className="screenerFilterModeBtn">
+        Open Full Custom Screener
+      </Link>
+    </div>
+  );
+}
+
+// The "N matching" + Clear row that used to live under the (now-removed)
+// filter-mode toggle button. Only rendered when `alwaysFilterMode` is on
+// (i.e. only on /custom-screener, the one page where NavList's checkboxes
+// are always showing) -- every other page's NavList always renders plain
+// links now, so selectedFilters never becomes non-empty there and this has
+// nothing to show.
+function FilterSummaryBar() {
   const { selectedFilters, matchCount, clearFilters } = usePickerFilter();
+  if (!selectedFilters.length) return null;
 
   return (
     <div className="screenerFilterModeBar">
-      <button
-        type="button"
-        className={filterMode ? "screenerFilterModeBtn active" : "screenerFilterModeBtn"}
-        onClick={onToggle}
-      >
-        {filterMode ? "Hide" : "Open Filters"}
-        {selectedFilters.length ? <span className="screenerFilterModeBadge">{selectedFilters.length}</span> : null}
-      </button>
-      {!hideMeta && selectedFilters.length ? (
-        <div className="screenerFilterModeMeta">
-          {matchCount != null ? <span className="screenerFilterModeCount">{matchCount} matching</span> : <span />}
-          <button type="button" className="screenerFilterClear" onClick={clearFilters}>
-            Clear
-          </button>
-        </div>
-      ) : null}
+      <div className="screenerFilterModeMeta">
+        {matchCount != null ? <span className="screenerFilterModeCount">{matchCount} matching</span> : <span />}
+        <button type="button" className="screenerFilterClear" onClick={clearFilters}>
+          Clear
+        </button>
+      </div>
     </div>
   );
 }
 
 // `variant` lets callers split the desktop sidebar and the mobile
 // "Select Screener" trigger into two separate places in the page layout
-// (each variant renders its own independent open/close and filter-mode
-// state -- only one of the two is ever visible at a given viewport width
-// via the existing CSS breakpoint, so there's no conflict):
+// (each variant renders its own independent open/close state -- only one
+// of the two is ever visible at a given viewport width via the existing
+// CSS breakpoint, so there's no conflict):
 //   - "full" (default): sidebar + trigger, same position (legacy behaviour)
 //   - "sidebar": desktop sticky column only, no mobile trigger/overlay
 //   - "trigger": mobile "Select Screener" button + overlay only, no sidebar
 //
-// `showFilters` renders the filter-mode toggle + checkbox-aware NavList
-// (see above); it does nothing unless the caller also wraps the page in
-// <PickerFilterProvider>. `showSearch` renders the cross-picker TickerSearch
-// box, but only inside the mobile overlay -- on desktop the ticker search
-// now lives on the results header instead (see PickerResultsGrid.tsx's
-// inline-variant TickerSearch), so the sidebar never renders it regardless
-// of this prop.
+// `showFilters` renders the checkbox-aware NavList's supporting UI (see
+// above); it does nothing unless the caller also wraps the page in
+// <PickerFilterProvider>. When `alwaysFilterMode` is false (every existing
+// category page), NavList always renders plain links and, if `showFilters`
+// is on, a plain link to /custom-screener (OpenCustomScreenerLink) replaces
+// what used to be the "Open Filters" toggle button -- in-place per-category
+// checkbox filtering has been retired (see OpenCustomScreenerLink's comment
+// for why) in favour of that dedicated page. When `alwaysFilterMode` is
+// true (only /custom-screener passes this), NavList always renders
+// checkboxes and there's no toggle at all, just the always-visible
+// checkboxes plus a "N matching" + Clear summary row (FilterSummaryBar)
+// once at least one is checked.
+// `showSearch` renders the cross-picker TickerSearch box, but only inside
+// the mobile overlay -- on desktop the ticker search now lives on the
+// results header instead (see PickerResultsGrid.tsx's inline-variant
+// TickerSearch), so the sidebar never renders it regardless of this prop.
 export default function ScreenerNav({
   currentHref,
   variant = "full",
   showFilters = false,
   showSearch = false,
+  alwaysFilterMode = false,
 }: {
   currentHref: string;
   variant?: "full" | "sidebar" | "trigger";
   showFilters?: boolean;
   showSearch?: boolean;
+  alwaysFilterMode?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [filterMode, setFilterMode] = useState(false);
   const { matchCount, selectedFilters, clearFilters } = usePickerFilter();
   const showSidebar = variant !== "trigger";
   const showTrigger = variant !== "sidebar";
@@ -302,8 +312,8 @@ export default function ScreenerNav({
       {showSidebar ? (
         <aside className="screenerSidebar" aria-label="Stock screeners">
           <div className="screenerSidebarTitle">Screeners</div>
-          {showFilters ? <FilterModeToggle filterMode={filterMode} onToggle={() => setFilterMode((v) => !v)} /> : null}
-          <NavList currentHref={currentHref} filterMode={filterMode} />
+          {showFilters ? (alwaysFilterMode ? <FilterSummaryBar /> : <OpenCustomScreenerLink />) : null}
+          <NavList currentHref={currentHref} filterMode={alwaysFilterMode} />
         </aside>
       ) : null}
 
@@ -348,15 +358,13 @@ export default function ScreenerNav({
               {/* On mobile the search box lives inside this same opened
                   overlay (unchanged) -- searching does NOT close the
                   overlay, unlike tapping a category link, which navigates
-                  and closes it. The filter toggle + checkboxes work exactly
-                  like desktop; Clear + Go (always on screen, not part of
-                  this scrolling area) are how you clear/finish once you're
-                  done ticking boxes -- see the footer below. */}
+                  and closes it. Checkboxes (when alwaysFilterMode is on)
+                  work exactly like desktop; Clear + Go (always on screen,
+                  not part of this scrolling area) are how you clear/finish
+                  once you're done ticking boxes -- see the footer below. */}
               {showSearch ? <TickerSearch /> : null}
-              {showFilters ? (
-                <FilterModeToggle filterMode={filterMode} onToggle={() => setFilterMode((v) => !v)} hideMeta />
-              ) : null}
-              <NavList currentHref={currentHref} onNavigate={() => setOpen(false)} filterMode={filterMode} />
+              {showFilters && !alwaysFilterMode ? <OpenCustomScreenerLink /> : null}
+              <NavList currentHref={currentHref} onNavigate={() => setOpen(false)} filterMode={alwaysFilterMode} />
             </div>
             {showFilters ? (
               <div className="screenerOverlayFooter">
@@ -422,6 +430,7 @@ export default function ScreenerNav({
           width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
           padding: 9px 12px; border-radius: 10px; border: 1px solid rgba(96,165,250,0.35);
           background: rgba(59,130,246,0.10); color: #dbeafe; font-size: 12.5px; font-weight: 800; cursor: pointer;
+          text-decoration: none; box-sizing: border-box;
         }
         .screenerFilterModeBtn.active { background: rgba(34,197,94,0.14); border-color: rgba(34,197,94,0.42); color: #bbf7d0; }
         .screenerFilterModeBadge {

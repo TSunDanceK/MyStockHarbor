@@ -56,6 +56,13 @@ const SEE_MORE_BATCH = 36;
 // see PickerResultPage.tsx) so both the filter and "See more" pagination
 // below work entirely off data already sent down with the page: no
 // additional network/API requests for either interaction.
+//
+// `hideUntilFiltered` is only set on the dedicated /custom-screener page
+// (see PickerResultPage.tsx): unlike every other page, that page should
+// never show a default "everything" view -- results only appear once the
+// visitor has checked at least one condition. Every other page passes this
+// as false/omitted and keeps its existing default-show-everything
+// behaviour unchanged.
 export default function PickerResultsGrid({
   entries,
   initialVisibleCount,
@@ -64,6 +71,7 @@ export default function PickerResultsGrid({
   tone,
   emptyText,
   isEarnings,
+  hideUntilFiltered = false,
 }: {
   entries: ResultEntry[];
   initialVisibleCount: number;
@@ -72,14 +80,15 @@ export default function PickerResultsGrid({
   tone: PickerTone;
   emptyText: string;
   isEarnings: boolean;
+  hideUntilFiltered?: boolean;
 }) {
   const { selectedFilters, setMatchCount } = usePickerFilter();
   const [visibleCount, setVisibleCount] = useState(initialVisibleCount);
 
   const filteredEntries = useMemo(() => {
-    if (!selectedFilters.length) return entries;
+    if (!selectedFilters.length) return hideUntilFiltered ? [] : entries;
     return entries.filter((entry) => selectedFilters.every((key) => entry[key] === true));
-  }, [entries, selectedFilters]);
+  }, [entries, selectedFilters, hideUntilFiltered]);
 
   // Selecting/clearing a filter starts back at the top of the (now
   // differently-sized) result list, same as /pickers' own behaviour.
@@ -161,7 +170,11 @@ export default function PickerResultsGrid({
         </div>
       ) : (
         <div className="emptyBox">
-          {selectedFilters.length ? "No current results match the filters you've selected." : emptyText}
+          {hideUntilFiltered && !selectedFilters.length
+            ? "Select at least one condition on the left to see matching stocks."
+            : selectedFilters.length
+            ? "No current results match the filters you've selected."
+            : emptyText}
         </div>
       )}
 
