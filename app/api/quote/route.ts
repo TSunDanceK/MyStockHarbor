@@ -61,7 +61,12 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const symbol = (searchParams.get("symbol") || "AAPL").toUpperCase();
 
-  if (await isUnwantedBot()) {
+  // Deep Analysis: this route calls FMP live on every single request with
+  // no caching (see fetch below), so every hit is a real, billed upstream
+  // call — it's the highest-value target on the site for the deeper check.
+  // checkLevel here MUST match the advancedOptions set for "/api/quote" in
+  // instrumentation-client.ts, or verification fails outright.
+  if (await isUnwantedBot("deepAnalysis")) {
     return NextResponse.json({ error: "Access denied" }, { status: 403 });
   }
 
