@@ -494,8 +494,9 @@ export default async function PickerResultPage({
         .heroHowToChevron { flex: 0 0 auto; margin-left: 10px; color: #93c5fd; font-size: 12px; transition: transform 160ms ease; }
         .heroHowTo p { margin: 7px 0 0; max-width: 860px; color: rgba(226,232,240,0.8); font-size: 14px; line-height: 1.65; }
         .screenerTriggerWrap { margin: 20px 0 4px; }
-        .resultsHeader { margin-top: 22px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: end; }
-        .resultsHeader h2 { margin: 0; font-size: 26px; letter-spacing: -0.04em; }
+        .resultsHeader { margin-top: 22px; }
+        .resultsHeaderTop { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+        .resultsHeaderTop h2 { margin: 0; font-size: 26px; letter-spacing: -0.04em; }
         .resultsHeader p { margin: 8px 0 0; color: rgba(226,232,240,0.70); line-height: 1.6; }
         .resultsGrid { margin-top: 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
         .resultCard { display: block; border: 1px solid rgba(255,255,255,0.09); border-radius: 22px; padding: 15px; background: linear-gradient(180deg, rgba(255,255,255,0.042), rgba(255,255,255,0.022)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.035); text-decoration: none; color: inherit; cursor: pointer; transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease; }
@@ -539,8 +540,8 @@ export default async function PickerResultPage({
           .hero h1 { font-size: clamp(28px, 9vw, 36px); line-height: 1.08; letter-spacing: -0.045em; }
           .hero > p { font-size: 14px; line-height: 1.62; }
           .heroHowTo { padding: 12px 13px; }
-          .resultsHeader { margin-top: 18px; align-items: flex-start; }
-          .resultsHeader h2 { font-size: 22px; line-height: 1.14; }
+          .resultsHeader { margin-top: 18px; }
+          .resultsHeaderTop h2 { font-size: 22px; line-height: 1.14; }
           .resultsHeader p { font-size: 14px; line-height: 1.62; }
           .resultsGrid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
           .resultCard { border-radius: 18px; padding: 13px; }
