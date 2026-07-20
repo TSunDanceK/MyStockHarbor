@@ -388,7 +388,7 @@ export default function ScreenerNav({
         .screenerSidebar {
           position: sticky; top: 16px; align-self: start;
           border: 1px solid rgba(255,255,255,0.08); border-radius: 20px;
-          padding: 16px 12px;
+          padding: 16px 10px;
           background: linear-gradient(180deg, rgba(10,16,28,0.9), rgba(6,10,18,0.96));
           box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
           max-height: calc(100vh - 32px); overflow-y: auto;
@@ -406,7 +406,7 @@ export default function ScreenerNav({
         }
         .screenerNavItem {
           display: flex; align-items: center; gap: 10px;
-          padding: 9px 10px; border-radius: 11px; border: 1px solid transparent;
+          padding: 9px 8px; border-radius: 11px; border: 1px solid transparent;
           color: rgba(226,232,240,0.82); text-decoration: none;
           font-size: 13.5px; font-weight: 800;
           transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
