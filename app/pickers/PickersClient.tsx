@@ -484,15 +484,6 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
   // Header "Build Screener" dropdown link deep-links to /pickers#custom-screener --
   // once the results have loaded, scroll the custom screener panel into view and
   // give it a brief glow so the user's eye lands on it without staying lit forever.
-  //
-  // Also handles ?filter=<key> (repeatable) deep links from ScreenerNav's
-  // per-category pages -- those conditions have no dedicated screener page of
-  // their own (e.g. "Above MA50", "Bullish RSI Divergence"), so their nav
-  // links point here instead with the one relevant condition pre-selected.
-  // This runs against the FULL universe in `signalRecords`/`enrichedSignalRecords`
-  // below (not any single category's own narrower list), which is the whole
-  // point -- see the ScreenerNav.tsx comment on why per-category in-place
-  // filtering was replaced with links into this page.
   const [screenerHighlight, setScreenerHighlight] = useState(false);
   const screenerPanelRef = React.useRef<HTMLElement | null>(null);
   const screenerHashHandledRef = React.useRef(false);
@@ -501,20 +492,8 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
     if (loading) return;
     if (screenerHashHandledRef.current) return;
     if (typeof window === "undefined") return;
-
-    const requestedFilters = new URLSearchParams(window.location.search)
-      .getAll("filter")
-      .map((value) => value.trim())
-      .filter((value): value is FilterKey => FILTER_DEFS.some((def) => def.key === value));
-
-    const wantsScreenerPanel = window.location.hash === "#custom-screener" || requestedFilters.length > 0;
-    if (!wantsScreenerPanel) return;
+    if (window.location.hash !== "#custom-screener") return;
     screenerHashHandledRef.current = true;
-
-    if (requestedFilters.length) {
-      setSelectedFilters((prev) => Array.from(new Set([...prev, ...requestedFilters])));
-      setScreenerOpen(true);
-    }
 
     window.setTimeout(() => {
       screenerPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
