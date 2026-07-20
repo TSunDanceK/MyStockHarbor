@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { FILTER_DEFS, toneDotColor, type FilterKey } from "@/lib/pickerFilters";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -49,44 +50,18 @@ export type PickersPayload = {
   estimatedApiCalls?: number; sections?: PickerSection[]; signalRecords?: SignalRecord[];
 };
 
-type FilterKey = "oversold"|"overbought"|"buyTheDip"|"breakout"|"volumeSpike"|"atrSpike"|"aboveMA50"|"belowMA50"|"aboveMA200"|"belowMA200"|"dailyMa200Proximity"|"weeklyMa200Proximity"|"bullishRsiDivergence"|"bearishRsiDivergence"|"bullishMacdDivergence"|"bearishMacdDivergence"|"positiveLastEarnings"|"strongEarningsGrowth";
-type FilterDef = { key: FilterKey; label: string; tone: PickerTone; };
-
-const FILTER_DEFS: FilterDef[] = [
-  { key: "oversold", label: "Oversold", tone: "green" },
-  { key: "overbought", label: "Overbought", tone: "red" },
-  { key: "buyTheDip", label: "20%+ From ATH", tone: "yellow" },
-  { key: "breakout", label: "Breakout", tone: "orange" },
-  { key: "volumeSpike", label: "Volume Spike", tone: "orange" },
-  { key: "atrSpike", label: "ATR Spike", tone: "orange" },
-  { key: "aboveMA50", label: "Above MA50", tone: "yellow" },
-  { key: "belowMA50", label: "Below MA50", tone: "yellow" },
-  { key: "aboveMA200", label: "Above MA200", tone: "yellow" },
-  { key: "belowMA200", label: "Below MA200", tone: "yellow" },
-  { key: "dailyMa200Proximity", label: "Near 200-Day MA (Daily)", tone: "yellow" },
-  { key: "weeklyMa200Proximity", label: "Near 200-Day MA (Weekly)", tone: "yellow" },
-  { key: "bullishRsiDivergence", label: "Bullish RSI Divergence", tone: "green" },
-  { key: "bearishRsiDivergence", label: "Bearish RSI Divergence", tone: "red" },
-  { key: "bullishMacdDivergence", label: "Bullish MACD Divergence", tone: "green" },
-  { key: "bearishMacdDivergence", label: "Bearish MACD Divergence", tone: "red" },
-  { key: "positiveLastEarnings", label: "Positive Last Earnings", tone: "green" },
-  { key: "strongEarningsGrowth", label: "Strong Earnings Growth", tone: "green" },
-];
-
-function toneDot(tone?: string) {
-  if (tone === "green") return "#22c55e";
-  if (tone === "yellow") return "#eab308";
-  if (tone === "orange") return "#fb923c";
-  if (tone === "red") return "#ef4444";
-  if (tone === "blue") return "#60a5fa";
-  return "rgba(255,255,255,0.30)";
-}
+// FilterKey/FILTER_DEFS/toneDot now live in lib/pickerFilters.ts, shared
+// with the single-category picker pages' left-nav filter checkboxes (see
+// app/components/ScreenerNav.tsx's FilterChecklist) so both surfaces match
+// on exactly the same fields/labels/tones. `toneDot` kept as a local alias
+// so every existing call site below is unchanged.
+const toneDot = toneDotColor;
 
 function toChartHref(href: string, symbol?: string) {
   const cleanedSymbol = String(symbol || "").trim().toUpperCase();
   const fallback = cleanedSymbol ? `/dashboard?symbol=${encodeURIComponent(cleanedSymbol)}` : "/dashboard";
   const raw = href && href.trim() ? href.trim() : "";
-  const normalised = raw.startsWith("/?symbol=") ? raw.replace("/?symbol=", "/dashboard?symbol=") : raw.startsWith("/?")  
+  const normalised = raw.startsWith("/?symbol=") ? raw.replace("/?symbol=", "/dashboard?symbol=") : raw.startsWith("/?")
     ? raw.replace("/?", "/dashboard?") : raw;
   const base = normalised.startsWith("/dashboard") ? normalised : fallback;
   return base.includes("#chart") ? base : `${base}#chart`;
