@@ -8,6 +8,7 @@ import { PickerFilterProvider } from "@/app/components/PickerFilterContext";
 import { getCompanyNameMap } from "@/lib/server/companyNames";
 import { getPickersData } from "@/lib/server/pickersBuilder";
 import { WatermarkVisibilityProvider, HideWatermarksBar } from "@/app/components/WatermarkVisibility";
+import type { FilterKey } from "@/lib/pickerFilters";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -144,7 +145,12 @@ export type ResultEntry = ResultEntryFlags & {
   supportResistanceZone?: SupportResistanceZone;
 };
 
-const FLAG_KEYS: Array<keyof ResultEntryFlags> = [
+// Deliberately typed as FilterKey (the exact 18-key union from
+// lib/pickerFilters.ts), NOT `keyof ResultEntryFlags` -- ResultEntryFlags
+// also carries the 7 newer category-membership keys (hasBuySignal etc.,
+// see below) which don't exist on SignalRecord. Indexing `record[key]`
+// below needs a key type that's guaranteed to be a real SignalRecord field.
+const FLAG_KEYS: FilterKey[] = [
   "oversold", "overbought", "buyTheDip", "breakout", "volumeSpike", "atrSpike",
   "aboveMA50", "belowMA50", "aboveMA200", "belowMA200", "dailyMa200Proximity", "weeklyMa200Proximity",
   "bullishRsiDivergence", "bearishRsiDivergence", "bullishMacdDivergence", "bearishMacdDivergence",
