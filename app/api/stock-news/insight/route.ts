@@ -92,7 +92,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ai: false, beyondHeadline: "", whatItMeans: [] }, { status: 400 });
   }
 
-  if (await isUnwantedBot()) {
+  // Deep Analysis (2026-07-20): this route calls OpenAI on a cache keyed by
+  // the full request payload (including attacker-controlled article
+  // title/description text), so varying that text forces fresh, billed
+  // OpenAI calls on every attempt -- a cheap way to run up real API cost.
+  // checkLevel here MUST match the advancedOptions set for this path/method
+  // in instrumentation-client.ts, or verification fails outright.
+  if (await isUnwantedBot("deepAnalysis")) {
     return NextResponse.json({ error: "Access denied" }, { status: 403 });
   }
 
