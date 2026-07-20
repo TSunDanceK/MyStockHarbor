@@ -111,6 +111,23 @@ export type ResultEntryFlags = {
   bearishMacdDivergence?: boolean;
   positiveLastEarnings?: boolean;
   strongEarningsGrowth?: boolean;
+
+  // Category-membership flags (see buildCategoryFlags below) -- "is this
+  // symbol also a member of the Buy Signals / Best Trend / Divergence /
+  // ATH Breakouts / 3-Month Highs / Macro S/R page's own list right now".
+  // Attached to every entry on every page (not just that category's own
+  // page) so ScreenerNav's checkboxes for these categories (see
+  // ScreenerNav.tsx GROUPS) can narrow *any* page's results the same way
+  // the 18 custom-builder conditions already do. Computed for free from
+  // the same full `sections` + `signalRecords` payload every picker page
+  // already fetches -- no extra requests.
+  hasBuySignal?: boolean;
+  hasSellSignal?: boolean;
+  bestTrendPick?: boolean;
+  divergencePick?: boolean;
+  athBreakoutPick?: boolean;
+  threeMonthHighPick?: boolean;
+  macroSrPick?: boolean;
 };
 
 export type ResultEntry = ResultEntryFlags & {
@@ -379,6 +396,54 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
   return entriesFromSection({ configHref: config.href, section, recordMap, fallbackTone: config.tone, filterTimeframe: config.filterTimeframe });
 }
 
+// The same `sectionIncludes` needles each dedicated page's own config
+// already uses to find its section (see e.g. app/best-trend-score-stocks/
+// page.tsx) -- reused here so "is this symbol a member of that category"
+// is computed identically to how that category's own page decides it.
+// kept in one place so the two can't drift apart.
+const CATEGORY_SECTION_DEFS: Array<{ key: keyof ResultEntryFlags; includes: string[] }> = [
+  { key: "bestTrendPick", includes: ["best trend score"] },
+  { key: "divergencePick", includes: ["divergence"] },
+  { key: "macroSrPick", includes: ["macro", "support", "resistance"] },
+  { key: "athBreakoutPick", includes: ["all-time high breakout"] },
+  { key: "threeMonthHighPick", includes: ["3-month high breakout"] },
+];
+
+// Builds a symbol -> category-membership map covering every checkable
+// category that isn't already one of the 18 custom-builder flags (see
+// ResultEntryFlags above) -- Buy/Sell Signals (a computed score threshold,
+// same logic as their own dedicated pages) plus the five section-backed
+// categories (membership in that section's own item list). Runs once per
+// request against data the page already fetched in full (`sections` and
+// `signalRecords` are never trimmed to just the current page's own
+// category), so every page can offer every category as a checkbox with no
+// extra network/API cost.
+function buildCategoryFlags(sections: PickerSection[], signalRecords: SignalRecord[]) {
+  const flags = new Map<string, Partial<ResultEntryFlags>>();
+  const setFlag = (symbol: string, key: keyof ResultEntryFlags) => {
+    const clean = cleanSymbol(symbol);
+    if (!clean) return;
+    const existing = flags.get(clean) ?? {};
+    existing[key] = true;
+    flags.set(clean, existing);
+  };
+
+  for (const def of CATEGORY_SECTION_DEFS) {
+    const section = findSection(sections, def.includes);
+    for (const item of section?.items ?? []) {
+      if (item.symbol) setFlag(item.symbol, def.key);
+    }
+  }
+
+  for (const record of signalRecords) {
+    if (!record.symbol) continue;
+    if (getBuySignalCount(record) > 0) setFlag(record.symbol, "hasBuySignal");
+    if (getSellSignalCount(record) > 0) setFlag(record.symbol, "hasSellSignal");
+  }
+
+  return flags;
+}
+
 async function getPickerData(config: PickerResultConfig) {
   try {
     const origin = await getOriginFromHeaders();
@@ -396,6 +461,17 @@ async function getPickerData(config: PickerResultConfig) {
     // batch size for the client-side See More button, not a hard cutoff of
     // what's computed/sent. See PickerResultsGrid.tsx.
     const entries = buildEntries({ config, sections, signalRecords });
+
+    // Merge in category-membership flags (Buy Signals, Sell Signals, Best
+    // Trend, Divergence, ATH Breakouts, 3-Month Highs, Macro S/R) so
+    // ScreenerNav's checkboxes for those categories can filter *this*
+    // page's entries too, not just the categories that already had a
+    // custom-builder equivalent. See buildCategoryFlags above.
+    const categoryFlags = buildCategoryFlags(sections, signalRecords);
+    for (const entry of entries) {
+      const extra = categoryFlags.get(entry.symbol);
+      if (extra) Object.assign(entry, extra);
+    }
 
     // Best-effort company names for the card display line. Never blocks or
     // breaks the page: any symbol that doesn't resolve just shows the ticker.
