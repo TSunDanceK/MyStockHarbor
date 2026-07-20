@@ -67,6 +67,15 @@ function canFitLabel(
   return chordWidth > estimatedTextWidth + 4;
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export default function BottleneckPieChart({
   segments,
   size = 240,
@@ -102,8 +111,9 @@ export default function BottleneckPieChart({
     const labelPos = polarToCartesian(cx, cy, labelRadius, midAngle);
     const showLabel = canFitLabel(sweep, label.length, labelRadius, fontSize);
     const tooltip = `${segment.name}${segment.ticker ? ` (${segment.ticker})` : ""} - ${segment.pct}%`;
+    const tooltipHtml = `<title>${escapeHtml(tooltip)}</title>`;
 
-    return { ...segment, index, startAngle, endAngle, label, labelPos, showLabel, tooltip };
+    return { ...segment, index, startAngle, endAngle, label, labelPos, showLabel, tooltipHtml };
   });
 
   return (
@@ -137,23 +147,24 @@ export default function BottleneckPieChart({
         {/* dark backing disc so the glow has somewhere to bleed into */}
         <circle cx={cx} cy={cy} r={r + 3} fill="#06080d" />
 
-        {/* muted, darker fills - this is where the "depth" reads as darker.
-            The hover tooltip is a plain `title` attribute (not a nested
-            <title> element) - React 19's document-metadata handling can
-            special-case a rendered <title> element and strip its text
-            during SSR when the page already has its own real <head> title,
-            which produced empty <title></title> tags server-side and a
-            React hydration mismatch (error #418) once the client filled
-            them back in. A plain attribute isn't a "title" element, so
-            it's never touched by that logic, and browsers still show the
-            same native tooltip on hover. */}
+        {/* muted, darker fills - this is where the "depth" reads as darker */}
         {computed.map((segment) => (
           <path
             key={`fill-${segment.index}`}
             d={wedgePath(cx, cy, r, segment.startAngle, segment.endAngle)}
             fill={segment.color}
             fillOpacity={0.5}
-            title={segment.tooltip}
+            // Raw HTML instead of a JSX <title> child: React 19's server
+            // renderer (or Next's metadata-title bookkeeping layered on
+            // top of it - build logs don't distinguish which) treats a
+            // real React "title" element specially and was stripping its
+            // text on this page, since the page already has a real <head>
+            // title. dangerouslySetInnerHTML never goes through that
+            // element-creation path (React treats it as opaque markup),
+            // so it renders the exact same static <title> child without
+            // being touched by that logic, and doesn't get diffed during
+            // hydration either - both server and client just adopt it.
+            dangerouslySetInnerHTML={{ __html: segment.tooltipHtml }}
           />
         ))}
 
