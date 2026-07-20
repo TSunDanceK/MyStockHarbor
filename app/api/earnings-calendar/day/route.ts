@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCachedDayItems } from "@/lib/server/earningsCalendar";
+import { isUnwantedBot } from "@/lib/botid-guard";
 
 export const runtime = "nodejs";
 
@@ -15,6 +16,10 @@ export async function GET(request: Request) {
   const date = (searchParams.get("date") || "").trim();
   const offsetRaw = Number(searchParams.get("offset") || "0");
   const offset = Number.isFinite(offsetRaw) && offsetRaw > 0 ? Math.floor(offsetRaw) : 0;
+
+  if (await isUnwantedBot()) {
+    return NextResponse.json({ error: "Access denied" }, { status: 403 });
+  }
 
   if (!DATE_RE.test(date)) {
     return NextResponse.json({ error: "Invalid date. Use YYYY-MM-DD." }, { status: 400 });

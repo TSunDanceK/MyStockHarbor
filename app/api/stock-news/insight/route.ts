@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
 import { getAiNewsInsight } from "@/lib/ai-news-briefs";
 import { buildBeyondHeadline, buildWhatItMeans, type ScoreTone } from "@/lib/stock-news-templates";
+import { isUnwantedBot } from "@/lib/botid-guard";
 
 export const runtime = "nodejs";
 
@@ -89,6 +90,10 @@ export async function POST(request: NextRequest) {
     body = (await request.json()) as RequestBody;
   } catch {
     return NextResponse.json({ ai: false, beyondHeadline: "", whatItMeans: [] }, { status: 400 });
+  }
+
+  if (await isUnwantedBot()) {
+    return NextResponse.json({ error: "Access denied" }, { status: 403 });
   }
 
   const symbol = str(body.symbol).toUpperCase();

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import PlaysClient, { type PlaysPayload } from "./PlaysClient";
+import { getPlaysData } from "@/lib/server/playsBuilder";
 
 export const dynamic = "force-dynamic";
 
@@ -41,25 +42,24 @@ async function getOriginFromHeaders() {
   return `${proto}://${host}`;
 }
 
-// Server-side fetch of the same payload PlaysClient fetches client-side, so
-// crawlers (and the very first paint for real users) see the real scan
-// results instead of the "Loading chart-pattern plays..." skeleton. Cached
-// via Next's fetch Data Cache for up to an hour -- the /api/plays route
-// itself is also memoized (in-memory + Redis) for ~60 minutes, so this
+// Reads the plays payload in-process via getPlaysData() (the same
+// memo/Redis-cached builder the /api/plays route uses) instead of the
+// server fetching its own public URL. That self-request carries no browser
+// BotID header, so now that /api/plays is BotID-guarded it would otherwise
+// read as bot traffic and get 403'd -- the same self-fetch-gets-blocked
+// failure mode already documented as a past production outage in
+// claude/pickers-firewall-selfblock-2026-07-17.md. Going in-process removes
+// it entirely; the module's in-memory memo + Redis cache still means this
 // rarely triggers a fresh scan.
 async function getInitialPlaysPayload(): Promise<PlaysPayload | null> {
   try {
     const origin = await getOriginFromHeaders();
-    const res = await fetch(`${origin}/api/plays`, {
-      next: { revalidate: 3600 },
-    });
+    const { data, status } = await getPlaysData(origin);
 
-    if (!res.ok) return null;
+    if (status && status >= 400) return null;
+    if ((data as { error?: unknown })?.error) return null;
 
-    const data = (await res.json()) as PlaysPayload;
-    if (data?.error) return null;
-
-    return data;
+    return data as unknown as PlaysPayload;
   } catch {
     return null;
   }

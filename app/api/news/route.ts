@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isUnwantedBot } from "@/lib/botid-guard";
 
 export const runtime = "nodejs";
 export const revalidate = 3600;
@@ -35,6 +36,10 @@ function parseRss(xml: string): NewsItem[] {
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const symbol = (searchParams.get("symbol") || "AAPL").toUpperCase();
+
+  if (await isUnwantedBot()) {
+    return NextResponse.json({ error: "Access denied" }, { status: 403 });
+  }
 
   // Google News RSS search feed (multi-source aggregation). :contentReference[oaicite:3]{index=3}
   const q1 = encodeURIComponent(`${symbol} stock`);
