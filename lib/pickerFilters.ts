@@ -49,6 +49,28 @@ export const FILTER_DEFS: FilterDef[] = [
   { key: "strongEarningsGrowth", label: "Strong Earnings Growth", tone: "green" },
 ];
 
+// A second, separate set of checkable keys -- NOT part of the 18-condition
+// custom builder above, so adding to this list never changes what /pickers'
+// own filter chips (PickersClient.tsx) offer. These back the category
+// checkboxes in ScreenerNav (see ScreenerNav.tsx's GROUPS): each one means
+// "this stock is a member of that category's own page", derived for free
+// from data already fetched for every picker page (the full `sections` +
+// `signalRecords` payload -- see buildCategoryFlags in PickerResultPage.tsx).
+export type CategoryFilterKey =
+  | "hasBuySignal"
+  | "hasSellSignal"
+  | "bestTrendPick"
+  | "divergencePick"
+  | "athBreakoutPick"
+  | "threeMonthHighPick"
+  | "macroSrPick";
+
+// The combined type ScreenerNav/PickerFilterContext/PickerResultsGrid use --
+// a selection can mix conditions from the custom builder (e.g. "oversold")
+// with category-membership checks (e.g. "hasBuySignal") and both are ANDed
+// together the same way.
+export type AnyFilterKey = FilterKey | CategoryFilterKey;
+
 export function toneDotColor(tone?: string) {
   if (tone === "green") return "#22c55e";
   if (tone === "yellow") return "#eab308";

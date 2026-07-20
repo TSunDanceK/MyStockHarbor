@@ -4,20 +4,24 @@ import Link from "next/link";
 import { useState } from "react";
 import { usePickerFilter } from "@/app/components/PickerFilterContext";
 import { TickerSearch } from "@/app/components/TickerSearchBox";
-import { FILTER_DEFS, toneDotColor, type FilterKey } from "@/lib/pickerFilters";
+import { FILTER_DEFS, toneDotColor, type AnyFilterKey } from "@/lib/pickerFilters";
 
 type Tone = "green" | "yellow" | "orange" | "red" | "blue";
 
-// `filterKey` links a category straight to one of the 18 boolean
-// conditions /pickers' own custom screener uses (see lib/pickerFilters.ts).
-// Only set on categories with an exact one-to-one match to a single
-// boolean field -- e.g. the "Oversold" page is exactly the `oversold`
-// flag. Categories that are computed scores or separate datasets (Buy
-// Signals, Best Trend, Divergence, Macro S/R, the three chart-pattern
-// plays) are left unmapped and keep working as plain navigation links even
-// while filter mode is on -- see MoreFilters below for the remaining
-// boolean conditions that don't have a category of their own.
-type NavItem = { href: string; label: string; icon: string; tone: Tone; filterKey?: FilterKey };
+// `filterKey` turns a category into a real checkbox in filter mode (see
+// NavList below) instead of a plain navigation link. Two kinds of key work
+// here (see lib/pickerFilters.ts): a `FilterKey` from the 18-condition
+// custom builder for categories with an exact one-to-one boolean match
+// (e.g. "Oversold" is exactly the `oversold` flag), or a `CategoryFilterKey`
+// for everything else -- "is this stock also a member of that category's
+// own page right now" (e.g. "Buy Signals" -> `hasBuySignal`), computed for
+// every entry regardless of which page it's on (see buildCategoryFlags in
+// PickerResultPage.tsx). Only the three chart-pattern plays (Ascending
+// Triangles, Bull Flags, Descending Triangles) are left unmapped, since
+// they're built from a separate, more expensive dataset that was
+// deliberately kept out of every other page's payload -- those stay plain
+// links even while filter mode is on.
+type NavItem = { href: string; label: string; icon: string; tone: Tone; filterKey?: AnyFilterKey };
 type NavGroup = { heading: string; headingColor: string; items: NavItem[] };
 
 // Grouped so the column reads like the Learn sidebar (coloured section
@@ -29,8 +33,8 @@ const GROUPS: NavGroup[] = [
     heading: "Signals",
     headingColor: "#60a5fa",
     items: [
-      { href: "/top-stocks-with-buy-signals", label: "Buy Signals", icon: "▲", tone: "green" },
-      { href: "/top-stocks-with-sell-signals", label: "Sell Signals", icon: "▼", tone: "red" },
+      { href: "/top-stocks-with-buy-signals", label: "Buy Signals", icon: "▲", tone: "green", filterKey: "hasBuySignal" },
+      { href: "/top-stocks-with-sell-signals", label: "Sell Signals", icon: "▼", tone: "red", filterKey: "hasSellSignal" },
     ],
   },
   {
@@ -39,16 +43,16 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: "/oversold-stocks-today", label: "Oversold", icon: "●", tone: "green", filterKey: "oversold" },
       { href: "/overbought-stocks-today", label: "Overbought", icon: "●", tone: "red", filterKey: "overbought" },
-      { href: "/best-trend-score-stocks", label: "Best Trend", icon: "★", tone: "green" },
-      { href: "/bullish-bearish-divergence-stocks", label: "Divergence", icon: "⚇", tone: "blue" },
+      { href: "/best-trend-score-stocks", label: "Best Trend", icon: "★", tone: "green", filterKey: "bestTrendPick" },
+      { href: "/bullish-bearish-divergence-stocks", label: "Divergence", icon: "⚇", tone: "blue", filterKey: "divergencePick" },
     ],
   },
   {
     heading: "Highs & Breakouts",
     headingColor: "#fb923c",
     items: [
-      { href: "/all-time-high-breakout-stocks", label: "ATH Breakouts", icon: "↗", tone: "orange" },
-      { href: "/3-month-high-breakout-stocks", label: "3-Month Highs", icon: "↗", tone: "orange" },
+      { href: "/all-time-high-breakout-stocks", label: "ATH Breakouts", icon: "↗", tone: "orange", filterKey: "athBreakoutPick" },
+      { href: "/3-month-high-breakout-stocks", label: "3-Month Highs", icon: "↗", tone: "orange", filterKey: "threeMonthHighPick" },
       { href: "/stocks-down-20-from-all-time-highs", label: "20% From ATH", icon: "◆", tone: "yellow", filterKey: "buyTheDip" },
     ],
   },
@@ -72,7 +76,12 @@ const GROUPS: NavGroup[] = [
     heading: "Chart Plays",
     headingColor: "#c084fc",
     items: [
-      { href: "/macro-support-resistance-stocks", label: "Macro S/R", icon: "⇄", tone: "blue" },
+      { href: "/macro-support-resistance-stocks", label: "Macro S/R", icon: "⇄", tone: "blue", filterKey: "macroSrPick" },
+      // These three come from a separate chart-pattern dataset that was
+      // deliberately kept out of every other page's payload (see the
+      // ticker-search cost discussion earlier in this project) -- no cheap
+      // per-symbol membership flag is available for them, so they stay
+      // plain links (with the "opens page" hint below) even in filter mode.
       { href: "/plays", label: "Ascending Triangles", icon: "△", tone: "green" },
       { href: "/plays/bull-flags", label: "Bull Flags", icon: "⚑", tone: "green" },
       { href: "/plays/descending-triangles", label: "Descending Triangles", icon: "▽", tone: "red" },
@@ -81,13 +90,15 @@ const GROUPS: NavGroup[] = [
 ];
 
 // The FILTER_DEFS conditions with no category of their own above (volume
-// spike, ATR spike, MA50/MA200 above-below, the four divergence flags) --
-// still reachable while filter mode is on, just grouped separately instead
-// of pretending they map onto a category link.
+// spike, ATR spike, MA50/MA200 above-below, the four raw divergence flags --
+// "Divergence" the category now maps to `divergencePick`, a section-
+// membership flag, so the four raw flags stay here as finer-grained
+// options) -- still reachable while filter mode is on, just grouped
+// separately instead of pretending they map onto a category link.
 const MAPPED_FILTER_KEYS = new Set(
   GROUPS.flatMap((group) => group.items)
     .map((item) => item.filterKey)
-    .filter((key): key is FilterKey => Boolean(key))
+    .filter((key): key is AnyFilterKey => Boolean(key))
 );
 const OTHER_FILTER_DEFS = FILTER_DEFS.filter((filter) => !MAPPED_FILTER_KEYS.has(filter.key));
 
@@ -102,12 +113,12 @@ function toneColour(tone: Tone) {
 // Renders the category list. Off, every item is a plain link (legacy
 // behaviour: tap "Oversold", go to the Oversold page). On (`filterMode`),
 // any item with a `filterKey` grows a checkbox in its place -- ticking
-// "Oversold" and "Best Trend"... well, Best Trend has no boolean
-// equivalent, but ticking "Oversold" and (say) "Near 200-Day" combines
-// them via the same AND logic /pickers' own filter chips use, narrowing
-// *this* page's own results instead of navigating anywhere. Items with no
-// filterKey keep working as plain links even in filter mode (with a small
-// "opens page" hint so that's not confusing).
+// "Oversold" and "Best Trend" combines them via the same AND logic
+// /pickers' own filter chips use, narrowing *this* page's own results
+// instead of navigating anywhere. Only the three chart-pattern plays have
+// no filterKey (separate dataset, see GROUPS above) and keep working as
+// plain links even in filter mode (with a small "opens page" hint so
+// that's not confusing).
 function NavList({
   currentHref,
   onNavigate,

@@ -1,11 +1,11 @@
 "use client";
 
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import type { FilterKey } from "@/lib/pickerFilters";
+import type { AnyFilterKey } from "@/lib/pickerFilters";
 
 type PickerFilterContextValue = {
-  selectedFilters: FilterKey[];
-  toggleFilter: (key: FilterKey) => void;
+  selectedFilters: AnyFilterKey[];
+  toggleFilter: (key: AnyFilterKey) => void;
   clearFilters: () => void;
   matchCount: number | null;
   setMatchCount: (count: number | null) => void;
@@ -14,13 +14,19 @@ type PickerFilterContextValue = {
 const PickerFilterContext = createContext<PickerFilterContextValue | null>(null);
 
 // Wraps a single picker page's left-column nav + results grid so the
-// checkboxes rendered inside ScreenerNav (see FilterChecklist there) and
+// checkboxes rendered inside ScreenerNav (see NavList/MoreFilters there) and
 // the filtering/pagination done in PickerResultsGrid can share one
 // selection without a server round trip -- the same client-side-only
 // filtering /pickers' own PickersClient.tsx does, just lifted one level so
 // two sibling components on the same page can both read/write it.
+//
+// selectedFilters can mix two kinds of keys (see lib/pickerFilters.ts):
+// the 18-condition custom builder (FilterKey, e.g. "oversold") and the
+// category-membership checks ScreenerNav's own nav items now carry
+// (CategoryFilterKey, e.g. "hasBuySignal" for the Buy Signals item). Both
+// are ANDed together identically by PickerResultsGrid.
 export function PickerFilterProvider({ children }: { children: ReactNode }) {
-  const [selectedFilters, setSelectedFilters] = useState<FilterKey[]>([]);
+  const [selectedFilters, setSelectedFilters] = useState<AnyFilterKey[]>([]);
   const [matchCount, setMatchCount] = useState<number | null>(null);
 
   const value = useMemo<PickerFilterContextValue>(
