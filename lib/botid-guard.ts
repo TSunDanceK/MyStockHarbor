@@ -20,9 +20,26 @@ import { checkBotId } from "botid/server";
  *
  * The route's path/method must also be listed in instrumentation-client.ts,
  * otherwise checkBotId() has no client header to validate.
+ *
+ * Pass checkLevel: "deepAnalysis" to run Vercel's paid Deep Analysis model on
+ * this route instead of the free Basic check. This MUST match the
+ * advancedOptions.checkLevel set for the same path/method in
+ * instrumentation-client.ts, or verification fails outright (client/server
+ * checkLevel mismatch). Deep Analysis bills per checkBotId() call on that
+ * route once Basic passes — real visitor or not — so only opt specific,
+ * high-value routes in. /api/quote was the first: it calls FMP live on every
+ * request with no caching at all, so every hit is a real, billed upstream
+ * call with zero cushion — see
+ * claude/firewall-bot-protection-audit-2026-07-19.md for the full reasoning.
  */
-export async function isUnwantedBot(): Promise<boolean> {
-  const verification = await checkBotId();
+export async function isUnwantedBot(
+  checkLevel: "basic" | "deepAnalysis" = "basic"
+): Promise<boolean> {
+  const verification = await checkBotId(
+    checkLevel === "deepAnalysis"
+      ? { advancedOptions: { checkLevel: "deepAnalysis" } }
+      : undefined
+  );
   // Block bots, but never block a Vercel-verified crawler.
   return verification.isBot && !verification.isVerifiedBot;
 }

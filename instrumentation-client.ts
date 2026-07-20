@@ -50,6 +50,16 @@ import { initBotId } from "botid/client/core";
  * /api/pickers and /api/market do NOT have that safety net, which is why
  * they're excluded above.
  *
+ * NOTE on checkLevel: every route below runs Basic (free) unless it sets
+ * advancedOptions.checkLevel explicitly. /api/quote is the one exception —
+ * it's on Deep Analysis (paid) because it calls FMP live on every request
+ * with zero caching, making it the single highest-value target on the site.
+ * checkLevel here MUST match the corresponding checkBotId() call server-side
+ * (see lib/botid-guard.ts's isUnwantedBot(checkLevel) and its call site in
+ * app/api/quote/route.ts) or verification fails outright. See
+ * claude/firewall-bot-protection-audit-2026-07-19.md for the full reasoning
+ * and why other routes (already well-cached) weren't picked first.
+ *
  * Wired server-side guards so far: /api/quote, /api/history,
  * /api/stock-earnings/*, /api/symbols, /api/plays, /api/bull-flags,
  * /api/descending-triangles, /api/benchmarks, /api/discovery-strip,
@@ -60,7 +70,11 @@ import { initBotId } from "botid/client/core";
  */
 initBotId({
   protect: [
-    { path: "/api/quote", method: "GET" },
+    {
+      path: "/api/quote",
+      method: "GET",
+      advancedOptions: { checkLevel: "deepAnalysis" },
+    },
     { path: "/api/history", method: "GET" },
     { path: "/api/stock-earnings/*", method: "GET" },
     { path: "/api/symbols", method: "GET" },
