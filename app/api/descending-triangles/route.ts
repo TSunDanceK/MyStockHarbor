@@ -5,10 +5,29 @@
 // read via getDescendingTrianglesData(), see that module's header
 // comment). This route stays the public HTTP entry point: it still runs
 // the isUnwantedBot() guard before returning any data.
+//
+// force=1 gating (2026-07-20): force=1 used to bypass the memo/Redis
+// cache unconditionally for anyone, triggering a full rescan on every
+// request -- a public, unauthenticated way to force the most expensive
+// path on every hit. Now it requires &key=<EARNINGS_BACKFILL_KEY> (the
+// same owner-only secret already used by
+// app/api/earnings-calendar/backfill-date/route.ts, reused here rather
+// than adding a second secret) plus the same Redis-backed per-IP lockout
+// (3 failed attempts / 10 min) as that route. An unauthorized force=1
+// does NOT 403 the whole request -- it silently falls back to the normal
+// cached response, since force isn't required to use this endpoint at
+// all; only the expensive bypass needs gating.
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { isUnwantedBot } from "@/lib/botid-guard";
+import {
+  getClientIp,
+  checkBackfillLockout,
+  recordBackfillFailure,
+  clearBackfillFailures,
+  checkBackfillKey,
+} from "@/lib/server/backfillAuth";
 import { getDescendingTrianglesData } from "../../../lib/server/descendingTrianglesBuilder";
 
 function originFromReq(req: NextRequest) {
@@ -24,8 +43,33 @@ export async function GET(req: NextRequest) {
   }
 
   const origin = originFromReq(req);
-  const forceRefresh = req.nextUrl.searchParams.get("force") === "1";
+  const forceRequested = req.nextUrl.searchParams.get("force") === "1";
   const debugSymbol = req.nextUrl.searchParams.get("debugSymbol");
+
+  let forceRefresh = false;
+
+  if (forceRequested) {
+    const ip = getClientIp(req);
+    const lockout = await checkBackfillLockout(ip);
+
+    if (lockout.locked) {
+      return NextResponse.json(
+        { error: `Too many failed attempts. Try again in ${lockout.retryAfterSeconds}s.` },
+        { status: 429, headers: { "Retry-After": String(lockout.retryAfterSeconds) } }
+      );
+    }
+
+    const key = req.nextUrl.searchParams.get("key") ?? "";
+
+    if (checkBackfillKey(key)) {
+      await clearBackfillFailures(ip);
+      forceRefresh = true;
+    } else {
+      await recordBackfillFailure(ip);
+      // Falls through with forceRefresh left false -- serves the normal
+      // cached response instead of denying the request outright.
+    }
+  }
 
   const { data, headers, status } = await getDescendingTrianglesData(origin, {
     forceRefresh,
