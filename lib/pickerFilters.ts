@@ -71,6 +71,21 @@ export type CategoryFilterKey =
 // together the same way.
 export type AnyFilterKey = FilterKey | CategoryFilterKey;
 
+// {key, label, tone} for the 7 category-membership checks, in the same
+// shape as FILTER_DEFS above -- lets the "allSymbols" custom-screener page
+// (see PickerResultPage.tsx's buildEntries) build reason-chip labels and a
+// combined score for these 7 checks exactly the same way it already does
+// for the 18 custom-builder FILTER_DEFS.
+export const CATEGORY_FILTER_DEFS: { key: CategoryFilterKey; label: string; tone: PickerTone }[] = [
+  { key: "hasBuySignal", label: "Buy Signal", tone: "green" },
+  { key: "hasSellSignal", label: "Sell Signal", tone: "red" },
+  { key: "bestTrendPick", label: "Best Trend", tone: "green" },
+  { key: "divergencePick", label: "Divergence", tone: "blue" },
+  { key: "athBreakoutPick", label: "ATH Breakout", tone: "orange" },
+  { key: "threeMonthHighPick", label: "3-Month High", tone: "orange" },
+  { key: "macroSrPick", label: "Macro S/R", tone: "blue" },
+];
+
 export function toneDotColor(tone?: string) {
   if (tone === "green") return "#22c55e";
   if (tone === "yellow") return "#eab308";
