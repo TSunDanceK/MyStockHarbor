@@ -717,8 +717,6 @@ export default function SiteHeader({
           path === "/overbought-stocks-today" ||
           path === "/oversold-stocks-today" ||
           path === "/bullish-bearish-divergence-stocks" ||
-          path === "/stocks-with-high-rsi" ||
-          path === "/stocks-with-low-rsi" ||
           path === "/stocks-near-200-day-moving-average" ||
           path === "/stocks-near-weekly-200-day-moving-average" ||
           path === "/top-stocks-with-buy-signals" ||
@@ -776,8 +774,6 @@ export default function SiteHeader({
               path === "/overbought-stocks-today" ||
               path === "/oversold-stocks-today" ||
               path === "/bullish-bearish-divergence-stocks" ||
-              path === "/stocks-with-high-rsi" ||
-              path === "/stocks-with-low-rsi" ||
               path === "/stocks-near-200-day-moving-average" ||
               path === "/stocks-near-weekly-200-day-moving-average",
             items: [
@@ -795,16 +791,6 @@ export default function SiteHeader({
                 label: "Bullish / Bearish Divergence",
                 href: "/bullish-bearish-divergence-stocks",
                 isActive: (path) => path === "/bullish-bearish-divergence-stocks",
-              },
-              {
-                label: "High RSI Stocks",
-                href: "/stocks-with-high-rsi",
-                isActive: (path) => path === "/stocks-with-high-rsi",
-              },
-              {
-                label: "Low RSI Stocks",
-                href: "/stocks-with-low-rsi",
-                isActive: (path) => path === "/stocks-with-low-rsi",
               },
               {
                 label: "Near 200-Day MA (Daily)",
