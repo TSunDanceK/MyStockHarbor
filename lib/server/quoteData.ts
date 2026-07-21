@@ -65,21 +65,23 @@ export function emptyQuote(symbol: string): Quote {
 // upstream hit instead of one self-fetch that at least had Next's Data
 // Cache in front of it sometimes.
 //
-// Fix: a short (20s) Redis cache keyed by symbol, same fail-open
-// @upstash/redis pattern already used across the codebase (see
-// lib/server/historyCache.ts, app/api/market/route.ts), plus a per-instance
-// in-flight request map so a burst of near-simultaneous requests for the
-// same symbol (e.g. many visitors loading the same ticker in the same
-// second, all missing the Redis cache together) collapse into a single FMP
-// call instead of one each. 20s keeps quote data effectively real-time to a
-// user while cutting live upstream calls dramatically for popular symbols.
+// Fix: a short Redis cache keyed by symbol, same fail-open @upstash/redis
+// pattern already used across the codebase (see lib/server/historyCache.ts,
+// app/api/market/route.ts), plus a per-instance in-flight request map so a
+// burst of near-simultaneous requests for the same symbol (e.g. many
+// visitors loading the same ticker in the same second, all missing the
+// Redis cache together) collapse into a single FMP call instead of one
+// each. Started at 20s, raised to 60s on 2026-07-21 (owner didn't need
+// updates faster than once a minute) -- cache only ever gets populated for
+// symbols someone actually requests (a page view, a search, a background
+// snapshot build), never a blanket prefetch of the whole ticker universe.
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
     ? Redis.fromEnv()
     : null;
 
 const QUOTE_CACHE_PREFIX = "msh:quote:v1";
-const QUOTE_CACHE_TTL_SECONDS = 20;
+const QUOTE_CACHE_TTL_SECONDS = 60;
 
 function getQuoteCacheKey(symbol: string) {
   return `${QUOTE_CACHE_PREFIX}:${symbol}`;

@@ -10,7 +10,7 @@ export async function GET(req: Request) {
   const symbol = (searchParams.get("symbol") || "AAPL").toUpperCase();
 
   // Deep Analysis: fetchQuoteSnapshot() (lib/server/quoteData.ts) now sits
-  // behind a short (20s) Redis cache + in-flight request dedupe -- see that
+  // behind a short (60s) Redis cache + in-flight request dedupe -- see that
   // module's comment for why -- but this route is still the primary public
   // entry point for quote data and any cache miss is still a real, billed
   // FMP hit, so it stays on the deeper check. checkLevel here MUST match the
