@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import TickerLogo from "@/app/components/TickerLogo";
 
 type SymbolResult = {
   symbol: string;
@@ -171,12 +172,18 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
                   background: "#0b1220",
                   color: "#f8fafc",
                   cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
                 }}
               >
-                <div style={{ fontWeight: 950 }}>{result.symbol}</div>
-                <div style={{ marginTop: 3, fontSize: 13, color: "rgba(241,245,249,0.66)" }}>
-                  {result.name}
-                  {result.exchange ? ` • ${result.exchange}` : ""}
+                <TickerLogo symbol={result.symbol} size={22} radius={6} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 950 }}>{result.symbol}</div>
+                  <div style={{ marginTop: 3, fontSize: 13, color: "rgba(241,245,249,0.66)" }}>
+                    {result.name}
+                    {result.exchange ? ` • ${result.exchange}` : ""}
+                  </div>
                 </div>
               </button>
             ))}
