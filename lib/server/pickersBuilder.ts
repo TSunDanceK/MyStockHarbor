@@ -1493,6 +1493,7 @@ function buildCompositeFromHistory(points: Point[]): CompositeResult | null {
   const ma200 = movingAverage(closes, 200);
 
   const atr14 = atr(points, 14);
+
   const volume: (number | null)[] = points.map((p) =>
     typeof p.volume === "number" && Number.isFinite(p.volume) ? p.volume : null
   );
