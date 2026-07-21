@@ -1,4 +1,5 @@
 import { unstable_cache } from "next/cache";
+import { Redis } from "@upstash/redis";
 
 export type YouTubeVideo = {
   id: string;
@@ -70,6 +71,138 @@ const CHANNEL_HANDLE = "@MyStockHarbor";
 // is what blew through the 10,000 unit/day quota in a matter of hours.
 const RESULT_CACHE_SECONDS = 60 * 60 * 24; // 24 hours
 
+// --- Redis-backed circuit breaker (added 2026-07-21) -----------------------
+//
+// The 24h unstable_cache above only dedupes repeat requests for the SAME
+// cache key (the same `limit` argument, or the same videoId). It does
+// nothing to protect against many DIFFERENT keys all missing at once --
+// e.g. a fast crawl/bot burst hitting a dozen different /insights/videos/[id]
+// pages within a few minutes, each one a legitimate first-time cache miss
+// that still has to make a real call. That's exactly what happened on
+// 2026-07-16: ~7 distinct videoIds all 403'd within a 15-minute window
+// (confirmed via Vercel runtime error logs), alongside a matching spike in
+// /api/symbols traffic in the same window -- consistent with a rapid
+// multi-page crawl, not steady organic use.
+//
+// This adds a second, independent layer underneath the per-key cache: a
+// shared hourly call budget (real calls to channels.list + playlistItems.list
+// + videos.list combined, since they all draw from the same Google Cloud
+// project's 10,000-unit/day pool), plus a long-lived "last known good"
+// fallback so that once the budget is hit, pages serve slightly-stale real
+// data instead of an empty state or a fresh 403. Normal traffic, even with
+// the per-key cache totally cold, needs only a handful of real calls per
+// hour, so this ceiling is never expected to bind outside of a burst -- and
+// even sustained continuous triggering caps total usage well under the
+// daily quota, leaving headroom for any other consumer of the same key.
+const redis =
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+    ? Redis.fromEnv()
+    : null;
+
+const YOUTUBE_CALL_COUNTER_PREFIX = "msh:yt-calls:v1";
+const YOUTUBE_SAFE_CALLS_PER_HOUR = 100;
+
+const UPLOADS_PLAYLIST_KEY = "msh:yt-uploads-playlist:v1";
+const UPLOADS_PLAYLIST_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days -- a channel's uploads playlist ID essentially never changes.
+
+const LAST_GOOD_LIST_PREFIX = "msh:yt-lastgood-list:v1";
+const LAST_GOOD_VIDEO_PREFIX = "msh:yt-lastgood-video:v1";
+const LAST_GOOD_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days of fallback headroom.
+
+function getHourBucket(now = new Date()) {
+  const year = now.getUTCFullYear();
+  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(now.getUTCDate()).padStart(2, "0");
+  const hour = String(now.getUTCHours()).padStart(2, "0");
+  return `${year}${month}${day}${hour}`;
+}
+
+// Reserves one "real call" slot against the shared hourly budget. Returns
+// true if the call is allowed to proceed. Fails OPEN (returns true) if Redis
+// isn't configured or errors, so a Redis outage never blocks YouTube content
+// -- worst case in that scenario is a return to the pre-circuit-breaker
+// behavior, not a new failure mode.
+async function reserveYouTubeCallSlot(): Promise<boolean> {
+  if (!redis) return true;
+
+  try {
+    const key = `${YOUTUBE_CALL_COUNTER_PREFIX}:${getHourBucket()}`;
+    const current = await redis.incr(key);
+
+    if (current === 1) {
+      await redis.expire(key, 3700); // just over an hour, so the bucket always outlives its own window
+    }
+
+    return current <= YOUTUBE_SAFE_CALLS_PER_HOUR;
+  } catch {
+    return true;
+  }
+}
+
+async function readCachedUploadsPlaylistId(): Promise<string | null> {
+  if (!redis) return null;
+
+  try {
+    const id = await redis.get<string>(UPLOADS_PLAYLIST_KEY);
+    return typeof id === "string" && id ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeCachedUploadsPlaylistId(id: string) {
+  if (!redis) return;
+
+  try {
+    await redis.set(UPLOADS_PLAYLIST_KEY, id, { ex: UPLOADS_PLAYLIST_TTL_SECONDS });
+  } catch {
+    // fail open
+  }
+}
+
+async function readLastGoodVideoList(limit: number): Promise<YouTubeVideo[] | null> {
+  if (!redis) return null;
+
+  try {
+    const data = await redis.get<YouTubeVideo[]>(`${LAST_GOOD_LIST_PREFIX}:${limit}`);
+    return Array.isArray(data) && data.length > 0 ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeLastGoodVideoList(limit: number, videos: YouTubeVideo[]) {
+  if (!redis || videos.length === 0) return;
+
+  try {
+    await redis.set(`${LAST_GOOD_LIST_PREFIX}:${limit}`, videos, { ex: LAST_GOOD_TTL_SECONDS });
+  } catch {
+    // fail open
+  }
+}
+
+async function readLastGoodVideo(videoId: string): Promise<YouTubeVideo | null> {
+  if (!redis) return null;
+
+  try {
+    const data = await redis.get<YouTubeVideo>(`${LAST_GOOD_VIDEO_PREFIX}:${videoId}`);
+    return data && typeof data === "object" ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeLastGoodVideo(videoId: string, video: YouTubeVideo) {
+  if (!redis) return;
+
+  try {
+    await redis.set(`${LAST_GOOD_VIDEO_PREFIX}:${videoId}`, video, { ex: LAST_GOOD_TTL_SECONDS });
+  } catch {
+    // fail open
+  }
+}
+// -----------------------------------------------------------------------
+
 function pickThumbnail(
   thumbs:
     | {
@@ -96,7 +229,7 @@ async function fetchLatestYouTubeVideosUncached(limit: number): Promise<YouTubeV
 
   if (!apiKey) {
     console.error("[youtube] YOUTUBE_API_KEY is not set — skipping video fetch.");
-    return [];
+    return (await readLastGoodVideoList(limit)) ?? [];
   }
 
   try {
@@ -107,34 +240,58 @@ async function fetchLatestYouTubeVideosUncached(limit: number): Promise<YouTubeV
     // of that was the source of the earlier quota-burn bug: fetch-level
     // caching alone doesn't reliably prevent re-attempts of a failing/error
     // response across renders, whereas wrapping the whole function does.
-    const channelRes = await fetch(
-      `${YOUTUBE_API_BASE}/channels?part=contentDetails&forHandle=${encodeURIComponent(
-        CHANNEL_HANDLE
-      )}&key=${encodeURIComponent(apiKey)}`,
-      { cache: "no-store" }
-    );
-
-    if (!channelRes.ok) {
-      const body = await channelRes.text().catch(() => "");
-      console.error(
-        `[youtube] channels.list failed: ${channelRes.status} ${channelRes.statusText} — ${body.slice(0, 500)}`
-      );
-      return [];
-    }
-
-    const channelData = (await channelRes.json()) as ChannelsListResponse;
-    const uploadsPlaylistId =
-      channelData.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
+    let uploadsPlaylistId = await readCachedUploadsPlaylistId();
 
     if (!uploadsPlaylistId) {
-      console.error(
-        `[youtube] No uploads playlist found for handle ${CHANNEL_HANDLE}. Raw response: ${JSON.stringify(channelData).slice(0, 500)}`
+      const allowed = await reserveYouTubeCallSlot();
+
+      if (!allowed) {
+        console.error(
+          "[youtube] Hourly call budget exhausted — skipping channels.list, serving last-known-good video list."
+        );
+        return (await readLastGoodVideoList(limit)) ?? [];
+      }
+
+      const channelRes = await fetch(
+        `${YOUTUBE_API_BASE}/channels?part=contentDetails&forHandle=${encodeURIComponent(
+          CHANNEL_HANDLE
+        )}&key=${encodeURIComponent(apiKey)}`,
+        { cache: "no-store" }
       );
-      return [];
+
+      if (!channelRes.ok) {
+        const body = await channelRes.text().catch(() => "");
+        console.error(
+          `[youtube] channels.list failed: ${channelRes.status} ${channelRes.statusText} — ${body.slice(0, 500)}`
+        );
+        return (await readLastGoodVideoList(limit)) ?? [];
+      }
+
+      const channelData = (await channelRes.json()) as ChannelsListResponse;
+      uploadsPlaylistId =
+        channelData.items?.[0]?.contentDetails?.relatedPlaylists?.uploads ?? null;
+
+      if (!uploadsPlaylistId) {
+        console.error(
+          `[youtube] No uploads playlist found for handle ${CHANNEL_HANDLE}. Raw response: ${JSON.stringify(channelData).slice(0, 500)}`
+        );
+        return (await readLastGoodVideoList(limit)) ?? [];
+      }
+
+      await writeCachedUploadsPlaylistId(uploadsPlaylistId);
     }
 
     // YouTube playlist API supports up to 50 results per request
     const clampedLimit = Math.max(1, Math.min(limit, 50));
+
+    const playlistAllowed = await reserveYouTubeCallSlot();
+
+    if (!playlistAllowed) {
+      console.error(
+        "[youtube] Hourly call budget exhausted — skipping playlistItems.list, serving last-known-good video list."
+      );
+      return (await readLastGoodVideoList(limit)) ?? [];
+    }
 
     const playlistRes = await fetch(
       `${YOUTUBE_API_BASE}/playlistItems?part=snippet,contentDetails&playlistId=${encodeURIComponent(
@@ -148,7 +305,7 @@ async function fetchLatestYouTubeVideosUncached(limit: number): Promise<YouTubeV
       console.error(
         `[youtube] playlistItems.list failed: ${playlistRes.status} ${playlistRes.statusText} — ${body.slice(0, 500)}`
       );
-      return [];
+      return (await readLastGoodVideoList(limit)) ?? [];
     }
 
     const playlistData = (await playlistRes.json()) as PlaylistItemsListResponse;
@@ -178,12 +335,14 @@ async function fetchLatestYouTubeVideosUncached(limit: number): Promise<YouTubeV
       console.error(
         `[youtube] playlistItems.list returned ${playlistData.items?.length ?? 0} raw items but 0 mapped to valid videos. Raw response: ${JSON.stringify(playlistData).slice(0, 800)}`
       );
+      return (await readLastGoodVideoList(limit)) ?? [];
     }
 
+    await writeLastGoodVideoList(limit, videos);
     return videos;
   } catch (err) {
     console.error("[youtube] getLatestYouTubeVideos threw:", err);
-    return [];
+    return (await readLastGoodVideoList(limit)) ?? [];
   }
 }
 
@@ -206,10 +365,19 @@ async function fetchYouTubeVideoByIdUncached(videoId: string): Promise<YouTubeVi
   const apiKey = process.env.YOUTUBE_API_KEY;
   if (!apiKey) {
     console.error("[youtube] YOUTUBE_API_KEY is not set — skipping single-video fetch.");
-    return null;
+    return await readLastGoodVideo(videoId);
   }
 
   try {
+    const allowed = await reserveYouTubeCallSlot();
+
+    if (!allowed) {
+      console.error(
+        `[youtube] Hourly call budget exhausted — skipping videos.list for ${videoId}, serving last-known-good video.`
+      );
+      return await readLastGoodVideo(videoId);
+    }
+
     const res = await fetch(
       `${YOUTUBE_API_BASE}/videos?part=snippet&id=${encodeURIComponent(videoId)}&key=${encodeURIComponent(apiKey)}`,
       { cache: "no-store" }
@@ -220,14 +388,14 @@ async function fetchYouTubeVideoByIdUncached(videoId: string): Promise<YouTubeVi
       console.error(
         `[youtube] videos.list failed for ${videoId}: ${res.status} ${res.statusText} — ${body.slice(0, 500)}`
       );
-      return null;
+      return await readLastGoodVideo(videoId);
     }
 
     const data = (await res.json()) as VideosListResponse;
     const item = data.items?.[0];
     if (!item) {
       console.error(`[youtube] videos.list returned no item for videoId ${videoId}`);
-      return null;
+      return await readLastGoodVideo(videoId);
     }
 
     const title = item.snippet?.title?.trim() || "";
@@ -236,10 +404,10 @@ async function fetchYouTubeVideoByIdUncached(videoId: string): Promise<YouTubeVi
 
     if (!title) {
       console.error(`[youtube] videos.list item for ${videoId} had no title.`);
-      return null;
+      return await readLastGoodVideo(videoId);
     }
 
-    return {
+    const video: YouTubeVideo = {
       id: videoId,
       title,
       publishedAt,
@@ -247,9 +415,12 @@ async function fetchYouTubeVideoByIdUncached(videoId: string): Promise<YouTubeVi
       url: `https://www.youtube.com/watch?v=${videoId}`,
       embedUrl: `https://www.youtube-nocookie.com/embed/${videoId}`,
     };
+
+    await writeLastGoodVideo(videoId, video);
+    return video;
   } catch (err) {
     console.error(`[youtube] getYouTubeVideoById(${videoId}) threw:`, err);
-    return null;
+    return await readLastGoodVideo(videoId);
   }
 }
 
