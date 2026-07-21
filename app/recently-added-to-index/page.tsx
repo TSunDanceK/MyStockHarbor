@@ -253,7 +253,6 @@ export default async function RecentlyAddedToIndexPage() {
                         <td style={tdStyle}>
                           <Link
                             href={`/stock/${encodeURIComponent(item.symbol)}`}
-                            prefetch={false}
                             style={{ color: "#93c5fd", textDecoration: "none", fontWeight: 700 }}
                           >
                             {item.symbol}

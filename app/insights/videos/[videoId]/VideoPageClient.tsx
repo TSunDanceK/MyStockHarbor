@@ -64,7 +64,7 @@ export default function VideoPageClient({ videos, contentHtml }: Props) {
         <div style={{ fontSize: 11, opacity: 0.55, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 12, color: "#fecaca" }}>More videos</div>
         <div style={{ display: "grid", gap: 8 }}>
           {visibleVideos.map((v) => (
-            <Link key={v.id} href={`/insights/videos/${v.id}`} prefetch={false} style={{ display: "block", textDecoration: "none", color: "#f1f5f9", borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.025)" }}>
+            <Link key={v.id} href={`/insights/videos/${v.id}`} style={{ display: "block", textDecoration: "none", color: "#f1f5f9", borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.025)" }}>
               <div style={{ width: "100%", aspectRatio: "16 / 9", overflow: "hidden", background: "#0b1220" }}>
                 {v.thumbnailUrl ? <img src={v.thumbnailUrl} alt={v.title} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : null}
               </div>
