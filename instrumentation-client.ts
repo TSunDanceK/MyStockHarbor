@@ -74,13 +74,23 @@ import { initBotId } from "botid/client/core";
  * for consistency with the other browser-facing data routes below, not
  * because it has an expensive bypass to gate.
  *
+ * /api/internal/verify-human (added 2026-07-21, see
+ * claude/stock-daily-rate-limit-2026-07-21.md): NOT a data route. It's the
+ * BotID Deep Analysis gate for the /stock/* daily real-view limit --
+ * middleware.ts redirects an IP here (via app/verify) only after it's
+ * already racked up 40+ real page views on /stock/* today and hasn't been
+ * checked yet today. The server side (app/api/internal/verify-human/route.ts)
+ * short-circuits on an already-known result for that IP+day, so this is at
+ * most one Deep Analysis call per IP per day, not one per request.
+ *
  * Wired server-side guards so far: /api/quote, /api/history,
  * /api/stock-earnings/*, /api/symbols, /api/plays, /api/bull-flags,
  * /api/descending-triangles, /api/benchmarks, /api/discovery-strip,
  * /api/news, /api/insights/search, /api/earnings-calendar/day,
  * /api/earnings-calendar/backfill-date, /api/stock-valuation/*,
  * /api/stock-analyst-rating/*, /api/stock-news/insight,
- * /api/stock-news/why-it-matters, /api/ticker-lookup.
+ * /api/stock-news/why-it-matters, /api/ticker-lookup,
+ * /api/internal/verify-human.
  */
 initBotId({
   protect: [
@@ -114,6 +124,11 @@ initBotId({
       advancedOptions: { checkLevel: "deepAnalysis" },
     },
     { path: "/api/ticker-lookup", method: "GET" },
+    {
+      path: "/api/internal/verify-human",
+      method: "POST",
+      advancedOptions: { checkLevel: "deepAnalysis" },
+    },
   ],
 }
 );
