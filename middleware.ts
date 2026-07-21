@@ -3,6 +3,8 @@ import {
   getClientIp,
   isBypassedIp,
   getDailyPageViewCount,
+  isVerifiedHumanToday,
+  isBotFlaggedToday,
 } from "@/lib/server/dailyPageLimit";
 
 // Cumulative cap on /stock/* views per IP per (UTC) day -- a second,
@@ -13,10 +15,13 @@ import {
 //
 // This checks (never increments) a counter that only real, client-rendered
 // page views feed -- see lib/server/dailyPageLimit.ts and
-// app/components/PageViewTracker.tsx. 40/day is a small buffer above the
-// owner's original ~30 real-views/day target, now that the counter reflects
-// genuine visits rather than raw requests (which Link prefetching inflated
-// well beyond 1:1 -- see claude/stock-daily-rate-limit-2026-07-21.md).
+// app/components/PageViewTracker.tsx.
+//
+// Crossing this limit does NOT hard-block: it sends the request through an
+// invisible BotID Deep Analysis check (/verify) once per IP per day. A real
+// visitor passes silently and is forwarded straight on to the page they
+// asked for; only a confirmed bot actually gets denied. See
+// claude/stock-daily-rate-limit-2026-07-21.md for the full reasoning.
 const STOCK_DAILY_LIMIT = 40;
 
 export async function middleware(request: NextRequest) {
@@ -84,16 +89,25 @@ export async function middleware(request: NextRequest) {
     const ip = getClientIp(request.headers);
 
     if (!isBypassedIp(ip)) {
+      // Already confirmed a bot today -- deny immediately, no re-check
+      // (and no repeat Deep Analysis charge).
+      if (await isBotFlaggedToday("stock", ip)) {
+        return new NextResponse("Access denied", { status: 403 });
+      }
+
       const count = await getDailyPageViewCount("stock", ip);
 
       if (count >= STOCK_DAILY_LIMIT) {
-        return new NextResponse(
-          "Too many requests. Please try again later.",
-          {
-            status: 429,
-            headers: { "Retry-After": "3600" },
-          }
-        );
+        // Already verified human today -- let them straight through.
+        const verified = await isVerifiedHumanToday("stock", ip);
+
+        if (!verified) {
+          const nextPath = `${pathname}${search}`;
+          return NextResponse.redirect(
+            new URL(`/verify?next=${encodeURIComponent(nextPath)}`, request.url),
+            307
+          );
+        }
       }
     }
   }

@@ -1,6 +1,7 @@
 import { Redis } from "@upstash/redis";
 
-// Cumulative per-IP, per-category, 24h *real page view* counter.
+// Cumulative per-IP, per-category, 24h *real page view* counter, plus a
+// same-day BotID verification gate layered on top of it.
 //
 // This intentionally does NOT count raw HTTP requests. An earlier version
 // of this file incremented on every request middleware saw matching a path
@@ -20,9 +21,16 @@ import { Redis } from "@upstash/redis";
 // real pathname change) inside the actual rendered page. A background
 // Link prefetch only fetches an RSC payload into the router cache -- it
 // never mounts anything client-side -- so it can never reach that beacon,
-// no matter how many prefetch requests it generates. This makes the counter
-// immune to the prefetch multiplier without touching Link/prefetch behavior
-// or page rendering at all.
+// no matter how many prefetch requests it generates.
+//
+// On top of the counter: once an IP crosses the daily limit, middleware
+// sends it through an invisible BotID Deep Analysis check (app/verify) once
+// per day instead of hard-blocking outright. `isVerifiedHumanToday` and
+// `isBotFlaggedToday` (read-only, used by middleware) plus
+// `markVerifiedHumanToday`/`markBotFlaggedToday` (write-only, used only by
+// /api/internal/verify-human) record that result for the rest of the UTC
+// day, so the same IP is never re-checked (and never re-billed for Deep
+// Analysis) twice in one day.
 //
 // Same fail-open @upstash/redis pattern as every other Redis guard in this
 // codebase (historyCache.ts's reserveFmpCallSlot, youtube.ts's call budget,
@@ -33,11 +41,16 @@ const redis =
     ? Redis.fromEnv()
     : null;
 
-const DAILY_LIMIT_PREFIX = "msh:daily-views:v2";
+const VIEWS_PREFIX = "msh:daily-views:v2";
+const VERIFIED_PREFIX = "msh:botid-verified:v1";
+const BOT_FLAG_PREFIX = "msh:botid-blocked:v1";
 
 // 25h, not 24h: gives a 1h buffer past the UTC day boundary so a bucket
 // created right at 23:59:59 UTC doesn't expire mid-count if a later
-// increment in the same UTC day lands a little late.
+// increment/check in the same UTC day lands a little late. (Minor known
+// edge case: something set at 23:00 UTC technically outlives the view
+// counter's own day bucket by up to an hour -- not worth the extra
+// complexity of computing exact seconds-to-midnight for a same-day gate.)
 const BUCKET_TTL_SECONDS = 25 * 60 * 60;
 
 function getUtcDayBucket(now: Date) {
@@ -47,8 +60,8 @@ function getUtcDayBucket(now: Date) {
   return `${year}${month}${day}`;
 }
 
-function getDailyLimitKey(category: string, ip: string, now: Date) {
-  return `${DAILY_LIMIT_PREFIX}:${category}:${getUtcDayBucket(now)}:${ip}`;
+function getKey(prefix: string, category: string, ip: string, now: Date) {
+  return `${prefix}:${category}:${getUtcDayBucket(now)}:${ip}`;
 }
 
 // Same IP already whitelisted in the Vercel Firewall's "Bypass rate limit
@@ -72,7 +85,7 @@ export function isBypassedIp(ip: string): boolean {
 
 // Vercel forwards the connecting client IP as the first entry in
 // x-forwarded-for. Falls back to x-real-ip, then "unknown" (treated as
-// never-limited by the read/write functions below, matching every other
+// never-limited by every read/write function below, matching every other
 // fail-open guard in this codebase).
 export function getClientIp(headers: Headers): string {
   const forwardedFor = headers.get("x-forwarded-for");
@@ -83,10 +96,12 @@ export function getClientIp(headers: Headers): string {
   return headers.get("x-real-ip")?.trim() ?? "unknown";
 }
 
+// ── Daily real-page-view counter ────────────────────────────────────────
+
 // Read-only: how many real page views has this IP racked up today for this
-// category so far? Used by middleware to decide whether to block a request
-// BEFORE serving it -- it never increments, so checking the count doesn't
-// itself count as a view.
+// category so far? Used by middleware to decide whether to send a request
+// through the verify gate -- it never increments, so checking the count
+// doesn't itself count as a view.
 export async function getDailyPageViewCount(
   category: string,
   ip: string
@@ -94,19 +109,17 @@ export async function getDailyPageViewCount(
   if (!redis || !ip || ip === "unknown") return 0;
 
   try {
-    const key = getDailyLimitKey(category, ip, new Date());
+    const key = getKey(VIEWS_PREFIX, category, ip, new Date());
     const count = await redis.get<number>(key);
     return typeof count === "number" ? count : 0;
   } catch {
-    // Fail open -- a Redis hiccup should never block a real visitor.
     return 0;
   }
 }
 
 // Increments the counter for a real page view. Called only from the
 // /api/internal/track-view beacon endpoint, which only ever receives a
-// request when a real client-rendered page actually mounted -- see the
-// module doc comment above.
+// request when a real client-rendered page actually mounted.
 export async function recordDailyPageView(
   category: string,
   ip: string
@@ -114,12 +127,71 @@ export async function recordDailyPageView(
   if (!redis || !ip || ip === "unknown") return;
 
   try {
-    const key = getDailyLimitKey(category, ip, new Date());
+    const key = getKey(VIEWS_PREFIX, category, ip, new Date());
     const count = await redis.incr(key);
     if (count === 1) {
       await redis.expire(key, BUCKET_TTL_SECONDS);
     }
   } catch {
     // Fail open -- if Redis is down, we just undercount; never throw.
+  }
+}
+
+// ── Same-day BotID verification result ───────────────────────────
+
+export async function isVerifiedHumanToday(
+  category: string,
+  ip: string
+): Promise<boolean> {
+  if (!redis || !ip || ip === "unknown") return false;
+  try {
+    const key = getKey(VERIFIED_PREFIX, category, ip, new Date());
+    return (await redis.get(key)) != null;
+  } catch {
+    // Fail open: if we can't tell, don't force a redundant verify loop --
+    // middleware will just send them through /verify again, which itself
+    // fails open on a Redis/BotID hiccup.
+    return false;
+  }
+}
+
+export async function markVerifiedHumanToday(
+  category: string,
+  ip: string
+): Promise<void> {
+  if (!redis || !ip || ip === "unknown") return;
+  try {
+    const key = getKey(VERIFIED_PREFIX, category, ip, new Date());
+    await redis.set(key, 1, { ex: BUCKET_TTL_SECONDS });
+  } catch {
+    // Best effort -- worst case this IP gets re-checked once more today.
+  }
+}
+
+export async function isBotFlaggedToday(
+  category: string,
+  ip: string
+): Promise<boolean> {
+  if (!redis || !ip || ip === "unknown") return false;
+  try {
+    const key = getKey(BOT_FLAG_PREFIX, category, ip, new Date());
+    return (await redis.get(key)) != null;
+  } catch {
+    // Fail open -- never treat a Redis hiccup as "this IP is a bot".
+    return false;
+  }
+}
+
+export async function markBotFlaggedToday(
+  category: string,
+  ip: string
+): Promise<void> {
+  if (!redis || !ip || ip === "unknown") return;
+  try {
+    const key = getKey(BOT_FLAG_PREFIX, category, ip, new Date());
+    await redis.set(key, 1, { ex: BUCKET_TTL_SECONDS });
+  } catch {
+    // Best effort -- worst case this IP gets re-checked (and re-billed)
+    // once more today instead of being remembered as blocked.
   }
 }
