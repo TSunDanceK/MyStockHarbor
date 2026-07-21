@@ -9,10 +9,11 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const symbol = (searchParams.get("symbol") || "AAPL").toUpperCase();
 
-  // Deep Analysis: this route calls FMP live on every single request with
-  // no caching (see fetchQuoteSnapshot in lib/server/quoteData.ts), so every
-  // hit is a real, billed upstream call — it's the highest-value target on
-  // the site for the deeper check. checkLevel here MUST match the
+  // Deep Analysis: fetchQuoteSnapshot() (lib/server/quoteData.ts) now sits
+  // behind a short (20s) Redis cache + in-flight request dedupe -- see that
+  // module's comment for why -- but this route is still the primary public
+  // entry point for quote data and any cache miss is still a real, billed
+  // FMP hit, so it stays on the deeper check. checkLevel here MUST match the
   // advancedOptions set for "/api/quote" in instrumentation-client.ts, or
   // verification fails outright.
   if (await isUnwantedBot("deepAnalysis")) {
