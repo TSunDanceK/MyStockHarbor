@@ -1,13 +1,8 @@
 import { Redis } from "@upstash/redis";
 import type { InsightSnapshot, InsightSnapshotPoint } from "@/lib/blog";
-
-type Quote = {
-  symbol: string;
-  price: number | null;
-  date: string | null;
-  time: string | null;
-  source: string;
-};
+import { getDailyHistory } from "@/lib/server/historyCache";
+import { fetchQuoteSnapshot, type Quote } from "@/lib/server/quoteData";
+import { searchSymbols, type SymbolRow } from "@/lib/server/symbolSearch";
 
 type Point = {
   date: string;
@@ -17,12 +12,6 @@ type Point = {
   volume?: number;
 };
 
-type SymbolResult = {
-  symbol: string;
-  name: string;
-  exchange: string;
-};
-
 function getRedisClient() {
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -30,26 +19,6 @@ function getRedisClient() {
   if (!url || !token) return null;
 
   return Redis.fromEnv();
-}
-
-function getBaseUrl() {
-  if (process.env.NEXT_PUBLIC_SITE_URL) {
-    return process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "");
-  }
-
-  if (process.env.SITE_URL) {
-    return process.env.SITE_URL.replace(/\/$/, "");
-  }
-
-  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
-    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL.replace(/\/$/, "")}`;
-  }
-
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL.replace(/\/$/, "")}`;
-  }
-
-  return "http://localhost:3000";
 }
 
 function movingAverage(values: number[], window: number): (number | null)[] {
@@ -133,16 +102,6 @@ function trendLabel(args: {
   }
 
   return "Range / Mixed";
-}
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { cache: "no-store" });
-
-  if (!res.ok) {
-    throw new Error(`Request failed: ${url} (${res.status})`);
-  }
-
-  return (await res.json()) as T;
 }
 
 function normalizeSnapshot(input: unknown): InsightSnapshot | null {
@@ -233,22 +192,38 @@ function normalizeSnapshot(input: unknown): InsightSnapshot | null {
   };
 }
 
+// Builds a new Insight post's SEO snapshot (price, trend, MA levels, chart
+// points) once, then caches it in Redis forever (see
+// getOrCreateInsightSnapshot below) so the post's initial HTML always has
+// real data embedded for crawlers, per RENDERING_POLICY.md.
+//
+// This used to self-fetch the public /api/quote, /api/history and
+// /api/symbols routes over HTTP (`fetch(`${baseUrl}/api/...`)`). Once those
+// three routes were BotID-guarded (2026-07-20 "Expand BotID Basic coverage
+// site-wide"), that self-fetch carried no browser BotID header, so every one
+// of those requests was misclassified as bot traffic and returned a hard 403
+// -- which this function's fetchJson() turned into a thrown error, which
+// propagated all the way up through getOrCreateInsightSnapshot into
+// app/insights/[slug]/page.tsx uncaught, producing a 500 for every brand-new
+// Insight post (any post whose snapshot wasn't already cached in Redis from
+// before the BotID rollout). This is the exact same self-fetch-gets-blocked
+// failure mode already documented for /api/pickers, /api/plays,
+// /api/bull-flags, /api/descending-triangles and /api/benchmarks in
+// claude/pickers-firewall-selfblock-2026-07-17.md -- the fix is the same one
+// used there: call the underlying data functions in-process instead of
+// fetching this deployment's own public URL. fetchQuoteSnapshot,
+// getDailyHistory and searchSymbols are the same functions app/api/quote,
+// app/api/history and app/api/symbols call themselves, so behaviour/output
+// is identical to before; only the BotID-vulnerable HTTP hop is removed.
 async function buildSnapshot(symbol: string): Promise<InsightSnapshot> {
-  const baseUrl = getBaseUrl();
-
-  const [quoteData, historyData, symbolsData] = await Promise.all([
-    fetchJson<Quote>(`${baseUrl}/api/quote?symbol=${encodeURIComponent(symbol)}`),
-    fetchJson<{ points: any[] }>(
-      `${baseUrl}/api/history?symbol=${encodeURIComponent(symbol)}&days=2200`
-    ),
-    fetchJson<{ results?: SymbolResult[] }>(
-      `${baseUrl}/api/symbols?q=${encodeURIComponent(symbol)}`
-    ),
+  const [quoteData, dailyHistory, symbolResults] = await Promise.all([
+    fetchQuoteSnapshot(symbol) as Promise<Quote>,
+    getDailyHistory(symbol),
+    searchSymbols(symbol, "") as Promise<SymbolRow[]>,
   ]);
 
-  const ptsRaw = Array.isArray(historyData.points) ? historyData.points : [];
-  const points: Point[] = ptsRaw
-    .map((p: any) => ({
+  const points: Point[] = dailyHistory
+    .map((p) => ({
       date: String(p?.date ?? ""),
       close: Number(p?.close),
       high: p?.high == null ? undefined : Number(p.high),
@@ -287,7 +262,7 @@ async function buildSnapshot(symbol: string): Promise<InsightSnapshot> {
     typeof lastWeeklyMA200 === "number" ? lastWeeklyMA200 : null
   );
 
-  const exact = (symbolsData.results ?? []).find(
+  const exact = symbolResults.find(
     (r) => (r.symbol ?? "").toUpperCase() === symbol
   );
 
