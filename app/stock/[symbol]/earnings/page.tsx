@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 import Link from "next/link";
 import EarningsSymbolPicker from "./EarningsSymbolPicker";
 import { getDailyHistory } from "@/lib/server/historyCache";
+import { getLatestEarningsData } from "@/lib/latest-earnings-data";
 import {
   computeIndicatorSeed,
   type Point,
@@ -300,19 +300,22 @@ function buildScoreResult(score: number, tone: EarningsTone) {
   return { score, tone, label: toneLabel(tone), explanation: scoreExplanation(tone) };
 }
 
-async function getOriginFromHeaders() {
-  const headerStore = await headers();
-  const host = headerStore.get("x-forwarded-host") || headerStore.get("host") || "www.mystockharbor.com";
-  const proto = headerStore.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
-  return `${proto}://${host}`;
-}
-
+// Calls the shared lib/latest-earnings-data.ts function IN-PROCESS instead of
+// self-fetching this deployment's own /api/stock-earnings/[symbol] route over
+// HTTP. That route is BotID-protected (instrumentation-client.ts), and BotID
+// only validates a signed header a real browser attaches client-side -- a
+// server-to-server self-fetch never carries one, so it always reads as an
+// unverified bot and 403s itself. This function used `cache: "no-store"`, so
+// every single request hit that self-block with zero caching cushion; the
+// failure was masked because the caller falls back to a locally-computed
+// score (scoreEarnings()) whenever this returns null, so the page never
+// visibly broke -- it just silently used the wrong (non-canonical) score on
+// every load. Same self-block failure mode as
+// claude/pickers-firewall-selfblock-2026-07-17.md and
+// claude/stock-page-earnings-selfblock-2026-07-21.md.
 async function fetchSharedEarningsScore(symbol: string) {
   try {
-    const origin = await getOriginFromHeaders();
-    const response = await fetch(`${origin}/api/stock-earnings/${encodeURIComponent(symbol)}`, { cache: "no-store" });
-    if (!response.ok) return null;
-    const data = (await response.json()) as SharedEarningsScore;
+    const data = await getLatestEarningsData(symbol, "yellow");
     if (typeof data.score !== "number" || !Number.isFinite(data.score)) return null;
     return buildScoreResult(data.score, sharedToneToEarningsTone(data.tone));
   } catch { return null; }
