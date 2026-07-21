@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import CompanyLogo from "@/app/components/CompanyLogo";
+import TickerLogo from "@/app/components/TickerLogo";
 import type { BottleneckPost } from "@/lib/bottlenecks";
 
 const VISIBLE_ROWS = 12;
@@ -275,7 +275,7 @@ export default function BottleneckList({ posts }: { posts: BottleneckPost[] }) {
                 color: "#f1f5f9",
               }}
             >
-              <CompanyLogo domain={post.domain} name={post.companyName} />
+              <TickerLogo symbol={post.symbol} domain={post.domain} name={post.companyName} size={44} radius={10} />
 
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div
