@@ -2,6 +2,7 @@
 import type { Metadata } from "next";
 import { getDailyHistory } from "@/lib/server/historyCache";
 import { getLatestEarningsData } from "@/lib/latest-earnings-data";
+import { searchSymbols } from "@/lib/server/symbolSearch";
 import type { LatestEarningsData } from "@/app/components/LatestEarningsCard";
 import type { CompanyProfile } from "@/app/components/CompanyProfile";
 import type { DilutionHistoryData } from "@/app/components/DilutionHistory";
@@ -74,18 +75,20 @@ async function fetchQuote(symbol: string): Promise<InitialQuote> {
   }
 }
 
+// Calls the shared lib/server/symbolSearch.ts function IN-PROCESS instead of
+// self-fetching this deployment's own /api/symbols route over HTTP. That
+// route is BotID-protected, and a server-to-server self-fetch never carries
+// the browser-signed header BotID checks for, so it always read as an
+// unverified bot and 403'd itself -- the on-page company-name subtitle (e.g.
+// "GameStop Corp." under the GME ticker) silently fell back to blank in the
+// crawlable SSR HTML. Same self-block failure mode as
+// claude/pickers-firewall-selfblock-2026-07-17.md and
+// claude/stock-page-earnings-selfblock-2026-07-21.md.
 async function fetchCompanyName(symbol: string): Promise<string> {
   try {
-    const url = new URL(
-      `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mystockharbor.com"}/api/symbols`
-    );
-    url.searchParams.set("q", symbol);
-    const res = await fetch(url.toString(), { next: { revalidate: 3600 } });
-    if (!res.ok) return "";
-    const data = await res.json();
-    const exact = (
-      (data?.results ?? []) as Array<{ symbol?: string; name?: string }>
-    ).find((r) => (r.symbol ?? "").toUpperCase() === symbol.toUpperCase());
+    const upper = symbol.toUpperCase();
+    const results = await searchSymbols(upper, "");
+    const exact = results.find((r) => (r.symbol ?? "").toUpperCase() === upper);
     return exact?.name ?? "";
   } catch {
     return "";
