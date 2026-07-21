@@ -701,7 +701,14 @@ export default async function PickerResultPage({
                   <HowToCollapse title={config.explainerTitle} body={config.explainerBody} />
                   {config.kind === "allSymbols" ? (
                     <div style={{ marginTop: 16 }}>
-                      <CustomScreenerSymbolSearch />
+                      <CustomScreenerSymbolSearch
+                        universe={entries.map((e) => ({
+                          symbol: e.symbol,
+                          companyName: e.companyName,
+                          reasons: e.reasons,
+                          score: e.score,
+                        }))}
+                      />
                     </div>
                   ) : null}
                 </section>
