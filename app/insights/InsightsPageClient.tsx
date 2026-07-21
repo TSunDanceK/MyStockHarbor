@@ -36,6 +36,7 @@ function PostCard({ post }: { post: ListPost }) {
   return (
     <Link
       href={`/insights/${post.slug}`}
+      prefetch={false}
       style={{
         display: "flex",
         alignItems: "center",
@@ -99,6 +100,7 @@ function VideoCard({ video }: { video: YouTubeVideo }) {
   return (
     <Link
       href={`/insights/videos/${video.id}`}
+      prefetch={false}
       style={{
         display: "block",
         textDecoration: "none",
