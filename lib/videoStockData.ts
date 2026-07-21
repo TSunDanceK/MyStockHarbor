@@ -1,6 +1,23 @@
 // Fetches live market data for video pages.
-// Uses the /api/quote route which pulls price, marketCap, name, pe, priceAvg50,
-// priceAvg200 all in one FMP stable/quote call — no separate profile call needed.
+// Uses fetchQuoteSnapshot() (lib/server/quoteData.ts) to pull price, marketCap,
+// name, pe, priceAvg50, priceAvg200 all in one FMP stable/quote call — no
+// separate profile call needed.
+//
+// Fixed 2026-07-21: this used to self-fetch the public /api/quote route over
+// HTTP (`fetch(`${baseUrl}/api/quote?...`)`). /api/quote is BotID-guarded
+// (see instrumentation-client.ts), and a server-to-server self-fetch carries
+// no browser BotID header, so it read as bot traffic and got rejected --
+// the same self-fetch-gets-blocked failure mode documented in
+// claude/pickers-firewall-selfblock-2026-07-17.md and already fixed the same
+// way on the dashboard and stock pages (see
+// claude/stock-page-earnings-selfblock-2026-07-21.md). This call site was
+// missed in that earlier pass, so video pages kept silently rendering empty
+// price/market-cap/MA stat boxes. Now calls fetchQuoteSnapshot() in-process
+// instead -- the same function app/api/quote/route.ts's GET handler calls
+// internally, so this always returns identically-shaped data to the public
+// endpoint, with no HTTP round-trip and nothing for BotID to reject.
+
+import { fetchQuoteSnapshot } from "@/lib/server/quoteData";
 
 // Ticker remapping for non-US tickers.
 // Use US-listed ADR equivalents where available — all FMP endpoints work reliably for US symbols.
@@ -8,14 +25,6 @@
 const TICKER_REMAP: Record<string, string> = {
   IFX: "IFNNY",
 };
-
-function getBaseUrl() {
-  if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "");
-  if (process.env.SITE_URL) return process.env.SITE_URL.replace(/\/$/, "");
-  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL.replace(/\/$/, "")}`;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL.replace(/\/$/, "")}`;
-  return "http://localhost:3000";
-}
 
 function pctFromBase(last: number | null, base: number | null): number | null {
   if (typeof last !== "number" || typeof base !== "number" || !Number.isFinite(last) || !Number.isFinite(base) || base === 0) return null;
@@ -47,7 +56,6 @@ function formatMarketCap(value: number | null): string | null {
 export async function getVideoStockData(ticker: string): Promise<VideoStockData> {
   const upper = ticker.trim().toUpperCase();
   const fmpSymbol = TICKER_REMAP[upper] ?? upper;
-  const baseUrl = getBaseUrl();
 
   let price: number | null = null;
   let marketCapRaw: number | null = null;
@@ -57,21 +65,13 @@ export async function getVideoStockData(ticker: string): Promise<VideoStockData>
   let ma200: number | null = null;
 
   try {
-    const res = await fetch(
-      `${baseUrl}/api/quote?symbol=${encodeURIComponent(fmpSymbol)}`,
-      { next: { revalidate: 60 } }
-    );
-    if (res.ok) {
-      const q = await res.json() as Record<string, unknown>;
-      const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
-      const str = (v: unknown) => (typeof v === "string" && (v as string).trim() ? (v as string).trim() : null);
-      price = num(q.price);
-      marketCapRaw = num(q.marketCap);
-      name = str(q.name);
-      pe = num(q.pe);
-      ma50 = num(q.priceAvg50);
-      ma200 = num(q.priceAvg200);
-    }
+    const q = await fetchQuoteSnapshot(fmpSymbol);
+    price = q.price;
+    marketCapRaw = q.marketCap;
+    name = q.name;
+    pe = q.pe;
+    ma50 = q.priceAvg50;
+    ma200 = q.priceAvg200;
   } catch { /* fall through */ }
 
   const ma50Pct = pctFromBase(price, ma50);
