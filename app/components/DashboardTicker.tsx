@@ -433,6 +433,7 @@ export default function DashboardTicker() {
             <Link
               key={`${item.id}-${idx}`}
               href={item.href}
+              prefetch={false}
               style={{
                 display: "inline-flex",
                 alignItems: "center",

@@ -135,24 +135,28 @@ function CompanyRow({
         <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
           <Link
             href={`/stock/${encodeURIComponent(company.ticker)}`}
+            prefetch={false}
             className="bnActionBtn bnActionBtn--blue"
           >
             Stock analysis →
           </Link>
           <Link
             href={`/stock/${encodeURIComponent(company.ticker)}/earnings`}
+            prefetch={false}
             className="bnActionBtn bnActionBtn--blue"
           >
             Earnings →
           </Link>
           <Link
             href={`/dashboard?symbol=${encodeURIComponent(company.ticker)}`}
+            prefetch={false}
             className="bnActionBtn bnActionBtn--blue"
           >
             Chart →
           </Link>
           <Link
             href={`/stock/${encodeURIComponent(company.ticker)}/news`}
+            prefetch={false}
             className="bnActionBtn bnActionBtn--blue"
           >
             Stock News →

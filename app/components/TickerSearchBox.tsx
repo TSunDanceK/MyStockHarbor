@@ -59,7 +59,7 @@ export function TickerSearch({ variant = "block" }: { variant?: "block" | "inlin
           <b>{result.symbol}</b> qualifies for {result.matches.length} {result.matches.length === 1 ? "list" : "lists"}:
         </div>
         {result.matches.map((match) => (
-          <Link key={`${match.source}-${match.title}`} href={match.href} className="screenerSearchChip">
+          <Link key={`${match.source}-${match.title}`} href={match.href} className="screenerSearchChip" prefetch={false}>
             <span className="screenerFilterDot" style={{ background: toneDotColor(match.tone) }} aria-hidden="true" />
             {match.title}
             <span className="screenerSearchSource">{SOURCE_LABELS[match.source] ?? match.source}</span>

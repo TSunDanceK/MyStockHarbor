@@ -191,6 +191,7 @@ function NavList({
                 <Link
                   key={item.href}
                   href={item.href}
+                  prefetch={false}
                   onClick={onNavigate}
                   className={active ? "screenerNavItem active" : "screenerNavItem"}
                   aria-current={active ? "page" : undefined}
