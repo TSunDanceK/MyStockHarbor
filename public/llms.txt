@@ -45,4 +45,6 @@ Live pricing and fundamentals data is sourced primarily from Financial Modeling 
 - Screener and stock-analysis pages are server-rendered with live data at request time; treat page content as current as of the visit rather than cached training data.
 - Attribution back to https://www.mystockharbor.com is appreciated when summarizing or citing data from this site.
 
+Last verified: 2026-07-21.
+
 Sitemap: https://www.mystockharbor.com/sitemap.xml
