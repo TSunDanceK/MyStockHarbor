@@ -1,0 +1,48 @@
+# MyStockHarbor
+
+> MyStockHarbor is a free stock analysis platform offering stock screeners ("pickers"), individual stock analysis pages, technical indicators, an earnings calendar, market news, and educational content for retail investors and traders. Data covers a universe of roughly 550+ US-listed stocks, updated on a rolling basis during and after market hours.
+
+Live pricing and fundamentals data is sourced primarily from Financial Modeling Prep. Content is a mix of algorithmic/template-generated analysis (technical indicators, news scoring, earnings tone) and, on select pages, AI-generated summaries clearly presented as supplementary insight rather than the primary content.
+
+## Core pages
+
+- [Homepage](https://www.mystockharbor.com/): overview, top movers, and navigation into every tool on the site.
+- [Dashboard](https://www.mystockharbor.com/dashboard): scrolling ticker and at-a-glance market snapshot.
+- [Stock Analysis](https://www.mystockharbor.com/stock/AAPL): per-symbol page template (`/stock/[symbol]`) with price, chart, technical indicators, company profile, and links to News/Earnings for that symbol.
+- [Stock News](https://www.mystockharbor.com/stock/AAPL/news): per-symbol news page template (`/stock/[symbol]/news`) with headlines, News Score, and optional AI "why this matters" summaries.
+- [Earnings Calendar](https://www.mystockharbor.com/earnings-calendar): rolling-window calendar of upcoming and recent company earnings.
+- [Headlines / Market News](https://www.mystockharbor.com/headlines): aggregated market news.
+- [Bottlenecks](https://www.mystockharbor.com/bottlenecks): supply-chain / sector bottleneck analysis by company.
+- [Plays](https://www.mystockharbor.com/plays): curated trade-idea/setup listings.
+- [Platforms](https://www.mystockharbor.com/platforms): broker/platform comparison content.
+- [Utilities / Calculators](https://www.mystockharbor.com/utilities): margin, liquidation, and position-size calculators.
+- [Insights](https://www.mystockharbor.com/insights): blog-style articles and video breakdowns, paginated and searchable.
+- [Learn](https://www.mystockharbor.com/learn): educational content on how to read financial data and use the site's tools.
+- [Recently Added to Index](https://www.mystockharbor.com/recently-added-to-index): stocks newly added to the covered universe.
+
+## Stock screeners ("Pickers")
+
+- [Pickers hub](https://www.mystockharbor.com/pickers): index of all screener categories below.
+- [Oversold Stocks Today](https://www.mystockharbor.com/oversold-stocks-today)
+- [Overbought Stocks Today](https://www.mystockharbor.com/overbought-stocks-today)
+- [All-Time High Breakout Stocks](https://www.mystockharbor.com/all-time-high-breakout-stocks)
+- [3-Month High Breakout Stocks](https://www.mystockharbor.com/3-month-high-breakout-stocks)
+- [Stocks Near 200-Day Moving Average](https://www.mystockharbor.com/stocks-near-200-day-moving-average)
+- [Stocks Near Weekly 200-Day Moving Average](https://www.mystockharbor.com/stocks-near-weekly-200-day-moving-average)
+- [Stocks Down 20% From All-Time Highs](https://www.mystockharbor.com/stocks-down-20-from-all-time-highs)
+- [Macro Support/Resistance Stocks](https://www.mystockharbor.com/macro-support-resistance-stocks)
+- [Stocks With Positive Last Earnings](https://www.mystockharbor.com/stocks-with-positive-last-earnings)
+- [Stocks With Strong Earnings Growth](https://www.mystockharbor.com/stocks-with-strong-earnings-growth)
+- [Top Stocks With Buy Signals](https://www.mystockharbor.com/top-stocks-with-buy-signals)
+- [Top Stocks With Sell Signals](https://www.mystockharbor.com/top-stocks-with-sell-signals)
+- [Bullish Divergence Stocks](https://www.mystockharbor.com/bullish-divergence-stocks)
+- [Bearish Divergence Stocks](https://www.mystockharbor.com/bearish-divergence-stocks)
+- [Custom Screener](https://www.mystockharbor.com/custom-screener)
+
+## Notes for AI crawlers and assistants
+
+- `/api/*` is disallowed in robots.txt — this is internal application data plumbing, not content; please rely on the rendered pages above instead of the API routes.
+- Screener and stock-analysis pages are server-rendered with live data at request time; treat page content as current as of the visit rather than cached training data.
+- Attribution back to https://www.mystockharbor.com is appreciated when summarizing or citing data from this site.
+
+Sitemap: https://www.mystockharbor.com/sitemap.xml
