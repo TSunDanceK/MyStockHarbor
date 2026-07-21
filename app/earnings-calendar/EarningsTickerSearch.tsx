@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import TickerLogo from "@/app/components/TickerLogo";
 
 type SymbolResult = { symbol: string; name: string; exchange: string };
 
@@ -132,12 +133,18 @@ export default function EarningsTickerSearch() {
                 background: "#0b1220",
                 color: "#f8fafc",
                 cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
               }}
             >
-              <div style={{ fontWeight: 800, fontSize: 13 }}>{result.symbol}</div>
-              <div style={{ fontSize: 12, color: "rgba(226,232,240,0.66)" }}>
-                {result.name}
-                {result.exchange ? ` · ${result.exchange}` : ""}
+              <TickerLogo symbol={result.symbol} size={22} radius={6} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 800, fontSize: 13 }}>{result.symbol}</div>
+                <div style={{ fontSize: 12, color: "rgba(226,232,240,0.66)" }}>
+                  {result.name}
+                  {result.exchange ? ` · ${result.exchange}` : ""}
+                </div>
               </div>
             </button>
           ))}
