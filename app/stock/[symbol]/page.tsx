@@ -1,6 +1,7 @@
 // app/stock/[symbol]/page.tsx
 import type { Metadata } from "next";
 import { getDailyHistory } from "@/lib/server/historyCache";
+import { getLatestEarningsData } from "@/lib/latest-earnings-data";
 import type { LatestEarningsData } from "@/app/components/LatestEarningsCard";
 import type { CompanyProfile } from "@/app/components/CompanyProfile";
 import type { DilutionHistoryData } from "@/app/components/DilutionHistory";
@@ -118,18 +119,20 @@ function emptyEarnings(): LatestEarningsData {
   };
 }
 
-// Fetch the structured earnings snapshot on the SERVER (same /api/stock-earnings
-// pipeline the Earnings page uses) and pass it down as a prop. This removes the
-// old client-side earnings round-trip and its loading flash. The client is also
-// seeded with server-computed indicators (seed) and recent history
-// (initialHistory), so the whole layout renders into the crawlable initial HTML
-// instead of behind a "Loading…" gate.
+// Fetch the structured earnings snapshot on the SERVER (same computation the
+// /api/stock-earnings HTTP route and the Earnings page use) and pass it down
+// as a prop. This calls the shared lib function IN-PROCESS rather than doing
+// an HTTP self-fetch to our own /api/stock-earnings/[symbol] route: that
+// route is BotID-protected (see instrumentation-client.ts), and BotID only
+// validates a signed header attached by a real browser running the client
+// script — a server-to-server self-fetch never carries one, so it always
+// reads as an unverified bot and 403s itself. This is the same self-block
+// failure mode documented in claude/pickers-firewall-selfblock-2026-07-17.md
+// for the Pickers pages; the fix there (and here) is to skip the HTTP hop
+// entirely and call the data function directly in-process.
 async function fetchLatestEarnings(symbol: string): Promise<LatestEarningsData> {
   try {
-    const url = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mystockharbor.com"}/api/stock-earnings/${encodeURIComponent(symbol)}`;
-    const res = await fetch(url, { next: { revalidate: 60 * 60 * 24 } });
-    if (!res.ok) return emptyEarnings();
-    return (await res.json()) as LatestEarningsData;
+    return await getLatestEarningsData(symbol, "yellow");
   } catch {
     return emptyEarnings();
   }
