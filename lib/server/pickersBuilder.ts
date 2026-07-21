@@ -18,6 +18,13 @@ import {
   addToDynamicUniverse,
   readDynamicUniverse,
 } from "./dynamicUniverseCache";
+import {
+  getClientIp,
+  checkBackfillLockout,
+  recordBackfillFailure,
+  clearBackfillFailures,
+  checkBackfillKey,
+} from "./backfillAuth";
 
 type Point = {
   date: string;
@@ -1486,7 +1493,6 @@ function buildCompositeFromHistory(points: Point[]): CompositeResult | null {
   const ma200 = movingAverage(closes, 200);
 
   const atr14 = atr(points, 14);
-
   const volume: (number | null)[] = points.map((p) =>
     typeof p.volume === "number" && Number.isFinite(p.volume) ? p.volume : null
   );
@@ -3014,7 +3020,32 @@ export async function getPickersData(
 
 export async function GET(req: NextRequest) {
   const now = Date.now();
-  const forceRefresh = req.nextUrl.searchParams.get("force") === "1";
+  const forceRequested = req.nextUrl.searchParams.get("force") === "1";
+
+  let forceRefresh = false;
+
+  if (forceRequested) {
+    const ip = getClientIp(req);
+    const lockout = await checkBackfillLockout(ip);
+
+    if (lockout.locked) {
+      return NextResponse.json(
+        { error: `Too many failed attempts. Try again in ${lockout.retryAfterSeconds}s.` },
+        { status: 429, headers: { "Retry-After": String(lockout.retryAfterSeconds) } }
+      );
+    }
+
+    const key = req.nextUrl.searchParams.get("key") ?? "";
+
+    if (checkBackfillKey(key)) {
+      await clearBackfillFailures(ip);
+      forceRefresh = true;
+    } else {
+      await recordBackfillFailure(ip);
+      // Falls through with forceRefresh left false -- serves the normal
+      // cached response instead of denying the request outright.
+    }
+  }
 
   if (!forceRefresh && memo && now - memo.ts < MEMORY_CACHE_MS) {
     return NextResponse.json(memo.data, {
