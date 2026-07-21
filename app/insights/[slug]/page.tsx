@@ -138,10 +138,28 @@ export default async function InsightPostPage({ params }: Props) {
   const processedContent = await remark().use(html).process(post.content);
   const contentHtml = processedContent.toString();
 
-  const snapshot = await getOrCreateInsightSnapshot({
-    slug: post.slug,
-    symbol: post.symbol ?? null,
-  });
+  // getOrCreateInsightSnapshot builds a fresh snapshot (live quote + history +
+  // symbol lookup) on a Redis cache miss -- i.e. for every brand-new post.
+  // InsightPostClient already renders correctly with snapshot === null (see
+  // its `hasSnapshot`/"Archived snapshot" fallbacks), so guard this call: a
+  // transient upstream failure here (FMP outage, Redis hiccup, or anything
+  // else in the fetch chain) should degrade to a snapshot-less page, never
+  // take down the whole post with an uncaught 500. This was exactly the
+  // failure mode that made brand-new Insight posts 500 after the 2026-07-20
+  // BotID site-wide expansion started 403-ing this snapshot build's internal
+  // data calls -- now fixed at the source in lib/insightSnapshots.ts, but
+  // this try/catch stays as a safety net against the next thing that can go
+  // wrong in that chain.
+  let snapshot: Awaited<ReturnType<typeof getOrCreateInsightSnapshot>> = null;
+
+  try {
+    snapshot = await getOrCreateInsightSnapshot({
+      slug: post.slug,
+      symbol: post.symbol ?? null,
+    });
+  } catch (error) {
+    console.error("getOrCreateInsightSnapshot failed:", error);
+  }
 
   const insightUrl = `https://www.mystockharbor.com/insights/${post.slug}`;
   const stockUrl = post.symbol
