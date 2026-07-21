@@ -334,6 +334,10 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
   const [indicatorMenuOpen, setIndicatorMenuOpen] = useState(false);
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
   const [drawMenuOpen, setDrawMenuOpen] = useState(false);
+  // Fixed (viewport-relative) coords for whichever toolbar dropdown is open.
+  // Computed from the trigger button's rect on open and clamped to the
+  // viewport so a menu never runs off the right edge on a narrow phone.
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const indicatorMenuRef = useRef<HTMLDivElement | null>(null);
   const typeMenuRef = useRef<HTMLDivElement | null>(null);
   const drawMenuRef = useRef<HTMLDivElement | null>(null);
@@ -591,6 +595,16 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
     [chartType]
   );
 
+  // Position an about-to-open dropdown just under its trigger button, using
+  // fixed (viewport) coordinates clamped horizontally so the menu stays fully
+  // on screen even when the button sits near the right edge on mobile.
+  const openMenuAt = (el: HTMLElement, menuWidth: number) => {
+    const rect = el.getBoundingClientRect();
+    const vw = typeof window !== "undefined" ? window.innerWidth : rect.right;
+    const left = Math.max(8, Math.min(rect.left, vw - menuWidth - 8));
+    setMenuPos({ top: rect.bottom + 6, left });
+  };
+
   // ---- Styles ----
   // `dense` = landscape single-row icon-only toolbar.
   const dense = compact;
@@ -651,11 +665,11 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
 
         {/* Chart type dropdown */}
         <div style={{ position: "relative" }} ref={typeMenuRef}>
-          <button type="button" onClick={() => { setTypeMenuOpen((v) => !v); setIndicatorMenuOpen(false); setDrawMenuOpen(false); }} title={dense ? activeTypeLabel : undefined} style={{ ...btn(false), display: "inline-flex", alignItems: "center", gap: dense ? 3 : 6 }}>
+          <button type="button" onClick={(e) => { const willOpen = !typeMenuOpen; setIndicatorMenuOpen(false); setDrawMenuOpen(false); if (willOpen) openMenuAt(e.currentTarget, 178); setTypeMenuOpen(willOpen); }} title={dense ? activeTypeLabel : undefined} style={{ ...btn(false), display: "inline-flex", alignItems: "center", gap: dense ? 3 : 6 }}>
             {TYPE_ICONS[chartType]}{!dense ? <span>{activeTypeLabel}</span> : null}<span style={{ opacity: 0.7 }}>▾</span>
           </button>
           {typeMenuOpen ? (
-            <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 50, minWidth: 178, background: "#0f172a", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 12, boxShadow: "0 18px 34px rgba(0,0,0,0.45)", overflow: "hidden" }}>
+            <div style={{ position: "fixed", top: menuPos?.top ?? 0, left: menuPos?.left ?? 0, zIndex: 3000, minWidth: 178, maxWidth: "calc(100vw - 16px)", background: "#0f172a", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 12, boxShadow: "0 18px 34px rgba(0,0,0,0.45)", overflow: "hidden" }}>
               {CHART_TYPES.map((t) => (
                 <button
                   key={t.key}
@@ -672,7 +686,7 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
 
         {/* Indicators dropdown */}
         <div style={{ position: "relative" }} ref={indicatorMenuRef}>
-          <button type="button" onClick={() => { setIndicatorMenuOpen((v) => !v); setTypeMenuOpen(false); setDrawMenuOpen(false); }} title={dense ? "Indicators" : undefined} style={{ ...btn(activeIndicators.length > 0), display: "inline-flex", alignItems: "center", gap: dense ? 4 : 6 }}>
+          <button type="button" onClick={(e) => { const willOpen = !indicatorMenuOpen; setTypeMenuOpen(false); setDrawMenuOpen(false); if (willOpen) openMenuAt(e.currentTarget, 250); setIndicatorMenuOpen(willOpen); }} title={dense ? "Indicators" : undefined} style={{ ...btn(activeIndicators.length > 0), display: "inline-flex", alignItems: "center", gap: dense ? 4 : 6 }}>
             {dense ? INDICATORS_ICON : null}
             {dense
               ? (activeIndicators.length ? <span style={{ fontSize: 11 }}>{activeIndicators.length}</span> : null)
@@ -680,7 +694,7 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
             <span style={{ opacity: 0.7 }}>▾</span>
           </button>
           {indicatorMenuOpen ? (
-            <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 50, width: 250, maxHeight: 340, overflowY: "auto", background: "#0f172a", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 12, boxShadow: "0 18px 34px rgba(0,0,0,0.45)" }}>
+            <div style={{ position: "fixed", top: menuPos?.top ?? 0, left: menuPos?.left ?? 0, zIndex: 3000, width: 250, maxWidth: "calc(100vw - 16px)", maxHeight: 340, overflowY: "auto", background: "#0f172a", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 12, boxShadow: "0 18px 34px rgba(0,0,0,0.45)" }}>
               <div style={{ padding: "8px 12px 6px", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: "#7c8aa3" }}>Price overlays</div>
               {PRICE_INDICATORS.map((name) => (
                 <label key={name} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 12px", borderTop: "1px solid rgba(255,255,255,0.05)", cursor: "pointer", fontWeight: 700, fontSize: 13, color: "#cbd5e1" }}>
@@ -701,11 +715,11 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
 
         {/* Drawing tools dropdown */}
         <div style={{ position: "relative" }} ref={drawMenuRef}>
-          <button type="button" onClick={() => { setDrawMenuOpen((v) => !v); setTypeMenuOpen(false); setIndicatorMenuOpen(false); }} title={dense ? "Drawing tools" : undefined} style={{ ...btn(drawMenuOpen || activeTool != null), display: "inline-flex", alignItems: "center", gap: dense ? 3 : 6 }}>
+          <button type="button" onClick={(e) => { const willOpen = !drawMenuOpen; setTypeMenuOpen(false); setIndicatorMenuOpen(false); if (willOpen) openMenuAt(e.currentTarget, 210); setDrawMenuOpen(willOpen); }} title={dense ? "Drawing tools" : undefined} style={{ ...btn(drawMenuOpen || activeTool != null), display: "inline-flex", alignItems: "center", gap: dense ? 3 : 6 }}>
             {PENCIL_ICON}{!dense ? <span>Drawing tools</span> : null}<span style={{ opacity: 0.7 }}>▾</span>
           </button>
           {drawMenuOpen ? (
-            <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 50, width: 210, background: "#0f172a", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 12, boxShadow: "0 18px 34px rgba(0,0,0,0.45)", overflow: "hidden" }}>
+            <div style={{ position: "fixed", top: menuPos?.top ?? 0, left: menuPos?.left ?? 0, zIndex: 3000, width: 210, maxWidth: "calc(100vw - 16px)", background: "#0f172a", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 12, boxShadow: "0 18px 34px rgba(0,0,0,0.45)", overflow: "hidden" }}>
               <div style={{ padding: "8px 12px 6px", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: "#7c8aa3" }}>Draw</div>
               {DRAW_TOOLS.map((tool) => (
                 <button

@@ -500,7 +500,7 @@ export default function BullFlagsClient({
                   marginTop: 14,
                   display: "grid",
                   gridTemplateColumns: isNarrow
-                    ? "1fr"
+                    ? "minmax(0, 1fr)"
                     : "repeat(auto-fit, minmax(310px, 1fr))",
                   gap: isNarrow ? 12 : 14,
                 }}
@@ -808,6 +808,9 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
     >
       <svg
         viewBox={`0 0 ${width} ${height}`}
+        width={width}
+        height={height}
+        preserveAspectRatio="xMidYMid meet"
         role="img"
         aria-label={`${item.symbol} ${timeframeLabel(
           item.timeframe
@@ -815,7 +818,8 @@ function MiniPlayChart({ item }: { item: PlayItem }) {
         style={{
           display: "block",
           width: "100%",
-          height: isNarrow ? 260 : 310,
+          height: "auto",
+          maxWidth: "100%",
         }}
       >
         <defs>
