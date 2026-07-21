@@ -205,6 +205,30 @@ function SearchBox({ value, onChange }: { value: string; onChange: (value: strin
 export default function InsightsPageClient({ posts, videos, page, totalPages, totalCount }: Props) {
   const [mobileTab, setMobileTab] = useState<"insights" | "videos">("insights");
   const [query, setQuery] = useState("");
+
+  // Remember which mobile tab (Latest Insights vs Watch Videos) the visitor
+  // last had open, so returning here via the browser Back button after opening
+  // a video restores that tab instead of snapping back to the default. Read on
+  // mount (in an effect, not the initial state, to avoid an SSR hydration
+  // mismatch) and written on every tab change. sessionStorage keeps it scoped
+  // to the current browsing session.
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem("insightsMobileTab");
+      if (saved === "videos" || saved === "insights") setMobileTab(saved);
+    } catch {
+      /* sessionStorage unavailable — fall back to the default tab */
+    }
+  }, []);
+
+  const selectMobileTab = (tab: "insights" | "videos") => {
+    setMobileTab(tab);
+    try {
+      sessionStorage.setItem("insightsMobileTab", tab);
+    } catch {
+      /* ignore persistence failures (private mode, storage disabled) */
+    }
+  };
   const [searchResults, setSearchResults] = useState<InsightSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState(false);
@@ -306,7 +330,7 @@ export default function InsightsPageClient({ posts, videos, page, totalPages, to
         <div className="mobileTabs" style={{ marginTop: 24, display: "none" }}>
           <div style={{ display: "flex", borderRadius: 12, overflow: "hidden", border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.03)" }}>
             <button
-              onClick={() => setMobileTab("insights")}
+              onClick={() => selectMobileTab("insights")}
               style={{
                 flex: 1, padding: "12px 0", border: "none", cursor: "pointer",
                 fontSize: 14, fontWeight: 800, fontFamily: "system-ui, Arial", borderRadius: 0,
@@ -319,7 +343,7 @@ export default function InsightsPageClient({ posts, videos, page, totalPages, to
               Latest Insights
             </button>
             <button
-              onClick={() => setMobileTab("videos")}
+              onClick={() => selectMobileTab("videos")}
               style={{
                 flex: 1, padding: "12px 0", border: "none", cursor: "pointer",
                 fontSize: 14, fontWeight: 800, fontFamily: "system-ui, Arial", borderRadius: 0,
