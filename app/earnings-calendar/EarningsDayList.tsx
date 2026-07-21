@@ -200,6 +200,7 @@ export default function EarningsDayList({ date, initialItems, initialHasMore, co
                 <td style={tdStyle}>
                   <Link
                     href={`/stock/${encodeURIComponent(item.symbol)}/earnings`}
+                    prefetch={false}
                     style={{ color: "#93c5fd", textDecoration: "none", fontWeight: 700 }}
                   >
                     {item.symbol}
@@ -214,13 +215,13 @@ export default function EarningsDayList({ date, initialItems, initialHasMore, co
                 <td style={{ ...tdStyle, textAlign: "right" }}>{formatCompact(item.marketCap)}</td>
                 <td style={{ ...tdStyle, textAlign: "right" }}>
                   <div style={{ display: "inline-flex", gap: 6, flexWrap: "nowrap" }}>
-                    <Link href={`/stock/${encodeURIComponent(item.symbol)}`} style={pillStyle}>
+                    <Link href={`/stock/${encodeURIComponent(item.symbol)}`} prefetch={false} style={pillStyle}>
                       Analysis →
                     </Link>
-                    <Link href={`/dashboard?symbol=${encodeURIComponent(item.symbol)}`} style={pillStyle}>
+                    <Link href={`/dashboard?symbol=${encodeURIComponent(item.symbol)}`} prefetch={false} style={pillStyle}>
                       Chart →
                     </Link>
-                    <Link href={`/stock/${encodeURIComponent(item.symbol)}/news`} style={pillStyle}>
+                    <Link href={`/stock/${encodeURIComponent(item.symbol)}/news`} prefetch={false} style={pillStyle}>
                       News →
                     </Link>
                   </div>
