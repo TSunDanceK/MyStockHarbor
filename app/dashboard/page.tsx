@@ -10,6 +10,8 @@ import DashboardClient, {
 } from "../components/DashboardClient";
 import { getDailyHistory } from "@/lib/server/historyCache";
 import { getBenchmarksData } from "@/lib/server/benchmarksBuilder";
+import { fetchQuoteSnapshot } from "@/lib/server/quoteData";
+import { getLatestEarningsData } from "@/lib/latest-earnings-data";
 
 // Was a plain client-rendered shell (Suspense fallback "Loading dashboard…"
 // with no real content until client effects fetched everything). Now fetches
@@ -23,14 +25,20 @@ import { getBenchmarksData } from "@/lib/server/benchmarksBuilder";
 // were always going to happen from the client on first load; they're just
 // made once, here, on the server, instead.
 //
-// Benchmarks are read in-process via getBenchmarksData() rather than an
-// HTTP self-fetch to /api/benchmarks: that route is now BotID-guarded, and
-// a server-to-server self-fetch carries no browser BotID header, so it
-// would otherwise itself read as bot traffic and get 403'd -- the same
-// self-fetch-gets-blocked failure mode already documented as a past
-// production outage in claude/pickers-firewall-selfblock-2026-07-17.md.
-// The module's in-memory cache is shared with /api/benchmarks's GET
-// handler, so this stays consistent with the public endpoint.
+// Quote, benchmarks and earnings are all read IN-PROCESS (fetchQuoteSnapshot,
+// getBenchmarksData, getLatestEarningsData) rather than via an HTTP
+// self-fetch to /api/quote / /api/benchmarks / /api/stock-earnings: those
+// routes are now BotID-guarded, and a server-to-server self-fetch carries no
+// browser BotID header, so it would otherwise itself read as bot traffic and
+// get 403'd -- the same self-fetch-gets-blocked failure mode already
+// documented as a past production outage in
+// claude/pickers-firewall-selfblock-2026-07-17.md and, for the quote +
+// earnings self-fetches specifically that used to live here, in
+// claude/stock-page-earnings-selfblock-2026-07-21.md. Each in-process
+// function is the same one its public API route calls internally, so the
+// public endpoint and this server-rendered path always return identically
+// shaped data. /api/internal-news is NOT BotID-guarded, so it's left as a
+// plain self-fetch below.
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
@@ -94,46 +102,57 @@ async function getInitialBenchmarks(): Promise<BenchPayload | null> {
   }
 }
 
+async function getInitialQuoteAndName(
+  symbol: string
+): Promise<{ quote: Quote | null; name: string }> {
+  try {
+    const q = await fetchQuoteSnapshot(symbol);
+    if (q.price == null) return { quote: null, name: "" };
+    return {
+      quote: {
+        symbol: q.symbol || symbol,
+        price: q.price,
+        date: q.date,
+        time: q.time,
+        source: q.source,
+      },
+      name: q.name ?? "",
+    };
+  } catch {
+    return { quote: null, name: "" };
+  }
+}
+
+async function getInitialEarningsSummary(
+  symbol: string
+): Promise<StockEarningsSummary | null> {
+  try {
+    return (await getLatestEarningsData(symbol, "yellow")) as unknown as StockEarningsSummary;
+  } catch {
+    return null;
+  }
+}
+
 export default async function DashboardPage({ searchParams }: Props) {
   const params = await searchParams;
   const requested = cleanSymbolParam(params?.symbol);
   const symbol = requested || "SPY";
   const origin = await getOriginFromHeaders();
 
-  const [rawHistory, rawQuote, benchmarks, news, earningsSummary] =
+  const [rawHistory, quoteAndName, benchmarks, news, earningsSummary] =
     await Promise.all([
       getDailyHistory(symbol).catch(() => [] as Point[]),
-      fetchJson(`${origin}/api/quote?symbol=${encodeURIComponent(symbol)}`, {
-        next: { revalidate: 60 },
-      }),
+      getInitialQuoteAndName(symbol),
       getInitialBenchmarks(),
       fetchJson<NewsPayload>(
         `${origin}/api/internal-news?symbol=${encodeURIComponent(symbol)}`,
         { next: { revalidate: 900 } }
       ),
-      fetchJson<StockEarningsSummary>(
-        `${origin}/api/stock-earnings/${encodeURIComponent(symbol)}`,
-        { cache: "no-store" }
-      ),
+      getInitialEarningsSummary(symbol),
     ]);
 
   const initialHistory: Point[] = Array.isArray(rawHistory) ? rawHistory : [];
-
-  const initialQuote: Quote | null = rawQuote
-    ? {
-        symbol: typeof rawQuote.symbol === "string" ? rawQuote.symbol : symbol,
-        price: typeof rawQuote.price === "number" ? rawQuote.price : null,
-        date: typeof rawQuote.date === "string" ? rawQuote.date : null,
-        time: typeof rawQuote.time === "string" ? rawQuote.time : null,
-        source:
-          typeof rawQuote.source === "string"
-            ? rawQuote.source
-            : "financialmodelingprep.com",
-      }
-    : null;
-
-  const initialSymbolName =
-    typeof rawQuote?.name === "string" ? rawQuote.name : "";
+  const { quote: initialQuote, name: initialSymbolName } = quoteAndName;
 
   return (
     <Suspense
