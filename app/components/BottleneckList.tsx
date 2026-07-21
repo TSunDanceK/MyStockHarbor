@@ -241,6 +241,7 @@ export default function BottleneckList({ posts }: { posts: BottleneckPost[] }) {
               key={post.slug}
               ref={index === 0 ? firstItemRef : undefined}
               href={`/bottlenecks/${post.slug}`}
+              prefetch={false}
               className="bottleneckListRow"
               style={{
                 display: "flex",
