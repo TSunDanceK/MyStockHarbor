@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import MiniPickerCandleChart, { type MiniCandlePoint } from "@/app/components/MiniPickerCandleChart";
 import { headers } from "next/headers";
+import { getPickersData } from "@/lib/server/pickersBuilder";
 
 export const dynamic = "force-dynamic";
 
@@ -106,16 +107,21 @@ async function getDivergenceEntries(): Promise<{
   entries: DivergenceEntry[];
 }> {
   try {
+    // Calls the shared lib/server/pickersBuilder.ts function IN-PROCESS
+    // instead of self-fetching this deployment's own /api/pickers route over
+    // HTTP. /api/pickers is NOT currently BotID-guarded, so this self-fetch
+    // wasn't actively broken -- but it had zero cache cushion
+    // (cache: "no-store") and no client-side fallback, the exact shape of
+    // self-fetch that has already caused a real outage once (a firewall
+    // rule blocking node UA on /api/*, see
+    // claude/pickers-firewall-selfblock-2026-07-17.md) and, separately, has
+    // already recurred when a route got BotID-guarded (see
+    // claude/stock-page-earnings-selfblock-2026-07-21.md). PickerResultPage.tsx
+    // already reads picker data this same in-process way; this brings these
+    // two divergence pages in line with that established, self-block-proof
+    // pattern before /api/pickers is ever added to the BotID guard list.
     const origin = await getOriginFromHeaders();
-    const res = await fetch(`${origin}/api/pickers`, {
-      cache: "no-store",
-    });
-
-    if (!res.ok) {
-      return { updatedAt: null, entries: [] };
-    }
-
-    const data = (await res.json()) as PickersPayload;
+    const data = (await getPickersData(origin)) as unknown as PickersPayload;
     const sections = Array.isArray(data?.sections) ? data.sections : [];
 
     const divergenceSection = sections.find((section) =>
