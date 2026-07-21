@@ -142,6 +142,7 @@ export default function DiscoveryStrip() {
           <Link
             key={tile.key}
             href={tile.href}
+            prefetch={false}
             style={{
               display: "flex",
               flexDirection: "column",

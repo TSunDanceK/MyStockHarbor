@@ -1333,7 +1333,7 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
                     { href: "/stocks-ready-to-break-out", label: "Breakout Stocks", sub: "Momentum expansion setups", dot: "#60a5fa" },
                     { href: "/stocks-near-200-day-moving-average", label: "Near 200-Day MA", sub: "Long-term level tests", dot: "#eab308" },
                   ].map((item) => (
-                    <Link key={item.href} href={item.href} style={exploreCardStyle}>
+                    <Link key={item.href} href={item.href} style={exploreCardStyle} prefetch={false}>
                       <span style={{ width: 7, height: 7, borderRadius: 999, background: item.dot, flex: "0 0 auto" }} />
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontWeight: 700, fontSize: 13 }}>{item.label}</div>
