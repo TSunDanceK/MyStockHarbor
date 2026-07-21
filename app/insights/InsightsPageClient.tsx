@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { BlogPost, InsightSearchResult } from "@/lib/blog";
 import type { YouTubeVideo } from "@/lib/youtube";
 import ShareButton from "@/app/components/ShareButton";
+import TickerLogo from "@/app/components/TickerLogo";
 
 const YOUTUBE_CHANNEL_URL = "https://www.youtube.com/@MyStockHarbor";
 const MIN_QUERY_LENGTH = 2;
@@ -50,6 +51,9 @@ function PostCard({ post }: { post: ListPost }) {
     >
       {/* Ticker col */}
       <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 58 }}>
+        {post.symbol ? (
+          <TickerLogo symbol={post.symbol} size={30} radius={8} />
+        ) : null}
         {post.symbol ? (
           <div style={{ fontSize: 16, fontWeight: 900, color: "#93c5fd", letterSpacing: "0.04em", lineHeight: 1 }}>
             {post.symbol}
