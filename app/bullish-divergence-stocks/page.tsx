@@ -688,7 +688,6 @@ export default async function BullishBearishDivergenceStocksPage() {
                   >
                     <Link
                       href={entry.stockHref}
-                      prefetch={false}
                       style={{
                         display: "inline-flex",
                         alignItems: "center",
@@ -709,7 +708,6 @@ export default async function BullishBearishDivergenceStocksPage() {
 
                     <Link
                       href={entry.chartHref}
-                      prefetch={false}
                       style={{
                         display: "inline-flex",
                         alignItems: "center",

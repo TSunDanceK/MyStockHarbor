@@ -162,7 +162,6 @@ export default function BottleneckLeaderboard({
               <Link
                 key={company.name}
                 href={`/stock/${encodeURIComponent(company.ticker)}`}
-                prefetch={false}
                 style={{
                   display: "block",
                   textDecoration: "none",
