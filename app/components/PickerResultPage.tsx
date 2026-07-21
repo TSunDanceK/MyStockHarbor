@@ -4,6 +4,7 @@ import PickerHighlightScroller from "@/app/components/PickerHighlightScroller";
 import ScreenerNav from "@/app/components/ScreenerNav";
 import HowToCollapse from "@/app/components/HowToCollapse";
 import PickerResultsGrid from "@/app/components/PickerResultsGrid";
+import CustomScreenerSymbolSearch from "@/app/components/CustomScreenerSymbolSearch";
 import { PickerFilterProvider } from "@/app/components/PickerFilterContext";
 import { getCompanyNameMap } from "@/lib/server/companyNames";
 import { getPickersData } from "@/lib/server/pickersBuilder";
@@ -698,6 +699,11 @@ export default async function PickerResultPage({
                   <h1>{config.title}</h1>
                   <p>{config.description}</p>
                   <HowToCollapse title={config.explainerTitle} body={config.explainerBody} />
+                  {config.kind === "allSymbols" ? (
+                    <div style={{ marginTop: 16 }}>
+                      <CustomScreenerSymbolSearch />
+                    </div>
+                  ) : null}
                 </section>
 
                 <div className="screenerTriggerWrap">
