@@ -281,6 +281,7 @@ export default function MobileHomePage() {
             <Link
               key={tile.label}
               href={resolvedHref}
+              prefetch={false}
               style={{
                 display: "flex",
                 flexDirection: "column",
@@ -347,6 +348,7 @@ export default function MobileHomePage() {
           <Link
             key={l.href}
             href={l.href}
+            prefetch={false}
             style={{ color: "inherit", textDecoration: "none" }}
           >
             {l.label}
