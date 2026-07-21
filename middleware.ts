@@ -1,19 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkDailyPageLimit } from "@/lib/server/dailyPageLimit";
-
-// Same IP already whitelisted in the Vercel Firewall's "Bypass rate limit
-// for my IP" rule (owner's home connection, confirmed 2026-07-21). Add more
-// -- e.g. a work or mobile IP -- via the RATE_LIMIT_BYPASS_IPS env var
-// (comma-separated) in Vercel project settings, no code change needed.
-const DEFAULT_BYPASS_IPS = ["80.192.159.167"];
-
-const BYPASS_IPS = new Set([
-  ...DEFAULT_BYPASS_IPS,
-  ...(process.env.RATE_LIMIT_BYPASS_IPS ?? "")
-    .split(",")
-    .map((ip) => ip.trim())
-    .filter(Boolean),
-]);
+import {
+  getClientIp,
+  isBypassedIp,
+  getDailyPageViewCount,
+} from "@/lib/server/dailyPageLimit";
 
 // Cumulative cap on /stock/* views per IP per (UTC) day -- a second,
 // longer-window layer on top of the existing Vercel Firewall "Rate limit
@@ -21,23 +11,13 @@ const BYPASS_IPS = new Set([
 // catches bursts; this one catches a slow, steady drip that never bursts
 // hard enough to trip a 10-minute window but adds up over a day.
 //
-// 120 raw requests/day targets roughly 30 real page views/day. A clean,
-// no-scroll pageview to /stock/[symbol] was measured (2026-07-21) at 1
-// matching request, but real browsing sessions -- scrolling, moving between
-// the on-page tabs -- were observed firing several more per view in the
-// same test. 120 leaves real headroom above the theoretical 1:1 minimum
-// rather than assuming best case; see claude/ project docs for the traced
-// numbers this is based on.
-const STOCK_DAILY_LIMIT = 120;
-
-function getClientIp(request: NextRequest) {
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  if (forwardedFor) {
-    const first = forwardedFor.split(",")[0]?.trim();
-    if (first) return first;
-  }
-  return request.headers.get("x-real-ip")?.trim() ?? "unknown";
-}
+// This checks (never increments) a counter that only real, client-rendered
+// page views feed -- see lib/server/dailyPageLimit.ts and
+// app/components/PageViewTracker.tsx. 40/day is a small buffer above the
+// owner's original ~30 real-views/day target, now that the counter reflects
+// genuine visits rather than raw requests (which Link prefetching inflated
+// well beyond 1:1 -- see claude/stock-daily-rate-limit-2026-07-21.md).
+const STOCK_DAILY_LIMIT = 40;
 
 export async function middleware(request: NextRequest) {
   const url = request.nextUrl.clone();
@@ -101,16 +81,12 @@ export async function middleware(request: NextRequest) {
   }
 
   if (pathname.startsWith("/stock/")) {
-    const ip = getClientIp(request);
+    const ip = getClientIp(request.headers);
 
-    if (!BYPASS_IPS.has(ip)) {
-      const { allowed } = await checkDailyPageLimit(
-        "stock",
-        ip,
-        STOCK_DAILY_LIMIT
-      );
+    if (!isBypassedIp(ip)) {
+      const count = await getDailyPageViewCount("stock", ip);
 
-      if (!allowed) {
+      if (count >= STOCK_DAILY_LIMIT) {
         return new NextResponse(
           "Too many requests. Please try again later.",
           {
