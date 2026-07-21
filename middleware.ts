@@ -1,6 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  getClientIp,
+  isBypassedIp,
+  getDailyPageViewCount,
+  isVerifiedHumanToday,
+  isBotFlaggedToday,
+} from "@/lib/server/dailyPageLimit";
 
-export function middleware(request: NextRequest) {
+// Cumulative cap on /stock/* views per IP per (UTC) day -- a second,
+// longer-window layer on top of the existing Vercel Firewall "Rate limit
+// /stock category (10min)" rule (25 requests/10min, Challenge). That rule
+// catches bursts; this one catches a slow, steady drip that never bursts
+// hard enough to trip a 10-minute window but adds up over a day.
+//
+// This checks (never increments) a counter that only real, client-rendered
+// page views feed -- see lib/server/dailyPageLimit.ts and
+// app/components/PageViewTracker.tsx.
+//
+// Crossing this limit does NOT hard-block: it sends the request through an
+// invisible BotID Deep Analysis check (/verify) once per IP per day. A real
+// visitor passes silently and is forwarded straight on to the page they
+// asked for; only a confirmed bot actually gets denied. See
+// claude/stock-daily-rate-limit-2026-07-21.md for the full reasoning.
+const STOCK_DAILY_LIMIT = 40;
+
+export async function middleware(request: NextRequest) {
   const url = request.nextUrl.clone();
   const host = request.headers.get("host") ?? "";
 
@@ -24,7 +48,7 @@ export function middleware(request: NextRequest) {
   // the GitHub Actions warm-up workflow, client-side fetch()) that either
   // don't follow redirects at all or have no need for canonical-host/SEO
   // redirection the way browser page navigations do. A 308 here silently
-  // kills anything that doesn't follow redirects — which is exactly what
+  // kills anything that doesn't follow redirects -- which is exactly what
   // was happening to the scheduled cron hits on /api/jobs/*. Skip the
   // host redirect entirely for API paths.
   if (pathname.startsWith("/api/")) {
@@ -59,6 +83,33 @@ export function middleware(request: NextRequest) {
       `https://www.mystockharbor.com${pathname}${search}`,
       308
     );
+  }
+
+  if (pathname.startsWith("/stock/")) {
+    const ip = getClientIp(request.headers);
+
+    if (!isBypassedIp(ip)) {
+      // Already confirmed a bot today -- deny immediately, no re-check
+      // (and no repeat Deep Analysis charge).
+      if (await isBotFlaggedToday("stock", ip)) {
+        return new NextResponse("Access denied", { status: 403 });
+      }
+
+      const count = await getDailyPageViewCount("stock", ip);
+
+      if (count >= STOCK_DAILY_LIMIT) {
+        // Already verified human today -- let them straight through.
+        const verified = await isVerifiedHumanToday("stock", ip);
+
+        if (!verified) {
+          const nextPath = `${pathname}${search}`;
+          return NextResponse.redirect(
+            new URL(`/verify?next=${encodeURIComponent(nextPath)}`, request.url),
+            307
+          );
+        }
+      }
+    }
   }
 
   return NextResponse.next();
