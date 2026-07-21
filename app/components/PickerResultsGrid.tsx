@@ -131,7 +131,7 @@ export default function PickerResultsGrid({
             const cardHref = isEarnings ? `/stock/${encodeURIComponent(entry.symbol)}/earnings` : entry.chartHref;
             const scoreValue = scoreLabelForEntry(entry);
             return (
-              <Link key={`${entry.symbol}-${entry.note}`} id={`picker-${entry.symbol}`} href={cardHref} prefetch={false} className="resultCard">
+              <Link key={`${entry.symbol}-${entry.note}`} id={`picker-${entry.symbol}`} href={cardHref} className="resultCard">
                 <div className="resultCardTop">
                   <div className="resultCardHead">
                     <div className="symbolLine">
