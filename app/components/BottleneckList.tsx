@@ -7,6 +7,12 @@ import type { BottleneckPost } from "@/lib/bottlenecks";
 
 const VISIBLE_ROWS = 12;
 const ROW_GAP = 8;
+// How many rows to render into the DOM before a "See more" button. The full
+// (searched + sorted) set is always computed in memory -- this only bounds how
+// many <Link> rows we actually mount, so the page stays fast as the number of
+// bottleneck pages grows. Search and the Latest/A-Z sort still run across the
+// entire set; the cap is applied last, after both.
+const PAGE_SIZE = 30;
 
 type SortMode = "date" | "title";
 
@@ -35,6 +41,7 @@ export default function BottleneckList({ posts }: { posts: BottleneckPost[] }) {
   // SSR paint and this component taking over on hydration.
   const [sortMode, setSortMode] = useState<SortMode>("date");
   const [rowHeight, setRowHeight] = useState<number | null>(null);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const firstItemRef = useRef<HTMLAnchorElement | null>(null);
 
   const filtered = useMemo(() => {
@@ -60,6 +67,20 @@ export default function BottleneckList({ posts }: { posts: BottleneckPost[] }) {
     }
     return arr;
   }, [filtered, sortMode]);
+
+  // Reset back to the first page whenever the result set changes (new search
+  // query or a different sort order) so you never land deep in an expanded
+  // list that no longer matches what you're looking at.
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [query, sortMode]);
+
+  const visible = useMemo(
+    () => sorted.slice(0, visibleCount),
+    [sorted, visibleCount]
+  );
+  const hasMore = sorted.length > visible.length;
+  const remaining = sorted.length - visible.length;
 
   useEffect(() => {
     const measure = () => {
@@ -236,7 +257,7 @@ export default function BottleneckList({ posts }: { posts: BottleneckPost[] }) {
             scrollbarColor: "rgba(255,255,255,0.15) transparent",
           }}
         >
-          {sorted.map((post, index) => (
+          {visible.map((post, index) => (
             <Link
               key={post.slug}
               ref={index === 0 ? firstItemRef : undefined}
@@ -303,6 +324,29 @@ export default function BottleneckList({ posts }: { posts: BottleneckPost[] }) {
           ))}
         </div>
       )}
+
+      {hasMore ? (
+        <div style={{ marginTop: 14, display: "flex", justifyContent: "center" }}>
+          <button
+            type="button"
+            onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+            style={{
+              cursor: "pointer",
+              borderRadius: 999,
+              border: "1px solid rgba(147,197,253,0.35)",
+              background: "rgba(147,197,253,0.12)",
+              color: "#bfdbfe",
+              padding: "11px 22px",
+              fontSize: 13.5,
+              fontWeight: 800,
+              letterSpacing: 0.2,
+              transition: "all 0.18s ease",
+            }}
+          >
+            See more ({remaining} more)
+          </button>
+        </div>
+      ) : null}
 
       <div
         style={{
