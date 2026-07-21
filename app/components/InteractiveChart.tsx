@@ -626,8 +626,16 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
           display: "flex",
           alignItems: "center",
           gap: dense ? 6 : 8,
-          flexWrap: isMobile || dense ? "nowrap" : "wrap",
-          overflowX: isMobile || dense ? "auto" : "visible",
+          // Only the dense (landscape fullscreen) toolbar stays a single
+          // horizontally-scrolling row. In portrait/mobile we must NOT use
+          // overflowX:auto here: when either overflow axis is non-visible the
+          // other computes to "auto" too, which clips the dropdown menus that
+          // open downward out of the toolbar box -- that's the bug where the
+          // Candle / Indicators / Drawing-tools menus appeared hidden behind
+          // the chart on mobile. Letting the toolbar wrap keeps overflow
+          // visible so the menus can escape and paint above the chart.
+          flexWrap: dense ? "nowrap" : "wrap",
+          overflowX: dense ? "auto" : "visible",
           padding: dense ? "0 2px 5px" : "2px 2px 10px",
           WebkitOverflowScrolling: "touch",
         }}

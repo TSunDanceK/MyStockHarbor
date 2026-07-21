@@ -384,9 +384,12 @@ export default function MiniPickerCandleChart({
     >
       <svg
         viewBox={`0 0 ${width} ${height}`}
+        width={width}
+        height={height}
+        preserveAspectRatio="xMidYMid meet"
         role="img"
         aria-label="Mini candlestick chart"
-        style={{ display: "block", width: "100%", height: "auto" }}
+        style={{ display: "block", width: "100%", height: "auto", maxWidth: "100%" }}
       >
         <rect x="0" y="0" width={width} height={height} fill="rgba(2,6,23,0.18)" />
 
