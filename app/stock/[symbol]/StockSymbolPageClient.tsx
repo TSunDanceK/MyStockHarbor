@@ -15,6 +15,7 @@ import CompanyProfile, {
 import DilutionHistory, {
   type DilutionHistoryData,
 } from "@/app/components/DilutionHistory";
+import ReturnsBarChart, { type ReturnBar } from "@/app/components/ReturnsBarChart";
 import ShareButton from "@/app/components/ShareButton";
 
 type Quote = {
@@ -335,6 +336,33 @@ function aggregateWeekly(points: Point[]): Point[] {
     else { buckets.set(key, { date: key, close: point.close, high: Math.max(existing.high ?? existing.close, high), low: Math.min(existing.low ?? existing.close, low), volume: (existing.volume ?? 0) + volume }); }
   }
   return Array.from(buckets.values()).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function fmtShortDate(dateStr: string) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return dateStr;
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(d);
+}
+
+// Close-over-close percentage change for the last `count` periods in an
+// ascending-by-date points array. Works for daily points directly, or for
+// aggregateWeekly(history) to get week-over-week change — same shape, same
+// math, just a different input series.
+function computeCloseOverCloseReturns(points: Point[], count: number): ReturnBar[] {
+  if (points.length < 2) return [];
+  const bars: ReturnBar[] = [];
+  const start = Math.max(1, points.length - count);
+  for (let i = start; i < points.length; i++) {
+    const prev = points[i - 1].close;
+    const close = points[i].close;
+    if (!(prev > 0) || !Number.isFinite(close)) continue;
+    bars.push({
+      date: points[i].date,
+      label: fmtShortDate(points[i].date),
+      changePercent: ((close - prev) / prev) * 100,
+    });
+  }
+  return bars;
 }
 
 function computeMacroSupport(points: Point[], lastClose: number | null): MacroSupportResult | null {
@@ -995,6 +1023,9 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
   const ma200Pct = pctFromBase(lastClose, typeof lastMA200 === "number" ? lastMA200 : null);
   const macroSupport = useMemo(() => computeMacroSupport(history, lastClose), [history, lastClose]);
   const macdSignal = useMemo(() => buildMacd(closes), [closes]);
+  const weeklyHistory = useMemo(() => aggregateWeekly(history), [history]);
+  const dailyReturns = useMemo(() => computeCloseOverCloseReturns(history, 20), [history]);
+  const weeklyReturns = useMemo(() => computeCloseOverCloseReturns(weeklyHistory, 12), [weeklyHistory]);
 
   // Shared "Learn the indicators" links. Rendered inside the company-profile
   // right-hand column (under the stat cards) when a profile exists, and as a
@@ -1156,6 +1187,16 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
                   </div>
                 </div>
                 <StockPriceChart symbol={symbol} data={history.slice(-240)} ma50={ma50.slice(-240)} ma200={ma200.slice(-240)} height={360} />
+              </section>
+
+              {/* -- Daily / weekly returns --------------------------- */}
+              <section style={{ marginTop: 32, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
+                <div style={sectionLabelStyle}>Price Action</div>
+                <h2 style={{ ...sectionHeadingStyle, marginBottom: 16 }}>Daily &amp; weekly close-over-close change</h2>
+                <div className="returns-charts-grid">
+                  <ReturnsBarChart symbol={symbol} periodLabel="Daily" compareLabel="previous day's close" bars={dailyReturns} />
+                  <ReturnsBarChart symbol={symbol} periodLabel="Weekly" compareLabel="previous week's close" bars={weeklyReturns} />
+                </div>
               </section>
 
               {/* -- Technical indicators ---------------------------- */}
@@ -1471,6 +1512,7 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
         .yearlyEarningsGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
         .learn-grid { display: grid; gap: 0; }
         .explore-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+        .returns-charts-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 
         a:hover { filter: brightness(1.06); transform: translateY(-1px); }
 
@@ -1480,6 +1522,7 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
           .explore-grid { grid-template-columns: 1fr !important; }
           .earningsMetricGrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
           .valuationGrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+          .returns-charts-grid { grid-template-columns: 1fr !important; }
         }
 
         @media (max-width: 640px) {
