@@ -173,7 +173,7 @@ async function enqueueDynamicUniverseMissing(): Promise<number> {
   let cached: (FmpEarningsRow[] | null)[];
   try {
     const keys = symbols.map((symbol) => `${EARNINGS_REDIS_KEY_PREFIX}${symbol}`);
-    cached = await redis.mget<FmpEarningsRow[]>(...keys);
+    cached = (await redis.mget(...keys)) as unknown as (FmpEarningsRow[] | null)[];
   } catch {
     return 0;
   }
