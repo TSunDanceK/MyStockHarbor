@@ -88,35 +88,90 @@ export default function CustomScreenerSymbolSearch({
     setOpen(false);
   }
 
+  // Styled to match the /pickers "Search a ticker" box (cyan label, dark
+  // rounded input, green Search button), resized to fit the custom-screener
+  // hero. Behaviour is unchanged from before -- type-ahead symbol lookup with
+  // an inline "which conditions does it meet" result.
   const inputStyle: React.CSSProperties = {
-    width: "100%",
-    padding: "12px 14px",
-    borderRadius: 12,
-    border: "1px solid rgba(59,130,246,0.32)",
-    background: "rgba(15,23,42,0.72)",
-    color: "#f8fafc",
-    // 16px (not 14px) so mobile Safari doesn't auto-zoom the page in when
-    // this input is focused.
+    flex: 1,
+    minWidth: 180,
+    background: "rgba(255,255,255,0.04)",
+    border: "1px solid rgba(255,255,255,0.10)",
+    borderRadius: 8,
+    padding: "9px 12px",
+    color: "#e2e8f0",
+    // 16px (not the 13px /pickers uses) so mobile Safari doesn't auto-zoom
+    // the page in when this input is focused.
     fontSize: 16,
-    fontWeight: 700,
     outline: "none",
     boxSizing: "border-box",
   };
 
+  // The "Search" button (and Enter) resolves what's typed to the top symbol
+  // match and shows its screener result -- the same inline behaviour as
+  // picking from the dropdown, just an explicit affordance so it looks and
+  // acts like the /pickers search box.
+  function submitSearch() {
+    if (results.length) choose(results[0]);
+  }
+
   return (
     <div ref={wrapRef} style={{ position: "relative", maxWidth: 520 }}>
-      <input
-        value={query}
-        onChange={(e) => {
-          setQuery(e.target.value.toUpperCase());
-          setOpen(true);
-          setSelected(null);
+      <section
+        style={{
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 12,
+          padding: "12px 16px",
+          background: "rgba(255,255,255,0.02)",
+          boxSizing: "border-box",
         }}
-        onFocus={() => setOpen(true)}
-        placeholder="Check a ticker or company against the screener (e.g. TSLA)"
-        aria-label="Search a ticker or company to see which screener conditions it meets"
-        style={inputStyle}
-      />
+      >
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            color: "#67e8f9",
+            marginBottom: 6,
+          }}
+        >
+          Search a ticker
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <input
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value.toUpperCase());
+              setOpen(true);
+              setSelected(null);
+            }}
+            onFocus={() => setOpen(true)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submitSearch();
+            }}
+            placeholder="e.g. AAPL — see which conditions it meets"
+            aria-label="Search a ticker or company to see which screener conditions it meets"
+            style={inputStyle}
+          />
+          <button
+            type="button"
+            onClick={submitSearch}
+            style={{
+              flex: "0 0 auto",
+              padding: "9px 16px",
+              borderRadius: 8,
+              border: "1px solid rgba(34,197,94,0.28)",
+              background: "rgba(34,197,94,0.10)",
+              color: "#86efac",
+              fontWeight: 700,
+              fontSize: 12,
+              cursor: "pointer",
+            }}
+          >
+            Search
+          </button>
+        </div>
 
       {open && results.length > 0 ? (
         <div
@@ -187,6 +242,7 @@ export default function CustomScreenerSymbolSearch({
           })}
         </div>
       ) : null}
+      </section>
 
       {selected ? (
         <div
