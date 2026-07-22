@@ -20,7 +20,7 @@ export default function PickerTickerSearch({
 }: {
   query: string;
   setQuery: (value: string) => void;
-  onSubmit: (symbol: string) => void;
+  onSubmit: (symbol: string, name?: string) => void;
 }) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [results, setResults] = useState<SymbolResult[]>([]);
@@ -58,13 +58,17 @@ export default function PickerTickerSearch({
   // Resolve to an upper-cased symbol and run the page's existing picker-list
   // scan. Used by the Search button, the Enter key, and each dropdown row --
   // all three behave identically, exactly as the plain box did before.
-  function submit(symbol: string) {
+  function submit(symbol: string, name?: string) {
     const sym = symbol.trim().toUpperCase();
     if (!sym) return;
+    // Carry the company name through when we have it (from a picked dropdown
+    // row, or by matching the typed symbol against the current results) so the
+    // page's "no qualifying list" card can show it -- same as /custom-screener.
+    const resolvedName = name ?? results.find((r) => r.symbol.trim().toUpperCase() === sym)?.name;
     setQuery(sym);
     setResults([]);
     setOpen(false);
-    onSubmit(sym);
+    onSubmit(sym, resolvedName);
   }
 
   return (
@@ -135,7 +139,7 @@ export default function PickerTickerSearch({
             <button
               key={`${r.symbol}-${r.exchange ?? ""}`}
               type="button"
-              onClick={() => submit(r.symbol)}
+              onClick={() => submit(r.symbol, r.name)}
               style={{
                 width: "100%",
                 display: "flex",
