@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
 // Debug-only probe (mirrors app/api/debug/index-changes) to confirm, against
-// live data on the current FMP plan, which quote endpoints are reachable and
-// which fields (especially `pe`) each returns. Not linked from anywhere.
+// live data on the current FMP plan, which quote/ratios endpoints are reachable
+// and which fields (especially PE) each returns. Not linked from anywhere.
 // The API key is never returned. Hit with ?symbols=AAPL,MSFT to run.
 
 export const runtime = "nodejs";
@@ -27,18 +27,7 @@ async function probe(url: string) {
       status: res.status,
       count: rows.length,
       fields: first ? Object.keys(first) : [],
-      hasPe: first ? "pe" in first : false,
-      sample: first
-        ? {
-            symbol: first.symbol,
-            price: first.price,
-            pe: first.pe,
-            marketCap: first.marketCap,
-            volume: first.volume,
-            changePercentage: first.changePercentage,
-            changesPercentage: first.changesPercentage,
-          }
-        : null,
+      first: first ?? null,
     };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "fetch failed" };
@@ -55,17 +44,18 @@ export async function GET(request: Request) {
     return NextResponse.json({ note: "Pass ?symbols=AAPL,MSFT to probe." });
   }
   const first = symbols.split(",")[0];
+  const s = encodeURIComponent(first);
   const key = encodeURIComponent(FMP_API_KEY);
 
-  const [stableSingle, stableBatch, v3Batch] = await Promise.all([
-    probe(`https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(first)}&apikey=${key}`),
-    probe(`https://financialmodelingprep.com/stable/batch-quote?symbols=${encodeURIComponent(symbols)}&apikey=${key}`),
-    probe(`https://financialmodelingprep.com/api/v3/quote/${encodeURIComponent(symbols)}?apikey=${key}`),
+  const [ratiosTtm, keyMetricsTtm, income] = await Promise.all([
+    probe(`https://financialmodelingprep.com/stable/ratios-ttm?symbol=${s}&apikey=${key}`),
+    probe(`https://financialmodelingprep.com/stable/key-metrics-ttm?symbol=${s}&apikey=${key}`),
+    probe(`https://financialmodelingprep.com/stable/income-statement?symbol=${s}&period=quarter&limit=4&apikey=${key}`),
   ]);
 
   return NextResponse.json({
-    "stable/quote (single)": stableSingle,
-    "stable/batch-quote": stableBatch,
-    "api/v3/quote (comma batch)": v3Batch,
+    "stable/ratios-ttm": ratiosTtm,
+    "stable/key-metrics-ttm": keyMetricsTtm,
+    "stable/income-statement (quarter,4)": income,
   });
 }
