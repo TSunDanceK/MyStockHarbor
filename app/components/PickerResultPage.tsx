@@ -7,6 +7,7 @@ import PickerResultsGrid from "@/app/components/PickerResultsGrid";
 import CustomScreenerSymbolSearch from "@/app/components/CustomScreenerSymbolSearch";
 import { PickerFilterProvider } from "@/app/components/PickerFilterContext";
 import { getCompanyNameMap } from "@/lib/server/companyNames";
+import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
 import { getPickersData } from "@/lib/server/pickersBuilder";
 import { WatermarkVisibilityProvider, HideWatermarksBar } from "@/app/components/WatermarkVisibility";
 import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type FilterKey } from "@/lib/pickerFilters";
@@ -144,6 +145,15 @@ export type ResultEntry = ResultEntryFlags & {
   score?: number;
   reasons?: string[];
   supportResistanceZone?: SupportResistanceZone;
+
+  // Cron-warmed fundamentals attached from Redis in getPickerData (see
+  // lib/server/fundamentalsCache.ts). Optional -- any symbol not yet warmed
+  // simply shows "--" in the list view's Market Cap / PE / Industry columns.
+  // Price, % change, volume and 200 MA are NOT here: the list view derives
+  // those client-side from each entry's chartPoints, so they cost nothing.
+  marketCap?: number;
+  peRatio?: number;
+  industry?: string;
 };
 
 // Deliberately typed as FilterKey (the exact 18-key union from
@@ -539,6 +549,25 @@ async function getPickerData(config: PickerResultConfig) {
       // names are optional
     }
 
+    // Best-effort fundamentals (market cap, PE, industry) for the list view's
+    // extra columns. Redis-ONLY read (see fundamentalsCache.readCachedFundamentalsBulk)
+    // -- populated daily by the warm-fundamentals cron, so this never spends
+    // an FMP call on a page render. Any symbol not yet warmed just shows "--".
+    try {
+      const fundamentals = await readCachedFundamentalsBulk(entries.map((e) => e.symbol));
+      if (fundamentals.size) {
+        for (const entry of entries) {
+          const f = fundamentals.get(entry.symbol);
+          if (!f) continue;
+          if (f.marketCap != null) entry.marketCap = f.marketCap;
+          if (f.peRatio != null) entry.peRatio = f.peRatio;
+          if (f.industry) entry.industry = f.industry;
+        }
+      }
+    } catch {
+      // fundamentals are optional
+    }
+
     return {
       updatedAt: typeof payload.updatedAt === "string" ? payload.updatedAt : null,
       universeSize: typeof payload.universeSize === "number" ? payload.universeSize : null,
@@ -649,6 +678,26 @@ export default async function PickerResultPage({
         .seeMoreBtn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 22px; border-radius: 999px; border: 1px solid rgba(96,165,250,0.4); background: rgba(59,130,246,0.10); color: #dbeafe; font-weight: 800; font-size: 13.5px; cursor: pointer; }
         .seeMoreBtn:hover { background: rgba(59,130,246,0.16); border-color: rgba(96,165,250,0.6); }
         .filterMatchLine { margin: 8px 0 0; font-size: 12.5px; color: rgba(226,232,240,0.65); }
+        .viewToggle { display: inline-flex; align-items: center; gap: 6px; padding: 9px 15px; border-radius: 999px; border: 1px solid rgba(96,165,250,0.4); background: rgba(59,130,246,0.10); color: #dbeafe; font-weight: 800; font-size: 12.5px; cursor: pointer; white-space: nowrap; flex: 0 0 auto; }
+        .viewToggle:hover { background: rgba(59,130,246,0.16); border-color: rgba(96,165,250,0.6); }
+        .listTableWrap { margin-top: 16px; border: 1px solid rgba(255,255,255,0.09); border-radius: 18px; overflow-x: auto; background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015)); }
+        .listTable { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 860px; }
+        .listTable thead th { position: sticky; top: 0; background: #0b1220; text-align: right; padding: 12px 14px; font-size: 11px; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; color: rgba(148,163,184,0.92); border-bottom: 1px solid rgba(255,255,255,0.10); white-space: nowrap; cursor: pointer; user-select: none; }
+        .listTable thead th:first-child, .listTable tbody td:first-child { text-align: left; }
+        .listTable thead th.colName, .listTable tbody td.colName, .listTable thead th.colInd, .listTable tbody td.colInd { text-align: left; }
+        .listTable thead th:hover { color: #dbeafe; }
+        .listTable thead th .sortArrow { margin-left: 5px; font-size: 9px; opacity: 0.9; }
+        .listTable tbody tr { cursor: pointer; transition: background 120ms ease; }
+        .listTable tbody tr:hover { background: rgba(96,165,250,0.08); }
+        .listTable tbody td { padding: 11px 14px; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.055); white-space: nowrap; color: rgba(226,232,240,0.92); }
+        .listTable tbody tr:last-child td { border-bottom: none; }
+        .listSym { display: inline-flex; align-items: center; gap: 8px; font-weight: 900; font-size: 14px; color: #eaf2ff; text-decoration: none; }
+        .listSym .dot { width: 8px; height: 8px; border-radius: 999px; flex: 0 0 auto; }
+        .listName { color: rgba(148,163,184,0.92); max-width: 230px; overflow: hidden; text-overflow: ellipsis; }
+        .listInd { color: rgba(148,163,184,0.86); max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
+        .chgUp { color: #4ade80; font-weight: 800; }
+        .chgDown { color: #f87171; font-weight: 800; }
+        .muted { color: rgba(148,163,184,0.55); }
         @keyframes pickerHighlightPulse {
           0% { box-shadow: 0 0 0 0 rgba(245,197,66,0); border-color: rgba(255,255,255,0.09); }
           15% { box-shadow: 0 0 0 4px rgba(245,197,66,0.35); border-color: #f5c542; }
@@ -656,6 +705,7 @@ export default async function PickerResultPage({
           100% { box-shadow: 0 0 0 0 rgba(245,197,66,0); border-color: rgba(255,255,255,0.09); }
         }
         .resultCard.highlight { animation: pickerHighlightPulse 2.4s ease-out 1; scroll-margin-top: 90px; }
+        .listTable tbody tr.highlight { animation: pickerHighlightPulse 2.4s ease-out 1; scroll-margin-top: 90px; }
         @media (max-width: 980px) {
           .resultShell { grid-template-columns: 1fr; gap: 14px; }
         }
