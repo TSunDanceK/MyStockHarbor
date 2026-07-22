@@ -144,23 +144,63 @@ const INDICATOR_CALC_PARAMS: Partial<Record<IndicatorName, number[]>> = {
   KDJ: [14, 3, 3],
 };
 
-// Register a Wilder-smoothed RSI over KLineChart's built-in "RSI" (which uses
-// a simple moving average of gains/losses). This is the exact same algorithm
-// as lib/indicators.ts's rsiWilder and the dashboard summary panel, so the
-// Interactive chart's RSI now matches the Basic chart and TradingView. Runs
-// once per page (idempotent -- re-registering just re-applies the same
-// template). Typed loosely because the klinecharts template/DataList shapes
-// vary between minor versions; we only touch `.close` and return a figure map.
-let rsiWilderRegistered = false;
-function registerWilderRsi(kl: unknown) {
-  if (rsiWilderRegistered) return;
+// Custom-draw factory: paints a TradingView-style shaded band + dashed
+// threshold lines in the neutral zone of a bounded oscillator, then returns
+// false so KLineChart still renders the indicator's own lines on top. Fully
+// guarded so a drawing hiccup can never break the pane (worst case: no band,
+// lines still show). Coordinates are pane-relative: x spans 0..bounding.width
+// and yAxis.convertToPixel maps an oscillator value to its pane y.
+type BandDrawParams = {
+  ctx: CanvasRenderingContext2D;
+  bounding: { width: number };
+  yAxis: { convertToPixel: (value: number) => number };
+};
+function thresholdBandDraw(lower: number, upper: number, fill: string) {
+  return (params: BandDrawParams): boolean => {
+    try {
+      const { ctx, bounding, yAxis } = params;
+      const yUpper = yAxis.convertToPixel(upper);
+      const yLower = yAxis.convertToPixel(lower);
+      const top = Math.min(yUpper, yLower);
+      const h = Math.abs(yLower - yUpper);
+      const w = bounding.width;
+      ctx.save();
+      ctx.fillStyle = fill;
+      ctx.fillRect(0, top, w, h);
+      ctx.strokeStyle = "rgba(148,163,184,0.28)";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.moveTo(0, yUpper); ctx.lineTo(w, yUpper); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, yLower); ctx.lineTo(w, yLower); ctx.stroke();
+      ctx.restore();
+    } catch { /* noop */ }
+    return false;
+  };
+}
+
+// Register custom versions of KLineChart's built-in "RSI" and "KDJ" so the
+// Interactive chart's oscillators match the Basic chart / summary panel /
+// TradingView (correct math) AND get TradingView's shaded neutral-zone band.
+// Runs once per page (idempotent). Typed loosely because klinecharts template
+// / DataList shapes vary between minor versions; we only touch OHLC fields and
+// return figure maps.
+//  - RSI: Wilder smoothing (built-in uses a simple/Cutler average), period 14 --
+//    verified bit-identical to lib/indicators.ts rsiWilder. Band 30-70.
+//  - KDJ: standard slow-stochastic K/D/J at 14,3,3 (built-in defaults to 9,3,3),
+//    the same slow %K/%D TradingView's default Stochastic shows, plus J. Band
+//    20-80.
+let customIndicatorsRegistered = false;
+function registerCustomIndicators(kl: unknown) {
+  if (customIndicatorsRegistered) return;
   const register = (kl as { registerIndicator?: (t: unknown) => void }).registerIndicator;
   if (typeof register !== "function") return;
+
   register({
     name: "RSI",
     shortName: "RSI",
     calcParams: [14],
     figures: [{ key: "rsi", title: "RSI: ", type: "line" }],
+    draw: thresholdBandDraw(30, 70, "rgba(167,139,250,0.09)"),
     calc: (dataList: Array<{ close: number }>, indicator: { calcParams?: number[] }) => {
       const period = indicator?.calcParams?.[0] ?? 14;
       const out: Array<{ rsi?: number }> = dataList.map(() => ({}));
@@ -181,7 +221,40 @@ function registerWilderRsi(kl: unknown) {
       return out;
     },
   });
-  rsiWilderRegistered = true;
+
+  register({
+    name: "KDJ",
+    shortName: "KDJ",
+    calcParams: [14, 3, 3],
+    figures: [
+      { key: "k", title: "K: ", type: "line" },
+      { key: "d", title: "D: ", type: "line" },
+      { key: "j", title: "J: ", type: "line" },
+    ],
+    draw: thresholdBandDraw(20, 80, "rgba(56,189,248,0.08)"),
+    calc: (dataList: Array<{ high: number; low: number; close: number }>, indicator: { calcParams?: number[] }) => {
+      const ps = indicator?.calcParams ?? [14, 3, 3];
+      const n = ps[0] ?? 14, m1 = ps[1] ?? 3, m2 = ps[2] ?? 3;
+      let prevK = 50, prevD = 50;
+      return dataList.map((_d, i) => {
+        let hh = -Infinity, ll = Infinity;
+        const start = Math.max(0, i - n + 1);
+        for (let j = start; j <= i; j++) {
+          const h = dataList[j].high, l = dataList[j].low;
+          if (typeof h === "number" && h > hh) hh = h;
+          if (typeof l === "number" && l < ll) ll = l;
+        }
+        const close = dataList[i].close;
+        const rsv = hh === ll || !Number.isFinite(hh) || !Number.isFinite(ll) ? 0 : ((close - ll) / (hh - ll)) * 100;
+        const k = ((m1 - 1) * prevK + rsv) / m1;
+        const d = ((m2 - 1) * prevD + k) / m2;
+        prevK = k; prevD = d;
+        return { k, d, j: 3 * k - 2 * d };
+      });
+    },
+  });
+
+  customIndicatorsRegistered = true;
 }
 
 // Drawing / measurement tools -> KLineChart built-in overlay template names.
@@ -503,9 +576,10 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
       if (!el) return;
       const kl = await import("klinecharts");
       if (cancelled) return;
-      // Override the built-in RSI with a Wilder-smoothed one before the chart
-      // is created so createIndicator("RSI") uses it. Idempotent.
-      try { registerWilderRsi(kl); } catch { /* noop */ }
+      // Override the built-in RSI/KDJ with our own (correct math + shaded
+      // neutral-zone band) before the chart is created so createIndicator
+      // uses them. Idempotent.
+      try { registerCustomIndicators(kl); } catch { /* noop */ }
       disposeRef.current = kl.dispose as unknown as (element: HTMLElement) => void;
 
       const chart = (kl.init(el) as unknown) as ChartApi | null;
