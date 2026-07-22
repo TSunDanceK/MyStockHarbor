@@ -457,10 +457,15 @@ export async function getLatestEarningsData(
 
   const latestCompletedEarnings = completedEarningsRows[0] ?? null;
 
+  // Compare against start-of-day (UTC), not the current instant. A report
+  // scheduled for *today* has a midnight-UTC timestamp that is already behind
+  // `Date.now()`, so the old `<= Date.now()` check dropped the day-of report
+  // (its actuals are still null until it posts) and left nextEarningsDate blank.
+  const startOfTodayUtcMs = dateTime(new Date().toISOString().slice(0, 10)) ?? Date.now();
   const nextEarningsRow = [...earningsRows]
     .filter((item) => {
       const itemTime = dateTime(item.date);
-      if (itemTime == null || itemTime <= Date.now()) return false;
+      if (itemTime == null || itemTime < startOfTodayUtcMs) return false;
 
       return (
         safeNumber(item.epsActual) == null &&
