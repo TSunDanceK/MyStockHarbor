@@ -31,6 +31,10 @@
     {
       "path": "/api/jobs/warm-earnings",
       "schedule": "15 7 * * *"
+    },
+    {
+      "path": "/api/jobs/warm-fundamentals",
+      "schedule": "30 7 * * *"
     }
   ]
 }
