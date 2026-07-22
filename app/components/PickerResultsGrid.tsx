@@ -171,23 +171,29 @@ type DerivedRow = {
   ma200: number | null;
 };
 
-// Everything the list view's Price / % Change / Volume / 200 MA columns
-// need is already present in each entry's chartPoints (the same array the
-// mini candle chart draws), so those four columns cost zero extra data:
-// last close = price, last-vs-previous close = % change, last volume, last
-// ma200. Market cap / PE / industry come from the cron-warmed fundamentals
-// attached server-side (see PickerResultPage.getPickerData).
+// Price / % change / volume come from the ~15-min-fresh price pool when it has
+// the symbol (attached server-side in PickerResultPage.getPickerData), falling
+// back to the end-of-day close/volume from chartPoints on a pool miss (cold
+// start) so the columns never go blank. 200 MA always comes from chartPoints
+// (a daily average -- intraday freshness is irrelevant for it). Market cap /
+// PE come from the pool too (fresh), with the fundamentals cache as fallback.
 function deriveRow(entry: ResultEntry): DerivedRow {
   const pts = Array.isArray(entry.chartPoints) ? entry.chartPoints : [];
   const last = pts.length ? pts[pts.length - 1] : undefined;
   const prev = pts.length > 1 ? pts[pts.length - 2] : undefined;
-  const price = last && Number.isFinite(last.close) ? last.close : null;
+  const eodClose = last && Number.isFinite(last.close) ? last.close : null;
   const prevClose = prev && Number.isFinite(prev.close) ? prev.close : null;
-  const changePct =
-    price != null && prevClose != null && prevClose !== 0
-      ? ((price - prevClose) / prevClose) * 100
+  const eodChangePct =
+    eodClose != null && prevClose != null && prevClose !== 0
+      ? ((eodClose - prevClose) / prevClose) * 100
       : null;
-  const volume = last && typeof last.volume === "number" && Number.isFinite(last.volume) ? last.volume : null;
+  const eodVolume = last && typeof last.volume === "number" && Number.isFinite(last.volume) ? last.volume : null;
+  const price =
+    typeof entry.price === "number" && Number.isFinite(entry.price) ? entry.price : eodClose;
+  const changePct =
+    typeof entry.changePct === "number" && Number.isFinite(entry.changePct) ? entry.changePct : eodChangePct;
+  const volume =
+    typeof entry.volume === "number" && Number.isFinite(entry.volume) ? entry.volume : eodVolume;
   const ma200 = last && typeof last.ma200 === "number" && Number.isFinite(last.ma200) ? last.ma200 : null;
   return { price, changePct, volume, ma200 };
 }
