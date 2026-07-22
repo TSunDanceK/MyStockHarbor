@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useState } from "react";
 import { usePickerFilter } from "@/app/components/PickerFilterContext";
-import { TickerSearch } from "@/app/components/TickerSearchBox";
 import type { AnyFilterKey } from "@/lib/pickerFilters";
 
 type Tone = "green" | "yellow" | "orange" | "red" | "blue";
@@ -280,15 +279,15 @@ function FilterSummaryBar() {
 // checkboxes and there's no toggle at all, just the always-visible
 // checkboxes plus a "N matching" + Clear summary row (FilterSummaryBar)
 // once at least one is checked.
-// `showSearch` renders the cross-picker TickerSearch box, but only inside
-// the mobile overlay -- on desktop the ticker search now lives on the
-// results header instead (see PickerResultsGrid.tsx's inline-variant
-// TickerSearch), so the sidebar never renders it regardless of this prop.
+// `showSearch` is retained for backwards compatibility with existing
+// callers but is no longer used: the old cross-picker ticker search that
+// used to render in the mobile overlay has been removed (see below). The
+// only ticker search on the site now is the /custom-screener symbol search
+// in the hero (CustomScreenerSymbolSearch, see PickerResultPage.tsx).
 export default function ScreenerNav({
   currentHref,
   variant = "full",
   showFilters = false,
-  showSearch = false,
   alwaysFilterMode = false,
 }: {
   currentHref: string;
@@ -355,14 +354,10 @@ export default function ScreenerNav({
               </button>
             </div>
             <div className="screenerOverlayScroll">
-              {/* On mobile the search box lives inside this same opened
-                  overlay (unchanged) -- searching does NOT close the
-                  overlay, unlike tapping a category link, which navigates
-                  and closes it. Checkboxes (when alwaysFilterMode is on)
-                  work exactly like desktop; Clear + Go (always on screen,
-                  not part of this scrolling area) are how you clear/finish
-                  once you're done ticking boxes -- see the footer below. */}
-              {showSearch ? <TickerSearch /> : null}
+              {/* Checkboxes (when alwaysFilterMode is on) work exactly like
+                  desktop; Clear + Go in the footer are how you clear/finish
+                  once you're done ticking boxes. The old cross-picker ticker
+                  search that used to sit here has been removed. */}
               {showFilters && !alwaysFilterMode ? <OpenCustomScreenerLink /> : null}
               <NavList currentHref={currentHref} onNavigate={() => setOpen(false)} filterMode={alwaysFilterMode} />
             </div>
