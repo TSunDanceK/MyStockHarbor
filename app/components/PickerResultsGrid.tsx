@@ -140,31 +140,108 @@ function ReasonChips({
   );
 }
 
-const SEE_MORE_BATCH = 36;
+// Page sizes. List view is the new default (30/page); chart view is heavier
+// to render (a mini SVG candle chart per card) so it paginates tighter at
+// 21/page to keep the server-rendered first paint fast -- 21 = 7 full rows
+// of 3 cards, so the grid stays symmetrical with no half-empty last row.
+// Both grow via the "Show more" button entirely from data already sent down
+// with the page -- no extra network/API requests for pagination.
+const LIST_PAGE_SIZE = 30;
+const CHART_PAGE_SIZE = 21;
 
-// Renders the actual results grid for a single-category picker page
-// (/oversold-stocks-today, /plays/bull-flags-adjacent screener pages,
-// etc.), reading the same PickerFilterContext ScreenerNav's checkboxes
-// write to (see PickerFilterContext.tsx). `entries` is the FULL matched
-// set for this page (no longer truncated server-side to config.maxItems --
-// see PickerResultPage.tsx) so both the filter and "See more" pagination
-// below work entirely off data already sent down with the page: no
-// additional network/API requests for either interaction.
+type ViewMode = "list" | "chart";
+
+type SortKey =
+  | "symbol"
+  | "name"
+  | "marketCap"
+  | "price"
+  | "change"
+  | "industry"
+  | "volume"
+  | "pe"
+  | "ma200";
+
+type SortState = { key: SortKey; dir: "asc" | "desc" } | null;
+
+type DerivedRow = {
+  price: number | null;
+  changePct: number | null;
+  volume: number | null;
+  ma200: number | null;
+};
+
+// Everything the list view's Price / % Change / Volume / 200 MA columns
+// need is already present in each entry's chartPoints (the same array the
+// mini candle chart draws), so those four columns cost zero extra data:
+// last close = price, last-vs-previous close = % change, last volume, last
+// ma200. Market cap / PE / industry come from the cron-warmed fundamentals
+// attached server-side (see PickerResultPage.getPickerData).
+function deriveRow(entry: ResultEntry): DerivedRow {
+  const pts = Array.isArray(entry.chartPoints) ? entry.chartPoints : [];
+  const last = pts.length ? pts[pts.length - 1] : undefined;
+  const prev = pts.length > 1 ? pts[pts.length - 2] : undefined;
+  const price = last && Number.isFinite(last.close) ? last.close : null;
+  const prevClose = prev && Number.isFinite(prev.close) ? prev.close : null;
+  const changePct =
+    price != null && prevClose != null && prevClose !== 0
+      ? ((price - prevClose) / prevClose) * 100
+      : null;
+  const volume = last && typeof last.volume === "number" && Number.isFinite(last.volume) ? last.volume : null;
+  const ma200 = last && typeof last.ma200 === "number" && Number.isFinite(last.ma200) ? last.ma200 : null;
+  return { price, changePct, volume, ma200 };
+}
+
+const COLUMNS: Array<{ key: SortKey; label: string; type: "str" | "num"; cls?: string }> = [
+  { key: "symbol", label: "Symbol", type: "str" },
+  { key: "name", label: "Company Name", type: "str", cls: "colName" },
+  { key: "marketCap", label: "Market Cap", type: "num" },
+  { key: "price", label: "Stock Price", type: "num" },
+  { key: "change", label: "% Change", type: "num" },
+  { key: "industry", label: "Industry", type: "str", cls: "colInd" },
+  { key: "volume", label: "Volume", type: "num" },
+  { key: "pe", label: "PE Ratio", type: "num" },
+  { key: "ma200", label: "200 MA", type: "num" },
+];
+
+function fmtCap(v: number | null) {
+  if (v == null) return null;
+  const abs = Math.abs(v);
+  if (abs >= 1e12) return `${(v / 1e12).toFixed(2)}T`;
+  if (abs >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
+  if (abs >= 1e3) return `${(v / 1e3).toFixed(2)}K`;
+  return `${v}`;
+}
+
+function fmtNum(v: number | null, digits = 2) {
+  if (v == null) return null;
+  return v.toFixed(digits);
+}
+
+function fmtVolume(v: number | null) {
+  if (v == null) return null;
+  return Math.round(v).toLocaleString("en-US");
+}
+
+const MUTED = <span className="muted">–</span>;
+
+// Renders the results for a single-category picker page (or the custom
+// screener). Two view modes share the same filtered/paginated data set:
+//   * list  (default) -- a sortable table with the columns Symbol, Company,
+//     Market Cap, Price, % Change, Industry, Volume, PE, 200 MA
+//   * chart (opt-in via the "Chart View Mode" toggle) -- the original mini
+//     candle-chart cards
+// `entries` is the FULL matched set for this page, so filtering, sorting and
+// "See more" pagination all run entirely off data already sent down with the
+// page: no additional network/API requests for any of them.
 //
-// `hideUntilFiltered` is only set on the dedicated /custom-screener page
-// (see PickerResultPage.tsx): unlike every other page, that page should
-// never show a default "everything" view -- results only appear once the
-// visitor has checked at least one condition. Every other page passes this
-// as false/omitted and keeps its existing default-show-everything
-// behaviour unchanged.
-//
-// `splitReasonsBySelection` is likewise only set on /custom-screener: with
-// 25 checkable conditions a matching card would otherwise show a wall of
-// chips, so there we surface only the chips for the checked conditions and
-// tuck the rest behind an "Also Qualifies for" pill (see ReasonChips).
+// `hideUntilFiltered` (only the /custom-screener page): results only appear
+// once at least one condition is checked. `splitReasonsBySelection` (also
+// only custom-screener, chart view): collapse non-selected reason chips
+// behind an "Also Qualifies for" pill.
 export default function PickerResultsGrid({
   entries,
-  initialVisibleCount,
   configHref,
   configTitle,
   tone,
@@ -174,7 +251,7 @@ export default function PickerResultsGrid({
   splitReasonsBySelection = false,
 }: {
   entries: ResultEntry[];
-  initialVisibleCount: number;
+  initialVisibleCount?: number;
   configHref: string;
   configTitle: string;
   tone: PickerTone;
@@ -184,18 +261,73 @@ export default function PickerResultsGrid({
   splitReasonsBySelection?: boolean;
 }) {
   const { selectedFilters, setMatchCount } = usePickerFilter();
-  const [visibleCount, setVisibleCount] = useState(initialVisibleCount);
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [sort, setSort] = useState<SortState>(null);
+  const pageSize = viewMode === "list" ? LIST_PAGE_SIZE : CHART_PAGE_SIZE;
+  const [visibleCount, setVisibleCount] = useState(LIST_PAGE_SIZE);
 
   const filteredEntries = useMemo(() => {
     if (!selectedFilters.length) return hideUntilFiltered ? [] : entries;
     return entries.filter((entry) => selectedFilters.every((key) => entry[key] === true));
   }, [entries, selectedFilters, hideUntilFiltered]);
 
-  // Selecting/clearing a filter starts back at the top of the (now
-  // differently-sized) result list, same as /pickers' own behaviour.
+  // Precompute the price/%change/volume/200MA once per entry (not per sort or
+  // per render of a row), keyed by the entry object itself.
+  const derivedByEntry = useMemo(() => {
+    const map = new WeakMap<ResultEntry, DerivedRow>();
+    for (const entry of entries) map.set(entry, deriveRow(entry));
+    return map;
+  }, [entries]);
+
+  const sortedEntries = useMemo(() => {
+    if (!sort) return filteredEntries;
+    const { key, dir } = sort;
+    const factor = dir === "asc" ? 1 : -1;
+
+    const strVal = (e: ResultEntry): string => {
+      if (key === "symbol") return e.symbol ?? "";
+      if (key === "name") return e.companyName ?? "";
+      if (key === "industry") return e.industry ?? "";
+      return "";
+    };
+    const numVal = (e: ResultEntry): number | null => {
+      const d = derivedByEntry.get(e);
+      if (key === "marketCap") return e.marketCap ?? null;
+      if (key === "price") return d?.price ?? null;
+      if (key === "change") return d?.changePct ?? null;
+      if (key === "volume") return d?.volume ?? null;
+      if (key === "pe") return e.peRatio ?? null;
+      if (key === "ma200") return d?.ma200 ?? null;
+      return null;
+    };
+
+    const isStr = key === "symbol" || key === "name" || key === "industry";
+    const copy = filteredEntries.slice();
+    copy.sort((a, b) => {
+      if (isStr) {
+        const av = strVal(a);
+        const bv = strVal(b);
+        // Empty strings always sink to the bottom regardless of direction.
+        if (!av && !bv) return 0;
+        if (!av) return 1;
+        if (!bv) return -1;
+        return factor * av.localeCompare(bv);
+      }
+      const av = numVal(a);
+      const bv = numVal(b);
+      // Missing numbers always sink to the bottom regardless of direction.
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      return factor * (av - bv);
+    });
+    return copy;
+  }, [filteredEntries, sort, derivedByEntry]);
+
+  // Reset back to the top of the list whenever the data set or view changes.
   useEffect(() => {
-    setVisibleCount(initialVisibleCount);
-  }, [selectedFilters, initialVisibleCount]);
+    setVisibleCount(pageSize);
+  }, [selectedFilters, sort, viewMode, pageSize]);
 
   // Lets ScreenerNav's FilterChecklist show a live "N matching" count next
   // to the checkboxes without needing its own copy of the data.
@@ -204,8 +336,26 @@ export default function PickerResultsGrid({
     return () => setMatchCount(null);
   }, [filteredEntries.length, selectedFilters.length, setMatchCount]);
 
-  const shown = filteredEntries.slice(0, visibleCount);
-  const hasMore = visibleCount < filteredEntries.length;
+  const shown = sortedEntries.slice(0, visibleCount);
+  const hasMore = visibleCount < sortedEntries.length;
+
+  const onHeaderClick = (key: SortKey, type: "str" | "num") => {
+    setSort((current) => {
+      if (current && current.key === key) {
+        return { key, dir: current.dir === "asc" ? "desc" : "asc" };
+      }
+      // Sensible default direction: A->Z for text, largest-first for numbers.
+      return { key, dir: type === "str" ? "asc" : "desc" };
+    });
+  };
+
+  const cardHrefFor = (entry: ResultEntry) =>
+    isEarnings ? `/stock/${encodeURIComponent(entry.symbol)}/earnings` : entry.chartHref;
+
+  const description =
+    viewMode === "list"
+      ? "Sortable table of the current screened results — click any column header to sort, or a row to open the full view."
+      : "Each card shows a mini candle preview — select any stock to open its full view.";
 
   return (
     <section>
@@ -213,7 +363,18 @@ export default function PickerResultsGrid({
         <div className="resultsHeaderTop">
           <h2>Current screened results</h2>
         </div>
-        <p>Each card shows a mini candle preview — select any stock to open its full view.</p>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <p style={{ margin: "8px 0 0" }}>{description}</p>
+          <button
+            type="button"
+            className="viewToggle"
+            onClick={() => setViewMode((v) => (v === "list" ? "chart" : "list"))}
+            aria-label={viewMode === "list" ? "Switch to chart view" : "Switch to list view"}
+          >
+            {viewMode === "list" ? "Chart View Mode" : "List View Mode"}
+            <span aria-hidden="true" style={{ fontSize: 12 }}>{viewMode === "list" ? "▦" : "▤"}</span>
+          </button>
+        </div>
         {selectedFilters.length ? (
           <p className="filterMatchLine">
             {filteredEntries.length} of {entries.length} match your {selectedFilters.length === 1 ? "filter" : `${selectedFilters.length} filters`}.
@@ -222,47 +383,116 @@ export default function PickerResultsGrid({
       </div>
 
       {shown.length ? (
-        <div className="resultsGrid">
-          {shown.map((entry) => {
-            const cardHref = isEarnings ? `/stock/${encodeURIComponent(entry.symbol)}/earnings` : entry.chartHref;
-            const scoreValue = scoreLabelForEntry(entry);
-            return (
-              <Link key={`${entry.symbol}-${entry.note}`} id={`picker-${entry.symbol}`} href={cardHref} className="resultCard">
-                <div className="resultCardTop">
-                  <div className="resultCardHead">
-                    <div className="symbolLine">
-                      <span className="dot" style={{ background: toneColour(entry.tone) }} aria-hidden="true" />
-                      <h3>{entry.symbol}</h3>
-                      {entry.companyName ? <span className="companyName">{entry.companyName}</span> : null}
+        viewMode === "list" ? (
+          <div className="listTableWrap">
+            <table className="listTable">
+              <thead>
+                <tr>
+                  {COLUMNS.map((col) => {
+                    const active = sort?.key === col.key;
+                    return (
+                      <th
+                        key={col.key}
+                        className={col.cls}
+                        onClick={() => onHeaderClick(col.key, col.type)}
+                        aria-sort={active ? (sort?.dir === "asc" ? "ascending" : "descending") : "none"}
+                      >
+                        {col.label}
+                        {active ? <span className="sortArrow" aria-hidden="true">{sort?.dir === "asc" ? "▲" : "▼"}</span> : null}
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((entry) => {
+                  const d = derivedByEntry.get(entry);
+                  const href = cardHrefFor(entry);
+                  const cap = fmtCap(entry.marketCap ?? null);
+                  const price = fmtNum(d?.price ?? null);
+                  const chg = d?.changePct ?? null;
+                  const vol = fmtVolume(d?.volume ?? null);
+                  const pe = fmtNum(entry.peRatio ?? null);
+                  const ma = fmtNum(d?.ma200 ?? null);
+                  return (
+                    <tr
+                      key={`${entry.symbol}-${entry.note}`}
+                      id={`picker-${entry.symbol}`}
+                      onClick={() => { window.location.href = href; }}
+                    >
+                      <td>
+                        <a
+                          href={href}
+                          className="listSym"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <span className="dot" style={{ background: toneColour(entry.tone) }} aria-hidden="true" />
+                          {entry.symbol}
+                        </a>
+                      </td>
+                      <td className="colName"><span className="listName">{entry.companyName ?? MUTED}</span></td>
+                      <td>{cap ?? MUTED}</td>
+                      <td>{price ?? MUTED}</td>
+                      <td>
+                        {chg == null ? MUTED : (
+                          <span className={chg >= 0 ? "chgUp" : "chgDown"}>
+                            {chg >= 0 ? "+" : ""}{chg.toFixed(2)}%
+                          </span>
+                        )}
+                      </td>
+                      <td className="colInd"><span className="listInd">{entry.industry ?? MUTED}</span></td>
+                      <td>{vol ?? MUTED}</td>
+                      <td>{pe ?? MUTED}</td>
+                      <td>{ma ?? MUTED}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="resultsGrid">
+            {shown.map((entry) => {
+              const cardHref = cardHrefFor(entry);
+              const scoreValue = scoreLabelForEntry(entry);
+              return (
+                <Link key={`${entry.symbol}-${entry.note}`} id={`picker-${entry.symbol}`} href={cardHref} className="resultCard">
+                  <div className="resultCardTop">
+                    <div className="resultCardHead">
+                      <div className="symbolLine">
+                        <span className="dot" style={{ background: toneColour(entry.tone) }} aria-hidden="true" />
+                        <h3>{entry.symbol}</h3>
+                        {entry.companyName ? <span className="companyName">{entry.companyName}</span> : null}
+                      </div>
+                      {entry.badge ? <div className="badge" style={{ marginTop: 8 }}>{entry.badge}</div> : null}
                     </div>
-                    {entry.badge ? <div className="badge" style={{ marginTop: 8 }}>{entry.badge}</div> : null}
+                    {scoreValue != null ? (
+                      <div className="scorePill">
+                        <strong>{scoreValue}</strong>
+                        <span>Score</span>
+                      </div>
+                    ) : null}
                   </div>
-                  {scoreValue != null ? (
-                    <div className="scorePill">
-                      <strong>{scoreValue}</strong>
-                      <span>Score</span>
-                    </div>
+                  {entry.reasons && entry.reasons.length > 0 ? (
+                    <ReasonChips
+                      reasons={entry.reasons}
+                      tone={entry.tone}
+                      selectedFilters={selectedFilters}
+                      splitBySelection={splitReasonsBySelection}
+                    />
                   ) : null}
-                </div>
-                {entry.reasons && entry.reasons.length > 0 ? (
-                  <ReasonChips
-                    reasons={entry.reasons}
-                    tone={entry.tone}
-                    selectedFilters={selectedFilters}
-                    splitBySelection={splitReasonsBySelection}
+                  <MiniPickerCandleChart
+                    points={entry.chartPoints}
+                    tone={tone}
+                    overlay={chartOverlayForEntry(configHref, configTitle, entry)}
+                    supportResistanceZone={entry.supportResistanceZone}
                   />
-                ) : null}
-                <MiniPickerCandleChart
-                  points={entry.chartPoints}
-                  tone={tone}
-                  overlay={chartOverlayForEntry(configHref, configTitle, entry)}
-                  supportResistanceZone={entry.supportResistanceZone}
-                />
-                <div className="note">{entry.note}</div>
-              </Link>
-            );
-          })}
-        </div>
+                  <div className="note">{entry.note}</div>
+                </Link>
+              );
+            })}
+          </div>
+        )
       ) : (
         <div className="emptyBox">
           {hideUntilFiltered && !selectedFilters.length
@@ -278,9 +508,9 @@ export default function PickerResultsGrid({
           <button
             type="button"
             className="seeMoreBtn"
-            onClick={() => setVisibleCount((count) => Math.min(count + SEE_MORE_BATCH, filteredEntries.length))}
+            onClick={() => setVisibleCount((count) => Math.min(count + pageSize, sortedEntries.length))}
           >
-            See more ({filteredEntries.length - visibleCount} more)
+            Show more ({sortedEntries.length - visibleCount} more)
           </button>
         </div>
       ) : null}
