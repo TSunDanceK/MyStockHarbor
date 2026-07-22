@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import MiniPickerCandleChart from "@/app/components/MiniPickerCandleChart";
 import { usePickerFilter } from "@/app/components/PickerFilterContext";
 import type { ResultEntry } from "@/app/components/PickerResultPage";
+import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type AnyFilterKey } from "@/lib/pickerFilters";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -26,6 +27,18 @@ function toneBorder(tone?: PickerTone) {
   return "rgba(148,163,184,0.24)";
 }
 
+// Reverse lookup from a checkable filter key (the 18 custom-builder
+// FilterKeys + the 7 category-membership keys, see lib/pickerFilters.ts) to
+// the human label that shows on a card's reason chip. Reason chips carry
+// only their label string (see PickerResultPage's getFlagReasons), so this
+// is how the custom-screener page decides which chips correspond to the
+// conditions the visitor actually checked vs the ones the stock merely
+// "also qualifies for". Labels are unique across both def lists.
+const LABEL_BY_KEY = new Map<AnyFilterKey, string>([
+  ...FILTER_DEFS.map((d) => [d.key, d.label] as const),
+  ...CATEGORY_FILTER_DEFS.map((d) => [d.key, d.label] as const),
+]);
+
 function chartOverlayForEntry(configHref: string, configTitle: string, entry: ResultEntry) {
   const href = configHref.toLowerCase();
   const text = `${configTitle} ${entry.badge ?? ""} ${entry.note} ${entry.reasons?.join(" ") ?? ""}`.toLowerCase();
@@ -45,6 +58,88 @@ function scoreLabelForEntry(entry: ResultEntry) {
   return null;
 }
 
+// Reason chips for a single card. On most pages every chip shows at once
+// (splitBySelection=false). On the /custom-screener page it's set true:
+// only the chips matching the conditions the visitor checked stay visible,
+// and every other condition the stock qualifies for collapses behind an
+// "Also Qualifies for" pill that expands them on click. Because the card is
+// itself a <Link>, the pill button stops the click from navigating.
+function ReasonChips({
+  reasons,
+  tone,
+  selectedFilters,
+  splitBySelection,
+}: {
+  reasons: string[];
+  tone: PickerTone;
+  selectedFilters: AnyFilterKey[];
+  splitBySelection: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const border = toneBorder(tone);
+  const colour = toneColour(tone);
+
+  const selectedLabels = useMemo(() => {
+    const set = new Set<string>();
+    for (const key of selectedFilters) {
+      const label = LABEL_BY_KEY.get(key);
+      if (label) set.add(label);
+    }
+    return set;
+  }, [selectedFilters]);
+
+  const { primary, extra } = useMemo(() => {
+    if (!splitBySelection || selectedLabels.size === 0) {
+      return { primary: reasons, extra: [] as string[] };
+    }
+    const primaryList: string[] = [];
+    const extraList: string[] = [];
+    for (const reason of reasons) {
+      if (selectedLabels.has(reason)) primaryList.push(reason);
+      else extraList.push(reason);
+    }
+    return { primary: primaryList, extra: extraList };
+  }, [reasons, selectedLabels, splitBySelection]);
+
+  const renderChip = (reason: string) => (
+    <span key={reason} className="reasonChip" style={{ borderColor: border, color: colour }}>
+      {reason}
+    </span>
+  );
+
+  return (
+    <div className="reasonChips">
+      {primary.map(renderChip)}
+      {expanded ? extra.map(renderChip) : null}
+      {extra.length > 0 ? (
+        <button
+          type="button"
+          className="reasonChip"
+          style={{
+            borderColor: border,
+            color: colour,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            fontWeight: 900,
+            gap: 5,
+            background: "rgba(96,165,250,0.12)",
+            borderStyle: "dashed",
+          }}
+          aria-expanded={expanded}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setExpanded((value) => !value);
+          }}
+        >
+          {expanded ? "Show less" : `Also Qualifies for (${extra.length})`}
+          <span aria-hidden="true" style={{ fontSize: 8, lineHeight: 1 }}>{expanded ? "▲" : "▼"}</span>
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 const SEE_MORE_BATCH = 36;
 
 // Renders the actual results grid for a single-category picker page
@@ -62,6 +157,11 @@ const SEE_MORE_BATCH = 36;
 // visitor has checked at least one condition. Every other page passes this
 // as false/omitted and keeps its existing default-show-everything
 // behaviour unchanged.
+//
+// `splitReasonsBySelection` is likewise only set on /custom-screener: with
+// 25 checkable conditions a matching card would otherwise show a wall of
+// chips, so there we surface only the chips for the checked conditions and
+// tuck the rest behind an "Also Qualifies for" pill (see ReasonChips).
 export default function PickerResultsGrid({
   entries,
   initialVisibleCount,
@@ -71,6 +171,7 @@ export default function PickerResultsGrid({
   emptyText,
   isEarnings,
   hideUntilFiltered = false,
+  splitReasonsBySelection = false,
 }: {
   entries: ResultEntry[];
   initialVisibleCount: number;
@@ -80,6 +181,7 @@ export default function PickerResultsGrid({
   emptyText: string;
   isEarnings: boolean;
   hideUntilFiltered?: boolean;
+  splitReasonsBySelection?: boolean;
 }) {
   const { selectedFilters, setMatchCount } = usePickerFilter();
   const [visibleCount, setVisibleCount] = useState(initialVisibleCount);
@@ -143,13 +245,12 @@ export default function PickerResultsGrid({
                   ) : null}
                 </div>
                 {entry.reasons && entry.reasons.length > 0 ? (
-                  <div className="reasonChips">
-                    {entry.reasons.map((reason) => (
-                      <span key={reason} className="reasonChip" style={{ borderColor: toneBorder(entry.tone), color: toneColour(entry.tone) }}>
-                        {reason}
-                      </span>
-                    ))}
-                  </div>
+                  <ReasonChips
+                    reasons={entry.reasons}
+                    tone={entry.tone}
+                    selectedFilters={selectedFilters}
+                    splitBySelection={splitReasonsBySelection}
+                  />
                 ) : null}
                 <MiniPickerCandleChart
                   points={entry.chartPoints}

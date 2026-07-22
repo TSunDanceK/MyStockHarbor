@@ -728,6 +728,7 @@ export default async function PickerResultPage({
                   emptyText={config.emptyText}
                   isEarnings={isEarningsPickerPage(config)}
                   hideUntilFiltered={config.kind === "allSymbols"}
+                  splitReasonsBySelection={config.kind === "allSymbols"}
                 />
 
                 <div className="scanDebug">
