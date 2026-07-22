@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { FILTER_DEFS, toneDotColor, type FilterKey } from "@/lib/pickerFilters";
 import PickerTickerSearch from "@/app/components/PickerTickerSearch";
+import TickerLogo from "@/app/components/TickerLogo";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -481,6 +482,7 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
   const rowRefs = React.useRef<Map<string, HTMLDivElement>>(new Map());
   const [searchQuery, setSearchQuery] = useState("");
   const [searchSubmitted, setSearchSubmitted] = useState("");
+  const [searchSubmittedName, setSearchSubmittedName] = useState("");
 
   // Header "Build Screener" dropdown link deep-links to /pickers#custom-screener --
   // once the results have loaded, scroll the custom screener panel into view and
@@ -1017,7 +1019,10 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
             <PickerTickerSearch
               query={searchQuery}
               setQuery={setSearchQuery}
-              onSubmit={(sym) => setSearchSubmitted(sym)}
+              onSubmit={(sym, name) => {
+                setSearchSubmitted(sym);
+                setSearchSubmittedName(name ?? "");
+              }}
             />
             {searchResults != null ? (
               <div style={{ marginTop: 10 }}>
@@ -1035,7 +1040,23 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
                     <div style={{ marginTop: 6, fontSize: 10.5, opacity: 0.4 }}>Doesn&apos;t include Ascending/Descending Triangle or Bull Flag plays until those are expanded below.</div>
                   </>
                 ) : (
-                  <div style={{ fontSize: 12, opacity: 0.55 }}>No current picker lists match &ldquo;{searchSubmitted}&rdquo;.</div>
+                  <div style={{ padding: 14, borderRadius: 12, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.03)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <TickerLogo symbol={searchSubmitted} size={26} radius={7} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 15, fontWeight: 800 }}>{searchSubmitted}</div>
+                        {searchSubmittedName ? (
+                          <div style={{ fontSize: 12.5, color: "rgba(226,232,240,0.66)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{searchSubmittedName}</div>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div style={{ marginTop: 12, fontSize: 13.5, lineHeight: 1.6, color: "rgba(226,232,240,0.8)" }}>
+                      <strong>{searchSubmitted}</strong> does not currently qualify in any screener list.
+                    </div>
+                    <div style={{ marginTop: 12 }}>
+                      <Link href={`/stock/${encodeURIComponent(searchSubmitted)}`} style={{ display: "inline-flex", alignItems: "center", padding: "7px 12px", borderRadius: 9, border: "1px solid rgba(147,197,253,0.28)", background: "rgba(147,197,253,0.10)", color: "#93c5fd", textDecoration: "none", fontWeight: 700, fontSize: 12.5 }}>View {searchSubmitted} full analysis →</Link>
+                    </div>
+                  </div>
                 )}
               </div>
             ) : null}
