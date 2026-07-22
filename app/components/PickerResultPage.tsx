@@ -8,6 +8,7 @@ import CustomScreenerSymbolSearch from "@/app/components/CustomScreenerSymbolSea
 import { PickerFilterProvider } from "@/app/components/PickerFilterContext";
 import { getCompanyNameMap } from "@/lib/server/companyNames";
 import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
+import { readPricePoolBulk } from "@/lib/server/pricePool";
 import { getPickersData } from "@/lib/server/pickersBuilder";
 import { WatermarkVisibilityProvider, HideWatermarksBar } from "@/app/components/WatermarkVisibility";
 import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type FilterKey } from "@/lib/pickerFilters";
@@ -146,14 +147,19 @@ export type ResultEntry = ResultEntryFlags & {
   reasons?: string[];
   supportResistanceZone?: SupportResistanceZone;
 
-  // Cron-warmed fundamentals attached from Redis in getPickerData (see
-  // lib/server/fundamentalsCache.ts). Optional -- any symbol not yet warmed
-  // simply shows "--" in the list view's Market Cap / PE / Industry columns.
-  // Price, % change, volume and 200 MA are NOT here: the list view derives
-  // those client-side from each entry's chartPoints, so they cost nothing.
+  // Cron-warmed extras attached from Redis in getPickerData. All optional --
+  // a symbol not yet warmed just falls back: Market Cap / PE / Industry show
+  // "--", and price / % change / volume fall back to the end-of-day close from
+  // chartPoints. Industry comes from the fundamentals cache (see
+  // fundamentalsCache.ts); price / changePct / volume + fresh marketCap /
+  // peRatio come from the ~15-min price pool (see pricePool.ts, layered on top
+  // of the fundamentals values).
   marketCap?: number;
   peRatio?: number;
   industry?: string;
+  price?: number;
+  changePct?: number;
+  volume?: number;
 };
 
 // Deliberately typed as FilterKey (the exact 18-key union from
@@ -566,6 +572,29 @@ async function getPickerData(config: PickerResultConfig) {
       }
     } catch {
       // fundamentals are optional
+    }
+
+    // Fresher ~15-min quotes (price, % change, volume + fresh market cap & PE)
+    // from the price pool, layered on top of the daily/fundamentals values
+    // above. Redis-ONLY read (see pricePool.readPricePoolBulk) -- populated by
+    // the warm-price-pool cron, so a page render never spends an FMP call. Any
+    // symbol not yet pooled just keeps its EOD/fundamentals values (the list
+    // view falls back to the end-of-day close for price/%change/volume).
+    try {
+      const pool = await readPricePoolBulk(entries.map((e) => e.symbol));
+      if (pool.size) {
+        for (const entry of entries) {
+          const p = pool.get(entry.symbol);
+          if (!p) continue;
+          if (p.price != null) entry.price = p.price;
+          if (p.changePct != null) entry.changePct = p.changePct;
+          if (p.volume != null) entry.volume = p.volume;
+          if (p.marketCap != null) entry.marketCap = p.marketCap;
+          if (p.pe != null) entry.peRatio = p.pe;
+        }
+      }
+    } catch {
+      // pooled quotes are optional
     }
 
     return {
