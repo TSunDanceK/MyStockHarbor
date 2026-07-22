@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { FILTER_DEFS, toneDotColor, type FilterKey } from "@/lib/pickerFilters";
+import PickerTickerSearch from "@/app/components/PickerTickerSearch";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -1013,17 +1014,11 @@ export default function PickersClient({ latestInsights = [], initialPickersPaylo
         {!loading && !err && !customMode ? (
           <section style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "12px 16px", background: "rgba(255,255,255,0.02)", boxSizing: "border-box" }}>
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#67e8f9", marginBottom: 6 }}>Search a ticker</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") setSearchSubmitted(searchQuery.trim().toUpperCase()); }}
-                placeholder="e.g. AAPL — see every list it qualifies for"
-                style={{ flex: 1, minWidth: 180, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 8, padding: "9px 12px", color: "#e2e8f0", fontSize: 13 }}
-              />
-              <button type="button" onClick={() => setSearchSubmitted(searchQuery.trim().toUpperCase())} style={{ padding: "9px 16px", borderRadius: 8, border: "1px solid rgba(34,197,94,0.28)", background: "rgba(34,197,94,0.10)", color: "#86efac", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>Search</button>
-            </div>
+            <PickerTickerSearch
+              query={searchQuery}
+              setQuery={setSearchQuery}
+              onSubmit={(sym) => setSearchSubmitted(sym)}
+            />
             {searchResults != null ? (
               <div style={{ marginTop: 10 }}>
                 {searchResults.length ? (
