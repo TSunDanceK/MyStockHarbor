@@ -35,6 +35,11 @@ const CHART_COLORS = {
   supportZone: "#22c55e",
   resistanceZone: "#ef4444",
   referenceLine: "#facc15",
+  // Subtle fill for the "neutral zone" band between an oscillator's
+  // overbought / oversold thresholds (RSI 30-70, Stochastic 20-80), matching
+  // the shaded middle box TradingView draws on these panels.
+  rsiBand: "rgba(167,139,250,0.09)",
+  stochBand: "rgba(56,189,248,0.08)",
 };
 
 export type Overlay =
@@ -73,6 +78,21 @@ function fmtXLabel(s: string) {
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${mm}/${dd}`;
+}
+
+// Simple 3-period moving average over a nullable series. Used to turn the
+// server-provided Stochastic %K/%D into TradingView's *slow* Stochastic
+// (14,3,3): the incoming stochD is already SMA3 of the raw %K (i.e. the slow
+// %K), so slow %D = SMA3 of that. Leaves the first two points null.
+function sma3(arr: Array<number | null>): (number | null)[] {
+  const out: (number | null)[] = Array(arr.length).fill(null);
+  for (let i = 2; i < arr.length; i++) {
+    const a = arr[i], b = arr[i - 1], c = arr[i - 2];
+    if (typeof a === "number" && Number.isFinite(a) && typeof b === "number" && Number.isFinite(b) && typeof c === "number" && Number.isFinite(c)) {
+      out[i] = (a + b + c) / 3;
+    }
+  }
+  return out;
 }
 
 function minMax(arr: Array<number | null>) {
@@ -553,8 +573,15 @@ export default function PriceChart(props: Props) {
     () => pathFrom(series.map((p) => p.macdSignal), ySub),
     [series, ySub]
   );
-  const stochKPath = useMemo(() => pathFrom(series.map((p) => p.stochK), ySub), [series, ySub]);
-  const stochDPath = useMemo(() => pathFrom(series.map((p) => p.stochD), ySub), [series, ySub]);
+
+  // TradingView "slow" Stochastic (14,3,3): the server already hands us the raw
+  // %K (stochK) and its SMA3 (stochD, = slow %K). Plot that smoothed line as
+  // %K, and its own SMA3 as slow %D, so the panel matches TradingView instead
+  // of the noisier fast Stochastic.
+  const slowStochK = useMemo(() => series.map((p) => p.stochD), [series]);
+  const slowStochD = useMemo(() => sma3(slowStochK), [slowStochK]);
+  const stochKPath = useMemo(() => pathFrom(slowStochK, ySub), [slowStochK, ySub]);
+  const stochDPath = useMemo(() => pathFrom(slowStochD, ySub), [slowStochD, ySub]);
   const atrPath = useMemo(() => pathFrom(series.map((p) => p.atr14), ySub), [series, ySub]);
 
   const yTicks = useMemo(() => {
@@ -922,6 +949,13 @@ export default function PriceChart(props: Props) {
 
             {activeLowerOverlay === "RSI(14)" ? (
               <>
+                <rect
+                  x={padL}
+                  y={ySub(70)}
+                  width={width - padL - padR}
+                  height={Math.max(0, ySub(30) - ySub(70))}
+                  fill={CHART_COLORS.rsiBand}
+                />
                 <line
                   x1={padL}
                   y1={ySub(70)}
@@ -1014,6 +1048,13 @@ export default function PriceChart(props: Props) {
 
             {activeLowerOverlay === "Stochastic(14,3)" ? (
               <>
+                <rect
+                  x={padL}
+                  y={ySub(80)}
+                  width={width - padL - padR}
+                  height={Math.max(0, ySub(20) - ySub(80))}
+                  fill={CHART_COLORS.stochBand}
+                />
                 <line
                   x1={padL}
                   y1={ySub(80)}
