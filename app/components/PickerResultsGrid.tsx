@@ -142,11 +142,12 @@ function ReasonChips({
 
 // Page sizes. List view is the new default (30/page); chart view is heavier
 // to render (a mini SVG candle chart per card) so it paginates tighter at
-// 20/page to keep the server-rendered first paint fast. Both grow via the
-// "See more" button entirely from data already sent down with the page --
-// no extra network/API requests for pagination.
+// 21/page to keep the server-rendered first paint fast -- 21 = 7 full rows
+// of 3 cards, so the grid stays symmetrical with no half-empty last row.
+// Both grow via the "Show more" button entirely from data already sent down
+// with the page -- no extra network/API requests for pagination.
 const LIST_PAGE_SIZE = 30;
-const CHART_PAGE_SIZE = 20;
+const CHART_PAGE_SIZE = 21;
 
 type ViewMode = "list" | "chart";
 
