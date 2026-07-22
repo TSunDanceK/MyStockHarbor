@@ -113,7 +113,7 @@ const CHART_TYPES: { key: ChartTypeKey; label: string }[] = [
 
 // Price overlays stack on the main candle pane; lower indicators get their
 // own pane. These names are all KLineChart v9 built-ins.
-const PRICE_INDICATORS = ["MA", "EMA", "BOLL"] as const;
+const PRICE_INDICATORS = ["MA", "EMA", "BOLL", "NCT_SMOOTH", "NCT_FAST"] as const;
 const LOWER_INDICATORS = ["VOL", "MACD", "RSI", "KDJ"] as const;
 type IndicatorName = (typeof PRICE_INDICATORS)[number] | (typeof LOWER_INDICATORS)[number];
 
@@ -121,6 +121,8 @@ const INDICATOR_LABELS: Record<IndicatorName, string> = {
   MA: "MA (Moving Averages)",
   EMA: "EMA",
   BOLL: "Bollinger Bands",
+  NCT_SMOOTH: "Trend Helper — Smooth",
+  NCT_FAST: "Trend Helper — Fast",
   VOL: "Volume",
   MACD: "MACD",
   RSI: "RSI",
@@ -175,6 +177,144 @@ function thresholdBandDraw(lower: number, upper: number, fill: string) {
       ctx.restore();
     } catch { /* noop */ }
     return false;
+  };
+}
+
+// ---- Noise Cutter Trend Helper (ported from the user's Pine v6) -----------
+// A trend-following price overlay: an HMA trend line coloured by a *confirmed*
+// up/down state (needs N consecutive bars closing the same side of a rising/
+// falling HMA before the colour flips, so single-bar noise doesn't recolour
+// it), plus a purple MA200. Improvement over the original Pine: once a
+// direction is confirmed the colour is *held* through pullbacks until the
+// opposite direction confirms, instead of dropping back to grey on any single
+// counter-bar -- much less flicker. Two presets: Smooth (HMA 55, confirm 2)
+// and Fast (HMA 21, confirm 1).
+const NCT_BULL = "#3b82f6";    // blue   (confirmed up)
+const NCT_BEAR = "#eab308";    // yellow (confirmed down)
+const NCT_NEUTRAL = "#94a3b8"; // grey   (unconfirmed / pre-trend)
+const NCT_MA200 = "#a855f7";   // purple
+
+function wmaSeries(values: Array<number | null>, len: number): Array<number | null> {
+  const out: Array<number | null> = Array(values.length).fill(null);
+  if (len < 1) return out;
+  const denom = (len * (len + 1)) / 2;
+  for (let i = len - 1; i < values.length; i++) {
+    let num = 0, ok = true;
+    for (let k = 0; k < len; k++) {
+      const v = values[i - k];
+      if (typeof v !== "number" || !Number.isFinite(v)) { ok = false; break; }
+      num += v * (len - k);
+    }
+    if (ok) out[i] = num / denom;
+  }
+  return out;
+}
+function hmaSeries(values: number[], len: number): Array<number | null> {
+  const half = Math.max(1, Math.floor(len / 2));
+  const sq = Math.max(1, Math.round(Math.sqrt(len)));
+  const wHalf = wmaSeries(values, half);
+  const wFull = wmaSeries(values, len);
+  const diff: Array<number | null> = values.map((_, i) => {
+    const a = wHalf[i], b = wFull[i];
+    return typeof a === "number" && typeof b === "number" ? 2 * a - b : null;
+  });
+  return wmaSeries(diff, sq);
+}
+function smaSeries(values: number[], len: number): Array<number | null> {
+  const out: Array<number | null> = Array(values.length).fill(null);
+  if (len < 1) return out;
+  let sum = 0;
+  for (let i = 0; i < values.length; i++) {
+    sum += values[i];
+    if (i >= len) sum -= values[i - len];
+    if (i >= len - 1) out[i] = sum / len;
+  }
+  return out;
+}
+
+type NctRow = { trend: number | null; ma200: number | null; state: number };
+
+// Builds a KLineChart price-overlay template for one Trend Helper preset. The
+// coloured trend line + MA200 are painted in a custom draw (returns true = we
+// own the rendering); on any error it returns false so KLineChart falls back
+// to plain single-colour figure lines rather than breaking the pane.
+function makeTrendHelper(name: "NCT_SMOOTH" | "NCT_FAST", trendLen: number, confirmBars: number) {
+  return {
+    name,
+    shortName: name === "NCT_FAST" ? "Trend Helper (Fast)" : "Trend Helper (Smooth)",
+    series: "price",
+    figures: [
+      { key: "trend", title: "Trend: ", type: "line" },
+      { key: "ma200", title: "MA200: ", type: "line" },
+    ],
+    calc: (dataList: Array<{ close: number }>) => {
+      const closes = dataList.map((d) => d.close);
+      const trend = hmaSeries(closes, trendLen);
+      const ma200 = smaSeries(closes, 200);
+      const out: NctRow[] = new Array(dataList.length);
+      let bull = 0, bear = 0, lastState = 0;
+      for (let i = 0; i < dataList.length; i++) {
+        const t = trend[i], tp = i > 0 ? trend[i - 1] : null;
+        const up = typeof t === "number" && typeof tp === "number" && closes[i] > t && t > tp;
+        const dn = typeof t === "number" && typeof tp === "number" && closes[i] < t && t < tp;
+        bull = up ? bull + 1 : 0;
+        bear = dn ? bear + 1 : 0;
+        let state: number;
+        if (bull >= confirmBars) state = 1;
+        else if (bear >= confirmBars) state = -1;
+        else state = lastState; // hold last confirmed colour until the opposite confirms
+        lastState = state;
+        out[i] = { trend: typeof t === "number" ? t : null, ma200: typeof ma200[i] === "number" ? (ma200[i] as number) : null, state };
+      }
+      return out;
+    },
+    draw: (params: {
+      ctx: CanvasRenderingContext2D;
+      indicator: { result?: NctRow[] };
+      visibleRange: { from: number; to: number };
+      xAxis: { convertToPixel: (v: number) => number };
+      yAxis: { convertToPixel: (v: number) => number };
+    }): boolean => {
+      try {
+        const { ctx, indicator, visibleRange, xAxis, yAxis } = params;
+        const result = indicator?.result;
+        if (!result || !result.length) return true;
+        const from = Math.max(0, visibleRange.from);
+        const to = Math.min(result.length, visibleRange.to);
+        ctx.save();
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        ctx.setLineDash([]);
+        // MA200 (purple)
+        ctx.strokeStyle = NCT_MA200;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        let started = false;
+        for (let i = from; i < to; i++) {
+          const v = result[i]?.ma200;
+          if (typeof v !== "number" || !Number.isFinite(v)) { started = false; continue; }
+          const px = xAxis.convertToPixel(i), py = yAxis.convertToPixel(v);
+          if (!started) { ctx.moveTo(px, py); started = true; } else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+        // Trend line, coloured per bar by confirmed state.
+        ctx.lineWidth = 3;
+        for (let i = Math.max(1, from); i < to; i++) {
+          const a = result[i - 1]?.trend, b = result[i]?.trend;
+          if (typeof a !== "number" || !Number.isFinite(a) || typeof b !== "number" || !Number.isFinite(b)) continue;
+          const st = result[i]?.state ?? 0;
+          ctx.strokeStyle = st > 0 ? NCT_BULL : st < 0 ? NCT_BEAR : NCT_NEUTRAL;
+          ctx.beginPath();
+          ctx.moveTo(xAxis.convertToPixel(i - 1), yAxis.convertToPixel(a));
+          ctx.lineTo(xAxis.convertToPixel(i), yAxis.convertToPixel(b));
+          ctx.stroke();
+        }
+        ctx.restore();
+        return true;
+      } catch {
+        return false;
+      }
+    },
   };
 }
 
@@ -253,6 +393,10 @@ function registerCustomIndicators(kl: unknown) {
       });
     },
   });
+
+  // Noise Cutter Trend Helper — two presets, price overlays on the candle pane.
+  register(makeTrendHelper("NCT_SMOOTH", 55, 2));
+  register(makeTrendHelper("NCT_FAST", 21, 1));
 
   customIndicatorsRegistered = true;
 }
@@ -577,8 +721,8 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
       const kl = await import("klinecharts");
       if (cancelled) return;
       // Override the built-in RSI/KDJ with our own (correct math + shaded
-      // neutral-zone band) before the chart is created so createIndicator
-      // uses them. Idempotent.
+      // neutral-zone band) and register the Trend Helper overlays before the
+      // chart is created so createIndicator uses them. Idempotent.
       try { registerCustomIndicators(kl); } catch { /* noop */ }
       disposeRef.current = kl.dispose as unknown as (element: HTMLElement) => void;
 
