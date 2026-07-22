@@ -273,16 +273,9 @@ export default function CustomScreenerSymbolSearch({
           </div>
 
           <div style={{ marginTop: 12, fontSize: 13.5, lineHeight: 1.6 }}>
-            {!selected.inUniverse ? (
+            {selected.reasons.length === 0 ? (
               <span style={{ color: "rgba(226,232,240,0.8)" }}>
-                <strong>{selected.symbol}</strong> isn&rsquo;t in the current analyzed universe (the
-                screener tracks roughly the ~200 most-active symbols), so it has no screener
-                results right now.
-              </span>
-            ) : selected.reasons.length === 0 ? (
-              <span style={{ color: "rgba(226,232,240,0.8)" }}>
-                <strong>{selected.symbol}</strong> is analyzed but currently meets{" "}
-                <strong>none</strong> of the tracked screener conditions.
+                <strong>{selected.symbol}</strong> does not currently qualify in any screener list.
               </span>
             ) : (
               <>
