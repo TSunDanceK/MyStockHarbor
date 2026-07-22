@@ -9,6 +9,7 @@ import InteractiveChart from "./InteractiveChart";
 import { detectDivergenceFromHistory } from "../../lib/ta/divergence";
 import DiscoveryStrip from "./DiscoveryStrip";
 import DashboardTicker from "./DashboardTicker";
+import TickerLogo from "@/app/components/TickerLogo";
 
 export type Quote = { symbol: string; price: number | null; date: string | null; time: string | null; source: string; };
 export type Point = { date: string; open?: number; close: number; high?: number; low?: number; volume?: number; };
@@ -346,6 +347,8 @@ export default function DashboardClient({
   const [query, setQuery] = useState(symbol);
   const [results, setResults] = useState<SymbolResult[]>([]);
   const [open, setOpen] = useState(false);
+  const searchBoxRef = useRef<HTMLDivElement>(null);
+  const mobileSearchBoxRef = useRef<HTMLDivElement>(null);
   const [bench, setBench] = useState<BenchPayload | null>(initialBenchmarks);
   const [news, setNews] = useState<NewsPayload | null>(() => (seedMatchesSymbol ? initialNews : null));
   const [earningsSummary, setEarningsSummary] = useState<StockEarningsSummary | null>(() => (seedMatchesSymbol ? initialEarningsSummary : null));
@@ -504,6 +507,12 @@ export default function DashboardClient({
     };
   }, [fullscreen]);
   useEffect(() => { function h(e: MouseEvent) { if (!indicatorMenuRef.current) return; if (!indicatorMenuRef.current.contains(e.target as Node)) setIndicatorMenuOpen(false); } document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h); }, []);
+  // Close the ticker search results dropdown when the user clicks outside the search box.
+  // Both the desktop search box and the MobileHero search box share the single `open`
+  // state, so the handler must treat a click inside EITHER wrapper as "inside" --
+  // otherwise a tap on a mobile result reads as outside, closing the dropdown on
+  // mousedown before the click can run chooseSymbol (dead selection).
+  useEffect(() => { function h(e: MouseEvent) { const t = e.target as Node; const inDesktop = !!searchBoxRef.current && searchBoxRef.current.contains(t); const inMobile = !!mobileSearchBoxRef.current && mobileSearchBoxRef.current.contains(t); if (!inDesktop && !inMobile) setOpen(false); } document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h); }, []);
   useEffect(() => {
     if (assetType === "crypto") { const p = CRYPTO_PRESETS.find(t => t.symbol === symbol); if (p) setSymbolName(p.name); return; }
     const p = PRESET_TICKERS.find(t => t.symbol === symbol); if (p) { setSymbolName(p.name); return; }
@@ -750,7 +759,7 @@ export default function DashboardClient({
     const tc = toneToColor(trendToneFromScore(trendScore), true), sc = toneToColor(compositeToneFromCounts(stretchScore.overbought, stretchScore.oversold, 0).tone, true);
     return (<SectionCard title={`${symbol} Overview`} allowOverflow right={assetType === "stock" ? <Link href={`/stock/${encodeURIComponent(symbol)}`} style={{ display: "inline-flex", alignItems: "center", padding: "6px 11px", borderRadius: 9, border: `1px solid ${COLORS.amberBorder}`, background: COLORS.amberSoft, color: COLORS.amber, textDecoration: "none", fontWeight: 700, fontSize: 11 }}>Company Overview →</Link> : null}>
       <div style={{ display: "grid", gap: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}><div><div style={{ fontSize: isMobile ? 24 : 28, fontWeight: 800, lineHeight: 1, letterSpacing: "-0.02em" }}>{symbol}</div><div style={{ marginTop: 4, fontSize: 12, color: COLORS.mutedFg, fontWeight: 600 }}>{symbolName || "Name unavailable"}</div></div><div style={{ textAlign: "right" }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>Last price</div><div style={{ fontSize: isMobile ? 22 : 28, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.05 }}>{quote?.price != null ? `$${quote.price.toFixed(2)}` : "—"}</div></div></div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}><div><div style={{ display: "flex", alignItems: "center", gap: 10 }}><TickerLogo symbol={symbol} size={28} radius={8} /><div style={{ fontSize: isMobile ? 24 : 28, fontWeight: 800, lineHeight: 1, letterSpacing: "-0.02em" }}>{symbol}</div></div><div style={{ marginTop: 4, fontSize: 12, color: COLORS.mutedFg, fontWeight: 600 }}>{symbolName || "Name unavailable"}</div></div><div style={{ textAlign: "right" }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>Last price</div><div style={{ fontSize: isMobile ? 22 : 28, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.05 }}>{quote?.price != null ? `$${quote.price.toFixed(2)}` : "—"}</div></div></div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           {[{ label: "Trend Score", color: tc, score: trendScore.passed, total: trendScore.total, flagged: trendScore.passed, helpText: "Trend score checks price vs MA50/MA200 and MACD histogram direction." }, { label: "Stretch Score", color: sc, score: stretchScore.flagged, total: stretchScore.total, flagged: stretchScore.flagged, helpText: "Stretch score checks RSI, Stoch, Bollinger, VWMA(20), EMA20 and MA50 extension." }].map(s => (
             <div key={s.label} style={{ background: COLORS.cardBg2, border: `1px solid ${COLORS.borderSoft}`, borderRadius: 12, padding: 12 }}>
@@ -1010,10 +1019,10 @@ export default function DashboardClient({
         <div style={{ marginTop: 7, color: COLORS.mutedFg, fontSize: 13, fontWeight: 600, lineHeight: 1.5 }}>Scan the market for ideas, or search any stock to open its full analysis page.</div>
         <div style={{ marginTop: 14 }}><AssetTypeToggle /></div>
         <button type="button" onClick={() => router.push("/pickers")} style={{ width: "100%", marginTop: 14, padding: "14px 16px", borderRadius: 14, border: "1px solid rgba(47,107,255,0.5)", background: "linear-gradient(135deg, rgba(47,107,255,0.28), rgba(22,199,132,0.14))", color: COLORS.controlFg, fontWeight: 800, fontSize: 16, cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ display: "flex", alignItems: "center", gap: 9 }}><span>🔎</span><span>Scan for Stock Ideas</span></span><span>→</span></button>
-        <div style={{ marginTop: 12 }}>
+        <div style={{ marginTop: 12 }} ref={mobileSearchBoxRef}>
           <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.mutedFg2, marginBottom: 6 }}>{assetType === "crypto" ? "Search Crypto (USD pairs)" : "Search Any Stock"}</div>
           <input value={query} onChange={e => { setQuery(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); const f = results[0]; if (!f?.symbol) return; chooseSymbol(f.symbol, f.name, assetType); } }} placeholder={assetType === "crypto" ? "🔎 Search BTC, ETH, SOL, TRX…" : "🔎 Search ticker or company"} style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, outline: "none", fontSize: 15, fontWeight: 700 }} />
-          {open && results.length > 0 ? <div style={{ position: "relative", marginTop: 7, zIndex: 20, border: `1px solid ${COLORS.border}`, borderRadius: 13, background: COLORS.cardBg, boxShadow: "0 14px 28px rgba(0,0,0,0.4)", overflow: "hidden" }}>{results.slice(0, 8).map(r => <button key={`${r.symbol}-${r.exchange}`} type="button" onClick={() => chooseSymbol(r.symbol, r.name, assetType)} style={{ width: "100%", textAlign: "left", padding: "11px 13px", border: "none", borderBottom: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg, color: COLORS.cardFg, cursor: "pointer" }}><div style={{ fontWeight: 800 }}>{r.symbol}</div><div style={{ fontSize: 12, color: COLORS.mutedFg }}>{r.name}{r.exchange ? ` · ${r.exchange}` : ""}</div></button>)}</div> : null}
+          {open && results.length > 0 ? <div style={{ position: "relative", marginTop: 7, zIndex: 20, border: `1px solid ${COLORS.border}`, borderRadius: 13, background: COLORS.cardBg, boxShadow: "0 14px 28px rgba(0,0,0,0.4)", overflow: "hidden" }}>{results.slice(0, 8).map(r => <button key={`${r.symbol}-${r.exchange}`} type="button" onClick={() => chooseSymbol(r.symbol, r.name, assetType)} style={{ width: "100%", textAlign: "left", padding: "11px 13px", border: "none", borderBottom: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg, color: COLORS.cardFg, cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}><TickerLogo symbol={r.symbol} size={22} radius={6} /><div><div style={{ fontWeight: 800 }}>{r.symbol}</div><div style={{ fontSize: 12, color: COLORS.mutedFg }}>{r.name}{r.exchange ? ` · ${r.exchange}` : ""}</div></div></button>)}</div> : null}
         </div>
       </div>
     </section>);
@@ -1051,11 +1060,11 @@ export default function DashboardClient({
           <div className="msh-hero-lead"><h1>Analyze any stock</h1><p>Search a ticker for its full breakdown, or scan for fresh ideas.</p></div>
           <AssetTypeToggle compact />
           <div className="msh-hero-actions">
-            <div className="msh-searchbox">
+            <div className="msh-searchbox" ref={searchBoxRef}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8a97ad" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
               <input value={query} onChange={e => { setQuery(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); const f = results[0]; if (f?.symbol) chooseSymbol(f.symbol, f.name, assetType); } }} placeholder={assetType === "crypto" ? "Search BTC, ETH, SOL, TRX…" : "Search ANY ticker or company…"} />
               <button className="msh-go" onClick={() => { if (results[0]) chooseSymbol(results[0].symbol, results[0].name, assetType); }}>Go</button>
-              {open && results.length > 0 ? <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, right: 0, zIndex: 30, border: `1px solid ${COLORS.border}`, borderRadius: 13, background: COLORS.cardBg, boxShadow: "0 14px 28px rgba(0,0,0,0.4)", overflow: "hidden" }}>{results.slice(0, 8).map(r => <button key={`${r.symbol}-${r.exchange}`} type="button" onClick={() => chooseSymbol(r.symbol, r.name, assetType)} style={{ width: "100%", textAlign: "left", padding: "10px 13px", border: "none", borderBottom: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg, color: COLORS.cardFg, cursor: "pointer" }}><div style={{ fontWeight: 800, fontSize: 13 }}>{r.symbol}</div><div style={{ fontSize: 12, color: COLORS.mutedFg }}>{r.name}{r.exchange ? ` · ${r.exchange}` : ""}</div></button>)}</div> : null}
+              {open && results.length > 0 ? <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, right: 0, zIndex: 30, border: `1px solid ${COLORS.border}`, borderRadius: 13, background: COLORS.cardBg, boxShadow: "0 14px 28px rgba(0,0,0,0.4)", overflow: "hidden" }}>{results.slice(0, 8).map(r => <button key={`${r.symbol}-${r.exchange}`} type="button" onClick={() => chooseSymbol(r.symbol, r.name, assetType)} style={{ width: "100%", textAlign: "left", padding: "10px 13px", border: "none", borderBottom: `1px solid ${COLORS.borderSoft}`, background: COLORS.cardBg, color: COLORS.cardFg, cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}><TickerLogo symbol={r.symbol} size={22} radius={6} /><div><div style={{ fontWeight: 800, fontSize: 13 }}>{r.symbol}</div><div style={{ fontSize: 12, color: COLORS.mutedFg }}>{r.name}{r.exchange ? ` · ${r.exchange}` : ""}</div></div></button>)}</div> : null}
             </div>
             <button className="msh-scanbtn" onClick={() => router.push("/pickers")}>🔎 Scan for stock ideas</button>
           </div>

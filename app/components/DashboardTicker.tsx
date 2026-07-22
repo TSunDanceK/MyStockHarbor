@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import TickerLogo from "@/app/components/TickerLogo";
 
 // Live "sports ticker"-style scrolling feed for the dashboard, sitting
 // between the discovery strip and the stock overview/chart panels. Pulls
@@ -76,6 +77,7 @@ type TickerItem = {
   text: string;
   href: string;
   color: string;
+  symbol: string;
 };
 
 // Four accent colors, reused from the site's existing tile language
@@ -146,6 +148,7 @@ function buildItems(data: PickersPayload | null): TickerItem[] {
       text: `${row.symbol} ${up ? "▲" : "▼"} ${Math.abs(pct).toFixed(1)}% today`,
       href: href(row.symbol),
       color: up ? COLOR_UP : COLOR_DOWN,
+      symbol: row.symbol,
     });
   });
 
@@ -165,6 +168,7 @@ function buildItems(data: PickersPayload | null): TickerItem[] {
       text,
       href: `${href(item.symbol)}/earnings`,
       color: COLOR_EARNINGS,
+      symbol: item.symbol,
     });
   });
 
@@ -179,6 +183,7 @@ function buildItems(data: PickersPayload | null): TickerItem[] {
       text: `${r.symbol} getting close to weekly MA200`,
       href: href(r.symbol),
       color: COLOR_TECHNICAL,
+      symbol: r.symbol,
     });
   });
 
@@ -193,6 +198,7 @@ function buildItems(data: PickersPayload | null): TickerItem[] {
       text: `${r.symbol} currently has ${r.count} buy signal${r.count === 1 ? "" : "s"}`,
       href: href(r.symbol),
       color: COLOR_UP,
+      symbol: r.symbol,
     });
   });
 
@@ -207,6 +213,7 @@ function buildItems(data: PickersPayload | null): TickerItem[] {
       text: `${r.symbol} currently has ${r.count} sell signal${r.count === 1 ? "" : "s"}`,
       href: href(r.symbol),
       color: COLOR_DOWN,
+      symbol: r.symbol,
     });
   });
 
@@ -219,6 +226,7 @@ function buildItems(data: PickersPayload | null): TickerItem[] {
       text: `${r.symbol} showing bullish divergence`,
       href: href(r.symbol),
       color: COLOR_UP,
+      symbol: r.symbol,
     });
   });
 
@@ -231,6 +239,7 @@ function buildItems(data: PickersPayload | null): TickerItem[] {
       text: `${r.symbol} showing bearish divergence`,
       href: href(r.symbol),
       color: COLOR_DOWN,
+      symbol: r.symbol,
     });
   });
 
@@ -242,6 +251,7 @@ function buildItems(data: PickersPayload | null): TickerItem[] {
         text: `${item.symbol} just broke out to a new all-time high`,
         href: href(item.symbol),
         color: COLOR_UP,
+        symbol: item.symbol,
       });
     });
 
@@ -253,6 +263,7 @@ function buildItems(data: PickersPayload | null): TickerItem[] {
         text: `${item.symbol} broke out to a fresh 3-month high`,
         href: href(item.symbol),
         color: COLOR_UP,
+        symbol: item.symbol,
       });
     });
 
@@ -267,6 +278,7 @@ function buildItems(data: PickersPayload | null): TickerItem[] {
           : `${item.symbol} testing a key resistance zone`,
         href: href(item.symbol),
         color: isSupport ? COLOR_UP : COLOR_DOWN,
+        symbol: item.symbol,
       });
     });
 
@@ -278,6 +290,7 @@ function buildItems(data: PickersPayload | null): TickerItem[] {
         text: `${item.symbol} is 20%+ below its all-time high`,
         href: href(item.symbol),
         color: COLOR_TECHNICAL,
+        symbol: item.symbol,
       });
     });
 
@@ -289,6 +302,7 @@ function buildItems(data: PickersPayload | null): TickerItem[] {
         text: `${item.symbol} is oversold today`,
         href: href(item.symbol),
         color: COLOR_UP,
+        symbol: item.symbol,
       });
     });
 
@@ -300,6 +314,7 @@ function buildItems(data: PickersPayload | null): TickerItem[] {
         text: `${item.symbol} is overbought today`,
         href: href(item.symbol),
         color: COLOR_DOWN,
+        symbol: item.symbol,
       });
     });
 
@@ -311,6 +326,7 @@ function buildItems(data: PickersPayload | null): TickerItem[] {
         text: `${item.symbol} has one of the strongest trend scores today`,
         href: href(item.symbol),
         color: COLOR_TECHNICAL,
+        symbol: item.symbol,
       });
     });
 
@@ -322,6 +338,7 @@ function buildItems(data: PickersPayload | null): TickerItem[] {
         text: `${item.symbol} beat on its last earnings report`,
         href: `${href(item.symbol)}/earnings`,
         color: COLOR_EARNINGS,
+        symbol: item.symbol,
       });
     });
 
@@ -418,6 +435,8 @@ export default function DashboardTicker() {
           flex: "1 1 auto",
           overflow: reducedMotion ? "auto" : "hidden",
           position: "relative",
+          display: "flex",
+          alignItems: "center",
         }}
       >
         <div
@@ -425,6 +444,7 @@ export default function DashboardTicker() {
           style={{
             display: "flex",
             alignItems: "center",
+            height: "100%",
             width: "max-content",
             animation: reducedMotion ? "none" : `mshTickerScroll ${durationSec}s linear infinite`,
           }}
@@ -445,16 +465,7 @@ export default function DashboardTicker() {
                 whiteSpace: "nowrap",
               }}
             >
-              <span
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: "50%",
-                  background: item.color,
-                  flex: "0 0 auto",
-                  display: "inline-block",
-                }}
-              />
+              <TickerLogo symbol={item.symbol} size={18} radius={5} />
               {item.text}
             </Link>
           ))}

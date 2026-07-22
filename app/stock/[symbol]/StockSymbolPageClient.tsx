@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import TickerLogo from "@/app/components/TickerLogo";
 import type { IndicatorSeed } from "@/lib/indicators";
 import StockPriceChart from "./StockPriceChart";
 import StockTickerJump from "./StockTickerJump";
@@ -1041,7 +1042,10 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
             </div>
           </div>
           <div style={{ marginTop: 14 }}>
-            <h1 style={{ margin: 0, fontSize: 34, lineHeight: 1.05, fontWeight: 800, letterSpacing: "-0.045em" }}>{symbol}</h1>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <TickerLogo symbol={symbol} name={companyName} size={34} radius={8} />
+              <h1 style={{ margin: 0, fontSize: 34, lineHeight: 1.05, fontWeight: 800, letterSpacing: "-0.045em" }}>{symbol}</h1>
+            </div>
             {companyName ? <p style={{ margin: "4px 0 0", fontSize: 16, opacity: 0.60, fontWeight: 400 }}>{companyName}</p> : null}
             {lastClose !== null ? <p style={{ margin: "12px 0 0", fontSize: 16, lineHeight: 1.7, opacity: 0.82, maxWidth: 760 }}>{heroLede}</p> : null}
           </div>
