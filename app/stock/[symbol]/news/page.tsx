@@ -1,4 +1,4 @@
- import type { CSSProperties } from "react";
+import type { CSSProperties } from "react";
 import StockNewsTickerJump from "./StockNewsTickerJump";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -14,6 +14,7 @@ import {
   type Point,
 } from "@/lib/indicators";
 import ShareButton from "@/app/components/ShareButton";
+import TickerLogo from "@/app/components/TickerLogo";
 import WhyThisMatters from "./WhyThisMatters";
 import AiInsightCard from "./AiInsightCard";
 import { WatermarkVisibilityProvider, HideWatermarksBar, NewsScoreWatermark } from "@/app/components/WatermarkVisibility";
@@ -970,9 +971,12 @@ export default async function StockNewsPage({ params }: Props) {
             />
           </div>
           <div className="newsHeroLeft" style={heroLeftStyle}>
-            <h1 className="newsHeroTitle" style={heroTitleStyle}>
-              {upper} Stock News, News Score & What It Could Mean
-            </h1>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "14px 0 0 0" }}>
+              <TickerLogo symbol={upper} name={companyName} size={34} radius={8} />
+              <h1 className="newsHeroTitle" style={{ ...heroTitleStyle, margin: 0 }}>
+                {upper} Stock News, News Score & What It Could Mean
+              </h1>
+            </div>
             <p className="newsHeroLead" style={heroLeadStyle}>{leadSummary}</p>
             <div style={{ marginTop: 18, padding: "14px 16px", borderRadius: 14, border: "1px solid rgba(59,130,246,0.25)", background: "linear-gradient(135deg, rgba(59,130,246,0.10), rgba(8,18,30,0.92))", fontSize: 14, lineHeight: 1.6, color: "#e5e7eb", maxWidth: 620 }}>
               <strong style={{ color: "#93c5fd" }}>HEADLINE TAKE:</strong>{" "}{newsScore.reason}

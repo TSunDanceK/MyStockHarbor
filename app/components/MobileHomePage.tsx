@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import TickerLogo from "@/app/components/TickerLogo";
 
 const DEFAULT_SYMBOL = "AAPL";
 
@@ -99,6 +100,7 @@ const TILES: NavTile[] = [
 
 export default function MobileHomePage() {
   const router = useRouter();
+  const searchWrapRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<{ symbol: string; name: string; exchange: string }[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -113,6 +115,17 @@ export default function MobileHomePage() {
     } catch {
       // localStorage unavailable (private browsing edge cases) — keep default
     }
+  }, []);
+
+  // Close the search dropdown when clicking anywhere outside of it.
+  useEffect(() => {
+    function onDocMouseDown(event: MouseEvent) {
+      if (searchWrapRef.current && !searchWrapRef.current.contains(event.target as Node)) {
+        setSearchOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
   }, []);
 
   useEffect(() => {
@@ -189,7 +202,7 @@ export default function MobileHomePage() {
       </div>
 
       {/* ── Quick Stock Search ── */}
-      <div style={{ padding: "16px 16px 0", position: "relative" }}>
+      <div ref={searchWrapRef} style={{ padding: "16px 16px 0", position: "relative" }}>
         <div
           style={{
             fontSize: 12,
@@ -252,11 +265,17 @@ export default function MobileHomePage() {
                   background: "transparent",
                   color: "#f1f5f9",
                   cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
                 }}
               >
-                <div style={{ fontWeight: 900, fontSize: 14 }}>{r.symbol}</div>
-                <div style={{ fontSize: 12, opacity: 0.65 }}>
-                  {r.name}{r.exchange ? ` · ${r.exchange}` : ""}
+                <TickerLogo symbol={r.symbol} size={22} radius={6} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 900, fontSize: 14 }}>{r.symbol}</div>
+                  <div style={{ fontSize: 12, opacity: 0.65 }}>
+                    {r.name}{r.exchange ? ` · ${r.exchange}` : ""}
+                  </div>
                 </div>
               </button>
             ))}

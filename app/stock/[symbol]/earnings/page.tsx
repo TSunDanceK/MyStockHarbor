@@ -8,6 +8,7 @@ import {
   type Point,
 } from "@/lib/indicators";
 import ShareButton from "@/app/components/ShareButton";
+import TickerLogo from "@/app/components/TickerLogo";
 import { WatermarkVisibilityProvider, HideWatermarksBar, EarningsScoreWatermark } from "@/app/components/WatermarkVisibility";
 import { IncomeStatementCard, AnnualConsensusCard, CashFlowCard, SegmentationCard, BalanceSheetCard, type IncomeDetail, type AnnualConsensus, type CashFlow, type BalanceHealth, type SegmentGroup } from "./EarningsDetail";
 
@@ -1028,7 +1029,10 @@ export default async function StockEarningsPage({ params }: Props) {
               />
             </div>
             <div>
-              <h1>{clean} Stock Earnings, EPS & Revenue Breakdown</h1>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "12px 0 0" }}>
+                <TickerLogo symbol={clean} size={34} radius={8} />
+                <h1 style={{ margin: 0 }}>{clean} Stock Earnings, EPS & Revenue Breakdown</h1>
+              </div>
               <p>Review the latest reported earnings for {clean}, including actual EPS, estimates, revenue surprise, year-over-year context, recent earnings consistency and a simple earnings score.</p>
               <EarningsSymbolPicker currentSymbol={clean} />
             </div>
