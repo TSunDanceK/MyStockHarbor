@@ -358,11 +358,17 @@ function Section(props: {
                 transition: "transform 120ms ease, background 120ms ease, border-color 120ms ease",
               }}
             >
-              <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+              {/* `overflow: hidden` establishes a block formatting context so
+                  this card's height accounts for the floated icon badge below
+                  (otherwise a short title/summary could let the icon poke
+                  past the card's bottom edge). */}
+              <div style={{ overflow: "hidden" }}>
                 {Icon && (
                   <div
                     style={{
-                      flexShrink: 0,
+                      float: "right",
+                      marginLeft: 12,
+                      marginBottom: 8,
                       width: 38,
                       height: 38,
                       borderRadius: 10,
@@ -378,11 +384,9 @@ function Section(props: {
                   </div>
                 )}
 
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontWeight: 900, fontSize: 16 }}>{it.title}</div>
-                  <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
-                    {it.summary}
-                  </div>
+                <div style={{ fontWeight: 900, fontSize: 16 }}>{it.title}</div>
+                <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
+                  {it.summary}
                 </div>
               </div>
             </Link>
