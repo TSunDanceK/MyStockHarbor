@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
     );
 
     const result = await warmFundamentals(symbols);
-    return NextResponse.json({ ok: true, ...result });
+    return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(
       { ok: false, error: error instanceof Error ? error.message : "warm-fundamentals failed" },
