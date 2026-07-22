@@ -95,7 +95,9 @@ export default function CustomScreenerSymbolSearch({
     border: "1px solid rgba(59,130,246,0.32)",
     background: "rgba(15,23,42,0.72)",
     color: "#f8fafc",
-    fontSize: 14,
+    // 16px (not 14px) so mobile Safari doesn't auto-zoom the page in when
+    // this input is focused.
+    fontSize: 16,
     fontWeight: 700,
     outline: "none",
     boxSizing: "border-box",

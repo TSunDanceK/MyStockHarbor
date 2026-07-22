@@ -90,7 +90,7 @@ export default function ScreenerShell({
 
         <div className="resultWrap">
           <div className="resultShell">
-            <ScreenerNav currentHref={currentHref} variant="sidebar" />
+            <ScreenerNav currentHref={currentHref} variant="sidebar" showFilters />
 
             <div className="resultMain">
               <section className="hero">
@@ -104,7 +104,7 @@ export default function ScreenerShell({
               </section>
 
               <div className="screenerTriggerWrap">
-                <ScreenerNav currentHref={currentHref} variant="trigger" />
+                <ScreenerNav currentHref={currentHref} variant="trigger" showFilters />
               </div>
 
               <div className="screenerShellResults">{children}</div>
