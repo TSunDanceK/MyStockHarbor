@@ -22,6 +22,16 @@ declare global {
 // chart) experience. Unmounting this component (switching back) does not
 // unload the already-cached script -- a second toggle click on the same
 // page load reuses it instantly instead of re-fetching.
+//
+// `allow_symbol_change` is deliberately FALSE: the dashboard drives which
+// ticker is being analysed from its own header search, and the TradingView
+// pane is meant to mirror that active symbol. With symbol-change enabled,
+// tv.js persists the last symbol a user typed into the widget (in the
+// browser's localStorage) and restores it on the next mount -- so opening
+// TradingView while analysing TSLA could show a previously-viewed ticker
+// (e.g. Hasbro) instead of TSLA. Pinning the symbol makes the pane always
+// open on the stock currently in view. Users who want to explore other
+// tickers freely can use the "Open in TradingView ↗" link.
 export default function TradingViewChartEmbed({ symbol, height = 480 }: Props) {
   const rawId = useId().replace(/[^a-zA-Z0-9]/g, "");
   const containerId = `tradingview-embed-${rawId}`;
@@ -50,7 +60,7 @@ export default function TradingViewChartEmbed({ symbol, height = 480 }: Props) {
         locale: "en",
         toolbar_bg: "#0b1220",
         enable_publishing: false,
-        allow_symbol_change: true,
+        allow_symbol_change: false,
         hide_top_toolbar: false,
         withdateranges: true,
         container_id: containerId,
