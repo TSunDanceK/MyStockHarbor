@@ -469,7 +469,18 @@ async function getEarningsData(symbol: string) {
     });
 
   const latest = completedRows[0] ?? null;
-  const next = earningsRows.find((row) => { if (!row.date) return false; const dt = new Date(`${row.date}T00:00:00Z`); return dt.getTime() > today.getTime() && row.epsActual == null && row.revenueActual == null; }) ?? null;
+  // Use start-of-day (UTC) rather than the current instant so a report
+  // scheduled for *today* still counts as the next expected date. With the old
+  // `> today.getTime()` comparison, on the earnings day itself the row's
+  // midnight-UTC timestamp was already in the past, so the day-of report was
+  // dropped from `next` while its actuals were still null — leaving the field
+  // blank ("Unavailable") until the numbers posted. Also pick the *soonest*
+  // upcoming row (earningsRows is sorted newest-first, so `.find` returned the
+  // farthest-out future row).
+  const startOfTodayUtcMs = new Date(`${todayIso}T00:00:00Z`).getTime();
+  const next = earningsRows
+    .filter((row) => { if (!row.date) return false; const dt = new Date(`${row.date}T00:00:00Z`); return dt.getTime() >= startOfTodayUtcMs && row.epsActual == null && row.revenueActual == null; })
+    .sort((a, b) => new Date(`${a.date}T00:00:00Z`).getTime() - new Date(`${b.date}T00:00:00Z`).getTime())[0] ?? null;
 
   const nextEstimate = analystEstimateRows.find((row) => Boolean(row.date) && String(row.date) >= todayIso && (row.epsAvg != null || row.revenueAvg != null)) ?? null;
 
