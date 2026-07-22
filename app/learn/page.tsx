@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { lessonsByCategory } from "./all-lessons";
 import LearnShell from "./LearnShell";
+import { LESSON_ICONS } from "./icons";
 
 export const metadata: Metadata = {
   title: "Learn Stock Charts & Trading Basics",
@@ -259,6 +260,11 @@ function Section(props: {
           labelBg: "linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))",
           labelBorder: "1px solid rgba(59,130,246,0.34)",
           labelColor: "#dbeafe",
+          accent: {
+            color: "#93c5fd",
+            bg: "rgba(59,130,246,0.14)",
+            border: "rgba(59,130,246,0.35)",
+          },
         }
       : title === "INDICATORS"
       ? {
@@ -267,6 +273,11 @@ function Section(props: {
           labelBg: "linear-gradient(135deg, rgba(168,85,247,0.18), rgba(139,92,246,0.10))",
           labelBorder: "1px solid rgba(168,85,247,0.34)",
           labelColor: "#f3e8ff",
+          accent: {
+            color: "#d8b4fe",
+            bg: "rgba(168,85,247,0.14)",
+            border: "rgba(168,85,247,0.35)",
+          },
         }
       : title === "HOW TO READ FINANCIAL DATA"
       ? {
@@ -275,6 +286,11 @@ function Section(props: {
           labelBg: "linear-gradient(135deg, rgba(45,212,191,0.18), rgba(20,184,166,0.10))",
           labelBorder: "1px solid rgba(45,212,191,0.36)",
           labelColor: "#ccfbf1",
+          accent: {
+            color: "#5eead4",
+            bg: "rgba(45,212,191,0.14)",
+            border: "rgba(45,212,191,0.36)",
+          },
         }
       : {
           border: "1px solid rgba(234,179,8,0.22)",
@@ -282,6 +298,11 @@ function Section(props: {
           labelBg: "linear-gradient(135deg, rgba(234,179,8,0.18), rgba(202,138,4,0.10))",
           labelBorder: "1px solid rgba(234,179,8,0.34)",
           labelColor: "#fef3c7",
+          accent: {
+            color: "#fde047",
+            bg: "rgba(234,179,8,0.14)",
+            border: "rgba(234,179,8,0.34)",
+          },
         };
 
   return (
@@ -319,27 +340,54 @@ function Section(props: {
           gap: 12,
         }}
       >
-        {items.map((it) => (
-          <Link
-            key={it.slug}
-            href={learnCardHref(it.slug)}
-            style={{
-              border: "1px solid rgba(255,255,255,0.14)",
-              borderRadius: 14,
-              padding: 14,
-              background: "rgba(255,255,255,0.06)",
-              color: "#f1f5f9",
-              textDecoration: "none",
-              display: "block",
-              transition: "transform 120ms ease, background 120ms ease, border-color 120ms ease",
-            }}
-          >
-            <div style={{ fontWeight: 900, fontSize: 16 }}>{it.title}</div>
-            <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
-              {it.summary}
-            </div>
-          </Link>
-        ))}
+        {items.map((it) => {
+          const Icon = LESSON_ICONS[it.slug];
+
+          return (
+            <Link
+              key={it.slug}
+              href={learnCardHref(it.slug)}
+              style={{
+                border: "1px solid rgba(255,255,255,0.14)",
+                borderRadius: 14,
+                padding: 14,
+                background: "rgba(255,255,255,0.06)",
+                color: "#f1f5f9",
+                textDecoration: "none",
+                display: "block",
+                transition: "transform 120ms ease, background 120ms ease, border-color 120ms ease",
+              }}
+            >
+              <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                {Icon && (
+                  <div
+                    style={{
+                      flexShrink: 0,
+                      width: 38,
+                      height: 38,
+                      borderRadius: 10,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      background: sectionTint.accent.bg,
+                      border: `1px solid ${sectionTint.accent.border}`,
+                      color: sectionTint.accent.color,
+                    }}
+                  >
+                    <Icon />
+                  </div>
+                )}
+
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontWeight: 900, fontSize: 16 }}>{it.title}</div>
+                  <div style={{ marginTop: 6, fontSize: 13, opacity: 0.75, lineHeight: 1.5 }}>
+                    {it.summary}
+                  </div>
+                </div>
+              </div>
+            </Link>
+          );
+        })}
       </div>
     </section>
   );
