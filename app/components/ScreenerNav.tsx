@@ -549,6 +549,15 @@ export default function ScreenerNav({
 
         .screenerOverlay {
           position: fixed; inset: 0; z-index: 70; display: flex;
+          /* Height is pinned to the *dynamic* viewport (100dvh) so the panel
+             — and especially its fixed footer with the Go button — sits above
+             mobile Chrome's bottom toolbar instead of behind it. Plain 100vh
+             (the inset:0 fallback for browsers without dvh) measures the
+             toolbar-hidden viewport on Chrome iOS, which is what clipped the
+             footer; dvh tracks the visible area as the toolbar shows/hides.
+             Safari already anchored fixed elements above its toolbar, so it
+             was unaffected either way. */
+          height: 100dvh;
           /* Reserves space at the top for the site's own fixed/sticky
              header so the overlay's "Select Screener" title + close button
              (see .screenerOverlayHeader) never render underneath it. */
@@ -560,7 +569,7 @@ export default function ScreenerNav({
         }
         .screenerOverlayPanel {
           position: relative; margin-top: auto; width: 100%;
-          max-height: min(82vh, calc(100vh - 76px - env(safe-area-inset-top)));
+          max-height: min(82dvh, calc(100dvh - 76px - env(safe-area-inset-top)));
           display: flex; flex-direction: column;
           border-top-left-radius: 22px; border-top-right-radius: 22px;
           border: 1px solid rgba(255,255,255,0.10); border-bottom: 0;
