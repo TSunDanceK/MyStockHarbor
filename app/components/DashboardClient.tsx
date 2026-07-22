@@ -258,7 +258,7 @@ const CRYPTO_PRESETS: { symbol: string; name: string }[] = [
 const DEFAULT_CRYPTO_SYMBOL = "BTCUSD";
 
 const TIMEFRAMES = [{ label: "D", interval: "d" as ChartInterval, fetchBars: 2600, defaultVisibleBars: 75 }, { label: "W", interval: "w" as ChartInterval, fetchBars: 2600, defaultVisibleBars: 75 }, { label: "M", interval: "m" as ChartInterval, fetchBars: 360, defaultVisibleBars: 75 }];
-const PRICE_OVERLAY_OPTIONS: Overlay[] = ["MA50", "MA200", "EMA20", "VWMA(20)", "Bollinger(20,2)", "Support/Resistance"];
+const PRICE_OVERLAY_OPTIONS: Overlay[] = ["MA50", "MA200", "EMA20", "VWMA(20)", "Bollinger(20,2)", "Trend Helper (Smooth)", "Trend Helper (Fast)", "Support/Resistance"];
 const LOWER_OVERLAY_OPTIONS: Overlay[] = ["RSI(14)", "MACD(12,26,9)", "Stochastic(14,3)", "ATR(14)", "Volume"];
 const ALL_OVERLAY_OPTIONS: string[] = [...PRICE_OVERLAY_OPTIONS, ...LOWER_OVERLAY_OPTIONS];
 function isLowerOverlay(v: Overlay) { return LOWER_OVERLAY_OPTIONS.includes(v); }
@@ -287,6 +287,30 @@ function computeFocusWindow(historyAll: Point[], iso: string, leftMargin = 15) {
   const desiredStart = Math.max(0, anchor - leftMargin);
   const bars = historyAll.length - desiredStart;
   return { visibleBars: Math.min(historyAll.length, Math.max(bars, 30)), windowOffset: 0 };
+}
+
+// Same idea as computeFocusWindow but anchored to a *price* (a macro Support/
+// Resistance zone) rather than a date: grow the visible window back from the
+// latest bar until its price range covers the whole zone, so the S/R band sits
+// among the candles rather than floating off the top/bottom when the chart is
+// zoomed in too tight. Falls back to the full history if price never reached
+// the zone in the fetched window.
+function computeSrFocusWindow(historyAll: Point[], zone: { lower: number; upper: number } | null | undefined, minBars = 40) {
+  if (!historyAll.length || !zone) return null;
+  const lower = Math.min(zone.lower, zone.upper);
+  const upper = Math.max(zone.lower, zone.upper);
+  if (!Number.isFinite(lower) || !Number.isFinite(upper)) return null;
+  let lo = Infinity, hi = -Infinity, bars = 0;
+  for (let i = historyAll.length - 1; i >= 0; i--) {
+    const p = historyAll[i];
+    const h = typeof p.high === "number" && Number.isFinite(p.high) ? p.high : p.close;
+    const l = typeof p.low === "number" && Number.isFinite(p.low) ? p.low : p.close;
+    if (h > hi) hi = h;
+    if (l < lo) lo = l;
+    bars++;
+    if (lo <= lower && hi >= upper && bars >= minBars) break;
+  }
+  return { visibleBars: Math.min(historyAll.length, Math.max(bars, minBars)), windowOffset: 0 };
 }
 
 export default function DashboardClient({
@@ -598,6 +622,24 @@ export default function DashboardClient({
     if (externalZone) return [externalZone];
     return localSupportResistanceZones.slice(0, 1);
   }, [localSupportResistanceZones, externalZone]);
+
+  // When the Support/Resistance overlay is switched on, auto-zoom the chart out
+  // enough that the (macro) S/R band actually lands on screen -- anchor the
+  // visible window to the zone's price (same idea as the date-based focus for
+  // ATH deep-links above). A date focus still wins when one is present, and
+  // this only runs when the selection / zone / symbol changes, so it never
+  // fights the user's own manual zoom afterwards.
+  useEffect(() => {
+    if (chartFocus?.date) return;
+    if (!selectedIndicators.includes("Support/Resistance")) return;
+    const zone = supportResistanceZones[0];
+    if (!zone) return;
+    const win = computeSrFocusWindow(historyAll, zone);
+    if (!win) return;
+    setVisibleBars(win.visibleBars);
+    setWindowOffset(win.windowOffset);
+  }, [selectedIndicators, supportResistanceZones, historyAll, chartFocus]);
+
   const referenceLines = useMemo(() => (chartFocus ? [{ price: chartFocus.price, label: chartFocus.label }] : []), [chartFocus]);
   const lastMA50 = lastNum(ma50), lastMA200 = lastNum(ma200);
   const ma50Pct = formatPctFromBase(lastClose, typeof lastMA50 === "number" ? lastMA50 : null);
@@ -851,7 +893,7 @@ export default function DashboardClient({
       const h = full ? (typeof window !== "undefined" ? Math.max(360, window.innerHeight - 108) : 720) : (isMobile ? 480 : 620);
       return <TradingViewChartEmbed symbol={symbol} height={h} />;
     }
-    return <PriceChart symbol={symbol} data={displayedHistory} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} referenceLines={referenceLines} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={full ? (isMobile ? 420 : 560) : (isMobile ? 480 : 430)} hideSourceToggle showTradingViewLink={false} showTradeLink={false} />;
+    return <PriceChart symbol={symbol} data={displayedHistory} fullCloses={closesAll} displayStart={displayStart} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} referenceLines={referenceLines} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={full ? (isMobile ? 420 : 560) : (isMobile ? 480 : 430)} hideSourceToggle showTradingViewLink={false} showTradeLink={false} />;
   }
 
   function ChartPanel() {
@@ -1106,7 +1148,7 @@ export default function DashboardClient({
               <button type="button" onClick={() => setExpanded(false)} style={{ padding: "7px 10px", borderRadius: 9, border: `1px solid ${COLORS.controlBorder}`, background: COLORS.controlBg, color: COLORS.controlFg, cursor: "pointer", fontWeight: 700 }}>✕</button>
             </div>
             <div style={{ padding: 16 }}>
-              <PriceChart symbol={symbol} data={displayedHistory} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} referenceLines={referenceLines} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={isMobile ? 280 : 520} hideSourceToggle showTradingViewLink={false} showTradeLink={false} />
+              <PriceChart symbol={symbol} data={displayedHistory} fullCloses={closesAll} displayStart={displayStart} ma50={ma50} ma200={ma200} overlay={indicator} selectedIndicators={selectedIndicators} chartType={chartType} supportResistanceZones={supportResistanceZones} referenceLines={referenceLines} bollUpper={bollUpper} bollMid={bollMid} bollLower={bollLower} ema20={ema20Arr} vwma20={vwma20Arr} rsi14={rsi14Arr} macdLine={macdLine} macdSignal={macdSignal} macdHist={macdHist} stochK={stochK} stochD={stochD} atr14={atr14Arr} volume={volumeArr} divergence={divergence.div} height={isMobile ? 280 : 520} hideSourceToggle showTradingViewLink={false} showTradeLink={false} />
             </div>
           </div>
         </div>
