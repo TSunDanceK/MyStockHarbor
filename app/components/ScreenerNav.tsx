@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePickerFilter } from "@/app/components/PickerFilterContext";
 import type { AnyFilterKey } from "@/lib/pickerFilters";
 
@@ -229,8 +229,36 @@ function NavList({
 function OpenCustomScreenerLink() {
   return (
     <div className="screenerFilterModeBar">
-      <Link href="/custom-screener" className="screenerFilterModeBtn">
+      <Link
+        href="/custom-screener"
+        className="screenerFilterModeBtn"
+        onClick={() => {
+          // Signal the custom-screener page to re-open the "Select Screener"
+          // overlay on arrival (mobile only) so the menu switches straight to
+          // the custom-screener checkboxes -- the page loads behind it --
+          // instead of closing and forcing a second "Select Screener" tap.
+          // Read + cleared one-shot by ScreenerNav's mobile trigger below.
+          try {
+            sessionStorage.setItem("openScreenerOverlayOnLoad", "1");
+          } catch {
+            /* sessionStorage unavailable -- link still navigates normally */
+          }
+        }}
+      >
         Open Full Custom Screener
+      </Link>
+    </div>
+  );
+}
+
+// Shown at the top of the screener menu on the /custom-screener page
+// (alwaysFilterMode) -- a one-tap way back to the picker pages. Points at the
+// Buy Signals page, the default landing picker page.
+function BackToPickersLink() {
+  return (
+    <div className="screenerFilterModeBar">
+      <Link href="/top-stocks-with-buy-signals" className="screenerFilterModeBtn">
+        ← Back to Pickers
       </Link>
     </div>
   );
@@ -277,8 +305,8 @@ function FilterSummaryBar() {
 // for why) in favour of that dedicated page. When `alwaysFilterMode` is
 // true (only /custom-screener passes this), NavList always renders
 // checkboxes and there's no toggle at all, just the always-visible
-// checkboxes plus a "N matching" + Clear summary row (FilterSummaryBar)
-// once at least one is checked.
+// checkboxes plus a "Back to Pickers" link and a "N matching" + Clear
+// summary row (FilterSummaryBar) once at least one is checked.
 // `showSearch` is retained for backwards compatibility with existing
 // callers but is no longer used: the old cross-picker ticker search that
 // used to render in the mobile overlay has been removed (see below). The
@@ -301,6 +329,28 @@ export default function ScreenerNav({
   const showSidebar = variant !== "trigger";
   const showTrigger = variant !== "sidebar";
 
+  // When arriving from another page's "Open Full Custom Screener" tap on
+  // mobile, re-open the overlay immediately so the menu switches straight to
+  // the custom-screener checkboxes (the page itself loads behind it) instead
+  // of closing and making the visitor tap "Select Screener" again. One-shot:
+  // the flag is cleared the moment it's read. Only the mobile trigger of the
+  // custom-screener page (alwaysFilterMode) honours it, and only at mobile
+  // widths so the fixed overlay never covers the desktop layout.
+  useEffect(() => {
+    if (!showTrigger || !alwaysFilterMode) return;
+    try {
+      if (sessionStorage.getItem("openScreenerOverlayOnLoad") === "1") {
+        sessionStorage.removeItem("openScreenerOverlayOnLoad");
+        if (typeof window !== "undefined" && window.matchMedia("(max-width: 980px)").matches) {
+          setOpen(true);
+        }
+      }
+    } catch {
+      /* sessionStorage unavailable -- no auto-open, no harm */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const currentLabel =
     GROUPS.flatMap((group) => group.items).find((item) => item.href === currentHref)?.label ??
     "Screeners";
@@ -311,7 +361,16 @@ export default function ScreenerNav({
       {showSidebar ? (
         <aside className="screenerSidebar" aria-label="Stock screeners">
           <div className="screenerSidebarTitle">Screeners</div>
-          {showFilters ? (alwaysFilterMode ? <FilterSummaryBar /> : <OpenCustomScreenerLink />) : null}
+          {showFilters ? (
+            alwaysFilterMode ? (
+              <>
+                <BackToPickersLink />
+                <FilterSummaryBar />
+              </>
+            ) : (
+              <OpenCustomScreenerLink />
+            )
+          ) : null}
           <NavList currentHref={currentHref} filterMode={alwaysFilterMode} />
         </aside>
       ) : null}
@@ -358,7 +417,7 @@ export default function ScreenerNav({
                   desktop; Clear + Go in the footer are how you clear/finish
                   once you're done ticking boxes. The old cross-picker ticker
                   search that used to sit here has been removed. */}
-              {showFilters && !alwaysFilterMode ? <OpenCustomScreenerLink /> : null}
+              {showFilters ? (alwaysFilterMode ? <BackToPickersLink /> : <OpenCustomScreenerLink />) : null}
               <NavList currentHref={currentHref} onNavigate={() => setOpen(false)} filterMode={alwaysFilterMode} />
             </div>
             {showFilters ? (
