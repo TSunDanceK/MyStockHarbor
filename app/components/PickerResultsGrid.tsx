@@ -117,7 +117,7 @@ function ReasonChips({
           className="reasonChip"
           style={{
             borderColor: border,
-            color: colour,
+            color: "#ffffff",
             cursor: "pointer",
             fontFamily: "inherit",
             fontWeight: 900,
