@@ -146,6 +146,24 @@ export default async function PickersPage() {
           </div>
         </div>
 
+        {/* View all screeners CTA — sits above the screened results (incl. the
+            Top Picks widget) as a direct entry point into the full screener
+            experience (the ScreenerNav on that page lists every screener). */}
+        <Link
+          href="/top-stocks-with-buy-signals"
+          className="viewAllScreeners"
+          style={{ marginTop: 18, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, textDecoration: "none", color: "#eaf2ff", border: "1px solid rgba(96,165,250,0.34)", borderRadius: 16, padding: "16px 20px", background: "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(37,99,235,0.06))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 12px 30px rgba(0,0,0,0.26)", boxSizing: "border-box", width: "100%" }}
+        >
+          <span style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
+            <span aria-hidden="true" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 40, height: 40, borderRadius: 12, border: "1px solid rgba(96,165,250,0.34)", background: "rgba(59,130,246,0.14)", fontSize: 20, flex: "0 0 auto" }}>🧭</span>
+            <span style={{ minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: 12, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", color: "#93c5fd" }}>View All Screeners</span>
+              <span style={{ display: "block", marginTop: 4, fontSize: 14, lineHeight: 1.5, opacity: 0.82 }}>Browse every screener — buy & sell signals, breakouts, moving-average tests, divergence and more.</span>
+            </span>
+          </span>
+          <span aria-hidden="true" style={{ fontSize: 20, fontWeight: 800, color: "#93c5fd", flex: "0 0 auto" }}>→</span>
+        </Link>
+
         {/* Main screened results panel */}
         <section style={{ marginTop: 24, width: "100%", borderRadius: 18, border: "1px solid rgba(255,255,255,0.10)", background: "#08101e", overflow: "hidden", position: "relative", boxSizing: "border-box" }}>
           <div style={{ padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}>
@@ -226,6 +244,7 @@ export default async function PickersPage() {
         /* 3 tight columns */
         .hero-bullet-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px 10px; }
         .hero-bullet-item:hover { color: #e2e8f0 !important; }
+        .viewAllScreeners:hover { filter: brightness(1.06); transform: translateY(-1px); border-color: rgba(96,165,250,0.55) !important; }
         a:hover { filter: brightness(1.05); transform: translateY(-1px); }
         .msh-site-nav { position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:8px;padding:12px 24px;background:rgba(10,15,26,0.90);backdrop-filter:blur(14px);border-bottom:1px solid #1a2336; }
         .msh-site-nav-logo { display:flex;align-items:center;margin-right:4px;text-decoration:none;flex:0 0 auto; }
