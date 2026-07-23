@@ -18,6 +18,7 @@ import {
   addToDynamicUniverse,
   readDynamicUniverse,
 } from "./dynamicUniverseCache";
+import { readSearchDemand } from "./searchDemand";
 import {
   getClientIp,
   checkBackfillLockout,
@@ -159,6 +160,11 @@ type SignalRecord = {
   dominantOverboughtIndicator?: string;
 
   isDynamicUniverse?: boolean;
+  // True when this symbol earned its analyzed-universe slot from the Popular
+  // Searches demand signal (real users repeatedly selecting it), rather than
+  // from the preset mega-cap list or the day's market activity. Carried on the
+  // payload so the All Stocks / pickers UI can badge or group these later.
+  isPopularSearch?: boolean;
 };
 
 type TickerEarningsGrowthItem = {
@@ -2164,6 +2170,17 @@ const PRESET_UNIVERSE: string[] = [
 // of the analyzed set -- we now fit both the big caps AND ~160 dynamic names.
 const UNIVERSE_CAP = 260;
 
+// Popular Searches promotion (see claude/popular-searches-universe-spec-2026-07-23.md).
+// A ticker only earns a guaranteed analyzed-universe slot once real users have
+// deliberately selected it enough times over the 14-day demand window -- a
+// one-off search never gets analyzed (the promotion THRESHOLD), and the slice is
+// hard-capped so it can never blow up a build's FMP budget (the SUB-CAP). Because
+// selection counts are deduped per (caller, symbol) per 30 min upstream, a
+// symbol's demand score approximates the number of distinct interested callers,
+// so the threshold reads as "at least this many different people looked it up".
+const POPULAR_SEARCH_MIN_SCORE = 3; // promotion threshold (~distinct callers)
+const POPULAR_SEARCH_QUOTA = 30; // FMP sub-cap: max promoted names per build
+
 /* --------------------------- builder function ------------------------ */
 
 async function buildPickersPayload(origin: string, forceFreshMarket = false): Promise<PickersPayload> {
@@ -2219,20 +2236,63 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
 
   const dynamicUniverseSet = new Set(dynamicUniverse);
 
-  // PRESET_UNIVERSE (the ~100 largest US companies -- AAPL, NVDA, MSFT, GOOGL,
-  // AMZN, META, ...) goes FIRST so it's never dropped by the UNIVERSE_CAP slice
-  // below. Previously it was appended AFTER the (large) dynamic activity set, so
-  // once the dynamic set alone filled the cap the mega-caps were sliced off
-  // entirely -- which is why the biggest companies were missing from the All
-  // Stocks screener (only ones that happened to also be active movers, e.g. MU,
-  // survived). The day's active/mover names now fill the remaining slots.
-  const universe = Array.from(
-    new Set(
-      [...PRESET_UNIVERSE, ...dynamicUniverse]
-        .map((x) => String(x).trim().toUpperCase())
-        .filter(Boolean)
-    )
-  ).slice(0, UNIVERSE_CAP);
+  // Popular Searches promotion: pull the 14-day demand ranking and keep only
+  // names that clear the promotion threshold AND aren't already guaranteed by
+  // PRESET_UNIVERSE (no point spending a promoted slot on AAPL). Bounded to the
+  // sub-cap. Fail-open -- a Redis hiccup here just means no promoted names this
+  // build, never a broken payload.
+  const presetSet = new Set(
+    PRESET_UNIVERSE.map((s) => s.trim().toUpperCase())
+  );
+  let popularSearchSymbols: string[] = [];
+  try {
+    const demand = await readSearchDemand(POPULAR_SEARCH_QUOTA * 4);
+    popularSearchSymbols = demand
+      .filter((d) => d.score >= POPULAR_SEARCH_MIN_SCORE)
+      .map((d) => String(d.symbol).trim().toUpperCase())
+      .filter((s) => s && !presetSet.has(s))
+      .slice(0, POPULAR_SEARCH_QUOTA);
+  } catch {
+    popularSearchSymbols = [];
+  }
+  const popularSearchSet = new Set(popularSearchSymbols);
+
+  // Persist the promoted names into the shared dynamic universe under their own
+  // "search" source, so their provenance is tracked and (with the same 14-day
+  // decay as market names) their presence accumulates across builds while people
+  // keep looking them up. The raw demand score stays separate (searchDemand.ts)
+  // for the /popular-searches ranking; this is only membership/provenance.
+  if (popularSearchSymbols.length) {
+    await addToDynamicUniverse(popularSearchSymbols, "search", 1);
+  }
+
+  // Explicit-quota universe assembly -- NOT concat-then-slice. That exact
+  // pattern is what sliced the mega-caps off (PRESET was appended after the big
+  // dynamic set, then the whole thing was cut to the cap, dropping AAPL/NVDA/...
+  // -- only active movers like MU survived, which is why the biggest companies
+  // were missing from the All Stocks screener). Instead, three disjoint, bounded
+  // slices are filled in priority order so no single source can starve another:
+  //   1. PRESET_UNIVERSE  -- all ~100 largest US caps, always guaranteed first.
+  //   2. Popular searches -- up to POPULAR_SEARCH_QUOTA promoted names.
+  //   3. Market-dynamic   -- the day's active/mover + accumulated dynamic names,
+  //                          filling whatever slots remain up to UNIVERSE_CAP.
+  // Slice 3 backfills any slots slices 1-2 didn't use, so there are never gaps.
+  const universeSlots = new Set<string>();
+  const fillSlots = (symbols: string[], maxFromThisSource: number) => {
+    let added = 0;
+    for (const raw of symbols) {
+      if (universeSlots.size >= UNIVERSE_CAP) break;
+      if (added >= maxFromThisSource) break;
+      const s = String(raw).trim().toUpperCase();
+      if (!s || universeSlots.has(s)) continue;
+      universeSlots.add(s);
+      added++;
+    }
+  };
+  fillSlots(PRESET_UNIVERSE, PRESET_UNIVERSE.length);
+  fillSlots(popularSearchSymbols, POPULAR_SEARCH_QUOTA);
+  fillSlots(dynamicUniverse, UNIVERSE_CAP); // backfills the remainder
+  const universe = Array.from(universeSlots);
 
   // Queue missing earnings data for the background warmer. The picker route reads
   // earnings from Redis only, so page loads never spend FMP calls on earnings.
@@ -2275,7 +2335,12 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
   const failedSymbols: string[] = [];
 
   const isDynamicUniverse = (sym: string) => dynamicUniverseSet.has(sym);
-  const dynamicBoost = (sym: string) => (isDynamicUniverse(sym) ? 10 : 0);
+  const isPopularSearch = (sym: string) => popularSearchSet.has(sym);
+  // Popular-search names get the same ranking nudge dynamic names get (and both,
+  // if a name qualifies as both), so a ticker real users keep looking up floats
+  // up within whatever category it lands in rather than sitting at the bottom.
+  const dynamicBoost = (sym: string) =>
+    (isDynamicUniverse(sym) ? 10 : 0) + (isPopularSearch(sym) ? 10 : 0);
 
   await Promise.all(
     universe.map((symbol) =>
@@ -2292,6 +2357,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
           const earningsRows = earningsBySymbol.get(symbol) ?? [];
 
           const dynamicName = isDynamicUniverse(symbol);
+          const popularName = isPopularSearch(symbol);
           const chartPoints = buildPickerChartPoints(pts);
 
           const positiveLastEarningsCandidate = computePositiveLastEarningsCandidate(earningsRows);
@@ -2760,6 +2826,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
             dominantOversoldIndicator: comp?.dominantOversoldIndicator,
             dominantOverboughtIndicator: comp?.dominantOverboughtIndicator,
             isDynamicUniverse: dynamicName,
+            isPopularSearch: popularName,
           });
         } catch {
           failedSymbolCount++;
