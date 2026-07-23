@@ -711,6 +711,7 @@ export default function SiteHeader({
         label: "Pickers",
         isActive: (path) =>
           path === "/pickers" ||
+          path === "/stock-screener" ||
           path === "/plays" ||
           path.startsWith("/plays/") ||
           path === "/macro-support-resistance-stocks" ||
@@ -733,6 +734,13 @@ export default function SiteHeader({
           {
             kind: "link",
             label: "Main Pickers Page",
+            href: "/stock-screener",
+            isActive: (path) => path === "/stock-screener",
+            emphasize: true,
+          },
+          {
+            kind: "link",
+            label: "Quick Pickers Page",
             href: "/pickers",
             isActive: (path) => path === "/pickers",
             emphasize: true,
