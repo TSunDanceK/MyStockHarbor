@@ -9,21 +9,24 @@ import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 // warm-price-pool cron (app/api/jobs/warm-price-pool); READ-ONLY on page
 // renders so a page load never spends an FMP call.
 //
-// IMPORTANT (FMP Starter plan reality, confirmed live 2026-07-22 via
-// app/api/debug/quote-shape):
-//   * stable/batch-quote           -> 402 Restricted (not on this plan)
-//   * api/v3/quote (comma batch)   -> 403 (legacy, blocked)
-//   * stable/quote (per symbol)    -> 200, but has NO `pe` field
-//   * stable/ratios-ttm (per sym)  -> 200, has priceToEarningsRatioTTM  <-- PE
-// So there is no working multi-symbol quote endpoint and no quote endpoint
-// carries PE at all. Everything must go per-symbol: stable/quote for the live
-// price/%chg/volume/marketCap, and stable/ratios-ttm for the (slow-moving) PE.
-// To stay well under the shared 300/min FMP budget we DON'T refresh the whole
-// universe every run; each run refreshes only the STALEST slice (oldest `ts`
-// first) and the hash persists everything else -- so coverage builds up over a
-// few runs and then just keeps rolling. Per-symbol freshness is carried in each
-// value's `ts`; the whole hash also carries a safety TTL (reset every run) so a
-// stopped cron self-expires.
+// FMP Starter plan reality (confirmed live 2026-07-22/23):
+//   * No working multi-symbol quote endpoint (stable/batch-quote 402,
+//     api/v3/quote 403) -> every field is ONE call PER TICKER.
+//   * stable/quote (per symbol)   -> price / %chg / volume / marketCap (no PE)
+//   * stable/ratios-ttm (per sym) -> priceToEarningsRatioTTM (the only PE source)
+//   * Limit is 300 calls/MIN (no daily cap; 20GB/30d bandwidth). ~550 symbols
+//     refreshed every 15 min averages ~37 calls/min -- far under the ceiling.
+//
+// PRICE and PE have very different volatilities, so they refresh on independent
+// rotations, each tracked by its own timestamp on the row:
+//   * price (`ts`)   -> refreshed for the WHOLE universe every ~15 min. Each run
+//     takes the stalest-by-`ts` slice, sized so the universe is fully covered in
+//     PRICE_TARGET_RUNS cron runs (=> <=~15 min old with the */3 cron).
+//   * PE (`peTs`)    -> slow trickle of the stalest-by-`peTs` symbols per run;
+//     a P/E barely moves hour to hour, so full coverage in a couple hours then
+//     just rolling is plenty. Last-known PE is carried forward on a miss.
+// Only the touched fields are written; everything else persists. The hash also
+// carries a safety TTL (reset every run) so a stopped cron self-expires.
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -31,13 +34,16 @@ const redis =
     : null;
 
 const PRICE_POOL_KEY = "msh:price-pool:v1";
-const PRICE_POOL_HASH_TTL_SECONDS = 12 * 60 * 60; // reset each run; long enough to bridge slow rotation
-// Symbols refreshed per run. Each costs 2 FMP calls (quote + ratios-ttm), so
-// this defaults to ~80 calls/run. With the cron every 15 min a ~400-symbol
-// signal set fully cycles in ~2.5h and then stays fresh. Bump for fresher
-// prices at the cost of more FMP calls; the budget guard caps it regardless.
-const REFRESH_SLICE_SIZE = 40;
-const FMP_MIN_HEADROOM_CALLS = 60; // leave room for history/earnings warmers
+const PRICE_POOL_HASH_TTL_SECONDS = 12 * 60 * 60; // reset each run; bridges gaps
+
+// Price coverage: with the */3 cron (5 runs / 15 min) we cover the whole
+// universe in PRICE_TARGET_RUNS runs, so every price is <=~12-15 min old.
+const PRICE_TARGET_RUNS = 4;
+const PRICE_MIN_PER_RUN = 40; // don't bother sub-slicing a tiny universe
+const PRICE_MAX_PER_RUN = 220; // bound a single run's length (~<1 min even paced)
+// PE trickle: small per-run slice; slow-moving data, so this just needs to roll.
+const PE_MAX_PER_RUN = 20;
+const FMP_MIN_HEADROOM_CALLS = 60; // leave room for history/earnings + live traffic
 
 export type PricePoolRow = {
   price: number | null;
@@ -45,7 +51,8 @@ export type PricePoolRow = {
   volume: number | null;
   marketCap: number | null;
   pe: number | null;
-  ts: number; // ms epoch this quote was fetched
+  ts: number; // ms epoch price was last fetched
+  peTs?: number; // ms epoch PE was last fetched (independent rotation)
 };
 
 function cleanSymbol(value: string) {
@@ -98,6 +105,7 @@ export async function readPricePoolBulk(
             marketCap: num(row.marketCap),
             pe: num(row.pe),
             ts: row.ts,
+            peTs: num(row.peTs) ?? 0,
           });
         }
       });
@@ -143,8 +151,8 @@ async function fetchStableQuote(sym: string, apiKey: string): Promise<QuoteLite 
 
 // Per-symbol trailing-twelve-month P/E from stable/ratios-ttm. This is the only
 // endpoint on this plan that carries PE. Field is priceToEarningsRatioTTM (with
-// legacy-name fallbacks). PE is slow-moving so refreshing it on the same rolling
-// slice as price is plenty fresh.
+// legacy-name fallbacks). Absurd/negative PE (loss-makers) is nulled so the
+// column stays meaningful.
 async function fetchPeTtm(sym: string, apiKey: string): Promise<number | null> {
   try {
     await reserveFmpCallSlot();
@@ -161,7 +169,6 @@ async function fetchPeTtm(sym: string, apiKey: string): Promise<number | null> {
       num(row.priceEarningsRatioTTM) ??
       num(row.peRatioTTM) ??
       num(row.peRatio);
-    // Guard against absurd/negative PE noise so the column stays meaningful.
     if (pe == null || pe <= 0 || pe > 100000) return null;
     return pe;
   } catch {
@@ -170,11 +177,11 @@ async function fetchPeTtm(sym: string, apiKey: string): Promise<number | null> {
 }
 
 /**
- * Cron worker: refresh the STALEST slice of the pool. Reads each symbol's last
- * `ts` from the hash, refreshes the oldest REFRESH_SLICE_SIZE symbols
- * (stable/quote + stable/ratios-ttm each), and writes just that slice back via
- * a single HSET (+ resets the hash's safety expiry). Everything not in the
- * slice keeps its prior pooled value. Budget-guarded and fail-open throughout.
+ * Cron worker: refresh the pool. PRICE is refreshed for the stalest slice large
+ * enough to cover the whole universe every ~15 min (independent of PE). PE is
+ * refreshed for a small stalest-by-`peTs` trickle. Only touched fields are
+ * written back (a single HSET) + the hash's safety expiry is reset. Everything
+ * not refreshed keeps its prior value. Budget-guarded and fail-open throughout.
  */
 export async function warmPricePool(symbols: string[], nowMs: number) {
   const apiKey = process.env.FMP_API_KEY;
@@ -188,32 +195,65 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
     };
   }
 
-  // Pick the stalest slice: symbols with no pooled value (ts absent -> 0) go
-  // first, then oldest ts first. This fills a cold pool and then rotates.
   const existing = await readPricePoolBulk(clean);
-  const sorted = [...clean].sort(
-    (a, b) => (existing.get(a)?.ts ?? 0) - (existing.get(b)?.ts ?? 0)
+
+  // Price slice: stalest-by-ts, sized to cover the universe in PRICE_TARGET_RUNS.
+  const priceCap = Math.min(
+    PRICE_MAX_PER_RUN,
+    Math.max(PRICE_MIN_PER_RUN, Math.ceil(clean.length / PRICE_TARGET_RUNS))
   );
-  const slice = sorted.slice(0, REFRESH_SLICE_SIZE);
+  const priceSlice = [...clean]
+    .sort((a, b) => (existing.get(a)?.ts ?? 0) - (existing.get(b)?.ts ?? 0))
+    .slice(0, priceCap);
+  const priceSet = new Set(priceSlice);
+
+  // PE slice: stalest-by-peTs, small trickle.
+  const peSlice = [...clean]
+    .sort((a, b) => (existing.get(a)?.peTs ?? 0) - (existing.get(b)?.peTs ?? 0))
+    .slice(0, PE_MAX_PER_RUN);
+  const peSet = new Set(peSlice);
+
+  // Union, price-slice first (PE-only symbols are usually already in it).
+  const targets = Array.from(new Set([...priceSlice, ...peSlice]));
 
   const payload: Record<string, PricePoolRow> = {};
-  let refreshed = 0;
-  for (const sym of slice) {
-    // Each symbol needs 2 calls (quote + ratios); stop if we're near the floor.
-    if (!(await hasFmpCapacity(2, FMP_MIN_HEADROOM_CALLS))) break;
-    const q = await fetchStableQuote(sym, apiKey);
-    if (!q) continue;
-    const pe = await fetchPeTtm(sym, apiKey);
+  let pxRefreshed = 0;
+  let peRefreshed = 0;
+
+  for (const sym of targets) {
+    const prev = existing.get(sym);
+    const wantPrice = priceSet.has(sym);
+    const wantPe = peSet.has(sym);
+
+    let quote: QuoteLite | null = null;
+    let peFetched = false;
+    let peValue: number | null = null;
+
+    if (wantPrice) {
+      if (!(await hasFmpCapacity(1, FMP_MIN_HEADROOM_CALLS))) break;
+      quote = await fetchStableQuote(sym, apiKey);
+    }
+    if (wantPe) {
+      if (await hasFmpCapacity(1, FMP_MIN_HEADROOM_CALLS)) {
+        peValue = await fetchPeTtm(sym, apiKey);
+        peFetched = true;
+      }
+    }
+
+    if (!quote && !peFetched) continue; // nothing landed for this symbol
+
     payload[sym] = {
-      price: q.price,
-      changePct: q.changePct,
-      volume: q.volume,
-      marketCap: q.marketCap,
-      // Carry forward the last-known PE if the ratios call failed this run.
-      pe: pe ?? existing.get(sym)?.pe ?? null,
-      ts: nowMs,
+      price: quote ? quote.price : prev?.price ?? null,
+      changePct: quote ? quote.changePct : prev?.changePct ?? null,
+      volume: quote ? quote.volume : prev?.volume ?? null,
+      marketCap: quote ? quote.marketCap : prev?.marketCap ?? null,
+      // carry forward last-known PE if this run didn't (re)fetch a value
+      pe: peFetched ? peValue ?? prev?.pe ?? null : prev?.pe ?? null,
+      ts: quote ? nowMs : prev?.ts ?? nowMs,
+      peTs: peFetched ? nowMs : prev?.peTs ?? 0,
     };
-    refreshed++;
+    if (quote) pxRefreshed++;
+    if (peFetched && peValue != null) peRefreshed++;
   }
 
   let written = 0;
@@ -228,5 +268,12 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
     // fail open -- a failed warm just means the pool keeps its prior values.
   }
 
-  return { ok: true, universe: clean.length, sliceSize: slice.length, refreshed, written };
+  return {
+    ok: true,
+    universe: clean.length,
+    priceCap,
+    priceRefreshed: pxRefreshed,
+    peRefreshed,
+    written,
+  };
 }
