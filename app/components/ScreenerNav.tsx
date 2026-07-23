@@ -30,7 +30,7 @@ type Tone = "green" | "yellow" | "orange" | "red" | "blue";
 // Triangles) have no `filterKey`, since they're built from a separate, more
 // expensive dataset that was deliberately kept out of every other page's
 // payload -- those stay plain links even while filter mode is on.
-type NavItem = { href?: string; label: string; icon: string; tone: Tone; filterKey?: AnyFilterKey };
+type NavItem = { href?: string; label: string; icon: string; tone: Tone; filterKey?: AnyFilterKey; comingSoon?: boolean };
 type NavGroup = { heading: string; headingColor: string; items: NavItem[] };
 
 // Grouped so the column reads like the Learn sidebar (coloured section
@@ -46,6 +46,10 @@ const GROUPS: NavGroup[] = [
       // is a page you can open that doesn't pre-apply any condition (unlike
       // Overbought/Oversold/etc). Just a link, never a checkbox (no filterKey).
       { href: "/stock-screener", label: "All Stocks", icon: "▦", tone: "blue" },
+      // Greyed "coming soon" until launch -- the /popular-searches page itself
+      // is IP/preview-gated (see middleware.ts), so the public sees a Coming
+      // Soon placeholder if they click through; the owner sees the real page.
+      { href: "/popular-searches", label: "Popular Searches", icon: "☆", tone: "blue", comingSoon: true },
     ],
   },
   {
@@ -190,6 +194,44 @@ function NavList({
               }
 
               if (!item.href) return null;
+
+              // Greyed "coming soon" entry -- still links through (owner sees
+              // the real gated page; public sees the Coming Soon placeholder),
+              // just visually marked as not-yet-public with a "Soon" pill.
+              if (item.comingSoon) {
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={onNavigate}
+                    className={active ? "screenerNavItem active" : "screenerNavItem"}
+                    style={{ opacity: 0.55 }}
+                    title="Coming soon"
+                  >
+                    <span className="screenerNavIcon" style={{ color: colour }}>
+                      {item.icon}
+                    </span>
+                    <span className="screenerNavLabel">{item.label}</span>
+                    <span
+                      style={{
+                        marginLeft: "auto",
+                        flex: "0 0 auto",
+                        fontSize: 9.5,
+                        fontWeight: 800,
+                        letterSpacing: "0.04em",
+                        textTransform: "uppercase",
+                        color: "rgba(148,163,184,0.72)",
+                        border: "1px solid rgba(148,163,184,0.32)",
+                        borderRadius: 999,
+                        padding: "1px 6px",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Soon
+                    </span>
+                  </Link>
+                );
+              }
 
               return (
                 <Link
