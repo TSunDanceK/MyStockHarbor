@@ -1,6 +1,6 @@
 ---
 ticker: RKLB
-datasheetImage: /images/datasheets/rklb-july-2026.png
+datasheetImage: /images/datasheets/RKLB_Datasheet_July2026.png
 statLabel1: Market cap
 statValue1: "~$50B"
 statLabel2: Q1 2026 revenue
