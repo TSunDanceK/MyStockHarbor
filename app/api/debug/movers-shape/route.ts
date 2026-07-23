@@ -3,12 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// TEMPORARY debug route. Round 2: checking whether FMP's Starter plan exposes
-// a BULK "all quotes for this exchange/index" endpoint (legacy v3
-// /api/v3/quotes/{exchange} and similar), which would return real S&P
-//500/Nasdaq-100 constituent prices in one call -- a much better fit for the
-// price pool than the market-wide gainers/losers buckets (which skew to
-// penny stocks not in our analyzed universe). DELETE THIS FILE once verified.
+// TEMPORARY debug route. Round 3: the production discovery loop
+// (app/api/market/route.ts, fetchFmpConstituentSymbols) calls the LEGACY
+// api/v3/sp500_constituent / api/v3/nasdaq_constituent endpoints, which just
+// came back 403 "Legacy Endpoint ... no longer supported ... prior August 31,
+// 2025." Finding the current stable-API replacement so that call can be
+// fixed. DELETE THIS FILE once verified.
 
 async function probe(url: string, label: string) {
   try {
@@ -53,12 +53,12 @@ export async function GET(_req: NextRequest) {
   const k = encodeURIComponent(apiKey);
 
   const candidates: [string, string][] = [
-    ["v3_quotes_nasdaq", `https://financialmodelingprep.com/api/v3/quotes/nasdaq?apikey=${k}`],
-    ["v3_quotes_nyse", `https://financialmodelingprep.com/api/v3/quotes/nyse?apikey=${k}`],
-    ["v3_quote_sp500_index", `https://financialmodelingprep.com/api/v3/quote/%5EGSPC?apikey=${k}`],
-    ["stable_batch_exchange_quote_nasdaq", `https://financialmodelingprep.com/stable/batch-exchange-quote?exchange=NASDAQ&apikey=${k}`],
-    ["stable_sp500_constituent", `https://financialmodelingprep.com/api/v3/sp500_constituent?apikey=${k}`],
-    ["stable_index_list", `https://financialmodelingprep.com/stable/index-list?apikey=${k}`],
+    ["stable_sp500_constituent_hyphen", `https://financialmodelingprep.com/stable/sp500-constituent?apikey=${k}`],
+    ["stable_nasdaq_constituent_hyphen", `https://financialmodelingprep.com/stable/nasdaq-constituent?apikey=${k}`],
+    ["stable_dowjones_constituent_hyphen", `https://financialmodelingprep.com/stable/dowjones-constituent?apikey=${k}`],
+    ["stable_sp500_constituent_underscore", `https://financialmodelingprep.com/stable/sp500_constituent?apikey=${k}`],
+    ["stable_index_constituents_gspc", `https://financialmodelingprep.com/stable/index-constituents?symbol=%5EGSPC&apikey=${k}`],
+    ["stable_sp500_constituent_no_hyphen", `https://financialmodelingprep.com/stable/sp500constituent?apikey=${k}`],
   ];
 
   const results = await Promise.all(
