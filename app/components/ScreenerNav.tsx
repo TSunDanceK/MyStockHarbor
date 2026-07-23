@@ -589,12 +589,12 @@ export default function ScreenerNav({
         .screenerSelectCurrent {
           display: inline-flex; align-items: center; gap: 7px; min-width: 0;
           padding: 5px 10px; border-radius: 999px;
-          border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.03);
-          color: rgba(226,232,240,0.82); font-size: 12.5px; font-weight: 900;
+          border: 1px solid rgba(255,255,255,0.28); background: rgba(255,255,255,0.08);
+          color: rgba(241,245,249,0.95); font-size: 12.5px; font-weight: 900;
           overflow: hidden;
         }
         .screenerSelectCurrent > :not(.screenerSelectChevron) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .screenerSelectChevron { flex: 0 0 auto; color: rgba(226,232,240,0.55); }
+        .screenerSelectChevron { flex: 0 0 auto; color: rgba(226,232,240,0.7); }
 
         .screenerOverlay {
           position: fixed; inset: 0; z-index: 70; display: flex;
