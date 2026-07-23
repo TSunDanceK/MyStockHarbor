@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// TEMPORARY debug route. Round 3: the production discovery loop
+// TEMPORARY debug route. Round 3b (retry): the production discovery loop
 // (app/api/market/route.ts, fetchFmpConstituentSymbols) calls the LEGACY
 // api/v3/sp500_constituent / api/v3/nasdaq_constituent endpoints, which just
 // came back 403 "Legacy Endpoint ... no longer supported ... prior August 31,
@@ -65,5 +65,5 @@ export async function GET(_req: NextRequest) {
     candidates.map(([label, url]) => probe(url, label))
   );
 
-  return NextResponse.json({ results });
+  return NextResponse.json({ results, retry: true });
 }
