@@ -2977,12 +2977,24 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
     }),
   ];
 
+  // Ship the FULL analyzed universe in signalRecords so the All Stocks screener
+  // (/stock-screener) and the preset condition pages can show every symbol.
+  // Previously this was trimmed to just section members, which silently dropped
+  // the mega-caps (AAPL, NVDA, AMZN, GOOGL, META, ...) -- they're in the
+  // analyzed universe but don't always land in a section's top-20, so sorting
+  // All Stocks by market cap showed MSFT/LLY/MU at the top with the true giants
+  // missing entirely. To keep the cached payload lean (and safely under the
+  // Redis value-size limit), chartPoints are kept only for the symbols that
+  // appear in a section -- those cards already need them. The extra
+  // full-universe symbols ship WITHOUT chartPoints, so they still appear in the
+  // sortable list (which needs no per-row chart) while their chart-view card
+  // simply renders no mini-chart. The lean consumers (homepage buy-signal
+  // counts / weekly MA200 ticker) just read a longer, more complete list.
   const displayedSymbols = new Set(
     sections.flatMap((section) => section.items.map((item) => item.symbol))
   );
-
-  const filteredSignalRecords = signalRecords.filter((record) =>
-    displayedSymbols.has(record.symbol)
+  const fullSignalRecords = signalRecords.map((record) =>
+    displayedSymbols.has(record.symbol) ? record : { ...record, chartPoints: undefined }
   );
 
   // Homepage dashboard scrolling ticker: a handful of candidates per
@@ -3022,7 +3034,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
     dynamicSymbols: dynamicUniverse,
     estimatedApiCalls: process.env.FMP_API_KEY ? universe.length * 2 + 1 : universe.length + 1,
     sections,
-    signalRecords: filteredSignalRecords,
+    signalRecords: fullSignalRecords,
     tickerFeed: {
       topMovers: topMoversForTicker,
       earningsGrowth: earningsGrowthForTicker,
