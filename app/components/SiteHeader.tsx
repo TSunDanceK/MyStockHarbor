@@ -731,6 +731,10 @@ export default function SiteHeader({
         menuMinWidth: 220,
         submenuMinWidth: 250,
         entries: [
+          // Two landing options at the top of the Pickers dropdown:
+          // "Main Pickers Page" -> the full All Stocks screener
+          // (/stock-screener, no filter pre-applied), and "Quick Pickers
+          // Page" -> the original /pickers page.
           {
             kind: "link",
             label: "Main Pickers Page",
