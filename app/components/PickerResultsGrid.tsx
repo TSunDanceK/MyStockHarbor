@@ -60,11 +60,16 @@ function ReasonChips({
   tone,
   selectedFilters,
   splitBySelection,
+  collapseAll = false,
 }: {
   reasons: string[];
   tone: PickerTone;
   selectedFilters: AnyFilterKey[];
   splitBySelection: boolean;
+  // When true, hide EVERY qualifying pill behind a single "Qualified screeners"
+  // dropdown pill (used on the All Stocks screener, where an unfiltered stock
+  // can qualify for a dozen conditions and the inline chips get very noisy).
+  collapseAll?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const border = toneBorder(tone);
@@ -97,6 +102,40 @@ function ReasonChips({
       {reason}
     </span>
   );
+
+  // Collapsed mode: a single "Qualified screeners" dropdown pill that expands to
+  // reveal every qualifying chip. Keeps the All Stocks cards tidy since, with no
+  // filter applied, a stock can list a dozen conditions at once.
+  if (collapseAll && reasons.length > 0) {
+    return (
+      <div className="reasonChips">
+        <button
+          type="button"
+          className="reasonChip"
+          style={{
+            borderColor: border,
+            color: "#ffffff",
+            cursor: "pointer",
+            fontFamily: "inherit",
+            fontWeight: 900,
+            gap: 5,
+            background: "rgba(96,165,250,0.12)",
+            borderStyle: "dashed",
+          }}
+          aria-expanded={expanded}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setExpanded((value) => !value);
+          }}
+        >
+          Qualified screeners ({reasons.length})
+          <span aria-hidden="true" style={{ fontSize: 8, lineHeight: 1 }}>{expanded ? "▲" : "▼"}</span>
+        </button>
+        {expanded ? reasons.map(renderChip) : null}
+      </div>
+    );
+  }
 
   return (
     <div className="reasonChips">
@@ -276,6 +315,7 @@ export default function PickerResultsGrid({
   isEarnings,
   hideUntilFiltered = false,
   splitReasonsBySelection = false,
+  collapseReasons = false,
 }: {
   entries: ResultEntry[];
   initialVisibleCount?: number;
@@ -286,6 +326,7 @@ export default function PickerResultsGrid({
   isEarnings: boolean;
   hideUntilFiltered?: boolean;
   splitReasonsBySelection?: boolean;
+  collapseReasons?: boolean;
 }) {
   const { selectedFilters, setMatchCount } = usePickerFilter();
   const [viewMode, setViewMode] = useState<ViewMode>("list");
@@ -596,6 +637,7 @@ export default function PickerResultsGrid({
                       tone={entry.tone}
                       selectedFilters={selectedFilters}
                       splitBySelection={splitReasonsBySelection}
+                      collapseAll={collapseReasons}
                     />
                   ) : null}
                   <MiniPickerCandleChart
