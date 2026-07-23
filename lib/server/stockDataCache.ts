@@ -33,8 +33,8 @@ const redis =
 
 const KEY_PREFIX = "msh:stockdata:v1:";
 const TTL_SECONDS = 60 * 60 * 26; // 26h -- comfortably spans a daily-ish warm
-const REFRESH_SLICE_SIZE = 25; // symbols refreshed per run (~7 FMP calls each)
-const CALLS_PER_SYMBOL = 7;
+const REFRESH_SLICE_SIZE = 25; // symbols refreshed per run (~8 FMP calls each)
+const CALLS_PER_SYMBOL = 8;
 const FMP_MIN_HEADROOM_CALLS = 90; // leave room for price/history/earnings warmers
 
 export type StockData = {
@@ -61,6 +61,13 @@ export type StockData = {
   rating: string | null; // consensus label
   analystCount: number | null;
   priceTarget: number | null;
+  // Performance (percent returns; the picker chartPoints only span ~72 bars,
+  // so these come from stable/stock-price-change which returns every period).
+  perf1w: number | null; // 5D
+  perf1m: number | null;
+  perf6m: number | null;
+  perfYtd: number | null;
+  perf1y: number | null;
   updatedAt: string;
 };
 
@@ -249,6 +256,21 @@ async function fetchOne(symbol: string, apiKey: string): Promise<Partial<StockDa
     /* fail open */
   }
 
+  // 8) stock-price-change -> performance returns for every period in one call
+  //    (fields are already percentages: "5D","1M","6M","ytd","1Y", ...).
+  try {
+    const row = firstRow(await fetchJson(`${base}/stock-price-change?symbol=${s}&apikey=${key}`));
+    if (row) {
+      out.perf1w = num(row["5D"]);
+      out.perf1m = num(row["1M"]);
+      out.perf6m = num(row["6M"]);
+      out.perfYtd = num(row["ytd"]);
+      out.perf1y = num(row["1Y"]);
+    }
+  } catch {
+    /* fail open */
+  }
+
   return out;
 }
 
@@ -303,6 +325,11 @@ export async function warmStockData(symbols: string[], nowMs: number) {
       rating: partial.rating ?? prev?.rating ?? null,
       analystCount: partial.analystCount ?? prev?.analystCount ?? null,
       priceTarget: partial.priceTarget ?? prev?.priceTarget ?? null,
+      perf1w: partial.perf1w ?? prev?.perf1w ?? null,
+      perf1m: partial.perf1m ?? prev?.perf1m ?? null,
+      perf6m: partial.perf6m ?? prev?.perf6m ?? null,
+      perfYtd: partial.perfYtd ?? prev?.perfYtd ?? null,
+      perf1y: partial.perf1y ?? prev?.perf1y ?? null,
       updatedAt: nowIso,
     };
     pipeline.set(`${KEY_PREFIX}${symbol}`, row, { ex: TTL_SECONDS });
