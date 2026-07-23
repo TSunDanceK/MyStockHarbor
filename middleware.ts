@@ -85,6 +85,19 @@ export async function middleware(request: NextRequest) {
     );
   }
 
+  // /custom-screener has been retired: the All Stocks screener
+  // (/stock-screener) runs the identical full-universe + checkbox-filter
+  // engine and additionally shows results immediately with the sortable data
+  // tabs, so it fully supersedes it. 308-redirect the old URL (preserving any
+  // ?symbol=) so bookmarks and inbound links land on the better page rather
+  // than a dead route.
+  if (pathname === "/custom-screener") {
+    return NextResponse.redirect(
+      `https://www.mystockharbor.com/stock-screener${search}`,
+      308
+    );
+  }
+
   // "Coming Soon" gate for the not-yet-public /popular-searches page. Only an
   // allow-listed IP (POPULAR_SEARCHES_ALLOW_IPS, comma-separated) or a valid
   // preview cookie sees the real page; everyone else gets the Coming Soon

@@ -271,20 +271,22 @@ function NavList({
 // broken -- a stock on the Oversold page can never also be Overbought, so
 // any two-condition combination scoped to one category's own short list
 // always showed zero matches -- so in-place filtering has been retired in
-// favour of sending people to /custom-screener, which searches the full
+// favour of sending people to /stock-screener, which searches the full
 // analyzed universe instead of one category's own short list.
 function OpenCustomScreenerLink() {
   return (
     <div className="screenerFilterModeBar">
       <Link
-        href="/custom-screener"
+        href="/stock-screener"
         className="screenerFilterModeBtn"
         onClick={() => {
-          // Signal the custom-screener page to re-open the "Select Screener"
+          // Signal the All Stocks screener to re-open the "Select Screener"
           // overlay on arrival (mobile only) so the menu switches straight to
-          // the custom-screener checkboxes -- the page loads behind it --
-          // instead of closing and forcing a second "Select Screener" tap.
-          // Read + cleared one-shot by ScreenerNav's mobile trigger below.
+          // its filter checkboxes -- the page loads behind it -- instead of
+          // closing and forcing a second "Select Screener" tap. Read + cleared
+          // one-shot by ScreenerNav's mobile trigger below. (/stock-screener is
+          // also alwaysFilterMode, so it honours the flag just like the old
+          // /custom-screener page did.)
           try {
             sessionStorage.setItem("openScreenerOverlayOnLoad", "1");
           } catch {
@@ -292,7 +294,7 @@ function OpenCustomScreenerLink() {
           }
         }}
       >
-        Open Full Custom Screener
+        Open Full Stock Screener
       </Link>
     </div>
   );
@@ -346,18 +348,18 @@ function FilterSummaryBar() {
 // above); it does nothing unless the caller also wraps the page in
 // <PickerFilterProvider>. When `alwaysFilterMode` is false (every existing
 // category page), NavList always renders plain links and, if `showFilters`
-// is on, a plain link to /custom-screener (OpenCustomScreenerLink) replaces
+// is on, a plain link to /stock-screener (OpenCustomScreenerLink) replaces
 // what used to be the "Open Filters" toggle button -- in-place per-category
 // checkbox filtering has been retired (see OpenCustomScreenerLink's comment
 // for why) in favour of that dedicated page. When `alwaysFilterMode` is
-// true (only /custom-screener passes this), NavList always renders
+// true (the All Stocks screener passes this), NavList always renders
 // checkboxes and there's no toggle at all, just the always-visible
 // checkboxes plus a "Back to Pickers" link and a "N matching" + Clear
 // summary row (FilterSummaryBar) once at least one is checked.
 // `showSearch` is retained for backwards compatibility with existing
 // callers but is no longer used: the old cross-picker ticker search that
 // used to render in the mobile overlay has been removed (see below). The
-// only ticker search on the site now is the /custom-screener symbol search
+// only ticker search on the site now is the All Stocks symbol search
 // in the hero (CustomScreenerSymbolSearch, see PickerResultPage.tsx).
 export default function ScreenerNav({
   currentHref,
@@ -376,12 +378,12 @@ export default function ScreenerNav({
   const showSidebar = variant !== "trigger";
   const showTrigger = variant !== "sidebar";
 
-  // When arriving from another page's "Open Full Custom Screener" tap on
+  // When arriving from another page's "Open Full Stock Screener" tap on
   // mobile, re-open the overlay immediately so the menu switches straight to
-  // the custom-screener checkboxes (the page itself loads behind it) instead
+  // the checkboxes (the page itself loads behind it) instead
   // of closing and making the visitor tap "Select Screener" again. One-shot:
   // the flag is cleared the moment it's read. Only the mobile trigger of the
-  // custom-screener page (alwaysFilterMode) honours it, and only at mobile
+  // All Stocks screener (alwaysFilterMode) honours it, and only at mobile
   // widths so the fixed overlay never covers the desktop layout.
   useEffect(() => {
     if (!showTrigger || !alwaysFilterMode) return;
