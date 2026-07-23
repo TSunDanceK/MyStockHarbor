@@ -515,11 +515,13 @@ function NavDropdown({
   );
 }
 
-// Full-screen mobile nav overlay, opened from the hamburger button below
-// the 720px breakpoint. Reuses the same `navItems` data as the desktop
-// header, but renders dropdown items as inline expand/collapse accordion
-// groups (mobile has no hover, and a sideways flyout doesn't suit a narrow
-// viewport) instead of the desktop NavDropdown/NavSubmenu flyout behavior.
+// Full-screen mobile nav overlay, opened from the hamburger button below the
+// 720px breakpoint. Reuses the same `navItems` data as the desktop header, but
+// presents it as an iOS-style DRILL-DOWN stack rather than inline accordions:
+// tapping a group slides to a panel showing only that group's children, with a
+// Back button + the current section title, so only one level is ever on screen.
+// The old expand-everything-inline accordion got unreadable three levels deep
+// on a phone (Pickers -> Chart Plays -> its items all stacked at once).
 function MobileNavOverlay({
   navItems,
   activePathname,
@@ -533,7 +535,11 @@ function MobileNavOverlay({
   onNavigate: (stockNav: StockNavKind) => void;
   onClose: () => void;
 }) {
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  // The drill-down path: [] = root, [dropdown] = one level in, [dropdown,
+  // submenu] = two levels in. Resetting happens automatically because the
+  // overlay unmounts/remounts each time the menu opens.
+  const [stack, setStack] = useState<Array<{ label: string }>>([]);
+  const prevDepthRef = useRef(0);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -545,32 +551,91 @@ function MobileNavOverlay({
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
+      if (event.key !== "Escape") return;
+      // Escape steps back one level if we've drilled in, otherwise closes.
+      setStack((prev) => {
+        if (prev.length > 0) return prev.slice(0, -1);
+        onClose();
+        return prev;
+      });
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
-  function toggle(key: string) {
-    setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
+  // Slide direction: deeper than last render = forward (in from the right),
+  // shallower = back (in from the left). Read before the effect updates the ref.
+  const direction = stack.length >= prevDepthRef.current ? "fwd" : "back";
+  useEffect(() => {
+    prevDepthRef.current = stack.length;
+  }, [stack.length]);
+
+  const rootDropdown =
+    stack.length >= 1
+      ? navItems.find(
+          (item): item is NavDropdownItem =>
+            item.kind === "dropdown" && item.label === stack[0].label
+        )
+      : undefined;
+  const activeSubmenu =
+    stack.length >= 2 && rootDropdown
+      ? rootDropdown.entries.find(
+          (entry): entry is NavDropdownSubmenuEntry =>
+            entry.kind === "submenu" && entry.label === stack[1].label
+        )
+      : undefined;
+
+  type Row =
+    | { kind: "leaf"; child: NavChild }
+    | { kind: "branch"; label: string; active: boolean; open: () => void };
+
+  let title = "Menu";
+  let parentTitle: string | null = null;
+  let rows: Row[] = [];
+
+  if (stack.length === 0) {
+    rows = navItems.map((item): Row =>
+      item.kind === "dropdown"
+        ? {
+            kind: "branch",
+            label: item.label,
+            active: item.isActive(activePathname),
+            open: () => setStack([{ label: item.label }]),
+          }
+        : { kind: "leaf", child: item }
+    );
+  } else if (stack.length === 1 && rootDropdown) {
+    title = rootDropdown.label;
+    parentTitle = "Menu";
+    rows = rootDropdown.entries.map((entry): Row =>
+      entry.kind === "submenu"
+        ? {
+            kind: "branch",
+            label: entry.label,
+            active: entry.isActive(activePathname),
+            open: () => setStack((prev) => [...prev, { label: entry.label }]),
+          }
+        : { kind: "leaf", child: entry }
+    );
+  } else if (activeSubmenu && rootDropdown) {
+    title = activeSubmenu.label;
+    parentTitle = rootDropdown.label;
+    rows = activeSubmenu.items.map((child): Row => ({ kind: "leaf", child }));
   }
 
-  function renderLink(child: NavChild, extraClassName: string) {
+  function renderLeaf(child: NavChild) {
     const href = child.stockNav ? stockHref(lastSymbol, child.stockNav) : child.href;
     const active = child.isActive(activePathname);
-
     return (
       <Link
         key={child.label}
         href={href}
-        className={`mshMobileOverlayLink ${extraClassName}${
-          child.emphasize ? " mshMobileOverlayLink--emphasis" : ""
-        }${active ? " is-active" : ""}`}
+        className={`mshDrillLink${child.emphasize ? " mshDrillLink--emphasis" : ""}${
+          active ? " is-active" : ""
+        }`}
         onClick={(event) => {
           onClose();
-
           if (!child.stockNav) return;
-
           event.preventDefault();
           onNavigate(child.stockNav);
         }}
@@ -583,7 +648,19 @@ function MobileNavOverlay({
   return createPortal(
     <div className="mshMobileOverlay" role="dialog" aria-modal="true" aria-label="Site menu">
       <div className="mshMobileOverlayHeader">
-        <span className="mshMobileOverlayTitle">Menu</span>
+        {stack.length > 0 ? (
+          <button
+            type="button"
+            className="mshDrillBack"
+            onClick={() => setStack((prev) => prev.slice(0, -1))}
+            aria-label={parentTitle ? `Back to ${parentTitle}` : "Back"}
+          >
+            <span aria-hidden="true" className="mshDrillBackChevron">‹</span>
+            <span>{parentTitle}</span>
+          </button>
+        ) : (
+          <span className="mshMobileOverlayTitle">Menu</span>
+        )}
         <button
           type="button"
           className="mshMobileOverlayClose"
@@ -594,80 +671,28 @@ function MobileNavOverlay({
         </button>
       </div>
 
-      <nav className="mshMobileOverlayNav" aria-label="Mobile primary navigation">
-        {navItems.map((item) => {
-          if (item.kind === "link") {
-            return renderLink(item, "");
-          }
+      {stack.length > 0 ? <div className="mshDrillTitle">{title}</div> : null}
 
-          const key = item.label;
-          const isExpanded = !!expanded[key];
-          const active = item.isActive(activePathname);
-
-          return (
-            <div key={key} className="mshMobileOverlayGroup">
-              <button
-                type="button"
-                className={`mshMobileOverlayGroupTrigger${active ? " is-active" : ""}`}
-                onClick={() => toggle(key)}
-                aria-expanded={isExpanded}
-              >
-                <span>{item.label}</span>
-                <span
-                  aria-hidden="true"
-                  className="mshMobileOverlayChevron"
-                  style={{ transform: isExpanded ? "rotate(180deg)" : "none" }}
-                >
-                  ▼
-                </span>
-              </button>
-
-              {isExpanded ? (
-                <div className="mshMobileOverlaySubgroup">
-                  {item.entries.map((entry) => {
-                    if (entry.kind === "link") {
-                      return renderLink(entry, "mshMobileOverlayLink--nested");
-                    }
-
-                    const subKey = `${key}::${entry.label}`;
-                    const subExpanded = !!expanded[subKey];
-                    const subActive = entry.isActive(activePathname);
-
-                    return (
-                      <div key={entry.label} className="mshMobileOverlayGroup">
-                        <button
-                          type="button"
-                          className={`mshMobileOverlayGroupTrigger mshMobileOverlayGroupTrigger--nested${
-                            subActive ? " is-active" : ""
-                          }`}
-                          onClick={() => toggle(subKey)}
-                          aria-expanded={subExpanded}
-                        >
-                          <span>{entry.label}</span>
-                          <span
-                            aria-hidden="true"
-                            className="mshMobileOverlayChevron"
-                            style={{ transform: subExpanded ? "rotate(180deg)" : "none" }}
-                          >
-                            ▼
-                          </span>
-                        </button>
-
-                        {subExpanded ? (
-                          <div className="mshMobileOverlaySubgroup">
-                            {entry.items.map((child) =>
-                              renderLink(child, "mshMobileOverlayLink--nested2")
-                            )}
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
+      <nav
+        key={stack.map((s) => s.label).join("/") || "root"}
+        className={`mshDrillPanel mshDrillPanel--${direction}`}
+        aria-label="Mobile primary navigation"
+      >
+        {rows.map((row) =>
+          row.kind === "leaf" ? (
+            renderLeaf(row.child)
+          ) : (
+            <button
+              key={row.label}
+              type="button"
+              className={`mshDrillBranch${row.active ? " is-active" : ""}`}
+              onClick={row.open}
+            >
+              <span>{row.label}</span>
+              <span aria-hidden="true" className="mshDrillBranchChevron">›</span>
+            </button>
+          )
+        )}
       </nav>
     </div>,
     document.body
@@ -1416,6 +1441,108 @@ export default function SiteHeader({
           display: flex;
           flex-direction: column;
         }
+
+        /* ---- Drill-down mobile nav (iOS-style slide panels) ---- */
+        .mshDrillTitle {
+          padding: 4px 18px 12px;
+          font-size: 27px;
+          font-weight: 950;
+          letter-spacing: -0.02em;
+          color: #f8fafc;
+        }
+
+        .mshDrillPanel {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+          padding: 6px 12px 32px;
+        }
+
+        .mshDrillPanel--fwd { animation: mshDrillInFwd 0.19s ease; }
+        .mshDrillPanel--back { animation: mshDrillInBack 0.19s ease; }
+
+        @keyframes mshDrillInFwd {
+          from { transform: translateX(26px); opacity: 0; }
+          to { transform: none; opacity: 1; }
+        }
+        @keyframes mshDrillInBack {
+          from { transform: translateX(-26px); opacity: 0; }
+          to { transform: none; opacity: 1; }
+        }
+
+        /* A leaf row = an actual page link. */
+        .mshDrillLink {
+          display: block;
+          padding: 15px 14px;
+          border-radius: 12px;
+          color: #d7deea;
+          font-size: 16px;
+          font-weight: 700;
+          text-decoration: none;
+        }
+        .mshDrillLink:hover,
+        .mshDrillLink:active {
+          color: #eaf0fa;
+          background: #141b2b;
+        }
+        .mshDrillLink.is-active {
+          color: #eaf0fa;
+          background: #141b2b;
+          box-shadow: inset 0 0 0 1px #222c40;
+        }
+        .mshDrillLink--emphasis { font-weight: 850; color: #eaf0fa; }
+
+        /* A branch row = opens a deeper panel. Brighter + a right chevron so
+           it's obviously "drills in" rather than "navigates". */
+        .mshDrillBranch {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          width: 100%;
+          padding: 15px 14px;
+          border: none;
+          border-radius: 12px;
+          background: transparent;
+          color: #e8eef8;
+          font-size: 16px;
+          font-weight: 800;
+          font-family: inherit;
+          text-align: left;
+          cursor: pointer;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .mshDrillBranch:hover,
+        .mshDrillBranch:active,
+        .mshDrillBranch.is-active {
+          color: #eaf0fa;
+          background: #141b2b;
+        }
+        .mshDrillBranchChevron {
+          flex: 0 0 auto;
+          font-size: 22px;
+          line-height: 1;
+          color: #5c6b83;
+        }
+        .mshDrillBranch.is-active .mshDrillBranchChevron { color: #93c5fd; }
+
+        /* Back button in the overlay header. */
+        .mshDrillBack {
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          padding: 6px 10px 6px 2px;
+          border: none;
+          background: transparent;
+          color: #93c5fd;
+          font-size: 15.5px;
+          font-weight: 800;
+          font-family: inherit;
+          cursor: pointer;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .mshDrillBack:active { opacity: 0.7; }
+        .mshDrillBackChevron { font-size: 24px; line-height: 1; margin-top: -2px; }
 
         @media (max-width: 720px) {
           .mshGlobalHeaderInner {
