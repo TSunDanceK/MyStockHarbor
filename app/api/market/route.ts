@@ -575,13 +575,29 @@ function shuffleArray<T>(arr: T[]) {
   return out;
 }
 
+// Modern stable-API constituent-list endpoints (as of 2026-07-23). The old
+// legacy paths (api/v3/sp500_constituent, api/v3/nasdaq_constituent) were
+// retired by FMP -- confirmed live 403 "Legacy Endpoint ... no longer
+// supported ... prior August 31, 2025" regardless of plan tier. These stable
+// paths are the real, current replacements; they returned 402 "Restricted:
+// not available under your current subscription" on the Starter plan when
+// last checked, but are valid endpoint names, so this call auto-recovers with
+// zero further code changes the moment the FMP plan includes them -- no
+// redeploy needed, since a 402/error response already resolves to an empty
+// array via the same fail-open path used below (falls back to the static
+// CURATED_UNIVERSE/DISCOVERY_MASTER_LIST/EXTRA_LIQUID_GROWTH_LIST names).
+type ConstituentEndpoint =
+  | "sp500-constituent"
+  | "nasdaq-constituent"
+  | "dowjones-constituent";
+
 async function fetchFmpConstituentSymbols(
-  endpoint: "sp500_constituent" | "nasdaq_constituent",
+  endpoint: ConstituentEndpoint,
   apiKey: string
 ) {
   await reserveFmpCallSlot();
 
-  const url = `https://financialmodelingprep.com/api/v3/${endpoint}?apikey=${encodeURIComponent(
+  const url = `https://financialmodelingprep.com/stable/${endpoint}?apikey=${encodeURIComponent(
     apiKey
   )}`;
 
@@ -613,18 +629,24 @@ async function fetchFmpConstituentSymbols(
 
 async function buildExpandedDiscoveryMasterList(apiKey: string) {
   const sp500Symbols = await fetchFmpConstituentSymbols(
-    "sp500_constituent",
+    "sp500-constituent",
     apiKey
   );
 
   const nasdaqSymbols = await fetchFmpConstituentSymbols(
-    "nasdaq_constituent",
+    "nasdaq-constituent",
+    apiKey
+  );
+
+  const dowSymbols = await fetchFmpConstituentSymbols(
+    "dowjones-constituent",
     apiKey
   );
 
   return uniqUpper([
     ...sp500Symbols,
     ...nasdaqSymbols,
+    ...dowSymbols,
     ...EXTRA_LIQUID_GROWTH_LIST,
     ...CURATED_UNIVERSE,
     ...DISCOVERY_MASTER_LIST,
