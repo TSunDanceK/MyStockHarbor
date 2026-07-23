@@ -2159,7 +2159,10 @@ const PRESET_UNIVERSE: string[] = [
   "ELV","SCHW","BLK","REGN","FI","TT","PH","PYPL","CDNS","MAR",
 ];
 
-const UNIVERSE_CAP = 200;
+// Raised 200 -> 260 so guaranteeing the ~100-name PRESET_UNIVERSE (the largest
+// US companies, prepended below) doesn't push the day's active/mover names out
+// of the analyzed set -- we now fit both the big caps AND ~160 dynamic names.
+const UNIVERSE_CAP = 260;
 
 /* --------------------------- builder function ------------------------ */
 
@@ -2216,9 +2219,16 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
 
   const dynamicUniverseSet = new Set(dynamicUniverse);
 
+  // PRESET_UNIVERSE (the ~100 largest US companies -- AAPL, NVDA, MSFT, GOOGL,
+  // AMZN, META, ...) goes FIRST so it's never dropped by the UNIVERSE_CAP slice
+  // below. Previously it was appended AFTER the (large) dynamic activity set, so
+  // once the dynamic set alone filled the cap the mega-caps were sliced off
+  // entirely -- which is why the biggest companies were missing from the All
+  // Stocks screener (only ones that happened to also be active movers, e.g. MU,
+  // survived). The day's active/mover names now fill the remaining slots.
   const universe = Array.from(
     new Set(
-      [...dynamicUniverse, ...PRESET_UNIVERSE]
+      [...PRESET_UNIVERSE, ...dynamicUniverse]
         .map((x) => String(x).trim().toUpperCase())
         .filter(Boolean)
     )
