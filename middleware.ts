@@ -85,6 +85,53 @@ export async function middleware(request: NextRequest) {
     );
   }
 
+  // "Coming Soon" gate for the not-yet-public /popular-searches page. Only an
+  // allow-listed IP (POPULAR_SEARCHES_ALLOW_IPS, comma-separated) or a valid
+  // preview cookie sees the real page; everyone else gets the Coming Soon
+  // placeholder the page itself renders when the x-msh-ps-preview header isn't
+  // "1". Visiting `?preview=<POPULAR_SEARCHES_PREVIEW_KEY>` once drops the
+  // cookie so the owner can view from any device/IP (dynamic IPs, phones).
+  // With neither env var set, the page stays Coming Soon for everyone -- the
+  // safe default.
+  if (pathname === "/popular-searches") {
+    const previewKey = process.env.POPULAR_SEARCHES_PREVIEW_KEY || "";
+    const allowIps = (process.env.POPULAR_SEARCHES_ALLOW_IPS || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const ip = getClientIp(request.headers);
+    const cookieVal = request.cookies.get("msh_ps_preview")?.value || "";
+    const queryKey = url.searchParams.get("preview") || "";
+
+    let unlocked = false;
+    let setCookie = false;
+
+    if (previewKey && queryKey && queryKey === previewKey) {
+      unlocked = true;
+      setCookie = true; // first visit via the secret link -> remember it
+    } else if (previewKey && cookieVal && cookieVal === previewKey) {
+      unlocked = true;
+    } else if (allowIps.length > 0 && allowIps.includes(ip)) {
+      unlocked = true;
+    }
+
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-msh-ps-preview", unlocked ? "1" : "0");
+
+    const gated = NextResponse.next({ request: { headers: requestHeaders } });
+    if (setCookie) {
+      gated.cookies.set("msh_ps_preview", previewKey, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 180, // ~6 months
+      });
+    }
+    return gated;
+  }
+
   if (pathname.startsWith("/stock/")) {
     const ip = getClientIp(request.headers);
 
