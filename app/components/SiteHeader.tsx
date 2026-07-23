@@ -718,6 +718,17 @@ export default function SiteHeader({
           path === "/overbought-stocks-today" ||
           path === "/oversold-stocks-today" ||
           path === "/bullish-bearish-divergence-stocks" ||
+          path === "/bullish-rsi-divergence-stocks" ||
+          path === "/bearish-rsi-divergence-stocks" ||
+          path === "/bullish-macd-divergence-stocks" ||
+          path === "/bearish-macd-divergence-stocks" ||
+          path === "/breakout-signal-stocks" ||
+          path === "/volume-spike-stocks" ||
+          path === "/atr-spike-stocks" ||
+          path === "/stocks-above-50-day-moving-average" ||
+          path === "/stocks-below-50-day-moving-average" ||
+          path === "/stocks-trading-above-200-day-moving-average" ||
+          path === "/stocks-below-200-day-moving-average" ||
           path === "/stocks-near-200-day-moving-average" ||
           path === "/stocks-near-weekly-200-day-moving-average" ||
           path === "/top-stocks-with-buy-signals" ||
@@ -786,8 +797,10 @@ export default function SiteHeader({
               path === "/overbought-stocks-today" ||
               path === "/oversold-stocks-today" ||
               path === "/bullish-bearish-divergence-stocks" ||
-              path === "/stocks-near-200-day-moving-average" ||
-              path === "/stocks-near-weekly-200-day-moving-average",
+              path === "/bullish-rsi-divergence-stocks" ||
+              path === "/bearish-rsi-divergence-stocks" ||
+              path === "/bullish-macd-divergence-stocks" ||
+              path === "/bearish-macd-divergence-stocks",
             items: [
               {
                 label: "Overbought Stocks",
@@ -805,6 +818,64 @@ export default function SiteHeader({
                 isActive: (path) => path === "/bullish-bearish-divergence-stocks",
               },
               {
+                label: "Bullish RSI Divergence",
+                href: "/bullish-rsi-divergence-stocks",
+                isActive: (path) => path === "/bullish-rsi-divergence-stocks",
+              },
+              {
+                label: "Bearish RSI Divergence",
+                href: "/bearish-rsi-divergence-stocks",
+                isActive: (path) => path === "/bearish-rsi-divergence-stocks",
+              },
+              {
+                label: "Bullish MACD Divergence",
+                href: "/bullish-macd-divergence-stocks",
+                isActive: (path) => path === "/bullish-macd-divergence-stocks",
+              },
+              {
+                label: "Bearish MACD Divergence",
+                href: "/bearish-macd-divergence-stocks",
+                isActive: (path) => path === "/bearish-macd-divergence-stocks",
+              },
+            ],
+          },
+          {
+            kind: "submenu",
+            label: "Volume & Volatility",
+            isActive: (path) =>
+              path === "/breakout-signal-stocks" ||
+              path === "/volume-spike-stocks" ||
+              path === "/atr-spike-stocks",
+            items: [
+              {
+                label: "Breakout Signals",
+                href: "/breakout-signal-stocks",
+                isActive: (path) => path === "/breakout-signal-stocks",
+              },
+              {
+                label: "Volume Spike",
+                href: "/volume-spike-stocks",
+                isActive: (path) => path === "/volume-spike-stocks",
+              },
+              {
+                label: "ATR Spike",
+                href: "/atr-spike-stocks",
+                isActive: (path) => path === "/atr-spike-stocks",
+              },
+            ],
+          },
+          {
+            kind: "submenu",
+            label: "Moving Averages",
+            isActive: (path) =>
+              path === "/stocks-near-200-day-moving-average" ||
+              path === "/stocks-near-weekly-200-day-moving-average" ||
+              path === "/stocks-above-50-day-moving-average" ||
+              path === "/stocks-below-50-day-moving-average" ||
+              path === "/stocks-trading-above-200-day-moving-average" ||
+              path === "/stocks-below-200-day-moving-average",
+            items: [
+              {
                 label: "Near 200-Day MA (Daily)",
                 href: "/stocks-near-200-day-moving-average",
                 isActive: (path) => path === "/stocks-near-200-day-moving-average",
@@ -813,6 +884,26 @@ export default function SiteHeader({
                 label: "Near 200-Day MA (Weekly)",
                 href: "/stocks-near-weekly-200-day-moving-average",
                 isActive: (path) => path === "/stocks-near-weekly-200-day-moving-average",
+              },
+              {
+                label: "Above 50-Day MA",
+                href: "/stocks-above-50-day-moving-average",
+                isActive: (path) => path === "/stocks-above-50-day-moving-average",
+              },
+              {
+                label: "Below 50-Day MA",
+                href: "/stocks-below-50-day-moving-average",
+                isActive: (path) => path === "/stocks-below-50-day-moving-average",
+              },
+              {
+                label: "Above 200-Day MA",
+                href: "/stocks-trading-above-200-day-moving-average",
+                isActive: (path) => path === "/stocks-trading-above-200-day-moving-average",
+              },
+              {
+                label: "Below 200-Day MA",
+                href: "/stocks-below-200-day-moving-average",
+                isActive: (path) => path === "/stocks-below-200-day-moving-average",
               },
             ],
           },
