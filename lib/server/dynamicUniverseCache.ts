@@ -1,6 +1,6 @@
 import { Redis } from "@upstash/redis";
 
-export type DynamicUniverseSource = "market" | "pickers" | "plays";
+export type DynamicUniverseSource = "market" | "pickers" | "plays" | "search";
 
 export type DynamicUniverseEntry = {
   symbol: string;
