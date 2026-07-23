@@ -27,6 +27,20 @@ import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 //     just rolling is plenty. Last-known PE is carried forward on a miss.
 // Only the touched fields are written; everything else persists. The hash also
 // carries a safety TTL (reset every run) so a stopped cron self-expires.
+//
+// FREE HEAD START -- FMP "market performance" buckets (confirmed live 2026-07-23):
+// stable/biggest-gainers, stable/biggest-losers, stable/most-actives are each
+// ONE call returning up to 50 ranked rows (price + changesPercentage, no volume
+// or marketCap). Real overlap with our curated/index universe is modest --
+// gainers/losers skew hard to penny stocks, most-actives skews to leveraged
+// ETFs -- typically ~15-20% of a run's universe, mostly via most-actives. Still
+// free (3 calls total regardless of universe size), so every run spends them
+// first: any universe symbol they cover gets its price/%change from the bucket
+// instead of a per-symbol stable/quote call, and is excluded from this run's
+// stalest-slice selection. This NEVER expands the universe (bucket rows outside
+// `clean` are ignored) and NEVER replaces the per-symbol rotation -- it only
+// shrinks what that rotation has to do this run. Buckets don't carry volume/PE,
+// so those fields still only ever come from the per-symbol calls below.
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -44,6 +58,9 @@ const PRICE_MAX_PER_RUN = 220; // bound a single run's length (~<1 min even pace
 // PE trickle: small per-run slice; slow-moving data, so this just needs to roll.
 const PE_MAX_PER_RUN = 20;
 const FMP_MIN_HEADROOM_CALLS = 60; // leave room for history/earnings + live traffic
+
+// Free "market performance" buckets checked before the per-symbol rotation.
+const MOVER_BUCKET_PATHS = ["biggest-gainers", "biggest-losers", "most-actives"] as const;
 
 export type PricePoolRow = {
   price: number | null;
@@ -176,12 +193,66 @@ async function fetchPeTtm(sym: string, apiKey: string): Promise<number | null> {
   }
 }
 
+type MoverRow = { price: number | null; changePct: number | null };
+
+// One "market performance" bucket call. Returns price/%change for whatever
+// tickers FMP includes (typically 50, ranked by that bucket's criterion). No
+// volume/marketCap field on this endpoint family.
+async function fetchMoverBucket(
+  path: string,
+  apiKey: string
+): Promise<Map<string, MoverRow>> {
+  const out = new Map<string, MoverRow>();
+  try {
+    await reserveFmpCallSlot();
+    const url = `https://financialmodelingprep.com/stable/${path}?apikey=${encodeURIComponent(
+      apiKey
+    )}`;
+    const res = await fetch(url, { cache: "no-store", headers: { accept: "application/json" } });
+    if (!res.ok) return out;
+    const json = await res.json().catch(() => null);
+    if (!Array.isArray(json)) return out;
+    for (const row of json as Record<string, unknown>[]) {
+      const sym = cleanSymbol(String(row?.symbol ?? ""));
+      if (!sym || out.has(sym)) continue;
+      out.set(sym, {
+        price: num(row.price),
+        changePct: num(row.changesPercentage) ?? num(row.changePercentage),
+      });
+    }
+  } catch {
+    // fail open -- a bucket miss just means those symbols fall through to the
+    // normal per-symbol rotation below.
+  }
+  return out;
+}
+
+// All 3 buckets, merged (first bucket to mention a symbol wins -- gainers,
+// losers, actives rarely overlap on the same ticker in practice). Cheap: 3
+// calls total regardless of universe size, so we always attempt all 3 as long
+// as there's FMP headroom.
+async function fetchMoverBuckets(apiKey: string): Promise<Map<string, MoverRow>> {
+  const merged = new Map<string, MoverRow>();
+  for (const path of MOVER_BUCKET_PATHS) {
+    if (!(await hasFmpCapacity(1, FMP_MIN_HEADROOM_CALLS))) break;
+    const bucket = await fetchMoverBucket(path, apiKey);
+    for (const [sym, row] of bucket) {
+      if (!merged.has(sym)) merged.set(sym, row);
+    }
+  }
+  return merged;
+}
+
 /**
- * Cron worker: refresh the pool. PRICE is refreshed for the stalest slice large
- * enough to cover the whole universe every ~15 min (independent of PE). PE is
- * refreshed for a small stalest-by-`peTs` trickle. Only touched fields are
- * written back (a single HSET) + the hash's safety expiry is reset. Everything
- * not refreshed keeps its prior value. Budget-guarded and fail-open throughout.
+ * Cron worker: refresh the pool. Spends the 3 free mover-bucket calls first --
+ * any universe symbol they cover gets a free price/%change refresh and is
+ * excluded from this run's stalest-slice pick. PRICE is then refreshed for the
+ * stalest slice (among symbols NOT already freshened by a bucket hit this run)
+ * large enough to cover the whole universe every ~15 min (independent of PE).
+ * PE is refreshed for a small stalest-by-`peTs` trickle. Only touched fields
+ * are written back (a single HSET) + the hash's safety expiry is reset.
+ * Everything not refreshed keeps its prior value. Budget-guarded and fail-open
+ * throughout.
  */
 export async function warmPricePool(symbols: string[], nowMs: number) {
   const apiKey = process.env.FMP_API_KEY;
@@ -196,18 +267,47 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
   }
 
   const existing = await readPricePoolBulk(clean);
+  const cleanSet = new Set(clean);
 
-  // Price slice: stalest-by-ts, sized to cover the universe in PRICE_TARGET_RUNS.
+  // Free head start from the mover buckets. Only symbols already in our own
+  // universe are used -- bucket rows for names outside `clean` are ignored, so
+  // this never expands what the site analyzes/displays.
+  const moverHits = await fetchMoverBuckets(apiKey);
+  const payload: Record<string, PricePoolRow> = {};
+  const bucketFreshened = new Set<string>();
+  for (const [sym, row] of moverHits) {
+    if (!cleanSet.has(sym)) continue;
+    if (row.price == null && row.changePct == null) continue;
+    const prev = existing.get(sym);
+    payload[sym] = {
+      price: row.price ?? prev?.price ?? null,
+      changePct: row.changePct ?? prev?.changePct ?? null,
+      // Buckets don't carry volume/marketCap -- carry forward whatever the pool
+      // already has; the per-symbol rotation is still the only source for these.
+      volume: prev?.volume ?? null,
+      marketCap: prev?.marketCap ?? null,
+      pe: prev?.pe ?? null,
+      ts: nowMs,
+      peTs: prev?.peTs ?? 0,
+    };
+    bucketFreshened.add(sym);
+  }
+
+  // Price slice: stalest-by-ts among symbols NOT already freshened by a bucket
+  // hit this run. Sized to cover the whole universe in PRICE_TARGET_RUNS runs;
+  // bucket hits are pure bonus coverage on top, so this doesn't shrink the cap.
   const priceCap = Math.min(
     PRICE_MAX_PER_RUN,
     Math.max(PRICE_MIN_PER_RUN, Math.ceil(clean.length / PRICE_TARGET_RUNS))
   );
-  const priceSlice = [...clean]
+  const priceSlice = clean
+    .filter((sym) => !bucketFreshened.has(sym))
     .sort((a, b) => (existing.get(a)?.ts ?? 0) - (existing.get(b)?.ts ?? 0))
     .slice(0, priceCap);
   const priceSet = new Set(priceSlice);
 
-  // PE slice: stalest-by-peTs, small trickle.
+  // PE slice: stalest-by-peTs, small trickle. Independent of bucket hits (PE
+  // never comes from a bucket).
   const peSlice = [...clean]
     .sort((a, b) => (existing.get(a)?.peTs ?? 0) - (existing.get(b)?.peTs ?? 0))
     .slice(0, PE_MAX_PER_RUN);
@@ -216,7 +316,6 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
   // Union, price-slice first (PE-only symbols are usually already in it).
   const targets = Array.from(new Set([...priceSlice, ...peSlice]));
 
-  const payload: Record<string, PricePoolRow> = {};
   let pxRefreshed = 0;
   let peRefreshed = 0;
 
@@ -242,15 +341,19 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
 
     if (!quote && !peFetched) continue; // nothing landed for this symbol
 
+    // A symbol can already have a bucket-sourced row in `payload` (bucket gave
+    // price, this loop is here only for its independent PE trickle) -- merge
+    // onto it rather than clobbering the fresh bucket price/changePct/ts.
+    const already = payload[sym];
     payload[sym] = {
-      price: quote ? quote.price : prev?.price ?? null,
-      changePct: quote ? quote.changePct : prev?.changePct ?? null,
-      volume: quote ? quote.volume : prev?.volume ?? null,
-      marketCap: quote ? quote.marketCap : prev?.marketCap ?? null,
+      price: quote ? quote.price : already?.price ?? prev?.price ?? null,
+      changePct: quote ? quote.changePct : already?.changePct ?? prev?.changePct ?? null,
+      volume: quote ? quote.volume : already?.volume ?? prev?.volume ?? null,
+      marketCap: quote ? quote.marketCap : already?.marketCap ?? prev?.marketCap ?? null,
       // carry forward last-known PE if this run didn't (re)fetch a value
-      pe: peFetched ? peValue ?? prev?.pe ?? null : prev?.pe ?? null,
-      ts: quote ? nowMs : prev?.ts ?? nowMs,
-      peTs: peFetched ? nowMs : prev?.peTs ?? 0,
+      pe: peFetched ? peValue ?? prev?.pe ?? null : already?.pe ?? prev?.pe ?? null,
+      ts: quote ? nowMs : already?.ts ?? prev?.ts ?? nowMs,
+      peTs: peFetched ? nowMs : already?.peTs ?? prev?.peTs ?? 0,
     };
     if (quote) pxRefreshed++;
     if (peFetched && peValue != null) peRefreshed++;
@@ -272,6 +375,7 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
     ok: true,
     universe: clean.length,
     priceCap,
+    bucketFreshened: bucketFreshened.size,
     priceRefreshed: pxRefreshed,
     peRefreshed,
     written,
