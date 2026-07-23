@@ -808,11 +808,19 @@ export default async function PickerResultPage({
         .listScrollTop > div { height: 1px; }
         .listTableWrap { margin-top: 8px; border: 1px solid rgba(255,255,255,0.09); border-radius: 18px; overflow-x: auto; background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015)); }
         .listTable { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 860px; }
-        .listTable thead th { position: sticky; top: 0; background: #0b1220; text-align: right; padding: 12px 14px; font-size: 11px; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; color: rgba(148,163,184,0.92); border-bottom: 1px solid rgba(255,255,255,0.10); white-space: nowrap; cursor: pointer; user-select: none; }
+        .listTable thead th { position: sticky; top: 74px; z-index: 2; background: #0b1220; text-align: right; padding: 12px 14px; font-size: 11px; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; color: rgba(148,163,184,0.92); border-bottom: 1px solid rgba(255,255,255,0.10); white-space: nowrap; cursor: pointer; user-select: none; }
         .listTable thead th:first-child, .listTable tbody td:first-child { text-align: left; }
         .listTable thead th.colName, .listTable tbody td.colName, .listTable thead th.colInd, .listTable tbody td.colInd { text-align: left; }
         .listTable thead th:hover { color: #dbeafe; }
         .listTable thead th .sortArrow { margin-left: 5px; font-size: 9px; opacity: 0.9; }
+        /* Sticky first column (Symbol) so the row's identity stays visible while
+           scrolling horizontally through the rest of the columns. The header's
+           corner cell needs the highest z-index (sits above both the plain sticky
+           header row and the plain sticky first column); body cells need an
+           opaque background so the scrolled-under columns don't show through. */
+        .listTable thead th:first-child { left: 0; z-index: 3; box-shadow: 3px 0 8px rgba(0,0,0,0.4); }
+        .listTable tbody td:first-child { position: sticky; left: 0; z-index: 1; background: #0a0e17; box-shadow: 3px 0 8px rgba(0,0,0,0.4); }
+        .listTable tbody tr:hover td:first-child { background: #131c2e; }
         .listTable tbody tr { cursor: pointer; transition: background 120ms ease; }
         .listTable tbody tr:hover { background: rgba(96,165,250,0.08); }
         .listTable tbody td { padding: 11px 14px; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.055); white-space: nowrap; color: rgba(226,232,240,0.92); }
@@ -859,6 +867,7 @@ export default async function PickerResultPage({
           .scorePill strong { font-size: 20px; }
           .reasonChip { font-size: 10.5px; padding: 4px 8px; }
           .note { min-height: 0; font-size: 13px; }
+          .listTable thead th { top: 52px; }
         }
         @media (max-width: 390px) { .resultWrap { padding-left: 8px; padding-right: 8px; } .hero, .resultCard { padding: 12px; } }
       `}</style>
