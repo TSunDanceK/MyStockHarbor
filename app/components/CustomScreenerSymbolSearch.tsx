@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import TickerLogo from "@/app/components/TickerLogo";
+import { trackTickerInterest } from "@/lib/trackTickerInterest";
 
 type SymbolResult = { symbol: string; name: string; exchange: string };
 
@@ -76,6 +77,7 @@ export default function CustomScreenerSymbolSearch({
 
   function choose(r: SymbolResult) {
     const sym = r.symbol.toUpperCase();
+    trackTickerInterest(sym); // deliberate selection -> popular-searches signal
     const entry = universeMap.get(sym);
     setSelected({
       symbol: sym,

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { toneDotColor } from "@/lib/pickerFilters";
+import { trackTickerInterest } from "@/lib/trackTickerInterest";
 
 type TickerMatch = { source: string; title: string; tone?: string; href: string };
 
@@ -37,6 +38,7 @@ export function TickerSearch({ variant = "block" }: { variant?: "block" | "inlin
   async function runSearch() {
     const symbol = value.trim().toUpperCase();
     if (!symbol) return;
+    trackTickerInterest(symbol); // deliberate ticker search -> popular-searches signal
     setLoading(true);
     setError(null);
     try {
