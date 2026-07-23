@@ -16,7 +16,7 @@ import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type FilterKey } from "@/lib/pickerF
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
-export type PickerResultKind = "section" | "buySignals" | "sellSignals" | "allSymbols";
+export type PickerResultKind = "section" | "buySignals" | "sellSignals" | "allSymbols" | "preset";
 
 export type PickerResultConfig = {
   href: string;
@@ -31,6 +31,14 @@ export type PickerResultConfig = {
   sectionIncludes?: string[];
   maxItems?: number;
   filterTimeframe?: "D" | "W";
+  // "preset" pages: the full analyzed universe pre-filtered server-side to the
+  // symbols matching ALL of these condition flags (e.g. ["belowMA200"]). Behaves
+  // like a normal dedicated screener page (nav-link sidebar, results shown
+  // immediately) rather than the custom-screener's hide-until-filtered mode.
+  presetFilters?: FilterKey[];
+  // "allSymbols" pages: show the whole list on load instead of hiding until a
+  // condition is checked (used by the plain "All Stocks" / Stock Screener page).
+  showAllImmediately?: boolean;
 };
 
 type PickerChartFocus = { kind: "ath" | "rangeHigh"; price: number; date: string };
@@ -459,17 +467,16 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
     }).filter((entry): entry is ResultEntry => Boolean(entry)).sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.symbol.localeCompare(b.symbol)).slice(0, RESULT_SAFETY_CAP);
   }
 
-  if (config.kind === "allSymbols") {
+  if (config.kind === "allSymbols" || config.kind === "preset") {
     // Every analyzed symbol is a candidate entry here (no score-based
-    // skipping like buySignals/sellSignals above) -- filtering only
-    // happens client-side, against whatever conditions the visitor checks
-    // (see PickerResultsGrid's hideUntilFiltered mode). Category-membership
-    // flags (Buy Signal, Best Trend, etc.) are computed once up front, same
-    // as getPickerData does for every other kind further down, so they can
-    // be folded into each entry's reasons/score alongside the 18
-    // custom-builder flags.
+    // skipping like buySignals/sellSignals above). For "allSymbols" the
+    // filtering happens client-side against whatever the visitor checks; for
+    // "preset" (dedicated condition pages like Below MA200) the same full set
+    // is filtered server-side to config.presetFilters below. Category-
+    // membership flags are computed once up front so they can be folded into
+    // each entry's reasons/score alongside the 18 custom-builder flags.
     const categoryFlags = buildCategoryFlags(sections, signalRecords);
-    return signalRecords.map((record): ResultEntry | null => {
+    const all = signalRecords.map((record): ResultEntry | null => {
       const symbol = cleanSymbol(record.symbol);
       if (!symbol) return null;
       const flags: ResultEntryFlags = { ...flagsFromRecord(record), ...(categoryFlags.get(symbol) ?? {}) };
@@ -487,6 +494,12 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
         ...flags,
       };
     }).filter((entry): entry is ResultEntry => Boolean(entry)).sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.symbol.localeCompare(b.symbol)).slice(0, RESULT_SAFETY_CAP);
+
+    if (config.kind === "preset") {
+      const keys = config.presetFilters ?? [];
+      return keys.length ? all.filter((entry) => keys.every((k) => entry[k] === true)) : all;
+    }
+    return all;
   }
 
   const section = findSection(sections, config.sectionIncludes ?? []);
@@ -892,7 +905,7 @@ export default async function PickerResultPage({
                   tone={config.tone}
                   emptyText={config.emptyText}
                   isEarnings={isEarningsPickerPage(config)}
-                  hideUntilFiltered={config.kind === "allSymbols"}
+                  hideUntilFiltered={config.kind === "allSymbols" && !config.showAllImmediately}
                   splitReasonsBySelection={config.kind === "allSymbols"}
                 />
 
