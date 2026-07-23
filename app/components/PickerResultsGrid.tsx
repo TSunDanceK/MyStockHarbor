@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import MiniPickerCandleChart from "@/app/components/MiniPickerCandleChart";
 import { usePickerFilter } from "@/app/components/PickerFilterContext";
 import type { ResultEntry } from "@/app/components/PickerResultPage";
@@ -29,11 +29,7 @@ function toneBorder(tone?: PickerTone) {
 
 // Reverse lookup from a checkable filter key (the 18 custom-builder
 // FilterKeys + the 7 category-membership keys, see lib/pickerFilters.ts) to
-// the human label that shows on a card's reason chip. Reason chips carry
-// only their label string (see PickerResultPage's getFlagReasons), so this
-// is how the custom-screener page decides which chips correspond to the
-// conditions the visitor actually checked vs the ones the stock merely
-// "also qualifies for". Labels are unique across both def lists.
+// the human label that shows on a card's reason chip.
 const LABEL_BY_KEY = new Map<AnyFilterKey, string>([
   ...FILTER_DEFS.map((d) => [d.key, d.label] as const),
   ...CATEGORY_FILTER_DEFS.map((d) => [d.key, d.label] as const),
@@ -58,12 +54,7 @@ function scoreLabelForEntry(entry: ResultEntry) {
   return null;
 }
 
-// Reason chips for a single card. On most pages every chip shows at once
-// (splitBySelection=false). On the /custom-screener page it's set true:
-// only the chips matching the conditions the visitor checked stay visible,
-// and every other condition the stock qualifies for collapses behind an
-// "Also Qualifies for" pill that expands them on click. Because the card is
-// itself a <Link>, the pill button stops the click from navigating.
+// Reason chips for a single card (chart view only). See prior behaviour.
 function ReasonChips({
   reasons,
   tone,
@@ -140,29 +131,29 @@ function ReasonChips({
   );
 }
 
-// Page sizes. List view is the new default (30/page); chart view is heavier
-// to render (a mini SVG candle chart per card) so it paginates tighter at
-// 21/page to keep the server-rendered first paint fast -- 21 = 7 full rows
-// of 3 cards, so the grid stays symmetrical with no half-empty last row.
-// Both grow via the "Show more" button entirely from data already sent down
-// with the page -- no extra network/API requests for pagination.
+// Page sizes. List view is the default (30/page); chart view paginates tighter
+// at 21/page (7 rows of 3) to keep the server-rendered first paint fast. Both
+// grow via "Show more" entirely from data already sent down -- no extra API.
 const LIST_PAGE_SIZE = 30;
 const CHART_PAGE_SIZE = 21;
 
 type ViewMode = "list" | "chart";
 
-type SortKey =
-  | "symbol"
-  | "name"
-  | "marketCap"
-  | "price"
-  | "change"
-  | "industry"
-  | "volume"
-  | "pe"
-  | "ma200";
+// The list view now has data tabs, each with its own column set. Only columns
+// for data the site actually pulls are included (per the stockanalysis-style
+// spec). General/Performance/Valuation/Dividends/Financials/Analysts.
+type TabKey = "general" | "performance" | "valuation" | "dividends" | "financials" | "analysts";
 
-type SortState = { key: SortKey; dir: "asc" | "desc" } | null;
+const TABS: { key: TabKey; label: string }[] = [
+  { key: "general", label: "General" },
+  { key: "performance", label: "Performance" },
+  { key: "valuation", label: "Valuation" },
+  { key: "dividends", label: "Dividends" },
+  { key: "financials", label: "Financials" },
+  { key: "analysts", label: "Analysts" },
+];
+
+type SortState = { key: string; dir: "asc" | "desc" } | null;
 
 type DerivedRow = {
   price: number | null;
@@ -171,12 +162,9 @@ type DerivedRow = {
   ma200: number | null;
 };
 
-// Price / % change / volume come from the ~15-min-fresh price pool when it has
-// the symbol (attached server-side in PickerResultPage.getPickerData), falling
-// back to the end-of-day close/volume from chartPoints on a pool miss (cold
-// start) so the columns never go blank. 200 MA always comes from chartPoints
-// (a daily average -- intraday freshness is irrelevant for it). Market cap /
-// PE come from the pool too (fresh), with the fundamentals cache as fallback.
+// Price / % change / volume come from the ~15-min price pool when present
+// (attached server-side), falling back to the end-of-day close/volume from
+// chartPoints on a pool miss. 200 MA always comes from chartPoints.
 function deriveRow(entry: ResultEntry): DerivedRow {
   const pts = Array.isArray(entry.chartPoints) ? entry.chartPoints : [];
   const last = pts.length ? pts[pts.length - 1] : undefined;
@@ -198,54 +186,87 @@ function deriveRow(entry: ResultEntry): DerivedRow {
   return { price, changePct, volume, ma200 };
 }
 
-const COLUMNS: Array<{ key: SortKey; label: string; type: "str" | "num"; cls?: string }> = [
-  { key: "symbol", label: "Symbol", type: "str" },
-  { key: "name", label: "Company Name", type: "str", cls: "colName" },
-  { key: "marketCap", label: "Market Cap", type: "num" },
-  { key: "price", label: "Stock Price", type: "num" },
-  { key: "change", label: "% Change", type: "num" },
-  { key: "industry", label: "Industry", type: "str", cls: "colInd" },
-  { key: "volume", label: "Volume", type: "num" },
-  { key: "pe", label: "PE Ratio", type: "num" },
-  { key: "ma200", label: "200 MA", type: "num" },
-];
+function num(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
 
 function fmtCap(v: number | null) {
-  if (v == null) return null;
+  if (v == null || !Number.isFinite(v)) return null;
   const abs = Math.abs(v);
   if (abs >= 1e12) return `${(v / 1e12).toFixed(2)}T`;
   if (abs >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
   if (abs >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
   if (abs >= 1e3) return `${(v / 1e3).toFixed(2)}K`;
-  return `${v}`;
+  return `${v.toFixed(2)}`;
 }
 
 function fmtNum(v: number | null, digits = 2) {
-  if (v == null) return null;
+  if (v == null || !Number.isFinite(v)) return null;
   return v.toFixed(digits);
 }
 
 function fmtVolume(v: number | null) {
-  if (v == null) return null;
+  if (v == null || !Number.isFinite(v)) return null;
   return Math.round(v).toLocaleString("en-US");
 }
 
 const MUTED = <span className="muted">–</span>;
 
-// Renders the results for a single-category picker page (or the custom
-// screener). Two view modes share the same filtered/paginated data set:
-//   * list  (default) -- a sortable table with the columns Symbol, Company,
-//     Market Cap, Price, % Change, Industry, Volume, PE, 200 MA
-//   * chart (opt-in via the "Chart View Mode" toggle) -- the original mini
-//     candle-chart cards
-// `entries` is the FULL matched set for this page, so filtering, sorting and
-// "See more" pagination all run entirely off data already sent down with the
-// page: no additional network/API requests for any of them.
-//
-// `hideUntilFiltered` (only the /custom-screener page): results only appear
-// once at least one condition is checked. `splitReasonsBySelection` (also
-// only custom-screener, chart view): collapse non-selected reason chips
-// behind an "Also Qualifies for" pill.
+// ── cell formatters (return display nodes) ──────────────────────────────────
+function capCell(v: number | null): ReactNode {
+  return fmtCap(v) ?? MUTED;
+}
+function numCell(v: number | null, digits = 2): ReactNode {
+  return fmtNum(v, digits) ?? MUTED;
+}
+function volCell(v: number | null): ReactNode {
+  return fmtVolume(v) ?? MUTED;
+}
+function moneyCell(v: number | null): ReactNode {
+  // signed B/M for revenue / income / FCF
+  return fmtCap(v) ?? MUTED;
+}
+function pctCell(v: number | null): ReactNode {
+  if (v == null || !Number.isFinite(v)) return MUTED;
+  const up = v >= 0;
+  return <span className={up ? "chgUp" : "chgDown"}>{up ? "+" : ""}{v.toFixed(2)}%</span>;
+}
+function plainPctCell(v: number | null): ReactNode {
+  if (v == null || !Number.isFinite(v)) return MUTED;
+  return `${v.toFixed(2)}%`;
+}
+function dollarCell(v: number | null): ReactNode {
+  if (v == null || !Number.isFinite(v)) return MUTED;
+  return `$${v.toFixed(2)}`;
+}
+function textCell(v: string | null | undefined): ReactNode {
+  return v ? v : MUTED;
+}
+
+function forwardPe(e: ResultEntry, d: DerivedRow): number | null {
+  const eps = num(e.forwardEps);
+  if (d.price == null || eps == null || eps <= 0) return null;
+  return d.price / eps;
+}
+function ptUpside(e: ResultEntry, d: DerivedRow): number | null {
+  const tgt = num(e.priceTarget);
+  if (d.price == null || d.price <= 0 || tgt == null) return null;
+  return ((tgt - d.price) / d.price) * 100;
+}
+
+type Col = {
+  key: string;
+  label: string;
+  sortType: "str" | "num";
+  cls?: string;
+  get: (e: ResultEntry, d: DerivedRow) => string | number | null;
+  cell: (e: ResultEntry, d: DerivedRow) => ReactNode;
+};
+
+// Renders the results for a picker/screener page. List view (default) is a
+// sortable, tabbed table; chart view is the mini candle-chart cards. `entries`
+// is the FULL matched set, so filtering / sorting / "Show more" all run off
+// data already sent down -- no additional API requests.
 export default function PickerResultsGrid({
   entries,
   configHref,
@@ -268,17 +289,94 @@ export default function PickerResultsGrid({
 }) {
   const { selectedFilters, setMatchCount } = usePickerFilter();
   const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [activeTab, setActiveTab] = useState<TabKey>("general");
   const [sort, setSort] = useState<SortState>(null);
   const pageSize = viewMode === "list" ? LIST_PAGE_SIZE : CHART_PAGE_SIZE;
   const [visibleCount, setVisibleCount] = useState(LIST_PAGE_SIZE);
+
+  const cardHrefFor = (entry: ResultEntry) =>
+    isEarnings ? `/stock/${encodeURIComponent(entry.symbol)}/earnings` : entry.chartHref;
+
+  // Column sets per tab. Only columns backed by data the site pulls are shown.
+  const columnSets = useMemo(() => {
+    const symbol: Col = {
+      key: "symbol",
+      label: "Symbol",
+      sortType: "str",
+      get: (e) => e.symbol ?? "",
+      cell: (e) => {
+        const href = isEarnings ? `/stock/${encodeURIComponent(e.symbol)}/earnings` : e.chartHref;
+        return (
+          <a href={href} className="listSym" onClick={(ev) => ev.stopPropagation()}>
+            <span className="dot" style={{ background: toneColour(e.tone) }} aria-hidden="true" />
+            {e.symbol}
+          </a>
+        );
+      },
+    };
+    const name: Col = {
+      key: "name",
+      label: "Company Name",
+      sortType: "str",
+      cls: "colName",
+      get: (e) => e.companyName ?? "",
+      cell: (e) => (e.companyName ? <span className="listName">{e.companyName}</span> : MUTED),
+    };
+    const marketCap: Col = { key: "marketCap", label: "Market Cap", sortType: "num", get: (e) => num(e.marketCap), cell: (e) => capCell(num(e.marketCap)) };
+    const price: Col = { key: "price", label: "Stock Price", sortType: "num", get: (_e, d) => d.price, cell: (_e, d) => numCell(d.price) };
+    const change: Col = { key: "change", label: "% Change", sortType: "num", get: (_e, d) => d.changePct, cell: (_e, d) => pctCell(d.changePct) };
+    const industry: Col = { key: "industry", label: "Industry", sortType: "str", cls: "colInd", get: (e) => e.industry ?? "", cell: (e) => (e.industry ? <span className="listInd">{e.industry}</span> : MUTED) };
+    const volume: Col = { key: "volume", label: "Volume", sortType: "num", get: (_e, d) => d.volume, cell: (_e, d) => volCell(d.volume) };
+    const pe: Col = { key: "pe", label: "PE Ratio", sortType: "num", get: (e) => num(e.peRatio), cell: (e) => numCell(num(e.peRatio)) };
+    const ma200: Col = { key: "ma200", label: "200 MA", sortType: "num", get: (_e, d) => d.ma200, cell: (_e, d) => numCell(d.ma200) };
+
+    const perf1w: Col = { key: "perf1w", label: "1W", sortType: "num", get: (e) => num(e.perf1w), cell: (e) => pctCell(num(e.perf1w)) };
+    const perf1m: Col = { key: "perf1m", label: "1M", sortType: "num", get: (e) => num(e.perf1m), cell: (e) => pctCell(num(e.perf1m)) };
+    const perf6m: Col = { key: "perf6m", label: "6M", sortType: "num", get: (e) => num(e.perf6m), cell: (e) => pctCell(num(e.perf6m)) };
+    const perfYtd: Col = { key: "perfYtd", label: "YTD", sortType: "num", get: (e) => num(e.perfYtd), cell: (e) => pctCell(num(e.perfYtd)) };
+    const perf1y: Col = { key: "perf1y", label: "1Y", sortType: "num", get: (e) => num(e.perf1y), cell: (e) => pctCell(num(e.perf1y)) };
+
+    const ev: Col = { key: "ev", label: "Ent. Value", sortType: "num", get: (e) => num(e.enterpriseValue), cell: (e) => capCell(num(e.enterpriseValue)) };
+    const fwdpe: Col = { key: "fwdpe", label: "Forward PE", sortType: "num", get: (e, d) => forwardPe(e, d), cell: (e, d) => numCell(forwardPe(e, d)) };
+    const ps: Col = { key: "ps", label: "PS Ratio", sortType: "num", get: (e) => num(e.psRatio), cell: (e) => numCell(num(e.psRatio)) };
+    const pb: Col = { key: "pb", label: "PB Ratio", sortType: "num", get: (e) => num(e.pbRatio), cell: (e) => numCell(num(e.pbRatio)) };
+    const pfcf: Col = { key: "pfcf", label: "P/FCF", sortType: "num", get: (e) => num(e.pfcfRatio), cell: (e) => numCell(num(e.pfcfRatio)) };
+
+    const dps: Col = { key: "dps", label: "Div ($)", sortType: "num", get: (e) => num(e.divPerShare), cell: (e) => dollarCell(num(e.divPerShare)) };
+    const dyield: Col = { key: "dyield", label: "Div Yield", sortType: "num", get: (e) => num(e.divYield), cell: (e) => plainPctCell(num(e.divYield)) };
+    const payout: Col = { key: "payout", label: "Payout Ratio", sortType: "num", get: (e) => num(e.payoutRatio), cell: (e) => plainPctCell(num(e.payoutRatio)) };
+    const dgrowth: Col = { key: "dgrowth", label: "Div Growth", sortType: "num", get: (e) => num(e.divGrowth), cell: (e) => pctCell(num(e.divGrowth)) };
+    const freq: Col = { key: "freq", label: "Payout Freq.", sortType: "str", get: (e) => e.payoutFreq ?? "", cell: (e) => textCell(e.payoutFreq) };
+
+    const revenue: Col = { key: "revenue", label: "Revenue", sortType: "num", get: (e) => num(e.revenue), cell: (e) => moneyCell(num(e.revenue)) };
+    const opinc: Col = { key: "opinc", label: "Op. Income", sortType: "num", get: (e) => num(e.operatingIncome), cell: (e) => moneyCell(num(e.operatingIncome)) };
+    const netinc: Col = { key: "netinc", label: "Net Income", sortType: "num", get: (e) => num(e.netIncome), cell: (e) => moneyCell(num(e.netIncome)) };
+    const fcf: Col = { key: "fcf", label: "FCF", sortType: "num", get: (e) => num(e.freeCashFlow), cell: (e) => moneyCell(num(e.freeCashFlow)) };
+    const eps: Col = { key: "eps", label: "EPS", sortType: "num", get: (e) => num(e.epsTtm), cell: (e) => numCell(num(e.epsTtm)) };
+
+    const rating: Col = { key: "rating", label: "Rating", sortType: "str", get: (e) => e.rating ?? "", cell: (e) => textCell(e.rating) };
+    const analysts: Col = { key: "analysts", label: "Analysts", sortType: "num", get: (e) => num(e.analystCount), cell: (e) => numCell(num(e.analystCount), 0) };
+    const ptgt: Col = { key: "ptgt", label: "Price Target", sortType: "num", get: (e) => num(e.priceTarget), cell: (e) => numCell(num(e.priceTarget)) };
+    const ptups: Col = { key: "ptups", label: "PT Upside", sortType: "num", get: (e, d) => ptUpside(e, d), cell: (e, d) => pctCell(ptUpside(e, d)) };
+
+    const sets: Record<TabKey, Col[]> = {
+      general: [symbol, name, marketCap, price, change, industry, volume, pe, ma200],
+      performance: [symbol, name, marketCap, price, change, perf1w, perf1m, perf6m, perfYtd, perf1y],
+      valuation: [symbol, name, marketCap, ev, pe, fwdpe, ps, pb, pfcf],
+      dividends: [symbol, name, marketCap, dps, dyield, payout, dgrowth, freq],
+      financials: [symbol, name, marketCap, revenue, opinc, netinc, fcf, eps],
+      analysts: [symbol, name, marketCap, rating, analysts, price, ptgt, ptups],
+    };
+    return sets;
+  }, [isEarnings]);
+
+  const activeColumns = columnSets[activeTab];
 
   const filteredEntries = useMemo(() => {
     if (!selectedFilters.length) return hideUntilFiltered ? [] : entries;
     return entries.filter((entry) => selectedFilters.every((key) => entry[key] === true));
   }, [entries, selectedFilters, hideUntilFiltered]);
 
-  // Precompute the price/%change/volume/200MA once per entry (not per sort or
-  // per render of a row), keyed by the entry object itself.
   const derivedByEntry = useMemo(() => {
     const map = new WeakMap<ResultEntry, DerivedRow>();
     for (const entry of entries) map.set(entry, deriveRow(entry));
@@ -286,57 +384,37 @@ export default function PickerResultsGrid({
   }, [entries]);
 
   const sortedEntries = useMemo(() => {
-    if (!sort) return filteredEntries;
-    const { key, dir } = sort;
-    const factor = dir === "asc" ? 1 : -1;
-
-    const strVal = (e: ResultEntry): string => {
-      if (key === "symbol") return e.symbol ?? "";
-      if (key === "name") return e.companyName ?? "";
-      if (key === "industry") return e.industry ?? "";
-      return "";
-    };
-    const numVal = (e: ResultEntry): number | null => {
-      const d = derivedByEntry.get(e);
-      if (key === "marketCap") return e.marketCap ?? null;
-      if (key === "price") return d?.price ?? null;
-      if (key === "change") return d?.changePct ?? null;
-      if (key === "volume") return d?.volume ?? null;
-      if (key === "pe") return e.peRatio ?? null;
-      if (key === "ma200") return d?.ma200 ?? null;
-      return null;
-    };
-
-    const isStr = key === "symbol" || key === "name" || key === "industry";
+    const sortCol = sort ? activeColumns.find((c) => c.key === sort.key) : null;
+    if (!sortCol || !sort) return filteredEntries;
+    const factor = sort.dir === "asc" ? 1 : -1;
     const copy = filteredEntries.slice();
     copy.sort((a, b) => {
-      if (isStr) {
-        const av = strVal(a);
-        const bv = strVal(b);
-        // Empty strings always sink to the bottom regardless of direction.
-        if (!av && !bv) return 0;
-        if (!av) return 1;
-        if (!bv) return -1;
-        return factor * av.localeCompare(bv);
+      const da = derivedByEntry.get(a) ?? deriveRow(a);
+      const db = derivedByEntry.get(b) ?? deriveRow(b);
+      const av = sortCol.get(a, da);
+      const bv = sortCol.get(b, db);
+      if (sortCol.sortType === "str") {
+        const as = (av as string) || "";
+        const bs = (bv as string) || "";
+        if (!as && !bs) return 0;
+        if (!as) return 1;
+        if (!bs) return -1;
+        return factor * as.localeCompare(bs);
       }
-      const av = numVal(a);
-      const bv = numVal(b);
-      // Missing numbers always sink to the bottom regardless of direction.
-      if (av == null && bv == null) return 0;
-      if (av == null) return 1;
-      if (bv == null) return -1;
-      return factor * (av - bv);
+      const an = av as number | null;
+      const bn = bv as number | null;
+      if (an == null && bn == null) return 0;
+      if (an == null) return 1;
+      if (bn == null) return -1;
+      return factor * (an - bn);
     });
     return copy;
-  }, [filteredEntries, sort, derivedByEntry]);
+  }, [filteredEntries, sort, activeColumns, derivedByEntry]);
 
-  // Reset back to the top of the list whenever the data set or view changes.
   useEffect(() => {
     setVisibleCount(pageSize);
-  }, [selectedFilters, sort, viewMode, pageSize]);
+  }, [selectedFilters, sort, viewMode, pageSize, activeTab]);
 
-  // Lets ScreenerNav's FilterChecklist show a live "N matching" count next
-  // to the checkboxes without needing its own copy of the data.
   useEffect(() => {
     setMatchCount(selectedFilters.length ? filteredEntries.length : null);
     return () => setMatchCount(null);
@@ -345,18 +423,41 @@ export default function PickerResultsGrid({
   const shown = sortedEntries.slice(0, visibleCount);
   const hasMore = visibleCount < sortedEntries.length;
 
-  const onHeaderClick = (key: SortKey, type: "str" | "num") => {
+  const onHeaderClick = (key: string, type: "str" | "num") => {
     setSort((current) => {
       if (current && current.key === key) {
         return { key, dir: current.dir === "asc" ? "desc" : "asc" };
       }
-      // Sensible default direction: A->Z for text, largest-first for numbers.
       return { key, dir: type === "str" ? "asc" : "desc" };
     });
   };
 
-  const cardHrefFor = (entry: ResultEntry) =>
-    isEarnings ? `/stock/${encodeURIComponent(entry.symbol)}/earnings` : entry.chartHref;
+  const onTabChange = (tab: TabKey) => {
+    setActiveTab(tab);
+    setSort(null);
+  };
+
+  // Synced top + bottom horizontal scrollbars (grey /insights style). The top
+  // strip mirrors the table's scroll width; scrolling either moves the other.
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const tableWrapRef = useRef<HTMLDivElement>(null);
+  const [scrollWidth, setScrollWidth] = useState(0);
+
+  useEffect(() => {
+    const table = tableWrapRef.current?.querySelector("table");
+    setScrollWidth(table ? table.scrollWidth : 0);
+  }, [shown, activeColumns, viewMode]);
+
+  const syncFromTop = () => {
+    if (tableWrapRef.current && topScrollRef.current) {
+      tableWrapRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+    }
+  };
+  const syncFromWrap = () => {
+    if (tableWrapRef.current && topScrollRef.current) {
+      topScrollRef.current.scrollLeft = tableWrapRef.current.scrollLeft;
+    }
+  };
 
   const description =
     viewMode === "list"
@@ -371,16 +472,48 @@ export default function PickerResultsGrid({
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <p style={{ margin: "8px 0 0" }}>{description}</p>
-          <button
-            type="button"
-            className="viewToggle"
-            onClick={() => setViewMode((v) => (v === "list" ? "chart" : "list"))}
-            aria-label={viewMode === "list" ? "Switch to chart view" : "Switch to list view"}
-          >
-            {viewMode === "list" ? "Chart View Mode" : "List View Mode"}
-            <span aria-hidden="true" style={{ fontSize: 12 }}>{viewMode === "list" ? "▦" : "▤"}</span>
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto" }}>
+            {viewMode === "list" ? (
+              <span className="tabSelectWrap">
+                <select
+                  className="tabSelect"
+                  value={activeTab}
+                  onChange={(e) => onTabChange(e.target.value as TabKey)}
+                  aria-label="Data view"
+                >
+                  {TABS.map((t) => (
+                    <option key={t.key} value={t.key}>{t.label}</option>
+                  ))}
+                </select>
+              </span>
+            ) : null}
+            <button
+              type="button"
+              className="viewToggle"
+              onClick={() => setViewMode((v) => (v === "list" ? "chart" : "list"))}
+              aria-label={viewMode === "list" ? "Switch to chart view" : "Switch to list view"}
+            >
+              {viewMode === "list" ? "Chart View Mode" : "List View Mode"}
+              <span aria-hidden="true" style={{ fontSize: 12 }}>{viewMode === "list" ? "▦" : "▤"}</span>
+            </button>
+          </div>
         </div>
+        {viewMode === "list" ? (
+          <div className="viewTabs" role="tablist" aria-label="Data view">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === t.key}
+                className={`viewTab${activeTab === t.key ? " active" : ""}`}
+                onClick={() => onTabChange(t.key)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
         {selectedFilters.length ? (
           <p className="filterMatchLine">
             {filteredEntries.length} of {entries.length} match your {selectedFilters.length === 1 ? "filter" : `${selectedFilters.length} filters`}.
@@ -390,72 +523,50 @@ export default function PickerResultsGrid({
 
       {shown.length ? (
         viewMode === "list" ? (
-          <div className="listTableWrap">
-            <table className="listTable">
-              <thead>
-                <tr>
-                  {COLUMNS.map((col) => {
-                    const active = sort?.key === col.key;
+          <>
+            <div className="listScrollTop msScrollGrey" ref={topScrollRef} onScroll={syncFromTop} aria-hidden="true">
+              <div style={{ width: scrollWidth || 1 }} />
+            </div>
+            <div className="listTableWrap msScrollGrey" ref={tableWrapRef} onScroll={syncFromWrap}>
+              <table className="listTable">
+                <thead>
+                  <tr>
+                    {activeColumns.map((col) => {
+                      const active = sort?.key === col.key;
+                      return (
+                        <th
+                          key={col.key}
+                          className={col.cls}
+                          onClick={() => onHeaderClick(col.key, col.sortType)}
+                          aria-sort={active ? (sort?.dir === "asc" ? "ascending" : "descending") : "none"}
+                        >
+                          {col.label}
+                          {active ? <span className="sortArrow" aria-hidden="true">{sort?.dir === "asc" ? "▲" : "▼"}</span> : null}
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {shown.map((entry) => {
+                    const d = derivedByEntry.get(entry) ?? deriveRow(entry);
+                    const href = cardHrefFor(entry);
                     return (
-                      <th
-                        key={col.key}
-                        className={col.cls}
-                        onClick={() => onHeaderClick(col.key, col.type)}
-                        aria-sort={active ? (sort?.dir === "asc" ? "ascending" : "descending") : "none"}
+                      <tr
+                        key={`${entry.symbol}-${entry.note}`}
+                        id={`picker-${entry.symbol}`}
+                        onClick={() => { window.location.href = href; }}
                       >
-                        {col.label}
-                        {active ? <span className="sortArrow" aria-hidden="true">{sort?.dir === "asc" ? "▲" : "▼"}</span> : null}
-                      </th>
+                        {activeColumns.map((col) => (
+                          <td key={col.key} className={col.cls}>{col.cell(entry, d)}</td>
+                        ))}
+                      </tr>
                     );
                   })}
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map((entry) => {
-                  const d = derivedByEntry.get(entry);
-                  const href = cardHrefFor(entry);
-                  const cap = fmtCap(entry.marketCap ?? null);
-                  const price = fmtNum(d?.price ?? null);
-                  const chg = d?.changePct ?? null;
-                  const vol = fmtVolume(d?.volume ?? null);
-                  const pe = fmtNum(entry.peRatio ?? null);
-                  const ma = fmtNum(d?.ma200 ?? null);
-                  return (
-                    <tr
-                      key={`${entry.symbol}-${entry.note}`}
-                      id={`picker-${entry.symbol}`}
-                      onClick={() => { window.location.href = href; }}
-                    >
-                      <td>
-                        <a
-                          href={href}
-                          className="listSym"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <span className="dot" style={{ background: toneColour(entry.tone) }} aria-hidden="true" />
-                          {entry.symbol}
-                        </a>
-                      </td>
-                      <td className="colName"><span className="listName">{entry.companyName ?? MUTED}</span></td>
-                      <td>{cap ?? MUTED}</td>
-                      <td>{price ?? MUTED}</td>
-                      <td>
-                        {chg == null ? MUTED : (
-                          <span className={chg >= 0 ? "chgUp" : "chgDown"}>
-                            {chg >= 0 ? "+" : ""}{chg.toFixed(2)}%
-                          </span>
-                        )}
-                      </td>
-                      <td className="colInd"><span className="listInd">{entry.industry ?? MUTED}</span></td>
-                      <td>{vol ?? MUTED}</td>
-                      <td>{pe ?? MUTED}</td>
-                      <td>{ma ?? MUTED}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                </tbody>
+              </table>
+            </div>
+          </>
         ) : (
           <div className="resultsGrid">
             {shown.map((entry) => {
