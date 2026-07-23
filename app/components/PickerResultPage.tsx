@@ -9,6 +9,7 @@ import { PickerFilterProvider } from "@/app/components/PickerFilterContext";
 import { getCompanyNameMap } from "@/lib/server/companyNames";
 import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
 import { readPricePoolBulk } from "@/lib/server/pricePool";
+import { readCachedStockDataBulk } from "@/lib/server/stockDataCache";
 import { getPickersData } from "@/lib/server/pickersBuilder";
 import { WatermarkVisibilityProvider, HideWatermarksBar } from "@/app/components/WatermarkVisibility";
 import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type FilterKey } from "@/lib/pickerFilters";
@@ -160,6 +161,34 @@ export type ResultEntry = ResultEntryFlags & {
   price?: number;
   changePct?: number;
   volume?: number;
+
+  // Extended data for the Valuation / Dividends / Financials / Analysts /
+  // Performance list-view tabs. Cron-warmed into Redis by stockDataCache.ts
+  // (readCachedStockDataBulk), attached in getPickerData. All optional -- a
+  // symbol not yet warmed just shows "--" in those tab columns.
+  enterpriseValue?: number;
+  forwardEps?: number; // Forward P/E is computed in the grid as price / forwardEps
+  psRatio?: number;
+  pbRatio?: number;
+  pfcfRatio?: number;
+  divPerShare?: number;
+  divYield?: number; // percent
+  payoutRatio?: number; // percent
+  divGrowth?: number; // percent, YoY
+  payoutFreq?: string;
+  revenue?: number;
+  operatingIncome?: number;
+  netIncome?: number;
+  freeCashFlow?: number;
+  epsTtm?: number;
+  rating?: string;
+  analystCount?: number;
+  priceTarget?: number;
+  perf1w?: number;
+  perf1m?: number;
+  perf6m?: number;
+  perfYtd?: number;
+  perf1y?: number;
 };
 
 // Deliberately typed as FilterKey (the exact 18-key union from
@@ -597,6 +626,45 @@ async function getPickerData(config: PickerResultConfig) {
       // pooled quotes are optional
     }
 
+    // Extended data (valuation / dividends / financials / analysts / performance)
+    // for the list-view tabs. Redis-ONLY read (see stockDataCache) -- warmed by
+    // the warm-stock-data cron, so a page render never spends an FMP call. Any
+    // symbol not yet warmed just shows "--" in those tab columns.
+    try {
+      const extra = await readCachedStockDataBulk(entries.map((e) => e.symbol));
+      if (extra.size) {
+        for (const entry of entries) {
+          const d = extra.get(entry.symbol);
+          if (!d) continue;
+          if (d.enterpriseValue != null) entry.enterpriseValue = d.enterpriseValue;
+          if (d.forwardEps != null) entry.forwardEps = d.forwardEps;
+          if (d.psRatio != null) entry.psRatio = d.psRatio;
+          if (d.pbRatio != null) entry.pbRatio = d.pbRatio;
+          if (d.pfcfRatio != null) entry.pfcfRatio = d.pfcfRatio;
+          if (d.divPerShare != null) entry.divPerShare = d.divPerShare;
+          if (d.divYield != null) entry.divYield = d.divYield;
+          if (d.payoutRatio != null) entry.payoutRatio = d.payoutRatio;
+          if (d.divGrowth != null) entry.divGrowth = d.divGrowth;
+          if (d.payoutFreq) entry.payoutFreq = d.payoutFreq;
+          if (d.revenue != null) entry.revenue = d.revenue;
+          if (d.operatingIncome != null) entry.operatingIncome = d.operatingIncome;
+          if (d.netIncome != null) entry.netIncome = d.netIncome;
+          if (d.freeCashFlow != null) entry.freeCashFlow = d.freeCashFlow;
+          if (d.epsTtm != null) entry.epsTtm = d.epsTtm;
+          if (d.rating) entry.rating = d.rating;
+          if (d.analystCount != null) entry.analystCount = d.analystCount;
+          if (d.priceTarget != null) entry.priceTarget = d.priceTarget;
+          if (d.perf1w != null) entry.perf1w = d.perf1w;
+          if (d.perf1m != null) entry.perf1m = d.perf1m;
+          if (d.perf6m != null) entry.perf6m = d.perf6m;
+          if (d.perfYtd != null) entry.perfYtd = d.perfYtd;
+          if (d.perf1y != null) entry.perf1y = d.perf1y;
+        }
+      }
+    } catch {
+      // extended data is optional
+    }
+
     return {
       updatedAt: typeof payload.updatedAt === "string" ? payload.updatedAt : null,
       universeSize: typeof payload.universeSize === "number" ? payload.universeSize : null,
@@ -709,7 +777,23 @@ export default async function PickerResultPage({
         .filterMatchLine { margin: 8px 0 0; font-size: 12.5px; color: rgba(226,232,240,0.65); }
         .viewToggle { display: inline-flex; align-items: center; gap: 6px; padding: 9px 15px; border-radius: 999px; border: 1px solid rgba(96,165,250,0.4); background: rgba(59,130,246,0.10); color: #dbeafe; font-weight: 800; font-size: 12.5px; cursor: pointer; white-space: nowrap; flex: 0 0 auto; }
         .viewToggle:hover { background: rgba(59,130,246,0.16); border-color: rgba(96,165,250,0.6); }
-        .listTableWrap { margin-top: 16px; border: 1px solid rgba(255,255,255,0.09); border-radius: 18px; overflow-x: auto; background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015)); }
+        /* Data-view tabs (General / Performance / Valuation / Dividends / Financials / Analysts) */
+        .viewTabs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 14px; }
+        .viewTab { padding: 7px 13px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.03); color: rgba(226,232,240,0.78); font-weight: 800; font-size: 12.5px; cursor: pointer; white-space: nowrap; font-family: inherit; }
+        .viewTab:hover { border-color: rgba(96,165,250,0.45); color: #dbeafe; }
+        .viewTab.active { background: rgba(59,130,246,0.16); border-color: rgba(96,165,250,0.6); color: #eff6ff; }
+        /* Mobile: the tab row collapses to a dropdown pill next to Chart View Mode */
+        .tabSelectWrap { display: none; flex: 0 0 auto; }
+        .tabSelect { padding: 9px 15px; border-radius: 999px; border: 1px solid rgba(96,165,250,0.4); background: rgba(59,130,246,0.10); color: #dbeafe; font-weight: 800; font-size: 12.5px; font-family: inherit; cursor: pointer; }
+        /* Grey horizontal scrollbar (matches /insights) + a synced top scrollbar */
+        .msScrollGrey { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.18) transparent; }
+        .msScrollGrey::-webkit-scrollbar { height: 10px; }
+        .msScrollGrey::-webkit-scrollbar-track { background: transparent; }
+        .msScrollGrey::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 999px; }
+        .msScrollGrey::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.28); }
+        .listScrollTop { overflow-x: auto; overflow-y: hidden; margin-top: 14px; }
+        .listScrollTop > div { height: 1px; }
+        .listTableWrap { margin-top: 8px; border: 1px solid rgba(255,255,255,0.09); border-radius: 18px; overflow-x: auto; background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015)); }
         .listTable { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 860px; }
         .listTable thead th { position: sticky; top: 0; background: #0b1220; text-align: right; padding: 12px 14px; font-size: 11px; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; color: rgba(148,163,184,0.92); border-bottom: 1px solid rgba(255,255,255,0.10); white-space: nowrap; cursor: pointer; user-select: none; }
         .listTable thead th:first-child, .listTable tbody td:first-child { text-align: left; }
@@ -750,6 +834,8 @@ export default async function PickerResultPage({
           .resultsHeader { margin-top: 18px; }
           .resultsHeaderTop h2 { font-size: 22px; line-height: 1.14; }
           .resultsHeader p { font-size: 14px; line-height: 1.62; }
+          .viewTabs { display: none; }
+          .tabSelectWrap { display: inline-flex; }
           .resultsGrid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
           .resultCard { border-radius: 18px; padding: 13px; }
           .resultCardTop { gap: 10px; }
