@@ -6,10 +6,10 @@ export const dynamic = "force-dynamic";
 // TEMPORARY debug route, same pattern as the removed /api/debug/quote-shape.
 // Probes the 3 FMP "market performance" bucket endpoints (biggest-gainers,
 // biggest-losers, most-actives) on the live Starter-plan key to confirm plan
-// access + exact JSON field shape before wiring them into the price pool.
-// No auth gate: this only returns public market-mover tickers/prices (the same
-// data any visitor could see on Yahoo/Google Finance) and never echoes the FMP
-// key itself. DELETE THIS FILE once verified.
+// access + exact JSON field shape, and returns the FULL symbol list per bucket
+// so overlap with our analyzed universe can be checked. No auth gate: this
+// only returns public market-mover tickers/prices, never the FMP key.
+// DELETE THIS FILE once verified.
 
 async function probe(path: string, apiKey: string) {
   const url = `https://financialmodelingprep.com/stable/${path}?apikey=${encodeURIComponent(
@@ -34,6 +34,9 @@ async function probe(path: string, apiKey: string) {
       isArray: Array.isArray(json),
       count: Array.isArray(json) ? json.length : null,
       sample: Array.isArray(json) ? json.slice(0, 3) : json,
+      symbols: Array.isArray(json)
+        ? json.map((r: any) => String(r?.symbol ?? "").toUpperCase())
+        : [],
     };
   } catch (e: any) {
     return {
