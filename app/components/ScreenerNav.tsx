@@ -574,27 +574,27 @@ export default function ScreenerNav({
         .screenerSelectBtn {
           width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px;
           padding: 14px 16px; border-radius: 16px;
-          border: 1.5px solid rgba(96,165,250,0.65);
-          background: linear-gradient(135deg, rgba(59,130,246,0.34), rgba(37,99,235,0.20));
+          border: 1px solid rgba(96,165,250,0.35);
+          background: rgba(15,23,42,0.6);
           color: #f0f7ff; font-weight: 950; font-size: 15px; cursor: pointer;
-          box-shadow: 0 6px 16px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.08);
-          transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+          transition: transform 140ms ease, background 140ms ease, border-color 140ms ease;
         }
         .screenerSelectBtn:active {
           transform: translateY(1px);
-          box-shadow: 0 3px 10px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.06);
+          background: rgba(15,23,42,0.78);
         }
         .screenerSelectMain { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 8px; }
         .screenerSelectIcon { font-size: 14px; color: #93c5fd; }
         .screenerSelectCurrent {
           display: inline-flex; align-items: center; gap: 7px; min-width: 0;
           padding: 5px 10px; border-radius: 999px;
-          border: 1px solid rgba(255,255,255,0.16); background: rgba(15,23,42,0.4);
-          color: rgba(226,232,240,0.92); font-size: 12.5px; font-weight: 900;
+          border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.03);
+          color: rgba(226,232,240,0.82); font-size: 12.5px; font-weight: 900;
           overflow: hidden;
         }
         .screenerSelectCurrent > :not(.screenerSelectChevron) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .screenerSelectChevron { flex: 0 0 auto; color: rgba(226,232,240,0.65); }
+        .screenerSelectChevron { flex: 0 0 auto; color: rgba(226,232,240,0.55); }
 
         .screenerOverlay {
           position: fixed; inset: 0; z-index: 70; display: flex;
