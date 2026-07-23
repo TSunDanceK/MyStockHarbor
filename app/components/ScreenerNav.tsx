@@ -39,6 +39,16 @@ type NavGroup = { heading: string; headingColor: string; items: NavItem[] };
 // are.
 const GROUPS: NavGroup[] = [
   {
+    heading: "Screener",
+    headingColor: "#e2e8f0",
+    items: [
+      // The plain, no-filter full list -- pinned at the top so it's clear there
+      // is a page you can open that doesn't pre-apply any condition (unlike
+      // Overbought/Oversold/etc). Just a link, never a checkbox (no filterKey).
+      { href: "/stock-screener", label: "All Stocks", icon: "▦", tone: "blue" },
+    ],
+  },
+  {
     heading: "Signals",
     headingColor: "#60a5fa",
     items: [
@@ -54,13 +64,12 @@ const GROUPS: NavGroup[] = [
       { href: "/overbought-stocks-today", label: "Overbought", icon: "●", tone: "red", filterKey: "overbought" },
       { href: "/best-trend-score-stocks", label: "Best Trend", icon: "★", tone: "green", filterKey: "bestTrendPick" },
       { href: "/bullish-bearish-divergence-stocks", label: "Divergence", icon: "⚇", tone: "blue", filterKey: "divergencePick" },
-      // Finer-grained divergence conditions -- the combined "Divergence"
-      // row above already covers the one live page this data has, so these
-      // only ever appear as checkboxes once filter mode is on.
-      { label: "Bullish RSI Divergence", icon: "↗", tone: "green", filterKey: "bullishRsiDivergence" },
-      { label: "Bearish RSI Divergence", icon: "↘", tone: "red", filterKey: "bearishRsiDivergence" },
-      { label: "Bullish MACD Divergence", icon: "↗", tone: "green", filterKey: "bullishMacdDivergence" },
-      { label: "Bearish MACD Divergence", icon: "↘", tone: "red", filterKey: "bearishMacdDivergence" },
+      // Finer-grained divergence conditions -- each now has its own dedicated
+      // preset page (all stocks matching just that one flag).
+      { href: "/bullish-rsi-divergence-stocks", label: "Bullish RSI Divergence", icon: "↗", tone: "green", filterKey: "bullishRsiDivergence" },
+      { href: "/bearish-rsi-divergence-stocks", label: "Bearish RSI Divergence", icon: "↘", tone: "red", filterKey: "bearishRsiDivergence" },
+      { href: "/bullish-macd-divergence-stocks", label: "Bullish MACD Divergence", icon: "↗", tone: "green", filterKey: "bullishMacdDivergence" },
+      { href: "/bearish-macd-divergence-stocks", label: "Bearish MACD Divergence", icon: "↘", tone: "red", filterKey: "bearishMacdDivergence" },
     ],
   },
   {
@@ -76,11 +85,9 @@ const GROUPS: NavGroup[] = [
     heading: "Volume & Volatility",
     headingColor: "#fb923c",
     items: [
-      // No dedicated live screener page for these three yet -- checkboxes
-      // only, once filter mode is on.
-      { label: "Breakout", icon: "↗", tone: "orange", filterKey: "breakout" },
-      { label: "Volume Spike", icon: "▮", tone: "orange", filterKey: "volumeSpike" },
-      { label: "ATR Spike", icon: "≈", tone: "orange", filterKey: "atrSpike" },
+      { href: "/breakout-signal-stocks", label: "Breakout", icon: "↗", tone: "orange", filterKey: "breakout" },
+      { href: "/volume-spike-stocks", label: "Volume Spike", icon: "▮", tone: "orange", filterKey: "volumeSpike" },
+      { href: "/atr-spike-stocks", label: "ATR Spike", icon: "≈", tone: "orange", filterKey: "atrSpike" },
     ],
   },
   {
@@ -89,12 +96,10 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: "/stocks-near-200-day-moving-average", label: "Near 200-Day", icon: "◇", tone: "yellow", filterKey: "dailyMa200Proximity" },
       { href: "/stocks-near-weekly-200-day-moving-average", label: "Weekly MA200", icon: "◆", tone: "yellow", filterKey: "weeklyMa200Proximity" },
-      // No dedicated live screener page for plain above/below MA50/MA200
-      // conditions -- checkboxes only, once filter mode is on.
-      { label: "Above MA50", icon: "▲", tone: "yellow", filterKey: "aboveMA50" },
-      { label: "Below MA50", icon: "▼", tone: "yellow", filterKey: "belowMA50" },
-      { label: "Above MA200", icon: "▲", tone: "yellow", filterKey: "aboveMA200" },
-      { label: "Below MA200", icon: "▼", tone: "yellow", filterKey: "belowMA200" },
+      { href: "/stocks-above-50-day-moving-average", label: "Above MA50", icon: "▲", tone: "yellow", filterKey: "aboveMA50" },
+      { href: "/stocks-below-50-day-moving-average", label: "Below MA50", icon: "▼", tone: "yellow", filterKey: "belowMA50" },
+      { href: "/stocks-trading-above-200-day-moving-average", label: "Above MA200", icon: "▲", tone: "yellow", filterKey: "aboveMA200" },
+      { href: "/stocks-below-200-day-moving-average", label: "Below MA200", icon: "▼", tone: "yellow", filterKey: "belowMA200" },
     ],
   },
   {
