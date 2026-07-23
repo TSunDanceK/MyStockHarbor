@@ -841,7 +841,7 @@ function DetailedNewsSection({
                   <div style={compactSourceStyle}>{compactSource(item.source)}</div>
                   <div style={compactDateStyle}>{formatDate(item.pubDate)}</div>
                 </div>
-                <div style={{ minWidth: 0, flex: 1 }}>
+                <div className="compactNewsHeadline" style={{ minWidth: 0, flex: 1 }}>
                   <div style={compactHeadlineStyle}>{stripAnyHtml(item.title)}</div>
                 </div>
                 <a href={item.link} target="_blank" rel="noopener noreferrer" style={compactMutedLinkStyle}>Read ↗</a>
@@ -1098,10 +1098,9 @@ export default async function StockNewsPage({ params }: Props) {
         .newsHeroMetricRow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
         .newsHeroCtaRow { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
         .newsBottomStrip { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: center; }
-        .compactNewsRow { display: grid; grid-template-columns: 88px minmax(0, 1fr) 120px; gap: 12px; align-items: start; }
         @media (max-width: 1180px) { .newsWrap { padding: 22px 24px 38px; } .newsHeroShell { grid-template-columns: 1fr !important; } .newsGrid { grid-template-columns: 1fr !important; } .newsSidebar { position: static !important; top: auto !important; } }
         @media (max-width: 820px) { .newsWrap { padding: 18px 16px 32px; } .newsHeroTitle { font-size: 34px !important; line-height: 1.06 !important; letter-spacing: -0.045em !important; } .newsHeroLead { font-size: 15px !important; line-height: 1.7 !important; } .newsHeroMetricRow { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } .newsHeroCtaRow { flex-direction: column !important; align-items: stretch !important; } .newsHeroBtn { width: 100%; justify-content: center !important; } .newsBottomStrip { flex-direction: column !important; align-items: stretch !important; } .newsBottomActions { width: 100%; } }
-        @media (max-width: 560px) { .newsWrap { padding: 14px 12px 26px; } .newsHeroShell { grid-template-columns: 1fr !important; border-radius: 22px !important; padding: 16px !important; } .newsHeroTitle { font-size: 28px !important; line-height: 1.08 !important; letter-spacing: -0.035em !important; } .newsHeroLead { font-size: 14px !important; line-height: 1.65 !important; } .newsHeroMetricRow { grid-template-columns: 1fr !important; } .compactNewsRow { grid-template-columns: 1fr !important; } .newsBottomActions { display: grid !important; grid-template-columns: 1fr !important; width: 100%; } .newsBottomActions a { width: 100%; justify-content: center !important; } .newsMainColumn, .newsSidebar { min-width: 0; } .newsSidebar section, .newsMainColumn section, .compactNewsRow, .newsHeroRight > div, .newsHeroMetricRow > div { min-width: 0; } }
+        @media (max-width: 560px) { .newsWrap { padding: 14px 12px 26px; } .newsHeroShell { grid-template-columns: 1fr !important; border-radius: 22px !important; padding: 16px !important; } .newsHeroTitle { font-size: 28px !important; line-height: 1.08 !important; letter-spacing: -0.035em !important; } .newsHeroLead { font-size: 14px !important; line-height: 1.65 !important; } .newsHeroMetricRow { grid-template-columns: 1fr !important; } .compactNewsRow .compactNewsHeadline { order: 5; flex: 1 1 100% !important; width: 100% !important; margin-top: 8px !important; } .newsBottomActions { display: grid !important; grid-template-columns: 1fr !important; width: 100%; } .newsBottomActions a { width: 100%; justify-content: center !important; } .newsMainColumn, .newsSidebar { min-width: 0; } .newsSidebar section, .newsMainColumn section, .compactNewsRow, .newsHeroRight > div, .newsHeroMetricRow > div { min-width: 0; } }
       `}</style>
     </main>
     </WatermarkVisibilityProvider>
