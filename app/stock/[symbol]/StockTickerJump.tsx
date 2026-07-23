@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import TickerLogo from "@/app/components/TickerLogo";
+import { trackTickerInterest } from "@/lib/trackTickerInterest";
 
 type SymbolResult = {
   symbol: string;
@@ -108,6 +109,7 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
 
   function chooseResult(result: SymbolResult) {
     const clean = result.symbol.trim().toUpperCase();
+    trackTickerInterest(clean); // deliberate selection -> popular-searches signal
     setSelected({ ...result, symbol: clean });
     setQuery(clean);
     setOpen(false);
