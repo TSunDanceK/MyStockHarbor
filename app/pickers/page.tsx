@@ -150,7 +150,7 @@ export default async function PickersPage() {
             Top Picks widget) as a direct entry point into the full screener
             experience (the ScreenerNav on that page lists every screener). */}
         <Link
-          href="/top-stocks-with-buy-signals"
+          href="/stock-screener"
           className="viewAllScreeners"
           style={{ marginTop: 18, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, textDecoration: "none", color: "#eaf2ff", border: "1px solid rgba(96,165,250,0.34)", borderRadius: 16, padding: "16px 20px", background: "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(37,99,235,0.06))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 12px 30px rgba(0,0,0,0.26)", boxSizing: "border-box", width: "100%" }}
         >
