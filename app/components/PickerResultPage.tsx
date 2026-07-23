@@ -800,15 +800,15 @@ export default async function PickerResultPage({
         .tabSelect { padding: 9px 15px; border-radius: 999px; border: 1px solid rgba(96,165,250,0.4); background: rgba(59,130,246,0.10); color: #dbeafe; font-weight: 800; font-size: 12.5px; font-family: inherit; cursor: pointer; }
         /* Grey horizontal scrollbar (matches /insights) + a synced top scrollbar */
         .msScrollGrey { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.18) transparent; }
-        .msScrollGrey::-webkit-scrollbar { height: 10px; }
+        .msScrollGrey::-webkit-scrollbar { height: 10px; width: 10px; }
         .msScrollGrey::-webkit-scrollbar-track { background: transparent; }
         .msScrollGrey::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 999px; }
         .msScrollGrey::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.28); }
         .listScrollTop { overflow-x: auto; overflow-y: hidden; margin-top: 14px; }
         .listScrollTop > div { height: 1px; }
-        .listTableWrap { margin-top: 8px; border: 1px solid rgba(255,255,255,0.09); border-radius: 18px; overflow-x: auto; background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015)); }
+        .listTableWrap { margin-top: 8px; border: 1px solid rgba(255,255,255,0.09); border-radius: 18px; overflow: auto; max-height: 66vh; min-height: 220px; background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015)); }
         .listTable { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 860px; }
-        .listTable thead th { position: sticky; top: 74px; z-index: 2; background: #0b1220; text-align: right; padding: 12px 14px; font-size: 11px; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; color: rgba(148,163,184,0.92); border-bottom: 1px solid rgba(255,255,255,0.10); white-space: nowrap; cursor: pointer; user-select: none; }
+        .listTable thead th { position: sticky; top: 0; z-index: 2; background: #0b1220; text-align: right; padding: 12px 14px; font-size: 11px; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; color: rgba(148,163,184,0.92); border-bottom: 1px solid rgba(255,255,255,0.10); white-space: nowrap; cursor: pointer; user-select: none; }
         .listTable thead th:first-child, .listTable tbody td:first-child { text-align: left; }
         .listTable thead th.colName, .listTable tbody td.colName, .listTable thead th.colInd, .listTable tbody td.colInd { text-align: left; }
         .listTable thead th:hover { color: #dbeafe; }
@@ -867,7 +867,7 @@ export default async function PickerResultPage({
           .scorePill strong { font-size: 20px; }
           .reasonChip { font-size: 10.5px; padding: 4px 8px; }
           .note { min-height: 0; font-size: 13px; }
-          .listTable thead th { top: 52px; }
+          .listTableWrap { max-height: 58vh; }
         }
         @media (max-width: 390px) { .resultWrap { padding-left: 8px; padding-right: 8px; } .hero, .resultCard { padding: 12px; } }
       `}</style>
