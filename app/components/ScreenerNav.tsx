@@ -577,24 +577,24 @@ export default function ScreenerNav({
           border: 1.5px solid rgba(96,165,250,0.65);
           background: linear-gradient(135deg, rgba(59,130,246,0.34), rgba(37,99,235,0.20));
           color: #f0f7ff; font-weight: 950; font-size: 15px; cursor: pointer;
-          box-shadow: 0 10px 26px rgba(37,99,235,0.32), inset 0 1px 0 rgba(255,255,255,0.08);
+          box-shadow: 0 6px 16px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.08);
           transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
         }
         .screenerSelectBtn:active {
           transform: translateY(1px);
-          box-shadow: 0 6px 16px rgba(37,99,235,0.28), inset 0 1px 0 rgba(255,255,255,0.06);
+          box-shadow: 0 3px 10px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.06);
         }
         .screenerSelectMain { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 8px; }
         .screenerSelectIcon { font-size: 14px; color: #93c5fd; }
         .screenerSelectCurrent {
           display: inline-flex; align-items: center; gap: 7px; min-width: 0;
           padding: 5px 10px; border-radius: 999px;
-          border: 1px solid rgba(147,197,253,0.42); background: rgba(15,23,42,0.55);
-          color: #dbeafe; font-size: 12.5px; font-weight: 900;
+          border: 1px solid rgba(255,255,255,0.16); background: rgba(15,23,42,0.4);
+          color: rgba(226,232,240,0.92); font-size: 12.5px; font-weight: 900;
           overflow: hidden;
         }
         .screenerSelectCurrent > :not(.screenerSelectChevron) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .screenerSelectChevron { flex: 0 0 auto; color: #93c5fd; }
+        .screenerSelectChevron { flex: 0 0 auto; color: rgba(226,232,240,0.65); }
 
         .screenerOverlay {
           position: fixed; inset: 0; z-index: 70; display: flex;
