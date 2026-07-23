@@ -4,13 +4,16 @@ import { warmPricePool } from "../../../../lib/server/pricePool";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Allow a full-coverage price run (stalest slice of the whole universe, paced
+// under the 300/min FMP budget guard) to finish without being cut short.
+export const maxDuration = 60;
 
-// Every-15-min cron (see vercel.json) that refreshes the shared price pool
-// (msh:price-pool:v1) for the symbols the screener displays, so the list view
-// can show ~15-min-fresh price / % change / volume / market cap / PE with zero
-// FMP calls per page render. Reads the symbol set from the already-cached
-// pickers payload, then hands it to warmPricePool() (one full-quote batch per
-// ~100 symbols, under the shared 300/min FMP budget guard).
+// Every-3-min cron (see vercel.json) that refreshes the shared price pool
+// (msh:price-pool:v1). PRICE is refreshed for a stalest slice sized so the
+// whole displayed universe is covered every ~15 min; PE trickles on its own
+// slower rotation (see lib/server/pricePool.ts). READ-ONLY on page renders, so
+// a page load never spends an FMP call. Reads the symbol set from the already-
+// cached pickers payload.
 
 function isAuthorized(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
