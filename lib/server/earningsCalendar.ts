@@ -61,6 +61,7 @@
 
 import { Redis } from "@upstash/redis";
 import { reserveFmpCallSlot } from "./historyCache";
+import { readPricePoolBulk } from "./pricePool";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -567,6 +568,11 @@ type QuoteResult = {
   // spent (and bypassCap wasn't set). Used only to decide whether a date can
   // be marked "complete"; never shown in the UI.
   capped: boolean;
+  // True when price/marketCap came free from the shared site-wide price pool
+  // (a universe symbol). The pool carries no exchange, but every universe
+  // symbol is US-listed by construction, so this stands in for the exchange
+  // check below.
+  usOk?: boolean;
 };
 
 async function quoteOne(symbol: string, bypassCap: boolean): Promise<QuoteResult> {
@@ -616,10 +622,42 @@ async function quoteOne(symbol: string, bypassCap: boolean): Promise<QuoteResult
   }
 }
 
+// Normalize a symbol the same way the price pool keys it, so a pool lookup hits.
+function normSymbol(s: string) {
+  return s.trim().toUpperCase().replace(/[^A-Z0-9.-]/g, "");
+}
+
 async function quoteBatch(symbols: string[], bypassCap: boolean): Promise<Record<string, QuoteResult>> {
   const results: Record<string, QuoteResult> = {};
-  for (let i = 0; i < symbols.length; i += QUOTE_CONCURRENCY) {
-    const slice = symbols.slice(i, i + QUOTE_CONCURRENCY);
+
+  // Shared-cache fast path: any reporting company that's in the site-wide
+  // rolling universe already has a ~15-min-fresh price + market cap in the
+  // price pool (msh:price-pool:v1). Serve those for FREE -- no per-symbol FMP
+  // /quote call and no hourly-cap slot -- so the cap is reserved for the
+  // small-cap long tail that isn't cached anywhere. One bulk HMGET total.
+  const poolHits = new Set<string>();
+  try {
+    const pool = await readPricePoolBulk(symbols);
+    for (const symbol of symbols) {
+      const p = pool.get(normSymbol(symbol));
+      if (p && p.price != null) {
+        results[symbol] = {
+          price: p.price,
+          marketCap: p.marketCap,
+          exchange: null,
+          usOk: true, // universe symbols are US-listed by construction
+          capped: false,
+        };
+        poolHits.add(symbol);
+      }
+    }
+  } catch {
+    // fall through -- a pool read failure just means we quote everything
+  }
+
+  const remaining = symbols.filter((symbol) => !poolHits.has(symbol));
+  for (let i = 0; i < remaining.length; i += QUOTE_CONCURRENCY) {
+    const slice = remaining.slice(i, i + QUOTE_CONCURRENCY);
     const quotes = await Promise.all(slice.map((symbol) => quoteOne(symbol, bypassCap)));
     slice.forEach((symbol, idx) => {
       results[symbol] = quotes[idx];
@@ -691,7 +729,9 @@ export async function getFullDayEarnings(
       if (quote?.capped) anyCapped = true;
       // Only US-listed common stock survives -- the pre-sort filter is
       // symbol-shape only; the exchange isn't known until the quote comes back.
-      const exchangeOk = Boolean(quote?.exchange && ALLOWED_EXCHANGES.has(quote.exchange));
+      const exchangeOk =
+        Boolean(quote?.usOk) ||
+        Boolean(quote?.exchange && ALLOWED_EXCHANGES.has(quote.exchange));
       if (!exchangeOk) return null;
       return {
         ...candidate,
