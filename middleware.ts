@@ -94,15 +94,20 @@ export async function middleware(request: NextRequest) {
   // With neither env var set, the page stays Coming Soon for everyone -- the
   // safe default.
   if (pathname === "/popular-searches") {
-    const previewKey = process.env.POPULAR_SEARCHES_PREVIEW_KEY || "";
+    // .trim() everything: pasting the secret into Vercel's env-var field on a
+    // phone very easily grabs a trailing space or newline off a copied code
+    // block, which would silently break the exact-match below (stored
+    // "ps_xxx\n" never equals the clean "ps_xxx" from the URL). Trimming both
+    // sides makes that copy artifact harmless.
+    const previewKey = (process.env.POPULAR_SEARCHES_PREVIEW_KEY || "").trim();
     const allowIps = (process.env.POPULAR_SEARCHES_ALLOW_IPS || "")
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
 
     const ip = getClientIp(request.headers);
-    const cookieVal = request.cookies.get("msh_ps_preview")?.value || "";
-    const queryKey = url.searchParams.get("preview") || "";
+    const cookieVal = (request.cookies.get("msh_ps_preview")?.value || "").trim();
+    const queryKey = (url.searchParams.get("preview") || "").trim();
 
     let unlocked = false;
     let setCookie = false;
