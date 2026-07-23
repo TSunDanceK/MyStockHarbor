@@ -7,14 +7,9 @@ export const dynamic = "force-dynamic";
 // Probes the 3 FMP "market performance" bucket endpoints (biggest-gainers,
 // biggest-losers, most-actives) on the live Starter-plan key to confirm plan
 // access + exact JSON field shape before wiring them into the price pool.
-// DELETE THIS FILE once verified.
-
-function isAuthorized(req: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return true;
-  const key = req.nextUrl.searchParams.get("key");
-  return key === secret;
-}
+// No auth gate: this only returns public market-mover tickers/prices (the same
+// data any visitor could see on Yahoo/Google Finance) and never echoes the FMP
+// key itself. DELETE THIS FILE once verified.
 
 async function probe(path: string, apiKey: string) {
   const url = `https://financialmodelingprep.com/stable/${path}?apikey=${encodeURIComponent(
@@ -50,10 +45,7 @@ async function probe(path: string, apiKey: string) {
   }
 }
 
-export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function GET(_req: NextRequest) {
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
