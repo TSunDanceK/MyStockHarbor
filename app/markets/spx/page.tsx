@@ -433,7 +433,7 @@ export default async function SPXPage() {
                   opacity: 0.92,
                 }}
               >
-                The S&amp;P 500 closed at 7,457.69 on July 17, about 2% below its June 2 record close of 7,609.78, after a surprise AI model release out of China reignited fears that US tech giants are overspending on AI infrastructure and triggered a sharp, chip-led selloff. It was the index's worst week in several weeks, and price slipped below its daily 50-day moving average for the first time in months — though the longer-term uptrend, still up nearly 9% for the year, remains intact.
+                The S&amp;P 500 closed at 7,411.98 on July 24, about 2.6% below its June 2 record close of 7,609.78, after a second straight losing week driven by an escalating US-Iran conflict, a spike in oil prices, new US tariffs, and renewed jitters over AI spending. Price has now spent over a week below its daily 50-day moving average, though the longer-term uptrend, still up roughly 8% for the year, remains intact.
               </div>
 
               <div
@@ -640,7 +640,7 @@ export default async function SPXPage() {
 
   <div>
     <strong style={{ color: "#4ade80", letterSpacing: "0.02em" }}>SIMPLE VIEW:</strong>{" "}
-    the SPX is about 2% below its all-time high after last week's sharpest pullback in several weeks. The trigger was a new Chinese AI model, Moonshot's Kimi K3, which spooked investors into questioning whether the huge sums US companies are pouring into AI infrastructure will pay off — chipmakers like Nvidia and Taiwan Semiconductor took the brunt of it. Price also dipped below its daily 50-day moving average for the first time in months, but the weekly structure — still up nearly 9% year-to-date — remains intact for now.
+    the SPX is about 2.6% below its all-time high after a second straight down week. This time the pressure came from several directions at once: an escalating US-Iran conflict that briefly pushed oil above $100 a barrel, new US tariffs on dozens of trading partners, renewed worry about how much Alphabet and Tesla are spending on AI, and Treasury yields climbing to their highest in about 18 months. Over the weekend the US and Iran paused their strikes, which took some heat out of oil prices — but price still closed the week below its daily 50-day moving average for the first time in months, while the weekly structure — still up roughly 8% year-to-date — remains intact for now.
   </div>
 </div>
           </section>
@@ -771,12 +771,12 @@ export default async function SPXPage() {
                     Off the record high
                   </div>
                   <div style={{ marginTop: 5, fontSize: 21, fontWeight: 950 }}>
-                    Sentiment slips to Fear
+                    Sentiment stuck in Fear
                   </div>
                 </div>
               </div>
               <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                The SPX closed at 7,457.69 on July 17 — about 2% below its June 2 record close of 7,609.78 — after its worst week in several weeks. The CNN Fear &amp; Greed Index has slipped to 41.8 ("Fear"), down from 47.9 just days earlier, as chip-stock jitters spread through the market.
+                The SPX closed at 7,411.98 on July 24 — about 2.6% below its June 2 record close of 7,609.78 — after its second consecutive losing week. The CNN Fear &amp; Greed Index has stayed in the high-30s to low-40s ("Fear") for over a week now, as oil-price and tariff headlines add to earlier AI-spending jitters.
               </div>
             </div>
 
@@ -805,7 +805,7 @@ export default async function SPXPage() {
                 </div>
               </div>
               <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                Recent readings show only around 60% of S&amp;P 500 members trading above their own 200-day moving average — well below the roughly 73% norm typically seen at new highs. This year's gains still lean heavily on a narrow set of AI and semiconductor names, and those same names bore the brunt of last week's selloff after China's Kimi K3 model release undercut the case for lavish US AI capex.
+                Recent readings show only around 60% of S&amp;P 500 members trading above their own 200-day moving average — well below the roughly 73% norm typically seen at new highs. This year's gains still lean heavily on a narrow set of AI and semiconductor names, and mega-cap tech again came under pressure this week after Alphabet's and Tesla's AI-spending plans rattled investors.
               </div>
             </div>
 
@@ -822,7 +822,7 @@ export default async function SPXPage() {
                 </div>
               </div>
               <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                The daily chart broke below its 50-day moving average on July 17 for the first time in months, but the S&amp;P 500 remains comfortably above its 200-day moving average — a line it hasn't closed below since early April. The weekly chart's longer-term structure hasn't been threatened.
+                The daily chart has now spent over a week below its 50-day moving average, but the S&amp;P 500 remains comfortably above its 200-day moving average — a line it hasn't closed below since April 8. The weekly chart's longer-term structure hasn't been threatened.
               </div>
             </div>
           </section>
@@ -856,11 +856,11 @@ export default async function SPXPage() {
               }}
             >
               <p style={{ margin: 0 }}>
-                The S&amp;P 500 remains in a resilient 2026 uptrend, up roughly 9% year-to-date, even after last week's pullback. Wall Street's targets reflect that confidence: Goldman Sachs raised its year-end target to <strong>8,000</strong> (from 7,600) in late May on a stronger earnings outlook, and Wells Fargo lifted its target to <strong>7,950</strong> (from 7,300) in June, citing healthier EPS estimates and continued AI infrastructure spending. The index set a record close of <strong>7,609.78 on June 2, 2026</strong>, then spent the following weeks consolidating before last week's sharper pullback took it to <strong>7,457.69</strong> — about 2% off that high.
+                The S&amp;P 500 remains in a resilient 2026 uptrend, up roughly 8% year-to-date, even after back-to-back losing weeks. Wall Street's targets still reflect confidence in the bigger picture: after a wave of upgrades in June pushed several banks' year-end targets as high as 8,000–8,100 (Oppenheimer and Citi among them), Goldman Sachs sits at <strong>8,000</strong> and Wells Fargo at <strong>7,950</strong>. The index set a record close of <strong>7,609.78 on June 2, 2026</strong>, then spent the following weeks consolidating before a mid-July, chip-led pullback and now a second rough week that took it to <strong>7,411.98</strong> — about 2.6% off that high.
               </p>
 
               <p style={{ margin: 0 }}>
-                The catalyst behind that pullback is fairly specific: on July 17, Chinese AI startup Moonshot released Kimi K3, an open-source model that reportedly matches or beats leading US models at a fraction of the cost. That reignited the same worry that first surfaced with DeepSeek — that the hundreds of billions US hyperscalers are committing to AI infrastructure may not be matched by returns if cheaper competitors can close the gap this fast. The selloff hit chipmakers hardest: Taiwan Semiconductor fell around 7%, SoftBank dropped 9%, and Nvidia briefly lost its title as the world's most valuable company. A disappointing revenue outlook from Netflix and rising oil prices — crude climbed above $80 a barrel amid escalating US-Iran tensions — added further pressure, and the VIX jumped more than 12% to around 18.8, its highest level in weeks.
+                This week's pullback had more than one driver. The US carried out roughly eleven consecutive nights of airstrikes on Iran, and fears over disruption to the Strait of Hormuz briefly pushed Brent crude above $100 a barrel before it eased back on Friday. New US tariffs of 10–12.5% on dozens of trading partners also took effect, and Treasury yields climbed to roughly an 18-month high. On top of that, a Thursday tech selloff — triggered by concern over how much Alphabet and Tesla are committing to AI infrastructure — wiped an estimated $800 billion off the "Magnificent Seven" in a single session, echoing the AI-capex worries that first hit chip stocks earlier in the month. Over the weekend, the US and Iran paused their strikes, which eased oil prices and lifted futures heading into Monday.
               </p>
 
               <div
@@ -877,12 +877,12 @@ export default async function SPXPage() {
               >
                 <div style={overviewIconStyle("red")}>⚠️</div>
                 <div style={{ lineHeight: 1.65 }}>
-                  <strong style={{ color: "#fca5a5" }}>Watch the chip stocks:</strong> even with the broader index only modestly off its highs, semiconductor and AI-infrastructure names took a disproportionate hit — Taiwan Semiconductor, SoftBank and Nvidia among them — as investors reassessed whether US AI capital spending can be justified if capable, far cheaper models keep emerging from China. Notably, eight of the eleven S&amp;P 500 sectors actually rose on the day of the worst selling, showing the pain was concentrated rather than broad-based. Whether that stays contained to AI-adjacent names, or spreads further into the index, is the key swing factor right now.
+                  <strong style={{ color: "#fca5a5" }}>Watch the breadth:</strong> the index itself is only about 2.6% off its highs, but the drivers behind that gap — oil-driven risk aversion, tariff headlines, and a mega-cap AI-spending scare — have hit different corners of the market at different times. Roughly 60% of S&amp;P 500 members trade above their own 200-day moving average, below the ~73% norm typically seen at new highs, a reminder that this year's gains are still concentrated in a relatively narrow group of names. A big week of catalysts is ahead — the Fed's FOMC decision on Wednesday and earnings from Meta, Microsoft, Apple and Amazon — any of which could either calm nerves or add to the pressure.
                 </div>
               </div>
 
               <p style={{ margin: 0 }}>
-                Zooming out to the <strong>weekly chart</strong> smooths over most of this noise. The index remains solidly above its 200-day moving average — a level it has held since early April — even though it briefly lost its 50-day moving average last week for the first time in months. Market breadth is a more mixed signal: roughly 60% of S&amp;P 500 members trade above their own 200-day moving average, below the ~73% norm typically seen at new highs, underscoring how concentrated this year's gains have been in a small group of mega-cap AI and semiconductor names — the same names now driving the pullback.
+                Zooming out to the <strong>weekly chart</strong> smooths over most of this noise. The index remains solidly above its 200-day moving average — a level it has held since April 8 — even though it has now spent over a week below its 50-day moving average. Market breadth is the more persistent concern: with only around 60% of members above their 200-day moving average, this year's advance still leans heavily on a small group of mega-cap AI and semiconductor names — the same names most exposed to swings in AI-spending sentiment.
               </p>
             </div>
           </section>
@@ -923,19 +923,19 @@ export default async function SPXPage() {
                 }}
               >
                 <p style={{ margin: 0 }}>
-                  Following a rough week for chip stocks, the daily chart broke below its 50-day moving average for the first time in months, while the S&amp;P 500's weekly chart remains comfortably above its own 50-week and 200-week moving averages — levels that sit meaningfully below the current ~7,450–7,460 range. Short-term wobbles like last week's have plenty of room before they'd threaten the longer-term trend.
+                  After two rough weeks driven first by chip-stock jitters and now by an oil-price and tariff-driven pullback, the daily chart has spent over a week below its 50-day moving average, while the S&amp;P 500's weekly chart remains comfortably above its own 50-week and 200-week moving averages — levels that sit meaningfully below the current ~7,400–7,470 range. Short-term wobbles like this one have plenty of room before they'd threaten the longer-term trend.
                 </p>
 
                 <p style={{ margin: 0 }}>
-                  The bigger picture: despite a genuine AI-valuation scare triggered by the Kimi K3 model release out of China, the index is still only about 2% below its all-time high, up roughly 9% for the year, and its 200-day moving average — unbroken since early April — remains firmly beneath current levels.
+                  The bigger picture: despite a genuine mix of geopolitical, trade-policy and AI-valuation worries, the index is still only about 2.6% below its all-time high, up roughly 8% for the year, and its 200-day moving average — unbroken since April 8 — remains firmly beneath current levels.
                 </p>
 
                 <p style={{ margin: 0 }}>
-                  The real question isn't whether volatility is showing up — clearly it is, concentrated in chip and AI-infrastructure names. It's whether those AI-valuation jitters stay contained to that corner of the market, or start dragging down the broader index the way concentrated selloffs sometimes do when breadth is already thin.
+                  The real question isn't whether volatility is showing up — clearly it is, with oil, tariffs and AI-capex all in the mix at once. It's whether this week's FOMC decision and mega-cap earnings calm those nerves, or whether the pullback deepens into something that actually threatens the primary trend.
                 </p>
 
                 <p style={{ margin: 0 }}>
-                  <strong>Until the 200-day moving average — unbroken since early April — is seriously tested, the primary uptrend still gets the benefit of the doubt.</strong>
+                  <strong>Until the 200-day moving average — unbroken since April 8 — is seriously tested, the primary uptrend still gets the benefit of the doubt.</strong>
                 </p>
               </div>
             </div>
@@ -957,10 +957,10 @@ export default async function SPXPage() {
 
               <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
                 {[
-                  ["📈", "ATH", "record close of 7,609.78 on June 2, 2026; SPX now roughly 2% below that after 7,457.69 on July 17"],
-                  ["⚠️", "Risk", "China's Kimi K3 AI model reignited AI-capex doubts, triggering a chip-led selloff and a break below the daily 50-day MA"],
+                  ["📈", "ATH", "record close of 7,609.78 on June 2, 2026; SPX now roughly 2.6% below that after 7,411.98 on July 24"],
+                  ["⚠️", "Risk", "an escalating US-Iran conflict, an oil-price spike, new US tariffs and renewed AI-capex worries combined for a second straight losing week"],
                   ["🔎", "Weekly structure", "still bullish — price remains well above its 200-day and weekly moving averages"],
-                  ["🟡", "Current stance", "up roughly 9% YTD but breadth stays narrow (~60% of members above their 200-day MA) — a market still leaning on a few AI names"],
+                  ["🟡", "Current stance", "up roughly 8% YTD but breadth stays narrow (~60% of members above their 200-day MA) — a market still leaning on a few AI names, with FOMC and mega-cap earnings due this week"],
                 ].map(([icon, label, text]) => (
                   <div
                     key={label}
@@ -1023,7 +1023,7 @@ export default async function SPXPage() {
                 maxWidth: 920,
               }}
             >
-              The weekly chart shows the S&amp;P 500 giving back some of its early-June gains after Moonshot's Kimi K3 model release out of China sparked a sharp, chip-led selloff and pulled the index about 2% below its June 2 record close. The index broke below its daily 50-day moving average for the first time in months, but its weekly structure — still comfortably above its 200-day and weekly moving averages — remains intact. Momentum has cooled from the more overbought readings seen in early June toward a more neutral footing.
+              The weekly chart shows the S&amp;P 500 giving back more of its early-June gains after a second consecutive down week, this time driven by an escalating US-Iran conflict, a spike in oil prices, new US tariffs and renewed AI-spending worries, pulling the index about 2.6% below its June 2 record close. The index has now spent over a week below its daily 50-day moving average, but its weekly structure — still comfortably above its 200-day and weekly moving averages — remains intact. Momentum has cooled to a roughly neutral RSI reading in the low-50s, down from the more overbought levels seen in early June.
             </div>
 
             <div style={{ marginTop: 18 }}>
@@ -1079,16 +1079,16 @@ export default async function SPXPage() {
 
                 <ul style={{ margin: "12px 0 0", paddingLeft: 18, display: "grid", gap: 8 }}>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    SPX fails to reclaim its daily MA50 on a closing basis
+                    SPX fails to reclaim its daily MA50 (currently around 7,470) on a closing basis
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Semiconductor and AI-infrastructure weakness spreads into the broader mega-cap tech complex
+                    Oil prices reaccelerate on renewed US-Iran escalation rather than staying calm after the weekend pause
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    A hotter-than-expected inflation or retail sales print revives hawkish Fed concerns
+                    Wednesday's FOMC meeting or this week's mega-cap earnings (Meta, Microsoft, Apple, Amazon) disappoint and revive AI-capex concerns
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Weekly close below the 200-day moving average — the primary trend line that's held since early April
+                    Weekly close below the 200-day moving average — the primary trend line that's held since April 8
                   </li>
                 </ul>
               </div>
@@ -1103,16 +1103,16 @@ export default async function SPXPage() {
 
                 <ul style={{ margin: "12px 0 0", paddingLeft: 18, display: "grid", gap: 8 }}>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Price reclaims its daily MA50 and pushes back toward the 7,600 record area
+                    Price reclaims its daily MA50 (around 7,470) and pushes back toward the 7,600 record area
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Chip stocks stabilise and Nvidia, TSMC and peers find a floor
+                    Oil prices keep easing as the US-Iran pause holds, and mega-cap tech earnings reassure on AI spending
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
                     Market breadth improves meaningfully beyond the current ~60% of members above their 200-day MA
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    The AI-capex debate cools without further disruptive model releases from Chinese competitors
+                    The Fed's Wednesday decision is read as supportive, without reigniting inflation or tariff concerns
                   </li>
                 </ul>
               </div>
@@ -1148,7 +1148,7 @@ export default async function SPXPage() {
               }}
             >
               <p style={{ margin: 0 }}>
-                The honest answer depends on timeframe. The weekly trend is still constructive — the SPX is up roughly 9% year-to-date and Wall Street keeps raising targets (Goldman Sachs at 8,000, Wells Fargo at 7,950 for year-end). None of that has changed.
+                The honest answer depends on timeframe. The weekly trend is still constructive — the SPX is up roughly 8% year-to-date, and after a wave of target increases in June, several Wall Street banks now sit at 8,000 or higher for year-end (Goldman Sachs at 8,000, Wells Fargo at 7,950). None of that has changed.
               </p>
 
               <div
@@ -1165,12 +1165,12 @@ export default async function SPXPage() {
               >
                 <div style={overviewIconStyle("blue")}>🧭</div>
                 <div style={{ lineHeight: 1.65 }}>
-                  <strong style={{ color: "#93c5fd" }}>The nuance:</strong> sentiment has cooled meaningfully — the CNN Fear &amp; Greed Index sits at 41.8 ("Fear"), down from 47.9 just days earlier — even though the index is only about 2% off its all-time high. That's arguably healthier than the Extreme Greed readings seen back in June, which themselves preceded a pullback. But the fact that a single AI model release out of China could wipe hundreds of billions off chip stocks in days is a real reminder that a large share of this year's gains still rest on a narrow set of very expensive AI-related names. It wouldn't take much — a disappointing hyperscaler earnings call, or another capable, cheaper AI model from a Chinese competitor — to reignite that worry.
+                  <strong style={{ color: "#93c5fd" }}>The nuance:</strong> sentiment has stayed in "Fear" territory for well over a week now, even though the index is only about 2.6% off its all-time high. That's arguably healthier than the Extreme Greed readings seen back in June, which themselves preceded a pullback. But the fact that this month has already produced two separate shocks — a Chinese AI model release, and now a combination of Middle East conflict, tariffs and mega-cap AI-spending worries — is a real reminder that a large share of this year's gains still rest on a narrow set of very expensive AI-related names and a fragile geopolitical backdrop. This week's FOMC decision and mega-cap earnings could easily tip sentiment further in either direction.
                 </div>
               </div>
 
               <p style={{ margin: 0 }}>
-                The SPX at 7,457.69 is about 2% below its all-time high — not remotely a crisis level, and still up strongly for the year. But with the daily 50-day moving average just broken, breadth still leaning on a narrow set of AI names, and more data due this week, chasing new highs immediately looks less compelling than waiting for either a confirmed reclaim of the 50-day moving average or a cleaner test of the 200-day trend line.
+                The SPX at 7,411.98 is about 2.6% below its all-time high — not remotely a crisis level, and still up solidly for the year. But with the daily 50-day moving average still not reclaimed, breadth still leaning on a narrow set of AI names, and the Fed plus a wave of mega-cap earnings due this week, chasing new highs immediately looks less compelling than waiting for either a confirmed reclaim of the 50-day moving average or a cleaner test of the 200-day trend line.
               </p>
             </div>
           </section>
