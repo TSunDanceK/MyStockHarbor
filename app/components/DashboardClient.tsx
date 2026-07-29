@@ -321,6 +321,7 @@ export default function DashboardClient({
   initialBenchmarks = null,
   initialNews = null,
   initialEarningsSummary = null,
+  pageToken = "",
 }: {
   defaultSymbol?: string;
   initialQuote?: Quote | null;
@@ -329,6 +330,10 @@ export default function DashboardClient({
   initialBenchmarks?: BenchPayload | null;
   initialNews?: NewsPayload | null;
   initialEarningsSummary?: StockEarningsSummary | null;
+  // Short-lived signed token minted server-side (lib/server/quoteToken.ts) and
+  // echoed back on the /api/quote fetch below. Session-scoped, so it stays
+  // valid across chooseSymbol() switches. "" means unconfigured -> no header.
+  pageToken?: string;
 }) {
   const router = useRouter(), searchParams = useSearchParams();
   const [assetType, setAssetType] = useState<AssetType>("stock");
@@ -552,7 +557,7 @@ export default function DashboardClient({
       if (hit) { setErr(null); setQuote(hit.quote); setHistoryAll(hit.history); setLoading(false); return; }
       setLoading(true); setErr(null);
       try {
-        const [qR, hR] = await Promise.all([fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`), fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=${selectedTimeframe.fetchBars}&interval=${chartInterval}`)]);
+        const [qR, hR] = await Promise.all([fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, pageToken ? { headers: { "x-msh-page-token": pageToken } } : undefined), fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=${selectedTimeframe.fetchBars}&interval=${chartInterval}`)]);
         if (!qR.ok) throw new Error("q"); if (!hR.ok) throw new Error("h");
         const q = (await qR.json()) as Quote, h = (await hR.json()) as { points: any[] }; if (c) return;
         const pts: Point[] = (Array.isArray(h.points) ? h.points : []).map((p: any) => ({ date: String(p?.date ?? ""), open: p?.open == null ? undefined : Number(p.open), close: Number(p?.close), high: p?.high == null ? undefined : Number(p.high), low: p?.low == null ? undefined : Number(p.low), volume: p?.volume == null ? undefined : Number(p.volume) })).filter(p => p.date && Number.isFinite(p.close));
@@ -561,7 +566,9 @@ export default function DashboardClient({
       finally { if (!c) setLoading(false); }
     }
     load(); return () => { c = true; };
-  }, [symbol, activeTimeframe, selectedTimeframe, chartInterval, symbolCache]);
+    // pageToken is a stable server-minted prop for the life of this render,
+    // so including it satisfies exhaustive-deps without causing a refetch.
+  }, [symbol, activeTimeframe, selectedTimeframe, chartInterval, symbolCache, pageToken]);
   useEffect(() => {
     let c = false; const q = query.trim(); if (!q) { setResults([]); return; }
     // /api/symbols already returns results in relevance order (exact symbol >
