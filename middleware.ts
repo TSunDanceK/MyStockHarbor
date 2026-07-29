@@ -6,6 +6,7 @@ import {
   isVerifiedHumanToday,
   isBotFlaggedToday,
 } from "@/lib/server/dailyPageLimit";
+import { isTrapBlocked } from "@/lib/server/trapBlock";
 
 // Cumulative cap on /stock/* views per IP per (UTC) day -- a second,
 // longer-window layer on top of the existing Vercel Firewall "Rate limit
@@ -39,6 +40,19 @@ export async function middleware(request: NextRequest) {
 
   if (isLocalhost || isVercelPreview) {
     return NextResponse.next();
+  }
+
+  // Honeypot trap block -- checked first, before anything else below
+  // (including the /api/ early-return that follows), so a requester who
+  // tripped the trap (app/api/internal/feed-index/route.ts) is denied on
+  // every path for the block's duration, not just the ones the daily-view
+  // gate already covers. See lib/server/trapBlock.ts.
+  const trapCheckIp = getClientIp(request.headers);
+  if (!isBypassedIp(trapCheckIp)) {
+    const ja4 = request.headers.get("x-vercel-ja4-digest");
+    if (await isTrapBlocked(trapCheckIp, ja4)) {
+      return new NextResponse("Access denied", { status: 403 });
+    }
   }
 
   const pathname = url.pathname;
