@@ -139,6 +139,10 @@ type SymbolResult = {
 
 type StockSymbolPageClientProps = {
   symbol: string;
+  // Short-lived signed token minted server-side (lib/server/quoteToken.ts) and
+  // echoed back on the /api/quote fetch below. "" / undefined means the feature
+  // is unconfigured, and we send no header at all.
+  pageToken?: string;
   latestEarnings: LatestEarningsData;
   profile: CompanyProfileData | null;
   shareHistory: DilutionHistoryData | null;
@@ -916,7 +920,7 @@ function sideCardBodyStyle(): React.CSSProperties {
   return { padding: "14px 14px" };
 }
 
-export default function StockSymbolPageClient({ symbol, latestEarnings, profile, shareHistory, seed, initialHistory, initialQuote }: StockSymbolPageClientProps) {
+export default function StockSymbolPageClient({ symbol, pageToken, latestEarnings, profile, shareHistory, seed, initialHistory, initialQuote }: StockSymbolPageClientProps) {
   const seededHistory = (initialHistory?.length ?? 0) > 0;
   const [quote, setQuote] = useState<Quote | null>(
     initialQuote?.price != null || seed?.price != null
@@ -958,7 +962,12 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
       if (!seededHistory) setPriceLoading(true);
       try {
         const [quoteRes, historyRes, symbolsRes] = await Promise.all([
-          fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" }),
+          fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, {
+            cache: "no-store",
+            // Only /api/quote is token-gated in this pilot, so only this fetch
+            // carries the header. Omitted entirely when unconfigured.
+            ...(pageToken ? { headers: { "x-msh-page-token": pageToken } } : {}),
+          }),
           fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=900`, { cache: "no-store" }),
           fetch(`/api/symbols?q=${encodeURIComponent(symbol)}`, { cache: "no-store" }),
         ]);
@@ -982,7 +991,9 @@ export default function StockSymbolPageClient({ symbol, latestEarnings, profile,
     }
     load();
     return () => { cancelled = true; };
-  }, [symbol]);
+    // pageToken is a stable server-minted prop for the life of this render,
+    // so including it satisfies exhaustive-deps without causing a refetch.
+  }, [symbol, pageToken]);
 
   useEffect(() => {
     let cancelled = false;

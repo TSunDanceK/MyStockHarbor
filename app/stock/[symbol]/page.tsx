@@ -13,6 +13,7 @@ import {
   type IndicatorSeed,
   type Point,
 } from "@/lib/indicators";
+import { mintQuoteToken } from "@/lib/server/quoteToken";
 import StockSymbolPageClient, { type InitialQuote } from "./StockSymbolPageClient";
 
 type Props = {
@@ -463,6 +464,10 @@ export default async function StockPage({ params }: Props) {
         seed={seed}
         initialHistory={points.slice(-300)}
         initialQuote={quote}
+        // Proves to /api/quote that this client rendered a real page. Empty
+        // string when QUOTE_TOKEN_SECRET is unset, in which case the client
+        // sends no header and behaviour is unchanged. See lib/server/quoteToken.ts.
+        pageToken={mintQuoteToken()}
       />
     </>
   );
