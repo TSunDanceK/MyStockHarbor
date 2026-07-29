@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { isUnwantedBot } from "@/lib/botid-guard";
 import { fetchQuoteSnapshot, emptyQuote } from "@/lib/server/quoteData";
+import {
+  QUOTE_TOKEN_HEADER,
+  verifyQuoteToken,
+  isQuoteTokenEnforced,
+} from "@/lib/server/quoteToken";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +23,28 @@ export async function GET(req: Request) {
   // verification fails outright.
   if (await isUnwantedBot("deepAnalysis")) {
     return NextResponse.json({ error: "Access denied" }, { status: 403 });
+  }
+
+  // Page-token gate. BotID above answers "is this a real browser?"; this
+  // answers "did this request come from someone who actually loaded one of
+  // our pages?" -- the gap the 2026-07-21 audit's scripted ticker-walk sat in.
+  //
+  // LOG-ONLY BY DEFAULT. verifyQuoteToken() returns ok for everyone until
+  // QUOTE_TOKEN_SECRET is set, and even then nothing is blocked until
+  // QUOTE_TOKEN_ENFORCE=1. Deploying this with no env vars set changes
+  // nothing. Read these log lines first: a steady trickle of "expired" means
+  // QUOTE_TOKEN_TTL_SECONDS is too short for real sessions, and "missing"
+  // from real visitors means a call site was left unwired -- either would
+  // become a visible outage if enforcement were switched on blind. This is
+  // the same staged rollout BotID and the AI Bots rule got.
+  const tokenResult = verifyQuoteToken(req.headers.get(QUOTE_TOKEN_HEADER));
+  if (!tokenResult.ok) {
+    if (isQuoteTokenEnforced()) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    }
+    console.warn(
+      `[quote-token] would-block symbol=${symbol} reason=${tokenResult.reason} (log-only; set QUOTE_TOKEN_ENFORCE=1 to enforce)`
+    );
   }
 
   const apiKey = process.env.FMP_API_KEY;

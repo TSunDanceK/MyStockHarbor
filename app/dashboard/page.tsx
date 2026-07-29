@@ -11,6 +11,7 @@ import DashboardClient, {
 import { getDailyHistory } from "@/lib/server/historyCache";
 import { getBenchmarksData } from "@/lib/server/benchmarksBuilder";
 import { fetchQuoteSnapshot } from "@/lib/server/quoteData";
+import { mintQuoteToken } from "@/lib/server/quoteToken";
 import { getLatestEarningsData } from "@/lib/latest-earnings-data";
 
 // Was a plain client-rendered shell (Suspense fallback "Loading dashboard…"
@@ -170,6 +171,12 @@ export default async function DashboardPage({ searchParams }: Props) {
         initialBenchmarks={benchmarks}
         initialNews={news}
         initialEarningsSummary={earningsSummary}
+        // Proves to /api/quote that this client rendered a real page. Empty
+        // string when QUOTE_TOKEN_SECRET is unset, in which case the client
+        // sends no header and behaviour is unchanged. Session-scoped, not
+        // symbol-scoped, precisely because chooseSymbol() swaps symbols here
+        // without a reload. See lib/server/quoteToken.ts.
+        pageToken={mintQuoteToken()}
       />
     </Suspense>
   );
