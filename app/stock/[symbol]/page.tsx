@@ -13,13 +13,14 @@ import {
   type IndicatorSeed,
   type Point,
 } from "@/lib/indicators";
+import { mintQuoteToken } from "@/lib/server/quoteToken";
 import StockSymbolPageClient, { type InitialQuote } from "./StockSymbolPageClient";
 
 type Props = {
   params: Promise<{ symbol: string }>;
 };
 
-// ── Server-side data fetching ────────────────────────────────────────────────
+// ── Server-side data fetching ────────────────────────────────────────
 
 // Fetches the FMP stable/quote payload once on the server. Beyond the
 // price/date pair used for SEO + indicator seeding, this also captures the
@@ -290,7 +291,7 @@ async function fetchShareHistory(symbol: string): Promise<DilutionHistoryData | 
   return null;
 }
 
-// ── Metadata (dynamic, data-driven) ─────────────────────────────────────────
+// ── Metadata (dynamic, data-driven) ────────────────────────────────────
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { symbol } = await params;
@@ -463,6 +464,10 @@ export default async function StockPage({ params }: Props) {
         seed={seed}
         initialHistory={points.slice(-300)}
         initialQuote={quote}
+        // Proves to /api/quote that this client rendered a real page. Empty
+        // string when QUOTE_TOKEN_SECRET is unset, in which case the client
+        // sends no header and behaviour is unchanged. See lib/server/quoteToken.ts.
+        pageToken={mintQuoteToken()}
       />
     </>
   );
