@@ -79,6 +79,35 @@ export default async function RootLayout({
     textDecoration: "none",
   };
 
+  // Honeypot trap link (see app/api/internal/feed-index/route.ts and
+  // lib/server/trapBlock.ts). Deliberately a plain <a>, NOT next/link's
+  // <Link> -- Link's viewport-prefetch would fire this route from real
+  // visitors' own browsers just by scrolling it into view, self-inflicting
+  // the exact block this exists to apply to bots. That exact prefetch
+  // false-positive already bit this site once elsewhere; see
+  // claude/list-link-prefetch-disable-2026-07-21.md.
+  //
+  // Hidden three separate ways so no real human can land here through
+  // normal use: clipped to a 1x1px box off-canvas (sighted visitors),
+  // aria-hidden="true" (removed from the accessibility tree entirely, so
+  // screen readers never announce it), and tabIndex={-1} (skipped by
+  // keyboard Tab navigation). What's left is a completely ordinary <a
+  // href> in the rendered HTML that only something parsing raw markup --
+  // or crawling every anchor regardless of visibility -- would ever fetch.
+  const trapLinkStyle: React.CSSProperties = {
+    position: "absolute",
+    width: 1,
+    height: 1,
+    margin: -1,
+    padding: 0,
+    overflow: "hidden",
+    clip: "rect(0,0,0,0)",
+    whiteSpace: "nowrap",
+    border: 0,
+    left: -9999,
+    top: -9999,
+  };
+
   return (
     <html lang="en-GB">
       <head>
@@ -378,6 +407,16 @@ export default async function RootLayout({
               </div>
             </div>
           </footer>
+
+          <a
+            href="/api/internal/feed-index"
+            aria-hidden="true"
+            tabIndex={-1}
+            rel="nofollow"
+            style={trapLinkStyle}
+          >
+            resource index
+          </a>
         </div>
       </body>
     </html>
