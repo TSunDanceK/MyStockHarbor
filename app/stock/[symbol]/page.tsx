@@ -20,7 +20,7 @@ type Props = {
   params: Promise<{ symbol: string }>;
 };
 
-// ── Server-side data fetching ────────────────────────────────────────
+// ── Server-side data fetching ────────────────────────────────────────────────
 
 // Fetches the FMP stable/quote payload once on the server. Beyond the
 // price/date pair used for SEO + indicator seeding, this also captures the
@@ -291,7 +291,7 @@ async function fetchShareHistory(symbol: string): Promise<DilutionHistoryData | 
   return null;
 }
 
-// ── Metadata (dynamic, data-driven) ────────────────────────────────────
+// ── Metadata (dynamic, data-driven) ─────────────────────────────────────────
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { symbol } = await params;
