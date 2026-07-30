@@ -12,7 +12,7 @@ import { readPricePoolBulk } from "@/lib/server/pricePool";
 import { readCachedStockDataBulk } from "@/lib/server/stockDataCache";
 import { getPickersData } from "@/lib/server/pickersBuilder";
 import { WatermarkVisibilityProvider, HideWatermarksBar } from "@/app/components/WatermarkVisibility";
-import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type FilterKey } from "@/lib/pickerFilters";
+import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type FilterKey, type AnyFilterKey } from "@/lib/pickerFilters";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -31,11 +31,12 @@ export type PickerResultConfig = {
   sectionIncludes?: string[];
   maxItems?: number;
   filterTimeframe?: "D" | "W";
-  // "preset" pages: the full analyzed universe pre-filtered server-side to the
-  // symbols matching ALL of these condition flags (e.g. ["belowMA200"]). Behaves
-  // like a normal dedicated screener page (nav-link sidebar, results shown
-  // immediately) rather than the custom-screener's hide-until-filtered mode.
-  presetFilters?: FilterKey[];
+  // "preset" pages: the full analyzed universe, shipped whole, with these
+  // condition flags pre-ticked client-side (see PickerResultPage below). Accepts
+  // both the 18 custom-builder keys (e.g. "belowMA200") and the 7
+  // category-membership keys (e.g. "bestTrendPick"), since several dedicated
+  // pages are defined by section membership rather than a raw record flag.
+  presetFilters?: AnyFilterKey[];
   // "allSymbols" pages: show the whole list on load instead of hiding until a
   // condition is checked (used by the plain "All Stocks" / Stock Screener page).
   showAllImmediately?: boolean;
@@ -512,6 +513,57 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
     // it collapsed to ~zero matches. Shipping the whole universe lets a visitor
     // untick the page's own condition (turning it into the All Stocks screener
     // in place) or combine it with another, without navigating away.
+    //
+    // Preset pages converted over from the old "section" kind additionally
+    // declare `sectionIncludes`. Those pages' entries used to be built straight
+    // from the section's item list, which carries per-item detail that does NOT
+    // exist on a plain signalRecord: the chart deep-link inputs
+    // (supportResistanceZone / chartFocus / dominantIndicator, consumed by
+    // chartHrefForEntry), the timeframe+indicator badge, richer chartPoints, and
+    // the section's own ordering. Dropping to the universe alone would silently
+    // lose all of that. So: build from the universe, then re-apply the section's
+    // detail to the entries that appear in it, and sort section members first in
+    // the section's own order. Presets with no sectionIncludes (the 2026-07-23
+    // batch) skip this entirely and keep the plain score-descending order.
+    if (config.kind === "preset" && config.sectionIncludes?.length) {
+      const presetSection = findSection(sections, config.sectionIncludes);
+      const sectionItems = Array.isArray(presetSection?.items) ? presetSection.items : [];
+      const timeframeItems = config.filterTimeframe
+        ? sectionItems.filter((item) => item.timeframe === config.filterTimeframe)
+        : sectionItems;
+
+      const itemBySymbol = new Map<string, { item: PickerSectionItem; rank: number }>();
+      timeframeItems.forEach((item, index) => {
+        const itemSymbol = cleanSymbol(item.symbol);
+        if (!itemSymbol || itemBySymbol.has(itemSymbol)) return;
+        itemBySymbol.set(itemSymbol, { item, rank: index });
+      });
+
+      const UNRANKED = Number.MAX_SAFE_INTEGER;
+      const ranked = all.map((entry) => {
+        const hit = itemBySymbol.get(entry.symbol);
+        if (!hit) return { entry, rank: UNRANKED };
+        const { item } = hit;
+        // Rebuild the chart link with this page's deep-link params (macro S/R
+        // zone, ATH / 3-month-high reference line, dominant RSI/MACD indicator).
+        entry.chartHref = chartHrefForEntry(config.href, entry.symbol, item.dashboardHref, item);
+        if (item.supportResistanceZone) entry.supportResistanceZone = item.supportResistanceZone;
+        if (Array.isArray(item.chartPoints) && item.chartPoints.length) entry.chartPoints = item.chartPoints;
+        if (item.tone) entry.tone = item.tone;
+        const badge = [item.timeframe, item.indicator].filter(Boolean).join(" · ");
+        if (badge) entry.badge = badge;
+        return { entry, rank: hit.rank };
+      });
+
+      ranked.sort(
+        (a, b) =>
+          a.rank - b.rank ||
+          (b.entry.score ?? 0) - (a.entry.score ?? 0) ||
+          a.entry.symbol.localeCompare(b.entry.symbol)
+      );
+      return ranked.map((r) => r.entry);
+    }
+
     return all;
   }
 
