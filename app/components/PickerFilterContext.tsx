@@ -25,8 +25,25 @@ const PickerFilterContext = createContext<PickerFilterContextValue | null>(null)
 // category-membership checks ScreenerNav's own nav items now carry
 // (CategoryFilterKey, e.g. "hasBuySignal" for the Buy Signals item). Both
 // are ANDed together identically by PickerResultsGrid.
-export function PickerFilterProvider({ children }: { children: ReactNode }) {
-  const [selectedFilters, setSelectedFilters] = useState<AnyFilterKey[]>([]);
+//
+// `initialFilters` seeds the selection. Dedicated condition pages (the
+// "preset" kind -- Oversold, Below MA200, ...) pass their own condition in
+// here instead of having the server pre-filter the entry list: the page then
+// ships the FULL analyzed universe with that one box already ticked. Because
+// useState's initial value is used during the server render too, the SSR'd
+// HTML is still just that condition's matches (so the page's SEO content is
+// unchanged), but the visitor can now untick it -- or AND a second condition
+// onto it -- entirely client-side, with no navigation and no refetch. That's
+// what lets the mobile "Select Screener" sheet stay open while the results
+// behind it change. See PickerResultPage.tsx.
+export function PickerFilterProvider({
+  children,
+  initialFilters = [],
+}: {
+  children: ReactNode;
+  initialFilters?: AnyFilterKey[];
+}) {
+  const [selectedFilters, setSelectedFilters] = useState<AnyFilterKey[]>(initialFilters);
   const [matchCount, setMatchCount] = useState<number | null>(null);
 
   const value = useMemo<PickerFilterContextValue>(
