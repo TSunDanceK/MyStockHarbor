@@ -386,9 +386,17 @@ function makeRecordMap(records: SignalRecord[]) {
 
 // Hard safety ceiling so a pathological universe (or a future symbol-count
 // blowup) can't ship an unbounded payload -- well above anything the
-// current ~200-symbol universe cap can produce, so it never actually
-// truncates real results the way the old per-page maxItems slice did.
-const RESULT_SAFETY_CAP = 500;
+// current universe can produce, so it never actually truncates real results
+// the way the old per-page maxItems slice did.
+//
+// Raised from 500 to 900: the analyzed universe has grown to ~553 symbols, so
+// 500 had started silently truncating. Because the allSymbols/preset branch
+// sorts by score (conditions met) DESCENDING before slicing, the symbols being
+// dropped were the lowest-scoring ones -- which is exactly where a stock that
+// meets only one condition lives. That made it possible for a genuine match to
+// go missing from its own condition page now that those pages filter the full
+// universe client-side.
+const RESULT_SAFETY_CAP = 900;
 
 function entriesFromSection(args: {
   configHref: string;
@@ -495,10 +503,15 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
       };
     }).filter((entry): entry is ResultEntry => Boolean(entry)).sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.symbol.localeCompare(b.symbol)).slice(0, RESULT_SAFETY_CAP);
 
-    if (config.kind === "preset") {
-      const keys = config.presetFilters ?? [];
-      return keys.length ? all.filter((entry) => keys.every((k) => entry[k] === true)) : all;
-    }
+    // NOTE: "preset" deliberately returns the FULL universe here, exactly like
+    // "allSymbols". The page's own condition is applied client-side instead,
+    // by seeding it into PickerFilterProvider's initialFilters (see the page
+    // component below). Server-filtering it here is what used to make the
+    // Select Screener checkboxes useless on these pages -- the shipped data set
+    // was only that one category's stocks, so ANDing any second condition onto
+    // it collapsed to ~zero matches. Shipping the whole universe lets a visitor
+    // untick the page's own condition (turning it into the All Stocks screener
+    // in place) or combine it with another, without navigating away.
     return all;
   }
 
@@ -678,15 +691,29 @@ async function getPickerData(config: PickerResultConfig) {
       // extended data is optional
     }
 
+    // On a "preset" page `entries` is now the whole universe (see buildEntries),
+    // so the page's own condition still has to be applied here for the two
+    // things that are decided server-side and can't be re-derived on the
+    // client: the CollectionPage/ItemList structured data (which must describe
+    // the stocks this URL actually ranks for, not the full universe) and the
+    // "Live matches" count. Everything the visitor sees is filtered client-side
+    // from the same seeded selection. Non-preset kinds are unaffected.
+    const presetKeys = config.presetFilters ?? [];
+    const seoEntries =
+      config.kind === "preset" && presetKeys.length
+        ? entries.filter((entry) => presetKeys.every((k) => entry[k] === true))
+        : entries;
+
     return {
       updatedAt: typeof payload.updatedAt === "string" ? payload.updatedAt : null,
       universeSize: typeof payload.universeSize === "number" ? payload.universeSize : null,
       dynamicUniverseCount: typeof payload.dynamicUniverseCount === "number" ? payload.dynamicUniverseCount : null,
       entries,
-      foundCount: config.filterTimeframe ? entries.length : typeof matchedSection?.foundCount === "number" ? matchedSection.foundCount : entries.length,
+      seoEntries,
+      foundCount: config.filterTimeframe ? seoEntries.length : typeof matchedSection?.foundCount === "number" ? matchedSection.foundCount : seoEntries.length,
     };
   } catch {
-    return { updatedAt: null, universeSize: null, dynamicUniverseCount: null, entries: [], foundCount: 0 };
+    return { updatedAt: null, universeSize: null, dynamicUniverseCount: null, entries: [], seoEntries: [], foundCount: 0 };
   }
 }
 
@@ -701,8 +728,16 @@ export default async function PickerResultPage({
   config: PickerResultConfig;
   searchParams?: Promise<{ symbol?: string | string[] }>;
 }) {
-  const { entries, updatedAt, universeSize, dynamicUniverseCount, foundCount } = await getPickerData(config);
+  const { entries, seoEntries, updatedAt, universeSize, dynamicUniverseCount, foundCount } = await getPickerData(config);
   const initialVisibleCount = config.maxItems ?? 36;
+
+  // Dedicated condition pages ship the full universe and apply their own
+  // condition client-side (see buildEntries + PickerFilterProvider below), so
+  // the checkboxes in "Select Screener" can narrow or widen the list in place.
+  // These two flags are what switch a page into that mode.
+  const isPresetPage = config.kind === "preset";
+  const isFilterablePage = config.kind === "allSymbols" || isPresetPage;
+  const initialFilters = isPresetPage ? config.presetFilters ?? [] : [];
 
   // "Universe" metric is a debug/sanity-check number for confirming the
   // dynamic-universe top-up job is actually running: universeSize is the
@@ -733,7 +768,7 @@ export default async function PickerResultPage({
     description: config.description,
     mainEntity: {
       "@type": "ItemList",
-      itemListElement: entries.slice(0, 24).map((entry, index) => ({
+      itemListElement: seoEntries.slice(0, 24).map((entry, index) => ({
         "@type": "ListItem",
         position: index + 1,
         item: { "@type": "Thing", name: `${entry.symbol} ${config.title}`, url: `https://www.mystockharbor.com${entry.stockHref}` },
@@ -873,9 +908,9 @@ export default async function PickerResultPage({
       `}</style>
 
         <div className="resultWrap">
-          <PickerFilterProvider>
+          <PickerFilterProvider initialFilters={initialFilters}>
             <div className="resultShell">
-              <ScreenerNav currentHref={config.href} variant="sidebar" showFilters showSearch alwaysFilterMode={config.kind === "allSymbols"} />
+              <ScreenerNav currentHref={config.href} variant="sidebar" showFilters showSearch alwaysFilterMode={isFilterablePage} />
 
               <div className="resultMain">
                 <section className="hero">
@@ -901,7 +936,7 @@ export default async function PickerResultPage({
                 </section>
 
                 <div className="screenerTriggerWrap">
-                  <ScreenerNav currentHref={config.href} variant="trigger" showFilters showSearch alwaysFilterMode={config.kind === "allSymbols"} />
+                  <ScreenerNav currentHref={config.href} variant="trigger" showFilters showSearch alwaysFilterMode={isFilterablePage} />
                 </div>
 
                 {highlightSymbol ? <PickerHighlightScroller symbol={highlightSymbol} /> : null}
@@ -915,12 +950,12 @@ export default async function PickerResultPage({
                   emptyText={config.emptyText}
                   isEarnings={isEarningsPickerPage(config)}
                   hideUntilFiltered={config.kind === "allSymbols" && !config.showAllImmediately}
-                  splitReasonsBySelection={config.kind === "allSymbols"}
+                  splitReasonsBySelection={isFilterablePage}
                   collapseReasons={config.kind === "allSymbols"}
                 />
 
                 <div className="scanDebug">
-                  Current scan · Live matches {foundCount} · Shown {entries.length} · Universe {combinedUniverseSize ?? "Live"} · Updated {formatUpdatedAt(updatedAt)}
+                  Current scan · Live matches {foundCount} · Shown {seoEntries.length} · Universe {combinedUniverseSize ?? "Live"} · Updated {formatUpdatedAt(updatedAt)}
                 </div>
 
                 <HideWatermarksBar />
