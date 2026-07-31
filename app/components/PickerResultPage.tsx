@@ -170,6 +170,11 @@ export type ResultEntry = ResultEntryFlags & {
   marketCap?: number;
   peRatio?: number;
   industry?: string;
+  // Broad sector (~11 values, e.g. "Technology") as opposed to the much
+  // finer-grained `industry` (~150 values). Both come off the same cached
+  // profile record; sector is the one that's usable as a filter, since a
+  // dropdown of 150 industries isn't, and "tech stocks" means the sector.
+  sector?: string;
   price?: number;
   changePct?: number;
   volume?: number;
@@ -707,6 +712,7 @@ async function getPickerData(config: PickerResultConfig) {
           if (f.marketCap != null) entry.marketCap = f.marketCap;
           if (f.peRatio != null) entry.peRatio = f.peRatio;
           if (f.industry) entry.industry = f.industry;
+          if (f.sector) entry.sector = f.sector;
         }
       }
     } catch {
@@ -822,6 +828,15 @@ export default async function PickerResultPage({
   // kinds for their bespoke scoring and reason chips while still opting in.
   const initialFilters = config.presetFilters ?? [];
   const isFilterablePage = config.kind === "allSymbols" || config.kind === "preset" || initialFilters.length > 0;
+
+  // Sectors actually present in this page's payload, alphabetical. Derived from
+  // the entries rather than hardcoded so the list can never offer a sector with
+  // nothing behind it, and so it self-corrects if the profile cache starts
+  // returning a value we didn't anticipate. Symbols whose profile hasn't been
+  // warmed yet simply have no sector and sit outside every sector filter.
+  const availableSectors = Array.from(
+    new Set(entries.map((entry) => entry.sector).filter((s): s is string => Boolean(s)))
+  ).sort((a, b) => a.localeCompare(b));
 
   // "Universe" metric is a debug/sanity-check number for confirming the
   // dynamic-universe top-up job is actually running: universeSize is the
@@ -994,7 +1009,7 @@ export default async function PickerResultPage({
         <div className="resultWrap">
           <PickerFilterProvider initialFilters={initialFilters}>
             <div className="resultShell">
-              <ScreenerNav currentHref={config.href} variant="sidebar" showFilters showSearch alwaysFilterMode={isFilterablePage} />
+              <ScreenerNav currentHref={config.href} variant="sidebar" showFilters showSearch alwaysFilterMode={isFilterablePage} availableSectors={availableSectors} />
 
               <div className="resultMain">
                 <section className="hero">
@@ -1023,7 +1038,7 @@ export default async function PickerResultPage({
                 </section>
 
                 <div className="screenerTriggerWrap">
-                  <ScreenerNav currentHref={config.href} variant="trigger" showFilters showSearch alwaysFilterMode={isFilterablePage} />
+                  <ScreenerNav currentHref={config.href} variant="trigger" showFilters showSearch alwaysFilterMode={isFilterablePage} availableSectors={availableSectors} />
                 </div>
 
                 {highlightSymbol ? <PickerHighlightScroller symbol={highlightSymbol} /> : null}
