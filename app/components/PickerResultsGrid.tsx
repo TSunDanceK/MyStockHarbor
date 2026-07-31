@@ -37,6 +37,14 @@ const LABEL_BY_KEY = new Map<AnyFilterKey, string>([
   ...CATEGORY_FILTER_DEFS.map((d) => [d.key, d.label] as const),
 ]);
 
+// Tone per checkable condition, from the same defs. Lets a card's dot follow
+// the condition the visitor actually applied rather than the page it happens to
+// be sitting on -- see displayTone below.
+const TONE_BY_KEY = new Map<AnyFilterKey, PickerTone>([
+  ...FILTER_DEFS.map((d) => [d.key, d.tone] as const),
+  ...CATEGORY_FILTER_DEFS.map((d) => [d.key, d.tone] as const),
+]);
+
 function chartOverlayForEntry(configHref: string, configTitle: string, entry: ResultEntry) {
   const href = configHref.toLowerCase();
   const text = `${configTitle} ${entry.badge ?? ""} ${entry.note} ${entry.reasons?.join(" ") ?? ""}`.toLowerCase();
@@ -341,7 +349,7 @@ export default function PickerResultsGrid({
   splitReasonsBySelection?: boolean;
   collapseReasons?: boolean;
 }) {
-  const { predicates, selectedFilters, setMatchCount } = usePickerFilter();
+  const { predicates, selectedFilters, setMatchCount, isPristine } = usePickerFilter();
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [activeTab, setActiveTab] = useState<TabKey>("general");
   const [sort, setSort] = useState<SortState>(null);
@@ -350,6 +358,32 @@ export default function PickerResultsGrid({
 
   const cardHrefFor = (entry: ResultEntry) =>
     isEarnings ? `/stock/${encodeURIComponent(entry.symbol)}/earnings` : entry.chartHref;
+
+  // Every entry is stamped with the PAGE's tone server-side (see buildEntries in
+  // PickerResultPage.tsx), which is correct right up until the visitor filters
+  // to something else. After that it actively misleads: untick Overbought on
+  // /overbought-stocks-today, tick Oversold, and you get oversold stocks still
+  // wearing the page's red dot. That is a wrong signal, not a cosmetic one.
+  //
+  // So once the selection has diverged from the page's own preset, the tone
+  // follows the applied condition instead. While pristine we deliberately keep
+  // entry.tone rather than recomputing it: preset pages built from a section can
+  // carry per-item tones (bullish vs bearish on the Divergence page, say) that
+  // are more specific than any single condition's tone.
+  //
+  // null means "leave every entry as it is".
+  const displayTone = useMemo<PickerTone | null>(() => {
+    if (isPristine) return null;
+    if (predicates.length === 1) {
+      const only = predicates[0];
+      if (only.kind === "flag") return TONE_BY_KEY.get(only.field) ?? "blue";
+    }
+    // Nothing selected, or a combination with no single condition to speak for
+    // it -- neutral rather than borrowing a colour that would imply a direction.
+    return "blue";
+  }, [isPristine, predicates]);
+
+  const toneFor = (entry: ResultEntry) => displayTone ?? entry.tone;
 
   // Column sets per tab. Only columns backed by data the site pulls are shown.
   const columnSets = useMemo(() => {
@@ -362,7 +396,7 @@ export default function PickerResultsGrid({
         const href = isEarnings ? `/stock/${encodeURIComponent(e.symbol)}/earnings` : e.chartHref;
         return (
           <a href={href} className="listSym" onClick={(ev) => ev.stopPropagation()}>
-            <span className="dot" style={{ background: toneColour(e.tone) }} aria-hidden="true" />
+            <span className="dot" style={{ background: toneColour(displayTone ?? e.tone) }} aria-hidden="true" />
             {e.symbol}
           </a>
         );
@@ -422,7 +456,9 @@ export default function PickerResultsGrid({
       analysts: [symbol, name, marketCap, rating, analysts, price, ptgt, ptups],
     };
     return sets;
-  }, [isEarnings]);
+    // displayTone is a real dependency: the symbol cell renders the dot, so
+    // without it the table keeps the tone it was first built with.
+  }, [isEarnings, displayTone]);
 
   const activeColumns = columnSets[activeTab];
 
@@ -635,7 +671,7 @@ export default function PickerResultsGrid({
                   <div className="resultCardTop">
                     <div className="resultCardHead">
                       <div className="symbolLine">
-                        <span className="dot" style={{ background: toneColour(entry.tone) }} aria-hidden="true" />
+                        <span className="dot" style={{ background: toneColour(toneFor(entry)) }} aria-hidden="true" />
                         <h3>{entry.symbol}</h3>
                         {entry.companyName ? <span className="companyName">{entry.companyName}</span> : null}
                       </div>
@@ -651,7 +687,7 @@ export default function PickerResultsGrid({
                   {entry.reasons && entry.reasons.length > 0 ? (
                     <ReasonChips
                       reasons={entry.reasons}
-                      tone={entry.tone}
+                      tone={toneFor(entry)}
                       selectedFilters={selectedFilters}
                       splitBySelection={splitReasonsBySelection}
                       collapseAll={collapseReasons}
@@ -659,7 +695,7 @@ export default function PickerResultsGrid({
                   ) : null}
                   <MiniPickerCandleChart
                     points={entry.chartPoints}
-                    tone={tone}
+                    tone={displayTone ?? tone}
                     overlay={chartOverlayForEntry(configHref, configTitle, entry)}
                     supportResistanceZone={entry.supportResistanceZone}
                   />
