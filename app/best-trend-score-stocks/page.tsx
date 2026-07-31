@@ -23,6 +23,11 @@ export const metadata: Metadata = {
   },
 };
 
+// kind is "preset", not "section": ships the whole universe with `bestTrendPick`
+// pre-ticked so Select Screener filters in place. That flag is derived from this
+// same section (see buildCategoryFlags), so the default set is identical to
+// before; sectionIncludes is kept so the MA50/MA200 chart deep link, badge and
+// ordering are re-applied on top. See buildEntries in PickerResultPage.tsx.
 const config: PickerResultConfig = {
   href: "/best-trend-score-stocks",
   eyebrow: "Trend score stock screener",
@@ -32,7 +37,8 @@ const config: PickerResultConfig = {
   explainerBody: "Trend score pages are useful for finding leadership. Strong trends can still be extended, so the cleaner ideas often combine trend strength with controlled pullbacks or constructive bases.",
   emptyText: "No best trend score stocks are currently available from the live picker feed.",
   tone: "green",
-  kind: "section",
+  kind: "preset",
+  presetFilters: ["bestTrendPick"],
   sectionIncludes: ["best trend score"],
   maxItems: 36,
 };

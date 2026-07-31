@@ -3,6 +3,12 @@ import PickerResultPage, {
   type PickerResultConfig,
 } from "@/app/components/PickerResultPage";
 
+// kind is "preset", not "section": ships the whole universe with
+// `positiveLastEarnings` pre-ticked so Select Screener filters in place --
+// which on an earnings page is the point, since combining it with a technical
+// condition is the obvious next question. sectionIncludes is kept so the
+// earnings section's badge and ordering are re-applied on top. See buildEntries
+// in PickerResultPage.tsx.
 const config: PickerResultConfig = {
   href: "/stocks-with-positive-last-earnings",
   eyebrow: "Earnings stock screener",
@@ -15,7 +21,8 @@ const config: PickerResultConfig = {
   emptyText:
     "No positive last-earnings results are available yet. Use the Fetch Earnings button on the main Pickers page or wait for the earnings cache to warm.",
   tone: "green",
-  kind: "section",
+  kind: "preset",
+  presetFilters: ["positiveLastEarnings"],
   sectionIncludes: ["positive", "last", "earnings"],
   maxItems: 40,
 };

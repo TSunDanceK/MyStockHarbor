@@ -23,6 +23,12 @@ export const metadata: Metadata = {
   },
 };
 
+// kind is "preset", not "section": ships the whole universe with
+// `threeMonthHighPick` pre-ticked so Select Screener filters in place. That flag
+// is derived from this same section (see buildCategoryFlags), so the default set
+// is identical to before; sectionIncludes is kept so the range-high reference
+// line chart deep link (rangeHighPrice / rangeHighDate), badge and ordering
+// survive. See buildEntries in PickerResultPage.tsx.
 const config: PickerResultConfig = {
   href: "/3-month-high-breakout-stocks",
   eyebrow: "Breakout stock screener",
@@ -32,7 +38,8 @@ const config: PickerResultConfig = {
   explainerBody: "A 3-month high breakout can flag improving momentum before a stock reaches major all-time high territory. Watch for follow-through volume, controlled retests and a lack of immediate rejection.",
   emptyText: "No 3-month high breakout stocks are currently available from the live picker feed.",
   tone: "orange",
-  kind: "section",
+  kind: "preset",
+  presetFilters: ["threeMonthHighPick"],
   sectionIncludes: ["3-month high breakout"],
   maxItems: 36,
 };
