@@ -23,6 +23,12 @@ export const metadata: Metadata = {
   },
 };
 
+// kind is "preset", not "section": the page ships the whole analyzed universe
+// with `oversold` pre-ticked client-side, so "Select Screener" can narrow or
+// widen the list in place instead of sending visitors off to /stock-screener.
+// `sectionIncludes` is kept so the Oversold section's per-item detail (dominant
+// indicator for the chart deep link, timeframe/indicator badge, its own
+// ordering) is re-applied on top -- see buildEntries in PickerResultPage.tsx.
 const config: PickerResultConfig = {
   href: "/oversold-stocks-today",
   eyebrow: "Oversold stock screener",
@@ -32,7 +38,8 @@ const config: PickerResultConfig = {
   explainerBody: "Oversold does not automatically mean bullish. The best setups usually show selling pressure slowing, a clean support area, or early evidence that buyers are stepping back in.",
   emptyText: "No oversold stocks are currently available from the live picker feed.",
   tone: "green",
-  kind: "section",
+  kind: "preset",
+  presetFilters: ["oversold"],
   sectionIncludes: ["oversold"],
   maxItems: 36,
 };

@@ -23,6 +23,10 @@ export const metadata: Metadata = {
   },
 };
 
+// kind is "preset", not "section": ships the whole universe with `overbought`
+// pre-ticked so Select Screener filters in place. sectionIncludes is kept so the
+// section's per-item detail (dominant indicator for the chart deep link, badge,
+// ordering) is re-applied on top. See buildEntries in PickerResultPage.tsx.
 const config: PickerResultConfig = {
   href: "/overbought-stocks-today",
   eyebrow: "Overbought stock screener",
@@ -32,7 +36,8 @@ const config: PickerResultConfig = {
   explainerBody: "Overbought stocks can keep trending, so this page is not automatically bearish. Use it to find stretched names where chasing may carry more risk, especially if momentum starts to fade.",
   emptyText: "No overbought stocks are currently available from the live picker feed.",
   tone: "red",
-  kind: "section",
+  kind: "preset",
+  presetFilters: ["overbought"],
   sectionIncludes: ["overbought"],
   maxItems: 36,
 };
