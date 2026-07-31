@@ -42,10 +42,16 @@ const GROUPS: NavGroup[] = [
     heading: "Screener",
     headingColor: "#e2e8f0",
     items: [
-      // The plain, no-filter full list -- pinned at the top so it's clear there
-      // is a page you can open that doesn't pre-apply any condition (unlike
+      // The no-filter starting point -- pinned at the top so it's clear there is
+      // a page you can open that doesn't pre-apply any condition (unlike
       // Overbought/Oversold/etc). Just a link, never a checkbox (no filterKey).
-      { href: "/stock-screener", label: "All Stocks", icon: "▦", tone: "blue" },
+      //
+      // Labelled "Custom Screener", NOT "All Stocks": the list is the analyzed
+      // universe (a few hundred symbols), not every listed stock, so "All
+      // Stocks" over-promised. "Custom Screener" also describes what the page is
+      // actually for now that every condition page filters in place -- this is
+      // where you start from nothing and build your own combination.
+      { href: "/stock-screener", label: "Custom Screener", icon: "▦", tone: "blue" },
       // Greyed "coming soon" until launch -- the /popular-searches page itself
       // is IP/preview-gated (see middleware.ts), so the public sees a Coming
       // Soon placeholder if they click through; the owner sees the real page.
