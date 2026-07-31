@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import type { AnyFilterKey } from "@/lib/pickerFilters";
 import { findPredicate, type Predicate } from "@/lib/screenerFields";
 
@@ -22,6 +22,18 @@ type PickerFilterContextValue = {
 
   matchCount: number | null;
   setMatchCount: (count: number | null) => void;
+
+  // Is the selection still exactly the page's own seeded condition?
+  //
+  // Several things want to present differently once the visitor has changed the
+  // filters -- the hero copy, the Select Screener pill, and the per-card tone
+  // dot -- and all of them would otherwise need the page's config threaded down
+  // to them. The provider already receives the seed, so it can answer this once
+  // and consumers just ask.
+  //
+  // True outside a provider too (see usePickerFilter's inert fallback), so
+  // anything reading it on a non-filterable page keeps its existing behaviour.
+  isPristine: boolean;
 };
 
 const PickerFilterContext = createContext<PickerFilterContextValue | null>(null);
@@ -119,6 +131,21 @@ export function PickerFilterProvider({
     });
   }, []);
 
+  // The seed as it was at mount, frozen. A ref rather than the prop itself
+  // because `initialFilters` is re-created on every render when a page passes
+  // no presetFilters, and because the question being answered is "has the
+  // visitor moved away from what this page started as" -- which is about the
+  // original seed, not whatever the prop happens to say now.
+  const presetRef = useRef<AnyFilterKey[]>(initialFilters);
+
+  // Same set, ignoring order. Any category or numeric predicate makes it false
+  // by definition, since the seed only ever contains flags.
+  const isPristine = useMemo(() => {
+    const preset = presetRef.current;
+    if (predicates.length !== preset.length) return false;
+    return predicates.every((p) => p.kind === "flag" && preset.includes(p.field));
+  }, [predicates]);
+
   const value = useMemo<PickerFilterContextValue>(
     () => ({
       predicates,
@@ -131,6 +158,7 @@ export function PickerFilterProvider({
       toggleSector,
       matchCount,
       setMatchCount,
+      isPristine,
     }),
     [
       predicates,
@@ -142,6 +170,7 @@ export function PickerFilterProvider({
       selectedSectors,
       toggleSector,
       matchCount,
+      isPristine,
     ]
   );
 
@@ -165,5 +194,9 @@ export function usePickerFilter(): PickerFilterContextValue {
     toggleSector: () => {},
     matchCount: null,
     setMatchCount: () => {},
+    // Nothing is seeded and nothing can be selected, so "unchanged from the
+    // page's own state" is trivially true -- consumers keep their default
+    // presentation.
+    isPristine: true,
   };
 }
