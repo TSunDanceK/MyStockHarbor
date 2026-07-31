@@ -23,6 +23,17 @@ export const metadata: Metadata = {
   },
 };
 
+// kind is "preset", not "section": ships the whole universe with `buyTheDip`
+// pre-ticked so Select Screener filters in place. sectionIncludes is kept so the
+// section's badge and ordering are re-applied on top. See buildEntries in
+// PickerResultPage.tsx.
+//
+// `buyTheDip` is this page's condition -- the drawdown-from-all-time-high check
+// is the same test, just named for what it's used for rather than how it's
+// measured. Note the Select Screener checkbox therefore reads "Buy The Dip"
+// while the page heading reads "Stocks Down 20% From All-Time Highs"; the URL
+// and metadata are deliberately left alone, since renaming a ranking page means
+// redirects and starting its search history over.
 const config: PickerResultConfig = {
   href: "/stocks-down-20-from-all-time-highs",
   eyebrow: "Pullback stock screener",
@@ -32,7 +43,8 @@ const config: PickerResultConfig = {
   explainerBody: "A large drawdown can create opportunity, but it can also signal real weakness. Use this page to find names worth reviewing, then check whether price is stabilising or still making lower lows.",
   emptyText: "No stocks down 20% from all-time highs are currently available from the live picker feed.",
   tone: "yellow",
-  kind: "section",
+  kind: "preset",
+  presetFilters: ["buyTheDip"],
   sectionIncludes: ["stocks down 20"],
   maxItems: 36,
 };
