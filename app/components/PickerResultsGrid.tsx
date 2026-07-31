@@ -6,6 +6,7 @@ import MiniPickerCandleChart from "@/app/components/MiniPickerCandleChart";
 import { usePickerFilter } from "@/app/components/PickerFilterContext";
 import type { ResultEntry } from "@/app/components/PickerResultPage";
 import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type AnyFilterKey } from "@/lib/pickerFilters";
+import { describePredicate, valueSatisfies } from "@/lib/screenerFields";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -229,6 +230,17 @@ function num(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 
+// Resolves a registry field key to the value to test a predicate against.
+// Everything in lib/screenerFields.ts is a plain ResultEntry property except
+// these three, which are derived (pool quote, falling back to the end-of-day
+// close/volume from chartPoints) -- see deriveRow above.
+function valueForField(entry: ResultEntry, derived: DerivedRow, field: string): unknown {
+  if (field === "price") return derived.price;
+  if (field === "changePct") return derived.changePct;
+  if (field === "volume") return derived.volume;
+  return (entry as unknown as Record<string, unknown>)[field];
+}
+
 function fmtCap(v: number | null) {
   if (v == null || !Number.isFinite(v)) return null;
   const abs = Math.abs(v);
@@ -328,7 +340,7 @@ export default function PickerResultsGrid({
   splitReasonsBySelection?: boolean;
   collapseReasons?: boolean;
 }) {
-  const { selectedFilters, selectedSectors, setMatchCount } = usePickerFilter();
+  const { predicates, selectedFilters, setMatchCount } = usePickerFilter();
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [activeTab, setActiveTab] = useState<TabKey>("general");
   const [sort, setSort] = useState<SortState>(null);
@@ -413,27 +425,24 @@ export default function PickerResultsGrid({
 
   const activeColumns = columnSets[activeTab];
 
-  // Two dimensions with deliberately different semantics: the condition
-  // checkboxes AND together (oversold AND above MA50), while the sector
-  // checkboxes OR together (Technology OR Healthcare) and are then ANDed with
-  // the conditions as a single group. A symbol whose profile hasn't warmed yet
-  // has no sector, so it falls outside any sector selection rather than
-  // silently passing it.
-  const filteredEntries = useMemo(() => {
-    const hasFilters = selectedFilters.length > 0;
-    const hasSectors = selectedSectors.length > 0;
-    if (!hasFilters && !hasSectors) return hideUntilFiltered ? [] : entries;
-    return entries.filter((entry) => {
-      if (hasSectors && !(entry.sector && selectedSectors.includes(entry.sector))) return false;
-      return selectedFilters.every((key) => entry[key] === true);
-    });
-  }, [entries, selectedFilters, selectedSectors, hideUntilFiltered]);
-
   const derivedByEntry = useMemo(() => {
     const map = new WeakMap<ResultEntry, DerivedRow>();
     for (const entry of entries) map.set(entry, deriveRow(entry));
     return map;
   }, [entries]);
+
+  // One evaluator over the predicate list, replacing the separate condition and
+  // sector loops this used to run. Semantics are unchanged: predicates AND with
+  // each other, values within a single category predicate OR (see
+  // valueSatisfies in lib/screenerFields.ts). The difference is that a numeric
+  // filter now needs no new code here at all -- it's just another predicate.
+  const filteredEntries = useMemo(() => {
+    if (!predicates.length) return hideUntilFiltered ? [] : entries;
+    return entries.filter((entry) => {
+      const derived = derivedByEntry.get(entry) ?? deriveRow(entry);
+      return predicates.every((p) => valueSatisfies(p, valueForField(entry, derived, p.field)));
+    });
+  }, [entries, predicates, hideUntilFiltered, derivedByEntry]);
 
   const sortedEntries = useMemo(() => {
     const sortCol = sort ? activeColumns.find((c) => c.key === sort.key) : null;
@@ -465,13 +474,12 @@ export default function PickerResultsGrid({
 
   useEffect(() => {
     setVisibleCount(pageSize);
-  }, [selectedFilters, selectedSectors, sort, viewMode, pageSize, activeTab]);
+  }, [predicates, sort, viewMode, pageSize, activeTab]);
 
   useEffect(() => {
-    const anySelection = selectedFilters.length > 0 || selectedSectors.length > 0;
-    setMatchCount(anySelection ? filteredEntries.length : null);
+    setMatchCount(predicates.length ? filteredEntries.length : null);
     return () => setMatchCount(null);
-  }, [filteredEntries.length, selectedFilters.length, selectedSectors.length, setMatchCount]);
+  }, [filteredEntries.length, predicates.length, setMatchCount]);
 
   const shown = sortedEntries.slice(0, visibleCount);
   const hasMore = visibleCount < sortedEntries.length;
@@ -567,13 +575,11 @@ export default function PickerResultsGrid({
             ))}
           </div>
         ) : null}
-        {selectedFilters.length || selectedSectors.length ? (
+        {predicates.length ? (
           <p className="filterMatchLine">
             {filteredEntries.length} of {entries.length} match your{" "}
-            {selectedFilters.length + (selectedSectors.length ? 1 : 0) === 1
-              ? "filter"
-              : `${selectedFilters.length + (selectedSectors.length ? 1 : 0)} filters`}
-            {selectedSectors.length ? ` (sector: ${selectedSectors.join(", ")})` : ""}.
+            {predicates.length === 1 ? "filter" : `${predicates.length} filters`}:{" "}
+            {predicates.map(describePredicate).join(" · ")}.
           </p>
         ) : null}
       </div>
@@ -670,9 +676,9 @@ export default function PickerResultsGrid({
         )
       ) : (
         <div className="emptyBox">
-          {hideUntilFiltered && !selectedFilters.length && !selectedSectors.length
+          {hideUntilFiltered && !predicates.length
             ? "Select at least one condition on the left to see matching stocks."
-            : selectedFilters.length || selectedSectors.length
+            : predicates.length
             ? "No current results match the filters you've selected."
             : emptyText}
         </div>
