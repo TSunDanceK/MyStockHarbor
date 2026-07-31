@@ -14,7 +14,7 @@ type NavChild = {
   isActive: (pathname: string) => boolean;
   stockNav?: StockNavKind;
   // Visually distinguishes a single "home" link for a dropdown section
-  // (e.g. "Main Pickers Page") from the grouped items below it.
+  // (e.g. "Advanced Pickers Page") from the grouped items below it.
   emphasize?: boolean;
 };
 
@@ -767,20 +767,21 @@ export default function SiteHeader({
         menuMinWidth: 220,
         submenuMinWidth: 250,
         entries: [
-          // Two landing options at the top of the Pickers dropdown:
-          // "Main Pickers Page" -> the full All Stocks screener
-          // (/stock-screener, no filter pre-applied), and "Quick Pickers
-          // Page" -> the original /pickers page.
+          // Two landing options at the top of the Pickers dropdown, named for
+          // what they are rather than which came first: "Advanced Pickers Page"
+          // -> the full screener at /stock-screener (every condition available
+          // as a checkbox, nothing pre-applied), and "Basic Pickers Page" ->
+          // the original /pickers accordion.
           {
             kind: "link",
-            label: "Main Pickers Page",
+            label: "Advanced Pickers Page",
             href: "/stock-screener",
             isActive: (path) => path === "/stock-screener",
             emphasize: true,
           },
           {
             kind: "link",
-            label: "Quick Pickers Page",
+            label: "Basic Pickers Page",
             href: "/pickers",
             isActive: (path) => path === "/pickers",
             emphasize: true,
@@ -1206,7 +1207,7 @@ export default function SiteHeader({
           user-select: none;
         }
 
-        /* "Home" link for a dropdown section (e.g. "Main Pickers Page") --
+        /* "Home" link for a dropdown section (e.g. "Advanced Pickers Page") --
            slightly bolder/brighter than the grouped items below it. */
         .mshGlobalHeaderDropdownItem--emphasis {
           font-weight: 800;
