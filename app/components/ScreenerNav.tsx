@@ -428,7 +428,7 @@ export default function ScreenerNav({
   categoryValues?: Record<string, string[]>;
 }) {
   const [open, setOpen] = useState(false);
-  const { matchCount, selectedFilters, selectedSectors, clearFilters } = usePickerFilter();
+  const { matchCount, predicates, selectedFilters, selectedSectors, clearFilters } = usePickerFilter();
   const showSidebar = variant !== "trigger";
   const showTrigger = variant !== "sidebar";
 
@@ -453,6 +453,42 @@ export default function ScreenerNav({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // While the sheet is open the page behind it must not move at all. Two
+  // separate things were letting it: touching the backdrop scrolled the page
+  // directly, and a swipe that ran the panel's own scroller to its end carried
+  // on into the page underneath (scroll chaining -- the CSS side of that is
+  // overscroll-behavior on .screenerOverlayScroll below).
+  //
+  // overflow: hidden on <body> alone is not enough on iOS Safari, which happily
+  // scrolls it anyway. Pinning the body with position: fixed at a negative
+  // offset is the reliable version: the page is frozen exactly where it was,
+  // and the offset is restored on close so closing the sheet doesn't jump you
+  // back to the top of a 500-row list.
+  useEffect(() => {
+    if (!open) return;
+    const body = document.body;
+    const scrollY = window.scrollY;
+    const previous = {
+      position: body.style.position,
+      top: body.style.top,
+      width: body.style.width,
+      overflow: body.style.overflow,
+    };
+
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.width = "100%";
+    body.style.overflow = "hidden";
+
+    return () => {
+      body.style.position = previous.position;
+      body.style.top = previous.top;
+      body.style.width = previous.width;
+      body.style.overflow = previous.overflow;
+      window.scrollTo(0, scrollY);
+    };
+  }, [open]);
 
   const currentLabel =
     GROUPS.flatMap((group) => group.items).find((item) => item.href === currentHref)?.label ??
@@ -491,6 +527,11 @@ export default function ScreenerNav({
             <span className="screenerSelectMain">
               <span className="screenerSelectIcon" aria-hidden="true">⏷</span>
               Select Screener
+              {predicates.length ? (
+                <span className="screenerSelectCount" aria-label={`${predicates.length} filters applied`}>
+                  {predicates.length}
+                </span>
+              ) : null}
             </span>
             <span className="screenerSelectCurrent">
               {currentLabel}
@@ -626,6 +667,13 @@ export default function ScreenerNav({
         .screenerSearchSource { margin-left: 4px; font-size: 10px; font-weight: 700; opacity: 0.55; }
 
         .screenerMobileBar { display: none; }
+        .screenerSelectCount {
+          display: inline-flex; align-items: center; justify-content: center;
+          min-width: 20px; height: 20px; padding: 0 6px; margin-left: 2px;
+          border-radius: 999px;
+          background: #22c55e; color: #052e16;
+          font-size: 11.5px; font-weight: 950; line-height: 1;
+        }
         .screenerSelectBtn {
           width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px;
           padding: 14px 16px; border-radius: 16px;
@@ -673,7 +721,13 @@ export default function ScreenerNav({
         }
         .screenerOverlayPanel {
           position: relative; margin-top: auto; width: 100%;
-          max-height: min(82dvh, calc(100dvh - 76px - env(safe-area-inset-top)));
+          /* Fixed "height", not "max-height": with max-height the panel was
+             content-driven, so it only filled the screen when the list
+             happened to be long enough and otherwise opened as a short slip
+             partway up. Fixing the height means it always opens to the same
+             full-height sheet regardless of where you were on the page or how
+             many groups are visible. */
+          height: min(82dvh, calc(100dvh - 76px - env(safe-area-inset-top)));
           display: flex; flex-direction: column;
           border-top-left-radius: 22px; border-top-right-radius: 22px;
           border: 1px solid rgba(255,255,255,0.10); border-bottom: 0;
@@ -692,6 +746,11 @@ export default function ScreenerNav({
         }
         .screenerOverlayScroll {
           flex: 1 1 auto; overflow-y: auto; padding: 14px 14px 24px;
+          /* Keeps a scroll gesture inside this panel once it reaches its top or
+             bottom, instead of handing the remainder to the page behind -- which
+             is what made scrolling feel like it was moving two things at once. */
+          overscroll-behavior: contain;
+          -webkit-overflow-scrolling: touch;
           scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent;
         }
         .screenerOverlayFooter {
@@ -714,6 +773,11 @@ export default function ScreenerNav({
 
         @media (max-width: 980px) {
           .screenerSidebar { display: none; }
+          /* Stickiness lives on the .screenerTriggerWrap wrapper in
+             PickerResultPage.tsx, not here. Sticky only travels within its own
+             parent's box, and this element's parent IS that wrapper -- which is
+             only as tall as the button, so sticking it here gave it nowhere to
+             go. See the note there. */
           .screenerMobileBar { display: block; }
         }
         @media (max-width: 420px) {

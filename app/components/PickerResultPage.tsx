@@ -992,11 +992,55 @@ export default async function PickerResultPage({
         .listTable tbody tr.highlight { animation: pickerHighlightPulse 2.4s ease-out 1; scroll-margin-top: 90px; }
         @media (max-width: 980px) {
           .resultShell { grid-template-columns: 1fr; gap: 14px; }
+          /* The Select Screener bar sticks HERE, on the wrapper, not on
+             .screenerMobileBar inside it. A sticky element can only travel
+             within its own parent's box, and that wrapper is only as tall as
+             the button -- so sticking the button to it gave it nowhere to go
+             and it scrolled away immediately. This wrapper's parent is
+             .resultMain, which spans the whole page body, so there's real
+             travel available.
+
+             That's a separate rule from the overflow one below: an ancestor
+             that is a scroll container ALSO breaks sticky, which is why
+             .resultWrap uses overflow-x: clip rather than hidden. Both had to
+             be right; fixing only the overflow left this still not sticking.
+
+             top matches the site header's height so it docks flush underneath
+             (header is z-index 100, this is 60, the results table's sticky
+             cells are 1-3, and the Select Screener overlay is 70 so it still
+             covers this when open). */
+          .screenerTriggerWrap {
+            position: sticky;
+            top: 62px;
+            z-index: 60;
+            margin: 20px 0 4px;
+            padding: 8px 0;
+            /* Opaque, and deliberately NO backdrop-filter. backdrop-filter (like
+               transform and filter) makes an element a containing block for
+               position: fixed descendants -- and the Select Screener overlay is
+               rendered inside this wrapper. Blurring here silently reparented
+               that overlay, so "position: fixed; inset: 0" stopped meaning the
+               viewport and started meaning this bar: the sheet opened anchored
+               to wherever the button happened to be instead of filling the
+               screen. A flat colour gives the same visual result at this scroll
+               position, since the page gradient has faded to #06080d by then. */
+            background: #06080d;
+          }
         }
         @media (max-width: 720px) {
           .pickerResultPage, .pickerResultPage * { box-sizing: border-box; }
-          .pickerResultPage { overflow-x: hidden; }
-          .resultWrap { width: 100%; padding: 14px 10px 44px; overflow-x: hidden; }
+          /* Deliberately "clip", not "hidden". Per the CSS Overflow spec,
+             setting one axis to a non-visible value forces the other axis to
+             compute as auto, which turns the element into a scroll container --
+             and a scroll container silently breaks position: sticky for
+             everything inside it. That's the exact bug that stopped the results
+             table's sticky header working, and it would stop the Select
+             Screener bar sticking here. "clip" is the carve-out: paired with
+             "visible" on the other axis neither value is coerced, and clip
+             never creates a scroll container. Same horizontal-overflow
+             protection, without the side effect. */
+          .pickerResultPage { overflow-x: clip; }
+          .resultWrap { width: 100%; padding: 14px 10px 44px; overflow-x: clip; }
           .hero { border-radius: 20px; padding: 15px; }
           .eyebrow { max-width: 100%; white-space: normal; text-align: center; line-height: 1.35; }
           .hero h1 { font-size: clamp(28px, 9vw, 36px); line-height: 1.08; letter-spacing: -0.045em; }
@@ -1018,6 +1062,9 @@ export default async function PickerResultPage({
           .reasonChip { font-size: 10.5px; padding: 4px 8px; }
           .note { min-height: 0; font-size: 13px; }
           .listTableWrap { max-height: 58vh; }
+          /* Header is shorter below this breakpoint (10px padding + 40px
+             hamburger + border, vs 12px + 38px logo above it). */
+          .screenerTriggerWrap { top: 60px; }
         }
         @media (max-width: 390px) { .resultWrap { padding-left: 8px; padding-right: 8px; } .hero, .resultCard { padding: 12px; } }
       `}</style>
