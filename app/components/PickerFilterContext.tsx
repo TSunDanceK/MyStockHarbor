@@ -1,12 +1,25 @@
 "use client";
 
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import type { AnyFilterKey } from "@/lib/pickerFilters";
+import { findPredicate, type Predicate } from "@/lib/screenerFields";
 
 type PickerFilterContextValue = {
+  // ---- the store ----------------------------------------------------------
+  predicates: Predicate[];
+  setPredicate: (predicate: Predicate) => void;
+  removePredicate: (kind: Predicate["kind"], field: string) => void;
+  clearFilters: () => void;
+
+  // ---- derived views over the store ---------------------------------------
+  // Kept so ScreenerNav and PickerResultsGrid can carry on talking in terms of
+  // "which conditions are ticked" and "which sectors are ticked" while the
+  // storage underneath is a single predicate list. See the note on the provider.
   selectedFilters: AnyFilterKey[];
   toggleFilter: (key: AnyFilterKey) => void;
-  clearFilters: () => void;
+  selectedSectors: string[];
+  toggleSector: (sector: string) => void;
+
   matchCount: number | null;
   setMatchCount: (count: number | null) => void;
 };
@@ -14,28 +27,32 @@ type PickerFilterContextValue = {
 const PickerFilterContext = createContext<PickerFilterContextValue | null>(null);
 
 // Wraps a single picker page's left-column nav + results grid so the
-// checkboxes rendered inside ScreenerNav (see NavList/MoreFilters there) and
-// the filtering/pagination done in PickerResultsGrid can share one
-// selection without a server round trip -- the same client-side-only
-// filtering /pickers' own PickersClient.tsx does, just lifted one level so
-// two sibling components on the same page can both read/write it.
+// checkboxes rendered inside ScreenerNav and the filtering/pagination done in
+// PickerResultsGrid can share one selection without a server round trip.
 //
-// selectedFilters can mix two kinds of keys (see lib/pickerFilters.ts):
-// the 18-condition custom builder (FilterKey, e.g. "oversold") and the
-// category-membership checks ScreenerNav's own nav items now carry
-// (CategoryFilterKey, e.g. "hasBuySignal" for the Buy Signals item). Both
-// are ANDed together identically by PickerResultsGrid.
+// The store is a flat list of Predicates (see lib/screenerFields.ts). That
+// replaced two hardcoded arrays -- an AnyFilterKey[] of ticked conditions and a
+// string[] of ticked sectors -- which between them could only ever express two
+// kinds of filter. Numeric filters (PE under 15) and a searchable industry list
+// don't fit either shape, and bolting on a third and fourth array would have
+// meant another piece of state, another toggle, another clause in the grid and
+// another block of UI for every kind added.
 //
-// `initialFilters` seeds the selection. Dedicated condition pages (the
-// "preset" kind -- Oversold, Below MA200, ...) pass their own condition in
-// here instead of having the server pre-filter the entry list: the page then
-// ships the FULL analyzed universe with that one box already ticked. Because
-// useState's initial value is used during the server render too, the SSR'd
-// HTML is still just that condition's matches (so the page's SEO content is
-// unchanged), but the visitor can now untick it -- or AND a second condition
-// onto it -- entirely client-side, with no navigation and no refetch. That's
-// what lets the mobile "Select Screener" sheet stay open while the results
-// behind it change. See PickerResultPage.tsx.
+// Nothing else has had to change yet: `selectedFilters` and `selectedSectors`
+// are derived from the predicate list on the way out, and `toggleFilter` /
+// `toggleSector` write back into it, so both consumers still see exactly the
+// API they had before. That's deliberate -- this is a storage change landing on
+// its own, with the UI that exploits it following separately.
+//
+// `initialFilters` seeds the selection. Dedicated condition pages (Oversold,
+// Below MA200, Buy Signals, ...) pass their own condition here rather than
+// having the server pre-filter the entry list, so the page ships the FULL
+// analyzed universe with that box already ticked. Because useState's initial
+// value is used during the server render too, the SSR'd HTML is still just that
+// condition's matches -- the page's indexed content is unchanged -- but the
+// visitor can untick it, or AND another condition onto it, entirely
+// client-side. That's what lets the mobile "Select Screener" sheet stay open
+// while the results behind it change. See PickerResultPage.tsx.
 export function PickerFilterProvider({
   children,
   initialFilters = [],
@@ -43,34 +60,109 @@ export function PickerFilterProvider({
   children: ReactNode;
   initialFilters?: AnyFilterKey[];
 }) {
-  const [selectedFilters, setSelectedFilters] = useState<AnyFilterKey[]>(initialFilters);
+  const [predicates, setPredicates] = useState<Predicate[]>(() =>
+    initialFilters.map((field) => ({ kind: "flag", field }))
+  );
   const [matchCount, setMatchCount] = useState<number | null>(null);
+
+  // One predicate per (kind, field). Adding a second sector extends the
+  // existing category predicate's `values` rather than appending another --
+  // that's what makes values OR while predicates AND.
+  const setPredicate = useCallback((predicate: Predicate) => {
+    setPredicates((prev) => {
+      const rest = prev.filter((p) => !(p.kind === predicate.kind && p.field === predicate.field));
+      return [...rest, predicate];
+    });
+  }, []);
+
+  const removePredicate = useCallback((kind: Predicate["kind"], field: string) => {
+    setPredicates((prev) => prev.filter((p) => !(p.kind === kind && p.field === field)));
+  }, []);
+
+  const clearFilters = useCallback(() => setPredicates([]), []);
+
+  const selectedFilters = useMemo(
+    () =>
+      predicates
+        .filter((p): p is Extract<Predicate, { kind: "flag" }> => p.kind === "flag")
+        .map((p) => p.field),
+    [predicates]
+  );
+
+  const selectedSectors = useMemo(() => {
+    const sectorPredicate = findPredicate(predicates, "category", "sector");
+    return sectorPredicate && sectorPredicate.kind === "category" ? sectorPredicate.values : [];
+  }, [predicates]);
+
+  const toggleFilter = useCallback((key: AnyFilterKey) => {
+    setPredicates((prev) => {
+      const exists = prev.some((p) => p.kind === "flag" && p.field === key);
+      if (exists) return prev.filter((p) => !(p.kind === "flag" && p.field === key));
+      return [...prev, { kind: "flag", field: key }];
+    });
+  }, []);
+
+  // Toggling the last remaining value drops the whole predicate rather than
+  // leaving an empty one behind, so "no sector selected" is represented one way
+  // only and the grid never has to special-case an empty values array.
+  const toggleSector = useCallback((sector: string) => {
+    setPredicates((prev) => {
+      const existing = prev.find((p) => p.kind === "category" && p.field === "sector");
+      if (!existing || existing.kind !== "category") {
+        return [...prev, { kind: "category", field: "sector", values: [sector] }];
+      }
+      const values = existing.values.includes(sector)
+        ? existing.values.filter((v) => v !== sector)
+        : [...existing.values, sector];
+      const rest = prev.filter((p) => !(p.kind === "category" && p.field === "sector"));
+      return values.length ? [...rest, { kind: "category", field: "sector", values }] : rest;
+    });
+  }, []);
 
   const value = useMemo<PickerFilterContextValue>(
     () => ({
+      predicates,
+      setPredicate,
+      removePredicate,
+      clearFilters,
       selectedFilters,
-      toggleFilter: (key) =>
-        setSelectedFilters((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key])),
-      clearFilters: () => setSelectedFilters([]),
+      toggleFilter,
+      selectedSectors,
+      toggleSector,
       matchCount,
       setMatchCount,
     }),
-    [selectedFilters, matchCount]
+    [
+      predicates,
+      setPredicate,
+      removePredicate,
+      clearFilters,
+      selectedFilters,
+      toggleFilter,
+      selectedSectors,
+      toggleSector,
+      matchCount,
+    ]
   );
 
   return <PickerFilterContext.Provider value={value}>{children}</PickerFilterContext.Provider>;
 }
 
-// Safe to call outside a provider -- returns inert no-op state so
-// ScreenerNav (used on many pages that don't opt into filtering) keeps
-// working unchanged everywhere it isn't wrapped in a PickerFilterProvider.
+// Safe to call outside a provider -- returns inert no-op state so ScreenerNav
+// (used on many pages that don't opt into filtering) keeps working unchanged
+// everywhere it isn't wrapped in a PickerFilterProvider.
 export function usePickerFilter(): PickerFilterContextValue {
   const ctx = useContext(PickerFilterContext);
   if (ctx) return ctx;
   return {
+    predicates: [],
+    setPredicate: () => {},
+    removePredicate: () => {},
+    clearFilters: () => {},
     selectedFilters: [],
     toggleFilter: () => {},
-    clearFilters: () => {},
+    selectedSectors: [],
+    toggleSector: () => {},
     matchCount: null,
     setMatchCount: () => {},
   };
