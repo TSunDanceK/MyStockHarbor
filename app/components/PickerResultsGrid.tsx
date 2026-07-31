@@ -6,7 +6,8 @@ import MiniPickerCandleChart from "@/app/components/MiniPickerCandleChart";
 import { usePickerFilter } from "@/app/components/PickerFilterContext";
 import type { ResultEntry } from "@/app/components/PickerResultPage";
 import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type AnyFilterKey } from "@/lib/pickerFilters";
-import { describePredicate, valueSatisfies } from "@/lib/screenerFields";
+import ScreenerFilterBar from "@/app/components/ScreenerFilterBar";
+import { valueSatisfies } from "@/lib/screenerFields";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -575,13 +576,7 @@ export default function PickerResultsGrid({
             ))}
           </div>
         ) : null}
-        {predicates.length ? (
-          <p className="filterMatchLine">
-            {filteredEntries.length} of {entries.length} match your{" "}
-            {predicates.length === 1 ? "filter" : `${predicates.length} filters`}:{" "}
-            {predicates.map(describePredicate).join(" · ")}.
-          </p>
-        ) : null}
+        <ScreenerFilterBar matched={filteredEntries.length} total={entries.length} />
       </div>
 
       {shown.length ? (
