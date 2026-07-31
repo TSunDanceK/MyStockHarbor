@@ -228,11 +228,57 @@ function NavList({
               if (filterMode && item.filterKey) {
                 const key = item.filterKey;
                 const checked = selectedFilters.includes(key);
+                const rowClass = checked
+                  ? "screenerNavItem screenerNavCheckable checked"
+                  : "screenerNavItem screenerNavCheckable";
+
+                // With an href the row carries TWO actions, not one: the box
+                // filters this page in place, the word opens that condition's
+                // own page. So it cannot be a <label> wrapping the lot -- a
+                // label hands every tap to its control, and nesting a link
+                // inside one is invalid markup besides. The row becomes a plain
+                // div, the input gets an aria-label of its own, and the hit
+                // area around it is padded out (see .screenerNavCheck) so the
+                // tick target stays thumb-sized now that the text is no longer
+                // part of it.
+                //
+                // This also puts the internal links back. Once every picker
+                // page switched to filter mode, these rows stopped rendering as
+                // links at all, so the whole site had no path into the
+                // condition pages except the header dropdown -- despite those
+                // pages carrying explainers and chart deep links nothing else
+                // has.
+                if (item.href) {
+                  return (
+                    <div key={item.filterKey} className={rowClass}>
+                      <span className="screenerNavCheck">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleFilter(key)}
+                          aria-label={`Filter this page by ${item.label}`}
+                        />
+                      </span>
+                      <span className="screenerNavIcon" style={{ color: colour }}>
+                        {item.icon}
+                      </span>
+                      <Link
+                        href={item.href}
+                        onClick={onNavigate}
+                        className="screenerNavLabelLink"
+                        aria-current={active ? "page" : undefined}
+                      >
+                        <span className="screenerNavLabel">{item.label}</span>
+                        <span className="screenerNavGo" aria-hidden="true">›</span>
+                      </Link>
+                    </div>
+                  );
+                }
+
+                // No page to open, so the whole row is still just the checkbox
+                // and the label can go on doing its normal job.
                 return (
-                  <label
-                    key={item.filterKey}
-                    className={checked ? "screenerNavItem screenerNavCheckable checked" : "screenerNavItem screenerNavCheckable"}
-                  >
+                  <label key={item.filterKey} className={rowClass}>
                     <input type="checkbox" checked={checked} onChange={() => toggleFilter(key)} />
                     <span className="screenerNavIcon" style={{ color: colour }}>
                       {item.icon}
@@ -660,7 +706,25 @@ export default function ScreenerNav({
         .screenerNavCheckable.checked {
           background: rgba(34,197,94,0.12); border-color: rgba(34,197,94,0.4); color: #f8fafc;
         }
-        .screenerNavCheckable input[type="checkbox"] { flex: 0 0 auto; width: 15px; height: 15px; accent-color: #22c55e; cursor: pointer; }
+        .screenerNavCheckable input[type="checkbox"] { flex: 0 0 auto; width: 16px; height: 16px; accent-color: #22c55e; cursor: pointer; }
+        /* Padded hit area around the box. The word next to it is a link now, so
+           this is the ONLY way to tick the row -- a bare 16px checkbox is well
+           under any sane touch target. Negative margins absorb the extra height
+           back into the row so rows do not grow. */
+        .screenerNavCheck {
+          flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+          width: 36px; height: 34px; margin: -7px -6px -7px -8px; cursor: pointer;
+        }
+        /* Fills the rest of the row, so tapping anywhere right of the box opens
+           the page -- the two targets between them cover the whole row with no
+           dead zone. */
+        .screenerNavLabelLink {
+          display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 auto;
+          color: inherit; text-decoration: none;
+        }
+        .screenerNavLabelLink:hover .screenerNavLabel { text-decoration: underline; }
+        .screenerNavGo { flex: 0 0 auto; margin-left: auto; font-size: 16px; line-height: 1; color: rgba(148,163,184,0.5); }
+        .screenerNavLabelLink:hover .screenerNavGo { color: #93c5fd; }
 
         .screenerSectorHint { padding: 4px 8px 0; font-size: 10.5px; line-height: 1.4; font-weight: 700; color: rgba(192,132,252,0.75); }
 
@@ -822,6 +886,9 @@ export default function ScreenerNav({
         @media (max-width: 420px) {
           .screenerSelectBtn { font-size: 14px; padding: 12px 14px; gap: 10px; }
           .screenerSelectCurrent { font-size: 12px; }
+          /* Two targets share this row on a phone, so give them a little more
+             vertical room to land in. */
+          .screenerNavCheckable { padding-top: 11px; padding-bottom: 11px; }
         }
       `}</style>
     </>
