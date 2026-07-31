@@ -26,6 +26,12 @@ export const metadata: Metadata = {
   },
 };
 
+// kind is "preset", not "section": ships the whole universe with
+// `weeklyMa200Proximity` pre-ticked so Select Screener filters in place.
+// sectionIncludes + filterTimeframe are kept so the weekly section's badge and
+// ordering are re-applied on top (filterTimeframe now only scopes which section
+// items enrich, since the W/D split is already carried by the flag itself).
+// See buildEntries in PickerResultPage.tsx.
 const config: PickerResultConfig = {
   href: "/stocks-near-weekly-200-day-moving-average",
   eyebrow: "Weekly MA200 stock screener",
@@ -38,7 +44,8 @@ const config: PickerResultConfig = {
   emptyText:
     "No weekly MA200 proximity stocks are currently available from the live picker feed.",
   tone: "yellow",
-  kind: "section",
+  kind: "preset",
+  presetFilters: ["weeklyMa200Proximity"],
   sectionIncludes: ["weekly ma200"],
   filterTimeframe: "W",
   maxItems: 36,

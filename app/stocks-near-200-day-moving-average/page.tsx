@@ -23,6 +23,10 @@ export const metadata: Metadata = {
   },
 };
 
+// kind is "preset", not "section": ships the whole universe with
+// `dailyMa200Proximity` pre-ticked so Select Screener filters in place.
+// sectionIncludes is kept so the section's badge and ordering are re-applied on
+// top. See buildEntries in PickerResultPage.tsx.
 const config: PickerResultConfig = {
   href: "/stocks-near-200-day-moving-average",
   eyebrow: "MA200 stock screener",
@@ -32,7 +36,8 @@ const config: PickerResultConfig = {
   explainerBody: "The 200-day moving average can act as support, resistance or a trend filter. Focus on whether price is reclaiming the level, defending it, or rejecting from it.",
   emptyText: "No MA200 proximity stocks are currently available from the live picker feed.",
   tone: "yellow",
-  kind: "section",
+  kind: "preset",
+  presetFilters: ["dailyMa200Proximity"],
   sectionIncludes: ["daily ma200"],
   maxItems: 36,
 };

@@ -27,6 +27,13 @@ export const metadata: Metadata = {
   },
 };
 
+// kind is "preset", not "section": ships the whole universe with `macroSrPick`
+// pre-ticked so Select Screener filters in place. That flag is derived from this
+// same section (see buildCategoryFlags), so the default set is identical to
+// before; sectionIncludes is kept so the S/R zone chart deep link (srLower /
+// srUpper / srKind) and the zone overlay on each card survive -- those come off
+// the section item, not the signal record. See buildEntries in
+// PickerResultPage.tsx.
 const config: PickerResultConfig = {
   href: "/macro-support-resistance-stocks",
   eyebrow: "Support and resistance screener",
@@ -39,7 +46,8 @@ const config: PickerResultConfig = {
   emptyText:
     "No strong macro support or resistance candidates are currently available from the live picker feed.",
   tone: "blue",
-  kind: "section",
+  kind: "preset",
+  presetFilters: ["macroSrPick"],
   sectionIncludes: ["macro", "support", "resistance"],
   maxItems: 36,
 };

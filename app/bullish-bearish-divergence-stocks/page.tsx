@@ -27,6 +27,11 @@ export const metadata: Metadata = {
   },
 };
 
+// kind is "preset", not "section": ships the whole universe with `divergencePick`
+// pre-ticked so Select Screener filters in place. That flag is derived from this
+// same section (see buildCategoryFlags), so the default set is identical to
+// before; sectionIncludes is kept so each card's badge and the section ordering
+// are re-applied on top. See buildEntries in PickerResultPage.tsx.
 const config: PickerResultConfig = {
   href: "/bullish-bearish-divergence-stocks",
   eyebrow: "Divergence stock screener",
@@ -38,7 +43,8 @@ const config: PickerResultConfig = {
     "Divergence appears when price and momentum stop moving in sync — in bullish divergence price keeps weakening while momentum improves, in bearish divergence price keeps pushing higher while momentum fades. Each card here shows whichever of RSI or MACD produced the strongest divergence signal for that stock. Divergence alone isn't a signal to act on — check structure, support and resistance, and follow-through before deciding.",
   emptyText: "No bullish or bearish divergence stocks are currently available from the live picker feed.",
   tone: "blue",
-  kind: "section",
+  kind: "preset",
+  presetFilters: ["divergencePick"],
   sectionIncludes: ["divergence"],
   maxItems: 36,
 };
