@@ -23,6 +23,15 @@ export const metadata: Metadata = {
   },
 };
 
+// kind stays "buySignals" -- that branch of buildEntries keeps this page's own
+// presentation (the "N of 9 bullish conditions met" note, the score pill driven
+// by that count, and reason chips drawn from BUY_REASON_DEFS rather than all 25
+// tracked conditions), which the generic "preset" path would flatten.
+//
+// presetFilters is what opts it into filtering in place: the page ships the full
+// universe with `hasBuySignal` pre-ticked, so Select Screener can narrow it
+// further (buy signals AND oversold) or widen it by unticking, without
+// navigating away. See PickerResultPage.tsx.
 const config: PickerResultConfig = {
   href: "/top-stocks-with-buy-signals",
   eyebrow: "Buy signal stock screener",
@@ -33,6 +42,7 @@ const config: PickerResultConfig = {
   emptyText: "No buy signal stocks are currently available from the live picker feed.",
   tone: "green",
   kind: "buySignals",
+  presetFilters: ["hasBuySignal"],
   maxItems: 36,
 };
 

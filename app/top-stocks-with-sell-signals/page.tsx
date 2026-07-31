@@ -23,6 +23,15 @@ export const metadata: Metadata = {
   },
 };
 
+// kind stays "sellSignals" -- that branch of buildEntries keeps this page's own
+// presentation (the "N of 5 bearish conditions met" note, the score pill driven
+// by that count, and reason chips drawn from SELL_REASON_DEFS rather than all 25
+// tracked conditions), which the generic "preset" path would flatten.
+//
+// presetFilters is what opts it into filtering in place: the page ships the full
+// universe with `hasSellSignal` pre-ticked, so Select Screener can narrow it
+// further (sell signals AND overbought) or widen it by unticking, without
+// navigating away. See PickerResultPage.tsx.
 const config: PickerResultConfig = {
   href: "/top-stocks-with-sell-signals",
   eyebrow: "Sell signal stock screener",
@@ -33,6 +42,7 @@ const config: PickerResultConfig = {
   emptyText: "No sell signal stocks are currently available from the live picker feed.",
   tone: "red",
   kind: "sellSignals",
+  presetFilters: ["hasSellSignal"],
   maxItems: 36,
 };
 
