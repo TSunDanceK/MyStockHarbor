@@ -726,35 +726,12 @@ export default function ScreenerNav({
 
         @media (max-width: 980px) {
           .screenerSidebar { display: none; }
-          /* Sticks just under the site header once scrolled past, so the
-             control you reach for most on a screener page is always where your
-             thumb expects it -- the top-left corner -- rather than scrolled off
-             somewhere above a 500-row table.
-             
-             z-index sits between the site header (100) and the results table's
-             sticky column/header (1-3), so it tucks under the header and over
-             the table. The overlay is 70, above this, so opening the sheet
-             still covers it.
-             
-             top is matched to the header's own height: 62px above 720px (12px
-             padding + 38px logo + border) and 60px below it (10px padding +
-             40px hamburger + border). The translucent background mirrors the
-             header's treatment so the seam between them is invisible. This only
-             works because .resultWrap uses overflow-x: clip rather than hidden
-             -- see the note in PickerResultPage.tsx. */
-          .screenerMobileBar {
-            display: block;
-            position: sticky;
-            top: 62px;
-            z-index: 60;
-            padding: 8px 0;
-            background: rgba(6,8,13,0.92);
-            -webkit-backdrop-filter: blur(10px);
-            backdrop-filter: blur(10px);
-          }
-        }
-        @media (max-width: 720px) {
-          .screenerMobileBar { top: 60px; }
+          /* Stickiness lives on the .screenerTriggerWrap wrapper in
+             PickerResultPage.tsx, not here. Sticky only travels within its own
+             parent's box, and this element's parent IS that wrapper -- which is
+             only as tall as the button, so sticking it here gave it nowhere to
+             go. See the note there. */
+          .screenerMobileBar { display: block; }
         }
         @media (max-width: 420px) {
           .screenerSelectBtn { font-size: 14px; padding: 12px 14px; gap: 10px; }
