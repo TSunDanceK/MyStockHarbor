@@ -37,7 +37,7 @@ function sameSelection(selected: AnyFilterKey[], preset: AnyFilterKey[]) {
  *     the initial filter state is seeded server-side, so the SSR'd HTML carries
  *     the page's real title and description. Nothing here changes the indexed
  *     content -- the swap only ever happens after a human ticks something.
- *   - Nothing ticked -> the page has become the All Stocks screener; say so.
+ *   - Nothing ticked -> the page has become the custom screener; say so.
  *   - Anything else -> describe the actual conditions being applied.
  *
  * The explainer (passed as children) is only shown in the first state, since
@@ -71,10 +71,10 @@ export default function ScreenerHeroHeading({
 
   if (!isPristine) {
     if (selectedFilters.length === 0) {
-      shownEyebrow = "All stocks screener";
-      shownTitle = "All Stocks";
+      shownEyebrow = "Custom stock screener";
+      shownTitle = "Custom Screener";
       shownDescription =
-        "Every stock in the analyzed universe. Tick one or more conditions in Select Screener to narrow the list.";
+        "No conditions applied — showing the full analyzed universe. Tick one or more conditions in Select Screener to narrow the list.";
     } else if (selectedFilters.length === 1) {
       const only = labelFor(selectedFilters[0]);
       shownEyebrow = `${only} screener`;
@@ -82,8 +82,8 @@ export default function ScreenerHeroHeading({
       shownDescription = `Stocks currently matching ${only}.`;
     } else {
       const labels = selectedFilters.map(labelFor);
-      shownEyebrow = "Custom stock screen";
-      shownTitle = "Custom Stock Screen";
+      shownEyebrow = "Custom stock screener";
+      shownTitle = "Custom Screener";
       shownDescription = `Stocks matching all of: ${labels.join(" + ")}.`;
     }
   }
