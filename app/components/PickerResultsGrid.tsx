@@ -328,7 +328,7 @@ export default function PickerResultsGrid({
   splitReasonsBySelection?: boolean;
   collapseReasons?: boolean;
 }) {
-  const { selectedFilters, setMatchCount } = usePickerFilter();
+  const { selectedFilters, selectedSectors, setMatchCount } = usePickerFilter();
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [activeTab, setActiveTab] = useState<TabKey>("general");
   const [sort, setSort] = useState<SortState>(null);
@@ -413,10 +413,21 @@ export default function PickerResultsGrid({
 
   const activeColumns = columnSets[activeTab];
 
+  // Two dimensions with deliberately different semantics: the condition
+  // checkboxes AND together (oversold AND above MA50), while the sector
+  // checkboxes OR together (Technology OR Healthcare) and are then ANDed with
+  // the conditions as a single group. A symbol whose profile hasn't warmed yet
+  // has no sector, so it falls outside any sector selection rather than
+  // silently passing it.
   const filteredEntries = useMemo(() => {
-    if (!selectedFilters.length) return hideUntilFiltered ? [] : entries;
-    return entries.filter((entry) => selectedFilters.every((key) => entry[key] === true));
-  }, [entries, selectedFilters, hideUntilFiltered]);
+    const hasFilters = selectedFilters.length > 0;
+    const hasSectors = selectedSectors.length > 0;
+    if (!hasFilters && !hasSectors) return hideUntilFiltered ? [] : entries;
+    return entries.filter((entry) => {
+      if (hasSectors && !(entry.sector && selectedSectors.includes(entry.sector))) return false;
+      return selectedFilters.every((key) => entry[key] === true);
+    });
+  }, [entries, selectedFilters, selectedSectors, hideUntilFiltered]);
 
   const derivedByEntry = useMemo(() => {
     const map = new WeakMap<ResultEntry, DerivedRow>();
@@ -454,12 +465,13 @@ export default function PickerResultsGrid({
 
   useEffect(() => {
     setVisibleCount(pageSize);
-  }, [selectedFilters, sort, viewMode, pageSize, activeTab]);
+  }, [selectedFilters, selectedSectors, sort, viewMode, pageSize, activeTab]);
 
   useEffect(() => {
-    setMatchCount(selectedFilters.length ? filteredEntries.length : null);
+    const anySelection = selectedFilters.length > 0 || selectedSectors.length > 0;
+    setMatchCount(anySelection ? filteredEntries.length : null);
     return () => setMatchCount(null);
-  }, [filteredEntries.length, selectedFilters.length, setMatchCount]);
+  }, [filteredEntries.length, selectedFilters.length, selectedSectors.length, setMatchCount]);
 
   const shown = sortedEntries.slice(0, visibleCount);
   const hasMore = visibleCount < sortedEntries.length;
@@ -555,9 +567,13 @@ export default function PickerResultsGrid({
             ))}
           </div>
         ) : null}
-        {selectedFilters.length ? (
+        {selectedFilters.length || selectedSectors.length ? (
           <p className="filterMatchLine">
-            {filteredEntries.length} of {entries.length} match your {selectedFilters.length === 1 ? "filter" : `${selectedFilters.length} filters`}.
+            {filteredEntries.length} of {entries.length} match your{" "}
+            {selectedFilters.length + (selectedSectors.length ? 1 : 0) === 1
+              ? "filter"
+              : `${selectedFilters.length + (selectedSectors.length ? 1 : 0)} filters`}
+            {selectedSectors.length ? ` (sector: ${selectedSectors.join(", ")})` : ""}.
           </p>
         ) : null}
       </div>
@@ -654,9 +670,9 @@ export default function PickerResultsGrid({
         )
       ) : (
         <div className="emptyBox">
-          {hideUntilFiltered && !selectedFilters.length
+          {hideUntilFiltered && !selectedFilters.length && !selectedSectors.length
             ? "Select at least one condition on the left to see matching stocks."
-            : selectedFilters.length
+            : selectedFilters.length || selectedSectors.length
             ? "No current results match the filters you've selected."
             : emptyText}
         </div>
