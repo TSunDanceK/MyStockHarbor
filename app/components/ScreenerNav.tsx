@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePickerFilter } from "@/app/components/PickerFilterContext";
+import ScreenerFilterSearch from "@/app/components/ScreenerFilterSearch";
 import type { AnyFilterKey } from "@/lib/pickerFilters";
 
 type Tone = "green" | "yellow" | "orange" | "red" | "blue";
@@ -160,22 +161,30 @@ function NavList({
   currentHref,
   onNavigate,
   filterMode = false,
-  availableSectors = [],
+  categoryValues = {},
 }: {
   currentHref: string;
   onNavigate?: () => void;
   filterMode?: boolean;
-  availableSectors?: string[];
+  categoryValues?: Record<string, string[]>;
 }) {
   const { selectedFilters, toggleFilter, selectedSectors, toggleSector } = usePickerFilter();
+  const availableSectors = categoryValues.sector ?? [];
 
   return (
     <div className="screenerNavList">
+      {/* Search first: it reaches every one of the 33 filterable fields plus
+          every industry value, none of which could be rendered as a list
+          without burying the checkboxes below. Browsing still works -- the
+          groups underneath are untouched. */}
+      {filterMode ? <ScreenerFilterSearch categoryValues={categoryValues} /> : null}
+
       {/* Sector sits above the condition groups, and only in filter mode: it's
           the most-reached-for refinement ("oversold TECH stocks") and it's the
           one group whose members OR together rather than AND. The list is
-          passed in from the page rather than hardcoded -- see availableSectors
-          in PickerResultPage.tsx. */}
+          passed in from the page rather than hardcoded -- see categoryValues
+          in PickerResultPage.tsx. Industry deliberately has no group of its own:
+          ~150 values belong in the search box, not a list. */}
       {filterMode && availableSectors.length ? (
         <div className="screenerNavGroup">
           <div className="screenerNavHeading" style={{ color: "#c084fc" }}>
@@ -405,17 +414,18 @@ export default function ScreenerNav({
   variant = "full",
   showFilters = false,
   alwaysFilterMode = false,
-  availableSectors = [],
+  categoryValues = {},
 }: {
   currentHref: string;
   variant?: "full" | "sidebar" | "trigger";
   showFilters?: boolean;
   showSearch?: boolean;
   alwaysFilterMode?: boolean;
-  // Sectors present in the calling page's own results, passed down so the
-  // Sector group never offers a value with nothing behind it. See
-  // availableSectors in PickerResultPage.tsx.
-  availableSectors?: string[];
+  // Values present in the calling page's own results for each category field
+  // ("sector", "industry", ...), so neither the Sector group nor the search box
+  // ever offers something with nothing behind it. See categoryValues in
+  // PickerResultPage.tsx.
+  categoryValues?: Record<string, string[]>;
 }) {
   const [open, setOpen] = useState(false);
   const { matchCount, selectedFilters, selectedSectors, clearFilters } = usePickerFilter();
@@ -464,7 +474,7 @@ export default function ScreenerNav({
               <OpenCustomScreenerLink />
             )
           ) : null}
-          <NavList currentHref={currentHref} filterMode={alwaysFilterMode} availableSectors={availableSectors} />
+          <NavList currentHref={currentHref} filterMode={alwaysFilterMode} categoryValues={categoryValues} />
         </aside>
       ) : null}
 
@@ -511,7 +521,7 @@ export default function ScreenerNav({
                   once you're done ticking boxes. The old cross-picker ticker
                   search that used to sit here has been removed. */}
               {showFilters ? (alwaysFilterMode ? <BackToPickersLink /> : <OpenCustomScreenerLink />) : null}
-              <NavList currentHref={currentHref} onNavigate={() => setOpen(false)} filterMode={alwaysFilterMode} availableSectors={availableSectors} />
+              <NavList currentHref={currentHref} onNavigate={() => setOpen(false)} filterMode={alwaysFilterMode} categoryValues={categoryValues} />
             </div>
             {showFilters ? (
               <div className="screenerOverlayFooter">
@@ -608,7 +618,6 @@ export default function ScreenerNav({
         }
         .screenerSearchBtn:disabled { opacity: 0.5; cursor: default; }
         .screenerSearchNote { margin-top: 8px; padding: 0 8px; font-size: 11.5px; line-height: 1.5; color: rgba(226,232,240,0.7); }
-        .screenerSearchResults { margin-top: 6px; display: grid; gap: 6px; padding: 0 8px; }
         .screenerSearchChip {
           display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px;
           border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04);

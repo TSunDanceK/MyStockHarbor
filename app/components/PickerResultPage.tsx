@@ -14,6 +14,7 @@ import { readCachedStockDataBulk } from "@/lib/server/stockDataCache";
 import { getPickersData } from "@/lib/server/pickersBuilder";
 import { WatermarkVisibilityProvider, HideWatermarksBar } from "@/app/components/WatermarkVisibility";
 import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type FilterKey, type AnyFilterKey } from "@/lib/pickerFilters";
+import { CATEGORY_FIELDS } from "@/lib/screenerFields";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -829,14 +830,29 @@ export default async function PickerResultPage({
   const initialFilters = config.presetFilters ?? [];
   const isFilterablePage = config.kind === "allSymbols" || config.kind === "preset" || initialFilters.length > 0;
 
-  // Sectors actually present in this page's payload, alphabetical. Derived from
-  // the entries rather than hardcoded so the list can never offer a sector with
-  // nothing behind it, and so it self-corrects if the profile cache starts
-  // returning a value we didn't anticipate. Symbols whose profile hasn't been
-  // warmed yet simply have no sector and sit outside every sector filter.
-  const availableSectors = Array.from(
-    new Set(entries.map((entry) => entry.sector).filter((s): s is string => Boolean(s)))
-  ).sort((a, b) => a.localeCompare(b));
+  // Values actually present in this page's payload for each category field,
+  // alphabetical. Derived from the entries rather than hardcoded so a value with
+  // nothing behind it is never offered, and so it self-corrects if the profile
+  // cache starts returning something we didn't anticipate. Symbols whose profile
+  // hasn't been warmed yet simply have no sector/industry and sit outside those
+  // filters.
+  //
+  // Deliberately built from the FULL universe this page ships, not from whatever
+  // subset is currently filtered -- otherwise the industry list would collapse
+  // as soon as a condition narrowed the results, and you could never widen back
+  // out to an industry you'd just filtered away from.
+  const categoryValues = Object.fromEntries(
+    CATEGORY_FIELDS.map((field) => [
+      field.key,
+      Array.from(
+        new Set(
+          entries
+            .map((entry) => (entry as unknown as Record<string, unknown>)[field.key])
+            .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+        )
+      ).sort((a, b) => a.localeCompare(b)),
+    ])
+  ) as Record<string, string[]>;
 
   // "Universe" metric is a debug/sanity-check number for confirming the
   // dynamic-universe top-up job is actually running: universeSize is the
@@ -1009,7 +1025,7 @@ export default async function PickerResultPage({
         <div className="resultWrap">
           <PickerFilterProvider initialFilters={initialFilters}>
             <div className="resultShell">
-              <ScreenerNav currentHref={config.href} variant="sidebar" showFilters showSearch alwaysFilterMode={isFilterablePage} availableSectors={availableSectors} />
+              <ScreenerNav currentHref={config.href} variant="sidebar" showFilters showSearch alwaysFilterMode={isFilterablePage} categoryValues={categoryValues} />
 
               <div className="resultMain">
                 <section className="hero">
@@ -1038,7 +1054,7 @@ export default async function PickerResultPage({
                 </section>
 
                 <div className="screenerTriggerWrap">
-                  <ScreenerNav currentHref={config.href} variant="trigger" showFilters showSearch alwaysFilterMode={isFilterablePage} availableSectors={availableSectors} />
+                  <ScreenerNav currentHref={config.href} variant="trigger" showFilters showSearch alwaysFilterMode={isFilterablePage} categoryValues={categoryValues} />
                 </div>
 
                 {highlightSymbol ? <PickerHighlightScroller symbol={highlightSymbol} /> : null}
