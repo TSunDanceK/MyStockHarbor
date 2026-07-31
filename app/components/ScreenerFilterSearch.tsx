@@ -302,6 +302,25 @@ export default function ScreenerFilterSearch({
           background: rgba(239,68,68,0.08); color: #fca5a5;
           font-size: 10px; font-weight: 900; cursor: pointer;
         }
+
+        /* iOS Safari force-zooms the whole page when a focused input has a
+           font-size below 16px, and there is no way back out short of a manual
+           pinch -- which wrecks the Select Screener sheet, since it's a fixed
+           overlay sized to the viewport. 16px is the threshold, so these bump to
+           exactly that on touch-sized screens. Padding drops a little to keep
+           the controls the same physical height.
+
+           The alternative fix, maximum-scale=1 on the viewport meta, would also
+           stop the zoom -- but it disables pinch-zoom site-wide, which is a real
+           accessibility loss for anyone who needs to magnify. Not worth it for
+           one input. */
+        @media (max-width: 980px) {
+          .screenerFieldSearch { font-size: 16px; padding: 8px 11px; }
+          .screenerNumInput { font-size: 16px; padding: 5px 6px; }
+          /* The two number boxes need a touch more room at 16px so "12.5"
+             doesn't clip. */
+          .screenerNumRow { grid-template-columns: 1fr 70px 70px 24px; }
+        }
       `}</style>
     </div>
   );
