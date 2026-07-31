@@ -32,11 +32,13 @@ export type PickerResultConfig = {
   sectionIncludes?: string[];
   maxItems?: number;
   filterTimeframe?: "D" | "W";
-  // "preset" pages: the full analyzed universe, shipped whole, with these
-  // condition flags pre-ticked client-side (see PickerResultPage below). Accepts
-  // both the 18 custom-builder keys (e.g. "belowMA200") and the 7
-  // category-membership keys (e.g. "bestTrendPick"), since several dedicated
-  // pages are defined by section membership rather than a raw record flag.
+  // Pages that ship the full analyzed universe whole, with these condition
+  // flags pre-ticked client-side (see PickerResultPage below). Accepts both the
+  // 18 custom-builder keys (e.g. "belowMA200") and the 7 category-membership
+  // keys (e.g. "bestTrendPick", "hasBuySignal"), since several dedicated pages
+  // are defined by section membership or a computed score rather than a raw
+  // record flag. Setting this is what opts a page into in-place filtering,
+  // independently of its `kind`.
   presetFilters?: AnyFilterKey[];
   // "allSymbols" pages: show the whole list on load instead of hiding until a
   // condition is checked (used by the plain "All Stocks" / Stock Screener page).
@@ -436,11 +438,24 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
   const recordMap = makeRecordMap(signalRecords);
 
   if (config.kind === "buySignals") {
+    // Every analyzed symbol is kept, not just those scoring above zero. The
+    // page's own condition (`hasBuySignal`) is applied client-side instead, by
+    // seeding it into PickerFilterProvider as an already-ticked checkbox -- same
+    // approach as the "preset" branch below, and for the same reason: dropping
+    // the non-qualifying symbols here is what made the Select Screener
+    // checkboxes useless on this page, since ANDing a second condition onto a
+    // list that was already only buy-signal stocks collapsed to ~zero matches.
+    //
+    // This branch stays separate from "preset" so the buy-specific presentation
+    // survives: the "N of 9 bullish conditions met" note, the score pill driven
+    // by that same count, and reason chips drawn from BUY_REASON_DEFS rather
+    // than all 25 tracked conditions. A symbol that meets none of them simply
+    // reads "0 of 9" and sorts to the bottom -- only ever visible if the visitor
+    // unticks Buy Signals, at which point that's the accurate thing to say.
     return signalRecords.map((record): ResultEntry | null => {
       const symbol = cleanSymbol(record.symbol);
       if (!symbol) return null;
       const score = getBuySignalCount(record);
-      if (score <= 0) return null;
       const reasons = getReasons(record, BUY_REASON_DEFS);
       return {
         symbol,
@@ -457,11 +472,14 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
   }
 
   if (config.kind === "sellSignals") {
+    // Mirror of the buySignals branch above -- see that comment for the
+    // reasoning. Keeps SELL_REASON_DEFS chips and the "N of 5 bearish
+    // conditions met" note rather than falling back to the generic 25-condition
+    // presentation.
     return signalRecords.map((record): ResultEntry | null => {
       const symbol = cleanSymbol(record.symbol);
       if (!symbol) return null;
       const score = getSellSignalCount(record);
-      if (score <= 0) return null;
       const reasons = getReasons(record, SELL_REASON_DEFS);
       return {
         symbol,
@@ -744,18 +762,18 @@ async function getPickerData(config: PickerResultConfig) {
       // extended data is optional
     }
 
-    // On a "preset" page `entries` is now the whole universe (see buildEntries),
-    // so the page's own condition still has to be applied here for the two
-    // things that are decided server-side and can't be re-derived on the
+    // On any page that ships the full universe with its own condition seeded
+    // client-side (see buildEntries), that condition still has to be applied
+    // here for the two things decided server-side and not re-derivable on the
     // client: the CollectionPage/ItemList structured data (which must describe
     // the stocks this URL actually ranks for, not the full universe) and the
-    // "Live matches" count. Everything the visitor sees is filtered client-side
-    // from the same seeded selection. Non-preset kinds are unaffected.
+    // "Live matches" count. Keyed off presetFilters so it covers both the
+    // "preset" kind and the Buy/Sell Signals pages. Everything the visitor sees
+    // is filtered client-side from the same seeded selection.
     const presetKeys = config.presetFilters ?? [];
-    const seoEntries =
-      config.kind === "preset" && presetKeys.length
-        ? entries.filter((entry) => presetKeys.every((k) => entry[k] === true))
-        : entries;
+    const seoEntries = presetKeys.length
+      ? entries.filter((entry) => presetKeys.every((k) => entry[k] === true))
+      : entries;
 
     return {
       updatedAt: typeof payload.updatedAt === "string" ? payload.updatedAt : null,
@@ -784,13 +802,13 @@ export default async function PickerResultPage({
   const { entries, seoEntries, updatedAt, universeSize, dynamicUniverseCount, foundCount } = await getPickerData(config);
   const initialVisibleCount = config.maxItems ?? 36;
 
-  // Dedicated condition pages ship the full universe and apply their own
-  // condition client-side (see buildEntries + PickerFilterProvider below), so
-  // the checkboxes in "Select Screener" can narrow or widen the list in place.
-  // These two flags are what switch a page into that mode.
-  const isPresetPage = config.kind === "preset";
-  const isFilterablePage = config.kind === "allSymbols" || isPresetPage;
-  const initialFilters = isPresetPage ? config.presetFilters ?? [] : [];
+  // Pages that ship the full universe and apply their own condition client-side
+  // (see buildEntries + PickerFilterProvider below), so the checkboxes in
+  // "Select Screener" can narrow or widen the list in place. Driven off
+  // `presetFilters` rather than `kind`, because Buy/Sell Signals keep their own
+  // kinds for their bespoke scoring and reason chips while still opting in.
+  const initialFilters = config.presetFilters ?? [];
+  const isFilterablePage = config.kind === "allSymbols" || config.kind === "preset" || initialFilters.length > 0;
 
   // "Universe" metric is a debug/sanity-check number for confirming the
   // dynamic-universe top-up job is actually running: universeSize is the
