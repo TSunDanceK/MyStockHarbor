@@ -1,8 +1,16 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import type { AnyFilterKey } from "@/lib/pickerFilters";
 import { findPredicate, type Predicate } from "@/lib/screenerFields";
+import {
+  clearFilterParams,
+  hasFilterParams,
+  parsePredicates,
+  predicatesQueryString,
+  serializePredicates,
+} from "@/lib/screenerUrl";
 
 type PickerFilterContextValue = {
   // ---- the store ----------------------------------------------------------
@@ -50,21 +58,20 @@ const PickerFilterContext = createContext<PickerFilterContextValue | null>(null)
 // meant another piece of state, another toggle, another clause in the grid and
 // another block of UI for every kind added.
 //
-// Nothing else has had to change yet: `selectedFilters` and `selectedSectors`
-// are derived from the predicate list on the way out, and `toggleFilter` /
-// `toggleSector` write back into it, so both consumers still see exactly the
-// API they had before. That's deliberate -- this is a storage change landing on
-// its own, with the UI that exploits it following separately.
+// The selection is mirrored into the query string (see lib/screenerUrl.ts and
+// the two sync effects below), which is what makes a filtered screen shareable
+// and what stops a selection leaking between visits to a page.
 //
-// `initialFilters` seeds the selection. Dedicated condition pages (Oversold,
-// Below MA200, Buy Signals, ...) pass their own condition here rather than
-// having the server pre-filter the entry list, so the page ships the FULL
-// analyzed universe with that box already ticked. Because useState's initial
-// value is used during the server render too, the SSR'd HTML is still just that
-// condition's matches -- the page's indexed content is unchanged -- but the
-// visitor can untick it, or AND another condition onto it, entirely
-// client-side. That's what lets the mobile "Select Screener" sheet stay open
-// while the results behind it change. See PickerResultPage.tsx.
+// `initialFilters` seeds the selection when the URL carries none. Dedicated
+// condition pages (Oversold, Below MA200, Buy Signals, ...) pass their own
+// condition here rather than having the server pre-filter the entry list, so
+// the page ships the FULL analyzed universe with that box already ticked.
+// Because useState's initial value is used during the server render too, the
+// SSR'd HTML is still just that condition's matches -- the page's indexed
+// content is unchanged -- but the visitor can untick it, or AND another
+// condition onto it, entirely client-side. That's what lets the mobile
+// "Select Screener" sheet stay open while the results behind it change. See
+// PickerResultPage.tsx.
 export function PickerFilterProvider({
   children,
   initialFilters = [],
@@ -72,8 +79,40 @@ export function PickerFilterProvider({
   children: ReactNode;
   initialFilters?: AnyFilterKey[];
 }) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // The seed as it was at mount, frozen. A ref rather than the prop itself
+  // because `initialFilters` is re-created on every render when a page passes
+  // no presetFilters, and because the question being answered is "has the
+  // visitor moved away from what this page started as" -- which is about the
+  // original seed, not whatever the prop happens to say now.
+  const presetRef = useRef<AnyFilterKey[]>(initialFilters);
+  const presetPredicates = useMemo<Predicate[]>(
+    () => presetRef.current.map((field) => ({ kind: "flag" as const, field })),
+    []
+  );
+
+  // The URL's own view of the selection. `hasFilterParams` is asked separately
+  // from `parsePredicates` because an empty result is ambiguous: a clean URL
+  // means "this page's own preset", while an explicit `filters=none` means the
+  // visitor cleared everything. See lib/screenerUrl.ts.
+  const urlParams = useMemo(() => new URLSearchParams(searchParams.toString()), [searchParams]);
+  const urlPredicates = useMemo(() => parsePredicates(urlParams), [urlParams]);
+  const urlHasFilters = useMemo(() => hasFilterParams(urlParams), [urlParams]);
+  const urlQuery = useMemo(
+    () => (urlHasFilters ? predicatesQueryString(urlPredicates) : ""),
+    [urlHasFilters, urlPredicates]
+  );
+
+  // Seeded from the URL when it carries a selection, otherwise from the page's
+  // own preset. Because this initialiser runs during the server render too, a
+  // crawler on the clean path still gets exactly the page's own condition in
+  // the SSR'd HTML -- the SEO invariant is unchanged. A shared filtered link
+  // server-renders its own filtered set, which is why every condition page's
+  // canonical stays pinned to the bare path.
   const [predicates, setPredicates] = useState<Predicate[]>(() =>
-    initialFilters.map((field) => ({ kind: "flag", field }))
+    urlHasFilters ? urlPredicates : presetPredicates
   );
   const [matchCount, setMatchCount] = useState<number | null>(null);
 
@@ -131,13 +170,6 @@ export function PickerFilterProvider({
     });
   }, []);
 
-  // The seed as it was at mount, frozen. A ref rather than the prop itself
-  // because `initialFilters` is re-created on every render when a page passes
-  // no presetFilters, and because the question being answered is "has the
-  // visitor moved away from what this page started as" -- which is about the
-  // original seed, not whatever the prop happens to say now.
-  const presetRef = useRef<AnyFilterKey[]>(initialFilters);
-
   // Same set, ignoring order. Any category or numeric predicate makes it false
   // by definition, since the seed only ever contains flags.
   const isPristine = useMemo(() => {
@@ -145,6 +177,50 @@ export function PickerFilterProvider({
     if (predicates.length !== preset.length) return false;
     return predicates.every((p) => p.kind === "flag" && preset.includes(p.field));
   }, [predicates]);
+
+  const currentQuery = useMemo(() => predicatesQueryString(predicates), [predicates]);
+
+  // While the selection is still the page's own preset the URL stays clean, so
+  // the resting state of every condition page remains the bare canonical path
+  // and only a deliberate change puts params on it.
+  const desiredQuery = isPristine ? "" : currentQuery;
+
+  // Tracks the last query string the two sides agreed on, so the URL -> state
+  // effect can tell a real navigation apart from the echo of our own write.
+  const lastSyncedRef = useRef(urlQuery);
+
+  // URL -> state. Fires for a shared link, the back/forward buttons, and a nav
+  // link back to this page's clean path.
+  //
+  // That last case is the one this was built for. The client router can keep
+  // this provider mounted across a navigation, so useState's initialiser is not
+  // re-run and a selection used to survive being navigated away from and back
+  // to. Reading from the URL removes the dependency on remount semantics
+  // entirely: the clean path carries no filters, so it re-seeds the preset.
+  useEffect(() => {
+    if (urlQuery === lastSyncedRef.current) return;
+    lastSyncedRef.current = urlQuery;
+    setPredicates(urlHasFilters ? urlPredicates : presetPredicates);
+  }, [urlQuery, urlHasFilters, urlPredicates, presetPredicates]);
+
+  // state -> URL.
+  //
+  // history.replaceState, NOT router.push: a Next navigation would unmount the
+  // mobile Select Screener sheet mid-interaction, which is the whole thing the
+  // in-place filtering work exists to avoid. replace rather than push also
+  // keeps the history stack honest -- ticking six boxes should not cost six
+  // back presses to undo.
+  useEffect(() => {
+    if (desiredQuery === urlQuery) return;
+    lastSyncedRef.current = desiredQuery;
+    const next = isPristine ? clearFilterParams(urlParams) : serializePredicates(predicates, urlParams);
+    const query = next.toString();
+    window.history.replaceState(
+      null,
+      "",
+      `${pathname}${query ? `?${query}` : ""}${window.location.hash}`
+    );
+  }, [desiredQuery, urlQuery, isPristine, predicates, urlParams, pathname]);
 
   const value = useMemo<PickerFilterContextValue>(
     () => ({
