@@ -1015,9 +1015,16 @@ export default async function PickerResultPage({
             z-index: 60;
             margin: 20px 0 4px;
             padding: 8px 0;
-            background: rgba(6,8,13,0.92);
-            -webkit-backdrop-filter: blur(10px);
-            backdrop-filter: blur(10px);
+            /* Opaque, and deliberately NO backdrop-filter. backdrop-filter (like
+               transform and filter) makes an element a containing block for
+               position: fixed descendants -- and the Select Screener overlay is
+               rendered inside this wrapper. Blurring here silently reparented
+               that overlay, so "position: fixed; inset: 0" stopped meaning the
+               viewport and started meaning this bar: the sheet opened anchored
+               to wherever the button happened to be instead of filling the
+               screen. A flat colour gives the same visual result at this scroll
+               position, since the page gradient has faded to #06080d by then. */
+            background: #06080d;
           }
         }
         @media (max-width: 720px) {
