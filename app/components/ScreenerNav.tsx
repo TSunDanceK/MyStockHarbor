@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { usePickerFilter } from "@/app/components/PickerFilterContext";
 import ScreenerFilterSearch from "@/app/components/ScreenerFilterSearch";
 import type { AnyFilterKey } from "@/lib/pickerFilters";
+import { describePredicate } from "@/lib/screenerFields";
 
 type Tone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -490,9 +491,47 @@ export default function ScreenerNav({
     };
   }, [open]);
 
-  const currentLabel =
-    GROUPS.flatMap((group) => group.items).find((item) => item.href === currentHref)?.label ??
-    "Screeners";
+  // The pill on the "Select Screener" button names what you are currently
+  // looking at, so it has to follow the SELECTION, not the URL. Deriving it from
+  // currentHref alone was the bug: on /oversold-stocks-today with Oversold
+  // unticked and Overbought ticked, the H1, eyebrow and results chip all said
+  // Overbought while the pill still said "Oversold".
+  //
+  // Only pages with in-place filtering (alwaysFilterMode) can diverge from their
+  // own URL, so everywhere else -- and anywhere ScreenerNav renders outside a
+  // PickerFilterProvider, e.g. ScreenerShell, where `predicates` is always the
+  // inert empty array -- keeps the plain page-name behaviour untouched.
+  const currentItem = GROUPS.flatMap((group) => group.items).find((item) => item.href === currentHref);
+  const pageLabel = currentItem?.label ?? "Screeners";
+
+  let currentLabel = pageLabel;
+  if (alwaysFilterMode) {
+    if (predicates.length > 1) {
+      // No point naming them: the count badge beside the pill already says how
+      // many, and two labels won't fit at mobile widths anyway.
+      currentLabel = "Custom";
+    } else if (predicates.length === 1) {
+      const only = predicates[0];
+      // The page's own preset, still the only thing ticked -- the resting state.
+      // Prefer the nav's page label over the predicate's, because the two are
+      // worded slightly differently in a few places ("Buy Signals" here vs the
+      // CATEGORY_FILTER_DEFS label "Buy Signal"; "20% From ATH" vs "20%+ From
+      // ATH"), and at rest the page's own name is the right one. This is what
+      // keeps the pill visually unchanged until the visitor actually diverges.
+      const isPagePreset = only.kind === "flag" && only.field === currentItem?.filterKey;
+      // describePredicate covers every predicate kind, so a lone sector or
+      // numeric filter reads "Sector: Technology" / "PE Ratio under 15" rather
+      // than a bare field name.
+      currentLabel = isPagePreset ? pageLabel : describePredicate(only);
+    } else {
+      // Nothing ticked. On a condition page that means the visitor unticked the
+      // page's own condition and is now looking at the full universe -- still
+      // saying "Oversold" there is the same lie in reverse. On /stock-screener
+      // (no filterKey, nothing seeded) an empty selection IS the resting state,
+      // so it keeps its own name.
+      currentLabel = currentItem?.filterKey ? "No filters" : pageLabel;
+    }
+  }
 
   return (
     <>
