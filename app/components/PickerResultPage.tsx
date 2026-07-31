@@ -3,6 +3,7 @@ import type { MiniCandlePoint, SupportResistanceZone } from "@/app/components/Mi
 import PickerHighlightScroller from "@/app/components/PickerHighlightScroller";
 import ScreenerNav from "@/app/components/ScreenerNav";
 import HowToCollapse from "@/app/components/HowToCollapse";
+import ScreenerHeroHeading from "@/app/components/ScreenerHeroHeading";
 import PickerResultsGrid from "@/app/components/PickerResultsGrid";
 import CustomScreenerSymbolSearch from "@/app/components/CustomScreenerSymbolSearch";
 import { PickerFilterProvider } from "@/app/components/PickerFilterContext";
@@ -966,13 +967,16 @@ export default async function PickerResultPage({
 
               <div className="resultMain">
                 <section className="hero">
-                  <div className="eyebrow">
-                    <span style={{ color: toneColour(config.tone) }}>●</span>
-                    {config.eyebrow}
-                  </div>
-                  <h1>{config.title}</h1>
-                  <p>{config.description}</p>
-                  <HowToCollapse title={config.explainerTitle} body={config.explainerBody} />
+                  <ScreenerHeroHeading
+                    eyebrow={config.eyebrow}
+                    title={config.title}
+                    description={config.description}
+                    presetFilters={initialFilters}
+                    presetHref={config.href}
+                    dotColour={toneColour(config.tone)}
+                  >
+                    <HowToCollapse title={config.explainerTitle} body={config.explainerBody} />
+                  </ScreenerHeroHeading>
                   {config.kind === "allSymbols" ? (
                     <div style={{ marginTop: 16 }}>
                       <CustomScreenerSymbolSearch
