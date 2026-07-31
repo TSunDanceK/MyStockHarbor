@@ -428,7 +428,7 @@ export default function ScreenerNav({
   categoryValues?: Record<string, string[]>;
 }) {
   const [open, setOpen] = useState(false);
-  const { matchCount, selectedFilters, selectedSectors, clearFilters } = usePickerFilter();
+  const { matchCount, predicates, selectedFilters, selectedSectors, clearFilters } = usePickerFilter();
   const showSidebar = variant !== "trigger";
   const showTrigger = variant !== "sidebar";
 
@@ -491,6 +491,11 @@ export default function ScreenerNav({
             <span className="screenerSelectMain">
               <span className="screenerSelectIcon" aria-hidden="true">⏷</span>
               Select Screener
+              {predicates.length ? (
+                <span className="screenerSelectCount" aria-label={`${predicates.length} filters applied`}>
+                  {predicates.length}
+                </span>
+              ) : null}
             </span>
             <span className="screenerSelectCurrent">
               {currentLabel}
@@ -626,6 +631,13 @@ export default function ScreenerNav({
         .screenerSearchSource { margin-left: 4px; font-size: 10px; font-weight: 700; opacity: 0.55; }
 
         .screenerMobileBar { display: none; }
+        .screenerSelectCount {
+          display: inline-flex; align-items: center; justify-content: center;
+          min-width: 20px; height: 20px; padding: 0 6px; margin-left: 2px;
+          border-radius: 999px;
+          background: #22c55e; color: #052e16;
+          font-size: 11.5px; font-weight: 950; line-height: 1;
+        }
         .screenerSelectBtn {
           width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px;
           padding: 14px 16px; border-radius: 16px;
@@ -714,7 +726,35 @@ export default function ScreenerNav({
 
         @media (max-width: 980px) {
           .screenerSidebar { display: none; }
-          .screenerMobileBar { display: block; }
+          /* Sticks just under the site header once scrolled past, so the
+             control you reach for most on a screener page is always where your
+             thumb expects it -- the top-left corner -- rather than scrolled off
+             somewhere above a 500-row table.
+             
+             z-index sits between the site header (100) and the results table's
+             sticky column/header (1-3), so it tucks under the header and over
+             the table. The overlay is 70, above this, so opening the sheet
+             still covers it.
+             
+             top is matched to the header's own height: 62px above 720px (12px
+             padding + 38px logo + border) and 60px below it (10px padding +
+             40px hamburger + border). The translucent background mirrors the
+             header's treatment so the seam between them is invisible. This only
+             works because .resultWrap uses overflow-x: clip rather than hidden
+             -- see the note in PickerResultPage.tsx. */
+          .screenerMobileBar {
+            display: block;
+            position: sticky;
+            top: 62px;
+            z-index: 60;
+            padding: 8px 0;
+            background: rgba(6,8,13,0.92);
+            -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(10px);
+          }
+        }
+        @media (max-width: 720px) {
+          .screenerMobileBar { top: 60px; }
         }
         @media (max-width: 420px) {
           .screenerSelectBtn { font-size: 14px; padding: 12px 14px; gap: 10px; }
