@@ -160,15 +160,48 @@ function NavList({
   currentHref,
   onNavigate,
   filterMode = false,
+  availableSectors = [],
 }: {
   currentHref: string;
   onNavigate?: () => void;
   filterMode?: boolean;
+  availableSectors?: string[];
 }) {
-  const { selectedFilters, toggleFilter } = usePickerFilter();
+  const { selectedFilters, toggleFilter, selectedSectors, toggleSector } = usePickerFilter();
 
   return (
     <div className="screenerNavList">
+      {/* Sector sits above the condition groups, and only in filter mode: it's
+          the most-reached-for refinement ("oversold TECH stocks") and it's the
+          one group whose members OR together rather than AND. The list is
+          passed in from the page rather than hardcoded -- see availableSectors
+          in PickerResultPage.tsx. */}
+      {filterMode && availableSectors.length ? (
+        <div className="screenerNavGroup">
+          <div className="screenerNavHeading" style={{ color: "#c084fc" }}>
+            Sector
+          </div>
+          {availableSectors.map((sector) => {
+            const checked = selectedSectors.includes(sector);
+            return (
+              <label
+                key={sector}
+                className={checked ? "screenerNavItem screenerNavCheckable checked" : "screenerNavItem screenerNavCheckable"}
+              >
+                <input type="checkbox" checked={checked} onChange={() => toggleSector(sector)} />
+                <span className="screenerNavIcon" style={{ color: "#c084fc" }}>
+                  ▪
+                </span>
+                <span className="screenerNavLabel">{sector}</span>
+              </label>
+            );
+          })}
+          {selectedSectors.length > 1 ? (
+            <div className="screenerSectorHint">Any of the {selectedSectors.length} selected sectors</div>
+          ) : null}
+        </div>
+      ) : null}
+
       {GROUPS.map((group) => {
         const visibleItems = group.items.filter((item) => filterMode || item.href);
         if (!visibleItems.length) return null;
@@ -326,8 +359,8 @@ function BackToPickersLink() {
 // links now, so selectedFilters never becomes non-empty there and this has
 // nothing to show.
 function FilterSummaryBar() {
-  const { selectedFilters, matchCount, clearFilters } = usePickerFilter();
-  if (!selectedFilters.length) return null;
+  const { selectedFilters, selectedSectors, matchCount, clearFilters } = usePickerFilter();
+  if (!selectedFilters.length && !selectedSectors.length) return null;
 
   return (
     <div className="screenerFilterModeBar">
@@ -372,15 +405,20 @@ export default function ScreenerNav({
   variant = "full",
   showFilters = false,
   alwaysFilterMode = false,
+  availableSectors = [],
 }: {
   currentHref: string;
   variant?: "full" | "sidebar" | "trigger";
   showFilters?: boolean;
   showSearch?: boolean;
   alwaysFilterMode?: boolean;
+  // Sectors present in the calling page's own results, passed down so the
+  // Sector group never offers a value with nothing behind it. See
+  // availableSectors in PickerResultPage.tsx.
+  availableSectors?: string[];
 }) {
   const [open, setOpen] = useState(false);
-  const { matchCount, selectedFilters, clearFilters } = usePickerFilter();
+  const { matchCount, selectedFilters, selectedSectors, clearFilters } = usePickerFilter();
   const showSidebar = variant !== "trigger";
   const showTrigger = variant !== "sidebar";
 
@@ -426,7 +464,7 @@ export default function ScreenerNav({
               <OpenCustomScreenerLink />
             )
           ) : null}
-          <NavList currentHref={currentHref} filterMode={alwaysFilterMode} />
+          <NavList currentHref={currentHref} filterMode={alwaysFilterMode} availableSectors={availableSectors} />
         </aside>
       ) : null}
 
@@ -473,12 +511,12 @@ export default function ScreenerNav({
                   once you're done ticking boxes. The old cross-picker ticker
                   search that used to sit here has been removed. */}
               {showFilters ? (alwaysFilterMode ? <BackToPickersLink /> : <OpenCustomScreenerLink />) : null}
-              <NavList currentHref={currentHref} onNavigate={() => setOpen(false)} filterMode={alwaysFilterMode} />
+              <NavList currentHref={currentHref} onNavigate={() => setOpen(false)} filterMode={alwaysFilterMode} availableSectors={availableSectors} />
             </div>
             {showFilters ? (
               <div className="screenerOverlayFooter">
                 <div className="screenerOverlayFooterRow">
-                  {selectedFilters.length ? (
+                  {selectedFilters.length || selectedSectors.length ? (
                     <button type="button" className="screenerFilterClearFixed" onClick={clearFilters}>
                       Clear
                     </button>
@@ -533,6 +571,8 @@ export default function ScreenerNav({
           background: rgba(34,197,94,0.12); border-color: rgba(34,197,94,0.4); color: #f8fafc;
         }
         .screenerNavCheckable input[type="checkbox"] { flex: 0 0 auto; width: 15px; height: 15px; accent-color: #22c55e; cursor: pointer; }
+
+        .screenerSectorHint { padding: 4px 8px 0; font-size: 10.5px; line-height: 1.4; font-weight: 700; color: rgba(192,132,252,0.75); }
 
         .screenerFilterModeBar { padding: 0 4px 12px; margin-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.08); }
         .screenerFilterModeBtn {
