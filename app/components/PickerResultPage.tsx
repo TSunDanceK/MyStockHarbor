@@ -992,6 +992,33 @@ export default async function PickerResultPage({
         .listTable tbody tr.highlight { animation: pickerHighlightPulse 2.4s ease-out 1; scroll-margin-top: 90px; }
         @media (max-width: 980px) {
           .resultShell { grid-template-columns: 1fr; gap: 14px; }
+          /* The Select Screener bar sticks HERE, on the wrapper, not on
+             .screenerMobileBar inside it. A sticky element can only travel
+             within its own parent's box, and that wrapper is only as tall as
+             the button -- so sticking the button to it gave it nowhere to go
+             and it scrolled away immediately. This wrapper's parent is
+             .resultMain, which spans the whole page body, so there's real
+             travel available.
+
+             That's a separate rule from the overflow one below: an ancestor
+             that is a scroll container ALSO breaks sticky, which is why
+             .resultWrap uses overflow-x: clip rather than hidden. Both had to
+             be right; fixing only the overflow left this still not sticking.
+
+             top matches the site header's height so it docks flush underneath
+             (header is z-index 100, this is 60, the results table's sticky
+             cells are 1-3, and the Select Screener overlay is 70 so it still
+             covers this when open). */
+          .screenerTriggerWrap {
+            position: sticky;
+            top: 62px;
+            z-index: 60;
+            margin: 20px 0 4px;
+            padding: 8px 0;
+            background: rgba(6,8,13,0.92);
+            -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(10px);
+          }
         }
         @media (max-width: 720px) {
           .pickerResultPage, .pickerResultPage * { box-sizing: border-box; }
@@ -1028,6 +1055,9 @@ export default async function PickerResultPage({
           .reasonChip { font-size: 10.5px; padding: 4px 8px; }
           .note { min-height: 0; font-size: 13px; }
           .listTableWrap { max-height: 58vh; }
+          /* Header is shorter below this breakpoint (10px padding + 40px
+             hamburger + border, vs 12px + 38px logo above it). */
+          .screenerTriggerWrap { top: 60px; }
         }
         @media (max-width: 390px) { .resultWrap { padding-left: 8px; padding-right: 8px; } .hero, .resultCard { padding: 12px; } }
       `}</style>
