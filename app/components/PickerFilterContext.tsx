@@ -7,6 +7,8 @@ type PickerFilterContextValue = {
   selectedFilters: AnyFilterKey[];
   toggleFilter: (key: AnyFilterKey) => void;
   clearFilters: () => void;
+  selectedSectors: string[];
+  toggleSector: (sector: string) => void;
   matchCount: number | null;
   setMatchCount: (count: number | null) => void;
 };
@@ -44,6 +46,13 @@ export function PickerFilterProvider({
   initialFilters?: AnyFilterKey[];
 }) {
   const [selectedFilters, setSelectedFilters] = useState<AnyFilterKey[]>(initialFilters);
+  // Sector lives in its own list rather than joining selectedFilters, because
+  // the two combine differently: conditions are ANDed with each other (oversold
+  // AND above MA50), whereas sectors are ORed within themselves (Technology OR
+  // Healthcare) and then ANDed with the conditions as a group. Keeping them
+  // apart means PickerResultsGrid can express that without special-casing
+  // certain keys out of the AND loop.
+  const [selectedSectors, setSelectedSectors] = useState<string[]>([]);
   const [matchCount, setMatchCount] = useState<number | null>(null);
 
   const value = useMemo<PickerFilterContextValue>(
@@ -51,11 +60,22 @@ export function PickerFilterProvider({
       selectedFilters,
       toggleFilter: (key) =>
         setSelectedFilters((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key])),
-      clearFilters: () => setSelectedFilters([]),
+      // Clear resets both dimensions -- a visitor who has ticked conditions and
+      // sectors and presses Clear means "start again", not "start again except
+      // for the sectors".
+      clearFilters: () => {
+        setSelectedFilters([]);
+        setSelectedSectors([]);
+      },
+      selectedSectors,
+      toggleSector: (sector) =>
+        setSelectedSectors((prev) =>
+          prev.includes(sector) ? prev.filter((s) => s !== sector) : [...prev, sector]
+        ),
       matchCount,
       setMatchCount,
     }),
-    [selectedFilters, matchCount]
+    [selectedFilters, selectedSectors, matchCount]
   );
 
   return <PickerFilterContext.Provider value={value}>{children}</PickerFilterContext.Provider>;
@@ -71,6 +91,8 @@ export function usePickerFilter(): PickerFilterContextValue {
     selectedFilters: [],
     toggleFilter: () => {},
     clearFilters: () => {},
+    selectedSectors: [],
+    toggleSector: () => {},
     matchCount: null,
     setMatchCount: () => {},
   };
