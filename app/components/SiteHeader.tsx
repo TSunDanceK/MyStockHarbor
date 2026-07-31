@@ -768,13 +768,15 @@ export default function SiteHeader({
         submenuMinWidth: 250,
         entries: [
           // Two landing options at the top of the Pickers dropdown, named for
-          // what they are rather than which came first: "Advanced Pickers Page"
-          // -> the full screener at /stock-screener (every condition available
-          // as a checkbox, nothing pre-applied), and "Basic Pickers Page" ->
-          // the original /pickers accordion.
+          // what they are rather than which came first: "Advanced Screener" ->
+          // the full screener at /stock-screener (every condition available as
+          // a checkbox, nothing pre-applied), and "Basic Pickers Page" -> the
+          // original /pickers accordion. "Advanced Screener" is deliberately
+          // the same wording used in ScreenerNav's sidebar and in the page's
+          // own H1, so one destination doesn't carry three different names.
           {
             kind: "link",
-            label: "Advanced Pickers Page",
+            label: "Advanced Screener",
             href: "/stock-screener",
             isActive: (path) => path === "/stock-screener",
             emphasize: true,
