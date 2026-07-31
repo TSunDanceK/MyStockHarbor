@@ -995,8 +995,18 @@ export default async function PickerResultPage({
         }
         @media (max-width: 720px) {
           .pickerResultPage, .pickerResultPage * { box-sizing: border-box; }
-          .pickerResultPage { overflow-x: hidden; }
-          .resultWrap { width: 100%; padding: 14px 10px 44px; overflow-x: hidden; }
+          /* Deliberately "clip", not "hidden". Per the CSS Overflow spec,
+             setting one axis to a non-visible value forces the other axis to
+             compute as auto, which turns the element into a scroll container --
+             and a scroll container silently breaks position: sticky for
+             everything inside it. That's the exact bug that stopped the results
+             table's sticky header working, and it would stop the Select
+             Screener bar sticking here. "clip" is the carve-out: paired with
+             "visible" on the other axis neither value is coerced, and clip
+             never creates a scroll container. Same horizontal-overflow
+             protection, without the side effect. */
+          .pickerResultPage { overflow-x: clip; }
+          .resultWrap { width: 100%; padding: 14px 10px 44px; overflow-x: clip; }
           .hero { border-radius: 20px; padding: 15px; }
           .eyebrow { max-width: 100%; white-space: normal; text-align: center; line-height: 1.35; }
           .hero h1 { font-size: clamp(28px, 9vw, 36px); line-height: 1.08; letter-spacing: -0.045em; }
