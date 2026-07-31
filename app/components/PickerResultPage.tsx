@@ -456,12 +456,21 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
       const symbol = cleanSymbol(record.symbol);
       if (!symbol) return null;
       const score = getBuySignalCount(record);
-      const reasons = getReasons(record, BUY_REASON_DEFS);
+      // A symbol meeting no bullish conditions is only ever on screen because
+      // the visitor unticked Buy Signals -- at which point "0 of 9 bullish
+      // conditions met", an empty score pill and a stray chip are noise about a
+      // condition they've just switched off. Blank the lot so those rows read
+      // as plain universe entries. Note the reasons wipe matters even at score
+      // 0: getBuySignalCount gates the whole score on aboveMA200, so a stock
+      // below its MA200 scores 0 while getReasons would still return chips for
+      // any other conditions it happens to meet.
+      const qualifies = score > 0;
+      const reasons = qualifies ? getReasons(record, BUY_REASON_DEFS) : [];
       return {
         symbol,
-        note: `${score} of ${BUY_REASON_DEFS.length} bullish conditions met`,
+        note: qualifies ? `${score} of ${BUY_REASON_DEFS.length} bullish conditions met` : "",
         tone: "green",
-        score,
+        score: qualifies ? score : undefined,
         reasons,
         stockHref: `/stock/${encodeURIComponent(symbol)}`,
         chartHref: chartHrefFor(symbol, record.dashboardHref),
@@ -480,12 +489,16 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
       const symbol = cleanSymbol(record.symbol);
       if (!symbol) return null;
       const score = getSellSignalCount(record);
-      const reasons = getReasons(record, SELL_REASON_DEFS);
+      // Same reasoning as buySignals above -- blank the note, score pill and
+      // chips for rows meeting no bearish conditions, since they're only
+      // visible once Sell Signals has been unticked.
+      const qualifies = score > 0;
+      const reasons = qualifies ? getReasons(record, SELL_REASON_DEFS) : [];
       return {
         symbol,
-        note: `${score} of ${SELL_REASON_DEFS.length} bearish conditions met`,
+        note: qualifies ? `${score} of ${SELL_REASON_DEFS.length} bearish conditions met` : "",
         tone: "red",
-        score,
+        score: qualifies ? score : undefined,
         reasons,
         stockHref: `/stock/${encodeURIComponent(symbol)}`,
         chartHref: chartHrefFor(symbol, record.dashboardHref),
