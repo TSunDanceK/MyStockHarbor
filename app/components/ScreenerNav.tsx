@@ -46,12 +46,12 @@ const GROUPS: NavGroup[] = [
       // a page you can open that doesn't pre-apply any condition (unlike
       // Overbought/Oversold/etc). Just a link, never a checkbox (no filterKey).
       //
-      // Labelled "Custom Screener", NOT "All Stocks": the list is the analyzed
-      // universe (a few hundred symbols), not every listed stock, so "All
-      // Stocks" over-promised. "Custom Screener" also describes what the page is
-      // actually for now that every condition page filters in place -- this is
-      // where you start from nothing and build your own combination.
-      { href: "/stock-screener", label: "Custom Screener", icon: "▦", tone: "blue" },
+      // Labelled "Advanced Screener", NOT "All Stocks": the list is the
+      // analyzed universe (a few hundred symbols), not every listed stock, so
+      // "All Stocks" over-promised. "Advanced Screener" also matches what this
+      // page is called in the top-nav Pickers dropdown and in its own H1, so
+      // the same destination isn't given three different names.
+      { href: "/stock-screener", label: "Advanced Screener", icon: "▦", tone: "blue" },
       // Greyed "coming soon" until launch -- the /popular-searches page itself
       // is IP/preview-gated (see middleware.ts), so the public sees a Coming
       // Soon placeholder if they click through; the owner sees the real page.
