@@ -23,6 +23,12 @@ export const metadata: Metadata = {
   },
 };
 
+// kind is "preset", not "section": ships the whole universe with `athBreakoutPick`
+// pre-ticked so Select Screener filters in place. That flag is derived from this
+// same section (see buildCategoryFlags), so the default set is identical to
+// before; sectionIncludes is kept so the ATH reference-line chart deep link
+// (athPrice / athDate), badge and ordering survive. See buildEntries in
+// PickerResultPage.tsx.
 const config: PickerResultConfig = {
   href: "/all-time-high-breakout-stocks",
   eyebrow: "Breakout stock screener",
@@ -32,7 +38,8 @@ const config: PickerResultConfig = {
   explainerBody: "Breakouts near all-time highs can show strong demand and leadership. The cleaner setups usually hold near the breakout zone rather than immediately failing back into the prior range.",
   emptyText: "No all-time high breakout stocks are currently available from the live picker feed.",
   tone: "orange",
-  kind: "section",
+  kind: "preset",
+  presetFilters: ["athBreakoutPick"],
   sectionIncludes: ["all-time high breakout"],
   maxItems: 36,
 };

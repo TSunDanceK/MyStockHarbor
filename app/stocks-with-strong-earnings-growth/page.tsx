@@ -3,6 +3,12 @@ import PickerResultPage, {
   type PickerResultConfig,
 } from "@/app/components/PickerResultPage";
 
+// kind is "preset", not "section": ships the whole universe with
+// `strongEarningsGrowth` pre-ticked so Select Screener filters in place --
+// which on an earnings page is the point, since combining it with a technical
+// condition is the obvious next question. sectionIncludes is kept so the
+// earnings section's badge and ordering are re-applied on top. See buildEntries
+// in PickerResultPage.tsx.
 const config: PickerResultConfig = {
   href: "/stocks-with-strong-earnings-growth",
   eyebrow: "Earnings growth screener",
@@ -15,7 +21,8 @@ const config: PickerResultConfig = {
   emptyText:
     "No strong earnings-growth results are available yet. Use the Fetch Earnings button on the main Pickers page or wait for the earnings cache to warm.",
   tone: "green",
-  kind: "section",
+  kind: "preset",
+  presetFilters: ["strongEarningsGrowth"],
   sectionIncludes: ["strong", "earnings", "growth"],
   maxItems: 40,
 };
