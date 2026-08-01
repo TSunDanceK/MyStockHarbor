@@ -3,6 +3,7 @@ import { getAllPosts } from "@/lib/blog";
 import { getAllVideoIds } from "@/lib/videoContent";
 import { getAllBottleneckPosts } from "@/lib/bottlenecks";
 import { LESSONS } from "@/app/learn/lessons";
+import { priorityStocks, uniqueEtfs } from "@/lib/curatedSymbols";
 
 const baseUrl = "https://www.mystockharbor.com";
 
@@ -103,42 +104,12 @@ const seoGuides = [
   "/bearish-divergence-stocks",
 ];
 
-const coreMegaCaps = [
-  "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "TSLA", "BRK.B", "AVGO",
-  "LLY", "JPM", "V", "MA", "COST", "UNH", "HD", "PG", "XOM", "CVX", "MRK",
-  "ABBV", "PEP", "KO", "WMT", "T", "VZ", "ORCL", "CRM", "ADBE", "CSCO",
-  "INTC", "AMD", "QCOM", "TXN", "MCD", "SBUX", "PYPL", "BAC", "WFC", "TGT",
-  "DIS",
-];
-
-const retailInterestStocks = [
-  "PLTR", "SOFI", "RIVN", "LCID", "NIO", "HOOD", "COIN", "DKNG", "AFRM",
-  "UPST", "ROKU", "SNAP", "PINS", "U", "SHOP", "SQ", "RDDT", "MSTR", "MARA",
-  "RIOT", "HIMS", "CAVA", "DUOL", "CELH", "ARM", "SMCI", "PATH", "CVNA",
-  "CHWY", "ETSY",
-];
-
-const recognizableMidCaps = [
-  "F", "GM", "UBER", "LYFT", "ABNB", "NET", "CRWD", "PANW", "SNOW", "ZS",
-  "DDOG", "OKTA", "DOCU", "MDB", "TWLO", "HUBS", "ESTC", "TEAM", "ZM", "BILL",
-  "TTD", "INTU", "NOW", "ADSK", "ANET", "MU", "KLAC", "LRCX", "AMAT", "ON",
-  "MRVL", "DELL", "HPQ", "CSX", "UAL", "DAL", "AAL", "CCL", "RCL", "MAR",
-  "HLT", "CMG", "NKE", "LOW", "CAT", "DE", "GE", "BA", "RTX", "PFE", "BMY",
-  "GILD", "AMGN", "ISRG", "BKNG", "MELI", "EBAY", "WDAY",
-];
-
-const etfs = [
-  "SPY", "QQQ", "DIA", "IWM", "VTI", "VOO", "ARKK", "XLF", "XLE", "XLK",
-  "XLP", "XLY", "XLV", "XLRE", "XLI", "XLC", "XLB", "XLU", "SMH", "SOXX",
-  "IBIT", "HODL", "ARKW", "VUG", "SCHD", "DGRO", "JEPI", "JEPQ", "GLD",
-  "SLV", "TLT", "HYG",
-];
-
-const priorityStocks = Array.from(
-  new Set([...coreMegaCaps, ...retailInterestStocks, ...recognizableMidCaps])
-);
-
-const uniqueEtfs = Array.from(new Set(etfs));
+// coreMegaCaps / retailInterestStocks / recognizableMidCaps / etfs and the
+// derived priorityStocks / uniqueEtfs now live in lib/curatedSymbols.ts —
+// the same shared source of truth used by the "Explore More Stocks"
+// internal-linking module on /stock/[symbol] pages (see
+// app/components/RelatedStocks.tsx). Import them from there instead of
+// redefining inline; this file's output is unchanged.
 
 function toAbsoluteUrl(path: string) {
   return `${baseUrl}${path}`;
