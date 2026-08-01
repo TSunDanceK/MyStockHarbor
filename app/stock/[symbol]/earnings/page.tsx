@@ -11,6 +11,8 @@ import ShareButton from "@/app/components/ShareButton";
 import TickerLogo from "@/app/components/TickerLogo";
 import { WatermarkVisibilityProvider, HideWatermarksBar, EarningsScoreWatermark } from "@/app/components/WatermarkVisibility";
 import { IncomeStatementCard, AnnualConsensusCard, CashFlowCard, SegmentationCard, BalanceSheetCard, type IncomeDetail, type AnnualConsensus, type CashFlow, type BalanceHealth, type SegmentGroup } from "./EarningsDetail";
+import { getRelatedSymbols } from "@/lib/curatedSymbols";
+import RelatedStocks from "@/app/components/RelatedStocks";
 
 export const dynamic = "force-dynamic";
 
@@ -893,6 +895,11 @@ export default async function StockEarningsPage({ params }: Props) {
   const latestReaction = [...data.priceReactionQuarters].reverse().find((q) => q.reactionPct != null) ?? null;
   const epsBeatPct = data.epsBeatTotal > 0 ? Math.round((data.epsBeatCount / data.epsBeatTotal) * 100) : null;
 
+  // Curated, deterministic set of OTHER stock symbols for the "Explore More
+  // Stocks" internal-linking module (see lib/curatedSymbols.ts and
+  // app/components/RelatedStocks.tsx).
+  const relatedSymbols = getRelatedSymbols(clean);
+
   const pageJsonLd = {
     "@context": "https://schema.org", "@type": "WebPage",
     name: `${clean} Stock Earnings`,
@@ -1289,6 +1296,11 @@ export default async function StockEarningsPage({ params }: Props) {
 
           <HideWatermarksBar />
         </div>
+
+        {/* -- Explore More Stocks -- server-rendered internal-linking
+               module, same pattern as app/stock/[symbol]/page.tsx (see
+               lib/curatedSymbols.ts + app/components/RelatedStocks.tsx). -- */}
+        <RelatedStocks currentSymbol={clean} symbols={relatedSymbols} />
       </main>
     </WatermarkVisibilityProvider>
   );

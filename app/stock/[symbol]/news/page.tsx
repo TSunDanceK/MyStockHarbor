@@ -25,6 +25,8 @@ import {
   type EarningsYearSummary,
 } from "@/lib/latest-earnings-data";
 import SharedLatestEarningsCard from "@/app/components/LatestEarningsCard";
+import { getRelatedSymbols } from "@/lib/curatedSymbols";
+import RelatedStocks from "@/app/components/RelatedStocks";
 
 export const runtime = "nodejs";
 
@@ -933,6 +935,11 @@ export default async function StockNewsPage({ params }: Props) {
     detailedNews.map((item) => [item.title, getArticleSnippet(item, upper)]),
   );
 
+  // Curated, deterministic set of OTHER stock symbols for the "Explore More
+  // Stocks" internal-linking module (see lib/curatedSymbols.ts and
+  // app/components/RelatedStocks.tsx).
+  const relatedSymbols = getRelatedSymbols(upper);
+
   return (
     <WatermarkVisibilityProvider>
     <main
@@ -1102,6 +1109,11 @@ export default async function StockNewsPage({ params }: Props) {
         @media (max-width: 820px) { .newsWrap { padding: 18px 16px 32px; } .newsHeroTitle { font-size: 34px !important; line-height: 1.06 !important; letter-spacing: -0.045em !important; } .newsHeroLead { font-size: 15px !important; line-height: 1.7 !important; } .newsHeroMetricRow { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } .newsHeroCtaRow { flex-direction: column !important; align-items: stretch !important; } .newsHeroBtn { width: 100%; justify-content: center !important; } .newsBottomStrip { flex-direction: column !important; align-items: stretch !important; } .newsBottomActions { width: 100%; } }
         @media (max-width: 560px) { .newsWrap { padding: 14px 12px 26px; } .newsHeroShell { grid-template-columns: 1fr !important; border-radius: 22px !important; padding: 16px !important; } .newsHeroTitle { font-size: 28px !important; line-height: 1.08 !important; letter-spacing: -0.035em !important; } .newsHeroLead { font-size: 14px !important; line-height: 1.65 !important; } .newsHeroMetricRow { grid-template-columns: 1fr !important; } .compactNewsRow .compactNewsHeadline { order: 5; flex: 1 1 100% !important; width: 100% !important; margin-top: 8px !important; } .newsBottomActions { display: grid !important; grid-template-columns: 1fr !important; width: 100%; } .newsBottomActions a { width: 100%; justify-content: center !important; } .newsMainColumn, .newsSidebar { min-width: 0; } .newsSidebar section, .newsMainColumn section, .compactNewsRow, .newsHeroRight > div, .newsHeroMetricRow > div { min-width: 0; } }
       `}</style>
+
+      {/* -- Explore More Stocks -- server-rendered internal-linking
+             module, same pattern as app/stock/[symbol]/page.tsx (see
+             lib/curatedSymbols.ts + app/components/RelatedStocks.tsx). -- */}
+      <RelatedStocks currentSymbol={upper} symbols={relatedSymbols} />
     </main>
     </WatermarkVisibilityProvider>
   );
