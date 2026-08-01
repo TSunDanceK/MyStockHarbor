@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getAllPosts, getPostBySlug } from "@/lib/blog";
+import { getAllPosts, getPostBySlug, getRelatedPosts } from "@/lib/blog";
 import { getOrCreateInsightSnapshot } from "@/lib/insightSnapshots";
 import { remark } from "remark";
 import html from "remark-html";
 import InsightPostClient from "./InsightPostClient";
 import { submitInsightToIndexNowOnce } from "@/lib/indexnowAuto";
+import RelatedInsights from "@/app/components/RelatedInsights";
 
 export const dynamic = "force-dynamic";
 
@@ -246,6 +248,17 @@ export default async function InsightPostPage({ params }: Props) {
     console.error("IndexNow auto-submit failed:", error);
   });
 
+  // Deterministic, no-I/O related-posts selection for the "More Insights"
+  // cross-linking module (see lib/blog.ts getRelatedPosts +
+  // app/components/RelatedInsights.tsx). Mirrors the "Explore More Stocks"
+  // pattern already shipped on /stock/[symbol] (getRelatedSymbols +
+  // RelatedStocks.tsx) — individual insight posts previously had exactly
+  // one inbound internal link (their listing on the paginated /insights
+  // archive), so this gives every post page a small, stable set of links
+  // from OTHER post pages too. getAllPosts()/readSortedPosts() is already a
+  // local content-file read used elsewhere on this page — no new I/O.
+  const relatedPosts = getRelatedPosts(post.slug, post.symbol ?? null, 8);
+
   return (
     <>
       <script
@@ -273,6 +286,37 @@ export default async function InsightPostPage({ params }: Props) {
         }}
         snapshot={snapshot}
       />
+
+      {/* -- View full stock analysis -----------------------------------
+             Small, single, real <Link> to this post's own stock page.
+             A July 2026 GSC audit found individual insight posts never
+             link to their own /stock/[symbol] page — this closes that gap
+             with a minimal addition rather than a whole new module. Kept
+             here (server-rendered, in page.tsx) rather than threaded
+             through the large InsightPostClient.tsx (~60KB) client
+             component, to keep this change small and safe. -- */}
+      {post.symbol && (
+        <div style={{ background: "#06080d" }}>
+          <div style={{ maxWidth: 1240, margin: "0 auto", padding: "20px 20px 0", boxSizing: "border-box" }}>
+            <Link
+              href={`/stock/${post.symbol.toUpperCase()}`}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                fontSize: 14,
+                fontWeight: 800,
+                letterSpacing: "-0.01em",
+                color: "#93c5fd",
+                textDecoration: "none",
+              }}
+            >
+              View full {post.symbol.toUpperCase()} stock analysis →
+            </Link>
+          </div>
+        </div>
+      )}
+
+      <RelatedInsights posts={relatedPosts} />
     </>
   );
 }
