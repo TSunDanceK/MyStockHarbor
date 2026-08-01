@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getClientIp, isBypassedIp } from "@/lib/server/dailyPageLimit";
 import { blockOffender, TRAP_BLOCK_DAYS } from "@/lib/server/trapBlock";
+import { isKnownGoodBot } from "@/lib/server/knownGoodBots";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,8 +22,8 @@ export const dynamic = "force-dynamic";
  * Nothing a rendered browser does ever reaches this path. A request only
  * arrives when something parsed the raw HTML -- or crawled every anchor tag
  * regardless of visibility -- and fetched it. Real visitors don't do that,
- * and neither do most compliant crawlers (see the allowlist below for the
- * ones that might, e.g. an unusually literal AI crawler).
+ * and neither do most compliant crawlers (see lib/server/knownGoodBots.ts
+ * for the ones that might, e.g. an unusually literal AI crawler).
  *
  * On a hit: block the requester's IP and JA4 fingerprint for
  * TRAP_BLOCK_DAYS (lib/server/trapBlock.ts, default 2 days), site-wide --
@@ -36,8 +37,8 @@ export const dynamic = "force-dynamic";
  * plausibly catch real visitors (an expired token, an unwired call site).
  * Here the link is unreachable through any real user flow by construction,
  * so the graduated rollout doesn't add much -- the residual risk is narrower
- * (the allowlist below being incomplete, or the hiding technique failing
- * for a specific crawler) and is mitigated directly rather than staged.
+ * (the allowlist being incomplete, or the hiding technique failing for a
+ * specific crawler) and is mitigated directly rather than staged.
  */
 
 function logSafe(value: string | null | undefined, max = 120): string {
@@ -45,32 +46,6 @@ function logSafe(value: string | null | undefined, max = 120): string {
   const cleaned = value.replace(/[\r\n\t]+/g, " ").trim();
   if (!cleaned) return "none";
   return cleaned.length > max ? `${cleaned.slice(0, max)}...` : cleaned;
-}
-
-// Crawlers whose entire business model depends on being let through --
-// Google/Bing indexing, Meta's link-preview fetcher (the single largest
-// source of legitimate traffic on this site today), Apple's, DuckDuckGo's.
-// None of these SHOULD ever reach this route (the link is invisible to
-// anything that respects CSS/ARIA), so a hit from one of these is treated
-// as "the hiding technique needs a second look", not as a bot to block --
-// getting this allowlist wrong in the blocking direction risks silently
-// killing social-preview rendering or search visibility for two days at a
-// time, which is a far worse outcome than under-blocking a scraper.
-const KNOWN_GOOD_UA_MARKERS = [
-  "googlebot",
-  "bingbot",
-  "adsbot-google",
-  "mediapartners-google",
-  "meta-externalagent",
-  "facebookexternalhit",
-  "applebot",
-  "duckduckbot",
-  "bingpreview",
-];
-
-function isKnownGoodBot(userAgent: string): boolean {
-  const lower = userAgent.toLowerCase();
-  return KNOWN_GOOD_UA_MARKERS.some((marker) => lower.includes(marker));
 }
 
 export async function GET(req: Request) {
@@ -87,6 +62,16 @@ export async function GET(req: Request) {
     return new NextResponse(null, { status: 404 });
   }
 
+  // Crawlers whose entire business model depends on being let through --
+  // Google/Bing indexing, Meta's link-preview fetcher (the single largest
+  // source of legitimate traffic on this site today), Apple's, DuckDuckGo's
+  // (lib/server/knownGoodBots.ts, shared with the quote-token gate). None of
+  // these SHOULD ever reach this route (the link is invisible to anything
+  // that respects CSS/ARIA), so a hit from one of these is treated as "the
+  // hiding technique needs a second look", not as a bot to block -- getting
+  // this allowlist wrong in the blocking direction risks silently killing
+  // social-preview rendering or search visibility for two days at a time,
+  // which is a far worse outcome than under-blocking a scraper.
   if (isKnownGoodBot(userAgent)) {
     console.warn(
       `[trap] hit by allowlisted UA -- NOT blocking, check the hidden-link ` +
