@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import HomePageRouter from "./components/HomePageRouter";
+import { mintQuoteToken } from "@/lib/server/quoteToken";
 
 export const metadata: Metadata = {
   title: "Stock Analysis Tools, Stock Pickers & Market Insights | MyStockHarbor",
@@ -130,7 +131,23 @@ export default function Page() {
           </div>
         }
       >
-        <HomePageRouter />
+        {/*
+          Root "/" is the desktop dashboard experience (HomePageRouter picks
+          DashboardClient vs MobileHomePage at mount). Unlike /dashboard/
+          page.tsx, this page previously rendered HomePageRouter with no
+          props at all, so DashboardClient's pageToken defaulted to "" for
+          every desktop visitor landing here -- which is most of the site's
+          real dashboard traffic, since "/" *is* the dashboard, not a
+          separate rarely-used route. That meant every /api/quote call these
+          visitors triggered logged reason=missing, indistinguishable in the
+          logs from an actual scraper hitting the API directly. Minting here
+          and passing it through closes that gap. See
+          lib/server/quoteToken.ts and claude/quote-page-token-rollout-2026-
+          07-29.md for the full token design; HomePageRouter forwards this
+          only to the desktop (DashboardClient) branch -- MobileHomePage
+          never calls /api/quote.
+        */}
+        <HomePageRouter pageToken={mintQuoteToken()} />
       </Suspense>
     </>
   );
