@@ -67,6 +67,26 @@ export default function ScreenerFilterSearch({
   const { predicates, setPredicate, removePredicate, toggleFilter } = usePickerFilter();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  // Numeric fields whose row is on screen but which have no bound typed yet.
+  //
+  // These are deliberately NOT predicates. Selecting "PE Ratio" used to push an
+  // unbounded number predicate straight into the store, which quietly filtered:
+  // a predicate with no min and no max still drops every stock that has no
+  // value at all, so picking PE Ratio and typing nothing silently removed every
+  // loss-making company from the results. Nothing on screen said so -- the chip
+  // just read "PE Ratio".
+  //
+  // Keeping the draft in local UI state instead means an unbounded filter
+  // cannot exist in the store, so everything downstream is correct for free:
+  // the grid does not filter on it, the match count and chip bar ignore it, the
+  // count badge does not include it, the card tones and the Select Screener
+  // pill stay put, and the URL has nothing to serialise. (It could not be
+  // serialised anyway -- a bare `peRatio=..` is rejected on parse. See
+  // lib/screenerUrl.ts.)
+  //
+  // It becomes a real predicate the moment a bound is typed, and reverts to a
+  // draft if every bound is cleared again.
+  const [draftFields, setDraftFields] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const needle = query.trim().toLowerCase();
@@ -104,6 +124,27 @@ export default function ScreenerFilterSearch({
     [predicates]
   );
 
+  // Bounded predicates first, then the drafts, so a row does not jump position
+  // the moment it is given a bound.
+  const numberRows = useMemo(() => {
+    const bounded = numberPredicates.map((p) => ({
+      field: p.field,
+      min: p.min,
+      max: p.max,
+      draft: false,
+    }));
+    const applied = new Set(numberPredicates.map((p) => p.field));
+    const drafts = draftFields
+      .filter((field) => !applied.has(field))
+      .map((field) => ({
+        field,
+        min: undefined as number | undefined,
+        max: undefined as number | undefined,
+        draft: true,
+      }));
+    return [...bounded, ...drafts];
+  }, [numberPredicates, draftFields]);
+
   function applySuggestion(s: Suggestion) {
     if (s.type === "value") {
       const existing = predicates.find((p) => p.kind === "category" && p.field === s.field.key);
@@ -120,23 +161,41 @@ export default function ScreenerFilterSearch({
     } else if (s.field.kind === "flag") {
       toggleFilter(s.field.key as Parameters<typeof toggleFilter>[0]);
     } else {
-      // Numeric: add the field with no bounds yet and let the visitor type one
-      // into the row that appears below. An unbounded numeric predicate matches
-      // any stock that HAS the value, which is a real (if blunt) filter -- it
-      // excludes stocks with no earnings from a PE screen, for instance.
+      // Numeric: open a row to type a bound into, but do NOT filter yet. See
+      // draftFields above for why this is local state and not a predicate.
       const already = predicates.some((p) => p.kind === "number" && p.field === s.field.key);
-      if (!already) setPredicate({ kind: "number", field: s.field.key });
+      if (!already) {
+        setDraftFields((prev) => (prev.includes(s.field.key) ? prev : [...prev, s.field.key]));
+      }
     }
     setQuery("");
     inputRef.current?.focus();
   }
 
+  // A row is a filter exactly while it has at least one bound. Clearing the
+  // last one puts it back to being a draft rather than leaving an unbounded
+  // predicate behind, so the round trip is symmetric and the store never holds
+  // a filter that does not filter.
   function updateBound(field: string, bound: "min" | "max", raw: string) {
     const existing = predicates.find((p) => p.kind === "number" && p.field === field);
     const current = existing && existing.kind === "number" ? existing : { kind: "number" as const, field };
     const parsed = raw.trim() === "" ? undefined : Number(raw);
     const value = parsed != null && Number.isFinite(parsed) ? parsed : undefined;
-    setPredicate({ ...current, [bound]: value });
+    const next = { ...current, [bound]: value };
+
+    if (next.min == null && next.max == null) {
+      if (existing) removePredicate("number", field);
+      setDraftFields((prev) => (prev.includes(field) ? prev : [...prev, field]));
+      return;
+    }
+
+    setDraftFields((prev) => prev.filter((f) => f !== field));
+    setPredicate(next);
+  }
+
+  function removeNumberRow(field: string) {
+    removePredicate("number", field);
+    setDraftFields((prev) => prev.filter((f) => f !== field));
   }
 
   function isValueApplied(fieldKey: string, value: string) {
@@ -146,7 +205,12 @@ export default function ScreenerFilterSearch({
 
   function isFieldApplied(field: ScreenerFieldDef) {
     if (field.kind === "flag") return predicates.some((p) => p.kind === "flag" && p.field === field.key);
-    return predicates.some((p) => p.kind === "number" && p.field === field.key);
+    // A draft counts as added: its row is already on screen, so offering it
+    // again as if it were not there would be confusing.
+    return (
+      predicates.some((p) => p.kind === "number" && p.field === field.key) ||
+      draftFields.includes(field.key)
+    );
   }
 
   return (
@@ -205,39 +269,47 @@ export default function ScreenerFilterSearch({
         </div>
       ) : null}
 
-      {/* Min/max editors for every numeric filter currently applied. These live
-          here rather than in the chip bar because they need typing room, and a
-          chip is a one-tap remove control. The chip for the same predicate
-          still shows above the results and still removes it. */}
-      {numberPredicates.length ? (
+      {/* Min/max editors for every numeric filter currently applied, plus any
+          draft row still waiting for a bound. These live here rather than in the
+          chip bar because they need typing room, and a chip is a one-tap remove
+          control. The chip for a bounded predicate still shows above the results
+          and still removes it; a draft has no chip, because it isn't filtering
+          anything. */}
+      {numberRows.length ? (
         <div className="screenerNumRows">
-          {numberPredicates.map((p) => (
-            <div key={p.field} className="screenerNumRow">
-              <span className="screenerNumLabel">{fieldLabel(p.field)}</span>
+          {numberRows.map((row) => (
+            <div key={row.field} className={row.draft ? "screenerNumRow isDraft" : "screenerNumRow"}>
+              <span className="screenerNumLabel">{fieldLabel(row.field)}</span>
               <input
                 type="number"
                 className="screenerNumInput"
                 placeholder="min"
-                value={p.min ?? ""}
-                onChange={(e) => updateBound(p.field, "min", e.target.value)}
-                aria-label={`${fieldLabel(p.field)} minimum`}
+                value={row.min ?? ""}
+                onChange={(e) => updateBound(row.field, "min", e.target.value)}
+                aria-label={`${fieldLabel(row.field)} minimum`}
               />
               <input
                 type="number"
                 className="screenerNumInput"
                 placeholder="max"
-                value={p.max ?? ""}
-                onChange={(e) => updateBound(p.field, "max", e.target.value)}
-                aria-label={`${fieldLabel(p.field)} maximum`}
+                value={row.max ?? ""}
+                onChange={(e) => updateBound(row.field, "max", e.target.value)}
+                aria-label={`${fieldLabel(row.field)} maximum`}
               />
               <button
                 type="button"
                 className="screenerNumRemove"
-                onClick={() => removePredicate("number", p.field)}
-                aria-label={`Remove ${fieldLabel(p.field)} filter`}
+                onClick={() => removeNumberRow(row.field)}
+                aria-label={`Remove ${fieldLabel(row.field)} filter`}
               >
                 ✕
               </button>
+              {/* Says outright that nothing is being filtered yet, so an empty
+                  row reads as "waiting for input" rather than as a filter that
+                  is silently doing nothing. */}
+              {row.draft ? (
+                <span className="screenerNumHint">Enter a min or max to apply this filter</span>
+              ) : null}
             </div>
           ))}
         </div>
@@ -285,6 +357,17 @@ export default function ScreenerFilterSearch({
         .screenerNumRow {
           display: grid; grid-template-columns: 1fr 62px 62px 24px; align-items: center; gap: 6px;
         }
+        /* The hint sits on its own second line spanning the full row, so adding
+           it never squeezes the inputs. */
+        .screenerNumRow.isDraft { row-gap: 3px; }
+        .screenerNumHint {
+          grid-column: 1 / -1;
+          font-size: 10.5px; font-weight: 700; line-height: 1.35;
+          color: rgba(250,204,21,0.75);
+        }
+        /* Amber edge while the row is inert, so an unfinished filter is visible
+           at a glance in a list of finished ones. */
+        .screenerNumRow.isDraft .screenerNumInput { border-color: rgba(250,204,21,0.4); }
         .screenerNumLabel {
           min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
           font-size: 12px; font-weight: 800; color: rgba(226,232,240,0.85);
