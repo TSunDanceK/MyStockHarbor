@@ -237,6 +237,57 @@ export function searchPosts(query: string, limit = 30): InsightSearchResult[] {
   return results;
 }
 
+// ── Related-posts selection ("More Insights" cross-linking module) ─────────
+//
+// Powers app/components/RelatedInsights.tsx, rendered on every
+// /insights/[slug] post page. Mirrors the deterministic, no-I/O selection
+// pattern already shipped for stock pages (see getRelatedSymbols() in
+// lib/curatedSymbols.ts / RelatedStocks.tsx): a July 2026 GSC audit found
+// individual insight posts have exactly ONE inbound internal link each —
+// their listing on the paginated /insights archive (PAGE_SIZE = 20). This
+// gives every post page a small, stable set of links to OTHER post pages
+// too, so Google (and readers) have more than one path to each post.
+//
+// Selection logic (deterministic — no Math.random()/Date.now()):
+//  - Always excludes the current post itself.
+//  - If `currentSymbol` is set, other posts about that SAME symbol are
+//    the most topically related, so they're listed first (there may be
+//    zero or a few).
+//  - The rest of the slots are filled with the most RECENT remaining posts
+//    by `date` (readSortedPosts() already returns newest-first), which is
+//    simple, deterministic, and gives every post — including brand-new
+//    ones — a natural promotion path via being linked from older posts.
+export function getRelatedPosts(
+  currentSlug: string,
+  currentSymbol: string | null,
+  count = 8
+): BlogPost[] {
+  const all = readSortedPosts().filter((post) => post.slug !== currentSlug);
+
+  const related: BlogPost[] = [];
+  const usedSlugs = new Set<string>();
+
+  if (currentSymbol) {
+    const upperSymbol = currentSymbol.toUpperCase();
+    for (const post of all) {
+      if (related.length >= count) break;
+      if (post.symbol && post.symbol.toUpperCase() === upperSymbol) {
+        related.push(post);
+        usedSlugs.add(post.slug);
+      }
+    }
+  }
+
+  for (const post of all) {
+    if (related.length >= count) break;
+    if (usedSlugs.has(post.slug)) continue;
+    related.push(post);
+    usedSlugs.add(post.slug);
+  }
+
+  return related;
+}
+
 export function getPostBySlug(slug: string): BlogPostFull {
   const fullPath = path.join(postsDirectory, `${slug}.md`);
   const fileContents = fs.readFileSync(fullPath, "utf8");
