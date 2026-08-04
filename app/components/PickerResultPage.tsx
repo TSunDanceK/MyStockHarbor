@@ -14,7 +14,7 @@ import { readCachedStockDataBulk } from "@/lib/server/stockDataCache";
 import { getPickersData } from "@/lib/server/pickersBuilder";
 import { WatermarkVisibilityProvider, HideWatermarksBar } from "@/app/components/WatermarkVisibility";
 import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type FilterKey, type AnyFilterKey } from "@/lib/pickerFilters";
-import { CATEGORY_FIELDS } from "@/lib/screenerFields";
+import { CATEGORY_FIELDS, valueSatisfies, type Predicate } from "@/lib/screenerFields";
 
 type PickerTone = "green" | "yellow" | "orange" | "red" | "blue";
 
@@ -27,6 +27,17 @@ export type PickerResultConfig = {
   description: string;
   explainerTitle: string;
   explainerBody: string;
+  // Real body copy, rendered below the results as ordinary always-present
+  // prose.
+  //
+  // Deliberately NOT reusing explainerBody: HowToCollapse is a client component
+  // that renders its body only once opened (`{open ? <p>…</p> : null}`), so
+  // that text is not in the server HTML at all and only ever appears behind a
+  // click. Fine for a usage hint on a condition page; useless for a landing
+  // page, where the copy IS the reason the page can rank. A filtered table plus
+  // one generated sentence is thin content -- see
+  // claude/preset-pages-universe-blocker-2026-08-04.md.
+  bodySections?: { heading: string; paragraphs: string[] }[];
   emptyText: string;
   tone: PickerTone;
   kind: PickerResultKind;
@@ -41,6 +52,13 @@ export type PickerResultConfig = {
   // record flag. Setting this is what opts a page into in-place filtering,
   // independently of its `kind`.
   presetFilters?: AnyFilterKey[];
+  // Non-boolean seeds: a numeric bound or a category value (see
+  // PickerFilterProvider's initialPredicates). This is what defines the
+  // "Popular Screens" pages -- /low-pe-stocks is `peRatio` under 15,
+  // /semiconductor-stocks is `industry` = Semiconductors. Behaves exactly like
+  // presetFilters otherwise: the page ships the full universe with these
+  // already applied, and the visitor can loosen or combine them in place.
+  presetPredicates?: Predicate[];
   // "allSymbols" pages: show the whole list on load instead of hiding until a
   // condition is checked (used by the plain "All Stocks" / Stock Screener page).
   showAllImmediately?: boolean;
@@ -657,6 +675,43 @@ function buildCategoryFlags(sections: PickerSection[], signalRecords: SignalReco
   return flags;
 }
 
+// Server-side twin of PickerResultsGrid's `valueForField`: resolves a registry
+// field key to the value a predicate is tested against. Everything in
+// lib/screenerFields.ts is a plain ResultEntry property except price /
+// changePct / volume, which fall back to the end-of-day close and volume off
+// chartPoints when the ~15-min price pool hasn't warmed that symbol.
+//
+// The two have to agree, because they filter the same page from opposite ends:
+// the grid decides what the visitor sees, this decides what the crawler gets in
+// the SSR'd HTML and what goes into the ItemList structured data. If they
+// diverged, a preset page would advertise a different set than it displays.
+// None of the six launch screens use the derived three, but a future
+// `price=..50` page would land here silently, so the fallback is handled rather
+// than left as a trap.
+function valueForPredicateField(entry: ResultEntry, field: string): unknown {
+  const direct = (entry as unknown as Record<string, unknown>)[field];
+  if (field !== "price" && field !== "changePct" && field !== "volume") return direct;
+  if (typeof direct === "number" && Number.isFinite(direct)) return direct;
+
+  const points = Array.isArray(entry.chartPoints) ? entry.chartPoints : [];
+  const last = points[points.length - 1];
+  if (!last) return undefined;
+
+  if (field === "price") {
+    return Number.isFinite(last.close) ? last.close : undefined;
+  }
+  if (field === "volume") {
+    return typeof last.volume === "number" && Number.isFinite(last.volume) ? last.volume : undefined;
+  }
+
+  const prev = points.length > 1 ? points[points.length - 2] : undefined;
+  const lastClose = Number.isFinite(last.close) ? last.close : null;
+  const prevClose = prev && Number.isFinite(prev.close) ? prev.close : null;
+  return lastClose != null && prevClose != null && prevClose !== 0
+    ? ((lastClose - prevClose) / prevClose) * 100
+    : undefined;
+}
+
 async function getPickerData(config: PickerResultConfig) {
   try {
     const origin = await getOriginFromHeaders();
@@ -791,9 +846,15 @@ async function getPickerData(config: PickerResultConfig) {
     // "preset" kind and the Buy/Sell Signals pages. Everything the visitor sees
     // is filtered client-side from the same seeded selection.
     const presetKeys = config.presetFilters ?? [];
-    const seoEntries = presetKeys.length
-      ? entries.filter((entry) => presetKeys.every((k) => entry[k] === true))
-      : entries;
+    const presetPredicates = config.presetPredicates ?? [];
+    const seoEntries =
+      presetKeys.length || presetPredicates.length
+        ? entries.filter(
+            (entry) =>
+              presetKeys.every((k) => entry[k] === true) &&
+              presetPredicates.every((p) => valueSatisfies(p, valueForPredicateField(entry, p.field)))
+          )
+        : entries;
 
     return {
       updatedAt: typeof payload.updatedAt === "string" ? payload.updatedAt : null,
@@ -828,7 +889,12 @@ export default async function PickerResultPage({
   // `presetFilters` rather than `kind`, because Buy/Sell Signals keep their own
   // kinds for their bespoke scoring and reason chips while still opting in.
   const initialFilters = config.presetFilters ?? [];
-  const isFilterablePage = config.kind === "allSymbols" || config.kind === "preset" || initialFilters.length > 0;
+  const initialPredicates = config.presetPredicates ?? [];
+  const isFilterablePage =
+    config.kind === "allSymbols" ||
+    config.kind === "preset" ||
+    initialFilters.length > 0 ||
+    initialPredicates.length > 0;
 
   // Values actually present in this page's payload for each category field,
   // alphabetical. Derived from the entries rather than hardcoded so a value with
@@ -934,6 +1000,18 @@ export default async function PickerResultPage({
         .note { margin: 10px 0 0; color: rgba(226,232,240,0.74); font-size: 13px; line-height: 1.55; min-height: 40px; }
         .emptyBox { margin-top: 16px; border: 1px solid rgba(255,255,255,0.10); border-radius: 18px; padding: 18px; background: rgba(255,255,255,0.035); color: rgba(226,232,240,0.72); line-height: 1.7; }
         .scanDebug { margin-top: 30px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); font-size: 11px; line-height: 1.5; color: rgba(148,163,184,0.5); letter-spacing: 0.02em; }
+
+        .screenerProse { margin-top: 40px; padding-top: 28px; border-top: 1px solid rgba(255,255,255,0.08); max-width: 780px; }
+        .screenerProseBlock + .screenerProseBlock { margin-top: 28px; }
+        .screenerProse h2 { margin: 0 0 10px; font-size: 19px; line-height: 1.3; font-weight: 800; color: #e2e8f0; letter-spacing: -0.01em; }
+        .screenerProse p { margin: 0 0 12px; font-size: 14.5px; line-height: 1.75; color: rgba(226,232,240,0.78); }
+        .screenerProse p:last-child { margin-bottom: 0; }
+        @media (max-width: 640px) {
+          .screenerProse { margin-top: 32px; padding-top: 22px; }
+          .screenerProse h2 { font-size: 17.5px; }
+          .screenerProse p { font-size: 14px; line-height: 1.7; }
+        }
+
         .seeMoreWrap { margin-top: 20px; display: flex; justify-content: center; }
         .seeMoreBtn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 22px; border-radius: 999px; border: 1px solid rgba(96,165,250,0.4); background: rgba(59,130,246,0.10); color: #dbeafe; font-weight: 800; font-size: 13.5px; cursor: pointer; }
         .seeMoreBtn:hover { background: rgba(59,130,246,0.16); border-color: rgba(96,165,250,0.6); }
@@ -1070,7 +1148,7 @@ export default async function PickerResultPage({
       `}</style>
 
         <div className="resultWrap">
-          <PickerFilterProvider initialFilters={initialFilters}>
+          <PickerFilterProvider initialFilters={initialFilters} initialPredicates={initialPredicates}>
             <div className="resultShell">
               <ScreenerNav currentHref={config.href} variant="sidebar" showFilters showSearch alwaysFilterMode={isFilterablePage} categoryValues={categoryValues} />
 
@@ -1118,6 +1196,19 @@ export default async function PickerResultPage({
                   splitReasonsBySelection={isFilterablePage}
                   collapseReasons={config.kind === "allSymbols"}
                 />
+
+                {config.bodySections?.length ? (
+                  <section className="screenerProse">
+                    {config.bodySections.map((section) => (
+                      <div key={section.heading} className="screenerProseBlock">
+                        <h2>{section.heading}</h2>
+                        {section.paragraphs.map((paragraph) => (
+                          <p key={paragraph.slice(0, 48)}>{paragraph}</p>
+                        ))}
+                      </div>
+                    ))}
+                  </section>
+                ) : null}
 
                 <div className="scanDebug">
                   Current scan · Live matches {foundCount} · Shown {seoEntries.length} · Universe {combinedUniverseSize ?? "Live"} · Updated {formatUpdatedAt(updatedAt)}
