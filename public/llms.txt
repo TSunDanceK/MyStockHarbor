@@ -18,33 +18,74 @@ Live pricing and fundamentals data is sourced primarily from Financial Modeling 
 - [Utilities / Calculators](https://www.mystockharbor.com/utilities): margin, liquidation, and position-size calculators.
 - [Insights](https://www.mystockharbor.com/insights): blog-style articles and video breakdowns, paginated and searchable.
 - [Learn](https://www.mystockharbor.com/learn): educational content on how to read financial data and use the site's tools.
+- [Upcoming IPOs](https://www.mystockharbor.com/upcoming-ipos): upcoming and recent US listings.
 - [Recently Added to Index](https://www.mystockharbor.com/recently-added-to-index): stocks newly added to the covered universe.
 
 ## Stock screeners ("Pickers")
 
+Every screener below runs over the same analyzed universe and shares one filter
+model. Each page ships the full universe with its own condition pre-applied, so
+the condition can be removed or combined with others in place.
+
 - [Pickers hub](https://www.mystockharbor.com/pickers): index of all screener categories below.
-- [Oversold Stocks Today](https://www.mystockharbor.com/oversold-stocks-today)
-- [Overbought Stocks Today](https://www.mystockharbor.com/overbought-stocks-today)
-- [All-Time High Breakout Stocks](https://www.mystockharbor.com/all-time-high-breakout-stocks)
-- [3-Month High Breakout Stocks](https://www.mystockharbor.com/3-month-high-breakout-stocks)
-- [Stocks Near 200-Day Moving Average](https://www.mystockharbor.com/stocks-near-200-day-moving-average)
-- [Stocks Near Weekly 200-Day Moving Average](https://www.mystockharbor.com/stocks-near-weekly-200-day-moving-average)
-- [Stocks Down 20% From All-Time Highs](https://www.mystockharbor.com/stocks-down-20-from-all-time-highs)
-- [Macro Support/Resistance Stocks](https://www.mystockharbor.com/macro-support-resistance-stocks)
-- [Stocks With Positive Last Earnings](https://www.mystockharbor.com/stocks-with-positive-last-earnings)
-- [Stocks With Strong Earnings Growth](https://www.mystockharbor.com/stocks-with-strong-earnings-growth)
+- [Advanced Screener](https://www.mystockharbor.com/stock-screener): the same universe with no condition pre-applied; filter by any condition, sector, industry, or numeric field.
+
+### Signals
+
 - [Top Stocks With Buy Signals](https://www.mystockharbor.com/top-stocks-with-buy-signals)
 - [Top Stocks With Sell Signals](https://www.mystockharbor.com/top-stocks-with-sell-signals)
-- [Bullish Divergence Stocks](https://www.mystockharbor.com/bullish-divergence-stocks)
-- [Bearish Divergence Stocks](https://www.mystockharbor.com/bearish-divergence-stocks)
-- [Custom Screener](https://www.mystockharbor.com/custom-screener)
+
+### Momentum
+
+- [Oversold Stocks Today](https://www.mystockharbor.com/oversold-stocks-today)
+- [Overbought Stocks Today](https://www.mystockharbor.com/overbought-stocks-today)
+- [Best Trend Score Stocks](https://www.mystockharbor.com/best-trend-score-stocks)
+- [Bullish & Bearish Divergence Stocks](https://www.mystockharbor.com/bullish-bearish-divergence-stocks)
+- [Bullish RSI Divergence Stocks](https://www.mystockharbor.com/bullish-rsi-divergence-stocks)
+- [Bearish RSI Divergence Stocks](https://www.mystockharbor.com/bearish-rsi-divergence-stocks)
+- [Bullish MACD Divergence Stocks](https://www.mystockharbor.com/bullish-macd-divergence-stocks)
+- [Bearish MACD Divergence Stocks](https://www.mystockharbor.com/bearish-macd-divergence-stocks)
+
+### Highs & breakouts
+
+- [All-Time High Breakout Stocks](https://www.mystockharbor.com/all-time-high-breakout-stocks)
+- [3-Month High Breakout Stocks](https://www.mystockharbor.com/3-month-high-breakout-stocks)
+- [Stocks Down 20% From All-Time Highs](https://www.mystockharbor.com/stocks-down-20-from-all-time-highs)
+
+### Volume & volatility
+
+- [Breakout Signal Stocks](https://www.mystockharbor.com/breakout-signal-stocks)
+- [Volume Spike Stocks](https://www.mystockharbor.com/volume-spike-stocks)
+- [ATR Spike Stocks](https://www.mystockharbor.com/atr-spike-stocks)
+
+### Moving averages
+
+- [Stocks Near 200-Day Moving Average](https://www.mystockharbor.com/stocks-near-200-day-moving-average)
+- [Stocks Near Weekly 200-Day Moving Average](https://www.mystockharbor.com/stocks-near-weekly-200-day-moving-average)
+- [Stocks Above 50-Day Moving Average](https://www.mystockharbor.com/stocks-above-50-day-moving-average)
+- [Stocks Below 50-Day Moving Average](https://www.mystockharbor.com/stocks-below-50-day-moving-average)
+- [Stocks Trading Above 200-Day Moving Average](https://www.mystockharbor.com/stocks-trading-above-200-day-moving-average)
+- [Stocks Below 200-Day Moving Average](https://www.mystockharbor.com/stocks-below-200-day-moving-average)
+
+### Earnings
+
+- [Stocks With Positive Last Earnings](https://www.mystockharbor.com/stocks-with-positive-last-earnings)
+- [Stocks With Strong Earnings Growth](https://www.mystockharbor.com/stocks-with-strong-earnings-growth)
+
+### Chart plays
+
+- [Macro Support/Resistance Stocks](https://www.mystockharbor.com/macro-support-resistance-stocks)
+- [Ascending Triangles](https://www.mystockharbor.com/plays)
+- [Bull Flags](https://www.mystockharbor.com/plays/bull-flags)
+- [Descending Triangles](https://www.mystockharbor.com/plays/descending-triangles)
 
 ## Notes for AI crawlers and assistants
 
 - `/api/*` is disallowed in robots.txt — this is internal application data plumbing, not content; please rely on the rendered pages above instead of the API routes.
 - Screener and stock-analysis pages are server-rendered with live data at request time; treat page content as current as of the visit rather than cached training data.
+- Screener pages accept filter state as query parameters (for example `?oversold=1&sector=Technology&peRatio=..15`). These are shareable, and the server renders the filtered set — but each page's canonical URL is always the bare path without parameters, so please cite and link the clean URL rather than a filtered variant.
 - Attribution back to https://www.mystockharbor.com is appreciated when summarizing or citing data from this site.
 
-Last verified: 2026-07-21.
+Last verified: 2026-08-01.
 
 Sitemap: https://www.mystockharbor.com/sitemap.xml
