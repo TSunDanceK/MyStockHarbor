@@ -14,6 +14,8 @@ import {
   type Point,
 } from "@/lib/indicators";
 import { mintQuoteToken } from "@/lib/server/quoteToken";
+import { getRelatedSymbols } from "@/lib/curatedSymbols";
+import RelatedStocks from "@/app/components/RelatedStocks";
 import StockSymbolPageClient, { type InitialQuote } from "./StockSymbolPageClient";
 
 type Props = {
@@ -378,6 +380,13 @@ export default async function StockPage({ params }: Props) {
   const seoTitle = buildSeoTitle(upper, seed);
   const seoDescription = buildSeoDescription(upper, seed);
 
+  // Curated, deterministic set of OTHER stock symbols for the "Explore More
+  // Stocks" internal-linking module (see lib/curatedSymbols.ts and
+  // app/components/RelatedStocks.tsx). Pure/no I/O — reuses the same
+  // curated arrays app/sitemap.ts submits to Google, doesn't add any new
+  // API calls.
+  const relatedSymbols = getRelatedSymbols(upper);
+
   return (
     <>
       <script
@@ -469,6 +478,16 @@ export default async function StockPage({ params }: Props) {
         // sends no header and behaviour is unchanged. See lib/server/quoteToken.ts.
         pageToken={mintQuoteToken()}
       />
+
+      {/* -- Explore More Stocks --------------------------------------
+             Server-rendered, always-present internal-linking module to
+             OTHER stock pages (see lib/curatedSymbols.ts +
+             app/components/RelatedStocks.tsx). Rendered here rather than
+             threaded through the large StockSymbolPageClient.tsx client
+             component to keep this change tightly scoped -- it's still
+             part of the same server-rendered response, so it's in the
+             crawlable initial HTML. -- */}
+      <RelatedStocks currentSymbol={upper} symbols={relatedSymbols} />
     </>
   );
 }
