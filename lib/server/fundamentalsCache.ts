@@ -32,6 +32,13 @@ const QUOTE_CHUNK_SIZE = 50; // batch-quote symbols per FMP call
 const PROFILE_MAX_PER_RUN = 120; // cap fresh profile fetches per run
 const FMP_MIN_HEADROOM_CALLS = 60; // leave room for history/earnings warmers
 
+// The FMP guard counts calls per MINUTE, so an exhausted budget means "wait a
+// few seconds", not "give up". Both stages draw on one shared wait budget for
+// the whole run, so total waiting is bounded well inside the function's max
+// duration no matter how the stages interleave.
+const CAPACITY_POLL_MS = 5_000;
+const CAPACITY_WAIT_BUDGET_MS = 90_000;
+
 export type FundamentalsRow = {
   symbol: string;
   marketCap: number | null;
@@ -70,6 +77,33 @@ function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
   return out;
+}
+
+/** Mutable, shared across both stages of a single warm run. */
+type WaitBudget = { remainingMs: number };
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Block until there is FMP headroom, or until the run's shared wait budget is
+ * spent. Returns false only in the latter case.
+ *
+ * This exists because the previous code abandoned a stage the instant the
+ * per-minute budget was tight. Since the budget refills every minute, a single
+ * busy moment was permanently costing the whole stage -- which is how the
+ * profile stage came to fetch ~nothing on nearly every run.
+ */
+async function awaitFmpCapacity(wait: WaitBudget): Promise<boolean> {
+  if (await hasFmpCapacity(1, FMP_MIN_HEADROOM_CALLS)) return true;
+  while (wait.remainingMs > 0) {
+    const step = Math.min(CAPACITY_POLL_MS, wait.remainingMs);
+    await sleep(step);
+    wait.remainingMs -= step;
+    if (await hasFmpCapacity(1, FMP_MIN_HEADROOM_CALLS)) return true;
+  }
+  return false;
 }
 
 /**
@@ -139,42 +173,52 @@ async function readCachedProfilesBulk(
 // works on FMP plans without the batch endpoint).
 async function fetchQuoteFundamentals(
   symbols: string[],
-  apiKey: string
+  apiKey: string,
+  wait: WaitBudget
 ): Promise<Map<string, { marketCap: number | null; peRatio: number | null }>> {
   const out = new Map<string, { marketCap: number | null; peRatio: number | null }>();
 
-  for (const group of chunk(symbols, QUOTE_CHUNK_SIZE)) {
-    if (!(await hasFmpCapacity(1, FMP_MIN_HEADROOM_CALLS))) break;
+  // stable/batch-quote is not on every FMP plan -- it answers 402 on Starter,
+  // which is what this project runs. One rejection is enough to know: stop
+  // spending a reserved call slot per chunk on a call that cannot succeed.
+  let batchAvailable = true;
 
+  for (const group of chunk(symbols, QUOTE_CHUNK_SIZE)) {
     let ok = false;
-    try {
-      await reserveFmpCallSlot();
-      const url = `https://financialmodelingprep.com/stable/batch-quote?symbols=${encodeURIComponent(
-        group.join(",")
-      )}&apikey=${encodeURIComponent(apiKey)}`;
-      const res = await fetch(url, {
-        cache: "no-store",
-        headers: { accept: "application/json" },
-      });
-      if (res.ok) {
-        const json = await res.json().catch(() => null);
-        if (Array.isArray(json) && json.length) {
-          for (const row of json) {
-            const sym = cleanSymbol(row?.symbol);
-            if (!sym) continue;
-            out.set(sym, { marketCap: num(row?.marketCap), peRatio: num(row?.pe) });
+
+    if (batchAvailable) {
+      if (!(await awaitFmpCapacity(wait))) return out;
+      try {
+        await reserveFmpCallSlot();
+        const url = `https://financialmodelingprep.com/stable/batch-quote?symbols=${encodeURIComponent(
+          group.join(",")
+        )}&apikey=${encodeURIComponent(apiKey)}`;
+        const res = await fetch(url, {
+          cache: "no-store",
+          headers: { accept: "application/json" },
+        });
+        if (res.status === 401 || res.status === 402 || res.status === 403) {
+          batchAvailable = false;
+        } else if (res.ok) {
+          const json = await res.json().catch(() => null);
+          if (Array.isArray(json) && json.length) {
+            for (const row of json) {
+              const sym = cleanSymbol(row?.symbol);
+              if (!sym) continue;
+              out.set(sym, { marketCap: num(row?.marketCap), peRatio: num(row?.pe) });
+            }
+            ok = true;
           }
-          ok = true;
         }
+      } catch {
+        ok = false;
       }
-    } catch {
-      ok = false;
     }
 
     if (!ok) {
       // Per-symbol fallback for this chunk.
       for (const sym of group) {
-        if (!(await hasFmpCapacity(1, FMP_MIN_HEADROOM_CALLS))) break;
+        if (!(await awaitFmpCapacity(wait))) return out;
         try {
           await reserveFmpCallSlot();
           const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(
@@ -221,9 +265,9 @@ async function fetchProfile(sym: string, apiKey: string): Promise<ProfileLite | 
 
 /**
  * Cron/warm worker: refresh cached fundamentals for the given universe.
- *   - market cap + PE via batch quote (daily-fresh)
- *   - industry/sector via profile, only for symbols whose profile isn't
+ *   - industry/sector via profile FIRST, only for symbols whose profile isn't
  *     already cached (30-day TTL), capped per run
+ *   - then market cap + PE via quote (daily-fresh)
  * Writes one combined FundamentalsRow per symbol (26h TTL). Fail-open and
  * budget-guarded throughout. Returns a small summary for the job response.
  */
@@ -239,16 +283,21 @@ export async function warmFundamentals(symbols: string[]) {
     };
   }
 
-  // 1) market cap + PE for everyone (batched).
-  const quoteMap = await fetchQuoteFundamentals(cleanSymbols, apiKey);
+  const wait: WaitBudget = { remainingMs: CAPACITY_WAIT_BUDGET_MS };
 
-  // 2) industry/sector: reuse cached profiles, fetch only the misses (capped).
+  // 1) industry/sector FIRST: reuse cached profiles, fetch only the misses
+  // (capped). This stage runs before quotes deliberately. Quotes need one call
+  // per symbol on plans without batch-quote -- roughly the whole universe --
+  // so running it first left the profile stage staring at a drained budget,
+  // and profiles are the only source of industry/sector. Profiles are also
+  // far cheaper in aggregate: they carry a 30-day TTL, so in the steady state
+  // this stage fetches a handful of symbols a day, not the whole universe.
   const cachedProfiles = await readCachedProfilesBulk(cleanSymbols);
   const profileMisses = cleanSymbols.filter((s) => !cachedProfiles.has(s));
   let profileFetches = 0;
   for (const sym of profileMisses) {
     if (profileFetches >= PROFILE_MAX_PER_RUN) break;
-    if (!(await hasFmpCapacity(1, FMP_MIN_HEADROOM_CALLS))) break;
+    if (!(await awaitFmpCapacity(wait))) break;
     const profile = await fetchProfile(sym, apiKey);
     if (profile) {
       cachedProfiles.set(sym, profile);
@@ -260,6 +309,9 @@ export async function warmFundamentals(symbols: string[]) {
       }
     }
   }
+
+  // 2) market cap + PE for everyone.
+  const quoteMap = await fetchQuoteFundamentals(cleanSymbols, apiKey, wait);
 
   // 3) write combined records for every symbol we have any data for.
   const now = new Date().toISOString();
@@ -292,7 +344,10 @@ export async function warmFundamentals(symbols: string[]) {
     ok: true,
     universe: cleanSymbols.length,
     quotesFetched: quoteMap.size,
+    profileMisses: profileMisses.length,
     profileFetches,
+    profilesKnown: cachedProfiles.size,
+    waitedMs: CAPACITY_WAIT_BUDGET_MS - wait.remainingMs,
     written,
   };
 }
