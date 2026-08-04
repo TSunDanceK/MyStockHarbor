@@ -245,12 +245,29 @@ function deriveRow(entry: ResultEntry): DerivedRow {
       ? ((eodClose - prevClose) / prevClose) * 100
       : null;
   const eodVolume = last && typeof last.volume === "number" && Number.isFinite(last.volume) ? last.volume : null;
+
+  // Zero is treated as MISSING for price and volume, not as data.
+  //
+  // A listed stock never trades exactly 0 shares in a session and never has a
+  // price of exactly 0, so a zero here is the pool reporting "I don't have
+  // this" in a numeric field. The old check only asked Number.isFinite, which
+  // 0 passes, so the zero won and the end-of-day fallback never ran -- INTC and
+  // NVDA were both showing Volume 0 on the screener while every other row had a
+  // real figure. Falling through to the chartPoints close/volume gives the last
+  // known good value instead of a figure that is not merely stale but wrong.
+  //
+  // changePct is deliberately NOT guarded this way: a stock genuinely can close
+  // unchanged, so 0 there is a real observation rather than a missing one.
   const price =
-    typeof entry.price === "number" && Number.isFinite(entry.price) ? entry.price : eodClose;
+    typeof entry.price === "number" && Number.isFinite(entry.price) && entry.price > 0
+      ? entry.price
+      : eodClose;
   const changePct =
     typeof entry.changePct === "number" && Number.isFinite(entry.changePct) ? entry.changePct : eodChangePct;
   const volume =
-    typeof entry.volume === "number" && Number.isFinite(entry.volume) ? entry.volume : eodVolume;
+    typeof entry.volume === "number" && Number.isFinite(entry.volume) && entry.volume > 0
+      ? entry.volume
+      : eodVolume;
   const ma200 = last && typeof last.ma200 === "number" && Number.isFinite(last.ma200) ? last.ma200 : null;
   return { price, changePct, volume, ma200 };
 }
