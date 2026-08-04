@@ -140,14 +140,14 @@ export default function StockIndicatorsPage() {
           }}
         >
           <IndicatorCard
-            href="/what-is-rsi-indicator"
+            href="/learn/rsi"
             title="Understand RSI"
             desc="Read how RSI can help identify oversold and overbought zones."
             tint="green"
           />
 
           <IndicatorCard
-            href="/what-is-macd-indicator"
+            href="/learn/macd"
             title="Learn MACD Divergence"
             desc="MACD can help confirm momentum shifts, trend strength and divergence."
             tint="blue"
@@ -168,14 +168,14 @@ export default function StockIndicatorsPage() {
           />
 
           <IndicatorCard
-            href="/stocks-with-unusual-volume"
+            href="/volume-spike-stocks"
             title="Stocks With Unusual Volume"
             desc="See why unusual volume can matter when reviewing breakouts and momentum."
             tint="purple"
           />
 
           <IndicatorCard
-            href="/stocks-above-200-day-moving-average"
+            href="/stocks-trading-above-200-day-moving-average"
             title="Stocks Above 200 Day Moving Average"
             desc="Understand how traders use the 200-day moving average as a long-term trend filter."
             tint="blue"
