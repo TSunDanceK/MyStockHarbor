@@ -75,23 +75,37 @@ const PickerFilterContext = createContext<PickerFilterContextValue | null>(null)
 export function PickerFilterProvider({
   children,
   initialFilters = [],
+  initialPredicates = [],
 }: {
   children: ReactNode;
   initialFilters?: AnyFilterKey[];
+  // Seeds that aren't boolean conditions -- a numeric bound (`peRatio` under
+  // 15) or a category value (`industry` = Semiconductors). The "Popular
+  // Screens" landing pages are defined by exactly these, and a flag key cannot
+  // express them: there is no `cheap` boolean on a record, only a PE column to
+  // put a ceiling on. Kept as a separate prop rather than widening
+  // `initialFilters` so the existing 24 condition pages are untouched.
+  initialPredicates?: Predicate[];
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // The seed as it was at mount, frozen. A ref rather than the prop itself
-  // because `initialFilters` is re-created on every render when a page passes
-  // no presetFilters, and because the question being answered is "has the
-  // visitor moved away from what this page started as" -- which is about the
-  // original seed, not whatever the prop happens to say now.
-  const presetRef = useRef<AnyFilterKey[]>(initialFilters);
-  const presetPredicates = useMemo<Predicate[]>(
-    () => presetRef.current.map((field) => ({ kind: "flag" as const, field })),
-    []
-  );
+  // The seed as it was at mount, frozen. Frozen because both props are
+  // re-created on every render when a page passes no preset, and because the
+  // question being answered downstream is "has the visitor moved away from what
+  // this page started as" -- which is about the original seed, not whatever the
+  // prop happens to say now.
+  //
+  // A lazy useState rather than a ref: the initialiser runs exactly once and
+  // the value is then ordinary state, which is safe to read during render.
+  // (Refs are not -- react-hooks/refs flags reading .current in a render path,
+  // and the previous version tripped it.) Nothing ever calls the setter, so
+  // this is a write-once constant with the right semantics rather than state in
+  // any meaningful sense.
+  const [presetPredicates] = useState<Predicate[]>(() => [
+    ...initialFilters.map((field) => ({ kind: "flag" as const, field })),
+    ...initialPredicates,
+  ]);
 
   // The URL's own view of the selection. `hasFilterParams` is asked separately
   // from `parsePredicates` because an empty result is ambiguous: a clean URL
@@ -170,15 +184,23 @@ export function PickerFilterProvider({
     });
   }, []);
 
-  // Same set, ignoring order. Any category or numeric predicate makes it false
-  // by definition, since the seed only ever contains flags.
-  const isPristine = useMemo(() => {
-    const preset = presetRef.current;
-    if (predicates.length !== preset.length) return false;
-    return predicates.every((p) => p.kind === "flag" && preset.includes(p.field));
-  }, [predicates]);
-
   const currentQuery = useMemo(() => predicatesQueryString(predicates), [predicates]);
+  const presetQuery = useMemo(() => predicatesQueryString(presetPredicates), [presetPredicates]);
+
+  // "Is the selection still exactly what this page started as?"
+  //
+  // Compared as canonical query strings rather than by walking the arrays.
+  // serializePredicates sorts by field and writes one param per predicate, so
+  // two selections produce the same string exactly when they are the same
+  // selection -- which makes this order-independent for free, and correct for
+  // numeric and category seeds as well as flags. (The previous implementation
+  // compared flag fields directly and documented that "any category or numeric
+  // predicate makes it false by definition, since the seed only ever contains
+  // flags" -- no longer true now that the Popular Screens pages seed exactly
+  // those. Left as a set comparison it would have made those pages permanently
+  // non-pristine, which would have put ?peRatio=..15 on the canonical URL of a
+  // page whose whole point is to be that filter.)
+  const isPristine = currentQuery === presetQuery;
 
   // While the selection is still the page's own preset the URL stays clean, so
   // the resting state of every condition page remains the bare canonical path
