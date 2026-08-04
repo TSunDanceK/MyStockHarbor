@@ -97,8 +97,36 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
       {
-        source: "/stocks/:symbol",
-        destination: "/stock/:symbol",
+        source: "/:path*",
+        has: [
+          {
+            type: "host",
+            value: "mystockharbor.com",
+          },
+        ],
+        destination: "https://www.mystockharbor.com/:path*",
+        permanent: true,
+      },
+      {
+        source: "/:path*",
+        has: [
+          {
+            type: "host",
+            value: "mystockharbour.com",
+          },
+        ],
+        destination: "https://www.mystockharbor.com/:path*",
+        permanent: true,
+      },
+      {
+        source: "/:path*",
+        has: [
+          {
+            type: "host",
+            value: "www.mystockharbour.com",
+          },
+        ],
+        destination: "https://www.mystockharbor.com/:path*",
         permanent: true,
       },
     ];
