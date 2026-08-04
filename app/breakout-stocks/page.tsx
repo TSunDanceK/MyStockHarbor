@@ -390,7 +390,7 @@ export default function BreakoutStocksPage() {
               desc="Learn how traders review stretched downside conditions and rebound setups."
             />
             <RelatedCard
-              href="/buy-the-dip-stocks"
+              href="/stocks-down-20-from-all-time-highs"
               title="Buy The Dip Stocks"
               desc="Review pullback setups that may still fit a constructive trend."
             />
