@@ -10,7 +10,7 @@
  *   import GuideJsonLd from "@/app/components/GuideJsonLd";
  *   // inside the page's default export JSX:
  *   <GuideJsonLd
- *     path="/what-is-rsi-indicator"
+ *     path="/learn/rsi"
  *     title="What Is RSI Indicator?"
  *     description="Learn what the RSI indicator is and how traders use it."
  *     breadcrumbs={[{ name: "Learn", href: "/learn" }]}
@@ -27,7 +27,7 @@ type Crumb = {
 };
 
 type Props = {
-  /** e.g. "/what-is-rsi-indicator" */
+  /** e.g. "/learn/rsi" */
   path: string;
   /** Plain text page title (without " | MyStockHarbor") */
   title: string;
