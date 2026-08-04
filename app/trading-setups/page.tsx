@@ -32,7 +32,7 @@ const cards = [
   { href: "/breakout-stocks", title: "Breakout Stocks", desc: "Stocks pushing above resistance with strong momentum and price expansion.", tint: "red" },
   { href: "/oversold-stocks", title: "Oversold Stocks", desc: "Stocks that may be stretched to the downside after heavy selling.", tint: "blue" },
   { href: "/overbought-stocks", title: "Overbought Stocks", desc: "Stocks that may be stretched after strong upside moves and fast rallies.", tint: "amber" },
-  { href: "/buy-the-dip-stocks", title: "Buy The Dip", desc: "Pullback opportunities within stronger trends where buyers may step back in.", tint: "green" },
+  { href: "/stocks-down-20-from-all-time-highs", title: "Buy The Dip", desc: "Pullback opportunities within stronger trends where buyers may step back in.", tint: "green" },
   { href: "/stocks-down-from-highs", title: "Stocks Down From Highs", desc: "Stocks that have pulled back significantly from recent highs.", tint: "purple" },
   { href: "/bullish-divergence-stocks", title: "Bullish Divergence", desc: "When momentum starts improving even while price still looks weak.", tint: "green" },
   { href: "/bearish-divergence-stocks", title: "Bearish Divergence", desc: "When momentum starts weakening during rising prices.", tint: "red" },
