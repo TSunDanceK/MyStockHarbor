@@ -91,6 +91,18 @@ const seoGuides = [
   "/stocks-with-positive-last-earnings",
   "/stocks-with-strong-earnings-growth",
 
+  // "Popular Screens" — hand-written landing pages, each a saved fundamental
+  // screen rather than a technical condition. Reachable from the Pickers
+  // dropdown and the Select Screener sidebar; listed here too, but it's the
+  // internal links that actually get them indexed (see
+  // claude/preset-pages-universe-blocker-2026-08-04.md).
+  "/low-pe-stocks",
+  "/high-dividend-yield-stocks",
+  "/dividend-growth-stocks",
+  "/cash-rich-value-stocks",
+  "/semiconductor-stocks",
+  "/cheap-tech-stocks",
+
   // chart pattern plays
   "/plays",
   "/plays/descending-triangles",

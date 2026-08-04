@@ -763,7 +763,13 @@ export default function SiteHeader({
           path === "/3-month-high-breakout-stocks" ||
           path === "/best-trend-score-stocks" ||
           path === "/stocks-with-positive-last-earnings" ||
-          path === "/stocks-with-strong-earnings-growth",
+          path === "/stocks-with-strong-earnings-growth" ||
+          path === "/low-pe-stocks" ||
+          path === "/high-dividend-yield-stocks" ||
+          path === "/dividend-growth-stocks" ||
+          path === "/cash-rich-value-stocks" ||
+          path === "/semiconductor-stocks" ||
+          path === "/cheap-tech-stocks",
         menuMinWidth: 220,
         submenuMinWidth: 250,
         entries: [
@@ -787,6 +793,56 @@ export default function SiteHeader({
             href: "/pickers",
             isActive: (path) => path === "/pickers",
             emphasize: true,
+          },
+          // Hand-written landing pages, each one a saved fundamental screen
+          // (see claude/preset-pages-universe-blocker-2026-08-04.md). Placed
+          // directly under the two landing links rather than at the bottom
+          // because this is the primary route to them: they are not reachable
+          // from any results page by clicking a condition, so the menu IS the
+          // navigation. Internal linking, not the sitemap, is what gets these
+          // indexed.
+          {
+            kind: "submenu",
+            label: "Popular Screens",
+            isActive: (path) =>
+              path === "/low-pe-stocks" ||
+              path === "/high-dividend-yield-stocks" ||
+              path === "/dividend-growth-stocks" ||
+              path === "/cash-rich-value-stocks" ||
+              path === "/semiconductor-stocks" ||
+              path === "/cheap-tech-stocks",
+            items: [
+              {
+                label: "Low P/E Stocks",
+                href: "/low-pe-stocks",
+                isActive: (path) => path === "/low-pe-stocks",
+              },
+              {
+                label: "High Dividend Yield",
+                href: "/high-dividend-yield-stocks",
+                isActive: (path) => path === "/high-dividend-yield-stocks",
+              },
+              {
+                label: "Dividend Growth",
+                href: "/dividend-growth-stocks",
+                isActive: (path) => path === "/dividend-growth-stocks",
+              },
+              {
+                label: "Cash-Rich Value",
+                href: "/cash-rich-value-stocks",
+                isActive: (path) => path === "/cash-rich-value-stocks",
+              },
+              {
+                label: "Semiconductor Stocks",
+                href: "/semiconductor-stocks",
+                isActive: (path) => path === "/semiconductor-stocks",
+              },
+              {
+                label: "Cheap Tech Stocks",
+                href: "/cheap-tech-stocks",
+                isActive: (path) => path === "/cheap-tech-stocks",
+              },
+            ],
           },
           {
             kind: "submenu",
