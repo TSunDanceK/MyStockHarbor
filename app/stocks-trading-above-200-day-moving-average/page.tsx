@@ -34,8 +34,8 @@ const config: PickerResultConfig = {
   presetFilters: ["aboveMA200"],
   maxItems: 36,
   relatedGuide: {
-    href: "/stocks-above-200-day-moving-average",
-    label: "our guide to the 200-day moving average",
+    href: "/learn/moving-averages",
+    label: "our lesson on moving averages",
     blurb: "For why this level matters and how traders use it, see",
   },
 };
