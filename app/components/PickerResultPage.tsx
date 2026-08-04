@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { headers } from "next/headers";
 import type { MiniCandlePoint, SupportResistanceZone } from "@/app/components/MiniPickerCandleChart";
 import PickerHighlightScroller from "@/app/components/PickerHighlightScroller";
@@ -52,6 +53,15 @@ export type PickerResultConfig = {
   // after is visible on arrival rather than a click away — dividend growth,
   // payout ratio and free cash flow each appear on exactly one tab.
   defaultTab?: TabKey;
+  // The explainer guide covering the same idea as this screen, e.g.
+  // /oversold-stocks-today -> /oversold-stocks.
+  //
+  // These pairs already existed and were not linked in either direction: the
+  // guide linked only to the generic /pickers hub, and the screener linked
+  // nowhere. Two thin pages targeting the same query with no relationship
+  // between them is a cannibalisation setup -- the link is what tells a search
+  // engine (and a reader) which is the explanation and which is the live list.
+  relatedGuide?: { href: string; label: string; blurb: string };
   emptyText: string;
   tone: PickerTone;
   kind: PickerResultKind;
@@ -1020,6 +1030,11 @@ export default async function PickerResultPage({
         .screenerProse h2 { margin: 0 0 10px; font-size: 19px; line-height: 1.3; font-weight: 800; color: #e2e8f0; letter-spacing: -0.01em; }
         .screenerProse p { margin: 0 0 12px; font-size: 14.5px; line-height: 1.75; color: rgba(226,232,240,0.78); }
         .screenerProse p:last-child { margin-bottom: 0; }
+
+        .screenerGuideLink { margin-top: 28px; padding: 16px 18px; border: 1px solid rgba(96,165,250,0.28); border-radius: 16px; background: rgba(59,130,246,0.08); max-width: 780px; }
+        .screenerGuideEyebrow { display: block; font-size: 10.5px; font-weight: 900; letter-spacing: 0.09em; text-transform: uppercase; color: rgba(147,197,253,0.85); margin-bottom: 6px; }
+        .screenerGuideLink p { margin: 0; font-size: 14px; line-height: 1.65; color: rgba(226,232,240,0.8); }
+        .screenerGuideLink a { color: #93c5fd; font-weight: 800; text-decoration: underline; text-underline-offset: 2px; }
         @media (max-width: 640px) {
           .screenerProse { margin-top: 32px; padding-top: 22px; }
           .screenerProse h2 { font-size: 17.5px; }
@@ -1237,6 +1252,16 @@ export default async function PickerResultPage({
                         ))}
                       </div>
                     ))}
+                  </section>
+                ) : null}
+
+                {config.relatedGuide ? (
+                  <section className="screenerGuideLink">
+                    <span className="screenerGuideEyebrow">Background reading</span>
+                    <p>
+                      {config.relatedGuide.blurb}{" "}
+                      <Link href={config.relatedGuide.href}>{config.relatedGuide.label}</Link>.
+                    </p>
                   </section>
                 ) : null}
 
