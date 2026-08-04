@@ -61,6 +61,28 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
+    // Hand-written landing pages, each defined by a fundamental screen rather
+    // than a technical condition (see claude/preset-pages-universe-blocker-2026-08-04.md).
+    // They seed `presetPredicates` -- a numeric bound or a category value --
+    // rather than a `filterKey`, so they have no checkbox here and stay plain
+    // links even in filter mode, the same as the three Chart Plays below.
+    //
+    // Listed in the sidebar as well as the header dropdown deliberately:
+    // internal linking, not the sitemap, is the binding constraint on getting
+    // these indexed -- two independent GSC audits in this repo reached that
+    // same conclusion.
+    heading: "Popular Screens",
+    headingColor: "#38bdf8",
+    items: [
+      { href: "/low-pe-stocks", label: "Low P/E Stocks", icon: "◈", tone: "blue" },
+      { href: "/high-dividend-yield-stocks", label: "High Dividend Yield", icon: "◈", tone: "green" },
+      { href: "/dividend-growth-stocks", label: "Dividend Growth", icon: "◈", tone: "green" },
+      { href: "/cash-rich-value-stocks", label: "Cash-Rich Value", icon: "◈", tone: "blue" },
+      { href: "/semiconductor-stocks", label: "Semiconductor Stocks", icon: "◈", tone: "blue" },
+      { href: "/cheap-tech-stocks", label: "Cheap Tech Stocks", icon: "◈", tone: "blue" },
+    ],
+  },
+  {
     heading: "Signals",
     headingColor: "#60a5fa",
     items: [
@@ -449,7 +471,7 @@ export default function ScreenerNav({
   categoryValues?: Record<string, string[]>;
 }) {
   const [open, setOpen] = useState(false);
-  const { matchCount, predicates, selectedFilters, selectedSectors, clearFilters } = usePickerFilter();
+  const { matchCount, predicates, selectedFilters, selectedSectors, clearFilters, isPristine } = usePickerFilter();
   const showSidebar = variant !== "trigger";
   const showTrigger = variant !== "sidebar";
 
@@ -526,23 +548,29 @@ export default function ScreenerNav({
 
   let currentLabel = pageLabel;
   if (alwaysFilterMode) {
-    if (predicates.length > 1) {
+    if (isPristine) {
+      // The resting state: the selection is still exactly what this page seeded,
+      // so the page's own name is the right label. Prefer it over the
+      // predicate's description because the two are worded slightly differently
+      // in places ("Buy Signals" here vs the CATEGORY_FILTER_DEFS label "Buy
+      // Signal"; "20% From ATH" vs "20%+ From ATH"), and because a Popular
+      // Screens page seeds two predicates but is still one named thing -- "Cheap
+      // Tech Stocks" beats "Custom" for a page that has not been touched.
+      //
+      // Asking isPristine rather than re-deriving it here is what makes this
+      // correct for every seed shape: one flag, several flags, a numeric bound,
+      // a category value, or a combination. It also covers /stock-screener,
+      // where an empty selection IS the resting state.
+      currentLabel = pageLabel;
+    } else if (predicates.length > 1) {
       // No point naming them: the count badge beside the pill already says how
       // many, and two labels won't fit at mobile widths anyway.
       currentLabel = "Custom";
     } else if (predicates.length === 1) {
-      const only = predicates[0];
-      // The page's own preset, still the only thing ticked -- the resting state.
-      // Prefer the nav's page label over the predicate's, because the two are
-      // worded slightly differently in a few places ("Buy Signals" here vs the
-      // CATEGORY_FILTER_DEFS label "Buy Signal"; "20% From ATH" vs "20%+ From
-      // ATH"), and at rest the page's own name is the right one. This is what
-      // keeps the pill visually unchanged until the visitor actually diverges.
-      const isPagePreset = only.kind === "flag" && only.field === currentItem?.filterKey;
       // describePredicate covers every predicate kind, so a lone sector or
       // numeric filter reads "Sector: Technology" / "PE Ratio under 15" rather
       // than a bare field name.
-      currentLabel = isPagePreset ? pageLabel : describePredicate(only);
+      currentLabel = describePredicate(predicates[0]);
     } else {
       // Nothing ticked. On a condition page that means the visitor unticked the
       // page's own condition and is now looking at the full universe -- still
