@@ -42,7 +42,7 @@ export default function HowToScanStocksPage() {
           <p style={{ marginTop: 14, lineHeight: 1.7, opacity: 0.86 }}>Stock scanning is the process of searching the market for stocks that meet specific criteria. Instead of manually reviewing thousands of charts, traders use scanners or idea platforms to narrow the market down to stocks that may be showing interesting behaviour.</p>
           <section style={{ marginTop: 28 }}>
             <h2>1. Decide what type of setup you want</h2>
-            <p style={{ marginTop: 12, lineHeight: 1.7, opacity: 0.86 }}>The first step in scanning stocks is deciding what type of opportunity you are looking for: <Link href="/breakout-stocks" style={{ color: "#93c5fd", textDecoration: "underline" }}>breakouts</Link>, <Link href="/oversold-stocks" style={{ color: "#93c5fd", textDecoration: "underline" }}>oversold stocks</Link>, or <Link href="/buy-the-dip-stocks" style={{ color: "#93c5fd", textDecoration: "underline" }}>buy-the-dip setups</Link>.</p>
+            <p style={{ marginTop: 12, lineHeight: 1.7, opacity: 0.86 }}>The first step in scanning stocks is deciding what type of opportunity you are looking for: <Link href="/breakout-stocks" style={{ color: "#93c5fd", textDecoration: "underline" }}>breakouts</Link>, <Link href="/oversold-stocks" style={{ color: "#93c5fd", textDecoration: "underline" }}>oversold stocks</Link>, or <Link href="/stocks-down-20-from-all-time-highs" style={{ color: "#93c5fd", textDecoration: "underline" }}>buy-the-dip setups</Link>.</p>
           </section>
           <section style={{ marginTop: 28 }}>
             <h2>2. Use screening tools to narrow the market</h2>
@@ -67,7 +67,7 @@ export default function HowToScanStocksPage() {
               <Link href="/trading-setups">Trading Setups</Link>
               <Link href="/stock-screener-for-breakouts">Stock Screener for Breakouts</Link>
               <Link href="/stock-screener-for-oversold-stocks">Stock Screener for Oversold Stocks</Link>
-              <Link href="/best-free-stock-screener">Best Free Stock Screener</Link>
+              <Link href="/stock-screener">Best Free Stock Screener</Link>
             </div>
           </section>
         </div>

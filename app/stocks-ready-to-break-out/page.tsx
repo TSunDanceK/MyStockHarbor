@@ -145,14 +145,14 @@ export default function StocksReadyToBreakOutPage() {
           <p style={{ marginTop: 12, lineHeight: 1.7, opacity: 0.86 }}>
             Momentum indicators such as{" "}
             <Link
-              href="/what-is-rsi-indicator"
+              href="/learn/rsi"
               style={{ color: "#93c5fd", textDecoration: "underline" }}
             >
               RSI
             </Link>{" "}
             or{" "}
             <Link
-              href="/what-is-macd-indicator"
+              href="/learn/macd"
               style={{ color: "#93c5fd", textDecoration: "underline" }}
             >
               MACD

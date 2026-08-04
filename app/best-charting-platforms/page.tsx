@@ -90,7 +90,7 @@ export default function BestChartingPlatformsPage() {
           </section>
           <section style={{ marginTop: 28 }}>
             <h2>2. Technical indicators</h2>
-            <p style={{ marginTop: 12, lineHeight: 1.7, opacity: 0.86 }}>Many charting platforms allow traders to apply technical indicators such as <Link href="/what-is-rsi-indicator" style={{ color: "#93c5fd", textDecoration: "underline" }}>RSI</Link>, <Link href="/what-is-macd-indicator" style={{ color: "#93c5fd", textDecoration: "underline" }}>MACD</Link>, or <Link href="/what-is-vwap-indicator" style={{ color: "#93c5fd", textDecoration: "underline" }}>VWAP</Link>.</p>
+            <p style={{ marginTop: 12, lineHeight: 1.7, opacity: 0.86 }}>Many charting platforms allow traders to apply technical indicators such as <Link href="/learn/rsi" style={{ color: "#93c5fd", textDecoration: "underline" }}>RSI</Link>, <Link href="/learn/macd" style={{ color: "#93c5fd", textDecoration: "underline" }}>MACD</Link>, or <Link href="/what-is-vwap-indicator" style={{ color: "#93c5fd", textDecoration: "underline" }}>VWAP</Link>.</p>
             <p style={{ marginTop: 12, lineHeight: 1.7, opacity: 0.86 }}>These tools help traders measure momentum, identify potential reversals, and evaluate trend strength.</p>
           </section>
           <section style={{ marginTop: 28 }}>

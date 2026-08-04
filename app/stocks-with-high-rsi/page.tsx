@@ -311,7 +311,7 @@ export default function StocksWithHighRsiPage() {
             maxWidth: 980,
           }}
         >
-          <Link href="/what-is-rsi-indicator" style={cardStyle}>
+          <Link href="/learn/rsi" style={cardStyle}>
             <div style={{ fontSize: 18, fontWeight: 950 }}>
               Understand RSI
             </div>
