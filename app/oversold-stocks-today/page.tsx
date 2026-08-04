@@ -42,6 +42,11 @@ const config: PickerResultConfig = {
   presetFilters: ["oversold"],
   sectionIncludes: ["oversold"],
   maxItems: 36,
+  relatedGuide: {
+    href: "/oversold-stocks",
+    label: "our guide to oversold stocks",
+    blurb: "New to RSI and oversold conditions? Start with",
+  },
 };
 
 export default async function Page({

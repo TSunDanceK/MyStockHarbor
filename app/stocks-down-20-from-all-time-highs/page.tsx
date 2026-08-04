@@ -47,6 +47,11 @@ const config: PickerResultConfig = {
   presetFilters: ["buyTheDip"],
   sectionIncludes: ["stocks down 20"],
   maxItems: 36,
+  relatedGuide: {
+    href: "/buy-the-dip-stocks",
+    label: "our guide to buying the dip",
+    blurb: "For how to tell a pullback worth reviewing from a broken chart, see",
+  },
 };
 
 export default async function Page({
