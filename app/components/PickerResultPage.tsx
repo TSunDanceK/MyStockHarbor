@@ -1208,7 +1208,22 @@ export default async function PickerResultPage({
                   isEarnings={isEarningsPickerPage(config)}
                   hideUntilFiltered={config.kind === "allSymbols" && !config.showAllImmediately}
                   splitReasonsBySelection={isFilterablePage}
-                  collapseReasons={config.kind === "allSymbols"}
+                  // Collapse the qualifying-condition chips into a single
+                  // dropdown on any page whose own condition is NOT one of the
+                  // 25 tracked booleans.
+                  //
+                  // splitReasonsBySelection can only split chips into "matched"
+                  // and "also qualifies for" by comparing them against
+                  // selectedFilters, which holds flag predicates only. A page
+                  // seeded with `peRatio <= 15` has no flag selected, so the
+                  // split finds nothing to promote, every chip lands in
+                  // `primary`, and a stock meeting ten conditions rendered ten
+                  // chips stacked above its mini chart. Collapsing is the
+                  // behaviour that already exists for exactly this case on All
+                  // Stocks, where nothing is ticked either.
+                  collapseReasons={
+                    config.kind === "allSymbols" || (config.presetPredicates?.length ?? 0) > 0
+                  }
                   defaultTab={config.defaultTab}
                 />
 
