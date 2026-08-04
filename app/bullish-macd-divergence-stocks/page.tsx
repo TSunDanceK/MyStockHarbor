@@ -33,6 +33,11 @@ const config: PickerResultConfig = {
   kind: "preset",
   presetFilters: ["bullishMacdDivergence"],
   maxItems: 36,
+  relatedGuide: {
+    href: "/bullish-divergence-explained",
+    label: "bullish divergence explained",
+    blurb: "For how the pattern forms and how to read it on a chart, see",
+  },
 };
 
 export default async function Page({

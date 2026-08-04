@@ -41,6 +41,11 @@ const config: PickerResultConfig = {
   presetFilters: ["bestTrendPick"],
   sectionIncludes: ["best trend score"],
   maxItems: 36,
+  relatedGuide: {
+    href: "/how-to-identify-stock-trends",
+    label: "our guide to identifying stock trends",
+    blurb: "For how to judge trend structure beyond a single score, see",
+  },
 };
 
 export default async function Page({
