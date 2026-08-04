@@ -28,7 +28,7 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
 
-      // ── Removed page cleanup (301) ───────────────────────
+      // ── Removed page cleanup (301) ────────────────────────
       // /hot-market-names-right-now was deliberately removed from the site
       // (see CLAUDE.md "Lessons learned") but Google still has it indexed
       // from before removal and keeps re-crawling it as a dead 404, wasting
@@ -97,36 +97,8 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
       {
-        source: "/:path*",
-        has: [
-          {
-            type: "host",
-            value: "mystockharbor.com",
-          },
-        ],
-        destination: "https://www.mystockharbor.com/:path*",
-        permanent: true,
-      },
-      {
-        source: "/:path*",
-        has: [
-          {
-            type: "host",
-            value: "mystockharbour.com",
-          },
-        ],
-        destination: "https://www.mystockharbor.com/:path*",
-        permanent: true,
-      },
-      {
-        source: "/:path*",
-        has: [
-          {
-            type: "host",
-            value: "www.mystockharbour.com",
-          },
-        ],
-        destination: "https://www.mystockharbor.com/:path*",
+        source: "/stocks/:symbol",
+        destination: "/stock/:symbol",
         permanent: true,
       },
     ];
