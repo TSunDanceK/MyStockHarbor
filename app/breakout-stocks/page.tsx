@@ -774,5 +774,5 @@ const paragraphStyle: React.CSSProperties = {
 const inlineLinkStyle: React.CSSProperties = {
   color: "#60a5fa",
   fontWeight: 800,
-  textDecoration: "none";
+  textDecoration: "none",
 };
