@@ -169,48 +169,22 @@ function NavList({
   filterMode?: boolean;
   categoryValues?: Record<string, string[]>;
 }) {
-  const { selectedFilters, toggleFilter, selectedSectors, toggleSector } = usePickerFilter();
-  const availableSectors = categoryValues.sector ?? [];
+  const { selectedFilters, toggleFilter } = usePickerFilter();
 
   return (
     <div className="screenerNavList">
       {/* Search first: it reaches every one of the 33 filterable fields plus
           every industry value, none of which could be rendered as a list
           without burying the checkboxes below. Browsing still works -- the
-          groups underneath are untouched. */}
-      {filterMode ? <ScreenerFilterSearch categoryValues={categoryValues} /> : null}
+          groups underneath are untouched.
 
-      {/* Sector sits above the condition groups, and only in filter mode: it's
-          the most-reached-for refinement ("oversold TECH stocks") and it's the
-          one group whose members OR together rather than AND. The list is
-          passed in from the page rather than hardcoded -- see categoryValues
-          in PickerResultPage.tsx. Industry deliberately has no group of its own:
-          ~150 values belong in the search box, not a list. */}
-      {filterMode && availableSectors.length ? (
-        <div className="screenerNavGroup">
-          <div className="screenerNavHeading" style={{ color: "#c084fc" }}>
-            Sector
-          </div>
-          {availableSectors.map((sector) => {
-            const checked = selectedSectors.includes(sector);
-            return (
-              <label
-                key={sector}
-                className={checked ? "screenerNavItem screenerNavCheckable checked" : "screenerNavItem screenerNavCheckable"}
-              >
-                <input type="checkbox" checked={checked} onChange={() => toggleSector(sector)} />
-                <span className="screenerNavIcon" style={{ color: "#c084fc" }}>
-                  ▪
-                </span>
-                <span className="screenerNavLabel">{sector}</span>
-              </label>
-            );
-          })}
-          {selectedSectors.length > 1 ? (
-            <div className="screenerSectorHint">Any of the {selectedSectors.length} selected sectors</div>
-          ) : null}
-        </div>
-      ) : null}
+          Sector used to also get its own always-visible checkbox group above
+          this search box, but it wrote to the exact same predicate as typing
+          a sector name (or "sector" to browse all 11) does here -- same OR-
+          together filter, same result, just a second UI pointed at identical
+          state. Removed as redundant with the search box that every other
+          field already relies on; sector filtering itself is unchanged. */}
+      {filterMode ? <ScreenerFilterSearch categoryValues={categoryValues} /> : null}
 
       {GROUPS.map((group) => {
         const visibleItems = group.items.filter((item) => filterMode || item.href);
@@ -725,8 +699,6 @@ export default function ScreenerNav({
         .screenerNavLabelLink:hover .screenerNavLabel { text-decoration: underline; }
         .screenerNavGo { flex: 0 0 auto; margin-left: auto; font-size: 16px; line-height: 1; color: rgba(148,163,184,0.5); }
         .screenerNavLabelLink:hover .screenerNavGo { color: #93c5fd; }
-
-        .screenerSectorHint { padding: 4px 8px 0; font-size: 10.5px; line-height: 1.4; font-weight: 700; color: rgba(192,132,252,0.75); }
 
         .screenerFilterModeBar { padding: 0 4px 12px; margin-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.08); }
         .screenerFilterModeBtn {
