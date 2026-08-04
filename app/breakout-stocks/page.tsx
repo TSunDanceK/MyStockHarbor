@@ -469,7 +469,7 @@ export default function BreakoutStocksPage() {
             }}
           >
             <Link
-              href="/pickers"
+              href="/breakout-signal-stocks"
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -486,7 +486,7 @@ export default function BreakoutStocksPage() {
                 whiteSpace: "nowrap",
               }}
             >
-              Browse Stock Ideas →
+              See Breakout Stocks Now →
             </Link>
 
             <Link

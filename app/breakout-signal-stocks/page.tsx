@@ -33,6 +33,11 @@ const config: PickerResultConfig = {
   kind: "preset",
   presetFilters: ["breakout"],
   maxItems: 36,
+  relatedGuide: {
+    href: "/breakout-stocks",
+    label: "our guide to breakout stocks",
+    blurb: "For how breakouts form and which ones tend to fail, see",
+  },
 };
 
 export default async function Page({

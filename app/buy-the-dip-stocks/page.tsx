@@ -368,7 +368,7 @@ export default function BuyTheDipStocksPage() {
             }}
           >
             <Link
-              href="/pickers"
+              href="/stocks-down-20-from-all-time-highs"
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -385,7 +385,7 @@ export default function BuyTheDipStocksPage() {
                 whiteSpace: "nowrap",
               }}
             >
-              Browse Stock Ideas →
+              See Stocks Down 20% From Highs →
             </Link>
 
             <Link

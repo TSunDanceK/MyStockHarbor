@@ -35,7 +35,7 @@ export default function BearishDivergenceExplainedPage() {
         <div style={{ maxWidth: 900, margin: "0 auto", padding: "28px 20px 40px" }}>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18 }}>
             <Link href="/" style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.06)", color: "#f1f5f9", textDecoration: "none", fontWeight: 850 }}>← Dashboard</Link>
-            <Link href="/pickers" style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.06)", color: "#f1f5f9", textDecoration: "none", fontWeight: 850 }}>Find Your Next Stock →</Link>
+            <Link href="/bullish-bearish-divergence-stocks" style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.06)", color: "#f1f5f9", textDecoration: "none", fontWeight: 850 }}>See Divergence Stocks Now →</Link>
           </div>
           <div style={{ fontSize: 12, opacity: 0.72, fontWeight: 800 }}>DIVERGENCE GUIDE</div>
           <h1 style={{ margin: "8px 0 0", fontSize: 36, lineHeight: 1.15 }}>Bearish Divergence Explained</h1>
