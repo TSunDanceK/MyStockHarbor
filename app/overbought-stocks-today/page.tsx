@@ -40,6 +40,11 @@ const config: PickerResultConfig = {
   presetFilters: ["overbought"],
   sectionIncludes: ["overbought"],
   maxItems: 36,
+  relatedGuide: {
+    href: "/overbought-stocks",
+    label: "our guide to overbought stocks",
+    blurb: "For what an overbought reading does and doesn't tell you, see",
+  },
 };
 
 export default async function Page({

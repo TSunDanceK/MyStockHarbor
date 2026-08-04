@@ -47,6 +47,11 @@ const config: PickerResultConfig = {
   presetFilters: ["divergencePick"],
   sectionIncludes: ["divergence"],
   maxItems: 36,
+  relatedGuide: {
+    href: "/bullish-divergence-explained",
+    label: "bullish divergence explained",
+    blurb: "For how these patterns form and how to read them on a chart, start with",
+  },
 };
 
 export default async function Page({
