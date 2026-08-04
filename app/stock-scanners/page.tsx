@@ -147,7 +147,7 @@ export default function StockScannersPage() {
           />
 
           <ScannerCard
-            href="/best-free-stock-screener"
+            href="/stock-screener"
             title="Best Free Stock Screener"
             desc="See what traders usually want from stock scanning tools."
             tint="blue"

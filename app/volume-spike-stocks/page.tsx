@@ -34,8 +34,8 @@ const config: PickerResultConfig = {
   presetFilters: ["volumeSpike"],
   maxItems: 36,
   relatedGuide: {
-    href: "/stocks-with-unusual-volume",
-    label: "our guide to unusual volume",
+    href: "/learn/volume",
+    label: "our lesson on volume",
     blurb: "For what a volume spike signals and what it doesn't, see",
   },
 };

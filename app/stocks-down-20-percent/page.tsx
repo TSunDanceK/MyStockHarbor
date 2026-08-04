@@ -241,14 +241,14 @@ export default function StocksDown20PercentPage() {
               <div style={{ marginTop: 6, opacity: 0.86, lineHeight: 1.6 }}>
                 Tools like{" "}
                 <Link
-                  href="/what-is-rsi-indicator"
+                  href="/learn/rsi"
                   style={{ color: "#93c5fd", textDecoration: "underline" }}
                 >
                   RSI
                 </Link>{" "}
                 or{" "}
                 <Link
-                  href="/what-is-macd-indicator"
+                  href="/learn/macd"
                   style={{ color: "#93c5fd", textDecoration: "underline" }}
                 >
                   MACD
@@ -385,7 +385,7 @@ export default function StocksDown20PercentPage() {
                 text: "Understand how traders review stretched downside moves and rebound setups.",
               },
               {
-                href: "/buy-the-dip-stocks",
+                href: "/stocks-down-20-from-all-time-highs",
                 title: "Buy The Dip Stocks",
                 text: "Learn how traders think about pullbacks inside stronger trends.",
               },

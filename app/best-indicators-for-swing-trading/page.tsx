@@ -42,11 +42,11 @@ export default function BestIndicatorsForSwingTradingPage() {
           <p style={{ marginTop: 14, lineHeight: 1.7, opacity: 0.86 }}>Swing trading focuses on capturing price moves that unfold over several days or weeks. Traders often rely on a small set of indicators to help them judge momentum, trend strength, and potential entry points. Indicators are rarely used alone — most traders combine them with chart structure, support and resistance levels, and broader market context.</p>
           <section style={{ marginTop: 28 }}>
             <h2>1. RSI (Relative Strength Index)</h2>
-            <p style={{ marginTop: 12, lineHeight: 1.7, opacity: 0.86 }}>The <Link href="/what-is-rsi-indicator" style={{ color: "#93c5fd", textDecoration: "underline" }}>RSI indicator</Link> measures the speed and magnitude of price movements. Swing traders sometimes use it to identify overbought or oversold conditions that may suggest a potential pause or reversal.</p>
+            <p style={{ marginTop: 12, lineHeight: 1.7, opacity: 0.86 }}>The <Link href="/learn/rsi" style={{ color: "#93c5fd", textDecoration: "underline" }}>RSI indicator</Link> measures the speed and magnitude of price movements. Swing traders sometimes use it to identify overbought or oversold conditions that may suggest a potential pause or reversal.</p>
           </section>
           <section style={{ marginTop: 28 }}>
             <h2>2. MACD</h2>
-            <p style={{ marginTop: 12, lineHeight: 1.7, opacity: 0.86 }}>The <Link href="/what-is-macd-indicator" style={{ color: "#93c5fd", textDecoration: "underline" }}>MACD indicator</Link> helps traders track momentum shifts and trend changes. Some traders use MACD crossovers or divergence patterns when evaluating swing setups.</p>
+            <p style={{ marginTop: 12, lineHeight: 1.7, opacity: 0.86 }}>The <Link href="/learn/macd" style={{ color: "#93c5fd", textDecoration: "underline" }}>MACD indicator</Link> helps traders track momentum shifts and trend changes. Some traders use MACD crossovers or divergence patterns when evaluating swing setups.</p>
           </section>
           <section style={{ marginTop: 28 }}>
             <h2>3. VWAP</h2>
