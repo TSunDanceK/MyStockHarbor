@@ -433,7 +433,7 @@ export default async function SPXPage() {
                   opacity: 0.92,
                 }}
               >
-                The S&amp;P 500 closed at 7,411.98 on July 24, about 2.6% below its June 2 record close of 7,609.78, after a second straight losing week driven by an escalating US-Iran conflict, a spike in oil prices, new US tariffs, and renewed jitters over AI spending. Price has now spent over a week below its daily 50-day moving average, though the longer-term uptrend, still up roughly 8% for the year, remains intact.
+                The S&amp;P 500 enters this week at 7,489.72, Friday's close and still about 1.6% below its June 2 record close of 7,609.78, after a volatile prior week in which a hawkish Fed dissent and Middle East tensions gave way to a blowout Amazon earnings beat and the index's first winning week in three months. The longer-term uptrend, up roughly 9% for the year, remains intact, and this week's spotlight is squarely on the labor market, culminating in Friday's July nonfarm payrolls report.
               </div>
 
               <div
@@ -640,7 +640,7 @@ export default async function SPXPage() {
 
   <div>
     <strong style={{ color: "#4ade80", letterSpacing: "0.02em" }}>SIMPLE VIEW:</strong>{" "}
-    the SPX is about 2.6% below its all-time high after a second straight down week. This time the pressure came from several directions at once: an escalating US-Iran conflict that briefly pushed oil above $100 a barrel, new US tariffs on dozens of trading partners, renewed worry about how much Alphabet and Tesla are spending on AI, and Treasury yields climbing to their highest in about 18 months. Over the weekend the US and Iran paused their strikes, which took some heat out of oil prices — but price still closed the week below its daily 50-day moving average for the first time in months, while the weekly structure — still up roughly 8% year-to-date — remains intact for now.
+    the SPX heads into this week about 1.6% below its all-time high, sitting at Friday's close of 7,489.72. Last week was genuinely wild: Wednesday brought the index's worst single day since April — a hawkish Fed dissent (three regional presidents wanted a rate hike, not a cut), a spike in long-dated Treasury yields to their highest since 2007, and fresh Middle East missile tensions all hit at once — before a blowout Amazon earnings beat helped the index snap back sharply into its first winning week in three months. Market breadth has quietly gotten healthier too — around 72% of S&amp;P 500 members now trade above their own 200-day moving average, the best reading since December 2024. This week's calendar is loaded with labor-market data (ISM PMI, JOLTS, ADP, jobless claims) culminating in Friday's nonfarm payrolls report, the follow-up to June's disappointing 57,000-job reading, all while the index remains roughly 9% higher for the year.
   </div>
 </div>
           </section>
@@ -771,12 +771,12 @@ export default async function SPXPage() {
                     Off the record high
                   </div>
                   <div style={{ marginTop: 5, fontSize: 21, fontWeight: 950 }}>
-                    Sentiment stuck in Fear
+                    Sentiment still cautious
                   </div>
                 </div>
               </div>
               <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                The SPX closed at 7,411.98 on July 24 — about 2.6% below its June 2 record close of 7,609.78 — after its second consecutive losing week. The CNN Fear &amp; Greed Index has stayed in the high-30s to low-40s ("Fear") for over a week now, as oil-price and tariff headlines add to earlier AI-spending jitters.
+                The SPX closed last week at 7,489.72 — about 1.6% below its June 2 record close of 7,609.78 — after a week that included its worst single day since April. Sentiment gauges have stayed stuck in "Fear" territory for well over a week now, even though Friday's earnings-driven rally delivered the index's first winning week in three months heading into this week's jobs-heavy data slate.
               </div>
             </div>
 
@@ -800,12 +800,12 @@ export default async function SPXPage() {
                     Under the surface
                   </div>
                   <div style={{ marginTop: 5, fontSize: 21, fontWeight: 950 }}>
-                    Breadth stays narrow
+                    Breadth broadens out
                   </div>
                 </div>
               </div>
               <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                Recent readings show only around 60% of S&amp;P 500 members trading above their own 200-day moving average — well below the roughly 73% norm typically seen at new highs. This year's gains still lean heavily on a narrow set of AI and semiconductor names, and mega-cap tech again came under pressure this week after Alphabet's and Tesla's AI-spending plans rattled investors.
+                Market breadth remains meaningfully improved: roughly 72% of S&amp;P 500 members now trade above their own 200-day moving average, the strongest reading since December 2024, up from a much narrower ~60% earlier this summer. Leadership has broadened beyond mega-cap AI names into software, financials, industrials, healthcare and consumer discretionary, even as semiconductor stocks stayed under pressure.
               </div>
             </div>
 
@@ -822,7 +822,7 @@ export default async function SPXPage() {
                 </div>
               </div>
               <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                The daily chart has now spent over a week below its 50-day moving average, but the S&amp;P 500 remains comfortably above its 200-day moving average — a line it hasn't closed below since April 8. The weekly chart's longer-term structure hasn't been threatened.
+                The S&amp;P 500 enters this week having reclaimed its daily 50-day moving average after briefly dipping below it during last Wednesday's selloff, and it remains comfortably above its 200-day moving average — a line it hasn't closed below in months. With the data-heavy week building toward Friday's payrolls report, the weekly chart's longer-term structure looks undisturbed for now.
               </div>
             </div>
           </section>
@@ -856,11 +856,11 @@ export default async function SPXPage() {
               }}
             >
               <p style={{ margin: 0 }}>
-                The S&amp;P 500 remains in a resilient 2026 uptrend, up roughly 8% year-to-date, even after back-to-back losing weeks. Wall Street's targets still reflect confidence in the bigger picture: after a wave of upgrades in June pushed several banks' year-end targets as high as 8,000–8,100 (Oppenheimer and Citi among them), Goldman Sachs sits at <strong>8,000</strong> and Wells Fargo at <strong>7,950</strong>. The index set a record close of <strong>7,609.78 on June 2, 2026</strong>, then spent the following weeks consolidating before a mid-July, chip-led pullback and now a second rough week that took it to <strong>7,411.98</strong> — about 2.6% off that high.
+                The S&amp;P 500 remains in a resilient 2026 uptrend, up roughly 9% year-to-date, despite a genuinely choppy prior week. Wall Street's targets still reflect confidence in the bigger picture: Citi raised its year-end target to <strong>8,100</strong> in June on AI-driven earnings optimism, Goldman Sachs sits at <strong>8,000</strong>, and Wells Fargo at <strong>7,950</strong> — though Bank of America has taken a more cautious stance at <strong>7,100</strong>, citing "too many red flags." The index set a record close of <strong>7,609.78 on June 2, 2026</strong>, then spent the following weeks consolidating and pulling back on AI-capex and geopolitical worries before closing out July at <strong>7,489.72</strong> — about 1.6% off that high, a level it carries into this new week.
               </p>
 
               <p style={{ margin: 0 }}>
-                This week's pullback had more than one driver. The US carried out roughly eleven consecutive nights of airstrikes on Iran, and fears over disruption to the Strait of Hormuz briefly pushed Brent crude above $100 a barrel before it eased back on Friday. New US tariffs of 10–12.5% on dozens of trading partners also took effect, and Treasury yields climbed to roughly an 18-month high. On top of that, a Thursday tech selloff — triggered by concern over how much Alphabet and Tesla are committing to AI infrastructure — wiped an estimated $800 billion off the "Magnificent Seven" in a single session, echoing the AI-capex worries that first hit chip stocks earlier in the month. Over the weekend, the US and Iran paused their strikes, which eased oil prices and lifted futures heading into Monday.
+                Last week had more than one driver, and they mostly cut against each other. Wednesday's FOMC meeting saw the Fed hold rates steady at 3.50%–3.75% for a fifth straight meeting, but three regional Fed presidents dissented in favor of a rate hike — the most hawkish dissent since 2016 — and long-dated Treasury yields spiked to multi-year highs (the 30-year topped 5.2%, its highest since 2007) as investors questioned new Fed Chair Kevin Warsh's inflation-fighting resolve. On the same day, intercepted missiles targeting US forces in the Middle East pushed oil sharply higher and sent the S&amp;P 500 down 1.51% to 7,316.15, its worst day since April. Friday told a very different story: Amazon surged roughly 15% on a strong cloud-computing beat, part of a Q2 earnings season where about 87% of reporting S&amp;P 500 companies have topped expectations with average year-over-year earnings growth near 22%. That rally pulled the index back to 7,489.72, its first winning week in three months, even though Apple fell 7.4% on soft guidance tied to AI-related component constraints. This week, the market's attention shifts from single-day headlines to a full slate of labor-market data — ISM Manufacturing and JOLTS early in the week, ADP employment and ISM Services midweek, then jobless claims and finally Friday's nonfarm payrolls report, the follow-through to June's soft 57,000-job print.
               </p>
 
               <div
@@ -877,12 +877,12 @@ export default async function SPXPage() {
               >
                 <div style={overviewIconStyle("red")}>⚠️</div>
                 <div style={{ lineHeight: 1.65 }}>
-                  <strong style={{ color: "#fca5a5" }}>Watch the breadth:</strong> the index itself is only about 2.6% off its highs, but the drivers behind that gap — oil-driven risk aversion, tariff headlines, and a mega-cap AI-spending scare — have hit different corners of the market at different times. Roughly 60% of S&amp;P 500 members trade above their own 200-day moving average, below the ~73% norm typically seen at new highs, a reminder that this year's gains are still concentrated in a relatively narrow group of names. A big week of catalysts is ahead — the Fed's FOMC decision on Wednesday and earnings from Meta, Microsoft, Apple and Amazon — any of which could either calm nerves or add to the pressure.
+                  <strong style={{ color: "#fca5a5" }}>Watch the bond market and Friday's jobs report:</strong> the S&amp;P 500 is only about 1.6% off its highs, and breadth has actually gotten healthier — roughly 72% of members now trade above their 200-day moving average, the best reading since December 2024. The bigger swing factors now are the bond market and the labor market: 10-year Treasury yields near 4.7% and 30-year yields above 5.2% reflect real doubt about whether new Fed Chair Kevin Warsh can get inflation back to 2%, and Friday's nonfarm payrolls report — following June's disappointing 57,000-job reading — could either calm or reignite those doubts. If long-end yields keep climbing or the jobs data disappoints again, that could matter more to this rally than any single earnings report or geopolitical headline.
                 </div>
               </div>
 
               <p style={{ margin: 0 }}>
-                Zooming out to the <strong>weekly chart</strong> smooths over most of this noise. The index remains solidly above its 200-day moving average — a level it has held since April 8 — even though it has now spent over a week below its 50-day moving average. Market breadth is the more persistent concern: with only around 60% of members above their 200-day moving average, this year's advance still leans heavily on a small group of mega-cap AI and semiconductor names — the same names most exposed to swings in AI-spending sentiment.
+                Zooming out to the <strong>weekly chart</strong> smooths over most of this noise. The index remains solidly above its 200-day moving average — a level it has held for months — even though it briefly dipped below its 50-day moving average during Wednesday's selloff before reclaiming it by Friday. Market breadth is no longer the main worry it was earlier this summer: with around 72% of members now above their 200-day moving average, this year's advance looks meaningfully broader than it did even a few weeks ago, though the bond market, the Fed's policy path, and this week's employment data are now the more pressing swing factors to watch.
               </p>
             </div>
           </section>
@@ -923,19 +923,19 @@ export default async function SPXPage() {
                 }}
               >
                 <p style={{ margin: 0 }}>
-                  After two rough weeks driven first by chip-stock jitters and now by an oil-price and tariff-driven pullback, the daily chart has spent over a week below its 50-day moving average, while the S&amp;P 500's weekly chart remains comfortably above its own 50-week and 200-week moving averages — levels that sit meaningfully below the current ~7,400–7,470 range. Short-term wobbles like this one have plenty of room before they'd threaten the longer-term trend.
+                  After a genuinely volatile prior week — a hawkish Fed dissent and a Middle East scare on Wednesday, followed by an earnings-fueled rally on Friday — the daily chart briefly dipped below its 50-day moving average before reclaiming it, while the S&amp;P 500's weekly chart remains comfortably above its own 50-week and 200-week moving averages, levels that sit well below the current ~7,400–7,500 range. Short-term swings like that one have plenty of room before they'd threaten the longer-term trend, and this week's employment data will be the next real test of that resilience.
                 </p>
 
                 <p style={{ margin: 0 }}>
-                  The bigger picture: despite a genuine mix of geopolitical, trade-policy and AI-valuation worries, the index is still only about 2.6% below its all-time high, up roughly 8% for the year, and its 200-day moving average — unbroken since April 8 — remains firmly beneath current levels.
+                  The bigger picture: despite a genuine mix of Fed-policy, bond-market and geopolitical worries, the index is still only about 1.6% below its all-time high, up roughly 9% for the year, and its 200-day moving average — unbroken for months — remains firmly beneath current levels.
                 </p>
 
                 <p style={{ margin: 0 }}>
-                  The real question isn't whether volatility is showing up — clearly it is, with oil, tariffs and AI-capex all in the mix at once. It's whether this week's FOMC decision and mega-cap earnings calm those nerves, or whether the pullback deepens into something that actually threatens the primary trend.
+                  The real question isn't whether volatility is showing up — clearly it is, with a hawkish Fed dissent, surging bond yields and Middle East tensions all in the mix recently. It's whether Friday's nonfarm payrolls report and the rest of this week's labor-market data show the economy holding up, the way earnings did last Friday, or whether a repeat of June's weak 57,000-job print forces a real test of the primary trend.
                 </p>
 
                 <p style={{ margin: 0 }}>
-                  <strong>Until the 200-day moving average — unbroken since April 8 — is seriously tested, the primary uptrend still gets the benefit of the doubt.</strong>
+                  <strong>Until the 200-day moving average — unbroken for months — is seriously tested, the primary uptrend still gets the benefit of the doubt.</strong>
                 </p>
               </div>
             </div>
@@ -957,10 +957,10 @@ export default async function SPXPage() {
 
               <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
                 {[
-                  ["📈", "ATH", "record close of 7,609.78 on June 2, 2026; SPX now roughly 2.6% below that after 7,411.98 on July 24"],
-                  ["⚠️", "Risk", "an escalating US-Iran conflict, an oil-price spike, new US tariffs and renewed AI-capex worries combined for a second straight losing week"],
-                  ["🔎", "Weekly structure", "still bullish — price remains well above its 200-day and weekly moving averages"],
-                  ["🟡", "Current stance", "up roughly 8% YTD but breadth stays narrow (~60% of members above their 200-day MA) — a market still leaning on a few AI names, with FOMC and mega-cap earnings due this week"],
+                  ["📈", "ATH", "record close of 7,609.78 on June 2, 2026; SPX now roughly 1.6% below that after closing last Friday, July 31, at 7,489.72"],
+                  ["⚠️", "Risk", "a hawkish Fed dissent, a spike in long-dated Treasury yields, and Middle East missile tensions drove the index's worst day since April last Wednesday; Friday's nonfarm payrolls report is this week's next big test"],
+                  ["🔎", "Weekly structure", "still bullish — price remains well above its 200-day and weekly moving averages, and breadth has broadened to roughly 72% of members above their 200-day MA"],
+                  ["🟡", "Current stance", "up roughly 9% YTD entering a jobs-data-heavy week, after last week ended with the first winning week in three months on a strong Amazon earnings beat and broad Q2 earnings strength"],
                 ].map(([icon, label, text]) => (
                   <div
                     key={label}
@@ -1023,7 +1023,7 @@ export default async function SPXPage() {
                 maxWidth: 920,
               }}
             >
-              The weekly chart shows the S&amp;P 500 giving back more of its early-June gains after a second consecutive down week, this time driven by an escalating US-Iran conflict, a spike in oil prices, new US tariffs and renewed AI-spending worries, pulling the index about 2.6% below its June 2 record close. The index has now spent over a week below its daily 50-day moving average, but its weekly structure — still comfortably above its 200-day and weekly moving averages — remains intact. Momentum has cooled to a roughly neutral RSI reading in the low-50s, down from the more overbought levels seen in early June.
+              The weekly chart shows the S&amp;P 500 recovering into the end of July after a genuinely volatile week — Wednesday's Fed-driven, geopolitically charged selloff followed by Friday's earnings-fueled rally — leaving the index about 1.6% below its June 2 record close as it enters this new week. Price briefly dipped below its daily 50-day moving average before reclaiming it, and its weekly structure — still comfortably above its 200-day and weekly moving averages — remains intact. Momentum sits in neutral-to-firm territory, well off the overbought extremes seen in early June, with market breadth at its healthiest reading since December 2024 heading into a data-heavy week capped by Friday's payrolls report.
             </div>
 
             <div style={{ marginTop: 18 }}>
@@ -1079,16 +1079,16 @@ export default async function SPXPage() {
 
                 <ul style={{ margin: "12px 0 0", paddingLeft: 18, display: "grid", gap: 8 }}>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    SPX fails to reclaim its daily MA50 (currently around 7,470) on a closing basis
+                    SPX slips back below its daily MA50 (currently in the ~7,470–7,550 area) on a closing basis
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Oil prices reaccelerate on renewed US-Iran escalation rather than staying calm after the weekend pause
+                    Friday's nonfarm payrolls report repeats June's weak 57,000-job print, or the unemployment rate climbs further
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Wednesday's FOMC meeting or this week's mega-cap earnings (Meta, Microsoft, Apple, Amazon) disappoint and revive AI-capex concerns
+                    Long-dated Treasury yields keep climbing — a 30-year yield meaningfully above 5.2% would add real pressure on equity valuations
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Weekly close below the 200-day moving average — the primary trend line that's held since April 8
+                    Weekly close below the 200-day moving average — the primary trend line that's held for months
                   </li>
                 </ul>
               </div>
@@ -1103,16 +1103,16 @@ export default async function SPXPage() {
 
                 <ul style={{ margin: "12px 0 0", paddingLeft: 18, display: "grid", gap: 8 }}>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Price reclaims its daily MA50 (around 7,470) and pushes back toward the 7,600 record area
+                    Price holds above its daily MA50 and pushes back toward the 7,600 record area
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Oil prices keep easing as the US-Iran pause holds, and mega-cap tech earnings reassure on AI spending
+                    Friday's jobs report comes in close to Barclays' ~100,000 estimate without a fresh downside surprise
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Market breadth improves meaningfully beyond the current ~60% of members above their 200-day MA
+                    Treasury yields stabilize or ease from their multi-year highs, easing pressure on richly valued growth stocks
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    The Fed's Wednesday decision is read as supportive, without reigniting inflation or tariff concerns
+                    Market breadth keeps improving beyond the current ~72% of members above their 200-day MA
                   </li>
                 </ul>
               </div>
@@ -1148,7 +1148,7 @@ export default async function SPXPage() {
               }}
             >
               <p style={{ margin: 0 }}>
-                The honest answer depends on timeframe. The weekly trend is still constructive — the SPX is up roughly 8% year-to-date, and after a wave of target increases in June, several Wall Street banks now sit at 8,000 or higher for year-end (Goldman Sachs at 8,000, Wells Fargo at 7,950). None of that has changed.
+                The honest answer depends on timeframe. The weekly trend is still constructive — the SPX is up roughly 9% year-to-date, and several Wall Street banks remain at 8,000 or higher for year-end (Goldman Sachs at 8,000, Citi at 8,100, Wells Fargo at 7,950), even though Bank of America has taken a more cautious 7,100 stance. None of the bullish targets have been walked back.
               </p>
 
               <div
@@ -1165,12 +1165,12 @@ export default async function SPXPage() {
               >
                 <div style={overviewIconStyle("blue")}>🧭</div>
                 <div style={{ lineHeight: 1.65 }}>
-                  <strong style={{ color: "#93c5fd" }}>The nuance:</strong> sentiment has stayed in "Fear" territory for well over a week now, even though the index is only about 2.6% off its all-time high. That's arguably healthier than the Extreme Greed readings seen back in June, which themselves preceded a pullback. But the fact that this month has already produced two separate shocks — a Chinese AI model release, and now a combination of Middle East conflict, tariffs and mega-cap AI-spending worries — is a real reminder that a large share of this year's gains still rest on a narrow set of very expensive AI-related names and a fragile geopolitical backdrop. This week's FOMC decision and mega-cap earnings could easily tip sentiment further in either direction.
+                  <strong style={{ color: "#93c5fd" }}>The nuance:</strong> sentiment has stayed stuck in "Fear" territory for well over a week now, even though the index is only about 1.6% off its all-time high and just posted its first winning week in three months. That gap between price action and sentiment is worth noting — it's arguably healthier than the Extreme Greed readings seen back in June, which themselves preceded a pullback. The improvement in market breadth (now roughly 72% of members above their 200-day moving average, the best since December 2024) is a genuine positive, but the hawkish Fed dissent and the spike in long-dated Treasury yields are a reminder that the path to the Fed's 2% inflation target is still unresolved under new leadership — and Friday's nonfarm payrolls report, following June's soft 57,000-job print, is the next data point that could shift the picture either way.
                 </div>
               </div>
 
               <p style={{ margin: 0 }}>
-                The SPX at 7,411.98 is about 2.6% below its all-time high — not remotely a crisis level, and still up solidly for the year. But with the daily 50-day moving average still not reclaimed, breadth still leaning on a narrow set of AI names, and the Fed plus a wave of mega-cap earnings due this week, chasing new highs immediately looks less compelling than waiting for either a confirmed reclaim of the 50-day moving average or a cleaner test of the 200-day trend line.
+                The SPX at 7,489.72 is about 1.6% below its all-time high — not remotely a crisis level, and up solidly for the year with broadening participation beneath the surface. But with long-dated bond yields at multi-year highs, the Fed's inflation path still uncertain under new leadership, sentiment yet to catch up with the recent rebound, and a full week of labor-market data — including Friday's payrolls report — still to come, chasing new highs immediately looks less compelling than waiting for either bond yields to stabilize, a clean jobs report, or a cleaner test of the 200-day trend line.
               </p>
             </div>
           </section>

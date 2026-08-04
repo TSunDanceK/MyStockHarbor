@@ -6,6 +6,7 @@ import {
   verifyQuoteToken,
   isQuoteTokenEnforced,
 } from "@/lib/server/quoteToken";
+import { isKnownGoodBot } from "@/lib/server/knownGoodBots";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -66,32 +67,52 @@ export async function GET(req: Request) {
   // the same staged rollout BotID and the AI Bots rule got.
   const tokenResult = verifyQuoteToken(req.headers.get(QUOTE_TOKEN_HEADER));
   if (!tokenResult.ok) {
-    if (isQuoteTokenEnforced()) {
+    const userAgent = req.headers.get("user-agent");
+
+    // Found 2026-08-01: Meta's own link-preview crawler (meta-externalagent
+    // -- the biggest source of legitimate traffic on this site, generating
+    // every Facebook/WhatsApp preview) calls this route directly with no
+    // token every time it renders a /stock/[symbol] page, so it was showing
+    // up as "missing" alongside genuine scrapers. Harmless today (log-only),
+    // but it would 403 Meta's own crawler the moment QUOTE_TOKEN_ENFORCE is
+    // ever set. isKnownGoodBot() (lib/server/knownGoodBots.ts, shared with
+    // the honeypot trap) exempts these UAs from being blocked OR counted
+    // toward the would-block log this gate's enforce/no-enforce decision is
+    // based on -- logged separately at info level purely so an unexpected
+    // volume from one of these is still visible without polluting the
+    // missing/expired tallies.
+    if (isKnownGoodBot(userAgent)) {
+      console.info(
+        `[quote-token] allowlisted-bot symbol=${logSafe(symbol, 12)} reason=${tokenResult.reason}` +
+          ` ua="${logSafe(userAgent, 160)}"`
+      );
+    } else if (isQuoteTokenEnforced()) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    } else {
+      // Identity fields are here rather than left to the Vercel Logs request
+      // panel for two reasons: the panel does not show the client IP at all, and
+      // more importantly a per-request panel can't be aggregated -- with the
+      // details inline you can eyeball every offender in one filtered search
+      // instead of clicking rows one at a time.
+      //
+      // ja4 lets a repeat offender be cross-referenced straight against the
+      // Firewall JA4 rules (see claude/firewall-ja4-repeat-offenders-selfblock-
+      // 2026-07-21.md). It is only populated on plans that expose it; "none" here
+      // simply means unavailable, not that the client lacked a fingerprint.
+      //
+      // Note this logs visitor IPs into Vercel's runtime logs. That's ordinary
+      // security telemetry for an abuse-detection gate, and it's bounded: it only
+      // fires for requests that FAILED the token check, never for normal traffic.
+      console.warn(
+        `[quote-token] would-block symbol=${logSafe(symbol, 12)} reason=${tokenResult.reason}` +
+          ` ip=${clientIp(req)}` +
+          ` country=${logSafe(req.headers.get("x-vercel-ip-country"), 8)}` +
+          ` ja4=${logSafe(req.headers.get("x-vercel-ja4-digest"), 64)}` +
+          ` ref=${logSafe(req.headers.get("referer"), 100)}` +
+          ` ua="${logSafe(userAgent, 160)}"` +
+          ` (log-only; set QUOTE_TOKEN_ENFORCE=1 to enforce)`
+      );
     }
-    // Identity fields are here rather than left to the Vercel Logs request
-    // panel for two reasons: the panel does not show the client IP at all, and
-    // more importantly a per-request panel can't be aggregated -- with the
-    // details inline you can eyeball every offender in one filtered search
-    // instead of clicking rows one at a time.
-    //
-    // ja4 lets a repeat offender be cross-referenced straight against the
-    // Firewall JA4 rules (see claude/firewall-ja4-repeat-offenders-selfblock-
-    // 2026-07-21.md). It is only populated on plans that expose it; "none" here
-    // simply means unavailable, not that the client lacked a fingerprint.
-    //
-    // Note this logs visitor IPs into Vercel's runtime logs. That's ordinary
-    // security telemetry for an abuse-detection gate, and it's bounded: it only
-    // fires for requests that FAILED the token check, never for normal traffic.
-    console.warn(
-      `[quote-token] would-block symbol=${logSafe(symbol, 12)} reason=${tokenResult.reason}` +
-        ` ip=${clientIp(req)}` +
-        ` country=${logSafe(req.headers.get("x-vercel-ip-country"), 8)}` +
-        ` ja4=${logSafe(req.headers.get("x-vercel-ja4-digest"), 64)}` +
-        ` ref=${logSafe(req.headers.get("referer"), 100)}` +
-        ` ua="${logSafe(req.headers.get("user-agent"), 160)}"` +
-        ` (log-only; set QUOTE_TOKEN_ENFORCE=1 to enforce)`
-    );
   }
 
   const apiKey = process.env.FMP_API_KEY;
