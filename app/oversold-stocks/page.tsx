@@ -380,7 +380,7 @@ export default function OversoldStocksPage() {
             }}
           >
             <Link
-              href="/pickers"
+              href="/oversold-stocks-today"
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -397,7 +397,7 @@ export default function OversoldStocksPage() {
                 whiteSpace: "nowrap",
               }}
             >
-              Browse Stock Ideas →
+              See Oversold Stocks Now →
             </Link>
 
             <Link
