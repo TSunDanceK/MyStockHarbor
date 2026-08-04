@@ -45,9 +45,29 @@ const TONE_BY_KEY = new Map<AnyFilterKey, PickerTone>([
   ...CATEGORY_FILTER_DEFS.map((d) => [d.key, d.tone] as const),
 ]);
 
+// Which indicator panel (if any) the mini-chart draws beneath the candles.
+//
+// This is a property of the PAGE, not of the stock. A curated condition page is
+// about one indicator, so its cards show that indicator. Anywhere the visitor
+// assembles their own list -- the Advanced Screener, the sector pages, Buy/Sell
+// Signals, any custom filter combination -- there is no such condition, so the
+// cards show plain candles.
+//
+// The divergence pages are the one exception, and the reason the per-entry
+// branch still exists: a divergence card carries its own indicator (RSI on one,
+// MACD on the next), and the combined page mixes both, so there the card's own
+// text has to choose. Everywhere else reading the card's text was actively
+// wrong -- on the Advanced Screener a card picked up an RSI or MACD panel
+// purely because one of the ~25 conditions it happened to qualify for mentioned
+// that indicator, so two cards side by side drew different panels on a page
+// that was about neither.
 function chartOverlayForEntry(configHref: string, configTitle: string, entry: ResultEntry) {
   const href = configHref.toLowerCase();
-  const text = `${configTitle} ${entry.badge ?? ""} ${entry.note} ${entry.reasons?.join(" ") ?? ""}`.toLowerCase();
+  const perCardIndicator = href.includes("divergence");
+  const entryText = perCardIndicator
+    ? `${entry.badge ?? ""} ${entry.note} ${entry.reasons?.join(" ") ?? ""}`
+    : "";
+  const text = `${configTitle} ${entryText}`.toLowerCase();
   if (text.includes("macd")) return "macd" as const;
   if (text.includes("rsi") || href.includes("overbought") || href.includes("oversold")) return "rsi" as const;
   if (href.includes("200-day") || href.includes("ma200") || href.includes("best-trend")) return href.includes("best-trend") ? ("trend" as const) : ("ma200" as const);
