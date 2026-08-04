@@ -74,10 +74,82 @@ export default async function RootLayout({
     textDecoration: "none",
   };
 
-  const footerSmallLinkStyle: React.CSSProperties = {
-    color: "rgba(241,245,249,0.58)",
-    textDecoration: "none",
-  };
+  // Footer columns, grouped by what a visitor is trying to do rather than by
+  // how the pages happen to be built.
+  //
+  // Replaces a Company / Legal / Learn trio plus a loose "Other Links" row.
+  // That older set had two problems beyond being thin: several entries pointed
+  // at thin duplicate pages that have since been 301'd away (What Is RSI,
+  // What Is MACD, Free Stock Screener, Best Trading Platforms, Buy The Dip,
+  // Stocks Above 200 MA, Unusual Volume), and two of them --
+  // /bullish-divergence-stocks and /bearish-divergence-stocks -- were already
+  // pointing at URLs that redirect elsewhere, so the footer was spending link
+  // equity on a hop to a page it could have linked directly.
+  //
+  // Everything below is now a destination worth landing on: the live
+  // screeners, the six curated screens, real lessons under /learn, and the
+  // tools. Internal linking is the binding constraint on getting the screener
+  // pages indexed (two GSC audits in this repo agree), and the footer is the
+  // one module on every page.
+  const footerColumns: {
+    heading: string;
+    links: { href: string; label: string }[];
+  }[] = [
+    {
+      heading: "Screeners",
+      links: [
+        { href: "/stock-screener", label: "Advanced Screener" },
+        { href: "/top-stocks-with-buy-signals", label: "Buy Signals" },
+        { href: "/top-stocks-with-sell-signals", label: "Sell Signals" },
+        { href: "/oversold-stocks-today", label: "Oversold Stocks" },
+        { href: "/overbought-stocks-today", label: "Overbought Stocks" },
+        { href: "/bullish-bearish-divergence-stocks", label: "Divergence Stocks" },
+      ],
+    },
+    {
+      heading: "Popular Screens",
+      links: [
+        { href: "/low-pe-stocks", label: "Low P/E Stocks" },
+        { href: "/high-dividend-yield-stocks", label: "High Dividend Yield" },
+        { href: "/dividend-growth-stocks", label: "Dividend Growth" },
+        { href: "/cash-rich-value-stocks", label: "Cash-Rich Value" },
+        { href: "/semiconductor-stocks", label: "Semiconductor Stocks" },
+        { href: "/cheap-tech-stocks", label: "Cheap Tech Stocks" },
+      ],
+    },
+    {
+      heading: "Learn",
+      links: [
+        { href: "/learn", label: "All Lessons" },
+        { href: "/learn/rsi", label: "RSI Explained" },
+        { href: "/learn/macd", label: "MACD Explained" },
+        { href: "/learn/moving-averages", label: "Moving Averages" },
+        { href: "/how-to-read-stock-charts", label: "How To Read Charts" },
+        { href: "/trading-setups", label: "Trading Setups" },
+      ],
+    },
+    {
+      heading: "Tools",
+      links: [
+        { href: "/dashboard", label: "Dashboard" },
+        { href: "/earnings-calendar", label: "Earnings Calendar" },
+        { href: "/markets/spx", label: "S&P 500 Analysis" },
+        { href: "/utilities", label: "Calculators" },
+        { href: "/platforms", label: "Platforms" },
+        { href: "/insights", label: "Insights" },
+      ],
+    },
+    {
+      heading: "Company",
+      links: [
+        { href: "/about", label: "About" },
+        { href: "/contact", label: "Contact" },
+        { href: "/risk-disclaimer", label: "Risk Disclaimer" },
+        { href: "/affiliate-disclosure", label: "Affiliate Disclosure" },
+        { href: "/privacy-policy", label: "Privacy Policy" },
+      ],
+    },
+  ];
 
   // Honeypot trap link (see app/api/internal/feed-index/route.ts and
   // lib/server/trapBlock.ts). Deliberately a plain <a>, NOT next/link's
@@ -130,7 +202,13 @@ export default async function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               .site-footer-main-grid {
-                grid-template-columns: minmax(140px, max-content) minmax(180px, max-content) minmax(180px, max-content);
+                grid-template-columns: repeat(5, minmax(140px, max-content));
+              }
+
+              @media (max-width: 1040px) {
+                .site-footer-main-grid {
+                  grid-template-columns: repeat(3, minmax(140px, 1fr));
+                }
               }
 
               @media (max-width: 720px) {
@@ -230,169 +308,38 @@ export default async function RootLayout({
                 className="site-footer-main-grid"
                 style={{
                   display: "grid",
-                  gap: "16px 48px",
+                  gap: "16px 40px",
                   alignItems: "start",
                 }}
               >
-                <div
-                  style={{
-                    display: "grid",
-                    gap: 6,
-                    alignContent: "start",
-                  }}
-                >
+                {footerColumns.map((column) => (
                   <div
+                    key={column.heading}
                     style={{
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: "#e2e8f0",
+                      display: "grid",
+                      gap: 6,
+                      alignContent: "start",
                     }}
                   >
-                    Company
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: "#e2e8f0",
+                      }}
+                    >
+                      {column.heading}
+                    </div>
+
+                    <div style={{ display: "grid", gap: 4 }}>
+                      {column.links.map((link) => (
+                        <Link key={link.href} href={link.href} style={footerLinkStyle}>
+                          {link.label}
+                        </Link>
+                      ))}
+                    </div>
                   </div>
-
-                  <div style={{ display: "grid", gap: 4 }}>
-                    <Link href="/about" style={footerLinkStyle}>
-                      About
-                    </Link>
-                    <Link href="/contact" style={footerLinkStyle}>
-                      Contact
-                    </Link>
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    display: "grid",
-                    gap: 6,
-                    alignContent: "start",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: "#e2e8f0",
-                    }}
-                  >
-                    Legal
-                  </div>
-
-                  <div style={{ display: "grid", gap: 4 }}>
-                    <Link href="/risk-disclaimer" style={footerLinkStyle}>
-                      Risk Disclaimer
-                    </Link>
-                    <Link href="/affiliate-disclosure" style={footerLinkStyle}>
-                      Affiliate Disclosure
-                    </Link>
-                    <Link href="/privacy-policy" style={footerLinkStyle}>
-                      Privacy Policy
-                    </Link>
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    display: "grid",
-                    gap: 6,
-                    alignContent: "start",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: "#e2e8f0",
-                    }}
-                  >
-                    Learn
-                  </div>
-
-                  <div style={{ display: "grid", gap: 4 }}>
-                    <Link href="/what-is-rsi-indicator" style={footerLinkStyle}>
-                      What Is RSI?
-                    </Link>
-                    <Link href="/what-is-macd-indicator" style={footerLinkStyle}>
-                      What Is MACD?
-                    </Link>
-                    <Link href="/how-to-read-stock-charts" style={footerLinkStyle}>
-                      How To Read Charts
-                    </Link>
-                    <Link href="/best-free-stock-screener" style={footerLinkStyle}>
-                      Free Stock Screener
-                    </Link>
-                    <Link href="/markets/spx" style={footerLinkStyle}>
-                      S&amp;P 500 Analysis
-                    </Link>
-                    <Link href="/best-trading-platform-for-beginners" style={footerLinkStyle}>
-                      Best Trading Platforms
-                    </Link>
-                  </div>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  borderTop: "1px solid rgba(255,255,255,0.08)",
-                  paddingTop: 10,
-                  display: "grid",
-                  gap: 6,
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 700,
-                    color: "rgba(241,245,249,0.72)",
-                    letterSpacing: 0.2,
-                  }}
-                >
-                  Other Links
-                </div>
-
-                <div
-                  style={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: "6px 16px",
-                    fontSize: 12,
-                    lineHeight: 1.5,
-                  }}
-                >
-                  <Link href="/breakout-stocks" style={footerSmallLinkStyle}>
-                    Breakout Stocks
-                  </Link>
-                  <Link href="/oversold-stocks" style={footerSmallLinkStyle}>
-                    Oversold Stocks
-                  </Link>
-                  <Link href="/buy-the-dip-stocks" style={footerSmallLinkStyle}>
-                    Buy The Dip Stocks
-                  </Link>
-                  <Link
-                    href="/bullish-divergence-stocks"
-                    style={footerSmallLinkStyle}
-                  >
-                    Bullish Divergence Stocks
-                  </Link>
-                  <Link
-                    href="/bearish-divergence-stocks"
-                    style={footerSmallLinkStyle}
-                  >
-                    Bearish Divergence Stocks
-                  </Link>
-                  <Link
-                    href="/stocks-above-200-day-moving-average"
-                    style={footerSmallLinkStyle}
-                  >
-                    Stocks Above 200 MA
-                  </Link>
-                  <Link
-                    href="/stocks-with-unusual-volume"
-                    style={footerSmallLinkStyle}
-                  >
-                    Unusual Volume Stocks
-                  </Link>
-                </div>
+                ))}
               </div>
 
               <div
