@@ -30,10 +30,19 @@ export type PickerResultConfig = {
   // Real body copy, rendered below the results as ordinary always-present
   // prose.
   //
-  // Deliberately NOT reusing explainerBody: HowToCollapse is a client component
-  // that renders its body only once opened (`{open ? <p>…</p> : null}`), so
-  // that text is not in the server HTML at all and only ever appears behind a
-  // click. Fine for a usage hint on a condition page; useless for a landing
+  // Deliberately NOT reusing explainerBody. HowToCollapse is a client component
+  // that renders its body only once opened (`{open ? <p>…</p> : null}`), and it
+  // defaults to closed, so that text never reaches the rendered markup -- it
+  // only appears after a click, and crawlers do not click.
+  //
+  // Be careful checking this: the string IS present in view-source, because
+  // Next serialises the prop into the RSC flight payload for hydration. But it
+  // is inside a <script> tag, not in the document body. Verified on production
+  // 2026-08-04 by fetching /semiconductor-stocks and stripping script tags --
+  // the explainer copy vanishes, this bodySections copy survives. Payload text
+  // is data for the client runtime, not page content.
+  //
+  // Fine for a one-line usage hint on a condition page; useless for a landing
   // page, where the copy IS the reason the page can rank. A filtered table plus
   // one generated sentence is thin content -- see
   // claude/preset-pages-universe-blocker-2026-08-04.md.
