@@ -6,6 +6,7 @@ import ScreenerNav from "@/app/components/ScreenerNav";
 import HowToCollapse from "@/app/components/HowToCollapse";
 import ScreenerHeroHeading from "@/app/components/ScreenerHeroHeading";
 import PickerResultsGrid, { type TabKey } from "@/app/components/PickerResultsGrid";
+import ScanFooter from "@/app/components/ScanFooter";
 import CustomScreenerSymbolSearch from "@/app/components/CustomScreenerSymbolSearch";
 import { PickerFilterProvider } from "@/app/components/PickerFilterContext";
 import { getCompanyNameMap } from "@/lib/server/companyNames";
@@ -944,18 +945,21 @@ export default async function PickerResultPage({
     ])
   ) as Record<string, string[]>;
 
-  // "Universe" metric is a debug/sanity-check number for confirming the
-  // dynamic-universe top-up job is actually running: universeSize is the
-  // fixed ~200-symbol cap actually analyzed per build (UNIVERSE_CAP, see
-  // claude/CACHING_REFRESH_ARCHITECTURE_PLAN.md), which never changes even
-  // when the broader dynamic-universe candidate pool grows. Adding
-  // dynamicUniverseCount (the size of that pool, up to 700) on top gives a
-  // combined number that visibly moves when the pool is topping up
-  // correctly, rather than always reading a static "200".
-  const combinedUniverseSize =
-    universeSize != null || dynamicUniverseCount != null
-      ? (universeSize ?? 0) + (dynamicUniverseCount ?? 0)
-      : null;
+  // `universeSize` and `dynamicUniverseCount` are now passed to ScanFooter
+  // SEPARATELY and rendered as "Universe 260 · Pool 353".
+  //
+  // They used to be summed into one `combinedUniverseSize`, on the reasoning
+  // that a single figure which visibly moves proves the dynamic-universe
+  // top-up job is running. It did move, but it was a sum of two different
+  // kinds of thing -- symbols actually analyzed, plus an overlapping pool of
+  // candidates eligible for a future build -- and the result read as a
+  // universe of 613 when only 260 symbols are ever analyzed.
+  //
+  // That cost real time: a whole investigation went looking for 353 symbols
+  // that were being "dropped between the universe and the screener", and they
+  // had never existed. Two numbers, each labelled, still show the top-up job
+  // working and cannot be misread the same way. See
+  // claude/preset-pages-universe-blocker-2026-08-04.md.
 
   // Supports deep links from the /pickers accordion like
   // /all-time-high-breakout-stocks?symbol=MTB -- scrolls to and briefly
@@ -1265,9 +1269,12 @@ export default async function PickerResultPage({
                   </section>
                 ) : null}
 
-                <div className="scanDebug">
-                  Current scan · Live matches {foundCount} · Shown {seoEntries.length} · Universe {combinedUniverseSize ?? "Live"} · Updated {formatUpdatedAt(updatedAt)}
-                </div>
+                <ScanFooter
+                  serverMatchCount={foundCount}
+                  universeSize={universeSize}
+                  poolSize={dynamicUniverseCount}
+                  updatedLabel={formatUpdatedAt(updatedAt)}
+                />
 
                 <HideWatermarksBar />
               </div>
