@@ -4,6 +4,10 @@ import { warmFundamentals } from "../../../../lib/server/fundamentalsCache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// The warm can now wait out a busy FMP minute rather than abandoning a stage,
+// and falls back to per-symbol quotes on plans without batch-quote, so give it
+// room. Bounded internally by the shared wait budget in fundamentalsCache.
+export const maxDuration = 300;
 
 // Daily cron (see vercel.json) that refreshes the Redis-cached fundamentals
 // (market cap, PE ratio, industry) for the current picker universe, so the
@@ -39,6 +43,9 @@ export async function GET(req: NextRequest) {
     );
 
     const result = await warmFundamentals(symbols);
+    // Logged as well as returned: the cron invokes this and discards the body,
+    // so without this line the run's coverage is invisible in Vercel logs.
+    console.log("[warm-fundamentals]", JSON.stringify(result));
     return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(
