@@ -371,15 +371,71 @@ doing, and it is the number a visitor is most likely to read as authoritative.
 This sits next to the already-outstanding relabel (`Universe 613` should be
 `Universe 260 · Pool 353`). Both are in the same footer; fix them together.
 
+## Shipped (2026-08-04, later the same evening)
+
+All six pages are live, linked and verified in production.
+
+| Page | Filter | Rows live |
+|---|---|---|
+| `/low-pe-stocks` | `peRatio=..15` | 42 |
+| `/dividend-growth-stocks` | `divGrowth=5..&divYield=2..` | 28 |
+| `/high-dividend-yield-stocks` | `divYield=4..` | 27 |
+| `/cash-rich-value-stocks` | `freeCashFlow=10000000000..&peRatio=..20` | 20 |
+| `/semiconductor-stocks` | `industry=Semiconductors` | 18 |
+| `/cheap-tech-stocks` | `sector=Technology&peRatio=..25` | 18 |
+
+Low P/E came back 42 against the 41 measured a couple of hours earlier. That is
+the universe rebuilding, not a defect, and it is the reason copy on these pages
+never cites a count.
+
+Linked from the **Pickers dropdown** (new "Popular Screens" flyout, placed
+directly under the two landing links) and from the **Select Screener sidebar**
+(new "Popular Screens" group), plus the sitemap. Named "Screens" rather than
+"Searches" to avoid colliding with the existing `/popular-searches`.
+
+### What had to change underneath
+
+- **Preset seeding took only boolean flag keys.** These pages are numeric bounds
+  and category values, which no flag can express -- there is no `cheap` boolean,
+  only a PE column to put a ceiling on. Added `presetPredicates` alongside
+  `presetFilters`, and taught the server-side SEO filter to evaluate predicates
+  so the SSR'd HTML and the ItemList structured data still describe what the URL
+  actually ranks for.
+- **`isPristine` compared flag fields directly**, and carried a comment saying
+  any numeric or category predicate made it false "by definition, since the seed
+  only ever contains flags". Left alone, every one of these pages would have been
+  permanently non-pristine -- which would have written `?peRatio=..15` onto the
+  canonical URL of a page whose entire purpose is to be that filter. Now compares
+  canonical query strings, which is order-independent and correct for any seed
+  shape. The Select Screener pill follows the same signal, so a two-predicate
+  page reads "Cheap Tech Stocks" at rest instead of "Custom".
+- **New `bodySections` config** renders real prose below the results. See the
+  finding below for why `explainerBody` could not be used.
+
+### Finding: explainer copy is not indexable
+
+`HowToCollapse` renders its body only once opened (`{open ? <p>...</p> : null}`)
+and defaults to closed, so that text never reaches the rendered markup.
+
+This is easy to check wrongly. The string **is** present in view-source, because
+Next serialises the prop into the RSC flight payload for hydration -- but it sits
+inside a `<script>` tag, not the document body. Verified on production by
+fetching `/semiconductor-stocks` and stripping script tags: the explainer copy
+disappears, the `bodySections` copy survives.
+
+Harmless for a one-line usage hint, which is all it was ever used for. Worth
+knowing before anyone puts content there expecting it to rank -- and it applies
+to all ~24 existing condition pages, not just these six.
+
 ## Still to do
 
 1. Fix the footer: make `Live matches` / `Shown` track the applied predicates,
-   and relabel `Universe 613` → `Universe 260 · Pool 353`.
-2. Write the six pages by hand. A filtered table plus a generated sentence is
-   thin content; the ranking case rests on the copy, not the screen.
-3. Link them from the Select Screener menu and the Pickers drilldown — internal
-   linking, not the sitemap, is the binding constraint on indexation (two
-   independent GSC audits agree).
-4. Sitemap entries follow the `lib/curatedSymbols.ts` pattern from #202.
-5. Copy must not cite row counts. Every number in this document is one snapshot
-   of a universe that rebuilds continuously.
+   and relabel `Universe 613` -> `Universe 260 - Pool 353`. Still outstanding.
+2. Revisit `/cheap-semiconductor-stocks` only if the universe cap rises far
+   enough to bring mid-cap semis in; at 260 the valuation angle does not have a
+   list behind it.
+3. The two near-misses -- `divYield=4..&payoutRatio=..60` (13) and
+   `sector=Financial Services&peRatio=..15` (14) -- are worth a page each if the
+   cap rises.
+4. Watch whether these six actually get indexed. Internal linking was the
+   diagnosis; these pages are the test of it.
