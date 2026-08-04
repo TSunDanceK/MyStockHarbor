@@ -117,7 +117,7 @@ export default function HowToIdentifyStockTrendsPage() {
             <p style={{ marginTop: 12, opacity: 0.86, lineHeight: 1.7 }}>If you want to explore real examples, visit the <Link href="/pickers" style={{ color: "#60a5fa", fontWeight: 800, textDecoration: "none" }}>Find Your Next Stock</Link> page for live stocks grouped by setup type.</p>
             <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
               <Link href="/" style={ctaPrimaryStyle()}>Open the Dashboard →</Link>
-              <Link href="/pickers" style={ctaSecondaryStyle()}>Browse Stock Ideas →</Link>
+              <Link href="/best-trend-score-stocks" style={ctaSecondaryStyle()}>See Best Trend Score Stocks →</Link>
               <Link href="/how-to-read-stock-charts" style={ctaSecondaryStyle()}>Read Chart Guide →</Link>
             </div>
           </section>
