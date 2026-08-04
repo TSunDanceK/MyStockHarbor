@@ -38,6 +38,9 @@ const config: PickerResultConfig = {
     { kind: "number", field: "peRatio", max: 25 },
   ],
   maxItems: 36,
+  // Same reasoning as /low-pe-stocks: the claim is about valuation, so open on
+  // the tab that lets it be checked against more than one multiple.
+  defaultTab: "valuation",
   bodySections: [
     {
       heading: "What counts as cheap in technology",
@@ -59,7 +62,7 @@ const config: PickerResultConfig = {
       heading: "How to work through the results",
       paragraphs: [
         "Look at revenue growth first, before anything else. It is the fastest way to separate the three cases above. A company at 20 times earnings still growing revenue steadily is in a different position from one at the same multiple whose revenue is shrinking, even though the valuation column reads identically.",
-        "Then check free cash flow, which is particularly informative in this sector. Technology accounting involves large non-cash charges — share-based compensation especially — that can make reported earnings a poor guide to the cash a business actually produces. The gap between the two is often wide here, and it usually favours looking at cash.",
+        "Then check free cash flow on the Financials tab, which is particularly informative in this sector. Technology accounting involves large non-cash charges — share-based compensation especially — that can make reported earnings a poor guide to the cash a business actually produces. The gap between the two is often wide here, and it usually favours looking at cash.",
         "Bear in mind that this list is short and will stay short. Only a small fraction of the technology names in the analyzed universe clear a 25x ceiling at any given time, and that scarcity is informative in itself: it tells you the sector is priced for continued growth. If the list ever lengthens materially, that is worth noticing, because it means the market has changed its mind about technology as a whole rather than about any one company on it.",
       ],
     },

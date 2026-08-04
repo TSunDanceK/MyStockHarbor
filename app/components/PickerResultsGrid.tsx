@@ -211,7 +211,7 @@ type ViewMode = "list" | "chart";
 // The list view now has data tabs, each with its own column set. Only columns
 // for data the site actually pulls are included (per the stockanalysis-style
 // spec). General/Performance/Valuation/Dividends/Financials/Analysts.
-type TabKey = "general" | "performance" | "valuation" | "dividends" | "financials" | "analysts";
+export type TabKey = "general" | "performance" | "valuation" | "dividends" | "financials" | "analysts";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "general", label: "General" },
@@ -357,6 +357,7 @@ export default function PickerResultsGrid({
   hideUntilFiltered = false,
   splitReasonsBySelection = false,
   collapseReasons = false,
+  defaultTab = "general",
 }: {
   entries: ResultEntry[];
   initialVisibleCount?: number;
@@ -368,10 +369,21 @@ export default function PickerResultsGrid({
   hideUntilFiltered?: boolean;
   splitReasonsBySelection?: boolean;
   collapseReasons?: boolean;
+  // Which column set to open on. "general" everywhere by default, which is the
+  // right overview for a page defined by a chart condition -- price, change,
+  // industry, volume.
+  //
+  // A page defined by a fundamental screen should open on the tab holding the
+  // metric it screens on. Landing the dividend-growth page on a table with no
+  // dividend column in it makes the visitor hunt for the one number the page is
+  // about, and several of these metrics (dividend growth, payout ratio, free
+  // cash flow) appear on exactly one tab. See defaultTab in PickerResultPage's
+  // config.
+  defaultTab?: TabKey;
 }) {
   const { predicates, selectedFilters, setMatchCount, isPristine } = usePickerFilter();
   const [viewMode, setViewMode] = useState<ViewMode>("list");
-  const [activeTab, setActiveTab] = useState<TabKey>("general");
+  const [activeTab, setActiveTab] = useState<TabKey>(defaultTab);
   const [sort, setSort] = useState<SortState>(null);
   const pageSize = viewMode === "list" ? LIST_PAGE_SIZE : CHART_PAGE_SIZE;
   const [visibleCount, setVisibleCount] = useState(LIST_PAGE_SIZE);
