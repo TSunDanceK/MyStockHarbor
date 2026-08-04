@@ -224,3 +224,162 @@ stage to have aborted.
   number to reason about when picking combinations.
 - Everything under *Judgements worth keeping* is unaffected, including the floor
   of ~15 rows and the preference for fundamental over technical screens.
+
+---
+
+# Re-measurement (2026-08-04, evening) — blocker cleared, counts retaken
+
+The `industry`/`sector` starvation diagnosed above was fixed in **#207**
+(`cdb0582`): profile stage moved ahead of the quote stage, `break` replaced with
+`awaitFmpCapacity()`, no batch-quote retry after 402. Profile coverage went from
+~130 to **259/260**.
+
+Every count below was taken from the **live production screener in a real
+browser** — the Vercel bot challenge that blocked the earlier session does not
+apply to a genuine browser session. Method: load
+`/stock-screener?<filter>` and read the `.screenerChipCount` element
+("N of 260") next to the filter chips.
+
+**Cross-check on data integrity:** the eleven sector counts sum to **259**, i.e.
+exactly `260 − 1`, matching the single symbol still lacking a profile. The
+category fields are now effectively complete.
+
+## Sector distribution (the whole analyzed universe)
+
+| Sector | Rows |
+|---|---|
+| Technology | 63 |
+| Financial Services | 35 |
+| Healthcare | 32 |
+| Industrials | 32 |
+| Consumer Cyclical | 27 |
+| Consumer Defensive | 20 |
+| Energy | 14 |
+| Utilities | 10 |
+| Basic Materials | 9 |
+| Communication Services | 9 |
+| Real Estate | 8 |
+| **Total** | **259** (+1 with no profile) |
+
+## The original counts, retaken
+
+| Filter | Was | Now |
+|---|---|---|
+| `industry=Semiconductors` | 4 | **18** |
+| `industry=Semiconductors&peRatio=..25` | 1 | **2** |
+| `industry=Semiconductors&peRatio=..40` | 2 | **5** |
+| `divYield=4..` | 28 | 27 |
+| `peRatio=..12` | 18 | 18 |
+| `peRatio=..15` | 41 | 41 |
+| `divGrowth=5..&divYield=2..` | 28 | 28 |
+| `perfYtd=20..` | 81 | 90 |
+| `freeCashFlow=10000000000..` | 46 | 48 |
+| `freeCashFlow=1000000000..` | 188 | 188 |
+| `oversold=1&sector=Technology` | 7 | 11 |
+
+Only the `industry=` rows moved materially, which is the expected signature of
+the fix: `peRatio`, `divYield` and `freeCashFlow` come from the price pool and
+stock-data caches, which were never starved. The earlier note's prediction that
+"counts will go up, in some cases a lot" was right about semis specifically and
+wrong as a general expectation — worth remembering, because it means **the
+numeric screens were never the thing that was broken** and their original
+readings stand.
+
+## `/cheap-semiconductor-stocks` is dead — and not because of a bug
+
+This is the headline result and it reverses the premise of the original note.
+
+The coverage problem is genuinely fixed: the semis list is now 18 names and
+contains NVDA, AVGO, INTC, ASML, TXN, ADI, AMAT, LRCX, KLAC, MU, ARM, MCHP,
+TER and the rest. Nothing is missing any more.
+
+But of those 18, **2 trade under P/E 25 and 5 under P/E 40.** The original note
+already suspected this ("semis trade far richer than a generic 'cheap' ceiling
+assumes") and it is now quantified. There is no P/E ceiling that produces both a
+defensible "cheap" claim and a list clearing the 15-row floor — a ceiling loose
+enough to fill the page stops meaning "cheap".
+
+The page as conceived cannot be written. Two viable replacements, same keyword
+territory:
+
+- **`/semiconductor-stocks`** — `industry=Semiconductors` — **18 rows.** A plain
+  industry landing page, no valuation claim to defend.
+- **`/semiconductor-stocks-outperforming`** — `industry=Semiconductors&perfYtd=20..`
+  — **15 rows.** Right at the floor and it is a momentum screen, so it churns;
+  weaker on the evergreen test.
+
+## The three previously-unmeasured fields
+
+**Analyst `rating` — only two values exist: `Buy` and `Hold`.** No Strong Buy,
+Sell or Strong Sell anywhere in the universe. `rating=Buy` is **180 of 260
+(69%)**, far too broad to define a page, and "stocks analysts say hold" is not a
+query anyone types. **Rating is not a viable page axis** — usable only as a
+secondary qualifier (`divYield=2..&rating=Buy` → 53).
+
+**`payoutFreq` — `Monthly` does exist**, alongside Irregular, Quarterly,
+Semi-Annual and Special. But `payoutFreq=Monthly` returns **2 rows**. A
+monthly-dividend page is dead on arrival, and structurally so: monthly payers are
+overwhelmingly REITs and BDCs, which a 260-name mega/large-cap universe barely
+contains (Real Estate is the smallest sector here at 8).
+
+**Bank industry labels — the split was real.** FMP uses `Banks - Diversified`
+and `Banks - Regional` (plain hyphen, spaces either side), plus a separate
+`Investment - Banking & Investment Services`. Counts: Regional **5**, both bank
+labels OR'd together **8**. **Below the floor even combined**, so neither the one
+page nor the two narrower ones are viable. Bank coverage has to come in via
+`sector=Financial Services` (35) instead — which also sidesteps the P/B-not-P/E
+problem, since a sector page makes no valuation claim.
+
+## Shortlist that survives the floor
+
+Ordered by how well each holds up as evergreen content, not by row count.
+
+| Page | Filter | Rows |
+|---|---|---|
+| `/low-pe-stocks` | `peRatio=..15` | 41 |
+| `/dividend-growth-stocks` | `divGrowth=5..&divYield=2..` | 28 |
+| `/high-dividend-yield-stocks` | `divYield=4..` | 27 |
+| `/cash-rich-value-stocks` | `freeCashFlow=10000000000..&peRatio=..20` | 20 |
+| `/semiconductor-stocks` | `industry=Semiconductors` | 18 |
+| `/cheap-tech-stocks` | `sector=Technology&peRatio=..25` | 18 |
+
+That is six, matching the "launch 5–6 hand-written" guidance. Two near-misses
+worth noting rather than launching: `divYield=4..&payoutRatio=..60`
+(**13** — a genuinely good screen, sustainable high yield, just under the floor;
+revisit if the universe cap rises) and `sector=Financial Services&peRatio=..15`
+(**14**, same).
+
+Explicitly rejected: `perfYtd=20..` (90 rows, and a momentum screen that churns);
+`freeCashFlow=1000000000..` (188 = 72% of the list); `rating=Buy` (180);
+`oversold=1&sector=Technology` (11, technical, churns daily);
+`payoutFreq=Monthly` (2); any bank page (≤8).
+
+## Bug found while measuring
+
+The results footer is **stuck at the unfiltered count**. With
+`?industry=Semiconductors` applied it reads
+
+```
+Current scan · Live matches 260 · Shown 260 · Universe 613 · Updated 04 Aug, 17:45
+```
+
+while the chip bar directly above the table correctly reads `18 of 260`.
+Reproduced on every filter tried. So "Live matches" and "Shown" ignore the
+applied predicates entirely — the label promises exactly the thing it is not
+doing, and it is the number a visitor is most likely to read as authoritative.
+
+This sits next to the already-outstanding relabel (`Universe 613` should be
+`Universe 260 · Pool 353`). Both are in the same footer; fix them together.
+
+## Still to do
+
+1. Fix the footer: make `Live matches` / `Shown` track the applied predicates,
+   and relabel `Universe 613` → `Universe 260 · Pool 353`.
+2. Write the six pages by hand. A filtered table plus a generated sentence is
+   thin content; the ranking case rests on the copy, not the screen.
+3. Link them from the Select Screener menu and the Pickers drilldown — internal
+   linking, not the sitemap, is the binding constraint on indexation (two
+   independent GSC audits agree).
+4. Sitemap entries follow the `lib/curatedSymbols.ts` pattern from #202.
+5. Copy must not cite row counts. Every number in this document is one snapshot
+   of a universe that rebuilds continuously.
