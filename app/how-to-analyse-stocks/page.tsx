@@ -46,11 +46,11 @@ export default function HowToAnalyseStocksPage() {
           </section>
           <section style={{ marginTop: 28 }}>
             <h2>2. Using technical indicators</h2>
-            <p style={{ marginTop: 12, lineHeight: 1.7, opacity: 0.86 }}>Technical indicators help measure aspects of price movement. Useful ones include <Link href="/what-is-rsi-indicator" style={{ color: "#93c5fd", textDecoration: "underline" }}>RSI</Link>, <Link href="/what-is-macd-indicator" style={{ color: "#93c5fd", textDecoration: "underline" }}>MACD</Link>, and <Link href="/what-is-vwap-indicator" style={{ color: "#93c5fd", textDecoration: "underline" }}>VWAP</Link>.</p>
+            <p style={{ marginTop: 12, lineHeight: 1.7, opacity: 0.86 }}>Technical indicators help measure aspects of price movement. Useful ones include <Link href="/learn/rsi" style={{ color: "#93c5fd", textDecoration: "underline" }}>RSI</Link>, <Link href="/learn/macd" style={{ color: "#93c5fd", textDecoration: "underline" }}>MACD</Link>, and <Link href="/what-is-vwap-indicator" style={{ color: "#93c5fd", textDecoration: "underline" }}>VWAP</Link>.</p>
           </section>
           <section style={{ marginTop: 28 }}>
             <h2>3. Identifying stock setups</h2>
-            <p style={{ marginTop: 12, lineHeight: 1.7, opacity: 0.86 }}>Traders often look for specific patterns including <Link href="/breakout-stocks" style={{ color: "#93c5fd", textDecoration: "underline" }}>breakouts</Link>, <Link href="/oversold-stocks" style={{ color: "#93c5fd", textDecoration: "underline" }}>oversold setups</Link>, and <Link href="/buy-the-dip-stocks" style={{ color: "#93c5fd", textDecoration: "underline" }}>buy-the-dip setups</Link>.</p>
+            <p style={{ marginTop: 12, lineHeight: 1.7, opacity: 0.86 }}>Traders often look for specific patterns including <Link href="/breakout-stocks" style={{ color: "#93c5fd", textDecoration: "underline" }}>breakouts</Link>, <Link href="/oversold-stocks" style={{ color: "#93c5fd", textDecoration: "underline" }}>oversold setups</Link>, and <Link href="/stocks-down-20-from-all-time-highs" style={{ color: "#93c5fd", textDecoration: "underline" }}>buy-the-dip setups</Link>.</p>
           </section>
           <section style={{ marginTop: 28 }}>
             <h2>4. Scanning the market for ideas</h2>
