@@ -45,6 +45,10 @@ export async function GET() {
     const payloadChars = JSON.stringify(payload).length;
 
     return NextResponse.json({
+      // updatedAt of the payload itself, so a stale cached rebuild is obvious
+      // rather than being read as a fresh measurement.
+      payloadUpdatedAt: payload.updatedAt ?? null,
+      universeSize: payload.universeSize ?? null,
       records: records.length,
       withCharts,
       withoutCharts,
