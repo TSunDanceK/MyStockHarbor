@@ -11,10 +11,12 @@ import {
   getWindowStartDate,
   getWindowEndDate,
   isDateInWindow,
+  getCachedDayItems,
   daysInMonth,
 } from "@/lib/server/earningsCalendar";
 import EarningsDayList from "./EarningsDayList";
 import EarningsTickerSearch from "./EarningsTickerSearch";
+import EarningsUpcomingTicker, { type UpcomingEarningsItem } from "./EarningsUpcomingTicker";
 import BackfillButton from "./BackfillButton";
 
 const PAGE_TITLE = "Earnings Calendar | MyStockHarbor";
@@ -95,6 +97,83 @@ function formatDateLabel(dateStr: string) {
   });
 }
 
+// Rows for the "Next up" strip at the top of the page.
+//
+// Walks forward from today and takes the biggest names off each day's cache
+// until it has enough. getCachedDayItems is read-only and never quotes an
+// upstream API -- it returns whatever the background populate job has already
+// materialised -- so this costs a handful of Redis reads and nothing else. A
+// day that has not been filled yet simply contributes nothing rather than
+// triggering a fetch, which keeps the ticker off the critical path of the
+// window-filling logic entirely.
+//
+// Items are already market-cap sorted inside each day (see dedupeAndSortItems),
+// so taking the head of each day gives recognisable companies while the overall
+// order stays chronological -- which is the point of the strip.
+const TICKER_DAYS_AHEAD = 14;
+const TICKER_MAX_ITEMS = 18;
+const TICKER_MAX_PER_DAY = 3;
+
+async function getUpcomingTickerItems(todayDate: string): Promise<UpcomingEarningsItem[]> {
+  try {
+    const dates: string[] = [];
+    const cursor = new Date(`${todayDate}T00:00:00Z`);
+    if (Number.isNaN(cursor.getTime())) return [];
+
+    for (let i = 0; i < TICKER_DAYS_AHEAD; i++) {
+      const iso = cursor.toISOString().slice(0, 10);
+      if (isDateInWindow(iso)) dates.push(iso);
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+    if (!dates.length) return [];
+
+    const perDay = await Promise.all(
+      dates.map(async (date) => {
+        try {
+          return { date, items: await getCachedDayItems(date) };
+        } catch {
+          return { date, items: [] };
+        }
+      })
+    );
+
+    const out: UpcomingEarningsItem[] = [];
+    const seen = new Set<string>();
+
+    for (const { date, items } of perDay) {
+      const label = new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        timeZone: "UTC",
+      });
+
+      let takenToday = 0;
+      for (const item of items) {
+        if (takenToday >= TICKER_MAX_PER_DAY || out.length >= TICKER_MAX_ITEMS) break;
+        const symbol = String(item.symbol || "").trim().toUpperCase();
+        // A company reporting inside the window twice (a restated or corrected
+        // date) would otherwise appear twice in one short strip.
+        if (!symbol || seen.has(symbol)) continue;
+        seen.add(symbol);
+        out.push({
+          symbol,
+          company: String(item.company || symbol).trim(),
+          date,
+          dayLabel: date === todayDate ? "Today" : label,
+        });
+        takenToday++;
+      }
+      if (out.length >= TICKER_MAX_ITEMS) break;
+    }
+
+    return out;
+  } catch {
+    // The strip is decorative; it must never take the calendar down with it.
+    return [];
+  }
+}
+
 export default async function EarningsCalendarPage({
   searchParams,
 }: {
@@ -154,10 +233,11 @@ export default async function EarningsCalendarPage({
   const prevDisabled = monthPrefix <= firstYM;
   const nextDisabled = monthPrefix >= lastYM;
 
-  const [daysWithEarnings, dayData, dateComplete] = await Promise.all([
+  const [daysWithEarnings, dayData, dateComplete, upcomingTickerItems] = await Promise.all([
     getMonthDaysWithEarnings(year, month),
     getDayEarningsForRender(selectedDate),
     isDateFullyPopulated(selectedDate),
+    getUpcomingTickerItems(todayDate),
   ]);
 
   // Background auto-populate: after this response is sent, quietly fill in the
@@ -291,6 +371,8 @@ export default async function EarningsCalendarPage({
 
             <EarningsTickerSearch />
           </section>
+
+          <EarningsUpcomingTicker items={upcomingTickerItems} />
 
           <section
             style={{
