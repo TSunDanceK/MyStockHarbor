@@ -364,9 +364,9 @@ export default function StocksWithUnusualVolumePage() {
             </div>
           </Link>
 
-          <Link href="/pickers" style={cardStyle}>
+          <Link href="/volume-spike-stocks" style={cardStyle}>
             <div style={{ fontSize: 18, fontWeight: 950 }}>
-              Use the stock pickers
+              See volume spike stocks
             </div>
             <div
               style={{
