@@ -35,6 +35,11 @@ const config: PickerResultConfig = {
   kind: "preset",
   presetPredicates: [{ kind: "category", field: "industry", values: ["Semiconductors"] }],
   maxItems: 36,
+  // Deliberately General rather than a metric tab: this page screens on an
+  // industry, not a number, so the right opening view is the plain overview --
+  // market cap, price, change, industry. The body copy points at Performance as
+  // the next place to look, which stays a click away.
+  defaultTab: "general",
   bodySections: [
     {
       heading: "One label, several different businesses",

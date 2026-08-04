@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 const pageTitle = "Low P/E Stocks | Shares Trading Under 15x Earnings | MyStockHarbor";
 const pageDescription =
-  "Stocks in the analyzed universe trading below 15 times earnings, with market cap, dividend yield and free cash flow alongside so a low multiple can be judged in context rather than on its own.";
+  "Stocks in the analyzed universe trading below 15 times earnings, opening on the valuation view so a low multiple can be checked against forward P/E, price-to-sales and price-to-book rather than judged on its own.";
 
 export const metadata: Metadata = {
   title: pageTitle,
@@ -35,6 +35,10 @@ const config: PickerResultConfig = {
   kind: "preset",
   presetPredicates: [{ kind: "number", field: "peRatio", max: 15 }],
   maxItems: 36,
+  // P/E is the screen, and the Valuation tab is the only place it sits next to
+  // forward P/E, P/S, P/B and P/FCF -- the cross-checks that tell a cheap stock
+  // from a broken one. General shows P/E alone, without that context.
+  defaultTab: "valuation",
   bodySections: [
     {
       heading: "What a low P/E actually tells you",
@@ -57,7 +61,7 @@ const config: PickerResultConfig = {
       paragraphs: [
         "Sort by market cap first. A low multiple on a very large, widely covered company usually means the market has priced in a known problem, because hundreds of analysts have already looked. The same multiple on a smaller name may simply mean nobody is looking, which is a different and sometimes more interesting situation.",
         "Then check the P/E against the sector rather than against the whole list. Banks, insurers and energy producers habitually trade in single digits and always have; software and medical devices rarely do. A bank at 11 times earnings is unremarkable. A software company at 11 is unusual enough to be worth understanding. Comparing across sectors on this one number produces a list of banks and little else.",
-        "Free cash flow is the most useful cross-check available on this page. Profit is an accounting figure and can be shaped by non-cash charges; cash is harder to argue with. A company with a low multiple and strong cash generation is a genuinely different case from one with a low multiple and cash that never seems to appear. Tick another condition in the sidebar to combine the two without leaving this page.",
+        "Free cash flow is the most useful cross-check of all, and it is one tab across on Financials. Profit is an accounting figure and can be shaped by non-cash charges; cash is harder to argue with. A company with a low multiple and strong cash generation is a genuinely different case from one with a low multiple and cash that never seems to appear. Add a free cash flow floor from the sidebar to screen on both at once.",
       ],
     },
   ],

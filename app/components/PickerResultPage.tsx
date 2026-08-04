@@ -4,7 +4,7 @@ import PickerHighlightScroller from "@/app/components/PickerHighlightScroller";
 import ScreenerNav from "@/app/components/ScreenerNav";
 import HowToCollapse from "@/app/components/HowToCollapse";
 import ScreenerHeroHeading from "@/app/components/ScreenerHeroHeading";
-import PickerResultsGrid from "@/app/components/PickerResultsGrid";
+import PickerResultsGrid, { type TabKey } from "@/app/components/PickerResultsGrid";
 import CustomScreenerSymbolSearch from "@/app/components/CustomScreenerSymbolSearch";
 import { PickerFilterProvider } from "@/app/components/PickerFilterContext";
 import { getCompanyNameMap } from "@/lib/server/companyNames";
@@ -47,6 +47,11 @@ export type PickerResultConfig = {
   // one generated sentence is thin content -- see
   // claude/preset-pages-universe-blocker-2026-08-04.md.
   bodySections?: { heading: string; paragraphs: string[] }[];
+  // Which results tab to open on. Defaults to "general". Set it to the tab
+  // holding the metric this page screens on, so the number the page is named
+  // after is visible on arrival rather than a click away — dividend growth,
+  // payout ratio and free cash flow each appear on exactly one tab.
+  defaultTab?: TabKey;
   emptyText: string;
   tone: PickerTone;
   kind: PickerResultKind;
@@ -1204,6 +1209,7 @@ export default async function PickerResultPage({
                   hideUntilFiltered={config.kind === "allSymbols" && !config.showAllImmediately}
                   splitReasonsBySelection={isFilterablePage}
                   collapseReasons={config.kind === "allSymbols"}
+                  defaultTab={config.defaultTab}
                 />
 
                 {config.bodySections?.length ? (

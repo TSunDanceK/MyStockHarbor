@@ -38,6 +38,10 @@ const config: PickerResultConfig = {
     { kind: "number", field: "peRatio", max: 20 },
   ],
   maxItems: 36,
+  // Free cash flow appears only on the Financials tab, and it is the leading
+  // half of this screen. P/E is the qualifier and stays one click away on
+  // Valuation (it is also on General).
+  defaultTab: "financials",
   bodySections: [
     {
       heading: "Why free cash flow is the harder test",

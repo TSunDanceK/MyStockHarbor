@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 const pageTitle = "High Dividend Yield Stocks | Shares Yielding Over 4% | MyStockHarbor";
 const pageDescription =
-  "Stocks in the analyzed universe yielding more than 4%, shown with payout ratio, dividend growth and free cash flow so you can tell a sustainable income stream from one about to be cut.";
+  "Stocks in the analyzed universe yielding more than 4%, opening on the dividend view so payout ratio, dividend growth and payment frequency sit beside the yield — the four numbers that separate a sustainable income stream from one about to be cut.";
 
 export const metadata: Metadata = {
   title: pageTitle,
@@ -26,7 +26,7 @@ const config: PickerResultConfig = {
   eyebrow: "HIGH DIVIDEND YIELD SCREENER",
   title: "High Dividend Yield Stocks",
   description:
-    "Stocks currently yielding over 4%. Switch to the Dividends tab to see payout ratio, dividend growth and payment frequency for every name on the list.",
+    "Stocks currently yielding over 4%, shown with payout ratio, dividend growth and payment frequency so the yield can be judged rather than just read.",
   explainerTitle: "How to use this screen",
   explainerBody:
     "Yield rises when the price falls, so the highest yields on any list often belong to the stocks the market trusts least. Check the payout ratio before treating a large number as good news.",
@@ -35,6 +35,10 @@ const config: PickerResultConfig = {
   kind: "preset",
   presetPredicates: [{ kind: "number", field: "divYield", min: 4 }],
   maxItems: 36,
+  // Yield alone is close to meaningless (see the body copy). The Dividends tab
+  // is where payout ratio, dividend growth and frequency sit beside it, which is
+  // the combination the page actually asks the reader to judge.
+  defaultTab: "dividends",
   bodySections: [
     {
       heading: "Why the highest yield is rarely the best one",
@@ -55,7 +59,7 @@ const config: PickerResultConfig = {
     {
       heading: "Using this list",
       paragraphs: [
-        "Open the Dividends tab above the table to bring payout ratio, dividend growth and payment frequency into view alongside the yield. Reading those four together tells you considerably more than the yield alone: a moderate yield that has grown steadily on a modest payout ratio is a stronger position than a large yield that has been flat for years on a stretched one.",
+        "This page opens on the Dividends view for a reason: payout ratio, dividend growth and payment frequency sit beside the yield there, and reading those four together tells you considerably more than the yield alone. A moderate yield that has grown steadily on a modest payout ratio is a stronger position than a large yield that has been flat for years on a stretched one.",
         "Expect this list to concentrate in a few sectors. Utilities, energy, consumer staples and parts of financial services are where mature cash-generative businesses tend to sit, and they are where large sustainable dividends are usually found. A high yield appearing in a fast-growing sector is unusual and worth a second look, because growth companies normally reinvest rather than distribute.",
         "If you want the stricter version of this screen, add a payout ratio ceiling from the sidebar. Combining a yield above 4% with a payout ratio below 60% produces a materially shorter and more defensible list, and you can do it in place without navigating away.",
       ],

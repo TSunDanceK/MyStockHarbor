@@ -38,6 +38,9 @@ const config: PickerResultConfig = {
     { kind: "number", field: "divGrowth", min: 5 },
   ],
   maxItems: 36,
+  // Dividend growth appears on this tab and nowhere else, so opening anywhere
+  // else would hide the metric the page is named after.
+  defaultTab: "dividends",
   bodySections: [
     {
       heading: "Why growth beats size in a dividend",
