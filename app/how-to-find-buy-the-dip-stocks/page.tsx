@@ -46,7 +46,7 @@ export default function HowToFindBuyTheDipStocksPage() {
           </section>
           <section style={{ marginTop: 28 }}>
             <h2>2. Identify meaningful pullbacks</h2>
-            <p style={{ marginTop: 12, lineHeight: 1.7, opacity: 0.86 }}>A pullback becomes interesting when price returns toward areas where buyers previously stepped in. Traders often combine this with indicators such as <Link href="/what-is-rsi-indicator" style={{ color: "#93c5fd", textDecoration: "underline" }}>RSI</Link> to judge whether momentum has become temporarily stretched.</p>
+            <p style={{ marginTop: 12, lineHeight: 1.7, opacity: 0.86 }}>A pullback becomes interesting when price returns toward areas where buyers previously stepped in. Traders often combine this with indicators such as <Link href="/learn/rsi" style={{ color: "#93c5fd", textDecoration: "underline" }}>RSI</Link> to judge whether momentum has become temporarily stretched.</p>
           </section>
           <section style={{ marginTop: 28 }}>
             <h2>3. Watch how the stock behaves after the dip</h2>
@@ -64,7 +64,7 @@ export default function HowToFindBuyTheDipStocksPage() {
           <section style={{ marginTop: 32 }}>
             <h2>Related guides</h2>
             <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
-              <Link href="/buy-the-dip-stocks">Buy the Dip Stocks</Link>
+              <Link href="/stocks-down-20-from-all-time-highs">Buy the Dip Stocks</Link>
               <Link href="/oversold-stocks">Oversold Stocks</Link>
               <Link href="/stocks-down-from-highs">Stocks Down From Highs</Link>
               <Link href="/trading-setups">Trading Setups</Link>
