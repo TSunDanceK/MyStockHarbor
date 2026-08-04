@@ -33,6 +33,11 @@ const config: PickerResultConfig = {
   kind: "preset",
   presetFilters: ["bearishRsiDivergence"],
   maxItems: 36,
+  relatedGuide: {
+    href: "/bearish-divergence-explained",
+    label: "bearish divergence explained",
+    blurb: "For how the pattern forms and how to read it on a chart, see",
+  },
 };
 
 export default async function Page({
