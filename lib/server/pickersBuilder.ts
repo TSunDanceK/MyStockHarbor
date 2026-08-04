@@ -472,7 +472,34 @@ async function readPickersCache() {
   }
 }
 
-async function writePickersCache(data: PickersPayload) {
+// Fallback payload for when the full write is rejected for exceeding
+// Upstash's 10MB Max Request Size (see claude/chart-coverage-handover-2026-08-04.md).
+// Mirrors the pre-dedup behaviour: chartPoints are kept only for symbols
+// that appear in at least one section; every other signalRecords entry has
+// chartPoints stripped. This is deliberately recomputed from `data` at
+// write time rather than cached, since it's only ever needed on the rare
+// oversized-payload path.
+function buildReducedPickersPayload(data: PickersPayload): PickersPayload {
+  const displayedSymbols = new Set(
+    data.sections.flatMap((section) => section.items.map((item) => item.symbol))
+  );
+
+  return {
+    ...data,
+    signalRecords: data.signalRecords.map((record) =>
+      displayedSymbols.has(record.symbol) ? record : { ...record, chartPoints: undefined }
+    ),
+  };
+}
+
+// Previously this caught-and-swallowed unconditionally, so an oversized
+// value simply wasn't cached and every request silently fell back to a live
+// FMP rebuild -- the worst failure mode available, and the one already in
+// place. Now: try the full payload first; on failure (e.g. Upstash's 10MB
+// Max Request Size), retry once with `reduced()` -- a smaller payload with
+// chartPoints stripped outside sections -- and log which path was used so a
+// truncated cache is visible in Vercel logs instead of silent.
+async function writePickersCache(data: PickersPayload, reduced?: () => PickersPayload) {
   if (!redis) return;
 
   try {
@@ -484,8 +511,28 @@ async function writePickersCache(data: PickersPayload) {
     await redis.set(PICKERS_REDIS_KEY, entry, {
       ex: PICKERS_REDIS_TTL_SECONDS,
     });
+    return;
+  } catch (error) {
+    console.warn(
+      "[pickers] full payload write failed",
+      error instanceof Error ? error.message : error
+    );
+  }
+
+  if (!reduced) return;
+
+  try {
+    const entry: CachedPickersPayload = {
+      cachedAt: Date.now(),
+      data: reduced(),
+    };
+
+    await redis.set(PICKERS_REDIS_KEY, entry, {
+      ex: PICKERS_REDIS_TTL_SECONDS,
+    });
+    console.warn("[pickers] cached reduced payload (chartPoints stripped outside sections)");
   } catch {
-    // fail open
+    // fail open, as before
   }
 }
 
@@ -2854,7 +2901,20 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
     );
   }
 
-  const takeTop = (arr: PickerItem[], n: number) => {
+  // Most sections' chartPoints are byte-identical to this same symbol's
+  // signalRecords entry -- both come from the single `chartPoints =
+  // buildPickerChartPoints(pts)` computed once per symbol above and threaded
+  // into whichever category buckets that symbol qualifies for. Shipping that
+  // array again on every section item roughly doubled the payload for no
+  // reason (a symbol can land in several sections at once). Consumers now
+  // fall back to a signalRecords lookup when an item's chartPoints is absent
+  // (see PickerResultPage.tsx's entriesFromSection/buildEntries and the
+  // bullish/bearish-divergence-stocks pages), so it's safe to omit here.
+  // Weekly MA200 Proximity and Macro Support & Resistance are the exception:
+  // their items carry genuinely different weekly-aggregated points (see
+  // `weeklyChartPoints` above), so those two keep their own copy via
+  // keepChartPoints.
+  const takeTop = (arr: PickerItem[], n: number, opts?: { keepChartPoints?: boolean }) => {
     const sorted = [...arr].sort((a, b) => (b._score ?? 0) - (a._score ?? 0));
     return sorted
       .slice(0, n)
@@ -2865,7 +2925,7 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
         timeframe,
         indicator,
         dashboardHref,
-        chartPoints,
+        chartPoints: opts?.keepChartPoints ? chartPoints : undefined,
         supportResistanceZone,
         chartFocus,
         dominantIndicator,
@@ -2878,8 +2938,9 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
     description?: string;
     source: PickerItem[];
     take: number;
+    keepChartPoints?: boolean;
   }): PickerSection => {
-    const items = takeTop(args.source, args.take);
+    const items = takeTop(args.source, args.take, { keepChartPoints: args.keepChartPoints });
 
     return {
       title: args.title,
@@ -2932,6 +2993,9 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
         "Stocks trading close to their Weekly MA200, with ranking favouring constructive MA200 behaviour over messy long-term weakness.",
       source: weeklyMa200Proximity,
       take: 20,
+      // Weekly-aggregated points, distinct from this symbol's daily
+      // signalRecords chartPoints -- can't be deduped against it.
+      keepChartPoints: true,
     }),
     buildSection({
       title: "Macro Support and Resistance Stocks",
@@ -2939,6 +3003,9 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
         "Stocks near wider weekly support or resistance zones, ranked by repeated touches, distance to the zone, structure length and volume traded around the level.",
       source: macroSupportResistance,
       take: 20,
+      // Weekly-aggregated points, distinct from this symbol's daily
+      // signalRecords chartPoints -- can't be deduped against it.
+      keepChartPoints: true,
     }),
     buildSection({
       title: "Overbought Stocks Today (Potential Pullback Setups)",
@@ -2983,19 +3050,19 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
   // the mega-caps (AAPL, NVDA, AMZN, GOOGL, META, ...) -- they're in the
   // analyzed universe but don't always land in a section's top-20, so sorting
   // All Stocks by market cap showed MSFT/LLY/MU at the top with the true giants
-  // missing entirely. To keep the cached payload lean (and safely under the
-  // Redis value-size limit), chartPoints are kept only for the symbols that
-  // appear in a section -- those cards already need them. The extra
-  // full-universe symbols ship WITHOUT chartPoints, so they still appear in the
-  // sortable list (which needs no per-row chart) while their chart-view card
-  // simply renders no mini-chart. The lean consumers (homepage buy-signal
-  // counts / weekly MA200 ticker) just read a longer, more complete list.
-  const displayedSymbols = new Set(
-    sections.flatMap((section) => section.items.map((item) => item.symbol))
-  );
-  const fullSignalRecords = signalRecords.map((record) =>
-    displayedSymbols.has(record.symbol) ? record : { ...record, chartPoints: undefined }
-  );
+  // missing entirely.
+  //
+  // chartPoints used to be stripped here for any symbol outside a section's
+  // top 20 (114 of 260 on 2026-08-04), so those symbols' chart-view cards
+  // rendered "Chart preview unavailable" -- and *which* 114 changed every
+  // rebuild as section membership shifted, reading as random breakage. Now
+  // that section items no longer carry their own duplicate chartPoints copy
+  // (see buildSection/takeTop above -- that alone freed more than this
+  // costs), every signalRecords entry ships its chartPoints and every card
+  // gets a real chart. writePickersCache's reduced-payload fallback (see
+  // buildReducedPickersPayload) is the safety net if this ever pushes the
+  // payload over Upstash's 10MB Max Request Size.
+  const fullSignalRecords = signalRecords;
 
   // Homepage dashboard scrolling ticker: a handful of candidates per
   // category, ranked here so the client doesn't need a second fetch or
@@ -3095,7 +3162,7 @@ export async function getPickersData(
     }
 
     memo = { ts: now, data };
-    await writePickersCache(data);
+    await writePickersCache(data, () => buildReducedPickersPayload(data));
     return data;
   } catch (error) {
     if (cached?.data) {
@@ -3198,7 +3265,7 @@ export async function GET(req: NextRequest) {
     }
 
     memo = { ts: now, data };
-    await writePickersCache(data);
+    await writePickersCache(data, () => buildReducedPickersPayload(data));
 
     return NextResponse.json(data, {
       headers: {
