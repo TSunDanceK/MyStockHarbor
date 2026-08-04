@@ -366,9 +366,9 @@ export default function StocksAbove200DayMovingAveragePage() {
             </div>
           </Link>
 
-          <Link href="/pickers" style={cardStyle}>
+          <Link href="/stocks-trading-above-200-day-moving-average" style={cardStyle}>
             <div style={{ fontSize: 18, fontWeight: 950 }}>
-              Use the stock pickers
+              See stocks above the 200-day MA
             </div>
             <div
               style={{

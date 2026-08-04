@@ -33,6 +33,11 @@ const config: PickerResultConfig = {
   kind: "preset",
   presetFilters: ["aboveMA200"],
   maxItems: 36,
+  relatedGuide: {
+    href: "/stocks-above-200-day-moving-average",
+    label: "our guide to the 200-day moving average",
+    blurb: "For why this level matters and how traders use it, see",
+  },
 };
 
 export default async function Page({
