@@ -74,69 +74,47 @@ export default async function RootLayout({
     textDecoration: "none",
   };
 
-  // Footer columns, grouped by what a visitor is trying to do rather than by
-  // how the pages happen to be built.
+  // Footer columns.
   //
-  // Replaces a Company / Legal / Learn trio plus a loose "Other Links" row.
-  // That older set had two problems beyond being thin: several entries pointed
-  // at thin duplicate pages that have since been 301'd away (What Is RSI,
-  // What Is MACD, Free Stock Screener, Best Trading Platforms, Buy The Dip,
-  // Stocks Above 200 MA, Unusual Volume), and two of them --
-  // /bullish-divergence-stocks and /bearish-divergence-stocks -- were already
-  // pointing at URLs that redirect elsewhere, so the footer was spending link
-  // equity on a hop to a page it could have linked directly.
+  // Deliberately small: 14 links across four columns, and the count is the
+  // design decision rather than an accident of what would fit.
   //
-  // Everything below is now a destination worth landing on: the live
-  // screeners, the six curated screens, real lessons under /learn, and the
-  // tools. Internal linking is the binding constraint on getting the screener
-  // pages indexed (two GSC audits in this repo agree), and the footer is the
-  // one module on every page.
+  // An earlier pass at this ran to 29 links across five columns, justified on
+  // internal linking being the binding constraint on getting the screener
+  // pages indexed. That reasoning was half right and led somewhere wrong.
+  // Contextual links inside page content do carry weight; site-wide footer
+  // links are boilerplate and are discounted precisely because they appear on
+  // every page. So the extra fifteen links bought a modest crawler gain at a
+  // real cost in readability -- an overcrowded footer that a visitor scans
+  // past.
+  //
+  // The clearest symptom: a whole "Popular Screens" column duplicated links
+  // that already exist in the Pickers dropdown AND the Select Screener
+  // sidebar. A third copy helped nobody. Those pages keep both of their real
+  // navigation routes; they just do not need a third here.
+  //
+  // What is left is what a footer is actually for -- orientation (where am I,
+  // what does this site do) and the legal obligations. Discovery is the
+  // header's job, and the header does it well.
   const footerColumns: {
     heading: string;
     links: { href: string; label: string }[];
   }[] = [
     {
-      heading: "Screeners",
+      heading: "Explore",
       links: [
+        { href: "/dashboard", label: "Dashboard" },
         { href: "/stock-screener", label: "Advanced Screener" },
-        { href: "/top-stocks-with-buy-signals", label: "Buy Signals" },
-        { href: "/top-stocks-with-sell-signals", label: "Sell Signals" },
-        { href: "/oversold-stocks-today", label: "Oversold Stocks" },
-        { href: "/overbought-stocks-today", label: "Overbought Stocks" },
-        { href: "/bullish-bearish-divergence-stocks", label: "Divergence Stocks" },
-      ],
-    },
-    {
-      heading: "Popular Screens",
-      links: [
-        { href: "/low-pe-stocks", label: "Low P/E Stocks" },
-        { href: "/high-dividend-yield-stocks", label: "High Dividend Yield" },
-        { href: "/dividend-growth-stocks", label: "Dividend Growth" },
-        { href: "/cash-rich-value-stocks", label: "Cash-Rich Value" },
-        { href: "/semiconductor-stocks", label: "Semiconductor Stocks" },
-        { href: "/cheap-tech-stocks", label: "Cheap Tech Stocks" },
+        { href: "/earnings-calendar", label: "Earnings Calendar" },
+        { href: "/insights", label: "Insights" },
       ],
     },
     {
       heading: "Learn",
       links: [
         { href: "/learn", label: "All Lessons" },
-        { href: "/learn/rsi", label: "RSI Explained" },
-        { href: "/learn/macd", label: "MACD Explained" },
-        { href: "/learn/moving-averages", label: "Moving Averages" },
         { href: "/how-to-read-stock-charts", label: "How To Read Charts" },
         { href: "/trading-setups", label: "Trading Setups" },
-      ],
-    },
-    {
-      heading: "Tools",
-      links: [
-        { href: "/dashboard", label: "Dashboard" },
-        { href: "/earnings-calendar", label: "Earnings Calendar" },
-        { href: "/markets/spx", label: "S&P 500 Analysis" },
-        { href: "/utilities", label: "Calculators" },
-        { href: "/platforms", label: "Platforms" },
-        { href: "/insights", label: "Insights" },
       ],
     },
     {
@@ -144,6 +122,11 @@ export default async function RootLayout({
       links: [
         { href: "/about", label: "About" },
         { href: "/contact", label: "Contact" },
+      ],
+    },
+    {
+      heading: "Legal",
+      links: [
         { href: "/risk-disclaimer", label: "Risk Disclaimer" },
         { href: "/affiliate-disclosure", label: "Affiliate Disclosure" },
         { href: "/privacy-policy", label: "Privacy Policy" },
@@ -202,13 +185,7 @@ export default async function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               .site-footer-main-grid {
-                grid-template-columns: repeat(5, minmax(140px, max-content));
-              }
-
-              @media (max-width: 1040px) {
-                .site-footer-main-grid {
-                  grid-template-columns: repeat(3, minmax(140px, 1fr));
-                }
+                grid-template-columns: repeat(4, minmax(150px, max-content));
               }
 
               @media (max-width: 720px) {
