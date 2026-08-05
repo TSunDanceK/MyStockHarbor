@@ -889,6 +889,26 @@ function isLowValueNewsItem(item: NewsItem) {
   return false;
 }
 
+// Small set of top-tier wire sources (matches the highest-quality tier
+// scoreNewsItem already recognizes) that, together with FMP's own
+// unattributed items, are allowed to compete for the "What's happening"
+// main feed slots. FMP's stock-news endpoint aggregates dozens of smaller
+// aggregator/opinion-blog publishers (Motley Fool, 247wallst, Investorplace,
+// Finbold, non-earnings Zacks/Benzinga, etc.); when several of them cover
+// the same theme at once it reads as duplicate coverage even though each
+// headline is technically distinct. Those are routed to the lighter feed
+// instead, alongside older items -- see mainFeedNews below.
+function isMajorWireSource(item: NewsItem) {
+  const source = (item.source ?? "").toLowerCase();
+
+  // FMP's own generic label when the underlying item has no specific
+  // publisher attached -- treat it the same as a major wire rather than
+  // routing it to the lighter feed by default.
+  if (source === "fmp news") return true;
+
+  return ["reuters", "bloomberg", "ap"].some((name) => source.includes(name));
+}
+
 function scoreNewsItem(item: NewsItem) {
   const title = item.title.toLowerCase();
   const source = (item.source ?? "").toLowerCase();
@@ -2040,6 +2060,14 @@ async function buildStockNewsBaseData(
   const highValueNews = displayNewsPool.filter((item) => !isLowValueNewsItem(item));
   const fallbackNews = displayNewsPool.filter((item) => isLowValueNewsItem(item));
 
+  // Main feed = FMP's own unattributed items, the handful of top-tier wires,
+  // or genuine earnings-result headlines (kept regardless of source, per the
+  // earnings-coverage fix above). See isMajorWireSource for why everything
+  // else is routed to the lighter feed instead.
+  const mainFeedNews = highValueNews.filter(
+    (item) => isMajorWireSource(item) || isActualEarningsResultNews(item)
+  );
+
 const newestFirst = (items: NewsItem[]) =>
   [...items].sort((a, b) => {
     const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
@@ -2071,18 +2099,18 @@ function oneArticlePerDate(items: NewsItem[]) {
   return filtered;
 }
 
-const aiFilteredNews = oneArticlePerDate(
-  dedupeNews([
-    ...newestFirst(highValueNews),
-    ...newestFirst(fallbackNews),
-  ])
-);
+const detailedNews = oneArticlePerDate(newestFirst(mainFeedNews)).slice(0, maxDetailedItems);
 
-const detailedNews = aiFilteredNews.slice(0, maxDetailedItems);
+// Everything that didn't make the main feed -- major-wire/earnings items
+// that lost out on space, the secondary aggregator/opinion-blog publishers,
+// low-value fallback items, and older news generally -- lands in the
+// lighter feed instead.
+const compactPool = dedupeNews([
+  ...highValueNews.filter((item) => !detailedNews.some((picked) => picked.link === item.link)),
+  ...fallbackNews,
+]);
 
-const compactNews = aiFilteredNews
-  .filter((item) => !detailedNews.some((picked) => picked.link === item.link))
-  .slice(0, 6);
+const compactNews = oneArticlePerDate(newestFirst(compactPool)).slice(0, 6);
 
   return {
     symbol: upper,
