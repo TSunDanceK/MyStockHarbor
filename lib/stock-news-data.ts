@@ -2114,7 +2114,46 @@ function oneArticlePerDate(items: NewsItem[]) {
   return filtered;
 }
 
-const detailedNews = oneArticlePerDate(newestFirst(mainFeedNews)).slice(0, maxDetailedItems);
+const primaryDetailedNews = oneArticlePerDate(newestFirst(mainFeedNews)).slice(0, maxDetailedItems);
+
+// Backfill only kicks in when the major-wire/earnings gate above doesn't
+// clear the target item count on its own (e.g. a quiet news day, or a
+// ticker with no Reuters/Bloomberg/AP/FMP coverage and no genuine
+// Benzinga/Zacks earnings piece). It draws from the same highValueNews
+// pool the main gate does -- still excludes the low-value fallback tier
+// entirely -- so a thin day doesn't leave the main feed empty, but a
+// normal day with enough major-wire/earnings coverage never touches this
+// path and the feed stays exactly as tight as the gate intends.
+let detailedNews = primaryDetailedNews;
+
+if (detailedNews.length < maxDetailedItems) {
+  const usedDates = new Set(
+    detailedNews.map((item) =>
+      item.pubDate ? new Date(item.pubDate).toISOString().slice(0, 10) : "unknown"
+    )
+  );
+  const usedLinks = new Set(detailedNews.map((item) => item.link));
+
+  const backfillCandidates = newestFirst(highValueNews).filter(
+    (item) => !usedLinks.has(item.link) && !mainFeedNews.some((picked) => picked.link === item.link)
+  );
+
+  const backfill: NewsItem[] = [];
+
+  for (const item of backfillCandidates) {
+    if (detailedNews.length + backfill.length >= maxDetailedItems) break;
+
+    const dateKey = item.pubDate ? new Date(item.pubDate).toISOString().slice(0, 10) : "unknown";
+    if (usedDates.has(dateKey) && !isActualEarningsResultNews(item)) continue;
+
+    usedDates.add(dateKey);
+    backfill.push(item);
+  }
+
+  if (backfill.length) {
+    detailedNews = [...detailedNews, ...backfill];
+  }
+}
 
 // Everything that didn't make the main feed -- major-wire/earnings items
 // that lost out on space, the secondary aggregator/opinion-blog publishers,
@@ -2238,7 +2277,7 @@ const getCachedStockNewsBaseData = unstable_cache(
 
     return buildStockNewsBaseData(parsed.symbol, parsed.options);
   },
-  ["msh-stock-news-base-data-v27-earnings-exception-scoped"],
+  ["msh-stock-news-base-data-v28-main-feed-backfill"],
   {
     revalidate: 3600,
   }
