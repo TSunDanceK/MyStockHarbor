@@ -2223,7 +2223,7 @@ const getCachedStockNewsBaseData = unstable_cache(
 
     return buildStockNewsBaseData(parsed.symbol, parsed.options);
   },
-  ["msh-stock-news-base-data-v25-yahoo-fallback"],
+  ["msh-stock-news-base-data-v26-source-tier-feed"],
   {
     revalidate: 3600,
   }
