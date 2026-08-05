@@ -835,6 +835,19 @@ function keywordHits(text: string, words: string[]) {
   return words.some((word) => lower.includes(word));
 }
 
+// Benzinga and Zacks publish a lot of low-value SEO content ("stock price
+// today", "price prediction"), but they are also two of the most prolific
+// real earnings-result wire sources (e.g. "PLTR Q2 Earnings: Beats
+// Estimates"). isLowValueNewsItem and the main-feed source gate both need
+// to recognize this same pair of sources, so it's a shared constant rather
+// than two independent literal arrays that could drift out of sync.
+const EARNINGS_EXCEPTION_SOURCES = ["benzinga", "zacks"];
+
+function isEarningsExceptionSource(item: NewsItem) {
+  const source = (item.source ?? "").toLowerCase();
+  return EARNINGS_EXCEPTION_SOURCES.some((entry) => source.includes(entry));
+}
+
 function isLowValueNewsItem(item: NewsItem) {
   const title = item.title.toLowerCase();
   const source = (item.source ?? "").toLowerCase();
@@ -869,20 +882,12 @@ function isLowValueNewsItem(item: NewsItem) {
     "tradingview",
   ];
 
-  // Benzinga and Zacks publish a lot of low-value SEO content ("stock price
-  // today", "price prediction"), but they are also two of the most prolific
-  // real earnings-result wire sources (e.g. "PLTR Q2 Earnings: Beats
-  // Estimates"). A blanket source block was silently dropping genuine
-  // earnings coverage from them. Only treat them as low value when the
-  // headline isn't an actual earnings result.
-  const conditionalLowValueSources = ["benzinga", "zacks"];
-
+  // A blanket source block was silently dropping genuine earnings coverage
+  // from Benzinga/Zacks. Only treat them as low value when the headline
+  // isn't an actual earnings result -- see EARNINGS_EXCEPTION_SOURCES above.
   if (keywordHits(title, lowValuePatterns)) return true;
   if (lowValueSources.some((entry) => source.includes(entry))) return true;
-  if (
-    conditionalLowValueSources.some((entry) => source.includes(entry)) &&
-    !isActualEarningsResultNews(item)
-  ) {
+  if (isEarningsExceptionSource(item) && !isActualEarningsResultNews(item)) {
     return true;
   }
 
@@ -2061,11 +2066,21 @@ async function buildStockNewsBaseData(
   const fallbackNews = displayNewsPool.filter((item) => isLowValueNewsItem(item));
 
   // Main feed = FMP's own unattributed items, the handful of top-tier wires,
-  // or genuine earnings-result headlines (kept regardless of source, per the
-  // earnings-coverage fix above). See isMajorWireSource for why everything
-  // else is routed to the lighter feed instead.
+  // or a genuine Benzinga/Zacks earnings-result headline (the earnings-
+  // coverage fix above, deliberately scoped to those two sources rather
+  // than every source -- isActualEarningsResultNews checks title+
+  // description together, and during an earnings news cycle almost any
+  // opinion/analysis piece ends up mentioning "reported"/"revenue"/
+  // "results" somewhere in its body even when it isn't fundamentally about
+  // the earnings event. Applying the exemption to every source let that
+  // loose match defeat the source gate entirely; scoping it back to the
+  // two sources it was built for keeps genuine earnings coverage in while
+  // still routing Motley Fool/247wallst/Investorplace/Seeking Alpha/etc.
+  // opinion pieces to the lighter feed.
   const mainFeedNews = highValueNews.filter(
-    (item) => isMajorWireSource(item) || isActualEarningsResultNews(item)
+    (item) =>
+      isMajorWireSource(item) ||
+      (isEarningsExceptionSource(item) && isActualEarningsResultNews(item))
   );
 
 const newestFirst = (items: NewsItem[]) =>
@@ -2223,7 +2238,7 @@ const getCachedStockNewsBaseData = unstable_cache(
 
     return buildStockNewsBaseData(parsed.symbol, parsed.options);
   },
-  ["msh-stock-news-base-data-v26-source-tier-feed"],
+  ["msh-stock-news-base-data-v27-earnings-exception-scoped"],
   {
     revalidate: 3600,
   }
