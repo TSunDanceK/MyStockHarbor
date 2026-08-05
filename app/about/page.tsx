@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "About MyStockHarbor | Free Stock Screeners & Market Education",
   description:
-    "MyStockHarbor is a free stock screening and market research site — no account, no paywall. Screeners across 260 analysed companies, chart-pattern plays, an earnings calendar and 19 trading lessons.",
+    "MyStockHarbor is a free stock screening and market research site — no account, no paywall. Advanced screeners, chart-pattern plays, earnings and IPO calendars, company analysis and 19 trading lessons.",
   alternates: { canonical: "https://www.mystockharbor.com/about" },
 };
 
@@ -47,7 +47,7 @@ const SECTIONS: { href: string; title: string; body: string }[] = [
   {
     href: "/stock-screener",
     title: "Advanced Screener",
-    body: "Every analysed company in one sortable table, with 33 filterable fields across valuation, dividends, financials, performance and analyst data. Combine any conditions you like; the filters live in the URL, so a screen you build is a link you can share or bookmark.",
+    body: "One sortable table with 33 filterable fields across valuation, dividends, financials, performance and analyst data. Combine any conditions you like; the filters live in the URL, so a screen you build is a link you can share or bookmark.",
   },
   {
     href: "/pickers",
@@ -65,9 +65,9 @@ const SECTIONS: { href: string; title: string; body: string }[] = [
     body: "Ascending triangles, descending triangles and bull flags, detected from price history rather than drawn by hand, with the pattern marked on each chart.",
   },
   {
-    href: "/earnings-calendar",
-    title: "Earnings calendar",
-    body: "A rolling calendar showing how many companies report each day, with EPS and revenue estimates, price and market cap for any date you open.",
+    href: "/stock/AAPL",
+    title: "Company pages",
+    body: "Every covered company has its own page: price action and technical context, company profile, financial statements, valuation and dividend detail, plus dedicated views for its earnings history and its news. Apple’s page is linked here as an example.",
   },
   {
     href: "/dashboard",
@@ -75,14 +75,34 @@ const SECTIONS: { href: string; title: string; body: string }[] = [
     body: "Three chart modes — a fast built-in chart, a full interactive chart with drawing tools and indicators, and a TradingView embed — plus trend and momentum scoring for context.",
   },
   {
-    href: "/learn",
-    title: "Lessons",
-    body: "Nineteen lessons covering RSI, MACD, moving averages, volume, divergence and market structure, written for people who want to understand an indicator rather than just switch it on.",
+    href: "/earnings-calendar",
+    title: "Earnings calendar",
+    body: "A rolling calendar showing how many companies report each day, with EPS and revenue estimates, price and market cap for any date you open.",
+  },
+  {
+    href: "/upcoming-ipos",
+    title: "IPO calendar",
+    body: "Confirmed, priced listings expected over the next thirty days, with ticker, exchange, price range, shares offered, deal size, market cap and revenue for each one.",
+  },
+  {
+    href: "/bottlenecks",
+    title: "Bottlenecks",
+    body: "Which companies a business actually depends on — its key suppliers and how concentrated its customer base is — broken down into simple charts, with a new company published each day.",
+  },
+  {
+    href: "/headlines",
+    title: "Market news",
+    body: "General market headlines straight from the wire with images and excerpts, linked out to the original story. No AI commentary, just the news.",
   },
   {
     href: "/insights",
-    title: "Insights and market notes",
-    body: "Daily written analysis, video breakdowns, an S&P 500 overview, IPO tracking and market headlines.",
+    title: "Insights and analysis",
+    body: "Daily written analysis, video breakdowns, an S&P 500 overview and a running list of companies recently added to the major indices.",
+  },
+  {
+    href: "/learn",
+    title: "Lessons",
+    body: "Nineteen lessons covering RSI, MACD, moving averages, volume, divergence and market structure, written for people who want to understand an indicator rather than just switch it on.",
   },
 ];
 
@@ -170,27 +190,27 @@ export default function AboutPage() {
 
           <p style={paraStyle}>
             Price and fundamental data come from a commercial market-data
-            provider, not scraped from other websites. A universe of 260
-            companies is re-analysed every morning, and prices for the whole of
-            that universe refresh on a rolling basis so no quote on the site is
-            more than about fifteen minutes old during market hours.
+            provider, not scraped from other websites. Prices refresh on a
+            rolling basis throughout the trading day, so no quote on the site
+            is more than about fifteen minutes old during market hours, and
+            the screening data behind every list is rebuilt each morning
+            before the open.
           </p>
 
           <p style={paraStyle}>
-            Company profiles, financial statements and analyst figures refresh
-            on their own slower schedules, since they change far less often
-            than a price does. Every screener page shows when its data was last
-            updated at the bottom of the results, so you can always see how
-            fresh the list you are reading actually is.
+            Company profiles, financial statements, dividend history and
+            analyst figures refresh on their own slower schedules, since they
+            change far less often than a price does. Every screener page shows
+            when its data was last updated at the bottom of the results, so you
+            can always see how fresh the list you are reading actually is.
           </p>
 
           <p style={paraStyle}>
-            The analysed universe is a fixed size rather than the whole market.
-            That is a deliberate trade: a smaller set that is genuinely kept
-            current is more useful than a larger one where half the figures are
-            stale. It also means a stock you are looking for may not appear in
-            a screen — absence from a list is not a judgement about the
-            company.
+            Screening coverage focuses on large, liquid, actively traded
+            companies — the names most people are actually looking up — rather
+            than attempting to cover every listed security. Individual company
+            pages, the earnings calendar and the news feeds reach considerably
+            wider than the screeners do.
           </p>
 
           <h2 style={h2Style}>How to read the screens</h2>
