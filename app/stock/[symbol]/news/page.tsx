@@ -30,6 +30,17 @@ import RelatedStocks from "@/app/components/RelatedStocks";
 
 export const runtime = "nodejs";
 
+// Force per-request rendering rather than ISR/Full Route Cache. The
+// underlying data (getStockNewsBaseData) is already cached via
+// unstable_cache (1hr) in lib/stock-news-data.ts, so this doesn't add
+// real cost -- but Vercel's Full Route Cache for this page was observed
+// to keep serving pre-deploy HTML snapshots well past a code change
+// (a new deployment does not reset it; only revalidate-window elapsing
+// or on-demand revalidation does). For a news page whose filtering logic
+// gets tuned periodically, "always reflects the latest deploy" matters
+// more than shaving the render step off an already-cached data fetch.
+export const dynamic = "force-dynamic";
+
 type Props = {
   params: Promise<{ symbol: string }>;
 };
