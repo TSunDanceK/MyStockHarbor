@@ -76,6 +76,10 @@ type RedisDiscoveryState = {
   dynamic: Record<string, DynamicQuoteRecord>;
   shuffledMasterList: string[];
   shuffleDayKey: string | null;
+  // Bumped whenever the SOURCE of the master list changes, so a stored list
+  // built by older code is discarded rather than served until the next daily
+  // rollover. See MASTER_LIST_SOURCE_VERSION.
+  masterListVersion?: number;
 };
 
 function emptyDiscoveryState(): RedisDiscoveryState {
@@ -85,6 +89,7 @@ function emptyDiscoveryState(): RedisDiscoveryState {
     dynamic: {},
     shuffledMasterList: [],
     shuffleDayKey: null,
+    masterListVersion: 0,
   };
 }
 
@@ -113,6 +118,8 @@ async function loadDiscoveryState(): Promise<RedisDiscoveryState> {
       : [],
     shuffleDayKey:
       typeof state.shuffleDayKey === "string" ? state.shuffleDayKey : null,
+    masterListVersion:
+      typeof state.masterListVersion === "number" ? state.masterListVersion : 0,
   };
 }
 
@@ -625,6 +632,18 @@ function shuffleArray<T>(arr: T[]) {
 // $1B keeps the universe to liquid, screenable names -- the same character as
 // the hand-built DISCOVERY_MASTER_LIST. Lower it to widen the net; probing
 // showed 300000000 also returns a full page, so there is room either way.
+// Bump this whenever the master list's SOURCE changes.
+//
+// Without it, a source change is latent: ensureDailyShuffledMasterList only
+// rebuilds when the Eastern day rolls over, so the stored list from the old
+// source keeps being served until the next morning. That bit immediately --
+// swapping the constituent endpoints for the screener had no effect at all,
+// because the same commit lowered MIN_DYNAMIC_MASTER_SIZE to 350, which made
+// the early-return accept the stale 407-name list and skip the rebuild.
+//
+// v2 = FMP company-screener (was: sp500/nasdaq/dowjones constituent endpoints).
+const MASTER_LIST_SOURCE_VERSION = 2;
+
 const SCREENER_MIN_MARKET_CAP = 1_000_000_000;
 const SCREENER_LIMIT = 1000;
 
@@ -697,6 +716,7 @@ async function ensureDailyShuffledMasterList(
   const todayKey = getEasternDayKey();
 
   if (
+    state.masterListVersion === MASTER_LIST_SOURCE_VERSION &&
     state.shuffleDayKey === todayKey &&
     Array.isArray(state.shuffledMasterList) &&
     state.shuffledMasterList.length >= MIN_DYNAMIC_MASTER_SIZE
@@ -716,6 +736,7 @@ async function ensureDailyShuffledMasterList(
 
   state.shuffledMasterList = shuffleArray(cleanMaster);
   state.shuffleDayKey = todayKey;
+  state.masterListVersion = MASTER_LIST_SOURCE_VERSION;
   state.pointer = 0;
 
   return true;
@@ -1075,6 +1096,7 @@ export async function GET() {
       fmpCapacityAvailable: hasCapacity,
       pointer: state.pointer,
       shuffleDayKey: state.shuffleDayKey,
+      masterListVersion: state.masterListVersion,
       lastDiscoveryAt:
         state.lastDiscoveryAt > 0
           ? new Date(state.lastDiscoveryAt).toISOString()
