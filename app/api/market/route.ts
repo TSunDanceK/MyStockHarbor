@@ -608,67 +608,70 @@ function shuffleArray<T>(arr: T[]) {
 // redeploy needed, since a 402/error response already resolves to an empty
 // array via the same fail-open path used below (falls back to the static
 // CURATED_UNIVERSE/DISCOVERY_MASTER_LIST/EXTRA_LIQUID_GROWTH_LIST names).
-type ConstituentEndpoint =
-  | "sp500-constituent"
-  | "nasdaq-constituent"
-  | "dowjones-constituent";
 
-async function fetchFmpConstituentSymbols(
-  endpoint: ConstituentEndpoint,
-  apiKey: string
-) {
+// Minimum market cap for a symbol to enter the discovery candidate pool.
+// $1B keeps the universe to liquid, screenable names -- the same character as
+// the hand-built DISCOVERY_MASTER_LIST. Lower it to widen the net; probing
+// showed 300000000 also returns a full page, so there is room either way.
+const SCREENER_MIN_MARKET_CAP = 1_000_000_000;
+const SCREENER_LIMIT = 1000;
+
+/**
+ * Candidate symbols from FMP's company screener.
+ *
+ * This REPLACED three constituent-endpoint calls (sp500/nasdaq/dowjones) that
+ * answered 402 "Restricted Endpoint: This endpoint is not available under your
+ * current subscription" on this plan -- confirmed by probing them live via
+ * /api/debug/fmp-endpoints on 2026-08-06. fetchFmpConstituentSymbols swallowed
+ * that into [], so all three failed silently on every master-list rebuild and
+ * the list was always the ~407-name static fallback.
+ *
+ * That mattered: pool 353 + CURATED_UNIVERSE 54 = 407 exactly, so discovery had
+ * literally nothing left to find and the universe could never grow no matter
+ * what UNIVERSE_CAP said.
+ *
+ * The screener IS available on this plan and returned 1000 symbols in the same
+ * probe. One call instead of three, and it actually works.
+ */
+async function fetchFmpScreenerSymbols(apiKey: string) {
   await reserveFmpCallSlot();
 
-  const url = `https://financialmodelingprep.com/stable/${endpoint}?apikey=${encodeURIComponent(
-    apiKey
-  )}`;
-
-  const res = await fetch(url, {
-    cache: "no-store",
-    headers: {
-      accept: "application/json,text/plain;q=0.9,*/*;q=0.8",
-    },
-  });
-
-  const text = await res.text();
-
-  let json: any = null;
+  const url =
+    `https://financialmodelingprep.com/stable/company-screener` +
+    `?marketCapMoreThan=${SCREENER_MIN_MARKET_CAP}` +
+    `&exchange=NASDAQ,NYSE` +
+    `&isActivelyTrading=true` +
+    `&limit=${SCREENER_LIMIT}` +
+    `&apikey=${encodeURIComponent(apiKey)}`;
 
   try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    json = null;
-  }
+    const res = await fetch(url, {
+      cache: "no-store",
+      headers: { accept: "application/json" },
+    });
 
-  if (!res.ok || !Array.isArray(json)) {
+    if (!res.ok) return [];
+
+    const json = await res.json().catch(() => null);
+    if (!Array.isArray(json)) return [];
+
+    return json
+      .map((item) => String(item?.symbol ?? "").trim().toUpperCase())
+      .filter(isCleanStockSymbol);
+  } catch {
+    // fail open -- the static lists below still provide a working master list
     return [];
   }
-
-  return json
-    .map((item) => String(item?.symbol ?? "").trim().toUpperCase())
-    .filter(isCleanStockSymbol);
 }
 
 async function buildExpandedDiscoveryMasterList(apiKey: string) {
-  const sp500Symbols = await fetchFmpConstituentSymbols(
-    "sp500-constituent",
-    apiKey
-  );
+  const screenerSymbols = await fetchFmpScreenerSymbols(apiKey);
 
-  const nasdaqSymbols = await fetchFmpConstituentSymbols(
-    "nasdaq-constituent",
-    apiKey
-  );
-
-  const dowSymbols = await fetchFmpConstituentSymbols(
-    "dowjones-constituent",
-    apiKey
-  );
-
+  // Static lists stay in the union: they carry the curated names and a set of
+  // known-good tickers that must be candidates regardless of what the screener
+  // returns on any given day.
   return uniqUpper([
-    ...sp500Symbols,
-    ...nasdaqSymbols,
-    ...dowSymbols,
+    ...screenerSymbols,
     ...EXTRA_LIQUID_GROWTH_LIST,
     ...CURATED_UNIVERSE,
     ...DISCOVERY_MASTER_LIST,
