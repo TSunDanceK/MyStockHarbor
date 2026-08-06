@@ -4,6 +4,10 @@
 // shared with /api/jobs/warm-picker-universe so the two entry points can
 // never drift out of sync again (see that module's header comment and
 // CACHING_REFRESH_ARCHITECTURE_PLAN.md for the history).
+// Neither pickers entry point set maxDuration, so the full universe build ran
+// on Vercel's default limit -- a timeout cliff at ANY universe size, and one
+// that would bite silently as UNIVERSE_CAP grows. Set explicitly.
+export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 export { GET } from "../../../lib/server/pickersBuilder";
