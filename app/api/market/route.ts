@@ -10,6 +10,7 @@ import {
   removeFromDynamicUniverse,
 } from "../../../lib/server/dynamicUniverseCache";
 import { cacheScreenerFundamentals } from "../../../lib/server/fundamentalsCache";
+import { seedColdPricePoolRows } from "../../../lib/server/pricePool";
 
 export const runtime = "nodejs";
 
@@ -973,6 +974,19 @@ export async function GET() {
   let discoveryReason: string | null = null;
   let attemptedSymbols: string[] = [];
   const admittedSymbols: string[] = [];
+  // STEP 3 (2026-08-06 follow-up session): the quote already fetched below to
+  // qualify each admitted symbol also carries price/%change/volume/marketCap --
+  // enough to seed a cold-start row in the price pool at zero extra FMP cost.
+  // See lib/server/pricePool.ts's seedColdPricePoolRows for why this matters
+  // (a discovery batch that admits more symbols than a single warm-price-pool
+  // run's priceCap otherwise queues the overflow behind other stale symbols).
+  const priceSeedRows: {
+    symbol: string;
+    price: number | null;
+    changePct: number | null;
+    volume: number | null;
+    marketCap: number | null;
+  }[] = [];
   let historyChecks = 0;
   let historyQualified = 0;
   let historyRejected = 0;
@@ -1045,6 +1059,16 @@ export async function GET() {
           // shared dynamic universe below, rather than waiting for a page build
           // to copy it across.
           admittedSymbols.push(symbol);
+
+          // STEP 3: reuse this same quote (already fetched above) to seed the
+          // price pool's cold-start row -- see seedColdPricePoolRows.
+          priceSeedRows.push({
+            symbol,
+            price: toNum(q.price),
+            changePct: toNum(q.changesPercentage),
+            volume: toNum(q.volume),
+            marketCap: toNum(rawJson?.marketCap),
+          });
         }
       } catch (e: any) {
         debugErrors.push({
@@ -1071,6 +1095,21 @@ export async function GET() {
     // never admit a name the discovery gate itself rejected.
     if (admittedSymbols.length) {
       await addToDynamicUniverse(admittedSymbols, "market");
+    }
+
+    // STEP 3: seed price-pool cold-start rows for whatever was just admitted.
+    // Pure Redis (no FMP call) and never overwrites an existing pool row -- see
+    // seedColdPricePoolRows. Fail-open: a seeding problem must not break
+    // discovery itself.
+    if (priceSeedRows.length) {
+      try {
+        const seeded = await seedColdPricePoolRows(priceSeedRows, now);
+        if (seeded > 0) {
+          console.log(`[market] seeded price pool for ${seeded} newly discovered symbols`);
+        }
+      } catch {
+        // fail open
+      }
     }
 
     // Logged unconditionally, including the zero case. A run that admits nothing
