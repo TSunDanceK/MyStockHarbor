@@ -19,6 +19,7 @@ import {
   readDynamicUniverse,
 } from "./dynamicUniverseCache";
 import { readSearchDemand } from "./searchDemand";
+import { PRESET_UNIVERSE } from "./presetUniverse";
 import {
   readPickerChartsBulk,
   writePickerChartsBulk,
@@ -2288,18 +2289,6 @@ function normalizeHistory(pts: Point[], days: number) {
 
 /* ------------------------------ universe ----------------------------- */
 
-const PRESET_UNIVERSE: string[] = [
-  "AAPL","MSFT","NVDA","AMZN","GOOGL","META","TSLA","BRK.B","AVGO","LLY",
-  "JPM","V","UNH","XOM","PG","MA","COST","HD","MRK","ABBV",
-  "CRM","NFLX","ORCL","BAC","KO","PEP","ADBE","TMO","WMT","CSCO",
-  "ACN","MCD","ABT","CVX","LIN","AMD","NKE","DHR","TXN","INTC",
-  "QCOM","PM","IBM","NOW","SBUX","CAT","GE","AMAT","LOW","UBER",
-  "PANW","PLTR","SHOP","MU","KLAC","LRCX","ANET","SNOW","CRWD","MELI",
-  "ASML","APH","DE","PGR","VRTX","ADP","INTU","CMCSA","COP","AXP",
-  "BKNG","AMGN","HON","ISRG","TJX","SYK","UNP","GILD","MDT","ADI",
-  "CB","C","MO","GS","ETN","MMC","TMUS","CI","SO","DUK",
-  "ELV","SCHW","BLK","REGN","FI","TT","PH","PYPL","CDNS","MAR",
-];
 
 // Raised 200 -> 260 so guaranteeing the ~100-name PRESET_UNIVERSE (the largest
 // US companies, prepended below) doesn't push the day's active/mover names out
