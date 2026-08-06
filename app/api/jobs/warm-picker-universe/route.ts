@@ -7,6 +7,10 @@
 // project doc) has a clearly-named target to hit and so Vercel logs/
 // Observability can distinguish scheduled warm-up hits from organic
 // traffic — the underlying handler is identical to /api/pickers.
+// Neither pickers entry point set maxDuration, so the full universe build ran
+// on Vercel's default limit -- a timeout cliff at ANY universe size, and one
+// that would bite silently as UNIVERSE_CAP grows. Set explicitly.
+export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 export { GET } from "../../../../lib/server/pickersBuilder";

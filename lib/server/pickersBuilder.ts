@@ -2293,7 +2293,16 @@ function normalizeHistory(pts: Point[], days: number) {
 // Raised 200 -> 260 so guaranteeing the ~100-name PRESET_UNIVERSE (the largest
 // US companies, prepended below) doesn't push the day's active/mover names out
 // of the analyzed set -- we now fit both the big caps AND ~160 dynamic names.
-const UNIVERSE_CAP = 260;
+// Step 4 of the universe consolidation: 260 -> 450. Raised in one step rather
+// than jumping straight to the 700 ceiling so the build-duration log added
+// below can show the real scaling cost before going further. The payload
+// ceiling that used to block this was removed in #214 (chart series moved off
+// the payload), and the scan already runs at pLimit(10) with Redis-cached
+// history, so the cost here is Redis read volume, not FMP calls.
+//
+// NOTE the pool feeding this is ~353 today, so 450 is headroom rather than an
+// immediate jump -- discovery fills toward 700 at 50 candidates/5min.
+const UNIVERSE_CAP = 450;
 
 // Popular Searches promotion (see claude/popular-searches-universe-spec-2026-07-23.md).
 // A ticker only earns a guaranteed analyzed-universe slot once real users have
@@ -2309,6 +2318,7 @@ const POPULAR_SEARCH_QUOTA = 30; // FMP sub-cap: max promoted names per build
 /* --------------------------- builder function ------------------------ */
 
 async function buildPickersPayload(origin: string, forceFreshMarket = false): Promise<PickersPayload> {
+  const buildStartedAt = Date.now();
   const market = await fetchMarket(origin, forceFreshMarket);
 
   const topTraded = (market?.topTraded ?? [])
@@ -3167,6 +3177,15 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
       releaseDate: item.releaseDate ?? null,
       tone: item.tone ?? "green",
     }));
+
+  // Build duration is the number that decides how far UNIVERSE_CAP can go. It
+  // was previously never logged, so there was no way to tell a comfortable build
+  // from one about to hit the function limit -- both just return a payload.
+  console.log(
+    `[pickers] build complete: universe ${universe.length}, ` +
+      `${signalRecords.length} records, ${failedSymbolCount} failed, ` +
+      `${Date.now() - buildStartedAt}ms`
+  );
 
   return {
     updatedAt: new Date().toISOString(),
