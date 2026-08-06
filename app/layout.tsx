@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import SiteHeader from "./components/SiteHeader";
+import PageViewTracker from "./components/PageViewTracker";
 import { getLatestYouTubeVideos } from "@/lib/youtube";
 import "./globals.css";
 
@@ -231,6 +232,20 @@ export default async function RootLayout({
             flexDirection: "column",
           }}
         >
+          {/* Site-wide real-page-view beacon. The "stock" category tracker in
+              app/stock/[symbol]/layout.tsx is unchanged and still feeds the
+              daily /stock/* cap in middleware.ts -- this is a separate,
+              broader counter under the "site" category, used by
+              app/api/go/[platform]/route.ts to tell a real visitor from a
+              scraper before attaching our affiliate ID.
+
+              Mounted here rather than per-section because affiliate links
+              appear on /dashboard, /platforms, /insights/*, /markets/spx and
+              every /stock/* page, and a page added later would otherwise
+              silently miss coverage. Like the stock tracker, this only ever
+              fires from a genuinely client-rendered navigation -- never from
+              a Link prefetch, and never from a client that doesn't run JS. */}
+          <PageViewTracker category="site" />
           <SiteHeader latestVideoId={latestVideoId} />
           <div style={{ flex: 1 }}>{children}</div>
 
