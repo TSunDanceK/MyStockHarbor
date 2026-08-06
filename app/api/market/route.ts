@@ -5,6 +5,7 @@ import {
   hasFmpCapacity,
   reserveFmpCallSlot,
 } from "../../../lib/server/historyCache";
+import { addToDynamicUniverse } from "../../../lib/server/dynamicUniverseCache";
 
 export const runtime = "nodejs";
 
@@ -44,7 +45,28 @@ const DYNAMIC_MAX_SIZE = 700;
 const DISCOVERY_BATCH_SIZE = 50;
 const DISCOVERY_ESTIMATED_MAX_CALLS = 100; // up to 50 quote calls + up to 50 history fills
 const DISCOVERY_MIN_HEADROOM_CALLS = 150;
-const MIN_DYNAMIC_MASTER_SIZE = 500;
+// Floor for accepting a shuffled master list, i.e. "is this list plausibly
+// complete, or did the sources fail?"
+//
+// WAS 500, WHICH THE LIST CAN NEVER REACH. buildExpandedDiscoveryMasterList
+// unions three FMP constituent endpoints with the static lists, but those
+// endpoints answer 402 on the Starter plan and fetchFmpConstituentSymbols
+// swallows that into []. So the master list is ALWAYS the static fallback:
+// 407 names (confirmed live -- masterListSize: 407).
+//
+// 407 < 500 meant the early-return in ensureDailyShuffledMasterList never fired,
+// so on EVERY request it rebuilt the list, reshuffled it, and -- the damaging
+// part -- reset state.pointer to 0. Discovery therefore never walked the master
+// list systematically; it re-sampled from a freshly shuffled list each time and
+// could only ever pick names it had not already admitted. Live debug showed
+// exactly this: pointer 0 and masterListChanged true on a request 8s after the
+// last discovery run. It also burned 3 FMP calls per request on endpoints that
+// always fail.
+//
+// 350 sits below the 407 static fallback (so the normal case is accepted and
+// the pointer persists) and above a curated-only degenerate list, which is what
+// this guard actually exists to reject.
+const MIN_DYNAMIC_MASTER_SIZE = 350;
 
 let payloadCache: { at: number; payload: any } | null = null;
 
@@ -847,6 +869,7 @@ export async function GET() {
   let discoveryRan = false;
   let discoveryReason: string | null = null;
   let attemptedSymbols: string[] = [];
+  const admittedSymbols: string[] = [];
   let historyChecks = 0;
   let historyQualified = 0;
   let historyRejected = 0;
@@ -914,6 +937,11 @@ export async function GET() {
             quote: q,
             discoveredAt: now,
           };
+
+          // Job A: remember what we admitted so it can go straight into the
+          // shared dynamic universe below, rather than waiting for a page build
+          // to copy it across.
+          admittedSymbols.push(symbol);
         }
       } catch (e: any) {
         debugErrors.push({
@@ -925,6 +953,31 @@ export async function GET() {
         });
       }
     }
+
+    // JOB A -- the shared dynamic universe (msh:dynamic-universe:v2) is now
+    // written HERE, at discovery time, rather than only as a side effect of a
+    // page build. pickersBuilder still copies market.dynamicSymbols across, so
+    // this is additive and safe to revert; what it changes is WHEN membership
+    // lands, which stops the universe depending on a builder having run.
+    //
+    // Batched deliberately: addToDynamicUniverse pipelines the ZINCRBYs into one
+    // round-trip, does a single ZADD for lastSeen and prunes once. Calling it
+    // per symbol would prune up to DISCOVERY_BATCH_SIZE times per run.
+    //
+    // Only symbols that passed ensureQualifiedHistory reach here, so this can
+    // never admit a name the discovery gate itself rejected.
+    if (admittedSymbols.length) {
+      await addToDynamicUniverse(admittedSymbols, "market");
+    }
+
+    // Logged unconditionally, including the zero case. A run that admits nothing
+    // is the interesting one -- it is what a saturated master list looks like,
+    // and it is indistinguishable from "the write never fired" without this.
+    console.log(
+      `[market] discovery admitted ${admittedSymbols.length} symbols -> dynamic universe ` +
+        `(attempted ${attemptedSymbols.length}, qualified ${historyQualified}, ` +
+        `rejected ${historyRejected}, pool ${Object.keys(state.dynamic).length})`
+    );
 
     state.lastDiscoveryAt = now;
 
