@@ -41,6 +41,21 @@ import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 // `clean` are ignored) and NEVER replaces the per-symbol rotation -- it only
 // shrinks what that rotation has to do this run. Buckets don't carry volume/PE,
 // so those fields still only ever come from the per-symbol calls below.
+//
+// COLD-START SEED (STEP 3, 2026-08-06 follow-up session): a symbol just
+// admitted by discovery (app/api/market/route.ts) has ts=0 here, so it wins
+// the stalest-first sort on the very next warm-price-pool run -- but if a
+// discovery batch admits enough symbols to exceed a single run's priceCap,
+// some of them queue behind each other for up to PRICE_TARGET_RUNS runs (~12
+// min). Discovery already fetches a stable/quote per admitted symbol for its
+// own purposes (building the homepage-movers quote cache); seedColdPricePoolRows
+// below reuses that ALREADY-FETCHED quote to give the symbol a real baseline
+// row immediately, at zero extra FMP cost. It only fills symbols with NO
+// existing pool row, so it can never clobber a fresher value the normal
+// rotation already wrote. This is stable/quote data (confirmed live, not an
+// average -- see /api/debug/fmp-endpoints STEP 1 the same session), not
+// screener data, so it carries none of the staleness caveats screener price
+// would.
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -132,6 +147,76 @@ export async function readPricePoolBulk(
   }
 
   return out;
+}
+
+export type ColdSeedRow = {
+  symbol: string;
+  price: number | null;
+  changePct: number | null;
+  volume: number | null;
+  marketCap: number | null;
+};
+
+/**
+ * Cold-start seed: write a baseline price-pool row for symbols that don't
+ * already have one, using a quote ALREADY fetched elsewhere -- specifically
+ * discovery's own stable/quote call when admitting a newly-found symbol (see
+ * app/api/market/route.ts). No FMP call happens here; this is pure Redis.
+ *
+ * Only fills symbols with NO existing row (checked via readPricePoolBulk), so
+ * it can never clobber a fresher value the normal warm-price-pool rotation
+ * already wrote -- worst case it's a no-op.
+ *
+ * Why this matters: a never-warmed symbol has ts=0 in the pool, so it already
+ * wins warm-price-pool's stalest-first sort and is typically picked up on the
+ * very next cron run. But if a single discovery batch admits enough symbols to
+ * exceed that run's priceCap (PRICE_MAX_PER_RUN=220), the overflow queues
+ * behind other stale symbols for up to PRICE_TARGET_RUNS runs (~12 min at the
+ * */3 cron). This gives those symbols a real row immediately instead.
+ *
+ * Deliberately does not touch `pe` (left null) or `peTs` (left 0) -- PE has no
+ * cheap already-fetched source at discovery time, so it still only ever comes
+ * from warm-price-pool's own ratios-ttm rotation, unchanged.
+ */
+export async function seedColdPricePoolRows(
+  rows: ColdSeedRow[],
+  nowMs: number
+): Promise<number> {
+  if (!redis || !rows.length) return 0;
+
+  const clean = rows
+    .map((r) => ({ ...r, symbol: cleanSymbol(r.symbol) }))
+    .filter(
+      (r) => r.symbol && (r.price != null || r.changePct != null || r.volume != null)
+    );
+  if (!clean.length) return 0;
+
+  const existing = await readPricePoolBulk(clean.map((r) => r.symbol));
+
+  const payload: Record<string, PricePoolRow> = {};
+  for (const row of clean) {
+    if (existing.has(row.symbol)) continue; // never overwrite an existing row
+    if (payload[row.symbol]) continue; // dedupe within this call
+    payload[row.symbol] = {
+      price: row.price,
+      changePct: row.changePct,
+      volume: row.volume,
+      marketCap: row.marketCap,
+      pe: null, // unknown until warm-price-pool's PE rotation reaches it
+      ts: nowMs,
+      peTs: 0,
+    };
+  }
+
+  if (!Object.keys(payload).length) return 0;
+
+  try {
+    await redis.hset(PRICE_POOL_KEY, payload);
+  } catch {
+    return 0; // fail open
+  }
+
+  return Object.keys(payload).length;
 }
 
 type QuoteLite = {
