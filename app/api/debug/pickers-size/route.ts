@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPickersData } from "@/lib/server/pickersBuilder";
+import { statPickerCharts } from "@/lib/server/pickerChartsCache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,7 +45,26 @@ export async function GET() {
     const avgChartChars = withCharts ? Math.round(chartChars / withCharts) : 0;
     const payloadChars = JSON.stringify(payload).length;
 
+    // What actually goes to Redis as ONE request now that the series live in
+    // their own chunked hash (lib/server/pickerChartsCache.ts). `payloadChars`
+    // above is the re-assembled in-memory payload -- it is NOT what gets
+    // written, and reading it as the write size is what would put us back on
+    // the 10MB wall. `strippedPayloadChars` is the figure that counts.
+    const strippedPayloadChars = JSON.stringify({
+      ...payload,
+      signalRecords: records.map((record) => ({ ...record, chartPoints: undefined })),
+    }).length;
+
+    const chartStore = await statPickerCharts();
+
     return NextResponse.json({
+      strippedPayloadChars,
+      // Wire size is ~15% above JSON.stringify().length: the value is embedded
+      // as a JSON string inside the Upstash command array, so every `"` becomes
+      // `\"`. This is the number to compare against the 10MB limit.
+      estimatedWireBytes: Math.round(strippedPayloadChars * 1.15),
+      chartStoreSymbols: chartStore.symbols,
+      chartStoreTtlSeconds: chartStore.ttlSeconds,
       // updatedAt of the payload itself, so a stale cached rebuild is obvious
       // rather than being read as a fresh measurement.
       payloadUpdatedAt: payload.updatedAt ?? null,
