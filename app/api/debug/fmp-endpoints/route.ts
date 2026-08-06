@@ -59,6 +59,15 @@ const PROBES: Probe[] = [
     note: "wider net, same endpoint",
   },
   { id: "stock-list", path: "stock-list", note: "full symbol directory if available" },
+  // Does the screener honour fund/ETF exclusion? The live universe picked up
+  // AAGTX / AALTX / CFNAX -- five letters ending in X, the US mutual-fund
+  // convention -- so the current filter (market cap + exchange + actively
+  // trading) is clearly not equities-only. `fundLikeSymbols` below measures it.
+  {
+    id: "screener-no-funds",
+    path: "company-screener?marketCapMoreThan=1000000000&exchange=NASDAQ,NYSE&isActivelyTrading=true&isEtf=false&isFund=false&limit=1000",
+    note: "CANDIDATE FIX -- same filter plus isEtf=false&isFund=false",
+  },
 ];
 
 function scrub(text: string, apiKey: string) {
@@ -102,6 +111,12 @@ export async function GET() {
           )
         : [];
 
+      // Five letters ending in X is the US mutual-fund share-class convention
+      // (AAGTX, CFNAX). Not a perfect test -- a handful of real equities match --
+      // but a count in the dozens means funds are getting through, and zero
+      // means the filter is doing its job.
+      const fundLike = symbols.filter((sym) => /^[A-Z]{4}X$/.test(sym) || /^[A-Z]{5}X$/.test(sym));
+
       results.push({
         id: probe.id,
         note: probe.note,
@@ -110,6 +125,8 @@ export async function GET() {
         isArray: Array.isArray(json),
         rows: arr ? arr.length : null,
         uniqueSymbols: symbols.length,
+        fundLikeSymbols: fundLike.length,
+        fundLikeSample: fundLike.slice(0, 6),
         sample: symbols.slice(0, 5),
         // Non-array responses are where the plan message lives (402/403 bodies).
         message: arr ? null : scrub(text, apiKey).slice(0, 200),
@@ -123,6 +140,8 @@ export async function GET() {
         isArray: false,
         rows: null,
         uniqueSymbols: 0,
+        fundLikeSymbols: 0,
+        fundLikeSample: [],
         sample: [],
         message: scrub(error instanceof Error ? error.message : "fetch failed", apiKey),
       });
