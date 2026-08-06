@@ -128,6 +128,15 @@ export async function GET() {
         fundLikeSymbols: fundLike.length,
         fundLikeSample: fundLike.slice(0, 6),
         sample: symbols.slice(0, 5),
+        // THE IMPORTANT PART, added 2026-08-06 after the obvious question was
+        // asked: a list endpoint returning 1000 SYMBOLS in one call is only a
+        // minor saving, but if it also returns per-symbol DATA then it can
+        // replace the per-symbol fan-out that dominates the FMP budget --
+        // warmPricePool alone makes ~166 sequential quote calls per run because
+        // "no multi-symbol endpoint works on Starter". Worth knowing exactly
+        // which fields come back rather than assuming.
+        rowKeys: arr && arr[0] ? Object.keys(arr[0]) : null,
+        sampleRow: arr && arr[0] ? arr[0] : null,
         // Non-array responses are where the plan message lives (402/403 bodies).
         message: arr ? null : scrub(text, apiKey).slice(0, 200),
       });
@@ -143,6 +152,8 @@ export async function GET() {
         fundLikeSymbols: 0,
         fundLikeSample: [],
         sample: [],
+        rowKeys: null,
+        sampleRow: null,
         message: scrub(error instanceof Error ? error.message : "fetch failed", apiKey),
       });
     }
