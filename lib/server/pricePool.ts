@@ -172,7 +172,7 @@ export type ColdSeedRow = {
  * very next cron run. But if a single discovery batch admits enough symbols to
  * exceed that run's priceCap (PRICE_MAX_PER_RUN=220), the overflow queues
  * behind other stale symbols for up to PRICE_TARGET_RUNS runs (~12 min at the
- * */3 cron). This gives those symbols a real row immediately instead.
+ * 3-minute cron). This gives those symbols a real row immediately instead.
  *
  * Deliberately does not touch `pe` (left null) or `peTs` (left 0) -- PE has no
  * cheap already-fetched source at discovery time, so it still only ever comes
