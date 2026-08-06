@@ -406,11 +406,32 @@ function getFlagReasons(flags: ResultEntryFlags, defs: Array<{ key: keyof Result
   return defs.filter((def) => flags[def.key] === true).map((def) => def.label);
 }
 
+// Renders the payload timestamp with an EXPLICIT timezone label.
+//
+// This previously called toLocaleString with no `timeZone`, and it runs
+// server-side where Vercel's Node defaults to UTC -- so the string was baked as
+// UTC and never re-rendered in the viewer's timezone. A UK visitor on BST read
+// a 24-minute-old payload as 84 minutes old and reasonably concluded the cache
+// had gone stale. That false alarm is the whole reason for this change.
+//
+// Deliberately UTC-with-a-label rather than the viewer's local time: this is a
+// server component and the formatted string is passed down to ScanFooter as a
+// prop, so localising it would need the raw ISO value threaded through and
+// re-formatted after hydration -- which risks a hydration mismatch on a value
+// that appears on every screener page. Labelling it is unambiguous for every
+// visitor regardless of where they are, and carries no such risk.
 function formatUpdatedAt(value?: string | null) {
   if (!value) return "Live data";
   const dt = new Date(value);
   if (Number.isNaN(dt.getTime())) return value;
-  return dt.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  return dt.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "UTC",
+    timeZoneName: "short",
+  });
 }
 
 async function getOriginFromHeaders() {
