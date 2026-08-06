@@ -70,6 +70,16 @@ const PROBES: Probe[] = [
   },
 ];
 
+// STEP 1 (2026-08-06 follow-up session): is company-screener's price/volume
+// live-ish or a stale multi-day average? The debug sample above only ever
+// shows row[0] (NVDA, the largest name by market cap), which is useless for
+// checking liquidity-dependent staleness. Track a couple of fixed, non-mega-cap
+// symbols through every screener-shaped probe so they can be diffed against
+// /api/quote (the same FMP `stable/quote` the price pool and stock pages use)
+// without widening this route into a symbol-lookup proxy -- the set is fixed
+// and tiny, same safety posture as the rest of this file.
+const TARGET_SYMBOLS = ["NVDA", "F", "COO"];
+
 function scrub(text: string, apiKey: string) {
   return apiKey ? text.split(apiKey).join("<key>") : text;
 }
@@ -117,6 +127,13 @@ export async function GET() {
       // means the filter is doing its job.
       const fundLike = symbols.filter((sym) => /^[A-Z]{4}X$/.test(sym) || /^[A-Z]{5}X$/.test(sym));
 
+      // Fixed, tiny lookup for the STEP 1 liveness check -- not caller input.
+      const targetSamples = arr
+        ? TARGET_SYMBOLS.map((sym) => arr.find((row) => String(row?.symbol ?? "").toUpperCase() === sym)).filter(
+            (row): row is Record<string, unknown> => Boolean(row)
+          )
+        : [];
+
       results.push({
         id: probe.id,
         note: probe.note,
@@ -137,6 +154,10 @@ export async function GET() {
         // which fields come back rather than assuming.
         rowKeys: arr && arr[0] ? Object.keys(arr[0]) : null,
         sampleRow: arr && arr[0] ? arr[0] : null,
+        // Fixed lookup of TARGET_SYMBOLS within this probe's rows, so
+        // liquidity-dependent staleness can be checked for names other than
+        // whichever mega-cap happens to sort first.
+        targetSamples: targetSamples.length ? targetSamples : null,
         // Non-array responses are where the plan message lives (402/403 bodies).
         message: arr ? null : scrub(text, apiKey).slice(0, 200),
       });
@@ -154,6 +175,7 @@ export async function GET() {
         sample: [],
         rowKeys: null,
         sampleRow: null,
+        targetSamples: null,
         message: scrub(error instanceof Error ? error.message : "fetch failed", apiKey),
       });
     }
