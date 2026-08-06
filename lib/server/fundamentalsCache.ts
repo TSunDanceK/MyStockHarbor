@@ -27,6 +27,28 @@ const PROFILE_KEY_PREFIX = "msh:pickers:profile:v1:";
 const FUND_TTL_SECONDS = 60 * 60 * 26; // 26h -- comfortably spans a daily warm
 const PROFILE_TTL_SECONDS = 60 * 60 * 24 * 30; // 30d -- industry/sector are static
 
+// STEP 2 (2026-08-06 follow-up session): app/api/market/route.ts already makes
+// one stable/company-screener call per master-list rebuild (~daily) to source
+// discovery candidates, and that response carries marketCap/sector/industry for
+// every row -- it was discarding all of it except `symbol`. Caching those
+// fields here (via cacheScreenerFundamentals, called from that same fetch)
+// lets warmFundamentals skip the per-symbol `profile` call entirely for any
+// symbol the screener covers, which is where the industry/sector backfill tail
+// actually comes from (PROFILE_MAX_PER_RUN below). Confirmed via
+// /api/debug/fmp-endpoints (STEP 1, same session): the screener's price/volume
+// track the live stable/quote feed in near lockstep rather than sitting on a
+// stale multi-day average, but marketCap/sector/industry are the fields this
+// file actually uses, and those are static-ish regardless.
+//
+// Only covers symbols the screener's own filter returns (>= its market-cap
+// floor, NASDAQ/NYSE, actively trading, equities only) -- everything else
+// still falls back to the profile fetch below, unchanged.
+const SCREENER_FUND_KEY_PREFIX = "msh:pickers:screener-fundamentals:v1:";
+// TTL comfortably spans the master-list rebuild cadence (~daily, gated by
+// ensureDailyShuffledMasterList's Eastern-day rollover in app/api/market) so a
+// delayed rebuild doesn't empty the cache before the next one lands.
+const SCREENER_FUND_TTL_SECONDS = 60 * 60 * 30; // 30h
+
 // Bounds so a single warm run can never run away with the FMP budget.
 const QUOTE_CHUNK_SIZE = 50; // batch-quote symbols per FMP call
 const PROFILE_MAX_PER_RUN = 120; // cap fresh profile fetches per run
@@ -52,6 +74,16 @@ type ProfileLite = {
   industry: string | null;
   sector: string | null;
   marketCap: number | null;
+};
+
+export type ScreenerFundamentalsRow = {
+  symbol: string;
+  marketCap: number | null;
+  sector: string | null;
+  industry: string | null;
+  beta: number | null;
+  lastAnnualDividend: number | null;
+  updatedAt: string;
 };
 
 function cleanSymbol(value: string) {
@@ -168,6 +200,84 @@ async function readCachedProfilesBulk(
   return result;
 }
 
+/**
+ * Cache marketCap/sector/industry/beta/lastAnnualDividend from FMP's
+ * company-screener response -- the SAME call app/api/market/route.ts already
+ * makes once per master-list rebuild for discovery candidates. That call was
+ * discarding every field except `symbol`; this captures the rest instead of a
+ * second fetch.
+ *
+ * These fields are static-ish (they do not need to be live), so this
+ * eliminates most of the profile-fetch tail warmFundamentals otherwise needs
+ * for industry/sector -- see the profileMisses computation in
+ * warmFundamentals below.
+ *
+ * Fail-open throughout: a caching failure here should never break discovery,
+ * which is what actually calls this.
+ */
+export async function cacheScreenerFundamentals(
+  rows: unknown[]
+): Promise<number> {
+  if (!redis || !Array.isArray(rows) || !rows.length) return 0;
+
+  const now = new Date().toISOString();
+  const pipeline = redis.pipeline();
+  let queued = 0;
+
+  for (const raw of rows) {
+    const row = raw as Record<string, unknown>;
+    const symbol = cleanSymbol(String(row?.symbol ?? ""));
+    if (!symbol) continue;
+
+    const entry: ScreenerFundamentalsRow = {
+      symbol,
+      marketCap: num(row?.marketCap),
+      sector: str(row?.sector),
+      industry: str(row?.industry),
+      beta: num(row?.beta),
+      lastAnnualDividend: num(row?.lastAnnualDividend),
+      updatedAt: now,
+    };
+
+    pipeline.set(`${SCREENER_FUND_KEY_PREFIX}${symbol}`, entry, {
+      ex: SCREENER_FUND_TTL_SECONDS,
+    });
+    queued++;
+  }
+
+  if (!queued) return 0;
+
+  try {
+    await pipeline.exec();
+  } catch {
+    return 0; // fail open
+  }
+
+  return queued;
+}
+
+async function readCachedScreenerFundamentals(
+  symbols: string[]
+): Promise<Map<string, ScreenerFundamentalsRow>> {
+  const result = new Map<string, ScreenerFundamentalsRow>();
+  if (!redis || !symbols.length) return result;
+
+  try {
+    const keys = symbols.map((s) => `${SCREENER_FUND_KEY_PREFIX}${s}`);
+    const values = await redis.mget<ScreenerFundamentalsRow[]>(...keys);
+    symbols.forEach((symbol, i) => {
+      const row = values[i];
+      if (row && typeof row === "object" && row.symbol) {
+        result.set(symbol, row);
+      }
+    });
+  } catch {
+    // fail open
+  }
+
+  return result;
+}
+
 // Batch quote -> marketCap + PE for many symbols in one FMP call. Falls back to
 // per-symbol stable/quote for a chunk whose batch call fails (so this still
 // works on FMP plans without the batch endpoint).
@@ -265,8 +375,9 @@ async function fetchProfile(sym: string, apiKey: string): Promise<ProfileLite | 
 
 /**
  * Cron/warm worker: refresh cached fundamentals for the given universe.
- *   - industry/sector via profile FIRST, only for symbols whose profile isn't
- *     already cached (30-day TTL), capped per run
+ *   - industry/sector: reuse cached profiles, then the screener-fundamentals
+ *     cache (free -- see cacheScreenerFundamentals), and only THEN fall back to
+ *     a fresh profile fetch for whatever neither source covers, capped per run
  *   - then market cap + PE via quote (daily-fresh)
  * Writes one combined FundamentalsRow per symbol (26h TTL). Fail-open and
  * budget-guarded throughout. Returns a small summary for the job response.
@@ -285,15 +396,24 @@ export async function warmFundamentals(symbols: string[]) {
 
   const wait: WaitBudget = { remainingMs: CAPACITY_WAIT_BUDGET_MS };
 
-  // 1) industry/sector FIRST: reuse cached profiles, fetch only the misses
-  // (capped). This stage runs before quotes deliberately. Quotes need one call
-  // per symbol on plans without batch-quote -- roughly the whole universe --
-  // so running it first left the profile stage staring at a drained budget,
-  // and profiles are the only source of industry/sector. Profiles are also
-  // far cheaper in aggregate: they carry a 30-day TTL, so in the steady state
-  // this stage fetches a handful of symbols a day, not the whole universe.
+  // 1) industry/sector. Reuse cached profiles first, then the screener
+  // fundamentals cache (zero FMP cost -- populated as a side effect of the
+  // company-screener call app/api/market/route.ts already makes), and only
+  // fetch a fresh profile for whatever neither source already covers. This
+  // stage runs before quotes deliberately. Quotes need one call per symbol on
+  // plans without batch-quote -- roughly the whole universe -- so running it
+  // first left the profile stage staring at a drained budget, and profiles
+  // (or the screener cache) are the only source of industry/sector. Profiles
+  // are also far cheaper in aggregate: they carry a 30-day TTL, so in the
+  // steady state this stage fetches a handful of symbols a day, not the whole
+  // universe -- and with the screener cache in place, that handful is now
+  // just the symbols the screener's own filter excludes (sub-$1B market cap,
+  // non NASDAQ/NYSE, or funds/ETFs).
   const cachedProfiles = await readCachedProfilesBulk(cleanSymbols);
-  const profileMisses = cleanSymbols.filter((s) => !cachedProfiles.has(s));
+  const screenerFund = await readCachedScreenerFundamentals(cleanSymbols);
+  const profileMisses = cleanSymbols.filter(
+    (s) => !cachedProfiles.has(s) && !screenerFund.has(s)
+  );
   let profileFetches = 0;
   for (const sym of profileMisses) {
     if (profileFetches >= PROFILE_MAX_PER_RUN) break;
@@ -320,13 +440,14 @@ export async function warmFundamentals(symbols: string[]) {
   for (const sym of cleanSymbols) {
     const q = quoteMap.get(sym);
     const p = cachedProfiles.get(sym);
-    if (!q && !p) continue;
+    const sc = screenerFund.get(sym);
+    if (!q && !p && !sc) continue;
     const row: FundamentalsRow = {
       symbol: sym,
-      marketCap: q?.marketCap ?? p?.marketCap ?? null,
+      marketCap: q?.marketCap ?? p?.marketCap ?? sc?.marketCap ?? null,
       peRatio: q?.peRatio ?? null,
-      industry: p?.industry ?? null,
-      sector: p?.sector ?? null,
+      industry: p?.industry ?? sc?.industry ?? null,
+      sector: p?.sector ?? sc?.sector ?? null,
       updatedAt: now,
     };
     writePipeline.set(`${FUND_KEY_PREFIX}${sym}`, row, { ex: FUND_TTL_SECONDS });
@@ -344,6 +465,7 @@ export async function warmFundamentals(symbols: string[]) {
     ok: true,
     universe: cleanSymbols.length,
     quotesFetched: quoteMap.size,
+    screenerCovered: screenerFund.size,
     profileMisses: profileMisses.length,
     profileFetches,
     profilesKnown: cachedProfiles.size,

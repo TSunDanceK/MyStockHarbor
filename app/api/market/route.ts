@@ -9,6 +9,7 @@ import {
   addToDynamicUniverse,
   removeFromDynamicUniverse,
 } from "../../../lib/server/dynamicUniverseCache";
+import { cacheScreenerFundamentals } from "../../../lib/server/fundamentalsCache";
 
 export const runtime = "nodejs";
 
@@ -671,6 +672,13 @@ const SCREENER_LIMIT = 1000;
  *
  * The screener IS available on this plan and returned 1000 symbols in the same
  * probe. One call instead of three, and it actually works.
+ *
+ * STEP 2 (2026-08-06 follow-up session): this response also carries
+ * marketCap/sector/industry/beta/lastAnnualDividend per row, which used to be
+ * discarded entirely here. Now handed to cacheScreenerFundamentals so
+ * warmFundamentals (lib/server/fundamentalsCache.ts) can use it instead of a
+ * per-symbol `profile` fetch for any symbol this screener call covers -- zero
+ * extra FMP calls, since this fetch already happens.
  */
 async function fetchFmpScreenerSymbols(apiKey: string) {
   await reserveFmpCallSlot();
@@ -697,6 +705,21 @@ async function fetchFmpScreenerSymbols(apiKey: string) {
 
     const json = await res.json().catch(() => null);
     if (!Array.isArray(json)) return [];
+
+    // Fire this before mapping down to symbols below -- cacheScreenerFundamentals
+    // wants the full rows (marketCap/sector/industry/...), not just `symbol`.
+    // Awaited rather than fire-and-forget: Vercel does not guarantee unawaited
+    // work continues after this function's caller returns, and a Redis
+    // pipeline write here is cheap relative to the master-list rebuild this
+    // sits inside.
+    try {
+      const cached = await cacheScreenerFundamentals(json);
+      if (cached > 0) {
+        console.log(`[market] cached screener fundamentals for ${cached} symbols`);
+      }
+    } catch {
+      // fail open -- discovery must not break because caching fundamentals did
+    }
 
     return json
       .map((item) => String(item?.symbol ?? "").trim().toUpperCase())
