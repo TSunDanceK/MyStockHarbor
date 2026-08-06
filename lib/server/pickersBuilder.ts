@@ -20,6 +20,11 @@ import {
 } from "./dynamicUniverseCache";
 import { readSearchDemand } from "./searchDemand";
 import {
+  readPickerChartsBulk,
+  writePickerChartsBulk,
+  type StoredChartPoint,
+} from "./pickerChartsCache";
+import {
   getClientIp,
   checkBackfillLockout,
   recordBackfillFailure,
@@ -466,6 +471,31 @@ async function readPickersCache() {
     const entry = await redis.get<CachedPickersPayload>(PICKERS_REDIS_KEY);
     if (!entry || typeof entry !== "object") return null;
     if (!entry.data || typeof entry.data !== "object") return null;
+
+    // Re-attach the chart series that writePickersCache split out, so every
+    // consumer sees the identical payload shape it saw before the series moved
+    // off-payload. Records that still carry their own chartPoints are left
+    // alone -- that's a cache entry written by a deploy predating this change,
+    // and it must keep working through the rollout.
+    const records = Array.isArray(entry.data.signalRecords) ? entry.data.signalRecords : [];
+    const missing = records
+      .filter((record) => !Array.isArray(record.chartPoints) || !record.chartPoints.length)
+      .map((record) => record.symbol);
+
+    if (missing.length) {
+      const series = await readPickerChartsBulk(missing);
+      if (series.size) {
+        entry.data = {
+          ...entry.data,
+          signalRecords: records.map((record) => {
+            if (Array.isArray(record.chartPoints) && record.chartPoints.length) return record;
+            const points = series.get(record.symbol);
+            return points ? { ...record, chartPoints: points as PickerChartPoint[] } : record;
+          }),
+        };
+      }
+    }
+
     return entry;
   } catch {
     return null;
@@ -499,13 +529,56 @@ function buildReducedPickersPayload(data: PickersPayload): PickersPayload {
 // Max Request Size), retry once with `reduced()` -- a smaller payload with
 // chartPoints stripped outside sections -- and log which path was used so a
 // truncated cache is visible in Vercel logs instead of silent.
+// Split the payload into (payload without series, series keyed by symbol).
+//
+// ~85% of the payload's bytes are signalRecords[].chartPoints (measured
+// 2026-08-06: 2.86MB of 3.38MB at a 260 universe), and that share grows
+// linearly with the universe cap. Holding them in a separate chunked hash is
+// what keeps every Redis request clear of Upstash's 10MB Max Request Size --
+// see lib/server/pickerChartsCache.ts for the measurements.
+//
+// `data` is memoized and handed back to callers, so this MUST NOT mutate it --
+// hence the shallow copies. Section items are deliberately left alone: only the
+// two weekly sections (Weekly MA200 Proximity, Macro S/R) carry their own
+// chartPoints, they're weekly-aggregated rather than a duplicate of the daily
+// series, and 2 x 20 items is ~0.44MB -- well inside the budget.
+function splitPickersPayload(data: PickersPayload): {
+  stripped: PickersPayload;
+  series: Map<string, StoredChartPoint[]>;
+} {
+  const series = new Map<string, StoredChartPoint[]>();
+
+  const signalRecords = data.signalRecords.map((record) => {
+    const points = record.chartPoints;
+    if (!Array.isArray(points) || !points.length) return record;
+    series.set(record.symbol, points as StoredChartPoint[]);
+    return { ...record, chartPoints: undefined };
+  });
+
+  return { stripped: { ...data, signalRecords }, series };
+}
+
 async function writePickersCache(data: PickersPayload, reduced?: () => PickersPayload) {
   if (!redis) return;
 
   try {
+    const { stripped, series } = splitPickersPayload(data);
+
+    // Series first: if this partly fails the payload still writes, and the
+    // affected symbols degrade to "Chart preview unavailable" exactly as an
+    // un-warmed symbol does. The reverse order could cache a payload whose
+    // series were never stored at all.
+    const chartResult = await writePickerChartsBulk(series);
+    if (!chartResult.ok) {
+      console.warn(
+        `[pickers] chart series partially written: ${chartResult.written}/${series.size} symbols, ` +
+          `${chartResult.failedChunks}/${chartResult.chunks} chunks failed`
+      );
+    }
+
     const entry: CachedPickersPayload = {
       cachedAt: Date.now(),
-      data,
+      data: stripped,
     };
 
     await redis.set(PICKERS_REDIS_KEY, entry, {
