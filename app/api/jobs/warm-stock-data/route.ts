@@ -4,9 +4,12 @@ import { warmStockData } from "../../../../lib/server/stockDataCache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-// Each refreshed symbol costs ~7 FMP calls; let a full slice finish under the
-// shared 300/min budget guard without being cut short.
-export const maxDuration = 60;
+// Raised alongside warm-price-pool, which demonstrably 504'd at 60s once the
+// universe grew. This route is arguably MORE exposed: REFRESH_SLICE_SIZE is 25
+// and CALLS_PER_SYMBOL is 8, so a full slice is ~200 sequential FMP calls in
+// one run -- a fixed cost that has always been close to the old 60s ceiling,
+// independent of universe size. It simply had not been observed failing yet.
+export const maxDuration = 300;
 
 // Cron (see vercel.json) that refreshes the Redis-cached extended stock data
 // (valuation / dividends / financials / analyst fields) for the current
