@@ -597,17 +597,29 @@ function shuffleArray<T>(arr: T[]) {
   return out;
 }
 
-// Modern stable-API constituent-list endpoints (as of 2026-07-23). The old
-// legacy paths (api/v3/sp500_constituent, api/v3/nasdaq_constituent) were
-// retired by FMP -- confirmed live 403 "Legacy Endpoint ... no longer
-// supported ... prior August 31, 2025" regardless of plan tier. These stable
-// paths are the real, current replacements; they returned 402 "Restricted:
-// not available under your current subscription" on the Starter plan when
-// last checked, but are valid endpoint names, so this call auto-recovers with
-// zero further code changes the moment the FMP plan includes them -- no
-// redeploy needed, since a 402/error response already resolves to an empty
-// array via the same fail-open path used below (falls back to the static
-// CURATED_UNIVERSE/DISCOVERY_MASTER_LIST/EXTRA_LIQUID_GROWTH_LIST names).
+// HISTORY, kept because it is easy to re-derive the wrong conclusion here.
+//
+// Discovery candidates used to come from FMP's index-constituent endpoints.
+// The legacy v3 paths (api/v3/sp500_constituent, api/v3/nasdaq_constituent)
+// were retired by FMP -- live 403 "Legacy Endpoint ... no longer supported
+// ... prior August 31, 2025", regardless of plan tier. They were replaced with
+// the stable paths (stable/sp500-constituent etc), which are valid endpoint
+// names but answer 402 "Restricted Endpoint: not available under your current
+// subscription" on this plan.
+//
+// The previous comment here claimed that was harmless because the call would
+// "auto-recover the moment the FMP plan includes them". It was not harmless.
+// The 402 resolved to an empty array silently, so the master list was ALWAYS
+// the ~407-name static fallback, and since pool 353 + CURATED_UNIVERSE 54 = 407
+// exactly, discovery had nothing left to find and the universe could not grow
+// at all. That went unnoticed for as long as it did precisely because the
+// failure was invisible and the comment said not to worry about it.
+//
+// Those calls are now gone, replaced by fetchFmpScreenerSymbols below. If the
+// plan is ever upgraded to serve constituent lists, adding them back to the
+// union in buildExpandedDiscoveryMasterList is a few lines -- but check
+// /api/debug/fmp-endpoints first rather than assuming, which is what that
+// route exists for.
 
 // Minimum market cap for a symbol to enter the discovery candidate pool.
 // $1B keeps the universe to liquid, screenable names -- the same character as
