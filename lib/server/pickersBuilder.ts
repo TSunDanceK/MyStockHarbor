@@ -307,7 +307,23 @@ const CACHE_SECONDS = 60 * 60; // 60 minutes
 const STALE_SECONDS = 60 * 60; // 60 minutes
 const MEMORY_CACHE_MS = 60_000;
 
-const PICKERS_REDIS_KEY = "msh:pickers:v8:macro-sr-cache";
+// v9: the cached payload no longer carries signalRecords[].chartPoints inline --
+// they live in msh:picker-charts:v1 and are re-attached on read (see
+// writePickersCache/readPickersCache and lib/server/pickerChartsCache.ts).
+//
+// The version bump is REQUIRED, not cosmetic. Preview deployments share this
+// project's Upstash credentials, so preview and production read and write the
+// SAME key. Without a bump, merely loading a picker page on this branch's
+// preview would build a stripped payload and SET it over the shared v8 entry --
+// and production, still running code that can't re-attach, would then serve
+// every page with no chartPoints at all: blank 200 MA column site-wide, dead
+// EOD price/volume fallback, "Chart preview unavailable" on every card, until
+// the 1h TTL expired. Bumping the key isolates the two shapes completely.
+//
+// Cost of the bump on merge: one cold rebuild on the first request after
+// deploy (the build lock keeps that to a single rebuild, and per-symbol history
+// is still Redis-cached, so it is the same cost as any post-TTL rebuild).
+const PICKERS_REDIS_KEY = "msh:pickers:v9:charts-off-payload";
 const PICKERS_REDIS_TTL_SECONDS = 60 * 60;
 const PICKERS_LOCK_KEY = "msh:pickers:v8:macro-sr-cache:lock";
 const PICKERS_LOCK_TTL_SECONDS = 120;
