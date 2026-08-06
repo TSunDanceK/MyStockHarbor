@@ -34,9 +34,16 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const [stat, entries, stalest] = await Promise.all([
+    // SEQUENTIAL, deliberately not Promise.all. readDynamicUniverse performs
+    // the one-time v1 -> v2 seed on its first call, so reading the cardinalities
+    // concurrently races that seed and reports zsetScoredCount 0 /
+    // servedFromLegacyFallback true on a request where the seed actually
+    // SUCCEEDED. That happened live on the 2026-08-06 migration and read as a
+    // failed migration for a few minutes. A diagnostic that cries wolf about
+    // the fallback is worse than no diagnostic at all.
+    const entries = await readDynamicUniverse();
+    const [stat, stalest] = await Promise.all([
       statDynamicUniverse(),
-      readDynamicUniverse(),
       readStalestUniverseSlice(10),
     ]);
 
