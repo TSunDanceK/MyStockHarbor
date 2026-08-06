@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getPickersData } from "../../../../lib/server/pickersBuilder";
+import { getWarmTargetSymbols } from "../../../../lib/server/warmTargets";
 import { warmFundamentals } from "../../../../lib/server/fundamentalsCache";
 
 export const runtime = "nodejs";
@@ -37,10 +37,11 @@ export async function GET(req: NextRequest) {
   const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mystockharbor.com";
 
   try {
-    const payload = await getPickersData(base);
-    const symbols = Array.from(
-      new Set((payload.signalRecords ?? []).map((r) => r.symbol).filter(Boolean))
-    );
+    // Displayed symbols UNION the rolling dynamic universe, so a symbol that
+    // rotates into the scan is already warm rather than arriving cold.
+    // See lib/server/warmTargets.ts for why this must not be a replacement.
+    const { symbols, displayed, universe } = await getWarmTargetSymbols(base);
+    console.log(`[warm-fundamentals] targets: ${symbols.length} (displayed ${displayed}, universe ${universe})`);
 
     const result = await warmFundamentals(symbols);
     // Logged as well as returned: the cron invokes this and discards the body,
