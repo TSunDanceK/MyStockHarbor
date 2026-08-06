@@ -10,7 +10,15 @@ export const dynamic = "force-dynamic";
 
 // Only a fixed, known set of categories can be tracked -- never let the
 // client body dictate an arbitrary Redis key.
-const ALLOWED_CATEGORIES = new Set(["stock"]);
+//
+// "stock"  -- mounted by app/stock/[symbol]/layout.tsx, feeds the daily
+//             /stock/* cap in middleware.ts.
+// "site"   -- mounted by the root app/layout.tsx, so it fires on every real
+//             page view anywhere on the site. Read (never incremented) by
+//             app/api/go/[platform]/route.ts to decide whether a request for
+//             an affiliate redirect came from something that had actually
+//             rendered a page in a browser first.
+const ALLOWED_CATEGORIES = new Set(["stock", "site"]);
 
 // Beacon endpoint: called once per real, client-rendered page view (see
 // app/components/PageViewTracker.tsx and lib/server/dailyPageLimit.ts for
