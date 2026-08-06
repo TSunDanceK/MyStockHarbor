@@ -2293,16 +2293,26 @@ function normalizeHistory(pts: Point[], days: number) {
 // Raised 200 -> 260 so guaranteeing the ~100-name PRESET_UNIVERSE (the largest
 // US companies, prepended below) doesn't push the day's active/mover names out
 // of the analyzed set -- we now fit both the big caps AND ~160 dynamic names.
-// Step 4 of the universe consolidation: 260 -> 450. Raised in one step rather
-// than jumping straight to the 700 ceiling so the build-duration log added
-// below can show the real scaling cost before going further. The payload
-// ceiling that used to block this was removed in #214 (chart series moved off
-// the payload), and the scan already runs at pLimit(10) with Redis-cached
-// history, so the cost here is Redis read volume, not FMP calls.
+// The scan universe ceiling. Now equal to MAX_DYNAMIC_UNIVERSE_SIZE (700) in
+// dynamicUniverseCache, so the cap is no longer the thing limiting how much of
+// the universe gets scanned -- the discovery pool is.
 //
-// NOTE the pool feeding this is ~353 today, so 450 is headroom rather than an
-// immediate jump -- discovery fills toward 700 at 50 candidates/5min.
-const UNIVERSE_CAP = 450;
+// Measured on the way here rather than guessed. At 260 -> 450 the live rebuild
+// produced universe 416 in 6,232ms with 0 failed symbols, against a 300s
+// function limit (2% of budget) and a 698KB Redis write against a 10MB request
+// limit. Extrapolating: 700 symbols is ~10.5s and ~1.2MB. The scan was never
+// the constraint -- the payload was, and #214 removed it by moving chart series
+// off-payload.
+//
+// What this does NOT do is instantly produce 700 symbols. The pool feeding the
+// backfill is ~353, so today this yields the same ~416. Discovery fills toward
+// 700 at 50 candidates/5min when FMP capacity allows, and the universe follows.
+//
+// The one thing that genuinely degrades as this grows: warm-stock-data uses a
+// FIXED 25-symbol slice per run, so full coverage of valuation/dividend/analyst
+// data stretches linearly -- ~2.8h at 416, ~4.7h at 700. REFRESH_SLICE_SIZE is
+// the dial if that matters (~8 FMP calls per symbol).
+const UNIVERSE_CAP = 700;
 
 // Popular Searches promotion (see claude/popular-searches-universe-spec-2026-07-23.md).
 // A ticker only earns a guaranteed analyzed-universe slot once real users have
