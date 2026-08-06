@@ -5,7 +5,10 @@ import {
   hasFmpCapacity,
   reserveFmpCallSlot,
 } from "../../../lib/server/historyCache";
-import { addToDynamicUniverse } from "../../../lib/server/dynamicUniverseCache";
+import {
+  addToDynamicUniverse,
+  removeFromDynamicUniverse,
+} from "../../../lib/server/dynamicUniverseCache";
 
 export const runtime = "nodejs";
 
@@ -642,7 +645,12 @@ function shuffleArray<T>(arr: T[]) {
 // the early-return accept the stale 407-name list and skip the rebuild.
 //
 // v2 = FMP company-screener (was: sp500/nasdaq/dowjones constituent endpoints).
-const MASTER_LIST_SOURCE_VERSION = 2;
+// v3 = same screener with isEtf=false&isFund=false. v2 was returning 42.5%
+//      mutual funds (425 of 1000 -- VTSAX, VFIAX, VFINX and friends), which
+//      were being admitted into a STOCK screener. Measured via
+//      /api/debug/fmp-endpoints; the excluded variant returns a full 1000 names
+//      with zero fund-like symbols, so this costs no coverage.
+const MASTER_LIST_SOURCE_VERSION = 3;
 
 const SCREENER_MIN_MARKET_CAP = 1_000_000_000;
 const SCREENER_LIMIT = 1000;
@@ -672,6 +680,10 @@ async function fetchFmpScreenerSymbols(apiKey: string) {
     `?marketCapMoreThan=${SCREENER_MIN_MARKET_CAP}` +
     `&exchange=NASDAQ,NYSE` +
     `&isActivelyTrading=true` +
+    // Equities only. Without these the screener returns ~42% mutual funds --
+    // market cap and exchange filters do not exclude them.
+    `&isEtf=false` +
+    `&isFund=false` +
     `&limit=${SCREENER_LIMIT}` +
     `&apikey=${encodeURIComponent(apiKey)}`;
 
@@ -888,6 +900,38 @@ export async function GET() {
   pruneDynamicCache(state, now);
 
   if (masterListChanged) {
+    // RECONCILE. The candidate list just changed, so anything sitting in the
+    // pool that is no longer a candidate should not stay in the universe.
+    //
+    // This exists because of a real incident: the v2 screener filter returned
+    // 42.5% mutual funds (VTSAX, VFIAX, ...) and they were admitted into a
+    // stock screener. Fixing the filter stops NEW ones arriving but does
+    // nothing about those already admitted, and the 14-day age window is far
+    // too slow to lean on.
+    //
+    // Curated names are exempt (they are deliberately never discovery
+    // candidates -- getNextDiscoveryBatch skips them -- so they would otherwise
+    // be evicted every single rebuild).
+    //
+    // Guarded on the master list being healthy: the acceptance check above
+    // already refuses a list below MIN_DYNAMIC_MASTER_SIZE, so by here the list
+    // is known good and a mass eviction cannot be triggered by one bad fetch.
+    const candidateSet = new Set(state.shuffledMasterList);
+    const curatedSet = new Set(uniqUpper(CURATED_UNIVERSE));
+    const orphaned = Object.keys(state.dynamic).filter(
+      (symbol) => !candidateSet.has(symbol) && !curatedSet.has(symbol)
+    );
+
+    if (orphaned.length) {
+      for (const symbol of orphaned) delete state.dynamic[symbol];
+      const removed = await removeFromDynamicUniverse(orphaned);
+      console.log(
+        `[market] reconciled pool against rebuilt master list: evicted ${orphaned.length} ` +
+          `no-longer-candidate symbols (${removed} removed from the shared universe), ` +
+          `pool now ${Object.keys(state.dynamic).length}`
+      );
+    }
+
     await saveDiscoveryState(state);
     payloadCache = null;
   }

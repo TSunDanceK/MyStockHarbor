@@ -314,6 +314,41 @@ export async function readStalestUniverseSlice(count: number): Promise<string[]>
 }
 
 /**
+ * Remove symbols from the universe entirely — both sorted sets, kept in step.
+ *
+ * Added for reconciliation: the discovery candidate list can change shape (it
+ * did on 2026-08-06, when the FMP screener was found to be returning 42.5%
+ * mutual funds), and symbols admitted under an older, wrong candidate list need
+ * evicting rather than waiting out the 14-day age window.
+ *
+ * Chunked because ZREM takes the members as arguments and a large eviction
+ * would otherwise build one enormous command.
+ */
+export async function removeFromDynamicUniverse(symbols: string[]) {
+  if (!redis) return 0;
+
+  const cleaned = Array.from(new Set(cleanSymbols(symbols)));
+  if (!cleaned.length) return 0;
+
+  let removed = 0;
+  for (let i = 0; i < cleaned.length; i += 200) {
+    const group = cleaned.slice(i, i + 200);
+    try {
+      await redis.zrem(SCORE_KEY, ...group);
+      await redis.zrem(SEEN_KEY, ...group);
+      removed += group.length;
+    } catch (error) {
+      console.warn(
+        "[dynamic-universe] remove failed",
+        error instanceof Error ? error.message : error
+      );
+    }
+  }
+
+  return removed;
+}
+
+/**
  * Add or bump symbols. `source` is accepted for call-site compatibility but no
  * longer persisted -- see the note on DynamicUniverseEntry.sources.
  *
