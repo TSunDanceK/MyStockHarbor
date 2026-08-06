@@ -597,78 +597,93 @@ function shuffleArray<T>(arr: T[]) {
   return out;
 }
 
-// Modern stable-API constituent-list endpoints (as of 2026-07-23). The old
-// legacy paths (api/v3/sp500_constituent, api/v3/nasdaq_constituent) were
-// retired by FMP -- confirmed live 403 "Legacy Endpoint ... no longer
-// supported ... prior August 31, 2025" regardless of plan tier. These stable
-// paths are the real, current replacements; they returned 402 "Restricted:
-// not available under your current subscription" on the Starter plan when
-// last checked, but are valid endpoint names, so this call auto-recovers with
-// zero further code changes the moment the FMP plan includes them -- no
-// redeploy needed, since a 402/error response already resolves to an empty
-// array via the same fail-open path used below (falls back to the static
-// CURATED_UNIVERSE/DISCOVERY_MASTER_LIST/EXTRA_LIQUID_GROWTH_LIST names).
-type ConstituentEndpoint =
-  | "sp500-constituent"
-  | "nasdaq-constituent"
-  | "dowjones-constituent";
+// HISTORY, kept because it is easy to re-derive the wrong conclusion here.
+//
+// Discovery candidates used to come from FMP's index-constituent endpoints.
+// The legacy v3 paths (api/v3/sp500_constituent, api/v3/nasdaq_constituent)
+// were retired by FMP -- live 403 "Legacy Endpoint ... no longer supported
+// ... prior August 31, 2025", regardless of plan tier. They were replaced with
+// the stable paths (stable/sp500-constituent etc), which are valid endpoint
+// names but answer 402 "Restricted Endpoint: not available under your current
+// subscription" on this plan.
+//
+// The previous comment here claimed that was harmless because the call would
+// "auto-recover the moment the FMP plan includes them". It was not harmless.
+// The 402 resolved to an empty array silently, so the master list was ALWAYS
+// the ~407-name static fallback, and since pool 353 + CURATED_UNIVERSE 54 = 407
+// exactly, discovery had nothing left to find and the universe could not grow
+// at all. That went unnoticed for as long as it did precisely because the
+// failure was invisible and the comment said not to worry about it.
+//
+// Those calls are now gone, replaced by fetchFmpScreenerSymbols below. If the
+// plan is ever upgraded to serve constituent lists, adding them back to the
+// union in buildExpandedDiscoveryMasterList is a few lines -- but check
+// /api/debug/fmp-endpoints first rather than assuming, which is what that
+// route exists for.
 
-async function fetchFmpConstituentSymbols(
-  endpoint: ConstituentEndpoint,
-  apiKey: string
-) {
+// Minimum market cap for a symbol to enter the discovery candidate pool.
+// $1B keeps the universe to liquid, screenable names -- the same character as
+// the hand-built DISCOVERY_MASTER_LIST. Lower it to widen the net; probing
+// showed 300000000 also returns a full page, so there is room either way.
+const SCREENER_MIN_MARKET_CAP = 1_000_000_000;
+const SCREENER_LIMIT = 1000;
+
+/**
+ * Candidate symbols from FMP's company screener.
+ *
+ * This REPLACED three constituent-endpoint calls (sp500/nasdaq/dowjones) that
+ * answered 402 "Restricted Endpoint: This endpoint is not available under your
+ * current subscription" on this plan -- confirmed by probing them live via
+ * /api/debug/fmp-endpoints on 2026-08-06. fetchFmpConstituentSymbols swallowed
+ * that into [], so all three failed silently on every master-list rebuild and
+ * the list was always the ~407-name static fallback.
+ *
+ * That mattered: pool 353 + CURATED_UNIVERSE 54 = 407 exactly, so discovery had
+ * literally nothing left to find and the universe could never grow no matter
+ * what UNIVERSE_CAP said.
+ *
+ * The screener IS available on this plan and returned 1000 symbols in the same
+ * probe. One call instead of three, and it actually works.
+ */
+async function fetchFmpScreenerSymbols(apiKey: string) {
   await reserveFmpCallSlot();
 
-  const url = `https://financialmodelingprep.com/stable/${endpoint}?apikey=${encodeURIComponent(
-    apiKey
-  )}`;
-
-  const res = await fetch(url, {
-    cache: "no-store",
-    headers: {
-      accept: "application/json,text/plain;q=0.9,*/*;q=0.8",
-    },
-  });
-
-  const text = await res.text();
-
-  let json: any = null;
+  const url =
+    `https://financialmodelingprep.com/stable/company-screener` +
+    `?marketCapMoreThan=${SCREENER_MIN_MARKET_CAP}` +
+    `&exchange=NASDAQ,NYSE` +
+    `&isActivelyTrading=true` +
+    `&limit=${SCREENER_LIMIT}` +
+    `&apikey=${encodeURIComponent(apiKey)}`;
 
   try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    json = null;
-  }
+    const res = await fetch(url, {
+      cache: "no-store",
+      headers: { accept: "application/json" },
+    });
 
-  if (!res.ok || !Array.isArray(json)) {
+    if (!res.ok) return [];
+
+    const json = await res.json().catch(() => null);
+    if (!Array.isArray(json)) return [];
+
+    return json
+      .map((item) => String(item?.symbol ?? "").trim().toUpperCase())
+      .filter(isCleanStockSymbol);
+  } catch {
+    // fail open -- the static lists below still provide a working master list
     return [];
   }
-
-  return json
-    .map((item) => String(item?.symbol ?? "").trim().toUpperCase())
-    .filter(isCleanStockSymbol);
 }
 
 async function buildExpandedDiscoveryMasterList(apiKey: string) {
-  const sp500Symbols = await fetchFmpConstituentSymbols(
-    "sp500-constituent",
-    apiKey
-  );
+  const screenerSymbols = await fetchFmpScreenerSymbols(apiKey);
 
-  const nasdaqSymbols = await fetchFmpConstituentSymbols(
-    "nasdaq-constituent",
-    apiKey
-  );
-
-  const dowSymbols = await fetchFmpConstituentSymbols(
-    "dowjones-constituent",
-    apiKey
-  );
-
+  // Static lists stay in the union: they carry the curated names and a set of
+  // known-good tickers that must be candidates regardless of what the screener
+  // returns on any given day.
   return uniqUpper([
-    ...sp500Symbols,
-    ...nasdaqSymbols,
-    ...dowSymbols,
+    ...screenerSymbols,
     ...EXTRA_LIQUID_GROWTH_LIST,
     ...CURATED_UNIVERSE,
     ...DISCOVERY_MASTER_LIST,
