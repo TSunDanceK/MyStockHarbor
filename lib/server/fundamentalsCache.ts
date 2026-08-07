@@ -256,7 +256,16 @@ export async function cacheScreenerFundamentals(
   return queued;
 }
 
-async function readCachedScreenerFundamentals(
+/**
+ * Redis-ONLY bulk read of the screener-sourced fundamentals rows. Exported
+ * (2026-08-07) because the sector index in lib/server/sectorUniverse.ts needs
+ * the widest possible sector coverage: the per-symbol `fundamentals` rows above
+ * only cover symbols warmFundamentals has actually reached (PROFILE_MAX_PER_RUN
+ * caps that at 120/run), whereas these rows land for every symbol the daily
+ * company-screener call returns. Reading both and preferring whichever has a
+ * sector materially reduces the "unclassified" tail. Body unchanged.
+ */
+export async function readCachedScreenerFundamentals(
   symbols: string[]
 ): Promise<Map<string, ScreenerFundamentalsRow>> {
   const result = new Map<string, ScreenerFundamentalsRow>();
