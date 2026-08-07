@@ -6,6 +6,8 @@ import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { SECTORS, sectorNewsPath } from "@/lib/sectors";
+
 type StockNavKind = "earnings" | "analysis" | "news";
 
 type NavChild = {
@@ -1119,8 +1121,14 @@ export default function SiteHeader({
       {
         kind: "dropdown",
         label: "News",
+        // Wider than the 180px default: "Communication Services" and
+        // "Consumer Defensive" need the room in the Sector News flyout.
+        menuMinWidth: 210,
+        submenuMinWidth: 250,
         isActive: (path) =>
           /^\/stock\/[^/]+\/news$/.test(path) ||
+          path === "/sector" ||
+          /^\/sector\/[^/]+/.test(path) ||
           path === "/upcoming-ipos" ||
           path === "/headlines",
         entries: [
@@ -1130,6 +1138,24 @@ export default function SiteHeader({
             href: stockHref(lastSymbol, "news"),
             stockNav: "news",
             isActive: (path) => /^\/stock\/[^/]+\/news$/.test(path),
+          },
+          {
+            kind: "submenu",
+            label: "Sector News",
+            isActive: (path) => path === "/sector" || /^\/sector\/[^/]+/.test(path),
+            items: [
+              {
+                label: "All Sectors",
+                href: "/sector",
+                isActive: (path) => path === "/sector",
+                emphasize: true,
+              },
+              ...SECTORS.map((sector) => ({
+                label: sector.name,
+                href: sectorNewsPath(sector.slug),
+                isActive: (path: string) => path === sectorNewsPath(sector.slug),
+              })),
+            ],
           },
           {
             kind: "link",
