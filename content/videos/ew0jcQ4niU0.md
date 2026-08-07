@@ -1,6 +1,6 @@
 ---
 ticker: ALAB
-datasheetImage: /images/datasheets/alab-august-2026.jpg
+datasheetImage:
 statLabel1: Market cap
 statValue1: "~$64B"
 statLabel2: Q2 2026 revenue
