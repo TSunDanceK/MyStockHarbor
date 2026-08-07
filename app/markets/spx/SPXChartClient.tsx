@@ -158,6 +158,10 @@ export default function SPXChartClient({
         overlay="None"
         selectedIndicators={["MA50", "MA200"]}
         height={420}
+        // SPX page only: hide PriceChart's built-in
+        // "MyStockHarbor | TradingView" source toggle. The "Open in
+        // TradingView ↗" / "Trade SPX →" CTAs below the chart stay.
+        hideSourceToggle
       />
 
       <div
