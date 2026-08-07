@@ -1,5 +1,14 @@
 import { NextResponse } from "next/server";
 
+import {
+  checkBackfillKey,
+  checkBackfillLockout,
+  clearBackfillFailures,
+  getClientIp,
+  recordBackfillFailure,
+} from "@/lib/server/backfillAuth";
+import { hasFmpCapacity, reserveFmpCallSlot } from "@/lib/server/historyCache";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -27,12 +36,28 @@ export const maxDuration = 60;
 //
 // SAFETY
 // ------
+// * OWNER-ONLY (added 2026-08-07). Requires ?key=<EARNINGS_BACKFILL_KEY> and
+//   reuses lib/server/backfillAuth's IP lockout (3 attempts / 10 min). Until
+//   this route was ungated -- and since every invocation fires one FMP call per
+//   probe OUTSIDE the per-minute guard, roughly 25 requests a minute was enough
+//   to drain the entire 300/min budget. The crons and stock pages that DO
+//   respect the guard would then start failing with no visible cause. That is a
+//   cost/availability hole, not a data leak: the two points below were already
+//   true and still are.
 // * Fixed allowlist of endpoints -- no caller-supplied URLs, so this cannot be
 //   used as an open proxy to FMP with the site's key.
 // * Returns status codes and COUNTS plus a tiny sample, never a full symbol
 //   list, so it is not a data-exfiltration surface.
 // * Never echoes the API key, and strips it from any error text.
-// * ~8 calls per invocation. Not on any cron; run by hand.
+// * Every probe now goes through reserveFmpCallSlot(), so even an authorised
+//   run can never outrun the shared budget, and bails early via hasFmpCapacity
+//   if headroom is short. ~12 calls per invocation. Not on any cron; by hand.
+//
+// The key is deliberately EARNINGS_BACKFILL_KEY rather than CRON_SECRET: that
+// one guards the warm jobs (warm-price-pool alone is ~175 sequential FMP calls
+// per run), and its isAuthorized() fails OPEN when the var is unset. Sharing it
+// with a browser-opened route would put the crons' credential in query strings,
+// access logs and Referer headers. checkBackfillKey fails CLOSED.
 
 type Probe = {
   id: string;
@@ -110,23 +135,53 @@ const PROBES: Probe[] = [
 // and tiny, same safety posture as the rest of this file.
 const TARGET_SYMBOLS = ["NVDA", "F", "COO"];
 
+// Leave room for the crons and live page traffic. This route is a diagnostic;
+// it should always lose a race against real work.
+const FMP_MIN_HEADROOM_CALLS = 60;
+
 function scrub(text: string, apiKey: string) {
   return apiKey ? text.split(apiKey).join("<key>") : text;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const ip = getClientIp(request);
+
+  const lockout = await checkBackfillLockout(ip);
+  if (lockout.locked) {
+    return NextResponse.json(
+      { ok: false, error: "Too many attempts" },
+      { status: 429, headers: { "retry-after": String(lockout.retryAfterSeconds) } }
+    );
+  }
+
+  const submitted = new URL(request.url).searchParams.get("key") ?? "";
+  if (!checkBackfillKey(submitted)) {
+    await recordBackfillFailure(ip);
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+
+  await clearBackfillFailures(ip);
+
   const apiKey = process.env.FMP_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ ok: false, error: "Missing FMP_API_KEY" }, { status: 500 });
   }
 
   const results = [];
+  let skippedForBudget = 0;
 
   for (const probe of PROBES) {
     const joiner = probe.path.includes("?") ? "&" : "?";
     const url = `https://financialmodelingprep.com/stable/${probe.path}${joiner}apikey=${encodeURIComponent(apiKey)}`;
 
+    // Diagnostics must never crowd out the crons or a live page render.
+    if (!(await hasFmpCapacity(1, FMP_MIN_HEADROOM_CALLS))) {
+      skippedForBudget += 1;
+      continue;
+    }
+
     try {
+      await reserveFmpCallSlot();
       const res = await fetch(url, {
         cache: "no-store",
         headers: { accept: "application/json" },
@@ -216,6 +271,10 @@ export async function GET() {
 
   return NextResponse.json({
     probedAt: new Date().toISOString(),
+    // Non-zero means the FMP budget was tight and some probes were skipped
+    // rather than queued -- rerun in a quieter minute before reading anything
+    // into a missing result.
+    skippedForBudget,
     // The headline: can anything here supply a bigger candidate pool than the
     // 407-name static master list?
     largestSymbolSource: bestForDiscovery
