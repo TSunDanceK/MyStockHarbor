@@ -10,7 +10,10 @@ import {
 import { getSectorConstituentCounts } from "@/lib/server/sectorUniverse";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+// ISR, same interval as /headlines and the per-sector news pages. See the note
+// in app/sector/[slug]/news/page.tsx for why this is revalidate rather than
+// force-dynamic, and why it doubles as the abuse protection for these routes.
+export const revalidate = 1800;
 
 const SITE = "https://www.mystockharbor.com";
 
@@ -144,7 +147,7 @@ export default async function SectorIndexPage() {
 
         <p style={footnoteStyle}>
           Performance figures are constituent-weighted across the largest names we track in each
-          sector, not index prints, and can lag the live market by a few minutes.
+          sector, not index prints. This page refreshes every 30 minutes, so they are not live.
         </p>
       </div>
 
