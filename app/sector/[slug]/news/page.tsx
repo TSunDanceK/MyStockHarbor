@@ -30,10 +30,41 @@ import {
 import WhyThisMatters from "@/app/stock/[symbol]/news/WhyThisMatters";
 
 export const runtime = "nodejs";
-// Matches app/stock/[symbol]/news/page.tsx: the underlying data is already
-// unstable_cache'd for an hour in lib/sector-news-data.ts, but Vercel's Full
-// Route Cache would otherwise serve HTML built at deploy time indefinitely.
-export const dynamic = "force-dynamic";
+
+// ISR, matching /headlines (app/headlines/page.tsx, revalidate = 1800) -- the
+// site's other non-ticker news feed.
+//
+// Deliberately NOT force-dynamic, which is what app/stock/[symbol]/news/page.tsx
+// uses. That page needs it because Vercel's Full Route Cache was serving HTML
+// built at deploy time INDEFINITELY. Time-based revalidation doesn't have that
+// failure mode -- the page regenerates on a timer regardless of when it was
+// last deployed -- so the reason for force-dynamic doesn't apply here.
+//
+// This is also the cheapest abuse protection available on these pages. Under
+// force-dynamic every single request re-ran the whole server component: several
+// Upstash commands and a Vercel invocation per view, scrapers included. Under
+// ISR the edge serves cached HTML and the component runs twice an hour per
+// sector no matter how hard the URL is hit. FMP was never exposed either way --
+// the feed is unstable_cache'd for an hour inside lib/sector-news-data.ts.
+//
+// Cost: the panels are up to 30 min staler than they were. The news feed loses
+// nothing (already hourly), but Top Movers is intraday, so the copy on that
+// card says so rather than implying live prices.
+export const revalidate = 1800;
+
+// All 11 slugs are known at build time, so prerender them rather than leaving
+// each page to be generated on its first request. Without this the route builds
+// as on-demand-only: the Full Route Cache still applies, but the first visitor
+// to each sector after every deploy pays the full render. Eleven pages is a
+// trivial build cost and it makes the caching unambiguous -- static HTML from
+// deploy, refreshed on a timer.
+//
+// dynamicParams stays at its default (true), so an unrecognised slug still
+// renders on demand and hits the notFound() below rather than 404ing at the
+// routing layer with no page.
+export function generateStaticParams() {
+  return SECTORS.map((sector) => ({ slug: sector.slug }));
+}
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -366,8 +397,8 @@ export default async function SectorNewsPage({ params }: Props) {
                   ))}
                 </div>
                 <div style={sourceFooterStyle}>
-                  Context only, not advice. Figures are drawn from cached market data and can lag
-                  live prices by a few minutes.
+                  Context only, not advice. Figures are drawn from cached market data and this
+                  page refreshes every 30 minutes, so they are not live prices.
                 </div>
               </section>
             </div>
@@ -764,8 +795,9 @@ function SectorMoversCard({ movers, sectorName }: { movers: SectorMovers; sector
             ))}
           </div>
           <div style={sourceFooterStyle}>
-            From {movers.sampled} {sectorName.toLowerCase()} names with a recent quote. Prices can
-            lag the live market by a few minutes.
+            From {movers.sampled} {sectorName.toLowerCase()} names. This page is cached for 30
+            minutes and the underlying quotes rotate every ~15, so treat these as end-of-period
+            rather than live prices.
           </div>
         </>
       ) : (
