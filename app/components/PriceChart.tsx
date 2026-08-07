@@ -245,8 +245,9 @@ type Props = {
   // built-in "MyStockHarbor | TradingView" source toggle. Used by
   // DashboardClient, which owns a 3-way Basic / Interactive / TradingView mode
   // switch itself and renders the TradingView embed and Interactive chart
-  // separately. Default false preserves the standalone behaviour for other
-  // callers (SPXChartClient, InsightPostClient).
+  // separately. Also set by SPXChartClient (/markets/spx), which wants the
+  // MyStockHarbor SVG chart only. Default false preserves the standalone
+  // behaviour for other callers (InsightPostClient).
   hideSourceToggle?: boolean;
 };
 
