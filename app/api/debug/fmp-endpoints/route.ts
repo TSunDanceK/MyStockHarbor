@@ -68,6 +68,36 @@ const PROBES: Probe[] = [
     path: "company-screener?marketCapMoreThan=1000000000&exchange=NASDAQ,NYSE&isActivelyTrading=true&isEtf=false&isFund=false&limit=1000",
     note: "CANDIDATE FIX -- same filter plus isEtf=false&isFund=false",
   },
+
+  // SECTOR NEWS (2026-08-07). Two questions the sector pages need answered,
+  // both cheap and both unanswerable from the repo:
+  //
+  //  1. Is there a real sector-performance print on this plan? If either probe
+  //     below returns rows, it is ONE call for all 11 sectors and beats the
+  //     constituent-weighted proxy the pages currently compute from the price
+  //     pool. If both 402/403, the proxy stands and the pages keep saying so.
+  //  2. Does stable/news/stock actually honour a multi-symbol `symbols=` list?
+  //     lib/sector-news-data.ts assumes it does (the per-stock path passes one
+  //     symbol into a parameter documented as a list). `uniqueSymbols` on this
+  //     probe answers it directly: a list-aware endpoint returns articles
+  //     tagged across many of the requested tickers, a single-symbol one does
+  //     not. Note this probe's rows are ARTICLES, not companies, so `rows` here
+  //     means article count.
+  {
+    id: "sector-performance-snapshot",
+    path: "sector-performance-snapshot",
+    note: "SECTOR NEWS -- 1 call for all 11 sectors if this works on Starter",
+  },
+  {
+    id: "historical-sector-performance",
+    path: "historical-sector-performance?sector=Technology",
+    note: "SECTOR NEWS -- fallback shape for longer windows",
+  },
+  {
+    id: "news-stock-multi-symbol",
+    path: "news/stock?symbols=AAPL,MSFT,NVDA,AVGO,ORCL,CRM,AMD,ADBE,CSCO,ACN&limit=100",
+    note: "SECTOR NEWS -- does symbols= accept a LIST? (rows = articles, not companies)",
+  },
 ];
 
 // STEP 1 (2026-08-06 follow-up session): is company-screener's price/volume
