@@ -563,6 +563,53 @@ export async function getDailyHistoryBulk(
   return result;
 }
 
+/**
+ * Cache-ONLY bulk history read: the pipelined half of getDailyHistoryBulk with
+ * the on-miss fetch removed. Added 2026-08-07 for the sector breadth panel,
+ * which needs closes for ~20 symbols on a page render and must NEVER spend an
+ * FMP call to get them -- getDailyHistoryBulk's miss path would fire up to one
+ * fetch per uncached symbol, which is fine for a cron and wrong for a render.
+ * Uncached symbols are simply absent from the returned map; the caller reports
+ * how many it actually had.
+ */
+export async function getCachedDailyHistoryBulk(
+  symbols: string[]
+): Promise<Map<string, Point[]>> {
+  const result = new Map<string, Point[]>();
+
+  const normalized = Array.from(
+    new Set(symbols.map((symbol) => normalizeSymbol(symbol)).filter(Boolean))
+  );
+  if (!normalized.length || !redis) return result;
+
+  try {
+    const pipeline = redis.pipeline();
+    for (const symbol of normalized) {
+      pipeline.get<HistoryCacheEntry | null>(getHistoryRedisKey(symbol));
+    }
+
+    const entries = await pipeline.exec<(HistoryCacheEntry | null)[]>();
+
+    normalized.forEach((symbol, i) => {
+      const entry = entries[i];
+      if (
+        entry &&
+        typeof entry === "object" &&
+        entry.symbol === symbol &&
+        entry.status === "qualified" &&
+        Array.isArray(entry.daily) &&
+        entry.daily.length
+      ) {
+        result.set(symbol, entry.daily);
+      }
+    });
+  } catch {
+    // Best-effort: an empty map means the caller shows fewer names, not an error.
+  }
+
+  return result;
+}
+
 export async function getCachedDailyHistory(symbol: string) {
   const normalized = normalizeSymbol(symbol);
   const cached = await readHistoryEntry(normalized);

@@ -44,7 +44,7 @@ export type NewsItem = {
   fmpSymbolMatched?: boolean;
 };
 
-type FmpStockNewsItem = {
+export type FmpStockNewsItem = {
   symbol?: string;
   symbols?: string[] | string;
   ticker?: string;
@@ -62,7 +62,7 @@ type FmpStockNewsItem = {
   link?: string;
 };
 
-type ScoreTone = "green" | "yellow" | "red";
+export type ScoreTone = "green" | "yellow" | "red";
 
 export type NewsScoreResult = {
   score: number;
@@ -139,7 +139,7 @@ function decodeHtml(value: string) {
 // collapses whitespace; both cleanRssDescription (below) and the title
 // handling in parseRss/fetchFmpStockNews route through it so there's a
 // single implementation to keep in sync.
-function stripHtmlTags(value: string) {
+export function stripHtmlTags(value: string) {
   return decodeHtml(
     value
       .replace(/<!\[CDATA\[(.*?)\]\]>/g, "$1")
@@ -154,11 +154,11 @@ function stripHtmlTags(value: string) {
 // is a malformed auto-generated snippet rather than real editorial content
 // -- better to drop it than show a "cleaned" but still nonsensical
 // duplicate-of-itself headline.
-function containsHtmlMarkup(value: string) {
+export function containsHtmlMarkup(value: string) {
   return /<[a-z][^>]*>/i.test(value);
 }
 
-function cleanRssDescription(value: string | null) {
+export function cleanRssDescription(value: string | null) {
   if (!value) return null;
   const cleaned = stripHtmlTags(value);
   return cleaned || null;
@@ -592,7 +592,7 @@ async function fetchFmpStockNews(symbol: string): Promise<NewsItem[]> {
   return [];
 }
 
-function isVideoOrLowQualitySource(item: NewsItem) {
+export function isVideoOrLowQualitySource(item: NewsItem) {
   const combined = `${item.source ?? ""} ${item.link} ${item.title}`.toLowerCase();
 
   return [
@@ -653,7 +653,7 @@ async function fetchNews(symbol: string, companyName: string): Promise<NewsItem[
   ]).slice(0, 50);
 }
 
-function isEarningsNewsItem(item: NewsItem) {
+export function isEarningsNewsItem(item: NewsItem) {
   const text = `${item.title} ${item.description ?? ""}`.toLowerCase();
   return keywordHits(text, [
     "earnings",
@@ -747,7 +747,7 @@ function isClearlyAboutRequestedCompany(item: NewsItem, symbol: string, companyN
   return false;
 }
 
-function mergeNewsPools(pools: NewsItem[][]): NewsItem[] {
+export function mergeNewsPools(pools: NewsItem[][]): NewsItem[] {
   const merged: NewsItem[] = [];
   const seenLinks = new Set<string>();
 
@@ -830,7 +830,7 @@ function trendLabel(lastClose: number | null, ma50: number | null, ma200: number
   return "Mixed / range";
 }
 
-function keywordHits(text: string, words: string[]) {
+export function keywordHits(text: string, words: string[]) {
   const lower = text.toLowerCase();
   return words.some((word) => lower.includes(word));
 }
@@ -843,12 +843,12 @@ function keywordHits(text: string, words: string[]) {
 // than two independent literal arrays that could drift out of sync.
 const EARNINGS_EXCEPTION_SOURCES = ["benzinga", "zacks"];
 
-function isEarningsExceptionSource(item: NewsItem) {
+export function isEarningsExceptionSource(item: NewsItem) {
   const source = (item.source ?? "").toLowerCase();
   return EARNINGS_EXCEPTION_SOURCES.some((entry) => source.includes(entry));
 }
 
-function isLowValueNewsItem(item: NewsItem) {
+export function isLowValueNewsItem(item: NewsItem) {
   const title = item.title.toLowerCase();
   const source = (item.source ?? "").toLowerCase();
 
@@ -903,7 +903,7 @@ function isLowValueNewsItem(item: NewsItem) {
 // the same theme at once it reads as duplicate coverage even though each
 // headline is technically distinct. Those are routed to the lighter feed
 // instead, alongside older items -- see mainFeedNews below.
-function isMajorWireSource(item: NewsItem) {
+export function isMajorWireSource(item: NewsItem) {
   const source = (item.source ?? "").toLowerCase();
 
   // FMP's own generic label when the underlying item has no specific
@@ -914,7 +914,7 @@ function isMajorWireSource(item: NewsItem) {
   return ["reuters", "bloomberg", "ap"].some((name) => source.includes(name));
 }
 
-function scoreNewsItem(item: NewsItem) {
+export function scoreNewsItem(item: NewsItem) {
   const title = item.title.toLowerCase();
   const source = (item.source ?? "").toLowerCase();
   let score = 0;
@@ -1085,7 +1085,7 @@ function storySignature(item: NewsItem) {
   return text.split(" ").slice(0, 7).join(" ");
 }
 
-function dedupeNews(items: NewsItem[]): NewsItem[] {
+export function dedupeNews(items: NewsItem[]): NewsItem[] {
   const seenLinks = new Set<string>();
   const seenStories = new Set<string>();
   const deduped: NewsItem[] = [];
@@ -1138,7 +1138,7 @@ function rankNews(news: NewsItem[], symbol = "", companyName = "") {
   );
 }
 
-function scoreNews(news: NewsItem[]): NewsScoreResult {
+export function scoreNews(news: NewsItem[]): NewsScoreResult {
   if (!news.length) {
     return {
       score: 50,
@@ -1347,13 +1347,13 @@ function scoreNews(news: NewsItem[]): NewsScoreResult {
 }
 
 
-function scoreToTone(score: number): ScoreTone {
+export function scoreToTone(score: number): ScoreTone {
   if (score >= 58) return "green";
   if (score <= 42) return "red";
   return "yellow";
 }
 
-function scoreToNewsLabel(score: number) {
+export function scoreToNewsLabel(score: number) {
   if (score >= 66) return "Bullish";
   if (score >= 58) return "Slightly Bullish";
   if (score <= 34) return "Bearish";
@@ -1361,13 +1361,13 @@ function scoreToNewsLabel(score: number) {
   return "Neutral";
 }
 
-function scoreToEarningsLabel(score: number) {
+export function scoreToEarningsLabel(score: number) {
   if (score >= 64) return "Positive earnings tone";
   if (score <= 36) return "Weak earnings tone";
   return "Mixed earnings tone";
 }
 
-function getEarningsQualityGuardrails(items: NewsItem[]) {
+export function getEarningsQualityGuardrails(items: NewsItem[]) {
   const cleaned = items.filter((item) => !isLowValueNewsItem(item));
   const actualResults = cleaned
     .filter((item) => isActualEarningsResultNews(item))
@@ -1613,7 +1613,7 @@ function isAnalystOrPreviewEarningsItem(item: NewsItem) {
   ]);
 }
 
-function isActualEarningsResultNews(item: NewsItem) {
+export function isActualEarningsResultNews(item: NewsItem) {
   const text = headlineText(item);
 
   if (isRoutineEarningsAnnouncement(item)) return false;
@@ -1718,7 +1718,7 @@ function isActualEarningsResultNews(item: NewsItem) {
   return true;
 }
 
-function rankEarningsNews(news: NewsItem[]) {
+export function rankEarningsNews(news: NewsItem[]) {
   return dedupeNews(
     [...news].sort((a, b) => {
       const aActual = isActualEarningsResultNews(a) ? 1 : 0;
@@ -1860,7 +1860,7 @@ function applyCatalystFloor(score: number, floor: number | null) {
   return Math.max(score, floor);
 }
 
-function scoreEarnings(news: NewsItem[]): EarningsScoreResult {
+export function scoreEarnings(news: NewsItem[]): EarningsScoreResult {
   const ranked = rankEarningsNews(news);
   const earningsItems = ranked.filter((item) => isActualEarningsResultNews(item));
 
@@ -1979,6 +1979,46 @@ function scoreEarnings(news: NewsItem[]): EarningsScoreResult {
   };
 }
 
+/**
+ * Newest-first by pubDate. Lifted from inside buildStockNewsBaseData to module
+ * scope (2026-08-07) so the sector news builder can reuse the exact same feed
+ * shaping rather than growing a second, drifting copy. Body unchanged.
+ */
+export const newestFirst = (items: NewsItem[]) =>
+  [...items].sort((a, b) => {
+    const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+    const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
+
+    return bTime - aTime;
+  });
+
+/**
+ * Collapses a feed to one article per calendar date. Lifted to module scope
+ * alongside newestFirst above; body unchanged.
+ */
+export function oneArticlePerDate(items: NewsItem[]) {
+  const seenDates = new Set<string>();
+  const filtered: NewsItem[] = [];
+
+  for (const item of items) {
+    const dateKey = item.pubDate
+      ? new Date(item.pubDate).toISOString().slice(0, 10)
+      : "unknown";
+
+    // Actual earnings-result headlines are exempt from the per-date cap.
+    // On earnings day it's normal for several distinct, legitimate stories
+    // (beat/miss, guidance, stock reaction) to land on the same date, and
+    // collapsing them down to one hid real signal right when it mattered
+    // most. Non-earnings items on an already-seen date still collapse.
+    if (seenDates.has(dateKey) && !isActualEarningsResultNews(item)) continue;
+
+    seenDates.add(dateKey);
+    filtered.push(item);
+  }
+
+  return filtered;
+}
+
 async function buildStockNewsBaseData(
   symbol: string,
   options: BuildOptions
@@ -2082,37 +2122,6 @@ async function buildStockNewsBaseData(
       isMajorWireSource(item) ||
       (isEarningsExceptionSource(item) && isActualEarningsResultNews(item))
   );
-
-const newestFirst = (items: NewsItem[]) =>
-  [...items].sort((a, b) => {
-    const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
-    const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
-
-    return bTime - aTime;
-  });
-
-function oneArticlePerDate(items: NewsItem[]) {
-  const seenDates = new Set<string>();
-  const filtered: NewsItem[] = [];
-
-  for (const item of items) {
-    const dateKey = item.pubDate
-      ? new Date(item.pubDate).toISOString().slice(0, 10)
-      : "unknown";
-
-    // Actual earnings-result headlines are exempt from the per-date cap.
-    // On earnings day it's normal for several distinct, legitimate stories
-    // (beat/miss, guidance, stock reaction) to land on the same date, and
-    // collapsing them down to one hid real signal right when it mattered
-    // most. Non-earnings items on an already-seen date still collapse.
-    if (seenDates.has(dateKey) && !isActualEarningsResultNews(item)) continue;
-
-    seenDates.add(dateKey);
-    filtered.push(item);
-  }
-
-  return filtered;
-}
 
 const primaryDetailedNews = oneArticlePerDate(newestFirst(mainFeedNews)).slice(0, maxDetailedItems);
 
