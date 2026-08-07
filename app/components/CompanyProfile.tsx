@@ -1,4 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
+import Link from "next/link";
+
+import { sectorNewsPath, sectorSlugFromLabel } from "@/lib/sectors";
 
 // -- Company profile card -----------------------------------------------------
 // Server-rendered "About" block built from the FMP company profile endpoint.
@@ -98,9 +101,28 @@ export default function CompanyProfile({
       ? `${fmtMoney2(profile.rangeLow)} – ${fmtMoney2(profile.rangeHigh)}`
       : null;
 
+  // Sector links through to that sector's news page when we recognise the FMP
+  // label. Unrecognised/absent sectors just render as plain text as before.
+  const sectorSlug = sectorSlugFromLabel(profile.sector);
+
   // label → value; only rows with a value are rendered.
-  const rows: Array<{ label: string; value: string | null; href?: string }> = [
-    { label: "Sector", value: profile.sector },
+  //
+  // `external` matters: the href branch below was written for the Website row
+  // and hardcoded target="_blank" + rel="nofollow". Reusing it as-is for an
+  // INTERNAL link would open our own page in a new tab and pass no internal
+  // link equity, so internal rows opt out via this flag.
+  const rows: Array<{
+    label: string;
+    value: string | null;
+    href?: string;
+    external?: boolean;
+  }> = [
+    {
+      label: "Sector",
+      value: profile.sector,
+      href: sectorSlug ? sectorNewsPath(sectorSlug) : undefined,
+      external: false,
+    },
     { label: "Industry", value: profile.industry },
     { label: "CEO", value: profile.ceo },
     { label: "Employees", value: fmtInt(profile.employees) },
@@ -121,6 +143,7 @@ export default function CompanyProfile({
           ? profile.website
           : `https://${profile.website}`
         : undefined,
+      external: true,
     },
   ].filter((r) => r.value);
 
@@ -132,7 +155,7 @@ export default function CompanyProfile({
   const statBoxes = rows.map((r) => (
     <div key={r.label} style={cellStyle}>
       <div style={cellLabelStyle}>{r.label}</div>
-      {r.href ? (
+      {r.href && r.external ? (
         <a
           href={r.href}
           target="_blank"
@@ -141,6 +164,13 @@ export default function CompanyProfile({
         >
           {r.value}
         </a>
+      ) : r.href ? (
+        <Link
+          href={r.href}
+          style={{ ...cellValueStyle, color: "#93c5fd", textDecoration: "none" }}
+        >
+          {r.value}
+        </Link>
       ) : (
         <div style={cellValueStyle}>{r.value}</div>
       )}
