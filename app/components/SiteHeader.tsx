@@ -1146,11 +1146,24 @@ export default function SiteHeader({
         ],
       },
       {
-        kind: "link",
-        label: "Stock Analysis",
-        href: stockHref(lastSymbol, "analysis"),
-        stockNav: "analysis",
-        isActive: (path) => /^\/stock\/[^/]+$/.test(path),
+        kind: "dropdown",
+        label: "Analysis",
+        isActive: (path) => /^\/stock\/[^/]+$/.test(path) || path === "/markets/spx",
+        entries: [
+          {
+            kind: "link",
+            label: "Stock Analysis",
+            href: stockHref(lastSymbol, "analysis"),
+            stockNav: "analysis",
+            isActive: (path) => /^\/stock\/[^/]+$/.test(path),
+          },
+          {
+            kind: "link",
+            label: "SPX Analysis",
+            href: "/markets/spx",
+            isActive: (path) => path === "/markets/spx",
+          },
+        ],
       },
       {
         kind: "link",
