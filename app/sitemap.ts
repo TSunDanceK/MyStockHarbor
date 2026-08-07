@@ -4,6 +4,7 @@ import { getAllVideoIds } from "@/lib/videoContent";
 import { getAllBottleneckPosts } from "@/lib/bottlenecks";
 import { LESSONS } from "@/app/learn/lessons";
 import { priorityStocks, uniqueEtfs } from "@/lib/curatedSymbols";
+import { SECTORS, sectorNewsPath } from "@/lib/sectors";
 
 const baseUrl = "https://www.mystockharbor.com";
 
@@ -110,6 +111,16 @@ const seoGuides = [
   "/oversold-stocks",
   "/bullish-divergence-stocks",
   "/bearish-divergence-stocks",
+
+  // Sector news (added 2026-08-07). Listed here as well as in the dedicated
+  // sectorEntries block below for one specific reason: the daily insight-post
+  // workflow verifies every internal link against THIS array (repo CLAUDE.md,
+  // step 4), so a page absent from it can never be linked from a post. The
+  // duplicate is harmless -- entries are deduped by URL below, and
+  // sectorEntries is placed ahead of seoGuideEntries so the hourly/0.75
+  // version is the one that survives rather than the weekly/0.8 default.
+  "/sector",
+  ...SECTORS.map((sector) => sectorNewsPath(sector.slug)),
 ];
 
 // coreMegaCaps / retailInterestStocks / recognizableMidCaps / etfs and the
@@ -239,8 +250,28 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.68,
   }));
 
+  // Sector news: one hub plus one page per sector. changeFrequency mirrors
+  // stockNewsEntries ("hourly") because the underlying feed refreshes on the
+  // hour, and these sit ahead of seoGuideEntries in `entries` so they win the
+  // URL dedupe below against their seoGuides listing.
+  const sectorEntries: MetadataRoute.Sitemap = [
+    {
+      url: toAbsoluteUrl("/sector"),
+      lastModified: now,
+      changeFrequency: "daily" as const,
+      priority: 0.75,
+    },
+    ...SECTORS.map((sector) => ({
+      url: toAbsoluteUrl(sectorNewsPath(sector.slug)),
+      lastModified: now,
+      changeFrequency: "hourly" as const,
+      priority: 0.75,
+    })),
+  ];
+
   const entries: MetadataRoute.Sitemap = [
     ...mainPageEntries,
+    ...sectorEntries,
     ...marketPageEntries,
     ...seoGuideEntries,
     ...insightEntries,
