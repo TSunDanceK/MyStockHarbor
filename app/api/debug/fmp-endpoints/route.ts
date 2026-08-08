@@ -94,36 +94,73 @@ const PROBES: Probe[] = [
     note: "CANDIDATE FIX -- same filter plus isEtf=false&isFund=false",
   },
 
-  // SECTOR NEWS (2026-08-07). Two questions the sector pages need answered,
-  // both cheap and both unanswerable from the repo:
+  // SECTOR NEWS (2026-08-07). Does stable/news/stock actually honour a
+  // multi-symbol `symbols=` list? lib/sector-news-data.ts assumes it does (the
+  // per-stock path passes one symbol into a parameter documented as a list),
+  // and the whole ~22-44 calls/hour cost model rests on it. `uniqueSymbols`
+  // answers it directly: a list-aware endpoint returns articles tagged across
+  // many of the requested tickers, a single-symbol one does not. Note this
+  // probe's rows are ARTICLES, not companies, so `rows` here means article
+  // count.
   //
-  //  1. Is there a real sector-performance print on this plan? If either probe
-  //     below returns rows, it is ONE call for all 11 sectors and beats the
-  //     constituent-weighted proxy the pages currently compute from the price
-  //     pool. If both 402/403, the proxy stands and the pages keep saying so.
-  //  2. Does stable/news/stock actually honour a multi-symbol `symbols=` list?
-  //     lib/sector-news-data.ts assumes it does (the per-stock path passes one
-  //     symbol into a parameter documented as a list). `uniqueSymbols` on this
-  //     probe answers it directly: a list-aware endpoint returns articles
-  //     tagged across many of the requested tickers, a single-symbol one does
-  //     not. Note this probe's rows are ARTICLES, not companies, so `rows` here
-  //     means article count.
-  {
-    id: "sector-performance-snapshot",
-    path: "sector-performance-snapshot",
-    note: "SECTOR NEWS -- 1 call for all 11 sectors if this works on Starter",
-  },
-  {
-    id: "historical-sector-performance",
-    path: "historical-sector-performance?sector=Technology",
-    note: "SECTOR NEWS -- fallback shape for longer windows",
-  },
+  // ANSWERED 2026-08-07: 10 symbols requested, 100 rows, uniqueSymbols 10.
+  // It is list-aware. Kept as a regression check -- if FMP ever narrows this,
+  // the sector pages get quietly worse rather than erroring, so it is worth
+  // being able to re-confirm in one call.
+  //
+  // (The sector-performance question lives in buildDatedProbes below, because
+  // those two endpoints need a date parameter.)
   {
     id: "news-stock-multi-symbol",
     path: "news/stock?symbols=AAPL,MSFT,NVDA,AVGO,ORCL,CRM,AMD,ADBE,CSCO,ACN&limit=100",
     note: "SECTOR NEWS -- does symbols= accept a LIST? (rows = articles, not companies)",
   },
 ];
+
+// The two sector-performance probes need a date, and the first run (2026-08-07)
+// got this wrong in a way worth not repeating: `sector-performance-snapshot`
+// was sent bare and answered
+//
+//   400 "Query Error: Invalid or missing query parameter - date"
+//
+// which reads as failure but is the opposite. Every genuinely plan-restricted
+// endpoint in that same response (sp500/nasdaq/dowjones-constituent) answered
+// 402 "Restricted Endpoint ... upgrade your plan". A 400 naming a missing
+// parameter means the plan check PASSED and the request reached validation --
+// so the endpoint is probably available and was simply never exercised.
+//
+// Built per request rather than hardcoded so the diagnostic cannot rot into
+// asking about a date months in the past.
+function buildDatedProbes(now: Date): Probe[] {
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+
+  // Ask about the last completed session, not today: before the close there is
+  // no snapshot to return, and an empty 200 is ambiguous with a bad request.
+  // Walk back at least one day, then off any weekend. Holidays aren't handled
+  // -- an empty 200 on a holiday still proves availability, which is the
+  // question being asked.
+  const day = new Date(now);
+  day.setUTCDate(day.getUTCDate() - 1);
+  while (day.getUTCDay() === 0 || day.getUTCDay() === 6) {
+    day.setUTCDate(day.getUTCDate() - 1);
+  }
+
+  const to = iso(day);
+  const from = iso(new Date(day.getTime() - 30 * 24 * 60 * 60 * 1000));
+
+  return [
+    {
+      id: "sector-performance-snapshot",
+      path: `sector-performance-snapshot?date=${to}`,
+      note: `SECTOR NEWS -- 1 call for all 11 sectors if this works on Starter (date=${to})`,
+    },
+    {
+      id: "historical-sector-performance",
+      path: `historical-sector-performance?sector=Technology&from=${from}&to=${to}`,
+      note: `SECTOR NEWS -- longer windows; NOTE averageChange is equal-weighted and split per exchange, so it is a DIFFERENT metric from the cap-weighted proxy the pages compute (${from}..${to})`,
+    },
+  ];
+}
 
 // STEP 1 (2026-08-06 follow-up session): is company-screener's price/volume
 // live-ish or a stale multi-day average? The debug sample above only ever
@@ -170,7 +207,9 @@ export async function GET(request: Request) {
   const results = [];
   let skippedForBudget = 0;
 
-  for (const probe of PROBES) {
+  const probes = [...PROBES, ...buildDatedProbes(new Date())];
+
+  for (const probe of probes) {
     const joiner = probe.path.includes("?") ? "&" : "?";
     const url = `https://financialmodelingprep.com/stable/${probe.path}${joiner}apikey=${encodeURIComponent(apiKey)}`;
 
