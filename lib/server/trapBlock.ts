@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { withRedisTimeout } from "./redisGuardTimeout";
 
 /**
  * Redis-backed temporary block list for the honeypot trap
@@ -19,9 +20,15 @@ import { Redis } from "@upstash/redis";
  * claude/firewall-ja4-repeat-offenders-selfblock-2026-07-21.md.
  */
 
+// retries: 1 because isTrapBlocked() below runs in middleware, on every
+// request, under a 400ms budget (redisGuardTimeout.ts). The SDK default of
+// 5 attempts with exponential backoff cannot finish inside that budget, so
+// the extra attempts only ever burn Upstash quota on a request whose answer
+// has already been abandoned. One quick retry still absorbs a single
+// dropped packet, which is the only retry that can help here.
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv({ retry: { retries: 1, backoff: () => 50 } })
     : null;
 
 const IP_PREFIX = "msh:trap-block:ip:v1";
@@ -52,6 +59,10 @@ function ja4Key(ja4: string): string {
  * TRAP_BLOCK_DAYS. Both writes go through a single pipeline round-trip.
  * Best-effort: a Redis hiccup here means this one offender doesn't get
  * blocked, never that anything breaks for anyone else.
+ *
+ * Deliberately NOT time-bounded like the read below: this runs in an API
+ * route, not middleware, and a write that is abandoned halfway leaves the
+ * offender unblocked -- worth waiting the extra moment for.
  */
 export async function blockOffender(
   ip: string,
@@ -81,6 +92,13 @@ export async function blockOffender(
  * offender is denied everywhere on the site, not just the path that
  * originally caught them. Uses a single mget round-trip when both an IP and
  * a JA4 are available, rather than two separate calls.
+ *
+ * Time-bounded via withRedisTimeout: this is the FIRST Redis call every
+ * request on the site makes, so an unbounded await here hangs middleware
+ * and takes the whole site down (2026-08-10 13:19-13:21 UTC, 12 clients,
+ * 25s middleware timeouts). The old bare try/catch could not catch that,
+ * because a slow-but-reachable Redis raises no error. See
+ * redisGuardTimeout.ts for the full write-up.
  */
 export async function isTrapBlocked(
   ip: string,
@@ -93,12 +111,20 @@ export async function isTrapBlocked(
   if (ja4) keys.push(ja4Key(ja4));
   if (keys.length === 0) return false;
 
-  try {
-    const results = await redis.mget<(number | null)[]>(...keys);
-    return results.some((value) => value != null);
-  } catch {
-    // Fail open -- never treat a Redis hiccup as "this requester is
-    // blocked".
-    return false;
-  }
+  // Bind to a const AFTER the null guard: strict-mode narrowing is not
+  // guaranteed to survive into the closure below, and this is the pattern
+  // used elsewhere in the codebase for exactly that reason.
+  const client = redis;
+
+  return withRedisTimeout(
+    async () => {
+      const results = await client.mget<(number | null)[]>(...keys);
+      return results.some((value) => value != null);
+    },
+    // Fail open -- never treat a Redis hiccup, or a slow one, as "this
+    // requester is blocked".
+    false,
+    "trap-block",
+    `ip=${ip} ja4=${ja4 ?? "none"}`
+  );
 }
