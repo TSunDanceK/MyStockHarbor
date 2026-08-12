@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { trackTickerInterest } from "@/lib/trackTickerInterest";
 import {
   TickerJumpDropdown,
-  useTickerJumpAnchor,
+  useDismissOnOutside,
   type SymbolResult,
 } from "@/app/components/TickerJumpDropdown";
 
@@ -17,7 +17,7 @@ export default function EarningsSymbolPicker({
   currentSymbol,
 }: EarningsSymbolPickerProps) {
   const router = useRouter();
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
 
   const [query, setQuery] = useState(currentSymbol);
   const [results, setResults] = useState<SymbolResult[]>([]);
@@ -27,9 +27,6 @@ export default function EarningsSymbolPicker({
     name: "",
     exchange: "",
   });
-
-  // Shared positioning + page scroll lock -- see TickerJumpDropdown.tsx.
-  const anchorRect = useTickerJumpAnchor(open, inputRef);
 
   useEffect(() => {
     setQuery(currentSymbol);
@@ -103,13 +100,10 @@ export default function EarningsSymbolPicker({
 
   const canGo = Boolean(selected?.symbol);
 
-  // Tap-outside / Escape. Leaves `query` and `selected` alone, which is
-  // what makes the "Open earnings ->" button below still usable: dismiss
-  // the dropdown with one tap, then press the button.
-  const dismiss = useCallback(() => {
-    setOpen(false);
-    inputRef.current?.blur();
-  }, []);
+  // Tap-outside / Escape. Leaves `query` and `selected` alone so the
+  // "Open earnings ->" button beside the input still works afterwards.
+  const dismiss = useCallback(() => setOpen(false), []);
+  useDismissOnOutside(wrapRef, open, dismiss);
 
   function chooseResult(result: SymbolResult) {
     const clean = result.symbol.trim().toUpperCase();
@@ -140,7 +134,7 @@ export default function EarningsSymbolPicker({
   }
 
   return (
-    <div className="earningsSymbolPicker" style={{ marginTop: 20, maxWidth: 660 }}>
+    <div ref={wrapRef} className="earningsSymbolPicker" style={{ marginTop: 20, maxWidth: 660 }}>
       <style>{`
         @media (max-width: 720px) {
           .earningsSymbolPicker {
@@ -206,7 +200,6 @@ export default function EarningsSymbolPicker({
       >
         <div className="earningsSymbolPickerInputWrap" style={{ position: "relative", width: 430, maxWidth: "100%" }}>
           <input
-            ref={inputRef}
             className="earningsSymbolPickerInput"
             value={query}
             onChange={(event) => {
@@ -229,18 +222,10 @@ export default function EarningsSymbolPicker({
               outline: "none",
               textTransform: "uppercase",
               boxSizing: "border-box",
-              position: "relative",
-              zIndex: 10000,
             }}
           />
 
-          <TickerJumpDropdown
-            open={open}
-            rect={anchorRect}
-            results={results}
-            onChoose={chooseResult}
-            onDismiss={dismiss}
-          />
+          <TickerJumpDropdown open={open} results={results} onChoose={chooseResult} />
 
           {!canGo && query.trim() ? (
             <div
