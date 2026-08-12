@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { trackTickerInterest } from "@/lib/trackTickerInterest";
 import {
   TickerJumpDropdown,
-  useTickerJumpAnchor,
+  useDismissOnOutside,
   type SymbolResult,
 } from "@/app/components/TickerJumpDropdown";
 
@@ -15,7 +15,7 @@ type StockTickerJumpProps = {
 
 export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps) {
   const router = useRouter();
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
 
   const [query, setQuery] = useState(currentSymbol);
   const [results, setResults] = useState<SymbolResult[]>([]);
@@ -25,12 +25,6 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
     name: "",
     exchange: "",
   });
-
-  // Positioning + the page scroll lock now live in TickerJumpDropdown.
-  // This component previously owned a `dropdownRect` state updated from a
-  // capture-phase scroll listener, which made the panel lag behind the
-  // input while scrolling on mobile. See that file for the full write-up.
-  const anchorRect = useTickerJumpAnchor(open, inputRef);
 
   useEffect(() => {
     setQuery(currentSymbol);
@@ -87,10 +81,8 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
   // Tap-outside / Escape. Deliberately leaves `query` and `selected`
   // untouched: dismissing means "I didn't pick anything", not "undo what I
   // typed".
-  const dismiss = useCallback(() => {
-    setOpen(false);
-    inputRef.current?.blur();
-  }, []);
+  const dismiss = useCallback(() => setOpen(false), []);
+  useDismissOnOutside(wrapRef, open, dismiss);
 
   function chooseResult(result: SymbolResult) {
     const clean = result.symbol.trim().toUpperCase();
@@ -102,10 +94,9 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
   }
 
   return (
-    <div>
+    <div ref={wrapRef}>
       <div style={{ position: "relative", width: "100%" }}>
         <input
-          ref={inputRef}
           value={query}
           onChange={(event) => {
             setQuery(event.target.value.toUpperCase());
@@ -127,20 +118,10 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
             outline: "none",
             textTransform: "uppercase",
             boxSizing: "border-box",
-            // Above the dropdown's backdrop, so the input stays visible and
-            // tappable while the results are open.
-            position: "relative",
-            zIndex: 10000,
           }}
         />
 
-        <TickerJumpDropdown
-          open={open}
-          rect={anchorRect}
-          results={results}
-          onChoose={chooseResult}
-          onDismiss={dismiss}
-        />
+        <TickerJumpDropdown open={open} results={results} onChoose={chooseResult} />
 
         {!selected?.symbol && query.trim() ? (
           <div style={{ marginTop: 7, fontSize: 12, color: "rgba(248,113,113,0.92)", fontWeight: 800 }}>
