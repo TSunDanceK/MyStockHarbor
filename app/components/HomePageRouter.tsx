@@ -9,6 +9,7 @@ const MOBILE_BREAKPOINT = 768;
 
 export default function HomePageRouter({
   pageToken = "",
+  initialIsMobile = false,
 }: {
   // Minted server-side in app/page.tsx (a Server Component) and forwarded
   // through this client component down to DashboardClient. This component
@@ -17,8 +18,22 @@ export default function HomePageRouter({
   // module. Only the desktop branch below needs it; MobileHomePage never
   // calls /api/quote.
   pageToken?: string;
+  // UA-sniffed guess from app/page.tsx, used to seed isMobile below instead
+  // of starting at null. Previously this component rendered nothing at all
+  // (`if (isMobile === null) return null`) until a mount-time
+  // window.innerWidth check ran client-side, which meant the server-
+  // rendered HTML for "/" -- and every "/?symbol=X" variant -- had no
+  // content at all: no DashboardClient, no MobileHomePage, no <h1>, nothing.
+  // Bing's Site Scan flagged this as "H1 tag missing" across dozens of
+  // "/?symbol=..." URLs (2026-08-07); the real issue was the blank
+  // pre-hydration HTML, not the heading specifically. Seeding from a
+  // server-side UA guess means real content (including each branch's own
+  // <h1>) ships in the initial response for the common case, while the
+  // resize-listener effect below still corrects it client-side if the UA
+  // guess was wrong (spoofed UA, borderline tablet width, etc).
+  initialIsMobile?: boolean;
 }) {
-  const [isMobile, setIsMobile] = useState<boolean | null>(null);
+  const [isMobile, setIsMobile] = useState<boolean>(initialIsMobile);
 
   useEffect(() => {
     function check() {
@@ -28,9 +43,6 @@ export default function HomePageRouter({
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
   }, []);
-
-  // Avoid flash: render nothing until we know the screen size
-  if (isMobile === null) return null;
 
   return isMobile ? <MobileHomePage /> : <DashboardClient pageToken={pageToken} />;
 }
