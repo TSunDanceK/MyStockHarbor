@@ -1,15 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import TickerLogo from "@/app/components/TickerLogo";
 import { trackTickerInterest } from "@/lib/trackTickerInterest";
-
-type SymbolResult = {
-  symbol: string;
-  name: string;
-  exchange: string;
-};
+import {
+  TickerJumpDropdown,
+  useDismissOnOutside,
+  type SymbolResult,
+} from "@/app/components/TickerJumpDropdown";
 
 type EarningsSymbolPickerProps = {
   currentSymbol: string;
@@ -38,18 +36,6 @@ export default function EarningsSymbolPicker({
       exchange: "",
     });
   }, [currentSymbol]);
-
-  useEffect(() => {
-    function onClickOutside(event: MouseEvent) {
-      if (!wrapRef.current) return;
-      if (!wrapRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, []);
 
   useEffect(() => {
     const q = query.trim();
@@ -113,6 +99,11 @@ export default function EarningsSymbolPicker({
   }, [query, selected?.symbol]);
 
   const canGo = Boolean(selected?.symbol);
+
+  // Tap-outside / Escape. Leaves `query` and `selected` alone so the
+  // "Open earnings ->" button beside the input still works afterwards.
+  const dismiss = useCallback(() => setOpen(false), []);
+  useDismissOnOutside(wrapRef, open, dismiss);
 
   function chooseResult(result: SymbolResult) {
     const clean = result.symbol.trim().toUpperCase();
@@ -234,58 +225,7 @@ export default function EarningsSymbolPicker({
             }}
           />
 
-          {open && results.length > 0 ? (
-            <div
-              style={{
-                position: "absolute",
-                top: "calc(100% + 8px)",
-                left: 0,
-                right: 0,
-                zIndex: 80,
-                borderRadius: 16,
-                border: "1px solid rgba(255,255,255,0.12)",
-                background: "#0b1220",
-                boxShadow: "0 18px 34px rgba(0,0,0,0.42)",
-                overflow: "hidden",
-              }}
-            >
-              {results.slice(0, 8).map((result) => (
-                <button
-                  key={`${result.symbol}-${result.exchange}`}
-                  type="button"
-                  onClick={() => chooseResult(result)}
-                  style={{
-                    width: "100%",
-                    textAlign: "left",
-                    padding: "12px 14px",
-                    border: "none",
-                    borderBottom: "1px solid rgba(255,255,255,0.08)",
-                    background: "#0b1220",
-                    color: "#f8fafc",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                  }}
-                >
-                  <TickerLogo symbol={result.symbol} size={22} radius={6} />
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 950 }}>{result.symbol}</div>
-                    <div
-                      style={{
-                        marginTop: 3,
-                        fontSize: 13,
-                        color: "rgba(241,245,249,0.66)",
-                      }}
-                    >
-                      {result.name}
-                      {result.exchange ? ` • ${result.exchange}` : ""}
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          ) : null}
+          <TickerJumpDropdown open={open} results={results} onChoose={chooseResult} />
 
           {!canGo && query.trim() ? (
             <div
