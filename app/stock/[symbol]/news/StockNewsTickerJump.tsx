@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   TickerJumpDropdown,
-  useTickerJumpAnchor,
+  useDismissOnOutside,
   type SymbolResult,
 } from "@/app/components/TickerJumpDropdown";
 
@@ -16,7 +16,7 @@ export default function StockNewsTickerJump({
   currentSymbol,
 }: StockNewsTickerJumpProps) {
   const router = useRouter();
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
 
   const [query, setQuery] = useState(currentSymbol);
   const [results, setResults] = useState<SymbolResult[]>([]);
@@ -26,9 +26,6 @@ export default function StockNewsTickerJump({
     name: "",
     exchange: "",
   });
-
-  // Shared positioning + page scroll lock -- see TickerJumpDropdown.tsx.
-  const anchorRect = useTickerJumpAnchor(open, inputRef);
 
   useEffect(() => {
     setQuery(currentSymbol);
@@ -79,10 +76,8 @@ export default function StockNewsTickerJump({
 
   // Tap-outside / Escape: closes without navigating and without discarding
   // whatever was typed.
-  const dismiss = useCallback(() => {
-    setOpen(false);
-    inputRef.current?.blur();
-  }, []);
+  const dismiss = useCallback(() => setOpen(false), []);
+  useDismissOnOutside(wrapRef, open, dismiss);
 
   function chooseResult(result: SymbolResult) {
     const clean = result.symbol.trim().toUpperCase();
@@ -99,6 +94,7 @@ export default function StockNewsTickerJump({
 
   return (
     <div
+      ref={wrapRef}
       style={{
         marginTop: 18,
         display: "grid",
@@ -133,7 +129,6 @@ export default function StockNewsTickerJump({
 
       <div style={{ position: "relative", width: "100%", maxWidth: 320 }}>
         <input
-          ref={inputRef}
           value={query}
           onChange={(event) => {
             setQuery(event.target.value.toUpperCase());
@@ -155,18 +150,10 @@ export default function StockNewsTickerJump({
             outline: "none",
             textTransform: "uppercase",
             boxSizing: "border-box",
-            position: "relative",
-            zIndex: 10000,
           }}
         />
 
-        <TickerJumpDropdown
-          open={open}
-          rect={anchorRect}
-          results={results}
-          onChoose={chooseResult}
-          onDismiss={dismiss}
-        />
+        <TickerJumpDropdown open={open} results={results} onChoose={chooseResult} />
 
         {!selected?.symbol && query.trim() ? (
           <div
