@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { withRedisTimeout } from "./redisGuardTimeout";
 
 // Cumulative per-IP, per-category, 24h *real page view* counter, plus a
 // same-day BotID verification gate layered on top of it.
@@ -36,9 +37,19 @@ import { Redis } from "@upstash/redis";
 // codebase (historyCache.ts's reserveFmpCallSlot, youtube.ts's call budget,
 // quoteData.ts's cache): if Redis is unreachable or
 // UPSTASH_REDIS_REST_URL/TOKEN aren't set, nothing is ever blocked.
+//
+// The three READ functions below additionally run under a hard time budget
+// (redisGuardTimeout.ts), because they are called from middleware.ts on
+// every /stock/* request. "Fail open" was previously a bare try/catch,
+// which catches errors but not slowness -- an unbounded await in middleware
+// is a whole-site outage, and was one on 2026-08-10.
+//
+// retries: 1 for the same reason as trapBlock.ts -- the SDK's default 5
+// attempts with backoff cannot complete inside the middleware budget, so
+// they only spend Upstash quota answering a question already abandoned.
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv({ retry: { retries: 1, backoff: () => 50 } })
     : null;
 
 const VIEWS_PREFIX = "msh:daily-views:v2";
@@ -102,24 +113,35 @@ export function getClientIp(headers: Headers): string {
 // category so far? Used by middleware to decide whether to send a request
 // through the verify gate -- it never increments, so checking the count
 // doesn't itself count as a view.
+//
+// Time-bounded (middleware path). On timeout returns 0 = "well under the
+// limit" = let them through, matching the old catch block.
 export async function getDailyPageViewCount(
   category: string,
   ip: string
 ): Promise<number> {
   if (!redis || !ip || ip === "unknown") return 0;
 
-  try {
-    const key = getKey(VIEWS_PREFIX, category, ip, new Date());
-    const count = await redis.get<number>(key);
-    return typeof count === "number" ? count : 0;
-  } catch {
-    return 0;
-  }
+  const client = redis;
+  const key = getKey(VIEWS_PREFIX, category, ip, new Date());
+
+  return withRedisTimeout(
+    async () => {
+      const count = await client.get<number>(key);
+      return typeof count === "number" ? count : 0;
+    },
+    0,
+    "daily-view-count",
+    `category=${category} ip=${ip}`
+  );
 }
 
 // Increments the counter for a real page view. Called only from the
 // /api/internal/track-view beacon endpoint, which only ever receives a
 // request when a real client-rendered page actually mounted.
+//
+// Not time-bounded: this is a write on a beacon endpoint, not middleware,
+// and abandoning it halfway just silently undercounts.
 export async function recordDailyPageView(
   category: string,
   ip: string
@@ -139,20 +161,24 @@ export async function recordDailyPageView(
 
 // ── Same-day BotID verification result ───────────────────────────
 
+// Time-bounded (middleware path). On timeout returns false, matching the
+// old catch block: middleware will send them through /verify again, which
+// itself fails open on a Redis/BotID hiccup.
 export async function isVerifiedHumanToday(
   category: string,
   ip: string
 ): Promise<boolean> {
   if (!redis || !ip || ip === "unknown") return false;
-  try {
-    const key = getKey(VERIFIED_PREFIX, category, ip, new Date());
-    return (await redis.get(key)) != null;
-  } catch {
-    // Fail open: if we can't tell, don't force a redundant verify loop --
-    // middleware will just send them through /verify again, which itself
-    // fails open on a Redis/BotID hiccup.
-    return false;
-  }
+
+  const client = redis;
+  const key = getKey(VERIFIED_PREFIX, category, ip, new Date());
+
+  return withRedisTimeout(
+    async () => (await client.get(key)) != null,
+    false,
+    "verified-human",
+    `category=${category} ip=${ip}`
+  );
 }
 
 export async function markVerifiedHumanToday(
@@ -168,18 +194,23 @@ export async function markVerifiedHumanToday(
   }
 }
 
+// Time-bounded (middleware path). On timeout returns false -- never treat a
+// slow or unreachable Redis as "this IP is a bot", same as the old catch.
 export async function isBotFlaggedToday(
   category: string,
   ip: string
 ): Promise<boolean> {
   if (!redis || !ip || ip === "unknown") return false;
-  try {
-    const key = getKey(BOT_FLAG_PREFIX, category, ip, new Date());
-    return (await redis.get(key)) != null;
-  } catch {
-    // Fail open -- never treat a Redis hiccup as "this IP is a bot".
-    return false;
-  }
+
+  const client = redis;
+  const key = getKey(BOT_FLAG_PREFIX, category, ip, new Date());
+
+  return withRedisTimeout(
+    async () => (await client.get(key)) != null,
+    false,
+    "bot-flagged",
+    `category=${category} ip=${ip}`
+  );
 }
 
 export async function markBotFlaggedToday(
