@@ -1,15 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import TickerLogo from "@/app/components/TickerLogo";
 import { trackTickerInterest } from "@/lib/trackTickerInterest";
-
-type SymbolResult = {
-  symbol: string;
-  name: string;
-  exchange: string;
-};
+import {
+  TickerJumpDropdown,
+  useTickerJumpAnchor,
+  type SymbolResult,
+} from "@/app/components/TickerJumpDropdown";
 
 type StockTickerJumpProps = {
   currentSymbol: string;
@@ -17,7 +15,6 @@ type StockTickerJumpProps = {
 
 export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps) {
   const router = useRouter();
-  const wrapRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const [query, setQuery] = useState(currentSymbol);
@@ -28,42 +25,17 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
     name: "",
     exchange: "",
   });
-  const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  // Positioning + the page scroll lock now live in TickerJumpDropdown.
+  // This component previously owned a `dropdownRect` state updated from a
+  // capture-phase scroll listener, which made the panel lag behind the
+  // input while scrolling on mobile. See that file for the full write-up.
+  const anchorRect = useTickerJumpAnchor(open, inputRef);
 
   useEffect(() => {
     setQuery(currentSymbol);
     setSelected({ symbol: currentSymbol, name: "", exchange: "" });
   }, [currentSymbol]);
-
-  // Update dropdown position whenever it opens or on scroll/resize
-  useEffect(() => {
-    if (!open || !inputRef.current) return;
-
-    function updateRect() {
-      if (!inputRef.current) return;
-      const r = inputRef.current.getBoundingClientRect();
-      setDropdownRect({ top: r.bottom + 8, left: r.left, width: r.width });
-    }
-
-    updateRect();
-    window.addEventListener("scroll", updateRect, true);
-    window.addEventListener("resize", updateRect);
-    return () => {
-      window.removeEventListener("scroll", updateRect, true);
-      window.removeEventListener("resize", updateRect);
-    };
-  }, [open]);
-
-  useEffect(() => {
-    function onClickOutside(event: MouseEvent) {
-      if (!wrapRef.current) return;
-      if (!wrapRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, []);
 
   useEffect(() => {
     const q = query.trim();
@@ -105,7 +77,20 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
     }, 250);
 
     return () => window.clearTimeout(timer);
+    // `results` is intentionally NOT a dependency even though it's read
+    // above: this effect calls setResults, so including it re-triggered the
+    // effect on every fetch and left the picker fetching /api/symbols in a
+    // loop for as long as the query stayed put.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, selected?.symbol]);
+
+  // Tap-outside / Escape. Deliberately leaves `query` and `selected`
+  // untouched: dismissing means "I didn't pick anything", not "undo what I
+  // typed".
+  const dismiss = useCallback(() => {
+    setOpen(false);
+    inputRef.current?.blur();
+  }, []);
 
   function chooseResult(result: SymbolResult) {
     const clean = result.symbol.trim().toUpperCase();
@@ -117,7 +102,7 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
   }
 
   return (
-    <div ref={wrapRef}>
+    <div>
       <div style={{ position: "relative", width: "100%" }}>
         <input
           ref={inputRef}
@@ -142,55 +127,20 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
             outline: "none",
             textTransform: "uppercase",
             boxSizing: "border-box",
+            // Above the dropdown's backdrop, so the input stays visible and
+            // tappable while the results are open.
+            position: "relative",
+            zIndex: 10000,
           }}
         />
 
-        {open && results.length > 0 && dropdownRect ? (
-          <div
-            style={{
-              position: "fixed",
-              top: dropdownRect.top,
-              left: dropdownRect.left,
-              width: dropdownRect.width,
-              zIndex: 9999,
-              borderRadius: 16,
-              border: "1px solid rgba(255,255,255,0.12)",
-              background: "#0b1220",
-              boxShadow: "0 18px 34px rgba(0,0,0,0.72)",
-              overflow: "hidden",
-            }}
-          >
-            {results.slice(0, 8).map((result) => (
-              <button
-                key={`${result.symbol}-${result.exchange}`}
-                type="button"
-                onClick={() => chooseResult(result)}
-                style={{
-                  width: "100%",
-                  textAlign: "left",
-                  padding: "12px 14px",
-                  border: "none",
-                  borderBottom: "1px solid rgba(255,255,255,0.08)",
-                  background: "#0b1220",
-                  color: "#f8fafc",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                }}
-              >
-                <TickerLogo symbol={result.symbol} size={22} radius={6} />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 950 }}>{result.symbol}</div>
-                  <div style={{ marginTop: 3, fontSize: 13, color: "rgba(241,245,249,0.66)" }}>
-                    {result.name}
-                    {result.exchange ? ` • ${result.exchange}` : ""}
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        ) : null}
+        <TickerJumpDropdown
+          open={open}
+          rect={anchorRect}
+          results={results}
+          onChoose={chooseResult}
+          onDismiss={dismiss}
+        />
 
         {!selected?.symbol && query.trim() ? (
           <div style={{ marginTop: 7, fontSize: 12, color: "rgba(248,113,113,0.92)", fontWeight: 800 }}>
