@@ -24,3 +24,33 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ---------------------------------------------------------------------
+   Ticker search dropdown: prevent ancestor clipping
+   ---------------------------------------------------------------------
+   The "Change stock" cards on the stock analysis page use sideCardStyle()
+   in app/stock/[symbol]/StockSymbolPageClient.tsx, which sets
+   `overflow: hidden` to keep child corners inside the card's 18px radius.
+
+   That also clips the ticker search results panel, which is an
+   absolutely-positioned child extending BELOW the card
+   (app/components/TickerJumpDropdown.tsx). Symptom: typing a ticker
+   produced no visible dropdown at all -- the panel was in the DOM and
+   correctly positioned, just cut off at the card's bottom edge.
+
+   Overriding to `visible` here rather than in the component keeps the
+   change to two lines instead of rewriting a ~60KB file. Safe because
+   these cards contain only a header and a body div, neither of which has
+   its own background or square corners to spill past the radius -- the
+   only thing `overflow: hidden` was clipping is the dropdown we want to
+   see.
+
+   Note for future work: any new container wrapping one of these search
+   boxes must not set `overflow: hidden` or `overflow: auto`, for the same
+   reason. The dropdown is deliberately anchored in normal flow rather than
+   portaled -- see the module comment in TickerJumpDropdown.tsx for why
+   portal + fixed positioning was tried and abandoned. */
+.sidebar-change-stock,
+.mobile-change-stock {
+  overflow: visible !important;
+}
