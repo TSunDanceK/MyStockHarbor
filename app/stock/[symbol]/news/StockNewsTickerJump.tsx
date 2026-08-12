@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import TickerLogo from "@/app/components/TickerLogo";
-
-type SymbolResult = {
-  symbol: string;
-  name: string;
-  exchange: string;
-};
+import {
+  TickerJumpDropdown,
+  useTickerJumpAnchor,
+  type SymbolResult,
+} from "@/app/components/TickerJumpDropdown";
 
 type StockNewsTickerJumpProps = {
   currentSymbol: string;
@@ -18,7 +16,7 @@ export default function StockNewsTickerJump({
   currentSymbol,
 }: StockNewsTickerJumpProps) {
   const router = useRouter();
-  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   const [query, setQuery] = useState(currentSymbol);
   const [results, setResults] = useState<SymbolResult[]>([]);
@@ -29,6 +27,9 @@ export default function StockNewsTickerJump({
     exchange: "",
   });
 
+  // Shared positioning + page scroll lock -- see TickerJumpDropdown.tsx.
+  const anchorRect = useTickerJumpAnchor(open, inputRef);
+
   useEffect(() => {
     setQuery(currentSymbol);
     setSelected({
@@ -37,18 +38,6 @@ export default function StockNewsTickerJump({
       exchange: "",
     });
   }, [currentSymbol]);
-
-  useEffect(() => {
-    function onClickOutside(event: MouseEvent) {
-      if (!wrapRef.current) return;
-      if (!wrapRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, []);
 
   useEffect(() => {
     const q = query.trim();
@@ -88,6 +77,13 @@ export default function StockNewsTickerJump({
     return () => window.clearTimeout(timer);
   }, [query, selected?.symbol]);
 
+  // Tap-outside / Escape: closes without navigating and without discarding
+  // whatever was typed.
+  const dismiss = useCallback(() => {
+    setOpen(false);
+    inputRef.current?.blur();
+  }, []);
+
   function chooseResult(result: SymbolResult) {
     const clean = result.symbol.trim().toUpperCase();
 
@@ -103,7 +99,6 @@ export default function StockNewsTickerJump({
 
   return (
     <div
-      ref={wrapRef}
       style={{
         marginTop: 18,
         display: "grid",
@@ -138,6 +133,7 @@ export default function StockNewsTickerJump({
 
       <div style={{ position: "relative", width: "100%", maxWidth: 320 }}>
         <input
+          ref={inputRef}
           value={query}
           onChange={(event) => {
             setQuery(event.target.value.toUpperCase());
@@ -159,61 +155,18 @@ export default function StockNewsTickerJump({
             outline: "none",
             textTransform: "uppercase",
             boxSizing: "border-box",
+            position: "relative",
+            zIndex: 10000,
           }}
         />
 
-        {open && results.length > 0 ? (
-          <div
-            style={{
-              position: "absolute",
-              top: "calc(100% + 8px)",
-              left: 0,
-              right: 0,
-              zIndex: 50,
-              borderRadius: 16,
-              border: "1px solid rgba(255,255,255,0.12)",
-              background: "#0b1220",
-              boxShadow: "0 18px 34px rgba(0,0,0,0.42)",
-              overflow: "hidden",
-            }}
-          >
-            {results.slice(0, 8).map((result) => (
-              <button
-                key={`${result.symbol}-${result.exchange}`}
-                type="button"
-                onClick={() => chooseResult(result)}
-                style={{
-                  width: "100%",
-                  textAlign: "left",
-                  padding: "12px 14px",
-                  border: "none",
-                  borderBottom: "1px solid rgba(255,255,255,0.08)",
-                  background: "#0b1220",
-                  color: "#f8fafc",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                }}
-              >
-                <TickerLogo symbol={result.symbol} size={22} radius={6} />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 950 }}>{result.symbol}</div>
-                  <div
-                    style={{
-                      marginTop: 3,
-                      fontSize: 13,
-                      color: "rgba(241,245,249,0.66)",
-                    }}
-                  >
-                    {result.name}
-                    {result.exchange ? ` • ${result.exchange}` : ""}
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        ) : null}
+        <TickerJumpDropdown
+          open={open}
+          rect={anchorRect}
+          results={results}
+          onChoose={chooseResult}
+          onDismiss={dismiss}
+        />
 
         {!selected?.symbol && query.trim() ? (
           <div
