@@ -48,13 +48,14 @@ supplyChain:
     pct: 8
     blurb: >
       Supplies memory used across Microsoft's data-center infrastructure.
-  - name: SK Hynix
-    ticker: null
+  - name: SK hynix
+    ticker: SKHY
     pct: 8
     blurb: >
-      A major memory and HBM supplier to Microsoft's AI infrastructure.
-      Trades primarily on the Korea Exchange with no proper US-listed
-      ticker.
+      A major memory and HBM supplier to Microsoft's AI infrastructure,
+      including the HBM3E stacked onto Microsoft's in-house Maia
+      accelerators. Its primary listing is the Korea Exchange, but it has
+      also traded on Nasdaq as an ADR since July 2026.
   - name: Samsung Electronics
     ticker: null
     pct: 6
