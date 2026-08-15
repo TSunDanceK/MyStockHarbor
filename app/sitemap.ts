@@ -264,12 +264,23 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.7,
   }));
 
-  const stockEarningsEntries: MetadataRoute.Sitemap = stockSymbols.map((symbol) => ({
-    url: toAbsoluteUrl(`/stock/${symbol}/earnings`),
-    lastModified: now,
-    changeFrequency: "weekly" as const,
-    priority: 0.68,
-  }));
+  // ETFs are excluded here, unlike the two blocks above. A fund does not
+  // report earnings, so /stock/{etf}/earnings is structurally empty - there
+  // is no quarter for it to show. Submitting all 32 asks Google to spend
+  // crawl requests, on a site that gets ~6 HTML crawls a day, discovering
+  // pages that can only ever be thin. RelatedStocks.tsx already stopped
+  // linking them for the same reason (PR #242); this stops submitting them.
+  // The routes stay live and reachable - only the sitemap entry goes.
+  const etfSymbols = new Set<string>(uniqueEtfs);
+
+  const stockEarningsEntries: MetadataRoute.Sitemap = stockSymbols
+    .filter((symbol) => !etfSymbols.has(symbol))
+    .map((symbol) => ({
+      url: toAbsoluteUrl(`/stock/${symbol}/earnings`),
+      lastModified: now,
+      changeFrequency: "weekly" as const,
+      priority: 0.68,
+    }));
 
   // Sector news: one hub plus one page per sector. changeFrequency mirrors
   // stockNewsEntries ("hourly") because the underlying feed refreshes on the
