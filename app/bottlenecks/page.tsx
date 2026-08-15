@@ -161,16 +161,25 @@ export default function BottlenecksIndexPage() {
             </Link>
           </div>
 
+          {/* Named grid areas rather than nesting, so the single-column
+              mobile layout can order the three blocks independently of the
+              desktop one. The archive used to sit inside the main column,
+              which put it above the leaderboard once the grid collapsed --
+              on a phone that meant scrolling past 100+ A-Z links to reach
+              the leaderboard. Row gap is 0 and vertical spacing comes from
+              each block's own margin, so the desktop layout is unchanged. */}
           <div
             className="bottlenecksIndexLayout"
             style={{
               display: "grid",
               gridTemplateColumns: "1fr 340px",
-              gap: 24,
+              gridTemplateAreas: `"main rail" "archive rail"`,
+              columnGap: 24,
+              rowGap: 0,
               alignItems: "start",
             }}
           >
-            <div style={{ minWidth: 0 }}>
+            <div style={{ gridArea: "main", minWidth: 0 }}>
               <section
                 className="bottlenecksIntroCard"
                 style={{
@@ -212,18 +221,27 @@ export default function BottlenecksIndexPage() {
               <section style={{ marginTop: 24 }}>
                 <BottleneckList posts={posts} />
               </section>
-
-              {/* Crawlable index of the full set. BottleneckList only mounts
-                  30 rows before a `See more` button, which Googlebot cannot
-                  click -- see the note at the top of BottleneckArchive.tsx. */}
-              <BottleneckArchive posts={posts} />
             </div>
 
             <div
               className="bottlenecksLeaderboardRail"
-              style={{ position: "sticky", top: 24, minWidth: 0 }}
+              style={{
+                gridArea: "rail",
+                position: "sticky",
+                top: 24,
+                minWidth: 0,
+              }}
             >
               <BottleneckLeaderboard counts={counts} />
+            </div>
+
+            {/* Crawlable index of the full set. BottleneckList only mounts
+                30 rows before a `See more` button, which Googlebot cannot
+                click -- see the note at the top of BottleneckArchive.tsx.
+                Its own marginTop provides the spacing above it in both
+                layouts, which is why the grid sets rowGap: 0. */}
+            <div style={{ gridArea: "archive", minWidth: 0 }}>
+              <BottleneckArchive posts={posts} />
             </div>
           </div>
         </div>
@@ -232,9 +250,11 @@ export default function BottlenecksIndexPage() {
           @media (max-width: 960px) {
             .bottlenecksIndexLayout {
               grid-template-columns: 1fr !important;
+              grid-template-areas: "main" "rail" "archive" !important;
             }
             .bottlenecksLeaderboardRail {
               position: static !important;
+              margin-top: 24px !important;
             }
           }
 
