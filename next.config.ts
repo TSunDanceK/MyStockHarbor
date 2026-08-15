@@ -1,7 +1,22 @@
 import type { NextConfig } from "next";
 import { withBotId } from "botid/next/config";
+import { NOINDEX_PICKER_PAGES } from "./lib/noindexPickerPages";
 
 const nextConfig: NextConfig = {
+  // ── Picker pages dropped from the index (noindex, follow) ────
+  // Served as an X-Robots-Tag response header rather than a
+  // `robots: { index: false, follow: true }` metadata export in each of the
+  // 22 route files. Google documents the header and the meta tag as
+  // equivalent, and one list in lib/noindexPickerPages.ts is far easier to
+  // audit, extend or reverse than 22 scattered edits that can silently drift
+  // apart. Which pages are on the list, which 10 are deliberately NOT, and
+  // why `follow` is mandatory, are all documented in that file.
+  async headers() {
+    return NOINDEX_PICKER_PAGES.map((source) => ({
+      source,
+      headers: [{ key: "X-Robots-Tag", value: "noindex, follow" }],
+    }));
+  },
   async redirects() {
     return [
       // ── Duplicate consolidation (301) ────────────────────────────
