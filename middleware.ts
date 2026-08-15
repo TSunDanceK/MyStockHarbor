@@ -7,6 +7,7 @@ import {
   isBotFlaggedToday,
 } from "@/lib/server/dailyPageLimit";
 import { isTrapBlocked } from "@/lib/server/trapBlock";
+import { isKnownGoodBot } from "@/lib/server/knownGoodBots";
 
 // Cumulative cap on /stock/* views per IP per (UTC) day -- a second,
 // longer-window layer on top of the existing Vercel Firewall "Rate limit
@@ -165,6 +166,26 @@ export async function middleware(request: NextRequest) {
   }
 
   if (pathname.startsWith("/stock/")) {
+    // Never gate a known-good crawler. /stock/* is 483 of the ~765 URLs in
+    // the sitemap, so this branch covers the majority of the indexable site;
+    // a crawler bounced to /verify here would take most of the site out of
+    // Google's index with no visible symptom on the live domain.
+    //
+    // In practice this should never have fired: the counter this gate reads
+    // is only ever incremented by a client beacon to
+    // /api/internal/track-view, and /api/ is disallowed in robots.txt, so
+    // Googlebot's renderer should skip it. But "should" is doing real work
+    // in that sentence -- it depends on the renderer honouring robots.txt
+    // for a subresource fetch, on the beacon never moving off /api/, and on
+    // no future change feeding this counter server-side. The honeypot trap
+    // route already carries exactly this allowlist
+    // (app/api/internal/feed-index/route.ts); this gate was simply missed.
+    // Cheap check, severe downside if the assumption ever breaks.
+    // Found in the 2026-08-15 Search Console audit.
+    if (isKnownGoodBot(request.headers.get("user-agent"))) {
+      return NextResponse.next();
+    }
+
     const ip = getClientIp(request.headers);
 
     if (!isBypassedIp(ip)) {
