@@ -4,6 +4,7 @@ import {
   isBypassedIp,
   recordDailyPageView,
 } from "@/lib/server/dailyPageLimit";
+import { isKnownGoodBot } from "@/lib/server/knownGoodBots";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,6 +31,18 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => null);
     const category = typeof body?.category === "string" ? body.category : "";
+
+    // Belt-and-braces with the allowlist added to middleware.ts's /stock/*
+    // gate: stop a crawler's IP accumulating toward the daily cap at the
+    // source, rather than only exempting it at the point of enforcement.
+    // Googlebot executes JavaScript, so PageViewTracker's beacon can in
+    // principle fire from the renderer; robots.txt disallows /api/ and
+    // should prevent it, but a counter that silently mis-attributes crawler
+    // traffic to a "real page view" is worth closing off directly.
+    // (2026-08-15 Search Console audit.)
+    if (isKnownGoodBot(request.headers.get("user-agent"))) {
+      return new NextResponse(null, { status: 204 });
+    }
 
     if (ALLOWED_CATEGORIES.has(category)) {
       const ip = getClientIp(request.headers);
