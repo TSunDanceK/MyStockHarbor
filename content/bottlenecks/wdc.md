@@ -56,13 +56,13 @@ supplyChain:
       the externally sourced components its drives depend on; Micron is a
       major US-listed merchant DRAM supplier to the broader storage
       industry.
-  - name: SK Hynix
-    ticker: null
+  - name: SK hynix
+    ticker: SKHY
     pct: 7
     blurb: >
       A major merchant DRAM and memory supplier to the broader storage
-      and electronics industry. Trades primarily on the Korea Exchange,
-      with no proper US-listed ticker.
+      and electronics industry. Its primary listing is the Korea Exchange,
+      but it has also traded on Nasdaq as an ADR since July 2026.
   - name: Samsung Electronics
     ticker: null
     pct: 6
