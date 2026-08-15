@@ -5,6 +5,7 @@ import {
   getBottleneckCompanyCounts,
 } from "@/lib/bottlenecks";
 import BottleneckList from "@/app/components/BottleneckList";
+import BottleneckArchive from "@/app/components/BottleneckArchive";
 import BottleneckLeaderboard from "@/app/components/BottleneckLeaderboard";
 
 const PAGE_TITLE =
@@ -211,6 +212,11 @@ export default function BottlenecksIndexPage() {
               <section style={{ marginTop: 24 }}>
                 <BottleneckList posts={posts} />
               </section>
+
+              {/* Crawlable index of the full set. BottleneckList only mounts
+                  30 rows before a `See more` button, which Googlebot cannot
+                  click -- see the note at the top of BottleneckArchive.tsx. */}
+              <BottleneckArchive posts={posts} />
             </div>
 
             <div
