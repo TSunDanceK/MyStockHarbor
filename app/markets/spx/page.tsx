@@ -433,7 +433,7 @@ export default async function SPXPage() {
                   opacity: 0.92,
                 }}
               >
-                The S&amp;P 500 enters this week at a fresh record high of 7,757.64, set last Friday, August 7, after its best week since April — a roughly 3.6% gain sparked by a surprisingly weak July jobs report (payrolls fell by 23,000 versus forecasts for an 80,000 gain) that eased fears of another Fed rate hike. The index is now up more than 12% for the year, with a data-heavy week ahead — July CPI on Wednesday, PPI on Thursday, and retail sales on Friday — the next real test before the Fed's September rate decision.
+                The S&amp;P 500 pushed to a fresh record high near 7,815 on Wednesday, August 13 — clearing 7,800 for the first time — before easing back slightly into the weekend, its third straight weekly gain. This time the trigger was calmer than early August's jobs-report shock: back-to-back soft inflation readings, July's CPI and Friday's PPI, eased worries the Fed will need to hike again in September. The index is now up roughly 14% for the year, with September's Fed decision and the next round of AI-linked earnings the key things to watch from here.
               </div>
 
               <div
@@ -640,7 +640,7 @@ export default async function SPXPage() {
 
   <div>
     <strong style={{ color: "#4ade80", letterSpacing: "0.02em" }}>SIMPLE VIEW:</strong>{" "}
-    the SPX enters this week fresh off its best run since April, having closed last Friday at a record 7,757.64. Last week's rally was set off by an unusual catalyst: July's jobs report showed the economy actually lost 23,000 jobs (economists expected an 80,000-job gain), and while a weak labor market isn't normally welcome news, investors read it as reducing the odds the Fed hikes rates again in September — those odds fell to roughly 44%, down from about 67% the week before. Treasury yields eased on the news, Q2 earnings season has been strong (roughly 87% of S&amp;P 500 companies have beaten estimates so far), and market breadth stayed healthy, with about 72% of S&amp;P 500 members trading above their own 200-day moving average. Not everything lines up bullishly, though: the index's RSI touched an overbought 74.5 last week before easing back to around 66, short interest in S&amp;P 500 stocks just hit a record 3.79% of free float as some investors bet against further gains, and the index has now cleared several banks' full-year 2026 targets months early. Next up: a data-heavy week with July CPI on Wednesday, PPI on Thursday and retail sales on Friday, ahead of the Fed's September policy decision.
+    the SPX notched a fresh record high near 7,815 on Wednesday, August 13, clearing 7,800 for the first time, before drifting slightly lower into the weekend — its third consecutive weekly gain. This week's catalyst was a one-two punch of cooler-than-expected inflation data: July's CPI rose just 0.1% month-over-month (3.4% annually) and Friday's PPI print also came in soft, easing worries the Fed hikes again in September while keeping hopes for a later rate cut alive. Q2 earnings season has stayed strong too — the index is on pace for a second straight quarter of year-over-year profit growth above 20%, with AI-related capital spending still doing much of the heavy lifting. Sentiment has followed price higher, with the CNN Fear &amp; Greed Index reading around 60 ("Greed"). Not everything lines up bullishly, though: RSI touched an overbought extreme near 74–75 earlier this month before easing to a more moderate high-60s reading, and short interest in S&amp;P 500 stocks remains near a record 3.79% of free float — a sign some investors are still hedging even as the index keeps setting new highs.
   </div>
 </div>
           </section>
@@ -768,15 +768,15 @@ export default async function SPXPage() {
                 <div style={insightIconStyle("yellow")}>📈</div>
                 <div>
                   <div style={{ ...statLabelStyle(), color: "#fde68a", opacity: 1 }}>
-                    Fresh record high
+                    New record, cooler catalyst
                   </div>
                   <div style={{ marginTop: 5, fontSize: 21, fontWeight: 950 }}>
-                    Sentiment catches up to price
+                    Inflation data, not jobs data, drives the latest leg
                   </div>
                 </div>
               </div>
               <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                The SPX closed last Friday at a record 7,757.64, up roughly 3.6% for the week — its best since April — after July's jobs report badly missed expectations (payrolls fell 23,000 versus a forecast +80,000 gain), which investors read as lowering the odds of a September Fed rate hike. Sentiment has followed price higher: the CNN Fear &amp; Greed Index sits at 60 ("Greed"), a marked shift from the caution seen earlier this summer. This week's July CPI, PPI and retail sales reports will show whether that reaction holds.
+                The SPX closed at a fresh record near 7,815 on Wednesday, August 13, clearing 7,800 for the first time, before easing modestly into the weekend — its third straight weekly gain. Unlike early August's jobs-report-driven rally, this leg was powered by cooling inflation: July's CPI rose just 0.1% month-over-month (3.4% annually) and Friday's PPI also came in soft, reducing fears the Fed hikes again in September. Sentiment has kept pace with price, with the CNN Fear &amp; Greed Index reading around 60 ("Greed").
               </div>
             </div>
 
@@ -800,12 +800,12 @@ export default async function SPXPage() {
                     Under the surface
                   </div>
                   <div style={{ marginTop: 5, fontSize: 21, fontWeight: 950 }}>
-                    Breadth holds up at the highs
+                    Leadership still skews toward AI mega-caps
                   </div>
                 </div>
               </div>
               <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                Unlike narrower rallies of the past, this move has real participation underneath it: roughly 72% of S&amp;P 500 members trade above their own 200-day moving average, the strongest reading since December 2024. The one flashing caution light is positioning — short interest in S&amp;P 500 stocks just climbed to a record 3.79% of free float, a sign some investors are hedging even as the index keeps grinding higher.
+                Breadth has stayed reasonably constructive without being pristine — a majority of S&amp;P 500 members trade above their own 200-day moving average, but the index's gains continue to lean heavily on a handful of AI-linked mega-caps, with names like Nvidia posting standout results this earnings season. The one flashing caution light is positioning: short interest in S&amp;P 500 stocks remains near a record 3.79% of free float, a sign some investors are still hedging even as the index keeps grinding to new highs.
               </div>
             </div>
 
@@ -817,12 +817,12 @@ export default async function SPXPage() {
                     Weekly chart
                   </div>
                   <div style={{ marginTop: 5, fontSize: 21, fontWeight: 950 }}>
-                    Uptrend still firmly intact
+                    Uptrend intact, momentum off the boil
                   </div>
                 </div>
               </div>
               <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                The S&amp;P 500 starts the week trading comfortably above its daily 50-day (~7,620) and 200-day (~7,520) moving averages, with every major moving average from the 5-day out to the 200-day aligned bullishly. RSI(14) has eased back to around 66 after touching an overbought 74.5 last week — firm momentum without being as stretched as it was a few days ago.
+                The S&amp;P 500 is trading comfortably above its rising daily 50-day and 200-day moving averages, with every major moving average from the 5-day out to the 200-day aligned bullishly. RSI(14) has eased from the overbought extreme (~74–75) touched earlier this month to a more moderate high-60s reading — firm momentum with noticeably less froth than a couple of weeks ago.
               </div>
             </div>
           </section>
@@ -856,11 +856,11 @@ export default async function SPXPage() {
               }}
             >
               <p style={{ margin: 0 }}>
-                The S&amp;P 500 is in a genuine melt-up. The index closed last Friday at a record 7,757.64, capping its best week since April with a roughly 3.6% weekly gain — the Nasdaq rose about 5.2% and the Dow about 3.0% over the same stretch, with the Dow also closing above 54,000 for the first time. The index is now up more than 12% for the year. Bank of America's own technical target for the S&amp;P 500 in 2026, 7,741, was reached last week, and the bank's technicians now see potential room to 8,000, 8,234 and even 8,541 — even as BofA's separate, more cautious fundamental strategist target of 7,100 now sits well behind the market entirely. Citi (8,100), Wells Fargo (7,950) and Goldman Sachs (8,000) remain the more representative Street targets for where the year finishes.
+                The S&amp;P 500's uptrend remains intact, but the character of the rally has shifted. The index closed at a fresh record high near 7,815 on Wednesday, August 13 — clearing 7,800 for the first time — before pulling back modestly on Thursday and Friday, enough to notch its third consecutive weekly gain but not enough to give back much ground. The index is now up in the region of 14% for the year. Goldman Sachs raised its year-end 2026 target to 8,000 (from 7,600) in late May on the back of AI-driven earnings growth, and it's been joined by Citi (8,100, raised from 7,700) and Wells Fargo (7,950) as the more representative Street targets for where the year finishes — all now within single-digit percentage reach. Bank of America remains the outlier, with its fundamental strategist target still at 7,100 on concerns about tech-sector concentration, while its technicians' earlier target has already been cleared and they're now eyeing potential resistance somewhere in the 8,000–8,500 zone.
               </p>
 
               <p style={{ margin: 0 }}>
-                The trigger for last week's leg higher was, oddly enough, weak economic data. Friday's July jobs report showed nonfarm payrolls fell by 23,000 versus expectations for an 80,000-job gain — one of the bigger misses in recent memory — while the unemployment rate actually ticked down to 4.1% from 4.2%. Rather than spooking investors, the soft print reduced the odds the Fed hikes rates again in September; futures markets now price roughly a 44% chance of a September hike, down from about 55% earlier that week and 67% the week before that. Treasury yields eased across the curve, though the 30-year, still near 5.19%, remains at some of its highest levels in years — a reminder that the debate over new Fed Chair Kevin Warsh's inflation-fighting credibility from earlier this summer hasn't fully gone away. Q2 earnings season has also helped: roughly 87% of S&amp;P 500 companies have beaten estimates so far, and Deutsche Bank raised its 2026 S&amp;P 500 earnings estimate to $358 per share (from $342) last week on the back of broad-based margin strength and continued AI-related capital spending. Attention now turns to this week's inflation data — July CPI on Wednesday, PPI on Thursday, and retail sales on Friday — the next real-time check on whether the Fed's rate-cut odds keep easing.
+                The trigger for this week's leg higher was calmer than early August's jobs-report shock: back-to-back soft inflation data. Wednesday's July CPI report rose just 0.1% month-over-month, with the annual rate settling at 3.4% — below what economists had expected — and Friday's producer price data was similarly soft, further easing fears the Federal Reserve will need to raise rates again at its September meeting. The Fed funds rate has held at 3.50%–3.75%, and futures markets increasingly price in the possibility of a rate cut later in the year rather than another hike. Q2 earnings season has also stayed strong: the S&amp;P 500 is on track for a second consecutive quarter of year-over-year earnings growth above 20%, with AI-related capital spending — including another standout quarter from Nvidia — continuing to do much of the heavy lifting. A separate reading on private payrolls also came in soft, adding to the picture of a cooling, but not collapsing, labor market.
               </p>
 
               <div
@@ -877,12 +877,12 @@ export default async function SPXPage() {
               >
                 <div style={overviewIconStyle("red")}>⚠️</div>
                 <div style={{ lineHeight: 1.65 }}>
-                  <strong style={{ color: "#fca5a5" }}>Watch this week's inflation data and the crowded trade:</strong> the SPX's RSI touched an overbought 74.5 last week before easing to around 66, and short interest in S&amp;P 500 stocks just hit a record 3.79% of free float — some investors are clearly hedging even as the index grinds higher. Bank of America itself flagged seasonal weakness from August through October, along with "overheated momentum" and geopolitical risk, as reasons this rally could pause. The next real tests are this week's July CPI, PPI and retail sales reports, followed by the Fed's September meeting: a hot inflation print, or a reversal in the current ~44% odds of a hike, could matter more to this rally than any single earnings report from here.
+                  <strong style={{ color: "#fca5a5" }}>Watch the breadth and the crowded trade:</strong> leadership remains concentrated in a handful of AI-linked mega-caps, and while a majority of S&amp;P 500 members trade above their own 200-day moving average, breadth hasn't been as broad-based as the index-level records might suggest. RSI touched an overbought extreme near 74–75 earlier this month before easing, and short interest in S&amp;P 500 stocks remains near a record 3.79% of free float — a reminder that positioning is stretched even as fresh records keep being set. From here, a hot inflation surprise or a stumble from a mega-cap AI name could matter more to this rally than another broad macro catalyst.
                 </div>
               </div>
 
               <p style={{ margin: 0 }}>
-                Zooming out to the <strong>weekly chart</strong>, the picture is unambiguously bullish for now: price sits well above its 50-week and 200-week moving averages, both of which remain far below the current ~7,700–7,760 range, and every major moving average on the daily and weekly charts is aligned in a bullish configuration. Market breadth has broadened out meaningfully from where it stood earlier this summer, and last week's jobs-driven rally pushed the index past Bank of America's technical target and close to Wells Fargo's 7,950 mark, leaving Citi's 8,100 and Goldman's 8,000 as the more relevant markers for the rest of the year.
+                Zooming out to the <strong>weekly chart</strong>, the picture stays constructive: price sits comfortably above its 50-week and 200-week moving averages, both well below the current ~7,750–7,815 range, and every major moving average on the daily and weekly charts remains aligned bullishly. Market breadth has held up reasonably well without being pristine, and this week's record puts the index within striking distance of Wells Fargo's 7,950 mark, leaving Goldman's and Citi's 8,000–8,100 targets as the more relevant markers for the rest of the year.
               </p>
             </div>
           </section>
@@ -923,19 +923,19 @@ export default async function SPXPage() {
                 }}
               >
                 <p style={{ margin: 0 }}>
-                  After a week that saw the S&amp;P 500 add roughly 3.6%, notch its best week since April, and close at a fresh record high on the back of a surprisingly weak jobs report, the daily chart alone doesn't tell the full story. The weekly chart shows an index that remains comfortably above both its 50-week and 200-week moving averages, levels that sit well below the current ~7,700–7,760 range — last week's move, as sharp as it was, has plenty of room before it would threaten the longer-term trend.
+                  After a week that saw the S&amp;P 500 touch a fresh record above 7,800 before easing slightly into the weekend, the daily chart alone doesn't tell the full story. The weekly chart shows an index that remains comfortably above both its 50-week and 200-week moving averages, levels that sit well below the current ~7,750–7,815 range — this week's brief pullback has plenty of room before it would threaten the longer-term trend.
                 </p>
 
                 <p style={{ margin: 0 }}>
-                  The bigger picture: the S&amp;P 500 is up more than 12% for the year, has now cleared several Wall Street banks' full-year 2026 targets months early, and its daily 200-day moving average (~7,520) — unbroken for months — sits firmly beneath current levels.
+                  The bigger picture: the S&amp;P 500 is up roughly 14% for the year, is now closing in on or has cleared several Wall Street banks' full-year 2026 targets, and its daily 200-day moving average — unbroken for months — sits comfortably beneath current levels.
                 </p>
 
                 <p style={{ margin: 0 }}>
-                  The real question isn't whether last week's rally was real — a roughly 3.6% weekly gain on a genuine catalyst (falling rate-hike odds) makes it real. It's whether the market can hold these levels as this week's inflation data lands, especially with RSI having touched overbought territory, short interest at a record high, and Bank of America itself warning of seasonally weak months ahead from August through October.
+                  The real question isn't whether this month's records are real — a genuine catalyst (cooling inflation, not just hope) makes them real. It's whether the market can hold these levels once the initial reaction fades, especially with RSI having touched overbought territory earlier this month, short interest near a record high, and breadth still leaning on a fairly narrow set of AI-linked leaders.
                 </p>
 
                 <p style={{ margin: 0 }}>
-                  <strong>Until the 200-day moving average — unbroken for months and now roughly 240 points below the market — is seriously tested, the primary uptrend still gets the benefit of the doubt.</strong>
+                  <strong>Until the 200-day moving average — unbroken for months and still hundreds of points below the market — is seriously tested, the primary uptrend still gets the benefit of the doubt.</strong>
                 </p>
               </div>
             </div>
@@ -957,10 +957,10 @@ export default async function SPXPage() {
 
               <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
                 {[
-                  ["📈", "ATH", "fresh record close of 7,757.64 set Friday, August 7, 2026, capping the index's best week since April"],
-                  ["⚠️", "Risk", "RSI touched an overbought 74.5 last week, short interest in S&P 500 stocks hit a record 3.79% of free float, and Bank of America is flagging seasonally weak months (Aug–Oct) ahead"],
-                  ["🔎", "Weekly structure", "still bullish — price sits well above its 200-day (~7,520) and 200-week moving averages, and roughly 72% of members trade above their own 200-day MA"],
-                  ["🟡", "Current stance", "up more than 12% for the year after a jobs-report-driven rally; this week's CPI, PPI and retail sales data, plus September's Fed decision, are the next big catalysts"],
+                  ["📈", "ATH", "fresh record high near 7,815 set Wednesday, August 13, 2026, clearing 7,800 for the first time and marking the index's third straight weekly gain"],
+                  ["⚠️", "Risk", "RSI touched an overbought extreme near 74–75 earlier this month, short interest in S&P 500 stocks remains near a record 3.79% of free float, and leadership still leans heavily on a handful of AI mega-caps"],
+                  ["🔎", "Weekly structure", "still bullish — price sits well above its 200-day and 200-week moving averages, and a majority of members trade above their own 200-day MA"],
+                  ["🟡", "Current stance", "up roughly 14% for the year after a cooling-inflation-driven rally; September's Fed decision and the next round of AI-linked earnings are the next big catalysts"],
                 ].map(([icon, label, text]) => (
                   <div
                     key={label}
@@ -1023,7 +1023,7 @@ export default async function SPXPage() {
                 maxWidth: 920,
               }}
             >
-              The weekly chart shows the S&amp;P 500 breaking out to a fresh record high last week, closing Friday at 7,757.64 after a roughly 3.6% weekly advance — its best week since April — sparked by a surprisingly weak July jobs report that eased fears of a Fed rate hike. Every major daily and weekly moving average remains aligned bullishly, with the index comfortably above its 50-day (~7,620) and 200-day (~7,520) levels. Momentum has eased from an overbought RSI near 74.5 last week back to a firmer reading around 66, while market breadth stays healthy at roughly 72% of members above their 200-day moving average — a backdrop that looks constructive heading into this week's inflation data and September's Fed meeting.
+              The weekly chart shows the S&amp;P 500 breaking out to a fresh record high this week, touching roughly 7,815 on Wednesday, August 13 before easing modestly into Friday's close — its third consecutive weekly gain. Every major daily and weekly moving average remains aligned bullishly, with the index comfortably above its rising 50-day and 200-day levels. Momentum has eased from an overbought RSI near 74–75 earlier this month to a firmer, less stretched high-60s reading, while a majority of S&amp;P 500 members continue to trade above their own 200-day moving average — a backdrop that looks constructive heading into September's Fed meeting, even with leadership still concentrated in a handful of AI-linked mega-caps.
             </div>
 
             <div style={{ marginTop: 18 }}>
@@ -1079,16 +1079,16 @@ export default async function SPXPage() {
 
                 <ul style={{ margin: "12px 0 0", paddingLeft: 18, display: "grid", gap: 8 }}>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    SPX closes back below its daily MA50 (currently near 7,620) on a weekly basis
+                    SPX closes back below its rising daily 50-day moving average on a weekly basis
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    This week's CPI or PPI prints run hot and rate-hike odds climb back above the current ~44% ahead of September's FOMC decision
+                    A hotter-than-expected inflation or jobs print revives fears the Fed hikes rates at its September meeting
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Short interest keeps climbing beyond its already-record 3.79% of free float, or a real bout of profit-taking hits mega-cap tech
+                    Short interest keeps climbing beyond its already-record 3.79% of free float, or a real bout of profit-taking hits AI-linked mega-caps
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Weekly close below the 200-day moving average (~7,520) — the primary trend line that's held for months
+                    Weekly close below the 200-day moving average — the primary trend line that's held for months
                   </li>
                 </ul>
               </div>
@@ -1103,16 +1103,16 @@ export default async function SPXPage() {
 
                 <ul style={{ margin: "12px 0 0", paddingLeft: 18, display: "grid", gap: 8 }}>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Price holds above its daily MA50 and pushes on toward Bank of America's next resistance levels near 8,000 and 8,234
+                    Price holds above 7,800 and pushes on toward the 8,000 level that several Wall Street year-end targets already point to
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    This week's CPI, PPI and retail sales data come in soft, keeping September hike odds near or below the current ~44%
+                    Upcoming inflation and labor-market data stay soft enough to keep the Fed on hold, or open the door to a rate cut later this year
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Q2 earnings season finishes with the beat rate holding near its current ~87%
+                    Q2 earnings season finishes with S&P 500 profit growth holding above its current 20%+ year-over-year pace
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Market breadth keeps improving beyond the current ~72% of members above their 200-day MA
+                    Market breadth keeps improving, with a growing share of members holding above their 200-day moving average
                   </li>
                 </ul>
               </div>
@@ -1148,7 +1148,7 @@ export default async function SPXPage() {
               }}
             >
               <p style={{ margin: 0 }}>
-                The honest answer depends on timeframe. The weekly trend is unambiguously bullish — the SPX just closed at a fresh record high, up more than 12% for the year, and has already cleared Bank of America's technical target of 7,741. Citi (8,100), Wells Fargo (7,950) and Goldman Sachs (8,000) remain the more forward-looking Street targets for where 2026 finishes; none of the bullish calls have been walked back.
+                The honest answer depends on timeframe. The weekly trend is unambiguously bullish — the SPX just closed at a fresh record high near 7,815, up roughly 14% for the year, and is now within striking distance of Wells Fargo's 7,950 target and Goldman Sachs' and Citi's 8,000–8,100 targets. None of the bullish sell-side calls have been walked back; Bank of America remains the outlier on the fundamental side, still at 7,100 on concerns about how concentrated the market's gains have become.
               </p>
 
               <div
@@ -1165,12 +1165,12 @@ export default async function SPXPage() {
               >
                 <div style={overviewIconStyle("blue")}>🧭</div>
                 <div style={{ lineHeight: 1.65 }}>
-                  <strong style={{ color: "#93c5fd" }}>The nuance:</strong> last week's rally was set off by weak economic data (a 23,000-job decline), not strong data — a reminder that markets have largely been trading on "bad news is good news for the Fed" logic rather than pure economic strength. Sentiment has caught up to price too: the CNN Fear &amp; Greed Index sits at 60 ("Greed"), and RSI touched an overbought 74.5 last week. Short interest in S&amp;P 500 stocks just hit a record 3.79% of free float, and Bank of America itself is flagging seasonally weak months (August–October) and "overheated momentum" as reasons this run could pause. None of that means the uptrend is over — breadth is genuinely healthy and the 200-day moving average is nowhere close — but it does mean the easy, undervalued entry point of a few months ago is behind us. This week's CPI, PPI and retail sales reports are the next real test of that thesis.
+                  <strong style={{ color: "#93c5fd" }}>The nuance:</strong> this month's rally was set off by cooling inflation data, not runaway economic strength — a reminder that markets have largely been trading on "good news on inflation is good news for the Fed" logic. Sentiment has caught up to price too: the CNN Fear &amp; Greed Index sits around 60 ("Greed"), and RSI touched an overbought extreme near 74–75 earlier this month. Short interest in S&amp;P 500 stocks remains near a record 3.79% of free float, and market leadership still leans on a fairly narrow set of AI-linked mega-caps even though breadth overall has held up reasonably well. None of that means the uptrend is over — the 200-day moving average is nowhere close — but it does mean the easy, undervalued entry point of a few months ago is behind us. September's Fed meeting and the next round of AI-linked earnings are the next real tests of that thesis.
                 </div>
               </div>
 
               <p style={{ margin: 0 }}>
-                The SPX at 7,757.64 is at a fresh all-time high, up solidly for the year with real participation beneath the surface. But with RSI having touched overbought levels, short interest at a record, sentiment back in "Greed" territory, and Bank of America itself flagging seasonally weak months just ahead, chasing last week's specific move looks less compelling than waiting for either a routine pullback toward the rising 50-day moving average or confirmation from this week's inflation data and the Fed's September decision.
+                The SPX near 7,815 is at a fresh all-time high, up solidly for the year with real earnings growth doing work beneath the surface. But with RSI having touched overbought levels earlier this month, short interest at a record, sentiment back in "Greed" territory, and leadership still concentrated in a handful of AI names, chasing this week's specific record looks less compelling than waiting for either a routine pullback toward the rising 50-day moving average or confirmation from the Fed's September decision.
               </p>
             </div>
           </section>
