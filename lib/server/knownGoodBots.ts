@@ -28,6 +28,31 @@ export const KNOWN_GOOD_UA_MARKERS = [
   "applebot",
   "duckduckbot",
   "bingpreview",
+
+  // Google agents that do NOT contain the substring "googlebot" and so were
+  // silently missed by the list above (found in the 2026-08-15 Search Console
+  // audit -- see claude/seo-recovery-plan-2026-08-15.md):
+  //
+  //   Google-InspectionTool -- the fetcher behind Search Console's "Test Live
+  //     URL" / URL Inspection. Blocking it makes the single most useful
+  //     debugging tool in GSC report failures that don't exist on the live
+  //     site, which is a genuinely painful way to lose an afternoon.
+  //   GoogleOther -- Google's general-purpose crawler, used for discovery
+  //     work that isn't core Search indexing.
+  //   Storebot-Google -- product/shopping crawler.
+  //   Google-Extended -- the Gemini/Vertex AI training agent.
+  //
+  // Google-Extended is listed here deliberately even though many sites choose
+  // NOT to let AI training crawlers read their content. That choice belongs in
+  // robots.txt (app/robots.ts), which is a polite "please don't read this".
+  // This list is different: it decides who is exempt from an IP + JA4
+  // *block*. Punishing a Google-owned crawler at the network layer risks
+  // collateral damage to shared Google infrastructure that also serves
+  // Googlebot itself -- so the two decisions should stay separate.
+  "google-inspectiontool",
+  "googleother",
+  "storebot-google",
+  "google-extended",
 ];
 
 export function isKnownGoodBot(userAgent: string | null | undefined): boolean {
