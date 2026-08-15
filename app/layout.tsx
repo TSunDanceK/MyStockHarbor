@@ -97,6 +97,16 @@ export default async function RootLayout({
   // What is left is what a footer is actually for -- orientation (where am I,
   // what does this site do) and the legal obligations. Discovery is the
   // header's job, and the header does it well.
+  //
+  // 2026-08-15: "Stock Directory" (/stocks) added, which is a deliberate
+  // exception to the paragraph above rather than a quiet walking-back of it.
+  // The reasoning that removed fifteen links still holds -- site-wide footer
+  // links are discounted boilerplate, and none of those fifteen pages needed a
+  // third navigation route. /stocks is different on both counts: it is a hub
+  // with no other route into it at all, and the point is not the weight the
+  // link passes but that the page exists one hop from everywhere so a crawler
+  // reaches it early. One link, opening a path to 483 pages that previously
+  // had none. See app/stocks/page.tsx for the full reasoning.
   const footerColumns: {
     heading: string;
     links: { href: string; label: string }[];
@@ -105,6 +115,7 @@ export default async function RootLayout({
       heading: "Explore",
       links: [
         { href: "/dashboard", label: "Dashboard" },
+        { href: "/stocks", label: "Stock Directory" },
         { href: "/stock-screener", label: "Advanced Screener" },
         { href: "/earnings-calendar", label: "Earnings Calendar" },
         { href: "/insights", label: "Insights" },
