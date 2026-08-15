@@ -5,6 +5,7 @@ import { getAllBottleneckPosts } from "@/lib/bottlenecks";
 import { LESSONS } from "@/app/learn/lessons";
 import { priorityStocks, uniqueEtfs } from "@/lib/curatedSymbols";
 import { SECTORS, sectorNewsPath } from "@/lib/sectors";
+import { NOINDEX_PICKER_PAGES } from "@/lib/noindexPickerPages";
 
 const baseUrl = "https://www.mystockharbor.com";
 
@@ -114,8 +115,11 @@ const seoGuides = [
   // from the sitemap - found via June 2026 SEO audit)
   "/breakout-stocks",
   "/oversold-stocks",
-  "/bullish-divergence-stocks",
-  "/bearish-divergence-stocks",
+  // /bullish-divergence-stocks and /bearish-divergence-stocks removed
+  // 2026-08-15: next.config.ts 301s both to /bullish-bearish-divergence-
+  // stocks, so they were being submitted to Google as crawlable URLs that
+  // only ever return a redirect. The canonical combined page is already
+  // listed above.
 
   // Sector news (added 2026-08-07). Listed here as well as in the dedicated
   // sectorEntries block below for one specific reason: the daily insight-post
@@ -159,12 +163,24 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.88,
   }));
 
-  const seoGuideEntries: MetadataRoute.Sitemap = seoGuides.map((path) => ({
-    url: toAbsoluteUrl(path),
-    lastModified: now,
-    changeFrequency: "weekly",
-    priority: 0.8,
-  }));
+  // The 22 noindexed picker pages are filtered out here rather than deleted
+  // from `seoGuides` above, and that distinction matters: per repo CLAUDE.md
+  // step 4, the daily insight-post workflow validates every internal link it
+  // writes against the `seoGuides` array, so a path removed from the array
+  // can never be linked from a post again. These pages are meant to stay
+  // live and internally linked (see lib/noindexPickerPages.ts) - it is only
+  // their sitemap entry that has to go, because listing a noindex URL in a
+  // sitemap asks Google to crawl something it has been told not to index.
+  const noindexPickerPaths = new Set<string>(NOINDEX_PICKER_PAGES);
+
+  const seoGuideEntries: MetadataRoute.Sitemap = seoGuides
+    .filter((path) => !noindexPickerPaths.has(path))
+    .map((path) => ({
+      url: toAbsoluteUrl(path),
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.8,
+    }));
 
   // Insight posts are frozen snapshots tied to their `date` field - they
   // never change after publish (see claude/CLAUDE.md "Lessons learned").
