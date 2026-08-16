@@ -1109,8 +1109,17 @@ export default async function PickerResultPage({
         .listTable tbody tr:last-child td { border-bottom: none; }
         .listSym { display: inline-flex; align-items: center; gap: 8px; font-weight: 900; font-size: 14px; color: #eaf2ff; text-decoration: none; }
         .listSym .dot { width: 8px; height: 8px; border-radius: 999px; flex: 0 0 auto; }
-        .listName { color: rgba(148,163,184,0.92); max-width: 230px; overflow: hidden; text-overflow: ellipsis; }
-        .listInd { color: rgba(148,163,184,0.86); max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
+        /* display:inline-block is load-bearing, not cosmetic. A <span> is an
+           inline box, and max-width / overflow / text-overflow do not apply to
+           inline non-replaced elements -- so the caps below were silently
+           ignored and a 133-character company name (PAC) stretched the cell,
+           the table, and every column to its right clean off the screen.
+           The td caps are the belt to that braces: they stop the COLUMN
+           growing even if a cell's content escapes the span. */
+        .listName { display: inline-block; vertical-align: middle; max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgba(148,163,184,0.92); }
+        .listInd { display: inline-block; vertical-align: middle; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgba(148,163,184,0.86); }
+        .listTable thead th.colName, .listTable tbody td.colName { max-width: 258px; }
+        .listTable thead th.colInd, .listTable tbody td.colInd { max-width: 218px; }
         .chgUp { color: #4ade80; font-weight: 800; }
         .chgDown { color: #f87171; font-weight: 800; }
         .muted { color: rgba(148,163,184,0.55); }
@@ -1194,6 +1203,13 @@ export default async function PickerResultPage({
           .reasonChip { font-size: 10.5px; padding: 4px 8px; }
           .note { min-height: 0; font-size: 13px; }
           .listTableWrap { max-height: 58vh; }
+          /* Tighter name/industry caps on phones -- the table already scrolls
+             sideways here, so every pixel the name column gives back is one
+             fewer swipe to reach the numbers. */
+          .listName { max-width: 150px; }
+          .listInd { max-width: 130px; }
+          .listTable thead th.colName, .listTable tbody td.colName { max-width: 178px; }
+          .listTable thead th.colInd, .listTable tbody td.colInd { max-width: 158px; }
           /* Header is shorter below this breakpoint (10px padding + 40px
              hamburger + border, vs 12px + 38px logo above it). */
           .screenerTriggerWrap { top: 60px; }
