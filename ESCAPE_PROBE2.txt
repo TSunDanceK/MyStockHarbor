@@ -1,2 +1,0 @@
-  /[\s,–-]+(class\s+[a-z]\s+)?(common stock)\s*$/i;
-  name = name.replace(/[\s,;:–-]+$/, "").trim();
