@@ -1,6 +1,6 @@
 ---
 ticker: KRMN
-datasheetImage:
+datasheetImage: /images/datasheets/krmn-august-2026.png
 statLabel1: Q1 FY26 revenue
 statValue1: $151.2M
 statLabel2: Net income
