@@ -9,8 +9,19 @@
 const NASDAQ_LISTED = "https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.txt";
 const OTHER_LISTED = "https://www.nasdaqtrader.com/dynamic/symdir/otherlisted.txt";
 
+// The separator is "whitespace/comma/dash, OR nothing at all if we are sitting
+// right after a closing bracket" -- the directory has entries with no space at
+// the join ("Iron Mountain Incorporated (Delaware)Common Stock REIT"), and the
+// trailing structure word ("REIT", "Trust") comes AFTER the instrument words,
+// so it has to be part of this pattern rather than a separate pass.
 const INSTRUMENT_SUFFIX_RE =
-  /[\s,–-]+(class\s+[a-z]\s+)?(common stock|ordinary shares?|common shares?|american depositary shares?|american depositary receipts?|depositary shares?|depositary receipts?)\s*$/i;
+  /(?:[\s,–-]+|(?<=\)))(class\s+[a-z]\s+)?(common stock|ordinary shares?|common shares?|american depositary shares?|american depositary receipts?|depositary shares?|depositary receipts?)(\s+(reit|trust|fund))?\s*$/i;
+
+// "…American Depositary Shares, each representing one Class A ordinary share."
+// The share-ratio clause is a description of the instrument, not of the
+// company, and it is the single biggest source of absurdly long names after the
+// parenthetical form (which is the same clause in brackets).
+const RATIO_CLAUSE_RE = /[\s,;–-]+each\s+represent\w*\b.*$/i;
 
 // Collapses a name that repeats itself.
 //
@@ -41,6 +52,7 @@ function collapseRepeat(name: string) {
 // the trailing instrument parenthetical and any restatement of the name itself.
 function cleanName(raw: string) {
   let name = String(raw || "").trim();
+  name = name.replace(RATIO_CLAUSE_RE, "");
   name = name.replace(INSTRUMENT_SUFFIX_RE, "");
   // Trailing parentheticals on this feed are always instrument descriptions
   // ("(each representing 10 Series B shares)", "(Cayman Islands)"), never part
