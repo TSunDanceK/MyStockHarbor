@@ -8,6 +8,7 @@ import { getVideoStockData } from "@/lib/videoStockData";
 import { remark } from "remark";
 import html from "remark-html";
 import VideoPageClient from "./VideoPageClient";
+import DatasheetViewer from "./DatasheetViewer";
 import PageShareBar from "@/app/components/PageShareBar";
 
 export const dynamic = "force-dynamic";
@@ -29,13 +30,13 @@ function formatDateShort(value: string) {
 }
 
 function fmtPct(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) return "\u2014";
+  if (value === null || !Number.isFinite(value)) return "—";
   const sign = value >= 0 ? "+" : "";
   return `${sign}${value.toFixed(1)}%`;
 }
 
 function fmtPrice(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) return "\u2014";
+  if (value === null || !Number.isFinite(value)) return "—";
   return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
@@ -57,7 +58,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const ticker = videoContent?.ticker ?? null;
 
   const title = ticker
-    ? `${ticker} \u2014 ${video.title} | MyStockHarbor`
+    ? `${ticker} — ${video.title} | MyStockHarbor`
     : `${video.title} | MyStockHarbor`;
 
   const description = ticker
@@ -125,7 +126,7 @@ export default async function VideoPage({ params }: Props) {
 
   const statItems = stockData ? [
     { label: "Price", value: fmtPrice(stockData.price) },
-    { label: "Market cap", value: stockData.marketCap ?? "\u2014" },
+    { label: "Market cap", value: stockData.marketCap ?? "—" },
     { label: "vs MA50", value: fmtPct(stockData.ma50Pct) },
     { label: "vs MA200", value: fmtPct(stockData.ma200Pct) },
     ...(stockData.peRatio ? [{ label: "P/E (TTM)", value: stockData.peRatio.toFixed(1) }] : []),
@@ -137,8 +138,8 @@ export default async function VideoPage({ params }: Props) {
 
   const pageUrl = `https://www.mystockharbor.com/insights/videos/${videoId}`;
   const shareText = ticker
-    ? `${ticker} stock analysis: ${video.title} \uD83D\uDCCA MyStockHarbor`
-    : `${video.title} \uD83D\uDCCA MyStockHarbor`;
+    ? `${ticker} stock analysis: ${video.title} 📊 MyStockHarbor`
+    : `${video.title} 📊 MyStockHarbor`;
 
   return (
     <>
@@ -156,7 +157,7 @@ export default async function VideoPage({ params }: Props) {
             </div>
             <PageShareBar
               url={pageUrl}
-              title={ticker ? `${ticker} \u2014 ${video.title} | MyStockHarbor` : `${video.title} | MyStockHarbor`}
+              title={ticker ? `${ticker} — ${video.title} | MyStockHarbor` : `${video.title} | MyStockHarbor`}
               text={shareText}
               align="right"
             />
@@ -194,10 +195,7 @@ export default async function VideoPage({ params }: Props) {
             </div>
             <VideoPageClient videos={relatedVideos} contentHtml={contentHtml} />
             {videoContent?.datasheetImage && (
-              <div style={{ marginBottom: 24 }}>
-                <div style={{ fontSize: 11, opacity: 0.55, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>Investor datasheet</div>
-                <img src={videoContent.datasheetImage} alt={`${ticker ?? ""} investor datasheet`} style={{ width: "100%", borderRadius: 12, border: "1px solid rgba(255,255,255,0.10)" }} />
-              </div>
+              <DatasheetViewer src={videoContent.datasheetImage} alt={`${ticker ?? ""} investor datasheet`} />
             )}
             <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)", padding: "12px 16px", fontSize: 13, opacity: 0.5, lineHeight: 1.6, marginBottom: 16 }}>
               This page is for educational purposes only and does not constitute financial advice. Always do your own research before making any investment decisions.
@@ -222,10 +220,7 @@ export default async function VideoPage({ params }: Props) {
                 <div style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.025)", padding: "18px 22px", marginBottom: 24, opacity: 0.6, fontSize: 18, lineHeight: 1.8 }}>Written analysis coming soon &mdash; watch the video above for the full breakdown.</div>
               )}
               {videoContent?.datasheetImage && (
-                <div style={{ marginBottom: 24 }}>
-                  <div style={{ fontSize: 11, opacity: 0.55, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>Investor datasheet</div>
-                  <img src={videoContent.datasheetImage} alt={`${ticker ?? ""} investor datasheet`} style={{ width: "100%", borderRadius: 12, border: "1px solid rgba(255,255,255,0.10)" }} />
-                </div>
+                <DatasheetViewer src={videoContent.datasheetImage} alt={`${ticker ?? ""} investor datasheet`} />
               )}
               <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)", padding: "12px 16px", fontSize: 13, opacity: 0.5, lineHeight: 1.6, marginBottom: 24 }}>
                 This page is for educational purposes only and does not constitute financial advice. Always do your own research before making any investment decisions.
