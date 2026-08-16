@@ -3,26 +3,6 @@ import { withBotId } from "botid/next/config";
 import { NOINDEX_PICKER_PAGES } from "./lib/noindexPickerPages";
 
 const nextConfig: NextConfig = {
-  // ── Keep content/videos/*.md inside the video route's function ────
-  // lib/videoContent.ts reads these at request time with a path built from
-  // the [videoId] param, so file tracing cannot see which file any given
-  // request needs. When a deploy adds ONLY a new .md (no code change), the
-  // traced file list can come back from the build cache unchanged and the
-  // new markdown never makes it into the function bundle — the page then
-  // renders "Written analysis coming soon" even though the file is on main
-  // and app/sitemap.ts (generated at build, with the whole repo on disk)
-  // already lists the URL. Naming the glob here makes the whole directory
-  // part of the bundle unconditionally.
-  //
-  // The KEYS are globs matched against page paths, so the brackets of a
-  // dynamic segment have to be escaped — an unescaped "[videoId]" is read as
-  // a character class and silently matches nothing. The second, bracket-free
-  // key is belt and braces against exactly that.
-  outputFileTracingIncludes: {
-    "/insights/videos/\\[videoId\\]": ["./content/videos/**/*.md"],
-    "/insights/videos/**": ["./content/videos/**/*.md"],
-  },
-
   // ── Picker pages dropped from the index (noindex, follow) ────
   // Served as an X-Robots-Tag response header rather than a
   // `robots: { index: false, follow: true }` metadata export in each of the
