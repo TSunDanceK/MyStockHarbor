@@ -13,8 +13,14 @@ const nextConfig: NextConfig = {
   // and app/sitemap.ts (generated at build, with the whole repo on disk)
   // already lists the URL. Naming the glob here makes the whole directory
   // part of the bundle unconditionally.
+  //
+  // The KEYS are globs matched against page paths, so the brackets of a
+  // dynamic segment have to be escaped — an unescaped "[videoId]" is read as
+  // a character class and silently matches nothing. The second, bracket-free
+  // key is belt and braces against exactly that.
   outputFileTracingIncludes: {
-    "/insights/videos/[videoId]": ["./content/videos/**/*.md"],
+    "/insights/videos/\\[videoId\\]": ["./content/videos/**/*.md"],
+    "/insights/videos/**": ["./content/videos/**/*.md"],
   },
 
   // ── Picker pages dropped from the index (noindex, follow) ────
