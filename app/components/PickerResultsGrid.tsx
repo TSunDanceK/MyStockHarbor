@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import MiniPickerCandleChart from "@/app/components/MiniPickerCandleChart";
 import { usePickerFilter } from "@/app/components/PickerFilterContext";
 import type { ResultEntry } from "@/app/components/PickerResultPage";
@@ -340,6 +340,31 @@ function textCell(v: string | null | undefined): ReactNode {
   return v ? v : MUTED;
 }
 
+// Hard character cap on the Company Name cell.
+//
+// The CSS cap (.listName, max-width + ellipsis) is the visual guarantee, but a
+// character cap is what keeps the *table* honest: the widest name in the
+// currently-rendered 30 rows sets the column width, so one 133-character entry
+// like PAC's used to blow the table out to several screens wide. Re-sorting
+// then swapped that row in or out, the name column resized underneath you, and
+// every column to its right slid sideways -- which is what made a sort click
+// feel like it threw you off the page. Capping the string keeps the column the
+// same width no matter which rows are on screen.
+//
+// The full name is still exposed via title=, so hovering (or a screen reader)
+// gets the untruncated text.
+const MAX_NAME_CHARS = 40;
+
+function truncateName(name: string, max = MAX_NAME_CHARS) {
+  if (name.length <= max) return name;
+  // Cut on a word boundary when there is one reasonably near the limit, so we
+  // get "Grupo Aeroportuario Del Pacifico…" rather than "…Pacif…".
+  const slice = name.slice(0, max);
+  const lastSpace = slice.lastIndexOf(" ");
+  const base = lastSpace > max * 0.6 ? slice.slice(0, lastSpace) : slice;
+  return `${base.replace(/[\s,;:–-]+$/, "")}…`;
+}
+
 function forwardPe(e: ResultEntry, d: DerivedRow): number | null {
   const eps = num(e.forwardEps);
   if (d.price == null || eps == null || eps <= 0) return null;
@@ -457,12 +482,19 @@ export default function PickerResultsGrid({
       sortType: "str",
       cls: "colName",
       get: (e) => e.companyName ?? "",
-      cell: (e) => (e.companyName ? <span className="listName">{e.companyName}</span> : MUTED),
+      cell: (e) =>
+        e.companyName ? (
+          <span className="listName" title={e.companyName}>
+            {truncateName(e.companyName)}
+          </span>
+        ) : (
+          MUTED
+        ),
     };
     const marketCap: Col = { key: "marketCap", label: "Market Cap", sortType: "num", get: (e) => num(e.marketCap), cell: (e) => capCell(num(e.marketCap)) };
     const price: Col = { key: "price", label: "Stock Price", sortType: "num", get: (_e, d) => d.price, cell: (_e, d) => numCell(d.price) };
     const change: Col = { key: "change", label: "% Change", sortType: "num", get: (_e, d) => d.changePct, cell: (_e, d) => pctCell(d.changePct) };
-    const industry: Col = { key: "industry", label: "Industry", sortType: "str", cls: "colInd", get: (e) => e.industry ?? "", cell: (e) => (e.industry ? <span className="listInd">{e.industry}</span> : MUTED) };
+    const industry: Col = { key: "industry", label: "Industry", sortType: "str", cls: "colInd", get: (e) => e.industry ?? "", cell: (e) => (e.industry ? <span className="listInd" title={e.industry}>{truncateName(e.industry, 32)}</span> : MUTED) };
     const volume: Col = { key: "volume", label: "Volume", sortType: "num", get: (_e, d) => d.volume, cell: (_e, d) => volCell(d.volume) };
     const pe: Col = { key: "pe", label: "PE Ratio", sortType: "num", get: (e) => num(e.peRatio), cell: (e) => numCell(num(e.peRatio)) };
     const ma200: Col = { key: "ma200", label: "200 MA", sortType: "num", get: (_e, d) => d.ma200, cell: (_e, d) => numCell(d.ma200) };
@@ -558,9 +590,15 @@ export default function PickerResultsGrid({
     return copy;
   }, [filteredEntries, sort, activeColumns, derivedByEntry]);
 
+  // Reset the page size when the RESULT SET changes (filters, tab, view), but
+  // deliberately NOT when only the sort order changes. Sorting reorders the
+  // same rows -- collapsing 300 expanded rows back to 30 shortens the document
+  // under the visitor's feet, so the browser scrolls them somewhere else the
+  // instant they click a column header. Keeping the count means clicking
+  // "Stock Price" re-orders the list and leaves you exactly where you were.
   useEffect(() => {
     setVisibleCount(pageSize);
-  }, [predicates, sort, viewMode, pageSize, activeTab]);
+  }, [predicates, viewMode, pageSize, activeTab]);
 
   useEffect(() => {
     setMatchCount(predicates.length ? filteredEntries.length : null);
@@ -570,7 +608,21 @@ export default function PickerResultsGrid({
   const shown = sortedEntries.slice(0, visibleCount);
   const hasMore = visibleCount < sortedEntries.length;
 
+  // Synced top + bottom horizontal scrollbars (grey /insights style). The top
+  // strip mirrors the table's scroll width; scrolling either moves the other.
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const tableWrapRef = useRef<HTMLDivElement>(null);
+  const [scrollWidth, setScrollWidth] = useState(0);
+
+  // Where the table was scrolled to, horizontally and vertically, at the moment
+  // a column header was clicked. Restored synchronously after the re-sorted
+  // rows commit (see the layout effect below) so the header you clicked is
+  // still under your cursor rather than somewhere off to the left.
+  const restoreScroll = useRef<{ left: number; top: number } | null>(null);
+
   const onHeaderClick = (key: string, type: "str" | "num") => {
+    const wrap = tableWrapRef.current;
+    if (wrap) restoreScroll.current = { left: wrap.scrollLeft, top: wrap.scrollTop };
     setSort((current) => {
       if (current && current.key === key) {
         return { key, dir: current.dir === "asc" ? "desc" : "asc" };
@@ -580,20 +632,32 @@ export default function PickerResultsGrid({
   };
 
   const onTabChange = (tab: TabKey) => {
+    // A tab swap really is a different table -- different columns, different
+    // widths -- so there is nothing meaningful to restore. Drop the pending
+    // position rather than reapplying it to a layout it doesn't describe.
+    restoreScroll.current = null;
     setActiveTab(tab);
     setSort(null);
   };
-
-  // Synced top + bottom horizontal scrollbars (grey /insights style). The top
-  // strip mirrors the table's scroll width; scrolling either moves the other.
-  const topScrollRef = useRef<HTMLDivElement>(null);
-  const tableWrapRef = useRef<HTMLDivElement>(null);
-  const [scrollWidth, setScrollWidth] = useState(0);
 
   useEffect(() => {
     const table = tableWrapRef.current?.querySelector("table");
     setScrollWidth(table ? table.scrollWidth : 0);
   }, [shown, activeColumns, viewMode]);
+
+  // useLayoutEffect, not useEffect: this has to run before the browser paints,
+  // otherwise the visitor sees one frame of the table snapped back to the left
+  // edge before it jumps back.
+  useLayoutEffect(() => {
+    const pending = restoreScroll.current;
+    if (!pending) return;
+    restoreScroll.current = null;
+    const wrap = tableWrapRef.current;
+    if (!wrap) return;
+    wrap.scrollLeft = pending.left;
+    wrap.scrollTop = pending.top;
+    if (topScrollRef.current) topScrollRef.current.scrollLeft = wrap.scrollLeft;
+  }, [sort]);
 
   const syncFromTop = () => {
     if (tableWrapRef.current && topScrollRef.current) {
