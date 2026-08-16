@@ -10,7 +10,7 @@ const NASDAQ_LISTED = "https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.
 const OTHER_LISTED = "https://www.nasdaqtrader.com/dynamic/symdir/otherlisted.txt";
 
 const INSTRUMENT_SUFFIX_RE =
-  /[\s,–-]+(class\s+[a-z]\s+)?(common stock|ordinary shares?|common shares?|american depositary shares?|american depositary receipts?|depositary shares?|depositary receipts?)\s*$/i;
+  /[\s,\\u2013-]+(class\s+[a-z]\s+)?(common stock|ordinary shares?|common shares?|american depositary shares?|american depositary receipts?|depositary shares?|depositary receipts?)\s*$/i;
 
 // Collapses a name that repeats itself.
 //
@@ -56,7 +56,7 @@ function cleanName(raw: string) {
   name = name.replace(/\s{2,}/g, " ").trim();
   // Tidy a cut that landed on a separator, but keep a trailing "." so
   // "S.A. de C.V." and "Inc." survive intact.
-  name = name.replace(/[\s,;:–-]+$/, "").trim();
+  name = name.replace(/[\s,;:\\u2013-]+$/, "").trim();
   return name;
 }
 
