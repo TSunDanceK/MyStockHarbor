@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getPaginatedPosts } from "@/lib/blog";
 import { getLatestYouTubeVideos } from "@/lib/youtube";
+import { getAllVideoMeta, mergeVideoLists } from "@/lib/videoContent";
 import InsightsPageClient from "./InsightsPageClient";
 
 const PAGE_SIZE = 20;
@@ -51,10 +52,30 @@ export default async function InsightsPage({ searchParams }: Props) {
   const { page: pageParam } = await searchParams;
   const requestedPage = parsePage(pageParam);
 
-  const [{ posts, page, totalPages, totalCount }, videos] = await Promise.all([
+  const [{ posts, page, totalPages, totalCount }, apiVideos] = await Promise.all([
     Promise.resolve(getPaginatedPosts(requestedPage, PAGE_SIZE)),
     getLatestYouTubeVideos(20),
   ]);
+
+  // The video rail is built from content/videos/*.md first, then enriched
+  // with live YouTube data where it's available.
+  //
+  // It used to be built from getLatestYouTubeVideos() alone, which made every
+  // internal link into /insights/videos/* conditional on a third-party API:
+  // when the key, quota or circuit breaker took the call out, the page
+  // rendered "Videos could not be loaded" and shipped no video links at all.
+  // Even healthy, it returned the channel's latest 20 uploads — not the same
+  // set as the .md files app/sitemap.ts submits — so any video that aged out
+  // of that window permanently lost its only internal link, while uploads
+  // with no written analysis got one. GSC showed the consequence directly:
+  // video pages discovered via the sitemap with "Referring page: None
+  // detected", sitting in "Crawled - currently not indexed".
+  //
+  // Reading from disk makes the link set deterministic, identical to the
+  // sitemap by construction, and immune to API failure. The API is now purely
+  // an enhancement (real titles, real thumbnails, real dates) rather than the
+  // source of truth. See mergeVideoLists in lib/videoContent.ts.
+  const videos = mergeVideoLists(getAllVideoMeta(), apiVideos);
 
   const insightsJsonLd = {
     "@context": "https://schema.org",
