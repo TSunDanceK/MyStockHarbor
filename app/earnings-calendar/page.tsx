@@ -178,6 +178,9 @@ export type SectorCount = {
 // hit this exact problem first and settled on the same answer: read both, prefer
 // whichever actually has a sector. This follows that precedent deliberately.
 //
+// Even with both, coverage is partial (2 of 52 on 2026-08-17, 8 of 44 on the
+// 20th) -- see the sectorLabel note in the page body for how that is presented.
+//
 // Both are Redis-only mgets that never quote FMP, and both fail open, so a
 // symbol missing from both is skipped and the page degrades to "no sector line"
 // rather than erroring. Labels are folded through getSectorByLabel() because FMP
@@ -437,6 +440,24 @@ export default async function EarningsCalendarPage({
   const sectorCounts = dayView.sectors;
   const selectedDateLabel = formatDateLabel(selectedDate);
 
+  // Sector coverage is partial by nature: the rollup can only classify symbols
+  // the screener universe reaches, and the earnings calendar is a much wider
+  // population. Measured on production 2026-08-17: 2 of 52 reporters classified
+  // on the 17th, 8 of 44 on the 20th. An unqualified "Reporting by sector:
+  // Consumer Cyclical 3 · Financial Services 2 · …" next to "44 companies
+  // report" is each count individually true but invites the wrong total, so the
+  // label states the coverage whenever it is partial.
+  //
+  // Labelling rather than hiding is deliberate: the /sector/* links in this row
+  // are real internal links out of a high-value page, and this site's binding
+  // constraint is crawl demand. Suppressing the row on thin days would throw
+  // those away on most days of the year.
+  const classifiedCount = sectorCounts.reduce((sum, sector) => sum + sector.count, 0);
+  const sectorLabel =
+    classifiedCount > 0 && classifiedCount < dayData.usListedCount
+      ? `Reporting by sector (${classifiedCount} of ${dayData.usListedCount} classified):`
+      : "Reporting by sector:";
+
   // Background auto-populate: after this response is sent, quietly fill in the
   // next not-yet-complete date in the window (front-to-back), a couple at a
   // time and respecting the hourly cap. Once the whole window is filled these
@@ -613,7 +634,7 @@ export default async function EarningsCalendarPage({
                   gap: 8,
                 }}
               >
-                <span style={{ opacity: 0.7 }}>Reporting by sector:</span>
+                <span style={{ opacity: 0.7 }}>{sectorLabel}</span>
                 {sectorCounts.slice(0, 8).map((sector) =>
                   sector.href ? (
                     <Link
