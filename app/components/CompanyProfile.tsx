@@ -201,7 +201,11 @@ export default function CompanyProfile({
           Mobile: the float is dropped and the container becomes a flex
           column, with `order` restoring the original reading order
           (description → dilution → stat boxes 2-up → learn links), since the
-          stat boxes have to come first in the DOM for the float to work. */}
+          stat boxes have to come first in the DOM for the float to work.
+
+          NB: the CSS block at the bottom of this file is a template literal —
+          no backticks in its comments, or the literal closes early and the
+          build fails to parse. */}
       {hasDescription && hasRows ? (
         <div className="cp-flow">
           <div className="cp-stats">{statBoxes}</div>
@@ -247,7 +251,7 @@ export default function CompanyProfile({
            bites for a description long enough to push the chart past the
            bottom of the sidebar, and keeps the chart the same width on every
            ticker rather than jumping to full-bleed on the wordiest ones.
-           `belowStats` is deliberately uncapped — it's a link list, so
+           belowStats is deliberately uncapped — it's a link list, so
            letting it use the full width when it lands below the sidebar
            fills space instead of leaving a gutter. */
         .cp-below-desc { max-width: calc(100% - 284px); }
