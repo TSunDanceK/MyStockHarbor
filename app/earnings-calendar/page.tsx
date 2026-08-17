@@ -4,7 +4,10 @@ import type { Metadata } from "next";
 import type React from "react";
 import { cache } from "react";
 import { getSectorByLabel, sectorNewsPath } from "@/lib/sectors";
-import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
+import {
+  readCachedFundamentalsBulk,
+  readCachedScreenerFundamentals,
+} from "@/lib/server/fundamentalsCache";
 import {
   getMonthDaysWithEarnings,
   getDayEarningsForRender,
@@ -160,20 +163,51 @@ export type SectorCount = {
 
 // Rolls the day's reporters up by sector.
 //
-// readCachedFundamentalsBulk is Redis-only and never quotes FMP -- a symbol
-// with no warmed profile simply doesn't appear in the map and is skipped, so
-// this degrades to "no sector line" rather than failing the render. Labels are
-// folded through getSectorByLabel() because FMP is inconsistent about spelling
-// ("Consumer Defensive" vs "Consumer Staples", "Health Care" vs "Healthcare").
+// BOTH caches are read, and that is not belt-and-braces -- it is the difference
+// between this working and not working.
+//
+// `readCachedFundamentalsBulk` only covers the analysed picker universe, which
+// warmFundamentals fills at PROFILE_MAX_PER_RUN = 120 symbols/run. The earnings
+// calendar is a different population: every US-listed company reporting on a
+// given date, most of which are nowhere near the picker universe. Reading only
+// that cache returned zero sectors for all 52 of 2026-08-17's reporters in
+// production -- the rollup rendered nothing at all.
+//
+// `readCachedScreenerFundamentals` lands a row for every symbol the daily
+// company-screener call returns, which is far wider. lib/server/sectorUniverse.ts
+// hit this exact problem first and settled on the same answer: read both, prefer
+// whichever actually has a sector. This follows that precedent deliberately.
+//
+// Both are Redis-only mgets that never quote FMP, and both fail open, so a
+// symbol missing from both is skipped and the page degrades to "no sector line"
+// rather than erroring. Labels are folded through getSectorByLabel() because FMP
+// is inconsistent about spelling ("Consumer Defensive" vs "Consumer Staples",
+// "Health Care" vs "Healthcare").
 async function rollUpSectors(symbols: string[]): Promise<SectorCount[]> {
   if (!symbols.length) return [];
 
+  // readCachedFundamentalsBulk cleans its own input before keying the result
+  // map; readCachedScreenerFundamentals keys on exactly what it is handed. Clean
+  // once up front so both maps agree on the key and a lower-case or padded
+  // ticker can't silently miss in one of them.
+  const cleaned = [
+    ...new Set(symbols.map((s) => String(s ?? "").trim().toUpperCase()).filter(Boolean)),
+  ];
+  if (!cleaned.length) return [];
+
   try {
-    const fundamentals = await readCachedFundamentalsBulk(symbols);
+    const [fundamentals, screener] = await Promise.all([
+      readCachedFundamentalsBulk(cleaned).catch(() => new Map()),
+      readCachedScreenerFundamentals(cleaned).catch(() => new Map()),
+    ]);
+
     const counts = new Map<string, SectorCount>();
 
-    for (const row of fundamentals.values()) {
-      const raw = row.sector?.trim();
+    for (const symbol of cleaned) {
+      // Fundamentals rows are fresher; screener rows are wider. Prefer a real
+      // sector from either, fundamentals first.
+      const raw =
+        fundamentals.get(symbol)?.sector?.trim() || screener.get(symbol)?.sector?.trim() || "";
       if (!raw) continue;
 
       const known = getSectorByLabel(raw);
@@ -231,7 +265,14 @@ export async function generateMetadata({
     const count = day.usListedCount;
 
     if (count > 0) {
-      const leaders = sectorPhrase(sectors);
+      // Only claim "led by X, Y and Z" when enough of the day's reporters are
+      // actually classified for that to be true. Sector coverage comes from
+      // Redis caches built around the screener universe, and a day dominated by
+      // micro-caps outside it would otherwise let three classified names
+      // masquerade as the day's leaders.
+      const classified = sectors.reduce((sum, sector) => sum + sector.count, 0);
+      const leaders = classified >= count * 0.6 ? sectorPhrase(sectors) : "";
+
       title = `Earnings Calendar: ${dateLabel} | MyStockHarbor`;
       description =
         `${count} US-listed compan${count === 1 ? "y reports" : "ies report"} on ${dateLabel}` +
