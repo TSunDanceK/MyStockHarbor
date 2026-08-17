@@ -3,7 +3,12 @@ import type { CSSProperties } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getYouTubeVideoById, getLatestYouTubeVideos } from "@/lib/youtube";
-import { getVideoContent } from "@/lib/videoContent";
+import {
+  getVideoContent,
+  getAllVideoMeta,
+  mergeVideoLists,
+  toFallbackVideo,
+} from "@/lib/videoContent";
 import { getVideoStockData } from "@/lib/videoStockData";
 import { remark } from "remark";
 import html from "remark-html";
@@ -11,7 +16,13 @@ import VideoPageClient from "./VideoPageClient";
 import DatasheetViewer from "./DatasheetViewer";
 import PageShareBar from "@/app/components/PageShareBar";
 
-export const dynamic = "force-dynamic";
+// Was `dynamic = "force-dynamic"`, which ships `Cache-Control: no-store` and
+// makes every crawl a full serverless render Google can never cheaply
+// revalidate. These pages are a YouTube embed plus a frozen markdown article;
+// the only moving part is the live stock strip, which the page itself already
+// labels as differing from the figures in the video. 30 minutes is well
+// inside that tolerance. See claude/seo-recovery-plan-2026-08-15.md item 3.1.
+export const revalidate = 1800;
 
 type Props = {
   params: Promise<{ videoId: string }>;
@@ -43,10 +54,14 @@ function fmtPrice(value: number | null): string {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { videoId } = await params;
 
-  const [video, videoContent] = await Promise.all([
+  const [apiVideo, videoContent] = await Promise.all([
     getYouTubeVideoById(videoId),
     Promise.resolve(getVideoContent(videoId)),
   ]);
+
+  // Same fallback rule as the page body below: written analysis on disk is
+  // enough to describe the page, with or without the YouTube API.
+  const video = apiVideo ?? (videoContent ? toFallbackVideo(videoContent) : null);
 
   if (!video) {
     return {
@@ -96,15 +111,35 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function VideoPage({ params }: Props) {
   const { videoId } = await params;
 
-  const [video, videoContent, allVideos] = await Promise.all([
+  const [apiVideo, videoContent, apiVideos] = await Promise.all([
     getYouTubeVideoById(videoId),
     Promise.resolve(getVideoContent(videoId)),
     getLatestYouTubeVideos(20),
   ]);
 
+  // This used to be `if (!video) notFound()` against the API result alone,
+  // which meant a page with a full written analysis committed to
+  // content/videos/*.md — and submitted to Google in sitemap.xml — returned a
+  // 404 whenever the YouTube API was unavailable AND Redis held no
+  // last-known-good entry for this ID (quota exhaustion, a bad key, a cold
+  // 30-day TTL, or simply a video never fetched successfully). A sitemap URL
+  // serving 404s to Googlebot is about the worst indexing signal available.
+  //
+  // Disk content is now sufficient on its own: toFallbackVideo builds the
+  // embed, thumbnail and watch URLs deterministically from the video ID. The
+  // API is preferred when present (real title and publish date), and 404
+  // remains correct only when NEITHER source knows this ID.
+  const video = apiVideo ?? (videoContent ? toFallbackVideo(videoContent) : null);
+
   if (!video) notFound();
 
-  const relatedVideos = allVideos.filter((v) => v.id !== videoId);
+  // Same reasoning as the /insights rail (PR #249): the "More videos" sidebar
+  // is an internal link block, so it must not silently empty out when the API
+  // is down. Disk-backed entries are the floor, live data enriches them.
+  const relatedVideos = mergeVideoLists(getAllVideoMeta(), apiVideos).filter(
+    (v) => v.id !== videoId
+  );
+
   const ticker = videoContent?.ticker ?? null;
 
   const [stockData, contentHtml] = await Promise.all([
@@ -119,7 +154,11 @@ export default async function VideoPage({ params }: Props) {
   const videoJsonLd = {
     "@context": "https://schema.org", "@type": "VideoObject",
     name: video.title, description: `Stock market analysis: ${video.title}`,
-    thumbnailUrl: video.thumbnailUrl, uploadDate: video.publishedAt,
+    thumbnailUrl: video.thumbnailUrl,
+    // Omitted entirely rather than emitted empty when the publish date is
+    // unknown (disk fallback with no `date:` frontmatter) — an empty
+    // uploadDate is an invalid VideoObject, a missing one is merely optional.
+    ...(video.publishedAt ? { uploadDate: video.publishedAt } : {}),
     url: video.url, embedUrl: video.embedUrl,
     publisher: { "@type": "Organization", name: "MyStockHarbor", url: "https://www.mystockharbor.com" },
   };
@@ -168,7 +207,7 @@ export default async function VideoPage({ params }: Props) {
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
               {ticker && <span style={{ display: "inline-flex", alignItems: "center", padding: "5px 12px", borderRadius: 999, background: "rgba(59,130,246,0.16)", border: "1px solid rgba(59,130,246,0.28)", fontSize: 13, fontWeight: 900, color: "#dbeafe" }}>{ticker}</span>}
               {stockData?.sector && <span style={{ padding: "5px 12px", borderRadius: 999, fontSize: 12, fontWeight: 700, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#94a3b8" }}>{stockData.sector}</span>}
-              <span style={{ fontSize: 13, opacity: 0.6 }}>{formatDate(video.publishedAt)}</span>
+              {video.publishedAt && <span style={{ fontSize: 13, opacity: 0.6 }}>{formatDate(video.publishedAt)}</span>}
             </div>
             <h1 style={{ margin: "0 0 6px", fontSize: 28, fontWeight: 900, lineHeight: 1.2, letterSpacing: "-0.3px" }}>{video.title}</h1>
             {stockData?.companyName && <p style={{ margin: "0 0 14px", opacity: 0.7, fontSize: 15 }}>{stockData.companyName}</p>}
