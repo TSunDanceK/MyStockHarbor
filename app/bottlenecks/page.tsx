@@ -49,7 +49,15 @@ export const metadata: Metadata = {
   },
 };
 
-export const dynamic = "force-dynamic";
+// Was `dynamic = "force-dynamic"`, which ships `Cache-Control: no-store`.
+// Nothing on this page is request-dependent: getAllBottleneckPosts() and
+// getBottleneckCompanyCounts() are both local content-file reads, and the
+// three child components are client components fed entirely by props. The
+// underlying markdown can only change on a deploy, so `no-store` bought
+// nothing and cost a full serverless render on every crawl of a page that
+// carries the crawl path to every /bottlenecks/{ticker} child.
+// See claude/seo-recovery-plan-2026-08-15.md item 3.1.
+export const revalidate = 3600;
 
 export default function BottlenecksIndexPage() {
   // Newest-first by default (was alphabetical by company name) so freshly
