@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getAllPosts, getPostBySlug, getRelatedPosts } from "@/lib/blog";
+import { getPostBySlug, getRelatedPosts } from "@/lib/blog";
 import { getOrCreateInsightSnapshot } from "@/lib/insightSnapshots";
 import { remark } from "remark";
 import html from "remark-html";
@@ -9,19 +9,34 @@ import InsightPostClient from "./InsightPostClient";
 import { submitInsightToIndexNowOnce } from "@/lib/indexnowAuto";
 import RelatedInsights from "@/app/components/RelatedInsights";
 
-export const dynamic = "force-dynamic";
+// Was `dynamic = "force-dynamic"`, which ships `Cache-Control: no-store` and
+// forced a full serverless render of a frozen article on every single crawl.
+// Insight posts never change after publish — app/sitemap.ts already declares
+// them `changeFrequency: "yearly"` — so no-store was the most expensive
+// possible setting for the least changeable content on the site, and Google
+// could never revalidate one cheaply. See
+// claude/seo-recovery-plan-2026-08-15.md item 3.1.
+//
+// 24 hours: the article body and JSON-LD are fully static, and the only live
+// element is the price snapshot, which InsightPostClient already labels and
+// degrades gracefully when absent (see the try/catch below).
+export const revalidate = 86400;
+
+// `generateStaticParams` was deliberately REMOVED alongside the change above,
+// not just left in place. It was inert while force-dynamic was set, so it has
+// never actually run; re-enabling it by switching to revalidate would have
+// prerendered every post at build time, and each one calls
+// getOrCreateInsightSnapshot below — which, on a Redis cache miss, builds a
+// fresh snapshot from live FMP data. Against a cold cache and hundreds of
+// posts that is a build-time FMP call storm on a plan with a 300/min ceiling
+// and a documented history of stage starvation (see the FMP budget notes in
+// claude/CLAUDE.md). Without it, posts render on demand once and are then
+// cached for `revalidate` — same end state for a crawler, no build-time
+// stampede. `dynamicParams` defaults to true, so every slug still resolves.
 
 type Props = {
   params: Promise<{ slug: string }>;
 };
-
-export async function generateStaticParams() {
-  const posts = getAllPosts();
-
-  return posts.map((post) => ({
-    slug: post.slug,
-  }));
-}
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
