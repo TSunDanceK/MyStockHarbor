@@ -75,19 +75,14 @@ export default function CompanyProfile({
   profile: CompanyProfile;
   symbol: string;
   // Optional extra content (e.g. the share-dilution chart) rendered directly
-  // under the description paragraph, in the same left-hand column as the
-  // description. On desktop the description is almost always much shorter
-  // than the stat-box column next to it, which used to leave a large empty
-  // gap in that column — this slot lets a caller fill that space instead of
-  // pushing the content into its own separate full-width section further
-  // down the page. Falls back to normal in-flow placement (after the
-  // description) when there are no stat rows to create the column mismatch.
+  // under the description paragraph, in the same flowing column as the
+  // description (i.e. beside/below the floated stat sidebar — see the layout
+  // note on the render block below). Falls back to normal in-flow placement
+  // (after the description) when there are no stat rows.
   belowDescription?: ReactNode;
-  // Optional extra content rendered in the narrow right-hand column directly
-  // beneath the stat boxes (e.g. the "Learn the indicators" links). On mobile
-  // the right column collapses into a 2-up grid, so callers should let this
-  // block span the full row (gridColumn: "1 / -1"). Falls back to sitting
-  // after the description / stat grid in the single-column layouts.
+  // Optional extra content (e.g. the "Learn the indicators" links) rendered
+  // after `belowDescription`, still in the flowing column. Sits last in the
+  // reading order on every breakpoint.
   belowStats?: ReactNode;
 }) {
   const name = profile.companyName || symbol;
@@ -182,22 +177,38 @@ export default function CompanyProfile({
       <div style={eyebrowStyle}>Company profile</div>
       <h2 style={headingStyle}>About {name}</h2>
 
-      {/* Desktop: description (+ any belowDescription content, e.g. the
-          share-dilution chart) in a wide left column, the stat boxes in a
-          narrow right column. Mobile: single column layout — description
-          and belowDescription content, then the stat boxes below, laid out
-          2-per-row (source order, no reordering) so the cards don't eat the
-          whole screen. */}
+      {/* Desktop: the stat boxes are FLOATED to the right (fixed 260px) and
+          everything else — description, belowDescription (share-dilution
+          chart), belowStats ("Learn the indicators") — runs down the page in
+          normal flow beside them, continuing full-width underneath once it
+          outruns the sidebar.
+
+          This used to be a `1fr 260px` grid, but the two columns can't be
+          balanced by any static content split: FMP descriptions range from
+          ~450 to ~2,150 characters, which is a ~640px swing in the left
+          column's height against a sidebar that's a near-fixed ~1,000px.
+          Short-description tickers (e.g. PAC) left a ~520px hole; long ones
+          (AAPL) overshot instead. A float has no fixed row height, so the
+          flow simply wraps under the sidebar when it's longer and the
+          leftover gap collapses to <100px at both ends of that range.
+
+          `belowDescription` / `belowStats` get `display: flow-root` so they
+          form their own block formatting contexts: block boxes don't shrink
+          around floats on their own (only line boxes do), so without a BFC a
+          full-width chart would render *underneath* the sidebar instead of
+          beside it.
+
+          Mobile: the float is dropped and the container becomes a flex
+          column, with `order` restoring the original reading order
+          (description → dilution → stat boxes 2-up → learn links), since the
+          stat boxes have to come first in the DOM for the float to work. */}
       {hasDescription && hasRows ? (
-        <div className="cp-columns">
-          <div>
-            <p style={descStyle}>{profile.description}</p>
-            {belowDescription}
-          </div>
-          <div className="cp-stats">
-            {statBoxes}
-            {belowStats}
-          </div>
+        <div className="cp-flow">
+          <div className="cp-stats">{statBoxes}</div>
+          <p className="cp-desc" style={descStyle}>{profile.description}</p>
+          {belowDescription ? <div className="cp-below-desc">{belowDescription}</div> : null}
+          {belowStats ? <div className="cp-below-stats">{belowStats}</div> : null}
+          <div className="cp-clear" />
         </div>
       ) : hasDescription ? (
         <>
@@ -219,21 +230,53 @@ export default function CompanyProfile({
       </div>
 
       <style>{`
-        .cp-columns {
-          margin-top: 18px;
-          display: grid;
-          grid-template-columns: 1fr 260px;
-          gap: 24px;
-          align-items: start;
-        }
+        .cp-flow { margin-top: 18px; }
         .cp-stats {
+          float: right;
+          width: 260px;
+          margin: 0 0 24px 24px;
           display: flex;
           flex-direction: column;
           gap: 10px;
         }
+        /* New block formatting contexts so these sit BESIDE the floated
+           sidebar (narrowed) rather than sliding underneath it. */
+        .cp-below-desc, .cp-below-stats { display: flow-root; }
+        /* 284px = the sidebar's 260px + its 24px margin. A block that starts
+           beside the float is already narrowed to exactly this; the cap only
+           bites for a description long enough to push the chart past the
+           bottom of the sidebar, and keeps the chart the same width on every
+           ticker rather than jumping to full-bleed on the wordiest ones.
+           `belowStats` is deliberately uncapped — it's a link list, so
+           letting it use the full width when it lands below the sidebar
+           fills space instead of leaving a gutter. */
+        .cp-below-desc { max-width: calc(100% - 284px); }
+        /* belowStats used to sit under the stat cards with only its own 4px
+           top margin before its divider rule, which is too tight now that it
+           follows the dilution chart's source line instead. */
+        .cp-below-stats { margin-top: 20px; }
+        /* Keeps the data-source line (and anything after the section) below
+           the sidebar when the flow column is the shorter of the two. */
+        .cp-clear { clear: both; }
+
         @media (max-width: 720px) {
-          .cp-columns { grid-template-columns: 1fr !important; gap: 18px !important; }
+          .cp-flow {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 18px !important;
+          }
+          /* DOM order is stats-first (float requirement); restore the
+             reading order description → dilution → stats → learn links. */
+          .cp-desc { order: 1; }
+          .cp-below-desc { order: 2; }
+          .cp-stats { order: 3; }
+          .cp-below-stats { order: 4; }
+          .cp-clear { display: none !important; }
+          .cp-below-desc { max-width: none !important; }
           .cp-stats {
+            float: none !important;
+            width: auto !important;
+            margin: 0 !important;
             display: grid !important;
             grid-template-columns: 1fr 1fr !important;
             gap: 10px !important;
