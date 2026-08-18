@@ -797,10 +797,14 @@ export default function PickerResultsGrid({
         <ScreenerFilterBar matched={filteredEntries.length} total={entries.length} />
       </div>
 
-      {/* One control row: which screener, which data tab, which sort, which
-          view. These four are a single decision about what you're looking at,
-          so they sit together and wrap onto a second line rather than running
-          off the side of the screen.
+      {/* One control row: which screener, which view, which data tab, which
+          sort. These four are a single decision about what you're looking at,
+          so they sit together rather than in two stacked bars.
+
+          The order is deliberate and the line break is explicit rather than
+          left to wrapping: WHAT you're looking at (screener + view) on the top
+          line, HOW it's arranged (tab + sort) underneath. Relying on wrap alone
+          would let the split move as labels change length between tabs.
 
           It's a direct child of this <section>, NOT of .resultsHeader above,
           and that placement is load-bearing: a sticky element can only travel
@@ -809,6 +813,16 @@ export default function PickerResultsGrid({
           travel to work with. Same lesson as .screenerTriggerWrap before it. */}
       <div className="screenerControls">
         {screenerControl}
+        <button
+          type="button"
+          className="viewToggle"
+          onClick={() => setViewMode((v) => (v === "list" ? "chart" : "list"))}
+          aria-label={viewMode === "list" ? "Switch to chart view" : "Switch to list view"}
+        >
+          {viewMode === "list" ? "Chart View" : "List View"}
+          <span aria-hidden="true" style={{ fontSize: 12 }}>{viewMode === "list" ? "▦" : "▤"}</span>
+        </button>
+        <span className="ctrlBreak" aria-hidden="true" />
         {viewMode === "list" ? (
           <span className="tabSelectWrap">
             <select
@@ -860,15 +874,6 @@ export default function PickerResultsGrid({
             </button>
           </span>
         ) : null}
-        <button
-          type="button"
-          className="viewToggle"
-          onClick={() => setViewMode((v) => (v === "list" ? "chart" : "list"))}
-          aria-label={viewMode === "list" ? "Switch to chart view" : "Switch to list view"}
-        >
-          {viewMode === "list" ? "Chart View Mode" : "List View Mode"}
-          <span aria-hidden="true" style={{ fontSize: 12 }}>{viewMode === "list" ? "▦" : "▤"}</span>
-        </button>
       </div>
 
       {shown.length ? (
@@ -1050,6 +1055,11 @@ export default function PickerResultsGrid({
           display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
           justify-content: flex-end; margin-top: 14px;
         }
+        /* Zero-height full-width flex item -- forces everything after it onto a
+           new line. Only active on mobile; on desktop the tab and sort pills are
+           hidden anyway (the tab row and column headers do those jobs there), so
+           a break would just leave a gap under a lone view-mode button. */
+        .ctrlBreak { display: none; }
 
         .mSortWrap { display: inline-flex; align-items: stretch; gap: 6px; flex: 0 0 auto; }
         .mSortDir {
@@ -1106,8 +1116,8 @@ export default function PickerResultsGrid({
           /* Docks under the site header exactly where the old Select Screener
              bar used to, and for the same reason: on a list this long the
              controls have to stay reachable without scrolling back to the top.
-             z-index 60 matches what that bar used, so the hero's ticker-search
-             dropdown (65) still clears it.
+             z-index 60 matches what that bar used, so anything layering above
+             it (the screener sheet at 70, the site header at 100) still wins.
 
              The negative margins let the opaque background bleed to the edge of
              .resultWrap's padding, so rows scrolling underneath don't show
@@ -1118,6 +1128,7 @@ export default function PickerResultsGrid({
             margin: 10px -18px 0; padding: 10px 18px;
             background: #06080d;
           }
+          .ctrlBreak { display: block; flex-basis: 100%; width: 100%; height: 0; margin: 0; }
         }
         @media (max-width: 720px) {
           /* Header is shorter below this breakpoint, and .resultWrap's side
