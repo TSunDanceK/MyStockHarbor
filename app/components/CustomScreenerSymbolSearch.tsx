@@ -91,12 +91,17 @@ export default function CustomScreenerSymbolSearch({
   }
 
   // Styled to match the /pickers "Search a ticker" box (cyan label, dark
-  // rounded input, green Search button), resized to fit the custom-screener
-  // hero. Behaviour is unchanged from before -- type-ahead symbol lookup with
-  // an inline "which conditions does it meet" result.
+  // rounded input), resized to fit the custom-screener hero.
+  //
+  // The green "Search" button that used to sit beside this input has been
+  // removed. It only ever called choose(results[0]) -- i.e. it did exactly what
+  // tapping a row in the dropdown already does, and by the time it was tappable
+  // the dropdown was already open right underneath it with the answer in it. So
+  // it was a second control for a job the list had already done, taking up a
+  // third of the row on a phone. Enter still submits (see submitSearch below)
+  // for anyone typing a full ticker and reaching for the return key.
   const inputStyle: React.CSSProperties = {
-    flex: 1,
-    minWidth: 180,
+    width: "100%",
     background: "rgba(255,255,255,0.04)",
     border: "1px solid rgba(255,255,255,0.10)",
     borderRadius: 8,
@@ -109,10 +114,8 @@ export default function CustomScreenerSymbolSearch({
     boxSizing: "border-box",
   };
 
-  // The "Search" button (and Enter) resolves what's typed to the top symbol
-  // match and shows its screener result -- the same inline behaviour as
-  // picking from the dropdown, just an explicit affordance so it looks and
-  // acts like the /pickers search box.
+  // Enter resolves what's typed to the top symbol match and shows its screener
+  // result -- the same inline behaviour as picking from the dropdown.
   function submitSearch() {
     if (results.length) choose(results[0]);
   }
@@ -140,40 +143,21 @@ export default function CustomScreenerSymbolSearch({
         >
           Search a ticker
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <input
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value.toUpperCase());
-              setOpen(true);
-              setSelected(null);
-            }}
-            onFocus={() => setOpen(true)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") submitSearch();
-            }}
-            placeholder="e.g. AAPL — see which conditions it meets"
-            aria-label="Search a ticker or company to see which screener conditions it meets"
-            style={inputStyle}
-          />
-          <button
-            type="button"
-            onClick={submitSearch}
-            style={{
-              flex: "0 0 auto",
-              padding: "9px 16px",
-              borderRadius: 8,
-              border: "1px solid rgba(34,197,94,0.28)",
-              background: "rgba(34,197,94,0.10)",
-              color: "#86efac",
-              fontWeight: 700,
-              fontSize: 12,
-              cursor: "pointer",
-            }}
-          >
-            Search
-          </button>
-        </div>
+        <input
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value.toUpperCase());
+            setOpen(true);
+            setSelected(null);
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") submitSearch();
+          }}
+          placeholder="e.g. AAPL — see which conditions it meets"
+          aria-label="Search a ticker or company to see which screener conditions it meets"
+          style={inputStyle}
+        />
 
       {open && results.length > 0 ? (
         <div
@@ -182,12 +166,29 @@ export default function CustomScreenerSymbolSearch({
             top: "calc(100% + 8px)",
             left: 0,
             right: 0,
-            zIndex: 30,
+            // Has to clear the "Select Screener" bar, which is
+            // `position: sticky; z-index: 60` at <=980px (see
+            // .screenerTriggerWrap in PickerResultPage.tsx). At the old z-index
+            // of 30 that bar painted straight over these results on a phone --
+            // the dropdown opens right where the bar docks. 65 sits above it
+            // but still below the Select Screener overlay (70) and the site
+            // header (100), so neither of those is covered by a stray dropdown.
+            //
+            // Nothing between here and the root creates a stacking context --
+            // this wrapper is position: relative with z-index auto, and .hero /
+            // .resultMain / .resultShell / .resultWrap set no z-index,
+            // transform or filter -- so this value is compared directly against
+            // the bar's 60.
+            zIndex: 65,
             border: "1px solid rgba(255,255,255,0.12)",
             borderRadius: 13,
             background: "#0b1220",
             boxShadow: "0 14px 28px rgba(0,0,0,0.4)",
-            overflow: "hidden",
+            // Eight results is a tall list on a phone -- cap it and scroll
+            // inside rather than running the whole thing down the page.
+            maxHeight: "min(52vh, 380px)",
+            overflowY: "auto",
+            overscrollBehavior: "contain",
           }}
         >
           {results.slice(0, 8).map((r) => {
