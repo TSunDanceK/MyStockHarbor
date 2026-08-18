@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import SiteHeader from "./components/SiteHeader";
+import CrawlableNav from "./components/CrawlableNav";
 import PageViewTracker from "./components/PageViewTracker";
 import { getLatestYouTubeVideos } from "@/lib/youtube";
 import "./globals.css";
@@ -107,6 +108,14 @@ export default async function RootLayout({
   // link passes but that the page exists one hop from everywhere so a crawler
   // reaches it early. One link, opening a path to 483 pages that previously
   // had none. See app/stocks/page.tsx for the full reasoning.
+  //
+  // 2026-08-18: the sentence above -- "Discovery is the header's job, and the
+  // header does it well" -- was wrong, and expensively so. The header renders
+  // every dropdown through createPortal and only while open, so it does that
+  // job for humans and not at all for crawlers. See CrawlableNav below and
+  // claude/header-nav-not-crawlable-2026-08-17.md. The four columns here are
+  // still deliberately small; the fix went into a collapsed block rather than
+  // into this list precisely so the readability argument above survives it.
   const footerColumns: {
     heading: string;
     links: { href: string; label: string }[];
@@ -200,6 +209,14 @@ export default async function RootLayout({
                 grid-template-columns: repeat(4, minmax(150px, max-content));
               }
 
+              .site-map-grid {
+                grid-template-columns: repeat(5, minmax(150px, 1fr));
+              }
+
+              .site-map-details > summary::-webkit-details-marker {
+                color: rgba(241,245,249,0.56);
+              }
+
               @media (max-width: 720px) {
                 .site-footer {
                   padding-left: 16px !important;
@@ -210,6 +227,11 @@ export default async function RootLayout({
                   grid-template-columns: 1fr 1fr;
                   gap: 18px !important;
                 }
+
+                .site-map-grid {
+                  grid-template-columns: 1fr 1fr;
+                  gap: 18px 20px !important;
+                }
               }
 
               @media (max-width: 480px) {
@@ -218,6 +240,11 @@ export default async function RootLayout({
                 }
 
                 .site-footer-main-grid {
+                  grid-template-columns: 1fr;
+                  gap: 20px !important;
+                }
+
+                .site-map-grid {
                   grid-template-columns: 1fr;
                   gap: 20px !important;
                 }
@@ -344,6 +371,12 @@ export default async function RootLayout({
                   </div>
                 ))}
               </div>
+
+              {/* The full nav link set, server-rendered. The 14-link footer
+                  above is unchanged and the reasoning behind its size still
+                  stands -- this is collapsed by default and adds one row.
+                  See app/components/CrawlableNav.tsx. */}
+              <CrawlableNav />
 
               <div
                 style={{
