@@ -457,6 +457,7 @@ export default function ScreenerNav({
   variant = "full",
   showFilters = false,
   alwaysFilterMode = false,
+  compact = false,
   categoryValues = {},
 }: {
   currentHref: string;
@@ -464,6 +465,16 @@ export default function ScreenerNav({
   showFilters?: boolean;
   showSearch?: boolean;
   alwaysFilterMode?: boolean;
+  // Renders the mobile trigger as a single inline pill instead of its own
+  // full-width bar, so it can sit in the results controls row alongside the
+  // data-tab, sort and view-mode pills.
+  //
+  // The full-width bar said the same thing twice -- "▾ Select Screener" on the
+  // left and "Advanced Screener ▾" on the right, two labels and two chevrons
+  // for one action -- and took a whole row of a phone screen to do it. The pill
+  // carries the current screener's name only, which is the half that actually
+  // tells you anything.
+  compact?: boolean;
   // Values present in the calling page's own results for each category field
   // ("sector", "industry", ...), so neither the Sector group nor the search box
   // ever offers something with nothing behind it. See categoryValues in
@@ -477,8 +488,8 @@ export default function ScreenerNav({
 
   // When arriving from another page's "Open Full Stock Screener" tap on
   // mobile, re-open the overlay immediately so the menu switches straight to
-  // the checkboxes (the page itself loads behind it) instead
-  // of closing and making the visitor tap "Select Screener" again. One-shot:
+  // the checkboxes (the page itself loads behind it) instead of closing and
+  // making the visitor tap "Select Screener" again. One-shot:
   // the flag is cleared the moment it's read. Only the mobile trigger of the
   // All Stocks screener (alwaysFilterMode) honours it, and only at mobile
   // widths so the fixed overlay never covers the desktop layout.
@@ -601,31 +612,54 @@ export default function ScreenerNav({
         </aside>
       ) : null}
 
-      {/* Mobile: single "Select Screener" trigger that opens an overlay */}
+      {/* Mobile: the trigger that opens the screener overlay. `compact` renders
+          it as one inline pill for the results controls row; otherwise it keeps
+          its original full-width bar. */}
       {showTrigger ? (
-        <div className="screenerMobileBar">
-          <button
-            type="button"
-            className="screenerSelectBtn"
-            onClick={() => setOpen(true)}
-            aria-haspopup="dialog"
-            aria-expanded={open}
-          >
-            <span className="screenerSelectMain">
-              <span className="screenerSelectIcon" aria-hidden="true">⏷</span>
-              Select Screener
+        compact ? (
+          <span className="screenerPillWrap">
+            <button
+              type="button"
+              className="screenerPillBtn"
+              onClick={() => setOpen(true)}
+              aria-haspopup="dialog"
+              aria-expanded={open}
+            >
+              <span className="screenerPillIcon" aria-hidden="true">▤</span>
+              <span className="screenerPillLabel">{currentLabel}</span>
               {predicates.length ? (
                 <span className="screenerSelectCount" aria-label={`${predicates.length} filters applied`}>
                   {predicates.length}
                 </span>
               ) : null}
-            </span>
-            <span className="screenerSelectCurrent">
-              {currentLabel}
               <span className="screenerSelectChevron" aria-hidden="true">▾</span>
-            </span>
-          </button>
-        </div>
+            </button>
+          </span>
+        ) : (
+          <div className="screenerMobileBar">
+            <button
+              type="button"
+              className="screenerSelectBtn"
+              onClick={() => setOpen(true)}
+              aria-haspopup="dialog"
+              aria-expanded={open}
+            >
+              <span className="screenerSelectMain">
+                <span className="screenerSelectIcon" aria-hidden="true">⏷</span>
+                Select Screener
+                {predicates.length ? (
+                  <span className="screenerSelectCount" aria-label={`${predicates.length} filters applied`}>
+                    {predicates.length}
+                  </span>
+                ) : null}
+              </span>
+              <span className="screenerSelectCurrent">
+                {currentLabel}
+                <span className="screenerSelectChevron" aria-hidden="true">▾</span>
+              </span>
+            </button>
+          </div>
+        )
       ) : null}
 
       {showTrigger && open ? (
@@ -770,6 +804,20 @@ export default function ScreenerNav({
         .screenerSearchSource { margin-left: 4px; font-size: 10px; font-weight: 700; opacity: 0.55; }
 
         .screenerMobileBar { display: none; }
+        /* The compact pill. Hidden on desktop for the same reason the full-width
+           bar is: the sidebar is already showing the whole screener list there,
+           so a control that opens it as an overlay is redundant. */
+        .screenerPillWrap { display: none; }
+        .screenerPillBtn {
+          display: inline-flex; align-items: center; gap: 7px; max-width: 62vw;
+          padding: 9px 15px; border-radius: 999px;
+          border: 1px solid rgba(96,165,250,0.4); background: rgba(59,130,246,0.10);
+          color: #dbeafe; font-weight: 800; font-size: 12.5px; font-family: inherit;
+          cursor: pointer; white-space: nowrap;
+        }
+        .screenerPillBtn:active { background: rgba(59,130,246,0.2); }
+        .screenerPillIcon { flex: 0 0 auto; color: #93c5fd; font-size: 12px; }
+        .screenerPillLabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .screenerSelectCount {
           display: inline-flex; align-items: center; justify-content: center;
           min-width: 20px; height: 20px; padding: 0 6px; margin-left: 2px;
@@ -882,10 +930,12 @@ export default function ScreenerNav({
              only as tall as the button, so sticking it here gave it nowhere to
              go. See the note there. */
           .screenerMobileBar { display: block; }
+          .screenerPillWrap { display: inline-flex; flex: 0 0 auto; }
         }
         @media (max-width: 420px) {
           .screenerSelectBtn { font-size: 14px; padding: 12px 14px; gap: 10px; }
           .screenerSelectCurrent { font-size: 12px; }
+          .screenerPillBtn { font-size: 12px; padding: 8px 13px; max-width: 56vw; }
           /* Two targets share this row on a phone, so give them a little more
              vertical room to land in. */
           .screenerNavCheckable { padding-top: 11px; padding-bottom: 11px; }
