@@ -883,11 +883,17 @@ export default function PickerResultsGrid({
               const d = derivedByEntry.get(entry) ?? deriveRow(entry);
               const href = cardHrefFor(entry);
               const open = expandedRows.has(entry.symbol);
-              // Only fields this symbol actually has. The extended tabs are
-              // warmed by cron across the universe, so a symbol that hasn't
-              // been reached yet would otherwise open a panel of five dashes --
-              // far more obviously empty in a two-column panel than as one dash
-              // in a wide table row.
+              // Only the fields this symbol actually has a value for, rather
+              // than a column of dashes.
+              //
+              // Mostly these gaps are REAL, not a warming lag: a company that
+              // pays no dividend has no yield, payout ratio or growth figure and
+              // never will; an ETF has no income statement; a small name may
+              // have no analyst coverage. (Coverage itself is fine -- the
+              // warm-stock-data cron cycles all ~755 targets in about five
+              // hours against a 26-hour TTL, so every symbol is refreshed
+              // several times over before it could expire.) Hence the empty
+              // message says N/A rather than promising the number is on its way.
               const panelColumns = metricColumns.filter((col) => {
                 const value = col.get(entry, d);
                 return value != null && value !== "";
@@ -931,7 +937,7 @@ export default function PickerResultsGrid({
                           </div>
                         ))
                       ) : (
-                        <div className="mRowEmpty">No {TABS.find((t) => t.key === activeTab)?.label.toLowerCase()} data for {entry.symbol} yet.</div>
+                        <div className="mRowEmpty">{TABS.find((t) => t.key === activeTab)?.label} data: N/A</div>
                       )}
                     </div>
                   ) : null}
