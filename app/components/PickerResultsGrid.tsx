@@ -222,6 +222,23 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "analysts", label: "Analysts" },
 ];
 
+// The one number each tab leads with on a phone.
+//
+// A 9-column table can show every metric at once and let the visitor pick one
+// by tapping a header. A phone row has space for exactly one headline figure,
+// so each tab needs a defined default -- the metric that tab is *about*. Once
+// the visitor sorts by something else, the sorted metric takes over as the
+// headline (see headlineColumn below), which is what makes sorting legible:
+// sort by Payout Ratio and every row shows its payout ratio.
+const DEFAULT_METRIC_BY_TAB: Record<TabKey, string> = {
+  general: "price",
+  performance: "perf1m",
+  valuation: "pe",
+  dividends: "dyield",
+  financials: "revenue",
+  analysts: "ptgt",
+};
+
 type SortState = { key: string; dir: "asc" | "desc" } | null;
 
 type DerivedRow = {
@@ -400,6 +417,7 @@ export default function PickerResultsGrid({
   splitReasonsBySelection = false,
   collapseReasons = false,
   defaultTab = "general",
+  screenerControl = null,
 }: {
   entries: ResultEntry[];
   initialVisibleCount?: number;
@@ -422,6 +440,16 @@ export default function PickerResultsGrid({
   // cash flow) appear on exactly one tab. See defaultTab in PickerResultPage's
   // config.
   defaultTab?: TabKey;
+  // The mobile screener trigger, rendered as the first pill in the controls row
+  // (see .screenerControls below). Passed in rather than rendered here because
+  // it's a ScreenerNav instance and needs the page's currentHref, filter mode
+  // and categoryValues, all of which live in PickerResultPage.
+  //
+  // It used to sit in its own full-width sticky bar between the hero and the
+  // results, which meant a phone showed two separate control surfaces -- one
+  // for "which screener", one for "how to view it" -- stacked on top of each
+  // other. They're one decision, so they're now one row.
+  screenerControl?: ReactNode;
 }) {
   const { predicates, selectedFilters, setMatchCount, isPristine } = usePickerFilter();
   const [viewMode, setViewMode] = useState<ViewMode>("list");
@@ -429,6 +457,31 @@ export default function PickerResultsGrid({
   const [sort, setSort] = useState<SortState>(null);
   const pageSize = viewMode === "list" ? LIST_PAGE_SIZE : CHART_PAGE_SIZE;
   const [visibleCount, setVisibleCount] = useState(LIST_PAGE_SIZE);
+
+  // Phone layout swap. The 9-column table needs horizontal scrolling to read a
+  // single number, which is a spreadsheet gesture, not an app one -- below this
+  // width the same data renders as full-width rows instead (see the mRows
+  // branch below).
+  //
+  // Deliberately state + matchMedia rather than rendering both trees and hiding
+  // one with CSS: two copies of every ticker in the DOM is duplicated content
+  // on pages that are actively being indexed. Starting false means the server
+  // render (and therefore the crawler) always gets the table, which is the
+  // text-richer of the two; a phone swaps to rows on hydration.
+  const [isNarrow, setIsNarrow] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(max-width: 720px)");
+    const apply = () => setIsNarrow(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+
+  // Which mobile rows are expanded to show their full field set. Keyed by
+  // symbol; cleared whenever the tab changes, since a panel opened on Dividends
+  // is showing fields that no longer exist on Financials.
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set());
 
   const cardHrefFor = (entry: ResultEntry) =>
     isEarnings ? `/stock/${encodeURIComponent(entry.symbol)}/earnings` : entry.chartHref;
@@ -543,6 +596,32 @@ export default function PickerResultsGrid({
 
   const activeColumns = columnSets[activeTab];
 
+  // Every column a phone row can lead with or sort by -- i.e. everything except
+  // the two identity columns, which are already the row's left-hand side.
+  const metricColumns = useMemo(
+    () => activeColumns.filter((col) => col.key !== "symbol" && col.key !== "name"),
+    [activeColumns]
+  );
+
+  // The single figure each row leads with. Follows the sort when there is one,
+  // so sorting by Payout Ratio makes every row show its payout ratio; otherwise
+  // it's the tab's defining metric. Falls back to the first metric column if
+  // neither resolves (a tab whose default was renamed, say).
+  const headlineColumn = useMemo(() => {
+    const wanted = sort && sort.key !== "symbol" && sort.key !== "name" ? sort.key : DEFAULT_METRIC_BY_TAB[activeTab];
+    return metricColumns.find((col) => col.key === wanted) ?? metricColumns[0] ?? null;
+  }, [sort, activeTab, metricColumns]);
+
+  // The smaller figure under the headline. Usually the day's % change, since
+  // that's the context you want next to any other number -- unless the headline
+  // IS the change, in which case show the price instead. Tabs carrying neither
+  // (Dividends, Financials) simply get no sub-line.
+  const subColumn = useMemo(() => {
+    if (!headlineColumn) return null;
+    const wanted = headlineColumn.key === "change" ? "price" : "change";
+    return activeColumns.find((col) => col.key === wanted) ?? null;
+  }, [headlineColumn, activeColumns]);
+
   const derivedByEntry = useMemo(() => {
     const map = new WeakMap<ResultEntry, DerivedRow>();
     for (const entry of entries) map.set(entry, deriveRow(entry));
@@ -638,6 +717,17 @@ export default function PickerResultsGrid({
     restoreScroll.current = null;
     setActiveTab(tab);
     setSort(null);
+    // Panels opened on the previous tab describe fields this one doesn't have.
+    setExpandedRows(new Set());
+  };
+
+  const toggleRow = (symbol: string) => {
+    setExpandedRows((current) => {
+      const next = new Set(current);
+      if (next.has(symbol)) next.delete(symbol);
+      else next.add(symbol);
+      return next;
+    });
   };
 
   useEffect(() => {
@@ -670,10 +760,16 @@ export default function PickerResultsGrid({
     }
   };
 
+  const showMobileRows = viewMode === "list" && isNarrow;
+
   const description =
-    viewMode === "list"
-      ? "Sortable table of the current screened results — click any column header to sort, or a row to open the full view."
-      : "Each card shows a mini candle preview — select any stock to open its full view.";
+    viewMode === "chart"
+      ? "Each card shows a mini candle preview — select any stock to open its full view."
+      : showMobileRows
+        ? "Tap a ticker to open it, or the arrow to see the rest of this tab's figures."
+        : "Sortable table of the current screened results — click any column header to sort, or a row to open the full view.";
+
+  const sortKey = headlineColumn?.key ?? "";
 
   return (
     <section>
@@ -681,34 +777,7 @@ export default function PickerResultsGrid({
         <div className="resultsHeaderTop">
           <h2>Current screened results</h2>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <p style={{ margin: "8px 0 0" }}>{description}</p>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto" }}>
-            {viewMode === "list" ? (
-              <span className="tabSelectWrap">
-                <select
-                  className="tabSelect"
-                  value={activeTab}
-                  onChange={(e) => onTabChange(e.target.value as TabKey)}
-                  aria-label="Data view"
-                >
-                  {TABS.map((t) => (
-                    <option key={t.key} value={t.key}>{t.label}</option>
-                  ))}
-                </select>
-              </span>
-            ) : null}
-            <button
-              type="button"
-              className="viewToggle"
-              onClick={() => setViewMode((v) => (v === "list" ? "chart" : "list"))}
-              aria-label={viewMode === "list" ? "Switch to chart view" : "Switch to list view"}
-            >
-              {viewMode === "list" ? "Chart View Mode" : "List View Mode"}
-              <span aria-hidden="true" style={{ fontSize: 12 }}>{viewMode === "list" ? "▦" : "▤"}</span>
-            </button>
-          </div>
-        </div>
+        <p>{description}</p>
         {viewMode === "list" ? (
           <div className="viewTabs" role="tablist" aria-label="Data view">
             {TABS.map((t) => (
@@ -728,8 +797,149 @@ export default function PickerResultsGrid({
         <ScreenerFilterBar matched={filteredEntries.length} total={entries.length} />
       </div>
 
+      {/* One control row: which screener, which view, which data tab, which
+          sort. These four are a single decision about what you're looking at,
+          so they sit together rather than in two stacked bars.
+
+          The order is deliberate and the line break is explicit rather than
+          left to wrapping: WHAT you're looking at (screener + view) on the top
+          line, HOW it's arranged (tab + sort) underneath. Relying on wrap alone
+          would let the split move as labels change length between tabs.
+
+          It's a direct child of this <section>, NOT of .resultsHeader above,
+          and that placement is load-bearing: a sticky element can only travel
+          inside its own parent's box, and .resultsHeader is only as tall as the
+          heading. The section spans the whole result list, so there's real
+          travel to work with. Same lesson as .screenerTriggerWrap before it. */}
+      <div className="screenerControls">
+        {screenerControl}
+        <button
+          type="button"
+          className="viewToggle"
+          onClick={() => setViewMode((v) => (v === "list" ? "chart" : "list"))}
+          aria-label={viewMode === "list" ? "Switch to chart view" : "Switch to list view"}
+        >
+          {viewMode === "list" ? "Chart View" : "List View"}
+          <span aria-hidden="true" style={{ fontSize: 12 }}>{viewMode === "list" ? "▦" : "▤"}</span>
+        </button>
+        <span className="ctrlBreak" aria-hidden="true" />
+        {viewMode === "list" ? (
+          <span className="tabSelectWrap">
+            <select
+              className="tabSelect"
+              value={activeTab}
+              onChange={(e) => onTabChange(e.target.value as TabKey)}
+              aria-label="Data view"
+            >
+              {TABS.map((t) => (
+                <option key={t.key} value={t.key}>{t.label}</option>
+              ))}
+            </select>
+          </span>
+        ) : null}
+        {/* Sorting on a phone can't be "tap a column header" -- there are no
+            headers once the table is gone, and reaching them meant swiping
+            sideways even when there were. So it becomes a visible control,
+            and the metric it names is the one every row then leads with. */}
+        {showMobileRows && metricColumns.length ? (
+          <span className="mSortWrap">
+            <select
+              className="tabSelect"
+              value={sortKey}
+              onChange={(e) => {
+                const col = metricColumns.find((c) => c.key === e.target.value);
+                if (!col) return;
+                setSort({ key: col.key, dir: col.sortType === "str" ? "asc" : "desc" });
+              }}
+              aria-label="Sort by"
+            >
+              {metricColumns.map((col) => (
+                <option key={col.key} value={col.key}>Sort: {col.label}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="mSortDir"
+              onClick={() =>
+                setSort((current) => {
+                  const key = current?.key ?? sortKey;
+                  if (!key) return current;
+                  const dir = current && current.key === key && current.dir === "desc" ? "asc" : "desc";
+                  return { key, dir };
+                })
+              }
+              aria-label={sort?.dir === "asc" ? "Sort ascending" : "Sort descending"}
+            >
+              {sort?.dir === "asc" ? "▲" : "▼"}
+            </button>
+          </span>
+        ) : null}
+      </div>
+
       {shown.length ? (
-        viewMode === "list" ? (
+        showMobileRows ? (
+          <div className="mRows">
+            {shown.map((entry) => {
+              const d = derivedByEntry.get(entry) ?? deriveRow(entry);
+              const href = cardHrefFor(entry);
+              const open = expandedRows.has(entry.symbol);
+              // Only fields this symbol actually has. The extended tabs are
+              // warmed by cron across the universe, so a symbol that hasn't
+              // been reached yet would otherwise open a panel of five dashes --
+              // far more obviously empty in a two-column panel than as one dash
+              // in a wide table row.
+              const panelColumns = metricColumns.filter((col) => {
+                const value = col.get(entry, d);
+                return value != null && value !== "";
+              });
+              return (
+                <div key={`${entry.symbol}-${entry.note}`} id={`picker-${entry.symbol}`} className={open ? "mRow open" : "mRow"}>
+                  <div className="mRowTop">
+                    <Link href={href} className="mRowId">
+                      <span className="dot" style={{ background: toneColour(toneFor(entry)) }} aria-hidden="true" />
+                      <span className="mRowSym">{entry.symbol}</span>
+                      {entry.companyName ? (
+                        <span className="mRowName" title={entry.companyName}>{entry.companyName}</span>
+                      ) : null}
+                    </Link>
+                    <div className="mRowFigures">
+                      {headlineColumn ? (
+                        <>
+                          <span className="mRowLabel">{headlineColumn.label}</span>
+                          <span className="mRowValue">{headlineColumn.cell(entry, d)}</span>
+                        </>
+                      ) : null}
+                      {subColumn ? <span className="mRowSub">{subColumn.cell(entry, d)}</span> : null}
+                    </div>
+                    <button
+                      type="button"
+                      className="mRowExpand"
+                      onClick={() => toggleRow(entry.symbol)}
+                      aria-expanded={open}
+                      aria-label={open ? `Hide ${entry.symbol} details` : `Show ${entry.symbol} details`}
+                    >
+                      <span aria-hidden="true">{open ? "▲" : "▼"}</span>
+                    </button>
+                  </div>
+                  {open ? (
+                    <div className="mRowPanel">
+                      {panelColumns.length ? (
+                        panelColumns.map((col) => (
+                          <div key={col.key} className="mRowField">
+                            <span className="mRowFieldLabel">{col.label}</span>
+                            <span className="mRowFieldValue">{col.cell(entry, d)}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="mRowEmpty">No {TABS.find((t) => t.key === activeTab)?.label.toLowerCase()} data for {entry.symbol} yet.</div>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        ) : viewMode === "list" ? (
           <>
             <div className="listScrollTop msScrollGrey" ref={topScrollRef} onScroll={syncFromTop} aria-hidden="true">
               <div style={{ width: scrollWidth || 1 }} />
@@ -839,6 +1049,100 @@ export default function PickerResultsGrid({
           </button>
         </div>
       ) : null}
+
+      <style>{`
+        .screenerControls {
+          display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+          justify-content: flex-end; margin-top: 14px;
+        }
+        /* Zero-height full-width flex item -- forces everything after it onto a
+           new line. Only active on mobile; on desktop the tab and sort pills are
+           hidden anyway (the tab row and column headers do those jobs there), so
+           a break would just leave a gap under a lone view-mode button. */
+        .ctrlBreak { display: none; }
+
+        .mSortWrap { display: inline-flex; align-items: stretch; gap: 6px; flex: 0 0 auto; }
+        .mSortDir {
+          flex: 0 0 auto; width: 38px; border-radius: 999px;
+          border: 1px solid rgba(96,165,250,0.4); background: rgba(59,130,246,0.10);
+          color: #dbeafe; font-size: 11px; font-weight: 900; cursor: pointer; font-family: inherit;
+        }
+
+        .mRows { margin-top: 12px; display: grid; gap: 8px; }
+        .mRow {
+          border: 1px solid rgba(255,255,255,0.09); border-radius: 14px;
+          background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+          overflow: hidden;
+        }
+        .mRow.open { border-color: rgba(96,165,250,0.4); }
+        .mRowTop { display: flex; align-items: center; gap: 10px; padding: 11px 6px 11px 12px; }
+        /* Fills the row so the whole left-hand side opens the stock; the expand
+           button is the only other target, and it sits outside this link. */
+        .mRowId {
+          display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 1 1 auto;
+          color: inherit; text-decoration: none;
+        }
+        .mRowId .dot { align-self: center; width: 8px; height: 8px; border-radius: 999px; flex: 0 0 auto; }
+        .mRowSym { flex: 0 0 auto; font-size: 15px; font-weight: 950; letter-spacing: -0.02em; color: #eaf2ff; }
+        .mRowName {
+          min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          font-size: 12px; font-weight: 700; color: rgba(148,163,184,0.9);
+        }
+        .mRowFigures { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; text-align: right; }
+        .mRowLabel { font-size: 9px; font-weight: 900; letter-spacing: 0.05em; text-transform: uppercase; color: rgba(148,163,184,0.62); }
+        .mRowValue { font-size: 14.5px; font-weight: 900; color: #f1f5f9; white-space: nowrap; }
+        .mRowSub { font-size: 11.5px; font-weight: 800; white-space: nowrap; }
+        .mRowExpand {
+          flex: 0 0 auto; width: 34px; height: 34px; border-radius: 10px;
+          border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04);
+          color: rgba(226,232,240,0.75); font-size: 10px; cursor: pointer; font-family: inherit;
+        }
+        .mRow.open .mRowExpand { border-color: rgba(96,165,250,0.45); color: #93c5fd; }
+
+        .mRowPanel {
+          border-top: 1px solid rgba(255,255,255,0.08);
+          padding: 4px 12px 10px;
+          display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px;
+        }
+        .mRowField {
+          display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+          padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.055); min-width: 0;
+        }
+        .mRowFieldLabel { font-size: 11px; font-weight: 800; color: rgba(148,163,184,0.8); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .mRowFieldValue { flex: 0 0 auto; font-size: 12.5px; font-weight: 800; color: rgba(226,232,240,0.94); white-space: nowrap; }
+        .mRowEmpty { grid-column: 1 / -1; padding: 10px 0 4px; font-size: 12px; color: rgba(148,163,184,0.75); }
+
+        @media (max-width: 980px) {
+          /* Docks under the site header exactly where the old Select Screener
+             bar used to, and for the same reason: on a list this long the
+             controls have to stay reachable without scrolling back to the top.
+             z-index 60 matches what that bar used, so anything layering above
+             it (the screener sheet at 70, the site header at 100) still wins.
+
+             The negative margins let the opaque background bleed to the edge of
+             .resultWrap's padding, so rows scrolling underneath don't show
+             through at the sides. */
+          .screenerControls {
+            justify-content: flex-start;
+            position: sticky; top: 62px; z-index: 60;
+            margin: 10px -18px 0; padding: 10px 18px;
+            background: #06080d;
+          }
+          .ctrlBreak { display: block; flex-basis: 100%; width: 100%; height: 0; margin: 0; }
+        }
+        @media (max-width: 720px) {
+          /* Header is shorter below this breakpoint, and .resultWrap's side
+             padding drops to 10px. */
+          .screenerControls { top: 60px; margin-left: -10px; margin-right: -10px; padding-left: 10px; padding-right: 10px; }
+        }
+        @media (max-width: 430px) {
+          /* Two columns of label+value stops fitting once the labels are this
+             long ("Payout Ratio", "Op. Income") -- one column keeps every value
+             on the same line as its own label. */
+          .mRowPanel { grid-template-columns: minmax(0, 1fr); }
+          .mRowName { font-size: 11.5px; }
+        }
+      `}</style>
     </section>
   );
 }

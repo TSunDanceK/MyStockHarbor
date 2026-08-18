@@ -88,12 +88,27 @@ export default function ScreenerHeroHeading({
     }
   }
 
+  // The eyebrow's job is to say what KIND of page this is before the H1 says
+  // which one -- "Momentum screener" over "Oversold Stocks Today". On a page
+  // where the two strings are the same word for word, it does no such job: the
+  // Advanced Screener rendered a pill reading ADVANCED SCREENER directly above
+  // an H1 reading Advanced Screener, which is the page name twice in two
+  // typefaces for no added meaning.
+  //
+  // Compared case- and whitespace-insensitively because the pill is uppercased
+  // in CSS, so the two are never byte-identical even when they're the same
+  // words.
+  const eyebrowRepeatsTitle =
+    shownEyebrow.trim().toLowerCase() === shownTitle.trim().toLowerCase();
+
   return (
     <>
-      <div className="eyebrow">
-        <span style={{ color: dotColour }}>●</span>
-        {shownEyebrow}
-      </div>
+      {eyebrowRepeatsTitle ? null : (
+        <div className="eyebrow">
+          <span style={{ color: dotColour }}>●</span>
+          {shownEyebrow}
+        </div>
+      )}
       <h1>{shownTitle}</h1>
       <p>{shownDescription}</p>
 
