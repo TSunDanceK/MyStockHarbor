@@ -417,6 +417,7 @@ export default function PickerResultsGrid({
   splitReasonsBySelection = false,
   collapseReasons = false,
   defaultTab = "general",
+  screenerControl = null,
 }: {
   entries: ResultEntry[];
   initialVisibleCount?: number;
@@ -439,6 +440,16 @@ export default function PickerResultsGrid({
   // cash flow) appear on exactly one tab. See defaultTab in PickerResultPage's
   // config.
   defaultTab?: TabKey;
+  // The mobile screener trigger, rendered as the first pill in the controls row
+  // (see .screenerControls below). Passed in rather than rendered here because
+  // it's a ScreenerNav instance and needs the page's currentHref, filter mode
+  // and categoryValues, all of which live in PickerResultPage.
+  //
+  // It used to sit in its own full-width sticky bar between the hero and the
+  // results, which meant a phone showed two separate control surfaces -- one
+  // for "which screener", one for "how to view it" -- stacked on top of each
+  // other. They're one decision, so they're now one row.
+  screenerControl?: ReactNode;
 }) {
   const { predicates, selectedFilters, setMatchCount, isPristine } = usePickerFilter();
   const [viewMode, setViewMode] = useState<ViewMode>("list");
@@ -766,71 +777,7 @@ export default function PickerResultsGrid({
         <div className="resultsHeaderTop">
           <h2>Current screened results</h2>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <p style={{ margin: "8px 0 0" }}>{description}</p>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto", flexWrap: "wrap" }}>
-            {viewMode === "list" ? (
-              <span className="tabSelectWrap">
-                <select
-                  className="tabSelect"
-                  value={activeTab}
-                  onChange={(e) => onTabChange(e.target.value as TabKey)}
-                  aria-label="Data view"
-                >
-                  {TABS.map((t) => (
-                    <option key={t.key} value={t.key}>{t.label}</option>
-                  ))}
-                </select>
-              </span>
-            ) : null}
-            {/* Sorting on a phone can't be "tap a column header" -- there are no
-                headers once the table is gone, and reaching them meant swiping
-                sideways even when there were. So it becomes a visible control,
-                and the metric it names is the one every row then leads with. */}
-            {showMobileRows && metricColumns.length ? (
-              <span className="mSortWrap">
-                <select
-                  className="tabSelect"
-                  value={sortKey}
-                  onChange={(e) => {
-                    const col = metricColumns.find((c) => c.key === e.target.value);
-                    if (!col) return;
-                    setSort({ key: col.key, dir: col.sortType === "str" ? "asc" : "desc" });
-                  }}
-                  aria-label="Sort by"
-                >
-                  {metricColumns.map((col) => (
-                    <option key={col.key} value={col.key}>Sort: {col.label}</option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  className="mSortDir"
-                  onClick={() =>
-                    setSort((current) => {
-                      const key = current?.key ?? sortKey;
-                      if (!key) return current;
-                      const dir = current && current.key === key && current.dir === "desc" ? "asc" : "desc";
-                      return { key, dir };
-                    })
-                  }
-                  aria-label={sort?.dir === "asc" ? "Sort ascending" : "Sort descending"}
-                >
-                  {sort?.dir === "asc" ? "▲" : "▼"}
-                </button>
-              </span>
-            ) : null}
-            <button
-              type="button"
-              className="viewToggle"
-              onClick={() => setViewMode((v) => (v === "list" ? "chart" : "list"))}
-              aria-label={viewMode === "list" ? "Switch to chart view" : "Switch to list view"}
-            >
-              {viewMode === "list" ? "Chart View Mode" : "List View Mode"}
-              <span aria-hidden="true" style={{ fontSize: 12 }}>{viewMode === "list" ? "▦" : "▤"}</span>
-            </button>
-          </div>
-        </div>
+        <p>{description}</p>
         {viewMode === "list" ? (
           <div className="viewTabs" role="tablist" aria-label="Data view">
             {TABS.map((t) => (
@@ -848,6 +795,80 @@ export default function PickerResultsGrid({
           </div>
         ) : null}
         <ScreenerFilterBar matched={filteredEntries.length} total={entries.length} />
+      </div>
+
+      {/* One control row: which screener, which data tab, which sort, which
+          view. These four are a single decision about what you're looking at,
+          so they sit together and wrap onto a second line rather than running
+          off the side of the screen.
+
+          It's a direct child of this <section>, NOT of .resultsHeader above,
+          and that placement is load-bearing: a sticky element can only travel
+          inside its own parent's box, and .resultsHeader is only as tall as the
+          heading. The section spans the whole result list, so there's real
+          travel to work with. Same lesson as .screenerTriggerWrap before it. */}
+      <div className="screenerControls">
+        {screenerControl}
+        {viewMode === "list" ? (
+          <span className="tabSelectWrap">
+            <select
+              className="tabSelect"
+              value={activeTab}
+              onChange={(e) => onTabChange(e.target.value as TabKey)}
+              aria-label="Data view"
+            >
+              {TABS.map((t) => (
+                <option key={t.key} value={t.key}>{t.label}</option>
+              ))}
+            </select>
+          </span>
+        ) : null}
+        {/* Sorting on a phone can't be "tap a column header" -- there are no
+            headers once the table is gone, and reaching them meant swiping
+            sideways even when there were. So it becomes a visible control,
+            and the metric it names is the one every row then leads with. */}
+        {showMobileRows && metricColumns.length ? (
+          <span className="mSortWrap">
+            <select
+              className="tabSelect"
+              value={sortKey}
+              onChange={(e) => {
+                const col = metricColumns.find((c) => c.key === e.target.value);
+                if (!col) return;
+                setSort({ key: col.key, dir: col.sortType === "str" ? "asc" : "desc" });
+              }}
+              aria-label="Sort by"
+            >
+              {metricColumns.map((col) => (
+                <option key={col.key} value={col.key}>Sort: {col.label}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="mSortDir"
+              onClick={() =>
+                setSort((current) => {
+                  const key = current?.key ?? sortKey;
+                  if (!key) return current;
+                  const dir = current && current.key === key && current.dir === "desc" ? "asc" : "desc";
+                  return { key, dir };
+                })
+              }
+              aria-label={sort?.dir === "asc" ? "Sort ascending" : "Sort descending"}
+            >
+              {sort?.dir === "asc" ? "▲" : "▼"}
+            </button>
+          </span>
+        ) : null}
+        <button
+          type="button"
+          className="viewToggle"
+          onClick={() => setViewMode((v) => (v === "list" ? "chart" : "list"))}
+          aria-label={viewMode === "list" ? "Switch to chart view" : "Switch to list view"}
+        >
+          {viewMode === "list" ? "Chart View Mode" : "List View Mode"}
+          <span aria-hidden="true" style={{ fontSize: 12 }}>{viewMode === "list" ? "▦" : "▤"}</span>
+        </button>
       </div>
 
       {shown.length ? (
@@ -1025,6 +1046,11 @@ export default function PickerResultsGrid({
       ) : null}
 
       <style>{`
+        .screenerControls {
+          display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+          justify-content: flex-end; margin-top: 14px;
+        }
+
         .mSortWrap { display: inline-flex; align-items: stretch; gap: 6px; flex: 0 0 auto; }
         .mSortDir {
           flex: 0 0 auto; width: 38px; border-radius: 999px;
@@ -1076,6 +1102,28 @@ export default function PickerResultsGrid({
         .mRowFieldValue { flex: 0 0 auto; font-size: 12.5px; font-weight: 800; color: rgba(226,232,240,0.94); white-space: nowrap; }
         .mRowEmpty { grid-column: 1 / -1; padding: 10px 0 4px; font-size: 12px; color: rgba(148,163,184,0.75); }
 
+        @media (max-width: 980px) {
+          /* Docks under the site header exactly where the old Select Screener
+             bar used to, and for the same reason: on a list this long the
+             controls have to stay reachable without scrolling back to the top.
+             z-index 60 matches what that bar used, so the hero's ticker-search
+             dropdown (65) still clears it.
+
+             The negative margins let the opaque background bleed to the edge of
+             .resultWrap's padding, so rows scrolling underneath don't show
+             through at the sides. */
+          .screenerControls {
+            justify-content: flex-start;
+            position: sticky; top: 62px; z-index: 60;
+            margin: 10px -18px 0; padding: 10px 18px;
+            background: #06080d;
+          }
+        }
+        @media (max-width: 720px) {
+          /* Header is shorter below this breakpoint, and .resultWrap's side
+             padding drops to 10px. */
+          .screenerControls { top: 60px; margin-left: -10px; margin-right: -10px; padding-left: 10px; padding-right: 10px; }
+        }
         @media (max-width: 430px) {
           /* Two columns of label+value stops fitting once the labels are this
              long ("Payout Ratio", "Op. Income") -- one column keeps every value
