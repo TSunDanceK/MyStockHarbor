@@ -100,6 +100,32 @@ export async function middleware(request: NextRequest) {
     );
   }
 
+  // Legacy "open the chart for this symbol" links point at the HOMEPAGE --
+  // `/?symbol=NVDA&tf=D#chart`. That's the shape buildDashboardHref still emits
+  // in playsBuilder, bullFlagsBuilder, descendingTrianglesBuilder and
+  // pickersBuilder.
+  //
+  // On desktop it happened to work, because `/` renders the dashboard. On a
+  // phone HomePageRouter renders the mobile landing page instead, which ignores
+  // ?symbol entirely -- so "Open full chart" on the three chart-plays pages
+  // (/plays, /plays/bull-flags, /plays/descending-triangles) dropped the
+  // visitor on the home page. The picker pages never showed the bug because
+  // PickerResultPage's chartHrefFor already rewrites these links to /dashboard
+  // before rendering them; the three plays clients' own toChartHref only
+  // appends "#chart" and passes the rest through untouched.
+  //
+  // Fixing it here rather than in each builder covers three cases at once:
+  // payloads already sitting in the Redis cache carrying the old href, any
+  // bookmarked or indexed legacy URL, and any future caller that forgets. The
+  // fragment survives the redirect -- browsers re-apply it when the target
+  // carries none -- so "#chart" still lands on the chart.
+  if (pathname === "/" && url.searchParams.has("symbol")) {
+    return NextResponse.redirect(
+      `https://www.mystockharbor.com/dashboard${search}`,
+      308
+    );
+  }
+
   // /custom-screener has been retired: the All Stocks screener
   // (/stock-screener) runs the identical full-universe + checkbox-filter
   // engine and additionally shows results immediately with the sortable data
