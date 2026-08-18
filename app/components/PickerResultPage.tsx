@@ -7,7 +7,6 @@ import HowToCollapse from "@/app/components/HowToCollapse";
 import ScreenerHeroHeading from "@/app/components/ScreenerHeroHeading";
 import PickerResultsGrid, { type TabKey } from "@/app/components/PickerResultsGrid";
 import ScanFooter from "@/app/components/ScanFooter";
-import CustomScreenerSymbolSearch from "@/app/components/CustomScreenerSymbolSearch";
 import { PickerFilterProvider } from "@/app/components/PickerFilterContext";
 import { getCompanyNameMap } from "@/lib/server/companyNames";
 import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
@@ -1193,6 +1192,14 @@ export default async function PickerResultPage({
               <ScreenerNav currentHref={config.href} variant="sidebar" showFilters showSearch alwaysFilterMode={isFilterablePage} categoryValues={categoryValues} />
 
               <div className="resultMain">
+                {/* The hero's "Search a ticker" box has been removed. It answered
+                    "does this one stock meet any tracked condition", which is a
+                    single-stock question on a page whose whole job is ranking a
+                    list -- and it sat between the visitor and the results,
+                    costing a screenful on a phone. The site's other ticker
+                    searches (header, stock pages, earnings) already cover
+                    looking one name up. CustomScreenerSymbolSearch.tsx is left
+                    in the repo unreferenced in case it wants a home elsewhere. */}
                 <section className="hero">
                   <ScreenerHeroHeading
                     eyebrow={config.eyebrow}
@@ -1204,18 +1211,6 @@ export default async function PickerResultPage({
                   >
                     <HowToCollapse title={config.explainerTitle} body={config.explainerBody} />
                   </ScreenerHeroHeading>
-                  {config.kind === "allSymbols" ? (
-                    <div style={{ marginTop: 16 }}>
-                      <CustomScreenerSymbolSearch
-                        universe={entries.map((e) => ({
-                          symbol: e.symbol,
-                          companyName: e.companyName,
-                          reasons: e.reasons,
-                          score: e.score,
-                        }))}
-                      />
-                    </div>
-                  ) : null}
                 </section>
 
                 {highlightSymbol ? <PickerHighlightScroller symbol={highlightSymbol} /> : null}
