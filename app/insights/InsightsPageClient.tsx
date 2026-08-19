@@ -183,6 +183,57 @@ function PaginationNav({ page, totalPages }: { page: number; totalPages: number 
   );
 }
 
+// Inline SVGs rather than an icon-library import: there is no icon package in
+// package.json, and adding one to ship two glyphs would put a dependency into
+// a client bundle on a page that is already under crawl-budget pressure.
+//
+// aria-hidden on both -- each sits inside a button that still carries its own
+// text label, so announcing the icon would just repeat it.
+
+/** Pen over paper: the written insight posts. */
+function WrittenIcon() {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      style={{ flexShrink: 0 }}
+    >
+      <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9" />
+      <path d="M8 8h6" />
+      <path d="M8 12h4" />
+      <path d="M19.5 12.5 21 14l-5 5-2 .5.5-2Z" />
+    </svg>
+  );
+}
+
+/** YouTube's rounded-rectangle-and-play mark, drawn rather than imported. */
+function VideoIcon() {
+  return (
+    <svg
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      style={{ flexShrink: 0 }}
+    >
+      <rect x="2" y="5" width="20" height="14" rx="4" />
+      <path d="M10.2 9.3v5.4l4.6-2.7Z" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 function SearchBox({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return (
     <input
@@ -342,8 +393,10 @@ export default function InsightsPageClient({ posts, videos, page, totalPages, to
                 color: mobileTab === "insights" ? "#93c5fd" : "rgba(241,245,249,0.55)",
                 borderRight: "1px solid rgba(255,255,255,0.10)",
                 transition: "background 0.15s, color 0.15s",
+                display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8,
               }}
             >
+              <WrittenIcon />
               Latest Insights
             </button>
             <button
@@ -354,8 +407,10 @@ export default function InsightsPageClient({ posts, videos, page, totalPages, to
                 background: mobileTab === "videos" ? "rgba(239,68,68,0.15)" : "transparent",
                 color: mobileTab === "videos" ? "#fca5a5" : "rgba(241,245,249,0.55)",
                 transition: "background 0.15s, color 0.15s",
+                display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8,
               }}
             >
+              <VideoIcon />
               Watch Videos
             </button>
           </div>
