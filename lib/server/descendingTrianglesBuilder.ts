@@ -22,6 +22,7 @@ import { getCachedDailyHistory, getDailyHistory } from "./historyCache";
 import { addToDynamicUniverse, readDynamicUniverse } from "./dynamicUniverseCache";
 import { getCompanyNameMap } from "./companyNames";
 import { PRESET_UNIVERSE } from "./presetUniverse";
+import { readMarketState } from "./marketState";
 
 type Point = {
   date: string;
@@ -345,18 +346,17 @@ async function releaseDescendingLock(token: string | null) {
   }
 }
 
-async function fetchJSON<T>(url: string, forceFresh = false) {
-  const res = await fetch(
-    forceFresh ? `${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}` : url,
-    forceFresh ? { cache: "no-store" } : { next: { revalidate: 300 } }
-  );
-
-  if (!res.ok) throw new Error(`Fetch failed: ${url}`);
-  return (await res.json()) as T;
-}
-
-async function fetchMarket(origin: string, forceFresh = false) {
-  return fetchJSON<MarketPayload>(`${origin}/api/market`, forceFresh);
+// Reads the discovery universe in-process instead of fetching this
+// deployment's own /api/market URL. See lib/server/marketState.ts for the full
+// reasoning: that self-request carried no BotID header and no session cookie,
+// so the firewall could challenge it on production and the SSO gate refused it
+// outright on every preview, and fetchJSON's throw then became a 500 for the
+// whole page whenever the plays cache was also cold.
+//
+// readMarketState never throws: a miss degrades to empty rankings and the
+// universe falls back to readDynamicUniverse() + PRESET_UNIVERSE below.
+async function fetchMarket(_origin: string, _forceFresh = false): Promise<MarketPayload> {
+  return readMarketState();
 }
 
 async function fetchHistory(symbol: string, days: number): Promise<Point[]> {
