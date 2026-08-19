@@ -61,6 +61,11 @@ const TONE_BY_KEY = new Map<AnyFilterKey, PickerTone>([
 // purely because one of the ~25 conditions it happened to qualify for mentioned
 // that indicator, so two cards side by side drew different panels on a page
 // that was about neither.
+//
+// ORDER IS LOAD-BEARING. These are substring tests against the href, and the
+// specific breakout pages have to be checked before the generic one:
+// /all-time-high-breakout-stocks and /3-month-high-breakout-stocks both contain
+// "breakout" but want their own reference line, not the catch-all.
 function chartOverlayForEntry(configHref: string, configTitle: string, entry: ResultEntry) {
   const href = configHref.toLowerCase();
   const perCardIndicator = href.includes("divergence");
@@ -70,10 +75,23 @@ function chartOverlayForEntry(configHref: string, configTitle: string, entry: Re
   const text = `${configTitle} ${entryText}`.toLowerCase();
   if (text.includes("macd")) return "macd" as const;
   if (text.includes("rsi") || href.includes("overbought") || href.includes("oversold")) return "rsi" as const;
-  if (href.includes("200-day") || href.includes("ma200") || href.includes("best-trend")) return href.includes("best-trend") ? ("trend" as const) : ("ma200" as const);
+  if (href.includes("best-trend")) return "trend" as const;
+  // The 50-day pages drew bare candles: the chart has always computed ma50 (and
+  // falls back to a local SMA when the payload omits it) but only ever drew it
+  // under the "trend" overlay, and nothing routed here. Matching the full
+  // "50-day-moving-average" rather than "50-day" so a future /...-150-day-...
+  // route can't land here by accident.
+  if (href.includes("50-day-moving-average") || href.includes("ma50")) return "ma50" as const;
+  if (href.includes("200-day") || href.includes("ma200")) return "ma200" as const;
   if (href.includes("all-time-high-breakout")) return "ath" as const;
   if (href.includes("3-month-high")) return "recentHigh" as const;
   if (href.includes("all-time-highs")) return "ath" as const;
+  // Generic breakout pages -- /breakout-signal-stocks, /breakout-stocks,
+  // /stocks-ready-to-break-out, /stock-screener-for-breakouts. A breakout is
+  // defined against the prior high, so that is the line worth drawing; without
+  // this they fell through to "none" and showed candles with nothing to break
+  // out of. Both spellings, since one route hyphenates "break-out".
+  if (href.includes("breakout") || href.includes("break-out")) return "recentHigh" as const;
   return "none" as const;
 }
 
