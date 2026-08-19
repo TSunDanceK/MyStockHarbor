@@ -21,10 +21,10 @@ function toneColour(tone?: PickerTone) {
 }
 
 function toneBorder(tone?: PickerTone) {
-  if (tone === "green") return "rgba(34,197,94,0.32)";
+  if (tone === "red") return "rgba(239,68,68,0.32)";
   if (tone === "yellow") return "rgba(250,204,21,0.32)";
   if (tone === "orange") return "rgba(251,146,60,0.32)";
-  if (tone === "red") return "rgba(239,68,68,0.32)";
+  if (tone === "green") return "rgba(34,197,94,0.32)";
   if (tone === "blue") return "rgba(96,165,250,0.32)";
   return "rgba(148,163,184,0.24)";
 }
@@ -566,15 +566,17 @@ export default function PickerResultsGrid({
     return () => mq.removeEventListener("change", apply);
   }, []);
 
-  // A phone gets the row list unconditionally now, so the view-mode toggle is
-  // desktop-only (it's hidden below the breakpoint) and `viewMode` only decides
-  // anything on a wide screen. Each row carries its own sparkline and opens the
-  // full mini-chart in its panel, which is what the Chart View pill used to be
-  // for -- a whole separate rendering of the same list, at 21 rows a page
-  // instead of 30, to see a chart.
-  const showMobileRows = isNarrow;
+  // Rows are the phone's LIST view, not the phone's only view.
+  //
+  // These briefly replaced chart view entirely on mobile, on the reasoning that
+  // a sparkline in each row plus a full chart one tap into the panel left a
+  // separate chart *mode* with nothing to offer. That was wrong: the card grid
+  // is its own way of reading the market -- pattern after pattern, no figures
+  // in the way -- and on the chart-pattern pages that browsing is the point.
+  // Removing it took a feature away to save a pill.
+  const showMobileRows = viewMode === "list" && isNarrow;
 
-  const pageSize = !isNarrow && viewMode === "chart" ? CHART_PAGE_SIZE : LIST_PAGE_SIZE;
+  const pageSize = viewMode === "list" ? LIST_PAGE_SIZE : CHART_PAGE_SIZE;
 
   // Which mobile rows are expanded to show their full field set. Keyed by
   // symbol; cleared whenever the tab changes, since a panel opened on Dividends
@@ -859,7 +861,7 @@ export default function PickerResultsGrid({
   };
 
   const description =
-    viewMode === "chart" && !showMobileRows
+    viewMode === "chart"
       ? "Each card shows a mini candle preview — select any stock to open its full view."
       : showMobileRows
         ? "Tap any row for its chart, the rest of its figures and where to open it."
@@ -874,7 +876,7 @@ export default function PickerResultsGrid({
           <h2>Current screened results</h2>
         </div>
         <p>{description}</p>
-        {viewMode === "list" || showMobileRows ? (
+        {viewMode === "list" ? (
           <div className="viewTabs" role="tablist" aria-label="Data view">
             {TABS.map((t) => (
               <button
@@ -909,22 +911,17 @@ export default function PickerResultsGrid({
           travel to work with. Same lesson as .screenerTriggerWrap before it. */}
       <div className="screenerControls">
         {screenerControl}
-        {/* Desktop only. On a phone every row carries a sparkline and opens its
-            full chart in place, so a separate chart *mode* has nothing left to
-            offer -- it would just re-render the same list at 21 rows a page. */}
-        {!showMobileRows ? (
-          <button
-            type="button"
-            className="viewToggle"
-            onClick={() => setViewMode((v) => (v === "list" ? "chart" : "list"))}
-            aria-label={viewMode === "list" ? "Switch to chart view" : "Switch to list view"}
-          >
-            {viewMode === "list" ? "Chart View" : "List View"}
-            <span aria-hidden="true" style={{ fontSize: 12 }}>{viewMode === "list" ? "▦" : "▤"}</span>
-          </button>
-        ) : null}
+        <button
+          type="button"
+          className="viewToggle"
+          onClick={() => setViewMode((v) => (v === "list" ? "chart" : "list"))}
+          aria-label={viewMode === "list" ? "Switch to chart view" : "Switch to list view"}
+        >
+          {viewMode === "list" ? "Chart View" : "List View"}
+          <span aria-hidden="true" style={{ fontSize: 12 }}>{viewMode === "list" ? "▦" : "▤"}</span>
+        </button>
         <span className="ctrlBreak" aria-hidden="true" />
-        {viewMode === "list" || showMobileRows ? (
+        {viewMode === "list" ? (
           <span className="tabSelectWrap">
             <select
               className="tabSelect"
@@ -1052,10 +1049,10 @@ export default function PickerResultsGrid({
                   </div>
                   {open ? (
                     <div className="mRowPanel">
-                      {/* The full chart, one tap in, which is what the Chart
-                          View pill used to be for. Rendered only while the row
-                          is open, so a 30-row list still mounts at most a
-                          handful of these rather than 30 up front. */}
+                      {/* The full chart, one tap in. Chart view is still there
+                          as its own mode -- this is for reading one row without
+                          leaving the list. Mounted only while the row is open,
+                          so a 30-row list still holds a handful rather than 30. */}
                       {closes.length > 1 ? (
                         <div className="mRowChart">
                           <MiniPickerCandleChart
