@@ -566,54 +566,6 @@ export default function PickerResultsGrid({
     return () => mq.removeEventListener("change", apply);
   }, []);
 
-  // The controls row is sticky, so on a phone roughly 110px of a ~740px
-  // viewport is permanently covered before a single result is visible -- and
-  // it sits under a 62px header that is already doing the same thing. Hiding
-  // it on a downward scroll gives that back while you are reading, and brings
-  // it straight back on an upward one, which is the gesture you already make
-  // when you want a control.
-  //
-  // Deliberately not a "hide after N seconds" or a manual collapse: the row
-  // should cost nothing when you are not reaching for it and be there the
-  // instant you are, without you having to ask twice.
-  //
-  // The hiding is CSS and scoped to <=980px (see the media query below), where
-  // the row is sticky at all. On desktop this state is set and simply has no
-  // rule to act on, which is cheaper than branching the listener on width and
-  // keeps the two in one place.
-  const [controlsHidden, setControlsHidden] = useState(false);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    let lastY = window.scrollY;
-    let frame = 0;
-
-    const onScroll = () => {
-      // rAF-coalesced: iOS fires scroll far faster than it paints, and a
-      // setState per event on a 700-row list is the kind of thing that shows
-      // up as jank rather than as a bug.
-      if (frame) return;
-      frame = window.requestAnimationFrame(() => {
-        frame = 0;
-        const y = window.scrollY;
-        const delta = y - lastY;
-        // Momentum scrolling delivers a lot of sub-pixel jitter in both
-        // directions. Without a threshold the row flickers, which is worse
-        // than one that never moves.
-        if (Math.abs(delta) < 8) return;
-        lastY = y;
-        // Near the top there is nothing gained by hiding it -- the results
-        // have barely started -- so the row always shows there.
-        setControlsHidden(y > 160 && delta > 0);
-      });
-    };
-
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      if (frame) window.cancelAnimationFrame(frame);
-    };
-  }, []);
-
   // Rows are the phone's LIST view, not the phone's only view.
   //
   // These briefly replaced chart view entirely on mobile, on the reasoning that
@@ -988,17 +940,12 @@ export default function PickerResultsGrid({
           sort. These four are a single decision about what you're looking at,
           so they sit together rather than in two stacked bars.
 
-          The order is deliberate and the line break is explicit rather than
-          left to wrapping: WHAT you're looking at (screener + view) on the top
-          line, HOW it's arranged (tab + sort) underneath. Relying on wrap alone
-          would let the split move as labels change length between tabs.
-
-          It's a direct child of this <section>, NOT of .resultsHeader above,
-          and that placement is load-bearing: a sticky element can only travel
-          inside its own parent's box, and .resultsHeader is only as tall as the
-          heading. The section spans the whole result list, so there's real
-          travel to work with. Same lesson as .screenerTriggerWrap before it. */}
-      <div className={controlsHidden ? "screenerControls hidden" : "screenerControls"}>
+          On a phone this is docked to the BOTTOM of the screen rather than
+          under the header -- see the media query below for why. On desktop it
+          stays exactly where it was, right-aligned above the results, because
+          a mouse has no reach problem and the sidebar is already showing the
+          screener list. */}
+      <div className="screenerControls">
         {screenerControl}
         <button
           type="button"
@@ -1006,7 +953,7 @@ export default function PickerResultsGrid({
           onClick={() => setViewMode((v) => (v === "list" ? "chart" : "list"))}
           aria-label={viewMode === "list" ? "Switch to chart view" : "Switch to list view"}
         >
-          {viewMode === "list" ? "Chart View" : "List View"}
+          <span className="viewToggleLabel">{viewMode === "list" ? "Chart View" : "List View"}</span>
           <span aria-hidden="true" style={{ fontSize: 12 }}>{viewMode === "list" ? "▦" : "▤"}</span>
         </button>
         <span className="ctrlBreak" aria-hidden="true" />
@@ -1304,6 +1251,8 @@ export default function PickerResultsGrid({
            a break would just leave a gap under a lone view-mode button. */
         .ctrlBreak { display: none; }
 
+        .viewToggleLabel { display: inline; }
+
         .mSortWrap { display: inline-flex; align-items: stretch; gap: 6px; flex: 0 0 auto; }
         .mSortDir {
           flex: 0 0 auto; width: 38px; border-radius: 999px;
@@ -1370,40 +1319,60 @@ export default function PickerResultsGrid({
         .mRowAction:active { background: rgba(59,130,246,0.2); }
 
         @media (max-width: 980px) {
-          /* Docks under the site header exactly where the old Select Screener
-             bar used to, and for the same reason: on a list this long the
-             controls have to stay reachable without scrolling back to the top.
-             z-index 60 matches what that bar used, so anything layering above
-             it (the screener sheet at 70, the site header at 100) still wins.
+          /* Docked to the BOTTOM of the screen rather than under the header.
+             Three reasons, in order of how much they matter:
 
-             The negative margins let the opaque background bleed to the edge of
-             .resultWrap's padding, so rows scrolling underneath don't show
-             through at the sides. */
+             1. Reach. These are the four controls a visitor actually presses
+                on this page, and the top of a 6.7" screen is where a thumb
+                cannot go without shifting grip. The list is what you read; the
+                controls are what you press. They were the wrong way up.
+             2. Height. Under the header they stacked with it -- 62px of header
+                plus ~110px of controls before a single result. At the bottom
+                they stop competing for the same strip, and going to one row
+                halves what they cost either way.
+             3. They stay put. A control docked at the bottom does not need to
+                hide on scroll to earn its space, which is why the scroll
+                machinery came back out.
+
+             z-index 55 keeps it under the screener sheet (70) and the site
+             header (100). While the sheet is open its own Go button owns the
+             bottom of the screen, and this belongs behind it. */
           .screenerControls {
-            justify-content: flex-start;
-            position: sticky; top: 62px; z-index: 60;
-            margin: 10px -18px 0; padding: 10px 18px;
-            background: #06080d;
-            transition: transform 180ms ease, opacity 180ms ease;
+            position: fixed; left: 0; right: 0; bottom: 0; top: auto;
+            z-index: 55;
+            justify-content: center;
+            flex-wrap: nowrap;
+            gap: 6px;
+            margin: 0; padding: 9px 10px calc(9px + env(safe-area-inset-bottom));
+            border-top: 1px solid rgba(255,255,255,0.10);
+            /* Opaque. A translucent bar over a dense column of figures reads
+               as smeared rather than as depth. */
+            background: #080b12;
           }
-          /* Slides up behind the site header (z-index 100) rather than fading
-             where it stands, so it is never left half-visible over the rows.
-             pointer-events goes off with it -- a control you cannot see should
-             not still be catching taps. */
-          .screenerControls.hidden {
-            transform: translateY(-140%);
-            opacity: 0;
-            pointer-events: none;
+          /* Reserves the bar's height at the foot of the document, so the last
+             row of a list and the "Show more" button are not sitting
+             underneath it. Without this it is not docked, it is covering
+             something. */
+          body { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }
+
+          /* One row, so the line break that used to force tab and sort onto a
+             second line is off again. */
+          .ctrlBreak { display: none; }
+
+          /* Four controls across ~370px of usable width. The screener name is
+             the elastic one -- it is the only label that varies in length --
+             so it gives up width first and ellipses, while the three fixed
+             controls keep their full targets. */
+          .screenerControls .screenerPillBtn {
+            max-width: 38vw; padding: 9px 12px; gap: 5px;
           }
-          .ctrlBreak { display: block; flex-basis: 100%; width: 100%; height: 0; margin: 0; }
-        }
-        @media (max-width: 720px) {
-          /* Header is shorter below this breakpoint, and .resultWrap's side
-             padding drops to 10px. */
-          .screenerControls { top: 60px; margin-left: -10px; margin-right: -10px; padding-left: 10px; padding-right: 10px; }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .screenerControls { transition: none; }
+          .screenerControls .viewToggle { flex: 0 0 auto; }
+          /* Icon-only on a phone. The word is what a fourth control could not
+             afford; aria-label on the button was already carrying the meaning
+             for anyone not reading the glyph. */
+          .viewToggleLabel { display: none; }
+          .screenerControls .tabSelect { max-width: 30vw; }
+          .mSortWrap { min-width: 0; }
         }
         @media (max-width: 430px) {
           /* Two columns of label+value stops fitting once the labels are this
