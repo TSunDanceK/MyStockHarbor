@@ -18,6 +18,7 @@ import { getCachedDailyHistory, getDailyHistory } from "./historyCache";
 import { addToDynamicUniverse, readDynamicUniverse } from "./dynamicUniverseCache";
 import { getCompanyNameMap } from "./companyNames";
 import { PRESET_UNIVERSE } from "./presetUniverse";
+import { readMarketState } from "./marketState";
 
 type Point = {
   date: string;
@@ -352,18 +353,23 @@ async function releasePlaysLock(token: string | null) {
   }
 }
 
-async function fetchJSON<T>(url: string, forceFresh = false) {
-  const res = await fetch(
-    forceFresh ? `${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}` : url,
-    forceFresh ? { cache: "no-store" } : { next: { revalidate: 300 } }
-  );
-
-  if (!res.ok) throw new Error(`Fetch failed: ${url}`);
-  return (await res.json()) as T;
-}
-
-async function fetchMarket(origin: string, forceFresh = false) {
-  return fetchJSON<MarketPayload>(`${origin}/api/market`, forceFresh);
+// Reads the discovery universe in-process instead of fetching this
+// deployment's own /api/market URL.
+//
+// That self-request had no browser BotID header and no session cookie, so the
+// Vercel firewall could challenge it on production and the SSO gate refused it
+// outright on every preview deployment. fetchJSON threw on the non-ok
+// response, and with a cold plays cache getBullFlagsData's catch returned
+// status 500 -- surfacing as "Failed to load chart plays" on a page whose data
+// was sitting in Redis the whole time. Same self-block already fixed in
+// claude/pickers-firewall-selfblock-2026-07-17.md and in this page's own SSR
+// path; the builder's market call was missed then.
+//
+// readMarketState never throws: a Redis miss degrades to empty rankings and
+// the universe falls back to readDynamicUniverse() + PRESET_UNIVERSE below,
+// rather than taking the page down.
+async function fetchMarket(_origin: string, _forceFresh = false): Promise<MarketPayload> {
+  return readMarketState();
 }
 
 async function fetchHistory(symbol: string, days: number): Promise<Point[]> {
