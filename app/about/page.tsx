@@ -245,7 +245,7 @@ export default function AboutPage() {
           </p>
 
           <p style={paraStyle}>
-            What you can do is judge the work. The{" "}
+            There is also a{" "}
             <a
               href="https://www.youtube.com/@MyStockHarbor"
               target="_blank"
@@ -254,10 +254,11 @@ export default function AboutPage() {
             >
               MyStockHarbor YouTube channel
             </a>{" "}
-            runs under the same name, breaking down charts and setups in full
-            rather than in summary. It is a public record of how this site
-            reads a market, and you are welcome to make up your own mind from
-            it before trusting anything here.
+            running under the same name, where charts and setups get worked
+            through in full rather than in summary. It is there if you want it.
+            The site is not asking to be judged on it — what is on these pages
+            has to stand on its own workings, whether or not you ever watch a
+            video.
           </p>
 
           <h2 style={h2Style}>How the screens are built</h2>
