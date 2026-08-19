@@ -117,9 +117,9 @@ body {
 /* ---------------------------------------------------------------------
    Picker controls bar: tab bar, not a row of pills
    ---------------------------------------------------------------------
-   PickerResultsGrid docks its four controls -- screener, view mode, data
-   tab, sort -- to the bottom of the screen on a phone. It shipped them as
-   pills, and pills were the wrong shape for the job twice over:
+   PickerResultsGrid docks its four controls -- screener, view mode, metrics,
+   sort -- to the bottom of the screen on a phone. It shipped them as pills,
+   and pills were the wrong shape for the job twice over:
 
    1. They size to their own labels, so four of them overflowed a 390px
       viewport at BOTH ends: the screener name clipped on the left,
@@ -133,6 +133,18 @@ body {
    bar and its own label ellipses inside it. Icon over label, flat, no
    borders -- the standard docked-bar treatment, and the same one built for
    the site-wide bar in the closed PR #272.
+
+   Second pass: every caption in the bar is now a static word naming what
+   the item does, and every glyph is a drawn icon. Both were wrong for the
+   same reason. Two of the four captions were reporting a value instead --
+   "Oversold" (which screen you are on) and "General" (which column set is
+   loaded) -- and in a bar of four equal slots there is no room to say both
+   what an item is and what it currently holds. What it is wins: the page
+   heading already names the screen, and the results already show which
+   figures are loaded, so the caption was the one place the information was
+   redundant and the one place the purpose was missing. The four glyphs,
+   meanwhile, were three shaded rectangles and a pair of arrows, which at
+   19px is one shape used three times.
 
    Lives here for exactly the reason the two rules above do: the component
    is 69KB and the GitHub connector has no patch API, so putting this in
@@ -158,6 +170,22 @@ body {
   .screenerControls > * {
     flex: 1 1 0 !important;
     min-width: 0 !important;
+  }
+
+  /* One size for all five icons, set here rather than per item so the bar
+     cannot drift out of alignment one glyph at a time. */
+  .screenerControls .ctrlIcon,
+  .screenerControls .screenerPillIcon {
+    width: 22px !important;
+    height: 22px !important;
+    color: inherit !important;
+  }
+
+  .screenerControls .ctrlCaption {
+    display: block !important;
+    font-size: 10.5px;
+    font-weight: 800;
+    line-height: 1;
   }
 
   /* 1. Screener. ScreenerNav renders this as a pill; the border, radius
@@ -189,12 +217,6 @@ body {
     background: rgba(255, 255, 255, 0.04) !important;
   }
 
-  .screenerControls .screenerPillIcon {
-    font-size: 19px !important;
-    line-height: 1 !important;
-    color: inherit !important;
-  }
-
   .screenerControls .screenerPillLabel {
     max-width: 100% !important;
   }
@@ -204,7 +226,8 @@ body {
   }
 
   /* The applied-filter count keeps its green badge: it is the one thing in
-     the bar reporting state rather than offering an action. */
+     the bar reporting state rather than offering an action, and now the only
+     one, since the caption above stopped naming the current screen. */
   .screenerControls .screenerSelectCount {
     position: absolute !important;
     top: 4px !important;
@@ -216,9 +239,10 @@ body {
     font-size: 9.5px !important;
   }
 
-  /* 2. View mode. Same flattening, and the word comes BACK -- a tab bar
-     has room for the label that four pills could not afford. Order puts
-     the glyph above the caption without touching the markup. */
+  /* 2. View mode. Same flattening. The label stays an action -- "Charts"
+     when you are on the list, "List" when you are on the charts -- because
+     this one is a toggle rather than a menu, and what it does is the only
+     thing about it worth a word. */
   .screenerControls .viewToggle {
     width: 100% !important;
     height: 100% !important;
@@ -242,21 +266,17 @@ body {
 
   .screenerControls .viewToggleLabel {
     display: inline !important;
-    order: 2 !important;
   }
 
-  .screenerControls .viewToggle > span[aria-hidden] {
-    order: 1 !important;
-    font-size: 19px !important;
-    line-height: 1 !important;
-  }
-
-  /* 3 & 4. The two <select>s stay native -- the wheel picker is the right
-     control on a phone and nothing here improves on it -- so the icon is
-     drawn by the wrapper's ::before and the select becomes the caption
-     underneath it. */
+  /* 3 & 4. Metrics and Sort stay native <select>s -- the wheel picker is the
+     right control on a phone and nothing here improves on it. But the select
+     stops being the caption: it goes invisible and full-bleed over its item,
+     so the icon and the static word are what you see and the whole tab is
+     what you press. That is what buys the caption the room to say "Metrics"
+     and "Sort" instead of "General" and "Sort: Stock Price". */
   .screenerControls .tabSelectWrap,
   .screenerControls .mSortWrap {
+    position: relative !important;
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
@@ -266,54 +286,23 @@ body {
     color: rgba(148, 163, 184, 0.85) !important;
   }
 
-  .screenerControls .tabSelectWrap::before,
-  .screenerControls .mSortWrap::before {
-    font-size: 19px;
-    line-height: 1;
-  }
-
-  .screenerControls .tabSelectWrap::before {
-    content: "\25A4";
-  }
-
-  .screenerControls .mSortWrap::before {
-    content: "\21C5";
-  }
-
   .screenerControls .tabSelect {
+    position: absolute !important;
+    inset: 0 !important;
     width: 100% !important;
-    max-width: 100% !important;
+    max-width: none !important;
+    height: 100% !important;
+    margin: 0 !important;
     padding: 0 !important;
     border: 0 !important;
     border-radius: 0 !important;
     background: none !important;
-    color: inherit !important;
-    font-size: 10.5px !important;
-    font-weight: 800 !important;
-    text-align: center;
-    text-align-last: center;
+    color: transparent !important;
+    opacity: 0 !important;
     -webkit-appearance: none;
     appearance: none;
-  }
-
-  /* Sort direction rides in the corner of the sort item rather than taking
-     a slot of its own -- it modifies a sort, it is not a fifth thing to
-     choose between. Deliberately kept as a real target: hiding it would
-     leave a phone with no way to reverse a sort at all, which the old
-     two-row layout did offer. */
-  .screenerControls .mSortWrap {
-    position: relative !important;
-  }
-
-  .screenerControls .mSortDir {
-    position: absolute !important;
-    top: 3px !important;
-    right: 2px !important;
-    width: 26px !important;
-    height: 22px !important;
-    border-radius: 7px !important;
-    border: 1px solid rgba(96, 165, 250, 0.28) !important;
-    font-size: 9.5px !important;
-    line-height: 1 !important;
+    /* 16px is the threshold below which iOS zooms the page on focus. The
+       control is invisible, but the zoom is not. */
+    font-size: 16px !important;
   }
 }
