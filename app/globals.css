@@ -54,3 +54,62 @@ body {
 .mobile-change-stock {
   overflow: visible !important;
 }
+
+/* ---------------------------------------------------------------------
+   News pages: one card layer on a phone, not two
+   ---------------------------------------------------------------------
+   The news page family (/stock/[symbol]/news and /sector/[slug]/news)
+   nests cards two deep. Measured on a 390px viewport:
+
+     .newsWrap side padding        12 + 12
+     editorialCardStyle            21 + 21   <- the outer section card
+     newsLeadCardStyle             19 + 17   <- each article card
+
+   102px of 390 -- 26% of the screen -- spent on chrome, leaving a 288px
+   reading column. The sidebar does the same thing: sidebarCardStyle wraps
+   listRowStyle rows that carry their own border and padding.
+
+   On a phone the outer card is doing almost no visual work anyway. It is
+   near-full-bleed, so its border just traces the viewport edge 12px in,
+   and every section inside it already has its own frame. So below 560px
+   the outer layer collapses to a hairline rule and the inner cards become
+   the only card layer. Recovers 42px -- a ~15% wider reading column --
+   and removes the cards-in-cards look rather than just shrinking it.
+
+   Direct children only (`> section`), and every direct child of both
+   columns on both pages is a <section>: verified against the JSX and
+   against the components rendered into those columns (DetailedNewsSection,
+   AiInsightCard, LatestEarningsCard, EarningsNewsSection on the stock
+   page; SectorFeed and the four sidebar cards on the sector pages). A
+   component that renders a <div> root would silently miss this rule.
+
+   Two sections lose a tinted shell here and it costs nothing: the AI
+   insight card's blue gradient is decoration, and LatestEarningsCard's
+   tone-coloured border is duplicated by the tone pill inside its own
+   header. Nothing tone-bearing is only expressed by an outer border.
+
+   Lives here rather than in the pages' own <style> blocks for the reason
+   the rule above does: it would otherwise mean rewriting a 66KB and a
+   48KB page file to say the same thing twice. Both pages set these styles
+   inline, hence !important.
+   --------------------------------------------------------------------- */
+@media (max-width: 560px) {
+  .newsMainColumn > section,
+  .newsSidebar > section {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: none !important;
+    box-shadow: none !important;
+    padding: 18px 0 0 !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  }
+
+  /* The first section in each column sits directly under the hero (main)
+     or under the feed (sidebar, once .newsGrid has collapsed to one
+     column), both of which already provide separation. */
+  .newsMainColumn > section:first-child,
+  .newsSidebar > section:first-child {
+    padding-top: 0 !important;
+    border-top: 0 !important;
+  }
+}

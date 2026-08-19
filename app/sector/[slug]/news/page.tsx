@@ -313,8 +313,6 @@ export default async function SectorNewsPage({ params }: Props) {
                 <strong style={{ color: "#93c5fd" }}>HEADLINE TAKE:</strong> {newsScore.reason}
               </div>
 
-              <SectorPillRow currentSlug={sector.slug} />
-
               <div className="newsHeroCtaRow" style={heroCtaRowStyle}>
                 <Link href={screenerHref} className="newsHeroBtn" style={heroPrimaryCtaStyle}>
                   SCREEN {sector.shortName.toUpperCase()} STOCKS
@@ -470,6 +468,12 @@ export default async function SectorNewsPage({ params }: Props) {
             </div>
           </section>
 
+          <section style={otherSectorsCardStyle}>
+            <div style={sectionEyebrowStyle}>Switch desk</div>
+            <h2 style={sectionTitleSmallStyle}>Other sector news pages</h2>
+            <SectorPillRow currentSlug={sector.slug} />
+          </section>
+
           <HideWatermarksBar />
         </div>
 
@@ -481,7 +485,7 @@ export default async function SectorNewsPage({ params }: Props) {
           .newsHeroLead { margin: 14px 0 0 0; max-width: 780px; }
           .newsHeroCtaRow { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
           .newsBottomStrip { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: center; }
-          .sectorPillRow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+          .sectorPillRow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
           @media (max-width: 1180px) { .newsWrap { padding: 22px 24px 38px; } .newsHeroShell { grid-template-columns: 1fr !important; } .newsGrid { grid-template-columns: 1fr !important; } .newsSidebar { position: static !important; top: auto !important; } }
           @media (max-width: 820px) { .newsWrap { padding: 18px 16px 32px; } .newsHeroTitle { font-size: 34px !important; line-height: 1.06 !important; letter-spacing: -0.045em !important; } .newsHeroLead { font-size: 15px !important; line-height: 1.7 !important; } .newsHeroCtaRow { flex-direction: column !important; align-items: stretch !important; } .newsHeroBtn { width: 100%; justify-content: center !important; } .newsBottomStrip { flex-direction: column !important; align-items: stretch !important; } .newsBottomActions { width: 100%; } }
           @media (max-width: 560px) { .newsWrap { padding: 14px 12px 26px; } .newsHeroShell { grid-template-columns: 1fr !important; border-radius: 22px !important; padding: 16px !important; } .newsHeroTitle { font-size: 28px !important; line-height: 1.08 !important; letter-spacing: -0.035em !important; } .newsHeroLead { font-size: 14px !important; line-height: 1.65 !important; } .compactNewsRow .compactNewsHeadline { order: 5; flex: 1 1 100% !important; width: 100% !important; margin-top: 8px !important; } .newsBottomActions { display: grid !important; grid-template-columns: 1fr !important; width: 100%; } .newsBottomActions a { width: 100%; justify-content: center !important; } .newsMainColumn, .newsSidebar { min-width: 0; } .newsSidebar section, .newsMainColumn section, .compactNewsRow, .newsHeroRight > div { min-width: 0; } }
@@ -498,6 +502,15 @@ export default async function SectorNewsPage({ params }: Props) {
  * is a client-side autocomplete because there are thousands of tickers; there
  * are eleven sectors, so this is a plain server-rendered link row -- no client
  * JS, and eleven crawlable internal links in the initial HTML.
+ *
+ * Lives at the FOOT of the page, not in the hero. In the hero it wrapped to
+ * four rows on a phone and pushed the two CTAs below the fold, and it spent
+ * that space telling the reader which ten sectors they are NOT looking at.
+ * Nothing is lost on the crawl side: lib/navSections.ts already emits all
+ * eleven sector news links into the SSR HTML of every page on the site via
+ * CrawlableNav, so these are a convenience for readers rather than the only
+ * path in. prefetch={false} for the same reason it is set there -- eleven
+ * links entering the viewport should not trigger eleven page prefetches.
  */
 function SectorPillRow({ currentSlug }: { currentSlug: string }) {
   return (
@@ -508,6 +521,7 @@ function SectorPillRow({ currentSlug }: { currentSlug: string }) {
           <Link
             key={entry.slug}
             href={sectorNewsPath(entry.slug)}
+            prefetch={false}
             style={active ? sectorPillActiveStyle : sectorPillStyle}
             aria-current={active ? "page" : undefined}
           >
@@ -893,6 +907,7 @@ const coverageNoteStyle: CSSProperties = { fontSize: 12, lineHeight: 1.55, color
 
 const sectorPillStyle: CSSProperties = { display: "inline-flex", alignItems: "center", padding: "8px 12px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.03)", color: "rgba(241,245,249,0.82)", textDecoration: "none", fontSize: 12, fontWeight: 800 };
 const sectorPillActiveStyle: CSSProperties = { ...sectorPillStyle, border: "1px solid rgba(59,130,246,0.40)", background: "rgba(59,130,246,0.16)", color: "#dbeafe" };
+const otherSectorsCardStyle: CSSProperties = { marginTop: 18, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 22, padding: 18, background: "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02))" };
 const tickerPillStyle: CSSProperties = { display: "inline-flex", alignItems: "center", padding: "6px 10px", borderRadius: 999, background: "rgba(34,197,94,0.10)", border: "1px solid rgba(34,197,94,0.24)", color: "#bbf7d0", fontSize: 12, fontWeight: 900, textDecoration: "none" };
 
 const miniScoreGridStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 };
