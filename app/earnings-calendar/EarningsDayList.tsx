@@ -277,19 +277,27 @@ export default function EarningsDayList({ date, initialItems, initialHasMore, co
                       {item.company}
                     </span>
                   </Link>
-                  <div className="ecRowFigures">
-                    <span className="ecRowLabel">{headlineColumn.label}</span>
-                    <span className="ecRowValue">{headlineColumn.fmt(item)}</span>
-                    {subColumn ? <span className="ecRowSub">{subColumn.fmt(item)}</span> : null}
-                  </div>
+                  {/* Everything right of the company name is one toggle: the
+                      gap, the figures and the chevron. Leaving the gap inside
+                      the link made the emptiest part of the row its most
+                      destructive target -- a big blank area with no affordance
+                      that threw you onto another page. Two explicit targets,
+                      and the larger one is the reversible one. */}
                   <button
                     type="button"
-                    className="ecRowExpand"
+                    className="ecRowToggle"
                     onClick={() => toggleRow(item.symbol)}
                     aria-expanded={open}
                     aria-label={open ? `Hide ${item.symbol} details` : `Show ${item.symbol} details`}
                   >
-                    <span aria-hidden="true">{open ? "▲" : "▼"}</span>
+                    <span className="ecRowFigures">
+                      <span className="ecRowLabel">{headlineColumn.label}</span>
+                      <span className="ecRowValue">{headlineColumn.fmt(item)}</span>
+                      {subColumn ? <span className="ecRowSub">{subColumn.fmt(item)}</span> : null}
+                    </span>
+                    <span className="ecRowExpand" aria-hidden="true">
+                      {open ? "▲" : "▼"}
+                    </span>
                   </button>
                 </div>
                 {open ? (
@@ -451,12 +459,19 @@ export default function EarningsDayList({ date, initialItems, initialHasMore, co
         }
         .ecRow.open { border-color: rgba(96,165,250,0.4); }
         .ecRowTop { display: flex; align-items: center; gap: 10px; padding: 11px 6px 11px 12px; }
-        /* Fills the row so the whole left-hand side opens the company's
-           earnings page; the expand button is the only other target and it
-           sits outside this link. */
+        /* Sized to its own content, not the row: the ticker and the company
+           name open the earnings page, and everything past them belongs to
+           the toggle below. */
         .ecRowId {
-          display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 1 1 auto;
+          display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 0 1 auto;
           color: inherit; text-decoration: none;
+        }
+        /* Takes the rest of the row, including the gap, so there is no dead
+           space between the two targets. */
+        .ecRowToggle {
+          flex: 1 1 auto; display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+          min-width: 0; padding: 0; border: none; background: transparent;
+          font: inherit; color: inherit; cursor: pointer; text-align: right;
         }
         .ecRowSym { flex: 0 0 auto; font-size: 15px; font-weight: 950; letter-spacing: -0.02em; color: #93c5fd; }
         .ecRowName {
@@ -469,8 +484,9 @@ export default function EarningsDayList({ date, initialItems, initialHasMore, co
         .ecRowSub { font-size: 11.5px; font-weight: 800; white-space: nowrap; color: rgba(148,163,184,0.9); }
         .ecRowExpand {
           flex: 0 0 auto; width: 34px; height: 34px; border-radius: 10px;
+          display: inline-flex; align-items: center; justify-content: center;
           border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04);
-          color: rgba(226,232,240,0.75); font-size: 10px; cursor: pointer; font-family: inherit;
+          color: rgba(226,232,240,0.75); font-size: 10px;
         }
         .ecRow.open .ecRowExpand { border-color: rgba(96,165,250,0.45); color: #93c5fd; }
 
