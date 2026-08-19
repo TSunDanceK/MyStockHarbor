@@ -402,6 +402,77 @@ type Col = {
   cell: (e: ResultEntry, d: DerivedRow) => ReactNode;
 };
 
+// Compact price line for a phone row.
+//
+// Deliberately NOT MiniPickerCandleChart: that draws candles, wicks, volume and
+// an optional indicator pane, which is the right thing for a 300px card and far
+// too much ink for a 54x22 strip beside a company name. This is one <path> and
+// no state, so putting one on all 30 rows costs a fraction of what a row of
+// mini-candle charts would. The real chart is one tap away in the panel.
+const SPARK_W = 54;
+const SPARK_H = 22;
+const SPARK_MAX_POINTS = 40;
+
+function sparkCloses(entry: ResultEntry): number[] {
+  const pts = Array.isArray(entry.chartPoints) ? entry.chartPoints : [];
+  const out: number[] = [];
+  for (const p of pts.slice(-SPARK_MAX_POINTS)) {
+    if (typeof p.close === "number" && Number.isFinite(p.close)) out.push(p.close);
+  }
+  return out;
+}
+
+function Sparkline({ closes, up }: { closes: number[]; up: boolean }) {
+  // Two points is the minimum that describes a direction; below that there is
+  // nothing to draw and the row simply goes without one rather than showing a
+  // flat line that would read as "unchanged".
+  if (closes.length < 2) return null;
+  let min = closes[0];
+  let max = closes[0];
+  for (const c of closes) {
+    if (c < min) min = c;
+    if (c > max) max = c;
+  }
+  // A dead-flat series has nothing to scale against. Guarding with span = 1
+  // would put every point at (c - min) / span = 0, i.e. hard along the bottom
+  // edge, which reads as a crash rather than as no movement -- so flat is drawn
+  // through the middle instead.
+  const flat = max === min;
+  const span = flat ? 1 : max - min;
+  const step = SPARK_W / (closes.length - 1);
+  // Inset by half the stroke so the extremes aren't clipped by the viewBox edge.
+  const top = 1;
+  const usable = SPARK_H - 2;
+  const d = closes
+    .map((c, i) => {
+      const x = (i * step).toFixed(1);
+      const y = (flat ? top + usable / 2 : top + usable - ((c - min) / span) * usable).toFixed(1);
+      return `${i === 0 ? "M" : "L"}${x} ${y}`;
+    })
+    .join(" ");
+  return (
+    <svg
+      className="mRowSpark"
+      width={SPARK_W}
+      height={SPARK_H}
+      viewBox={`0 0 ${SPARK_W} ${SPARK_H}`}
+      preserveAspectRatio="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        d={d}
+        fill="none"
+        stroke={up ? "#22c55e" : "#ef4444"}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  );
+}
+
 // Renders the results for a picker/screener page. List view (default) is a
 // sortable, tabbed table; chart view is the mini candle-chart cards. `entries`
 // is the FULL matched set, so filtering / sorting / "Show more" all run off
@@ -455,7 +526,6 @@ export default function PickerResultsGrid({
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [activeTab, setActiveTab] = useState<TabKey>(defaultTab);
   const [sort, setSort] = useState<SortState>(null);
-  const pageSize = viewMode === "list" ? LIST_PAGE_SIZE : CHART_PAGE_SIZE;
   const [visibleCount, setVisibleCount] = useState(LIST_PAGE_SIZE);
 
   // Phone layout swap. The 9-column table needs horizontal scrolling to read a
@@ -477,6 +547,16 @@ export default function PickerResultsGrid({
     mq.addEventListener("change", apply);
     return () => mq.removeEventListener("change", apply);
   }, []);
+
+  // A phone gets the row list unconditionally now, so the view-mode toggle is
+  // desktop-only (it's hidden below the breakpoint) and `viewMode` only decides
+  // anything on a wide screen. Each row carries its own sparkline and opens the
+  // full mini-chart in its panel, which is what the Chart View pill used to be
+  // for -- a whole separate rendering of the same list, at 21 rows a page
+  // instead of 30, to see a chart.
+  const showMobileRows = isNarrow;
+
+  const pageSize = !isNarrow && viewMode === "chart" ? CHART_PAGE_SIZE : LIST_PAGE_SIZE;
 
   // Which mobile rows are expanded to show their full field set. Keyed by
   // symbol; cleared whenever the tab changes, since a panel opened on Dividends
@@ -760,13 +840,11 @@ export default function PickerResultsGrid({
     }
   };
 
-  const showMobileRows = viewMode === "list" && isNarrow;
-
   const description =
-    viewMode === "chart"
+    viewMode === "chart" && !showMobileRows
       ? "Each card shows a mini candle preview — select any stock to open its full view."
       : showMobileRows
-        ? "Tap any row for the rest of its figures and where to open it."
+        ? "Tap any row for its chart, the rest of its figures and where to open it."
         : "Sortable table of the current screened results — click any column header to sort, or a row to open the full view.";
 
   const sortKey = headlineColumn?.key ?? "";
@@ -778,7 +856,7 @@ export default function PickerResultsGrid({
           <h2>Current screened results</h2>
         </div>
         <p>{description}</p>
-        {viewMode === "list" ? (
+        {viewMode === "list" || showMobileRows ? (
           <div className="viewTabs" role="tablist" aria-label="Data view">
             {TABS.map((t) => (
               <button
@@ -813,17 +891,22 @@ export default function PickerResultsGrid({
           travel to work with. Same lesson as .screenerTriggerWrap before it. */}
       <div className="screenerControls">
         {screenerControl}
-        <button
-          type="button"
-          className="viewToggle"
-          onClick={() => setViewMode((v) => (v === "list" ? "chart" : "list"))}
-          aria-label={viewMode === "list" ? "Switch to chart view" : "Switch to list view"}
-        >
-          {viewMode === "list" ? "Chart View" : "List View"}
-          <span aria-hidden="true" style={{ fontSize: 12 }}>{viewMode === "list" ? "▦" : "▤"}</span>
-        </button>
+        {/* Desktop only. On a phone every row carries a sparkline and opens its
+            full chart in place, so a separate chart *mode* has nothing left to
+            offer -- it would just re-render the same list at 21 rows a page. */}
+        {!showMobileRows ? (
+          <button
+            type="button"
+            className="viewToggle"
+            onClick={() => setViewMode((v) => (v === "list" ? "chart" : "list"))}
+            aria-label={viewMode === "list" ? "Switch to chart view" : "Switch to list view"}
+          >
+            {viewMode === "list" ? "Chart View" : "List View"}
+            <span aria-hidden="true" style={{ fontSize: 12 }}>{viewMode === "list" ? "▦" : "▤"}</span>
+          </button>
+        ) : null}
         <span className="ctrlBreak" aria-hidden="true" />
-        {viewMode === "list" ? (
+        {viewMode === "list" || showMobileRows ? (
           <span className="tabSelectWrap">
             <select
               className="tabSelect"
@@ -897,6 +980,17 @@ export default function PickerResultsGrid({
                 const value = col.get(entry, d);
                 return value != null && value !== "";
               });
+              const closes = sparkCloses(entry);
+              // Direction comes from the day's % change where we have it, so
+              // the line's colour agrees with the % figure printed beside it.
+              // Falling back to first-vs-last close keeps a colour on rows the
+              // price pool missed, where the sparkline is the only signal.
+              const sparkUp =
+                d.changePct != null
+                  ? d.changePct >= 0
+                  : closes.length > 1
+                    ? closes[closes.length - 1] >= closes[0]
+                    : true;
               return (
                 <div key={`${entry.symbol}-${entry.note}`} id={`picker-${entry.symbol}`} className={open ? "mRow open" : "mRow"}>
                   <div className="mRowTop">
@@ -925,6 +1019,7 @@ export default function PickerResultsGrid({
                           <span className="mRowName" title={entry.companyName}>{entry.companyName}</span>
                         ) : null}
                       </span>
+                      <Sparkline closes={closes} up={sparkUp} />
                       <span className="mRowFigures">
                         {headlineColumn ? (
                           <>
@@ -939,6 +1034,20 @@ export default function PickerResultsGrid({
                   </div>
                   {open ? (
                     <div className="mRowPanel">
+                      {/* The full chart, one tap in, which is what the Chart
+                          View pill used to be for. Rendered only while the row
+                          is open, so a 30-row list still mounts at most a
+                          handful of these rather than 30 up front. */}
+                      {closes.length > 1 ? (
+                        <div className="mRowChart">
+                          <MiniPickerCandleChart
+                            points={entry.chartPoints}
+                            tone={displayTone ?? tone}
+                            overlay={chartOverlayForEntry(configHref, configTitle, entry)}
+                            supportResistanceZone={entry.supportResistanceZone}
+                          />
+                        </div>
+                      ) : null}
                       {panelColumns.length ? (
                         panelColumns.map((col) => (
                           <div key={col.key} className="mRowField">
@@ -1120,6 +1229,7 @@ export default function PickerResultsGrid({
           min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
           font-size: 12px; font-weight: 700; color: rgba(148,163,184,0.9);
         }
+        .mRowSpark { flex: 0 0 auto; display: block; width: 54px; height: 22px; opacity: 0.9; }
         .mRowFigures { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; text-align: right; }
         .mRowLabel { font-size: 9px; font-weight: 900; letter-spacing: 0.05em; text-transform: uppercase; color: rgba(148,163,184,0.62); }
         .mRowValue { font-size: 14.5px; font-weight: 900; color: #f1f5f9; white-space: nowrap; }
@@ -1132,6 +1242,7 @@ export default function PickerResultsGrid({
           padding: 4px 12px 12px;
           display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px;
         }
+        .mRowChart { grid-column: 1 / -1; margin: 8px 0 2px; }
         .mRowField {
           display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
           padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.055); min-width: 0;
@@ -1183,6 +1294,9 @@ export default function PickerResultsGrid({
              on the same line as its own label. */
           .mRowPanel { grid-template-columns: minmax(0, 1fr); }
           .mRowName { font-size: 11.5px; }
+          /* The sparkline gives up 10px before the company name does -- the
+             name is the thing you read, the line is the thing you glance at. */
+          .mRowSpark { width: 44px; }
         }
       `}</style>
     </section>
