@@ -344,7 +344,70 @@ function fmtVolume(v: number | null) {
 
 const MUTED = <span className="muted">–</span>;
 
-// ── cell formatters (return display nodes) ────────────────────────────────
+// ── Control-bar icons ────────────────────────────────
+//
+// The docked bar used text glyphs (▤ ▦ ⇅) and two CSS ::before escapes. Four
+// near-identical hatched rectangles is what they render as at 19px on a phone,
+// so nothing in the bar was distinguishable from anything else in it. These are
+// drawn instead: one shape per job, stroked in currentColor so they inherit the
+// item's active/inactive treatment, and sized by CSS rather than the viewBox.
+function CtrlIcon({ children }: { children: ReactNode }) {
+  return (
+    <svg
+      className="ctrlIcon"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {children}
+    </svg>
+  );
+}
+
+// (The screener item's sliders icon lives in ScreenerNav, which renders it.)
+
+// Candles: what chart view actually shows.
+const ICON_CHARTS = (
+  <CtrlIcon>
+    <path d="M8 4v3M8 15v5M16 4v5M16 17v3" />
+    <rect x="5.5" y="7" width="5" height="8" rx="1.2" />
+    <rect x="13.5" y="9" width="5" height="8" rx="1.2" />
+  </CtrlIcon>
+);
+
+// Rows: what list view shows. Deliberately not the same family as the metrics
+// table below -- these two sit two slots apart and must not be confusable.
+const ICON_LIST = (
+  <CtrlIcon>
+    <path d="M4.6 6.5h.8M4.6 12h.8M4.6 17.5h.8" />
+    <path d="M9 6.5h10.5M9 12h10.5M9 17.5h10.5" />
+  </CtrlIcon>
+);
+
+// A table with a header row and columns: the menu swaps which set of figures
+// the results carry, and that is the thing it swaps.
+const ICON_METRICS = (
+  <CtrlIcon>
+    <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+    <path d="M3.5 9.5h17M10 9.5v10M15.5 9.5v10" />
+  </CtrlIcon>
+);
+
+// Two arrows, opposed. Now that direction is folded into the options this is
+// the only place either arrow appears.
+const ICON_SORT = (
+  <CtrlIcon>
+    <path d="M7 4.5v15M7 4.5 4 8M7 4.5 10 8" />
+    <path d="M17 19.5v-15M17 19.5 14 16M17 19.5 20 16" />
+  </CtrlIcon>
+);
+
+// ── cell formatters (return display nodes)
 function capCell(v: number | null): ReactNode {
   return fmtCap(v) ?? MUTED;
 }
@@ -910,6 +973,13 @@ export default function PickerResultsGrid({
 
   const sortKey = headlineColumn?.key ?? "";
 
+  // Direction is a property of the chosen sort, not a separate control, so the
+  // select carries both and there is no arrow button beside it. When nothing is
+  // sorted yet this reports the direction that choosing the headline metric
+  // would apply, which is what the old arrow showed too.
+  const sortDir: "asc" | "desc" =
+    sort && sort.key === sortKey ? sort.dir : headlineColumn?.sortType === "str" ? "asc" : "desc";
+
   return (
     <section>
       <div className="resultsHeader">
@@ -953,17 +1023,19 @@ export default function PickerResultsGrid({
           onClick={() => setViewMode((v) => (v === "list" ? "chart" : "list"))}
           aria-label={viewMode === "list" ? "Switch to chart view" : "Switch to list view"}
         >
-          <span className="viewToggleLabel">{viewMode === "list" ? "Chart View" : "List View"}</span>
-          <span aria-hidden="true" style={{ fontSize: 12 }}>{viewMode === "list" ? "▦" : "▤"}</span>
+          {viewMode === "list" ? ICON_CHARTS : ICON_LIST}
+          <span className="viewToggleLabel">{viewMode === "list" ? "Charts" : "List"}</span>
         </button>
         <span className="ctrlBreak" aria-hidden="true" />
         {viewMode === "list" ? (
           <span className="tabSelectWrap">
+            {ICON_METRICS}
+            <span className="ctrlCaption" aria-hidden="true">Metrics</span>
             <select
               className="tabSelect"
               value={activeTab}
               onChange={(e) => onTabChange(e.target.value as TabKey)}
-              aria-label="Data view"
+              aria-label="Which figures to show"
             >
               {TABS.map((t) => (
                 <option key={t.key} value={t.key}>{t.label}</option>
@@ -977,35 +1049,38 @@ export default function PickerResultsGrid({
             and the metric it names is the one every row then leads with. */}
         {showMobileRows && metricColumns.length ? (
           <span className="mSortWrap">
+            {ICON_SORT}
+            <span className="ctrlCaption" aria-hidden="true">Sort</span>
+            {/* Metric and direction in one list. They were two controls, and the
+                arrow button was the loser of that arrangement: a 26px target
+                wedged into the corner of a quarter-width bar item, showing a
+                state ("descending") that means nothing until you already know
+                which column it applies to. Spelled out per option there is
+                nothing to decode and nothing to cram. */}
             <select
               className="tabSelect"
-              value={sortKey}
+              value={`${sortKey}:${sortDir}`}
               onChange={(e) => {
-                const col = metricColumns.find((c) => c.key === e.target.value);
+                const [key, dir] = e.target.value.split(":");
+                const col = metricColumns.find((c) => c.key === key);
                 if (!col) return;
-                setSort({ key: col.key, dir: col.sortType === "str" ? "asc" : "desc" });
+                setSort({ key: col.key, dir: dir === "asc" ? "asc" : "desc" });
               }}
-              aria-label="Sort by"
+              aria-label="Sort results"
             >
-              {metricColumns.map((col) => (
-                <option key={col.key} value={col.key}>Sort: {col.label}</option>
-              ))}
+              {metricColumns.flatMap((col) => {
+                // Biggest-first for figures, A-Z for names: the order you'd want
+                // if you picked that column and said nothing else.
+                const dirs = col.sortType === "str" ? (["asc", "desc"] as const) : (["desc", "asc"] as const);
+                return dirs.map((dir) => (
+                  <option key={`${col.key}:${dir}`} value={`${col.key}:${dir}`}>
+                    {col.sortType === "str"
+                      ? `${col.label} (${dir === "asc" ? "A to Z" : "Z to A"})`
+                      : `${col.label} (${dir === "desc" ? "high to low" : "low to high"})`}
+                  </option>
+                ));
+              })}
             </select>
-            <button
-              type="button"
-              className="mSortDir"
-              onClick={() =>
-                setSort((current) => {
-                  const key = current?.key ?? sortKey;
-                  if (!key) return current;
-                  const dir = current && current.key === key && current.dir === "desc" ? "asc" : "desc";
-                  return { key, dir };
-                })
-              }
-              aria-label={sort?.dir === "asc" ? "Sort ascending" : "Sort descending"}
-            >
-              {sort?.dir === "asc" ? "▲" : "▼"}
-            </button>
           </span>
         ) : null}
       </div>
@@ -1253,12 +1328,15 @@ export default function PickerResultsGrid({
 
         .viewToggleLabel { display: inline; }
 
+        /* Sized here rather than on the viewBox so one number moves every icon
+           in the bar. 15px on desktop, where it sits beside a label on a pill;
+           the docked bar scales it up (see globals.css). */
+        .ctrlIcon { width: 15px; height: 15px; flex: 0 0 auto; display: block; }
+        /* The static word under each icon in the docked bar. Off everywhere
+           else -- desktop shows the select itself, which reads its own value. */
+        .ctrlCaption { display: none; }
+
         .mSortWrap { display: inline-flex; align-items: stretch; gap: 6px; flex: 0 0 auto; }
-        .mSortDir {
-          flex: 0 0 auto; width: 38px; border-radius: 999px;
-          border: 1px solid rgba(96,165,250,0.4); background: rgba(59,130,246,0.10);
-          color: #dbeafe; font-size: 11px; font-weight: 900; cursor: pointer; font-family: inherit;
-        }
 
         .mRows { margin-top: 12px; display: grid; gap: 8px; }
         .mRow {
@@ -1367,11 +1445,6 @@ export default function PickerResultsGrid({
             max-width: 38vw; padding: 9px 12px; gap: 5px;
           }
           .screenerControls .viewToggle { flex: 0 0 auto; }
-          /* Icon-only on a phone. The word is what a fourth control could not
-             afford; aria-label on the button was already carrying the meaning
-             for anyone not reading the glyph. */
-          .viewToggleLabel { display: none; }
-          .screenerControls .tabSelect { max-width: 30vw; }
           .mSortWrap { min-width: 0; }
         }
         @media (max-width: 430px) {
