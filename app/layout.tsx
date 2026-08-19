@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import SiteHeader from "./components/SiteHeader";
 import CrawlableNav from "./components/CrawlableNav";
+import BottomNav from "./components/BottomNav";
 import PageViewTracker from "./components/PageViewTracker";
 import { getLatestYouTubeVideos } from "@/lib/youtube";
 import "./globals.css";
@@ -498,6 +499,17 @@ export default async function RootLayout({
           >
             resource index
           </a>
+
+          {/* Fixed bottom navigation, phones only. Mounted last inside the
+              column wrapper so it is the final thing in the DOM before
+              </body> -- it is position: fixed, so its place in the flow does
+              not matter visually, but keeping it after the footer means the
+              reading and tab order still end with the page's own content
+              rather than with site chrome.
+
+              See app/components/BottomNav.tsx, including why it reserves
+              padding on <body> and why every link is prefetch={false}. */}
+          <BottomNav />
         </div>
       </body>
     </html>
