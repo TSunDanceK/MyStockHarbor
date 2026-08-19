@@ -31,6 +31,22 @@ type PickerFilterContextValue = {
   matchCount: number | null;
   setMatchCount: (count: number | null) => void;
 
+  // How many of the CURRENTLY SHOWN results also satisfy each checkable
+  // condition -- i.e. what you would be left with if you ticked it.
+  //
+  // The screener's standing problem is that a condition tells you nothing until
+  // you press it: tick something and the list either changes or empties, and
+  // only then do you learn which. These counts move that answer in front of the
+  // decision, and a 0 marks a dead end before it costs a tap.
+  //
+  // Computed in PickerResultsGrid, which is the only place holding the entries,
+  // and published here for ScreenerNav to render -- the same one-way channel
+  // matchCount already uses. null means "not computed" (a page outside a
+  // provider, or before the grid's first pass) and should render no count at
+  // all rather than a zero, which would claim every condition is a dead end.
+  conditionCounts: Partial<Record<AnyFilterKey, number>> | null;
+  setConditionCounts: (counts: Partial<Record<AnyFilterKey, number>> | null) => void;
+
   // Is the selection still exactly the page's own seeded condition?
   //
   // Several things want to present differently once the visitor has changed the
@@ -129,6 +145,9 @@ export function PickerFilterProvider({
     urlHasFilters ? urlPredicates : presetPredicates
   );
   const [matchCount, setMatchCount] = useState<number | null>(null);
+  const [conditionCounts, setConditionCounts] = useState<
+    Partial<Record<AnyFilterKey, number>> | null
+  >(null);
 
   // One predicate per (kind, field). Adding a second sector extends the
   // existing category predicate's `values` rather than appending another --
@@ -256,6 +275,8 @@ export function PickerFilterProvider({
       toggleSector,
       matchCount,
       setMatchCount,
+      conditionCounts,
+      setConditionCounts,
       isPristine,
     }),
     [
@@ -268,6 +289,7 @@ export function PickerFilterProvider({
       selectedSectors,
       toggleSector,
       matchCount,
+      conditionCounts,
       isPristine,
     ]
   );
@@ -292,6 +314,8 @@ export function usePickerFilter(): PickerFilterContextValue {
     toggleSector: () => {},
     matchCount: null,
     setMatchCount: () => {},
+    conditionCounts: null,
+    setConditionCounts: () => {},
     // Nothing is seeded and nothing can be selected, so "unchanged from the
     // page's own state" is trivially true -- consumers keep their default
     // presentation.

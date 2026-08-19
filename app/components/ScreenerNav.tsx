@@ -191,7 +191,7 @@ function NavList({
   filterMode?: boolean;
   categoryValues?: Record<string, string[]>;
 }) {
-  const { selectedFilters, toggleFilter } = usePickerFilter();
+  const { selectedFilters, toggleFilter, conditionCounts } = usePickerFilter();
 
   return (
     <div className="screenerNavList">
@@ -224,9 +224,18 @@ function NavList({
               if (filterMode && item.filterKey) {
                 const key = item.filterKey;
                 const checked = selectedFilters.includes(key);
-                const rowClass = checked
-                  ? "screenerNavItem screenerNavCheckable checked"
-                  : "screenerNavItem screenerNavCheckable";
+                const count = conditionCounts ? conditionCounts[key] ?? 0 : null;
+                // A 0 is dimmed but still tappable. Disabling it would be the
+                // obvious move and the wrong one -- a checkbox that silently
+                // refuses to tick is its own puzzle, and unticking something
+                // else can make this row live again, which the visitor can
+                // only discover if the row still behaves like a control.
+                const dead = count === 0 && !checked;
+                const rowClass = [
+                  "screenerNavItem screenerNavCheckable",
+                  checked ? "checked" : "",
+                  dead ? "dead" : "",
+                ].filter(Boolean).join(" ");
 
                 // With an href the row carries TWO actions, not one: the box
                 // filters this page in place, the word opens that condition's
@@ -252,7 +261,11 @@ function NavList({
                           type="checkbox"
                           checked={checked}
                           onChange={() => toggleFilter(key)}
-                          aria-label={`Filter this page by ${item.label}`}
+                          aria-label={
+                            count == null
+                              ? `Filter this page by ${item.label}`
+                              : `Filter this page by ${item.label}, ${count} of the current results match`
+                          }
                         />
                       </span>
                       <span className="screenerNavIcon" style={{ color: colour }}>
@@ -265,6 +278,9 @@ function NavList({
                         aria-current={active ? "page" : undefined}
                       >
                         <span className="screenerNavLabel">{item.label}</span>
+                        {count != null ? (
+                          <span className="screenerNavCount" aria-hidden="true">{count}</span>
+                        ) : null}
                         <span className="screenerNavGo" aria-hidden="true">›</span>
                       </Link>
                     </div>
@@ -280,6 +296,7 @@ function NavList({
                       {item.icon}
                     </span>
                     <span className="screenerNavLabel">{item.label}</span>
+                    {count != null ? <span className="screenerNavCount">{count}</span> : null}
                   </label>
                 );
               }
@@ -759,6 +776,19 @@ export default function ScreenerNav({
           color: inherit; text-decoration: none;
         }
         .screenerNavLabelLink:hover .screenerNavLabel { text-decoration: underline; }
+        /* Sits hard right of the label, so the counts form a readable column
+           down the sheet rather than trailing each label at a different x. */
+        .screenerNavCount {
+          flex: 0 0 auto; margin-left: auto; padding: 1px 7px; border-radius: 999px;
+          font-size: 10.5px; font-weight: 900; font-variant-numeric: tabular-nums;
+          background: rgba(148,163,184,0.14); color: rgba(226,232,240,0.82);
+        }
+        .screenerNavCheckable.checked .screenerNavCount { background: rgba(34,197,94,0.22); color: #dcfce7; }
+        /* Zero: readable but visibly spent, and the whole row dims with it. */
+        .screenerNavCheckable.dead { opacity: 0.45; }
+        .screenerNavCheckable.dead .screenerNavCount { background: rgba(148,163,184,0.10); }
+        /* The count has taken the auto margin, so the chevron just follows it. */
+        .screenerNavCount + .screenerNavGo { margin-left: 6px; }
         .screenerNavGo { flex: 0 0 auto; margin-left: auto; font-size: 16px; line-height: 1; color: rgba(148,163,184,0.5); }
         .screenerNavLabelLink:hover .screenerNavGo { color: #93c5fd; }
 
