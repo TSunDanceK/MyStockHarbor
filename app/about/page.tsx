@@ -47,7 +47,7 @@ const SECTIONS: { href: string; title: string; body: string }[] = [
   {
     href: "/stock-screener",
     title: "Advanced Screener",
-    body: "One sortable table with 33 filterable fields across valuation, dividends, financials, performance and analyst data. Combine any conditions you like; the filters live in the URL, so a screen you build is a link you can share or bookmark.",
+    body: "One sortable table with 33 filterable fields across valuation, dividends, financials, performance and analyst data, with a search box that finds any field or industry value by name rather than making you hunt a list. Combine any conditions you like; the filters live in the URL, so a screen you build is a link you can share or bookmark.",
   },
   {
     href: "/pickers",
@@ -218,8 +218,11 @@ export default function AboutPage() {
           <h2 style={h2Style}>Who runs it</h2>
 
           <p style={paraStyle}>
-            One person, working on this alone. Not a company, not an editorial
-            team, and not a group of analysts.
+            MyStockHarbor is independently run. It is not owned by, funded by,
+            or affiliated with any broker, fund, issuer or data vendor, and it
+            carries no sponsored placements — so nothing on it is shaped by
+            whose products it might end up screening. That independence is the
+            direct result of it being small, which is a trade worth making.
           </p>
 
           <p style={paraStyle}>
@@ -241,11 +244,29 @@ export default function AboutPage() {
             including one with a name attached.
           </p>
 
+          <p style={paraStyle}>
+            What you can do is judge the work. The{" "}
+            <a
+              href="https://www.youtube.com/@MyStockHarbor"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={linkStyle}
+            >
+              MyStockHarbor YouTube channel
+            </a>{" "}
+            runs under the same name, breaking down charts and setups in full
+            rather than in summary. It is a public record of how this site
+            reads a market, and you are welcome to make up your own mind from
+            it before trusting anything here.
+          </p>
+
           <h2 style={h2Style}>How the screens are built</h2>
 
           <p style={paraStyle}>
             Every condition on the site is computed, not curated. Nothing is
-            hand-picked into a list and no company pays to appear in one.
+            hand-picked into a list, and no position in one can be bought —
+            a stock appears in a screen because it meets that screen’s test
+            and for no other reason.
             Oversold, overbought, breakout, volume and volatility spikes,
             moving-average proximity, and RSI and MACD divergence are all
             derived from each company’s own price and volume history by
