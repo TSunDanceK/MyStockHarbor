@@ -37,6 +37,7 @@ function PostCard({ post }: { post: ListPost }) {
   return (
     <Link
       href={`/insights/${post.slug}`}
+      className="postCard"
       style={{
         display: "flex",
         alignItems: "center",
@@ -50,7 +51,7 @@ function PostCard({ post }: { post: ListPost }) {
       }}
     >
       {/* Ticker col */}
-      <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 58 }}>
+      <div className="postCardTicker" style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 58 }}>
         {post.symbol ? (
           <TickerLogo symbol={post.symbol} size={30} radius={8} />
         ) : null}
@@ -377,7 +378,7 @@ export default function InsightsPageClient({ posts, videos, page, totalPages, to
 
   return (
     <main style={{ minHeight: "100vh", background: "#06080d", color: "#f1f5f9", fontFamily: "system-ui, Arial" }}>
-      <div style={{ maxWidth: 1240, margin: "0 auto", padding: "24px 20px 40px" }}>
+      <div className="insightsWrap" style={{ maxWidth: 1240, margin: "0 auto", padding: "24px 20px 40px" }}>
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
           <div>
@@ -398,15 +399,15 @@ export default function InsightsPageClient({ posts, videos, page, totalPages, to
         </p>
 
         {/* Market hub banner */}
-        <section style={{ marginTop: 18, borderRadius: 18, border: "1px solid rgba(59,130,246,0.22)", background: "linear-gradient(135deg, rgba(59,130,246,0.10), rgba(34,197,94,0.06))", padding: 18 }}>
+        <section className="marketHubCard" style={{ marginTop: 18, borderRadius: 18, border: "1px solid rgba(59,130,246,0.22)", background: "linear-gradient(135deg, rgba(59,130,246,0.10), rgba(34,197,94,0.06))", padding: 18 }}>
           <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 900, letterSpacing: "0.05em", textTransform: "uppercase" }}>Market hub</div>
           <div style={{ marginTop: 8, fontSize: 24, fontWeight: 900, lineHeight: 1.2, letterSpacing: "-0.03em" }}>Looking for the bigger market picture?</div>
           <p style={{ margin: "10px 0 0", maxWidth: 820, lineHeight: 1.7, opacity: 0.84, fontSize: 15 }}>
             Read the S&amp;P 500 market page for a simple breakdown of SPX trend, key levels, RSI, MACD, and how to analyse market pullbacks without panicking.
           </p>
-          <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <Link href="/markets/spx" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "10px 14px", borderRadius: 12, border: "1px solid rgba(59,130,246,0.45)", background: "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(37,99,235,0.12))", color: "#eff6ff", textDecoration: "none", fontWeight: 900, fontSize: 13, whiteSpace: "nowrap", boxShadow: "0 6px 16px rgba(0,0,0,0.25)" }}>Read S&amp;P 500 Analysis →</Link>
-            <Link href="/pickers" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "10px 14px", borderRadius: 12, border: "1px solid rgba(34,197,94,0.45)", background: "linear-gradient(135deg, rgba(34,197,94,0.22), rgba(59,130,246,0.12))", color: "#ecfdf5", textDecoration: "none", fontWeight: 900, fontSize: 13, whiteSpace: "nowrap", boxShadow: "0 6px 16px rgba(0,0,0,0.25)" }}>Explore Live Stock Setups →</Link>
+          <div className="ctaRow" style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <Link href="/markets/spx" className="ctaBtn" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "10px 14px", borderRadius: 12, border: "1px solid rgba(59,130,246,0.45)", background: "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(37,99,235,0.12))", color: "#eff6ff", textDecoration: "none", fontWeight: 900, fontSize: 13, whiteSpace: "nowrap", boxShadow: "0 6px 16px rgba(0,0,0,0.25)" }}>S&amp;P 500 Analysis →</Link>
+            <Link href="/pickers" className="ctaBtn" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "10px 14px", borderRadius: 12, border: "1px solid rgba(34,197,94,0.45)", background: "linear-gradient(135deg, rgba(34,197,94,0.22), rgba(59,130,246,0.12))", color: "#ecfdf5", textDecoration: "none", fontWeight: 900, fontSize: 13, whiteSpace: "nowrap", boxShadow: "0 6px 16px rgba(0,0,0,0.25)" }}>Live Stock Setups →</Link>
           </div>
         </section>
 
@@ -514,6 +515,41 @@ export default function InsightsPageClient({ posts, videos, page, totalPages, to
         @media (min-width: 981px) {
           .mobileTabs { display: none !important; }
           .desktopVideos { position: sticky; top: 24px; }
+        }
+
+        /* Phone density.
+           The page spent 20px of side padding plus 18px of card padding plus
+           a 58px ticker column before the post title got any room, which is
+           why every title on a 390px screen clipped at two lines. These
+           numbers claw ~30px back into the title column.
+
+           The two market-hub CTAs also wrapped to one per line: at 13px/900
+           the old labels ran past the ~314px of usable width between them.
+           They are now a fixed 2-up grid, and the labels lost their verbs to
+           fit ("Read S&P 500 Analysis" -> "S&P 500 Analysis"). white-space
+           goes back to normal so a long label wraps inside its button rather
+           than overflowing; the grid keeps both boxes the same height. */
+        @media (max-width: 560px) {
+          .insightsWrap { padding: 20px 12px 32px !important; }
+          .marketHubCard { padding: 14px !important; }
+          .ctaRow {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 8px !important;
+          }
+          .ctaBtn {
+            width: 100%;
+            padding: 10px 8px !important;
+            font-size: 12.5px !important;
+            white-space: normal !important;
+            text-align: center;
+            line-height: 1.25;
+          }
+          .postCard {
+            padding: 13px 14px !important;
+            gap: 12px !important;
+          }
+          .postCardTicker { min-width: 46px !important; }
         }
       `}</style>
     </main>
