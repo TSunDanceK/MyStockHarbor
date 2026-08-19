@@ -106,19 +106,31 @@ and until it lands previews still cannot cold-build pickers.
 
 ---
 
-## 4. Corrections to existing docs
+## 4. Correction owed to a doc that is NOT in this repo
 
-**`claude/picker-charts-off-payload-2026-08-06.md` is STALE at the last
-paragraph.** It states that `/bullish-divergence-stocks` and
-`/bearish-divergence-stocks` render 20 empty charts because the Divergence
-section is built without `keepChartPoints`. That was true on 6 Aug and is not
-true now: `pickersBuilder` was later changed so every `signalRecords` entry ships
-its `chartPoints`, and `PickerResultPage`'s `entriesFromSection` / `buildEntries`
-fall back to that lookup. Confirmed live by the owner on 19 Aug — the divergence
-pages draw charts, MACD pane and all.
+`picker-charts-off-payload-2026-08-06.md` is **stale at its last paragraph**. It
+states that `/bullish-divergence-stocks` and `/bearish-divergence-stocks` render
+20 empty charts because the Divergence section is built without `keepChartPoints`.
+That was true on 6 Aug and is not true now: `pickersBuilder` was later changed so
+every `signalRecords` entry ships its `chartPoints`, and `PickerResultPage`'s
+`entriesFromSection` / `buildEntries` fall back to that lookup. Confirmed live by
+the owner on 19 Aug — the divergence pages draw charts, MACD pane and all. The
+stale claim was repeated twice before the code was checked.
 
-The stale claim was repeated twice before the code was checked. **Still to do:**
-fix the note in that file itself; this entry is the only record so far.
+**Do not go looking for that file in `claude/`. It isn't there.** Checked against
+`main` on 19 Aug: the repo's `claude/` directory holds 17 files and this is not
+one of them. It exists only as an upload in the Claude Project's knowledge, which
+is owner-editable and cannot be reached from a session. Several other docs are in
+the same position (`seo-recovery-plan-2026-08-15`, `universe-architecture-audit-2026-08-06`
+and others appear in Project knowledge but not in the repo).
+
+So the correction is an **owner-only task**: edit or replace that file in the
+Project knowledge. Until then this entry is the only record, and a session
+reading the Project copy will be told something false about the divergence pages.
+
+Worth deciding separately: whether Project-knowledge docs should be committed to
+`claude/` as a matter of course, so they can be corrected in-session rather than
+drifting where nothing can reach them.
 
 ---
 
@@ -174,13 +186,12 @@ two lost box-drawing characters in §6. **Verify the SHA every time; without it 
 whole-file upload is an unchecked retype of the file.** For the big files,
 applying the change locally is faster and safer. Do NOT reconstruct a large file
 from earlier context to save a read — that is how the duplicated effect in the
-old §2(b) got in.
+old §2 got in.
 
-**Preview and production share one Upstash instance.** From
-`claude/picker-charts-off-payload-2026-08-06.md`: the Redis key version is the
-only thing separating them, so browsing picker pages on a PR preview writes to
-the same `msh:pickers:v9` payload and `msh:picker-charts:v1` hash that production
-reads. Bump the key version for any change to payload shape.
+**Preview and production share one Upstash instance.** The Redis key version is
+the only thing separating them, so browsing picker pages on a PR preview writes
+to the same `msh:pickers:v9` payload and `msh:picker-charts:v1` hash that
+production reads. Bump the key version for any change to payload shape.
 
 Related: previews cannot cold-build pickers, because the market self-fetch is
 refused there. After the `marketState` change the plays builders no longer have
