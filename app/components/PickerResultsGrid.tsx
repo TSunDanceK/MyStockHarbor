@@ -21,10 +21,10 @@ function toneColour(tone?: PickerTone) {
 }
 
 function toneBorder(tone?: PickerTone) {
-  if (tone === "red") return "rgba(239,68,68,0.32)";
+  if (tone === "green") return "rgba(34,197,94,0.32)";
   if (tone === "yellow") return "rgba(250,204,21,0.32)";
   if (tone === "orange") return "rgba(251,146,60,0.32)";
-  if (tone === "green") return "rgba(34,197,94,0.32)";
+  if (tone === "red") return "rgba(239,68,68,0.32)";
   if (tone === "blue") return "rgba(96,165,250,0.32)";
   return "rgba(148,163,184,0.24)";
 }
@@ -566,6 +566,54 @@ export default function PickerResultsGrid({
     return () => mq.removeEventListener("change", apply);
   }, []);
 
+  // The controls row is sticky, so on a phone roughly 110px of a ~740px
+  // viewport is permanently covered before a single result is visible -- and
+  // it sits under a 62px header that is already doing the same thing. Hiding
+  // it on a downward scroll gives that back while you are reading, and brings
+  // it straight back on an upward one, which is the gesture you already make
+  // when you want a control.
+  //
+  // Deliberately not a "hide after N seconds" or a manual collapse: the row
+  // should cost nothing when you are not reaching for it and be there the
+  // instant you are, without you having to ask twice.
+  //
+  // The hiding is CSS and scoped to <=980px (see the media query below), where
+  // the row is sticky at all. On desktop this state is set and simply has no
+  // rule to act on, which is cheaper than branching the listener on width and
+  // keeps the two in one place.
+  const [controlsHidden, setControlsHidden] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let lastY = window.scrollY;
+    let frame = 0;
+
+    const onScroll = () => {
+      // rAF-coalesced: iOS fires scroll far faster than it paints, and a
+      // setState per event on a 700-row list is the kind of thing that shows
+      // up as jank rather than as a bug.
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        const y = window.scrollY;
+        const delta = y - lastY;
+        // Momentum scrolling delivers a lot of sub-pixel jitter in both
+        // directions. Without a threshold the row flickers, which is worse
+        // than one that never moves.
+        if (Math.abs(delta) < 8) return;
+        lastY = y;
+        // Near the top there is nothing gained by hiding it -- the results
+        // have barely started -- so the row always shows there.
+        setControlsHidden(y > 160 && delta > 0);
+      });
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
   // Rows are the phone's LIST view, not the phone's only view.
   //
   // These briefly replaced chart view entirely on mobile, on the reasoning that
@@ -950,7 +998,7 @@ export default function PickerResultsGrid({
           inside its own parent's box, and .resultsHeader is only as tall as the
           heading. The section spans the whole result list, so there's real
           travel to work with. Same lesson as .screenerTriggerWrap before it. */}
-      <div className="screenerControls">
+      <div className={controlsHidden ? "screenerControls hidden" : "screenerControls"}>
         {screenerControl}
         <button
           type="button"
@@ -1336,6 +1384,16 @@ export default function PickerResultsGrid({
             position: sticky; top: 62px; z-index: 60;
             margin: 10px -18px 0; padding: 10px 18px;
             background: #06080d;
+            transition: transform 180ms ease, opacity 180ms ease;
+          }
+          /* Slides up behind the site header (z-index 100) rather than fading
+             where it stands, so it is never left half-visible over the rows.
+             pointer-events goes off with it -- a control you cannot see should
+             not still be catching taps. */
+          .screenerControls.hidden {
+            transform: translateY(-140%);
+            opacity: 0;
+            pointer-events: none;
           }
           .ctrlBreak { display: block; flex-basis: 100%; width: 100%; height: 0; margin: 0; }
         }
@@ -1343,6 +1401,9 @@ export default function PickerResultsGrid({
           /* Header is shorter below this breakpoint, and .resultWrap's side
              padding drops to 10px. */
           .screenerControls { top: 60px; margin-left: -10px; margin-right: -10px; padding-left: 10px; padding-right: 10px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .screenerControls { transition: none; }
         }
         @media (max-width: 430px) {
           /* Two columns of label+value stops fitting once the labels are this
