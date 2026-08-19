@@ -236,24 +236,53 @@ function VideoIcon() {
 
 function SearchBox({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return (
-    <input
-      type="text"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder="Search all insights by ticker or title..."
-      aria-label="Search all insight posts by ticker or title"
-      style={{
-        width: "100%",
-        boxSizing: "border-box",
-        padding: "12px 16px",
-        borderRadius: 12,
-        border: "1px solid rgba(255,255,255,0.14)",
-        background: "rgba(255,255,255,0.04)",
-        color: "#f1f5f9",
-        fontSize: 15,
-        outline: "none",
-      }}
-    />
+    // Relative wrapper so the icon can sit inside the field. The input keeps
+    // width: 100% + box-sizing: border-box, and the extra left padding makes
+    // room for the glyph rather than letting the placeholder run under it.
+    <div style={{ position: "relative", width: "100%" }}>
+      <svg
+        width="17"
+        height="17"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          left: 15,
+          top: "50%",
+          transform: "translateY(-50%)",
+          color: "rgba(241,245,249,0.42)",
+          // Taps in the icon area still focus the input rather than dying on
+          // the SVG.
+          pointerEvents: "none",
+        }}
+      >
+        <circle cx="11" cy="11" r="7" />
+        <path d="m20 20-3.5-3.5" />
+      </svg>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Search all insights by ticker or title..."
+        aria-label="Search all insight posts by ticker or title"
+        style={{
+          width: "100%",
+          boxSizing: "border-box",
+          padding: "12px 16px 12px 42px",
+          borderRadius: 12,
+          border: "1px solid rgba(255,255,255,0.14)",
+          background: "rgba(255,255,255,0.04)",
+          color: "#f1f5f9",
+          fontSize: 15,
+          outline: "none",
+        }}
+      />
+    </div>
   );
 }
 
