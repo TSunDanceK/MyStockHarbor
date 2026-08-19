@@ -766,7 +766,7 @@ export default function PickerResultsGrid({
     viewMode === "chart"
       ? "Each card shows a mini candle preview — select any stock to open its full view."
       : showMobileRows
-        ? "Tap a ticker to open it, or the arrow to see the rest of this tab's figures."
+        ? "Tap any row for the rest of its figures and where to open it."
         : "Sortable table of the current screened results — click any column header to sort, or a row to open the full view.";
 
   const sortKey = headlineColumn?.key ?? "";
@@ -881,7 +881,6 @@ export default function PickerResultsGrid({
           <div className="mRows">
             {shown.map((entry) => {
               const d = derivedByEntry.get(entry) ?? deriveRow(entry);
-              const href = cardHrefFor(entry);
               const open = expandedRows.has(entry.symbol);
               // Only the fields this symbol actually has a value for, rather
               // than a column of dashes.
@@ -901,30 +900,41 @@ export default function PickerResultsGrid({
               return (
                 <div key={`${entry.symbol}-${entry.note}`} id={`picker-${entry.symbol}`} className={open ? "mRow open" : "mRow"}>
                   <div className="mRowTop">
-                    <Link href={href} className="mRowId">
-                      <span className="dot" style={{ background: toneColour(toneFor(entry)) }} aria-hidden="true" />
-                      <span className="mRowSym">{entry.symbol}</span>
-                      {entry.companyName ? (
-                        <span className="mRowName" title={entry.companyName}>{entry.companyName}</span>
-                      ) : null}
-                    </Link>
-                    <div className="mRowFigures">
-                      {headlineColumn ? (
-                        <>
-                          <span className="mRowLabel">{headlineColumn.label}</span>
-                          <span className="mRowValue">{headlineColumn.cell(entry, d)}</span>
-                        </>
-                      ) : null}
-                      {subColumn ? <span className="mRowSub">{subColumn.cell(entry, d)}</span> : null}
-                    </div>
+                    {/* The whole collapsed row is one target and it only
+                        expands. Nothing here navigates.
+
+                        This was one link filling the row, so the blank space
+                        between the name and the price silently threw you onto
+                        the dashboard; the intermediate fix left the ticker as a
+                        link, which still meant the row had two outcomes
+                        depending on which few pixels you hit, and the
+                        destructive one was the accident. Leaving the page is
+                        now always a deliberate tap on a named button in the
+                        panel. */}
                     <button
                       type="button"
-                      className="mRowExpand"
+                      className="mRowToggle"
                       onClick={() => toggleRow(entry.symbol)}
                       aria-expanded={open}
                       aria-label={open ? `Hide ${entry.symbol} details` : `Show ${entry.symbol} details`}
                     >
-                      <span aria-hidden="true">{open ? "▲" : "▼"}</span>
+                      <span className="mRowId">
+                        <span className="dot" style={{ background: toneColour(toneFor(entry)) }} aria-hidden="true" />
+                        <span className="mRowSym">{entry.symbol}</span>
+                        {entry.companyName ? (
+                          <span className="mRowName" title={entry.companyName}>{entry.companyName}</span>
+                        ) : null}
+                      </span>
+                      <span className="mRowFigures">
+                        {headlineColumn ? (
+                          <>
+                            <span className="mRowLabel">{headlineColumn.label}</span>
+                            <span className="mRowValue">{headlineColumn.cell(entry, d)}</span>
+                          </>
+                        ) : null}
+                        {subColumn ? <span className="mRowSub">{subColumn.cell(entry, d)}</span> : null}
+                      </span>
+                      <span className="mRowChev" aria-hidden="true">{open ? "▲" : "▼"}</span>
                     </button>
                   </div>
                   {open ? (
@@ -939,6 +949,20 @@ export default function PickerResultsGrid({
                       ) : (
                         <div className="mRowEmpty">{TABS.find((t) => t.key === activeTab)?.label} data: N/A</div>
                       )}
+                      {/* Every way off this row, named, inside the panel the
+                          visitor deliberately opened -- rather than left
+                          implicit in whichever part of the row they happened to
+                          tap. On an earnings page the row used to open the
+                          earnings view, so that destination leads here rather
+                          than disappearing with the link. */}
+                      <div className="mRowActions">
+                        {isEarnings ? (
+                          <Link href={`${entry.stockHref}/earnings`} className="mRowAction">Earnings</Link>
+                        ) : null}
+                        <Link href={entry.chartHref} className="mRowAction">Chart</Link>
+                        <Link href={entry.stockHref} className="mRowAction">Analysis</Link>
+                        <Link href={`${entry.stockHref}/news`} className="mRowAction">News</Link>
+                      </div>
                     </div>
                   ) : null}
                 </div>
@@ -1081,14 +1105,16 @@ export default function PickerResultsGrid({
           overflow: hidden;
         }
         .mRow.open { border-color: rgba(96,165,250,0.4); }
-        .mRowTop { display: flex; align-items: center; gap: 10px; padding: 11px 6px 11px 12px; }
-        /* Fills the row so the whole left-hand side opens the stock; the expand
-           button is the only other target, and it sits outside this link. */
-        .mRowId {
-          display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 1 1 auto;
-          color: inherit; text-decoration: none;
+        .mRowTop { display: flex; }
+        /* The entire collapsed row is the button. */
+        .mRowToggle {
+          flex: 1 1 auto; display: flex; width: 100%; align-items: center; gap: 10px;
+          padding: 11px 12px; border: none; background: none;
+          font-family: inherit; color: inherit; cursor: pointer; text-align: left;
         }
-        .mRowId .dot { align-self: center; width: 8px; height: 8px; border-radius: 999px; flex: 0 0 auto; }
+        .mRowToggle:active { background: rgba(255,255,255,0.03); }
+        .mRowId { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 auto; }
+        .mRowId .dot { width: 8px; height: 8px; border-radius: 999px; flex: 0 0 auto; }
         .mRowSym { flex: 0 0 auto; font-size: 15px; font-weight: 950; letter-spacing: -0.02em; color: #eaf2ff; }
         .mRowName {
           min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -1098,16 +1124,12 @@ export default function PickerResultsGrid({
         .mRowLabel { font-size: 9px; font-weight: 900; letter-spacing: 0.05em; text-transform: uppercase; color: rgba(148,163,184,0.62); }
         .mRowValue { font-size: 14.5px; font-weight: 900; color: #f1f5f9; white-space: nowrap; }
         .mRowSub { font-size: 11.5px; font-weight: 800; white-space: nowrap; }
-        .mRowExpand {
-          flex: 0 0 auto; width: 34px; height: 34px; border-radius: 10px;
-          border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04);
-          color: rgba(226,232,240,0.75); font-size: 10px; cursor: pointer; font-family: inherit;
-        }
-        .mRow.open .mRowExpand { border-color: rgba(96,165,250,0.45); color: #93c5fd; }
+        .mRowChev { flex: 0 0 auto; font-size: 10px; color: rgba(226,232,240,0.6); }
+        .mRow.open .mRowChev { color: #93c5fd; }
 
         .mRowPanel {
           border-top: 1px solid rgba(255,255,255,0.08);
-          padding: 4px 12px 10px;
+          padding: 4px 12px 12px;
           display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px;
         }
         .mRowField {
@@ -1117,6 +1139,20 @@ export default function PickerResultsGrid({
         .mRowFieldLabel { font-size: 11px; font-weight: 800; color: rgba(148,163,184,0.8); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .mRowFieldValue { flex: 0 0 auto; font-size: 12.5px; font-weight: 800; color: rgba(226,232,240,0.94); white-space: nowrap; }
         .mRowEmpty { grid-column: 1 / -1; padding: 10px 0 4px; font-size: 12px; color: rgba(148,163,184,0.75); }
+
+        /* Wraps rather than a fixed row: earnings pages carry a fourth button,
+           and four labels across a 390px screen leave each about 85px, which
+           "Earnings" plus its padding does not fit without shrinking the type
+           below a comfortable tap target. flex-basis 40% gives 3-up on one line
+           and 2x2 on four. */
+        .mRowActions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+        .mRowAction {
+          flex: 1 1 40%; display: inline-flex; align-items: center; justify-content: center;
+          padding: 10px 6px; border-radius: 10px;
+          border: 1px solid rgba(96,165,250,0.32); background: rgba(59,130,246,0.10);
+          color: #dbeafe; font-size: 12.5px; font-weight: 850; text-decoration: none; white-space: nowrap;
+        }
+        .mRowAction:active { background: rgba(59,130,246,0.2); }
 
         @media (max-width: 980px) {
           /* Docks under the site header exactly where the old Select Screener
