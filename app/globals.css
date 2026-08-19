@@ -113,3 +113,207 @@ body {
     border-top: 0 !important;
   }
 }
+
+/* ---------------------------------------------------------------------
+   Picker controls bar: tab bar, not a row of pills
+   ---------------------------------------------------------------------
+   PickerResultsGrid docks its four controls -- screener, view mode, data
+   tab, sort -- to the bottom of the screen on a phone. It shipped them as
+   pills, and pills were the wrong shape for the job twice over:
+
+   1. They size to their own labels, so four of them overflowed a 390px
+      viewport at BOTH ends: the screener name clipped on the left,
+      "Sort: Stock Price" on the right, with nothing indicating either was
+      cut. No amount of max-width tuning fixes that, because the widths are
+      content-driven and the screener name varies per page.
+   2. A pill reads as something you might dismiss. This is the page's
+      permanent control surface.
+
+   Equal-width flex items cannot overflow: each takes a fixed share of the
+   bar and its own label ellipses inside it. Icon over label, flat, no
+   borders -- the standard docked-bar treatment, and the same one built for
+   the site-wide bar in the closed PR #272.
+
+   Lives here for exactly the reason the two rules above do: the component
+   is 69KB and the GitHub connector has no patch API, so putting this in
+   its <style> block means re-uploading the whole file to say the same
+   thing twice. See claude/patches/picker-controls-tab-bar-2026-08-19.md
+   for the equivalent in-component version, which should replace this the
+   next time that file is edited locally.
+
+   !important throughout because the component's own rules live in a
+   <style> tag injected into the body, so they win ties on document order
+   against a stylesheet in <head> regardless of specificity.
+   --------------------------------------------------------------------- */
+@media (max-width: 980px) {
+  .screenerControls {
+    justify-content: stretch !important;
+    align-items: stretch !important;
+    gap: 0 !important;
+    padding: 0 0 env(safe-area-inset-bottom) !important;
+  }
+
+  /* Every item takes an equal share and clips its own label rather than
+     pushing its neighbours off the edge. */
+  .screenerControls > * {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+  }
+
+  /* 1. Screener. ScreenerNav renders this as a pill; the border, radius
+     and background come off, its icon becomes the tab glyph and its label
+     the caption. The chevron goes -- in a docked bar the affordance is the
+     bar itself, not a caret on one item. */
+  .screenerControls .screenerPillWrap {
+    display: flex !important;
+  }
+
+  .screenerControls .screenerPillBtn {
+    position: relative !important;
+    width: 100% !important;
+    max-width: none !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 3px !important;
+    padding: 7px 4px 6px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: none !important;
+    color: rgba(148, 163, 184, 0.85) !important;
+    font-size: 10.5px !important;
+    font-weight: 800 !important;
+  }
+
+  .screenerControls .screenerPillBtn:active {
+    background: rgba(255, 255, 255, 0.04) !important;
+  }
+
+  .screenerControls .screenerPillIcon {
+    font-size: 19px !important;
+    line-height: 1 !important;
+    color: inherit !important;
+  }
+
+  .screenerControls .screenerPillLabel {
+    max-width: 100% !important;
+  }
+
+  .screenerControls .screenerSelectChevron {
+    display: none !important;
+  }
+
+  /* The applied-filter count keeps its green badge: it is the one thing in
+     the bar reporting state rather than offering an action. */
+  .screenerControls .screenerSelectCount {
+    position: absolute !important;
+    top: 4px !important;
+    right: 50% !important;
+    margin-right: -22px !important;
+    min-width: 15px !important;
+    height: 15px !important;
+    padding: 0 4px !important;
+    font-size: 9.5px !important;
+  }
+
+  /* 2. View mode. Same flattening, and the word comes BACK -- a tab bar
+     has room for the label that four pills could not afford. Order puts
+     the glyph above the caption without touching the markup. */
+  .screenerControls .viewToggle {
+    width: 100% !important;
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 3px !important;
+    padding: 7px 4px 6px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: none !important;
+    color: rgba(148, 163, 184, 0.85) !important;
+    font-size: 10.5px !important;
+    font-weight: 800 !important;
+  }
+
+  .screenerControls .viewToggle:active {
+    background: rgba(255, 255, 255, 0.04) !important;
+  }
+
+  .screenerControls .viewToggleLabel {
+    display: inline !important;
+    order: 2 !important;
+  }
+
+  .screenerControls .viewToggle > span[aria-hidden] {
+    order: 1 !important;
+    font-size: 19px !important;
+    line-height: 1 !important;
+  }
+
+  /* 3 & 4. The two <select>s stay native -- the wheel picker is the right
+     control on a phone and nothing here improves on it -- so the icon is
+     drawn by the wrapper's ::before and the select becomes the caption
+     underneath it. */
+  .screenerControls .tabSelectWrap,
+  .screenerControls .mSortWrap {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 3px !important;
+    padding: 7px 4px 6px !important;
+    color: rgba(148, 163, 184, 0.85) !important;
+  }
+
+  .screenerControls .tabSelectWrap::before,
+  .screenerControls .mSortWrap::before {
+    font-size: 19px;
+    line-height: 1;
+  }
+
+  .screenerControls .tabSelectWrap::before {
+    content: "\25A4";
+  }
+
+  .screenerControls .mSortWrap::before {
+    content: "\21C5";
+  }
+
+  .screenerControls .tabSelect {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: none !important;
+    color: inherit !important;
+    font-size: 10.5px !important;
+    font-weight: 800 !important;
+    text-align: center;
+    text-align-last: center;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  /* Sort direction rides in the corner of the sort item rather than taking
+     a slot of its own -- it modifies a sort, it is not a fifth thing to
+     choose between. Deliberately kept as a real target: hiding it would
+     leave a phone with no way to reverse a sort at all, which the old
+     two-row layout did offer. */
+  .screenerControls .mSortWrap {
+    position: relative !important;
+  }
+
+  .screenerControls .mSortDir {
+    position: absolute !important;
+    top: 3px !important;
+    right: 2px !important;
+    width: 26px !important;
+    height: 22px !important;
+    border-radius: 7px !important;
+    border: 1px solid rgba(96, 165, 250, 0.28) !important;
+    font-size: 9.5px !important;
+    line-height: 1 !important;
+  }
+}
