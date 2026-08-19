@@ -642,8 +642,31 @@ export default function ScreenerNav({
               aria-haspopup="dialog"
               aria-expanded={open}
             >
-              <span className="screenerPillIcon" aria-hidden="true">▤</span>
-              <span className="screenerPillLabel">{currentLabel}</span>
+              {/* Sliders, and the word "Screens" rather than the name of the
+                  screen you are already on. In the docked bar this is a tab
+                  among four, and a tab labelled "Oversold" says what you are
+                  looking at -- which the page heading already says -- instead
+                  of what pressing it does, which is the only thing a control
+                  in that bar has room to say. The count badge still reports
+                  applied filters, so state is not lost, only moved to the one
+                  element whose job it is. */}
+              <svg
+                className="screenerPillIcon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.7}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path d="M4 7h10M18 7h2M4 12h3M11 12h9M4 17h8M16 17h4" />
+                <circle cx="16" cy="7" r="2" />
+                <circle cx="9" cy="12" r="2" />
+                <circle cx="14" cy="17" r="2" />
+              </svg>
+              <span className="screenerPillLabel">Screens</span>
               {predicates.length ? (
                 <span className="screenerSelectCount" aria-label={`${predicates.length} filters applied`}>
                   {predicates.length}
@@ -846,7 +869,7 @@ export default function ScreenerNav({
           cursor: pointer; white-space: nowrap;
         }
         .screenerPillBtn:active { background: rgba(59,130,246,0.2); }
-        .screenerPillIcon { flex: 0 0 auto; color: #93c5fd; font-size: 12px; }
+        .screenerPillIcon { flex: 0 0 auto; color: #93c5fd; width: 15px; height: 15px; display: block; }
         .screenerPillLabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .screenerSelectCount {
           display: inline-flex; align-items: center; justify-content: center;
