@@ -123,7 +123,7 @@ export default function EarningsDayList({ date, initialItems, initialHasMore, co
   }, []);
 
   // Which mobile rows are expanded to show the rest of their figures and the
-  // Analysis / Chart / News links. Keyed by symbol.
+  // Earnings / Analysis / Chart / News buttons. Keyed by symbol.
   const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set());
 
   // Fresh server navigation to a new date resets everything, including sort.
@@ -270,36 +270,34 @@ export default function EarningsDayList({ date, initialItems, initialHasMore, co
             const panelColumns = METRIC_COLUMNS.filter((col) => item[col.key] !== null);
             return (
               <div key={item.symbol} className={open ? "ecRow open" : "ecRow"}>
-                <div className="ecRowTop">
-                  <Link href={`/stock/${encodeURIComponent(item.symbol)}/earnings`} className="ecRowId">
+                {/* The whole collapsed row is one target and it only expands.
+                    Nothing here navigates: leaving the ticker as a link meant
+                    the row had two outcomes depending on which few pixels you
+                    hit, and the destructive one was the accident. Leaving the
+                    page is now always a deliberate tap on a named button in the
+                    panel below. */}
+                <button
+                  type="button"
+                  className="ecRowTop"
+                  onClick={() => toggleRow(item.symbol)}
+                  aria-expanded={open}
+                  aria-label={open ? `Hide ${item.symbol} details` : `Show ${item.symbol} details`}
+                >
+                  <span className="ecRowId">
                     <span className="ecRowSym">{item.symbol}</span>
                     <span className="ecRowName" title={item.company}>
                       {item.company}
                     </span>
-                  </Link>
-                  {/* Everything right of the company name is one toggle: the
-                      gap, the figures and the chevron. Leaving the gap inside
-                      the link made the emptiest part of the row its most
-                      destructive target -- a big blank area with no affordance
-                      that threw you onto another page. Two explicit targets,
-                      and the larger one is the reversible one. */}
-                  <button
-                    type="button"
-                    className="ecRowToggle"
-                    onClick={() => toggleRow(item.symbol)}
-                    aria-expanded={open}
-                    aria-label={open ? `Hide ${item.symbol} details` : `Show ${item.symbol} details`}
-                  >
-                    <span className="ecRowFigures">
-                      <span className="ecRowLabel">{headlineColumn.label}</span>
-                      <span className="ecRowValue">{headlineColumn.fmt(item)}</span>
-                      {subColumn ? <span className="ecRowSub">{subColumn.fmt(item)}</span> : null}
-                    </span>
-                    <span className="ecRowExpand" aria-hidden="true">
-                      {open ? "▲" : "▼"}
-                    </span>
-                  </button>
-                </div>
+                  </span>
+                  <span className="ecRowFigures">
+                    <span className="ecRowLabel">{headlineColumn.label}</span>
+                    <span className="ecRowValue">{headlineColumn.fmt(item)}</span>
+                    {subColumn ? <span className="ecRowSub">{subColumn.fmt(item)}</span> : null}
+                  </span>
+                  <span className="ecRowChev" aria-hidden="true">
+                    {open ? "▲" : "▼"}
+                  </span>
+                </button>
                 {open ? (
                   <div className="ecRowPanel">
                     {panelColumns.length ? (
@@ -314,15 +312,22 @@ export default function EarningsDayList({ date, initialItems, initialHasMore, co
                     ) : (
                       <div className="ecRowEmpty">No estimates or quote data for {item.symbol} yet.</div>
                     )}
+                    {/* Every way off this row, named. The ticker used to open
+                        the earnings page implicitly; on an earnings calendar
+                        that is the destination most people want, so it leads
+                        here rather than disappearing with the link. */}
                     <div className="ecRowLinks">
+                      <Link href={`/stock/${encodeURIComponent(item.symbol)}/earnings`} className="ecRowLink">
+                        Earnings
+                      </Link>
                       <Link href={`/stock/${encodeURIComponent(item.symbol)}`} className="ecRowLink">
-                        Analysis →
+                        Analysis
                       </Link>
                       <Link href={`/dashboard?symbol=${encodeURIComponent(item.symbol)}`} className="ecRowLink">
-                        Chart →
+                        Chart
                       </Link>
                       <Link href={`/stock/${encodeURIComponent(item.symbol)}/news`} className="ecRowLink">
-                        News →
+                        News
                       </Link>
                     </div>
                   </div>
@@ -458,22 +463,17 @@ export default function EarningsDayList({ date, initialItems, initialHasMore, co
           overflow: hidden;
         }
         .ecRow.open { border-color: rgba(96,165,250,0.4); }
-        .ecRowTop { display: flex; align-items: center; gap: 10px; padding: 11px 6px 11px 12px; }
-        /* Sized to its own content, not the row: the ticker and the company
-           name open the earnings page, and everything past them belongs to
-           the toggle below. */
-        .ecRowId {
-          display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 0 1 auto;
-          color: inherit; text-decoration: none;
+        /* The entire collapsed row is the button. */
+        .ecRowTop {
+          display: flex; width: 100%; align-items: center; gap: 10px;
+          padding: 11px 12px; border: none; background: transparent;
+          font: inherit; color: inherit; cursor: pointer; text-align: left;
         }
-        /* Takes the rest of the row, including the gap, so there is no dead
-           space between the two targets. */
-        .ecRowToggle {
-          flex: 1 1 auto; display: flex; align-items: center; justify-content: flex-end; gap: 10px;
-          min-width: 0; padding: 0; border: none; background: transparent;
-          font: inherit; color: inherit; cursor: pointer; text-align: right;
-        }
-        .ecRowSym { flex: 0 0 auto; font-size: 15px; font-weight: 950; letter-spacing: -0.02em; color: #93c5fd; }
+        .ecRowTop:active { background: rgba(255,255,255,0.03); }
+        .ecRowId { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 1 1 auto; }
+        /* Not link-blue any more: nothing in the collapsed row navigates, and
+           colouring the ticker like a link would promise otherwise. */
+        .ecRowSym { flex: 0 0 auto; font-size: 15px; font-weight: 950; letter-spacing: -0.02em; color: #eaf2ff; }
         .ecRowName {
           min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
           font-size: 12px; font-weight: 700; color: rgba(148,163,184,0.9);
@@ -482,13 +482,8 @@ export default function EarningsDayList({ date, initialItems, initialHasMore, co
         .ecRowLabel { font-size: 9px; font-weight: 900; letter-spacing: 0.05em; text-transform: uppercase; color: rgba(148,163,184,0.62); }
         .ecRowValue { font-size: 14.5px; font-weight: 900; color: #f1f5f9; white-space: nowrap; }
         .ecRowSub { font-size: 11.5px; font-weight: 800; white-space: nowrap; color: rgba(148,163,184,0.9); }
-        .ecRowExpand {
-          flex: 0 0 auto; width: 34px; height: 34px; border-radius: 10px;
-          display: inline-flex; align-items: center; justify-content: center;
-          border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04);
-          color: rgba(226,232,240,0.75); font-size: 10px;
-        }
-        .ecRow.open .ecRowExpand { border-color: rgba(96,165,250,0.45); color: #93c5fd; }
+        .ecRowChev { flex: 0 0 auto; font-size: 10px; color: rgba(226,232,240,0.6); }
+        .ecRow.open .ecRowChev { color: #93c5fd; }
 
         .ecRowPanel { border-top: 1px solid rgba(255,255,255,0.08); padding: 4px 12px 12px; }
         .ecRowFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; }
@@ -499,13 +494,18 @@ export default function EarningsDayList({ date, initialItems, initialHasMore, co
         .ecRowFieldLabel { font-size: 11px; font-weight: 800; color: rgba(148,163,184,0.8); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .ecRowFieldValue { flex: 0 0 auto; font-size: 12.5px; font-weight: 800; color: rgba(226,232,240,0.94); white-space: nowrap; }
         .ecRowEmpty { padding: 8px 0 2px; font-size: 12px; color: rgba(148,163,184,0.75); }
-        .ecRowLinks { display: flex; gap: 6px; margin-top: 10px; }
+        /* Four destinations, 2x2 rather than a single row: four labels across a
+           390px screen leaves each about 85px, and "Earnings" plus its padding
+           does not fit that without shrinking the type below a comfortable tap
+           target. */
+        .ecRowLinks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
         .ecRowLink {
-          flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center;
-          padding: 9px 6px; border-radius: 10px;
-          border: 1px solid rgba(147,197,253,0.28); background: rgba(147,197,253,0.10);
-          color: #93c5fd; text-decoration: none; font-weight: 800; font-size: 12px; white-space: nowrap;
+          display: inline-flex; align-items: center; justify-content: center;
+          padding: 10px 6px; border-radius: 10px;
+          border: 1px solid rgba(96,165,250,0.32); background: rgba(59,130,246,0.10);
+          color: #dbeafe; text-decoration: none; font-weight: 850; font-size: 12.5px; white-space: nowrap;
         }
+        .ecRowLink:active { background: rgba(59,130,246,0.2); }
 
         @media (max-width: 430px) {
           /* Two columns of label+value stops fitting once "Revenue Est." and
