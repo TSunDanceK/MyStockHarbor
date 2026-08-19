@@ -344,7 +344,7 @@ function fmtVolume(v: number | null) {
 
 const MUTED = <span className="muted">–</span>;
 
-// ── cell formatters (return display nodes) ──────────────────────────────────
+// ── cell formatters (return display nodes) ────────────────────────────────
 function capCell(v: number | null): ReactNode {
   return fmtCap(v) ?? MUTED;
 }
@@ -824,11 +824,6 @@ export default function PickerResultsGrid({
     setConditionCounts(conditionCounts);
     return () => setConditionCounts(null);
   }, [conditionCounts, setConditionCounts]);
-
-  useEffect(() => {
-    setMatchCount(predicates.length ? filteredEntries.length : null);
-    return () => setMatchCount(null);
-  }, [filteredEntries.length, predicates.length, setMatchCount]);
 
   const shown = sortedEntries.slice(0, visibleCount);
   const hasMore = visibleCount < sortedEntries.length;
