@@ -27,16 +27,12 @@ type Props = {
 type SortKey = "symbol" | "company" | "epsEstimated" | "revenueEstimated" | "price" | "marketCap";
 type SortDir = "asc" | "desc";
 
-const TEXT_KEYS: ReadonlySet<SortKey> = new Set<SortKey>(["symbol", "company"]);
+// The four figures that aren't the row's identity. On desktop they're four
+// columns; on a phone one of them leads each row and the rest live in the
+// expanded panel (see the rows branch below).
+type MetricKey = Extract<SortKey, "epsEstimated" | "revenueEstimated" | "price" | "marketCap">;
 
-const COLUMNS: { key: SortKey; label: string; align: "left" | "right" }[] = [
-  { key: "symbol", label: "Symbol", align: "left" },
-  { key: "company", label: "Company", align: "left" },
-  { key: "epsEstimated", label: "EPS Est.", align: "right" },
-  { key: "revenueEstimated", label: "Revenue Est.", align: "right" },
-  { key: "price", label: "Price", align: "right" },
-  { key: "marketCap", label: "Market Cap", align: "right" },
-];
+const TEXT_KEYS: ReadonlySet<SortKey> = new Set<SortKey>(["symbol", "company"]);
 
 function formatCompact(value: number | null) {
   if (value === null) return "-";
@@ -52,6 +48,29 @@ function formatPrice(value: number | null) {
 
 function formatEps(value: number | null) {
   return value !== null ? `$${value.toFixed(2)}` : "-";
+}
+
+const METRIC_COLUMNS: { key: MetricKey; label: string; fmt: (item: EarningsListItem) => string }[] = [
+  { key: "epsEstimated", label: "EPS Est.", fmt: (i) => formatEps(i.epsEstimated) },
+  { key: "revenueEstimated", label: "Revenue Est.", fmt: (i) => formatCompact(i.revenueEstimated) },
+  { key: "price", label: "Price", fmt: (i) => formatPrice(i.price) },
+  { key: "marketCap", label: "Market Cap", fmt: (i) => formatCompact(i.marketCap) },
+];
+
+const COLUMNS: { key: SortKey; label: string; align: "left" | "right" }[] = [
+  { key: "symbol", label: "Symbol", align: "left" },
+  { key: "company", label: "Company", align: "left" },
+  ...METRIC_COLUMNS.map((col) => ({ key: col.key as SortKey, label: col.label, align: "right" as const })),
+];
+
+// The figure each phone row leads with when nothing has been sorted. An
+// earnings calendar is a list of things that are about to report, so the
+// consensus estimate is the number the page is about -- market cap is only the
+// default ORDER, not the reason anyone is reading the row.
+const DEFAULT_METRIC: MetricKey = "epsEstimated";
+
+function isMetricKey(key: SortKey): key is MetricKey {
+  return !TEXT_KEYS.has(key);
 }
 
 // Merge a new page of rows into the existing list, dropping any symbol already
@@ -83,6 +102,30 @@ export default function EarningsDayList({ date, initialItems, initialHasMore, co
   const [sortKey, setSortKey] = useState<SortKey>("marketCap");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
+  // Phone layout swap. The six-column table is 980px wide with a fixed layout,
+  // so on a 390px screen everything past the company name -- both estimates,
+  // price, market cap and all three links -- sits behind a sideways scroll.
+  // Below this width the same data renders as full-width rows instead.
+  //
+  // Deliberately state + matchMedia rather than rendering both trees and hiding
+  // one with CSS: two copies of every ticker in the DOM is duplicated content
+  // on a page that is actively being indexed, and the day's reporters are the
+  // whole reason this page ranks. Starting false means the server render (and
+  // therefore the crawler) always gets the table; a phone swaps on hydration.
+  const [isNarrow, setIsNarrow] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(max-width: 720px)");
+    const apply = () => setIsNarrow(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+
+  // Which mobile rows are expanded to show the rest of their figures and the
+  // Analysis / Chart / News links. Keyed by symbol.
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set());
+
   // Fresh server navigation to a new date resets everything, including sort.
   useEffect(() => {
     setItems(initialItems);
@@ -91,6 +134,7 @@ export default function EarningsDayList({ date, initialItems, initialHasMore, co
     setError(null);
     setSortKey("marketCap");
     setSortDir("desc");
+    setExpandedRows(new Set());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
 
@@ -103,6 +147,32 @@ export default function EarningsDayList({ date, initialItems, initialHasMore, co
       setSortDir(TEXT_KEYS.has(key) ? "asc" : "desc");
     }
   }
+
+  function toggleRow(symbol: string) {
+    setExpandedRows((current) => {
+      const next = new Set(current);
+      if (next.has(symbol)) next.delete(symbol);
+      else next.add(symbol);
+      return next;
+    });
+  }
+
+  // The figure a phone row leads with. Follows the sort when the sort is on a
+  // number, so sorting by Market Cap makes every row show its market cap --
+  // which is what makes sorting legible with no column headers on screen.
+  // Sorting by Symbol or Company leaves the estimate in place, since neither of
+  // those is a figure a row could display.
+  const headlineColumn = useMemo(() => {
+    const wanted = isMetricKey(sortKey) ? sortKey : DEFAULT_METRIC;
+    return METRIC_COLUMNS.find((col) => col.key === wanted) ?? METRIC_COLUMNS[0];
+  }, [sortKey]);
+
+  // The smaller figure under the headline. Price is the useful companion to any
+  // of the others; when price IS the headline, show the market cap instead.
+  const subColumn = useMemo(() => {
+    const wanted: MetricKey = headlineColumn.key === "price" ? "marketCap" : "price";
+    return METRIC_COLUMNS.find((col) => col.key === wanted) ?? null;
+  }, [headlineColumn]);
 
   const sortedItems = useMemo(() => {
     const arr = items.slice();
@@ -156,80 +226,179 @@ export default function EarningsDayList({ date, initialItems, initialHasMore, co
 
   return (
     <div>
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: 900, tableLayout: "fixed" }}>
-          <colgroup>
-            <col style={{ width: 90 }} />
-            <col style={{ width: 220 }} />
-            <col style={{ width: 100 }} />
-            <col style={{ width: 120 }} />
-            <col style={{ width: 90 }} />
-            <col style={{ width: 100 }} />
-            <col style={{ width: 260 }} />
-          </colgroup>
-          <thead>
-            <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.12)" }}>
-              {COLUMNS.map((col) => {
-                const active = col.key === sortKey;
-                return (
-                  <th key={col.key} style={{ ...thStyle, textAlign: col.align }}>
-                    <button
-                      type="button"
-                      onClick={() => onSort(col.key)}
-                      title={`Sort by ${col.label}`}
-                      style={{
-                        ...thButtonStyle,
-                        justifyContent: col.align === "right" ? "flex-end" : "flex-start",
-                        color: active ? "#93c5fd" : "#8a97ad",
-                      }}
-                    >
-                      {col.label}
-                      <span style={{ fontSize: 9, opacity: active ? 1 : 0.25 }}>
-                        {active ? (sortDir === "asc" ? "▲" : "▼") : "▲"}
-                      </span>
-                    </button>
-                  </th>
-                );
-              })}
-              <th style={thStyle} />
-            </tr>
-          </thead>
-          <tbody>
-            {sortedItems.map((item) => (
-              <tr key={item.symbol} style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                <td style={tdStyle}>
-                  <Link
-                    href={`/stock/${encodeURIComponent(item.symbol)}/earnings`}
-                    style={{ color: "#93c5fd", textDecoration: "none", fontWeight: 700 }}
-                  >
-                    {item.symbol}
-                  </Link>
-                </td>
-                <td style={companyTdStyle} title={item.company}>
-                  {item.company}
-                </td>
-                <td style={{ ...tdStyle, textAlign: "right" }}>{formatEps(item.epsEstimated)}</td>
-                <td style={{ ...tdStyle, textAlign: "right" }}>{formatCompact(item.revenueEstimated)}</td>
-                <td style={{ ...tdStyle, textAlign: "right" }}>{formatPrice(item.price)}</td>
-                <td style={{ ...tdStyle, textAlign: "right" }}>{formatCompact(item.marketCap)}</td>
-                <td style={{ ...tdStyle, textAlign: "right" }}>
-                  <div style={{ display: "inline-flex", gap: 6, flexWrap: "nowrap" }}>
-                    <Link href={`/stock/${encodeURIComponent(item.symbol)}`} style={pillStyle}>
-                      Analysis →
-                    </Link>
-                    <Link href={`/dashboard?symbol=${encodeURIComponent(item.symbol)}`} style={pillStyle}>
-                      Chart →
-                    </Link>
-                    <Link href={`/stock/${encodeURIComponent(item.symbol)}/news`} style={pillStyle}>
-                      News →
-                    </Link>
-                  </div>
-                </td>
-              </tr>
+      {/* Sorting on a phone can't be "tap a column header" -- there are no
+          headers once the table is gone, and reaching the ones on the right
+          meant swiping sideways even when there were. So it becomes a visible
+          control, and the metric it names is the one every row then leads
+          with. */}
+      {isNarrow ? (
+        <div className="ecSortRow">
+          <select
+            className="ecSortSelect"
+            value={sortKey}
+            onChange={(e) => {
+              const key = e.target.value as SortKey;
+              setSortKey(key);
+              setSortDir(TEXT_KEYS.has(key) ? "asc" : "desc");
+            }}
+            aria-label="Sort by"
+          >
+            {COLUMNS.map((col) => (
+              <option key={col.key} value={col.key}>
+                Sort: {col.label}
+              </option>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </select>
+          <button
+            type="button"
+            className="ecSortDir"
+            onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+            aria-label={sortDir === "asc" ? "Sort ascending" : "Sort descending"}
+          >
+            {sortDir === "asc" ? "▲" : "▼"}
+          </button>
+        </div>
+      ) : null}
+
+      {isNarrow ? (
+        <div className="ecRows">
+          {sortedItems.map((item) => {
+            const open = expandedRows.has(item.symbol);
+            // Only the figures this company actually has. An estimate is
+            // genuinely absent for a name with no analyst coverage, and a row
+            // of dashes reads like a loading state rather than an answer.
+            const panelColumns = METRIC_COLUMNS.filter((col) => item[col.key] !== null);
+            return (
+              <div key={item.symbol} className={open ? "ecRow open" : "ecRow"}>
+                <div className="ecRowTop">
+                  <Link href={`/stock/${encodeURIComponent(item.symbol)}/earnings`} className="ecRowId">
+                    <span className="ecRowSym">{item.symbol}</span>
+                    <span className="ecRowName" title={item.company}>
+                      {item.company}
+                    </span>
+                  </Link>
+                  <div className="ecRowFigures">
+                    <span className="ecRowLabel">{headlineColumn.label}</span>
+                    <span className="ecRowValue">{headlineColumn.fmt(item)}</span>
+                    {subColumn ? <span className="ecRowSub">{subColumn.fmt(item)}</span> : null}
+                  </div>
+                  <button
+                    type="button"
+                    className="ecRowExpand"
+                    onClick={() => toggleRow(item.symbol)}
+                    aria-expanded={open}
+                    aria-label={open ? `Hide ${item.symbol} details` : `Show ${item.symbol} details`}
+                  >
+                    <span aria-hidden="true">{open ? "▲" : "▼"}</span>
+                  </button>
+                </div>
+                {open ? (
+                  <div className="ecRowPanel">
+                    {panelColumns.length ? (
+                      <div className="ecRowFields">
+                        {panelColumns.map((col) => (
+                          <div key={col.key} className="ecRowField">
+                            <span className="ecRowFieldLabel">{col.label}</span>
+                            <span className="ecRowFieldValue">{col.fmt(item)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="ecRowEmpty">No estimates or quote data for {item.symbol} yet.</div>
+                    )}
+                    <div className="ecRowLinks">
+                      <Link href={`/stock/${encodeURIComponent(item.symbol)}`} className="ecRowLink">
+                        Analysis →
+                      </Link>
+                      <Link href={`/dashboard?symbol=${encodeURIComponent(item.symbol)}`} className="ecRowLink">
+                        Chart →
+                      </Link>
+                      <Link href={`/stock/${encodeURIComponent(item.symbol)}/news`} className="ecRowLink">
+                        News →
+                      </Link>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: 900, tableLayout: "fixed" }}>
+            <colgroup>
+              <col style={{ width: 90 }} />
+              <col style={{ width: 220 }} />
+              <col style={{ width: 100 }} />
+              <col style={{ width: 120 }} />
+              <col style={{ width: 90 }} />
+              <col style={{ width: 100 }} />
+              <col style={{ width: 260 }} />
+            </colgroup>
+            <thead>
+              <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.12)" }}>
+                {COLUMNS.map((col) => {
+                  const active = col.key === sortKey;
+                  return (
+                    <th key={col.key} style={{ ...thStyle, textAlign: col.align }}>
+                      <button
+                        type="button"
+                        onClick={() => onSort(col.key)}
+                        title={`Sort by ${col.label}`}
+                        style={{
+                          ...thButtonStyle,
+                          justifyContent: col.align === "right" ? "flex-end" : "flex-start",
+                          color: active ? "#93c5fd" : "#8a97ad",
+                        }}
+                      >
+                        {col.label}
+                        <span style={{ fontSize: 9, opacity: active ? 1 : 0.25 }}>
+                          {active ? (sortDir === "asc" ? "▲" : "▼") : "▲"}
+                        </span>
+                      </button>
+                    </th>
+                  );
+                })}
+                <th style={thStyle} />
+              </tr>
+            </thead>
+            <tbody>
+              {sortedItems.map((item) => (
+                <tr key={item.symbol} style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                  <td style={tdStyle}>
+                    <Link
+                      href={`/stock/${encodeURIComponent(item.symbol)}/earnings`}
+                      style={{ color: "#93c5fd", textDecoration: "none", fontWeight: 700 }}
+                    >
+                      {item.symbol}
+                    </Link>
+                  </td>
+                  <td style={companyTdStyle} title={item.company}>
+                    {item.company}
+                  </td>
+                  <td style={{ ...tdStyle, textAlign: "right" }}>{formatEps(item.epsEstimated)}</td>
+                  <td style={{ ...tdStyle, textAlign: "right" }}>{formatCompact(item.revenueEstimated)}</td>
+                  <td style={{ ...tdStyle, textAlign: "right" }}>{formatPrice(item.price)}</td>
+                  <td style={{ ...tdStyle, textAlign: "right" }}>{formatCompact(item.marketCap)}</td>
+                  <td style={{ ...tdStyle, textAlign: "right" }}>
+                    <div style={{ display: "inline-flex", gap: 6, flexWrap: "nowrap" }}>
+                      <Link href={`/stock/${encodeURIComponent(item.symbol)}`} style={pillStyle}>
+                        Analysis →
+                      </Link>
+                      <Link href={`/dashboard?symbol=${encodeURIComponent(item.symbol)}`} style={pillStyle}>
+                        Chart →
+                      </Link>
+                      <Link href={`/stock/${encodeURIComponent(item.symbol)}/news`} style={pillStyle}>
+                        News →
+                      </Link>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {error ? <div style={{ marginTop: 12, fontSize: 13, color: "#fecaca", textAlign: "center" }}>{error}</div> : null}
 
@@ -260,6 +429,76 @@ export default function EarningsDayList({ date, initialItems, initialHasMore, co
             : `Showing ${items.length} so far — still populating…`}
         </div>
       )}
+
+      <style>{`
+        .ecSortRow { display: flex; align-items: stretch; justify-content: flex-end; gap: 6px; margin-bottom: 10px; }
+        .ecSortSelect {
+          appearance: none; border-radius: 999px; padding: 7px 14px;
+          border: 1px solid rgba(96,165,250,0.4); background: rgba(59,130,246,0.10);
+          color: #dbeafe; font-family: inherit; font-size: 12px; font-weight: 800; cursor: pointer;
+        }
+        .ecSortDir {
+          flex: 0 0 auto; width: 38px; border-radius: 999px;
+          border: 1px solid rgba(96,165,250,0.4); background: rgba(59,130,246,0.10);
+          color: #dbeafe; font-size: 11px; font-weight: 900; cursor: pointer; font-family: inherit;
+        }
+
+        .ecRows { display: grid; gap: 8px; }
+        .ecRow {
+          border: 1px solid rgba(255,255,255,0.09); border-radius: 14px;
+          background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+          overflow: hidden;
+        }
+        .ecRow.open { border-color: rgba(96,165,250,0.4); }
+        .ecRowTop { display: flex; align-items: center; gap: 10px; padding: 11px 6px 11px 12px; }
+        /* Fills the row so the whole left-hand side opens the company's
+           earnings page; the expand button is the only other target and it
+           sits outside this link. */
+        .ecRowId {
+          display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 1 1 auto;
+          color: inherit; text-decoration: none;
+        }
+        .ecRowSym { flex: 0 0 auto; font-size: 15px; font-weight: 950; letter-spacing: -0.02em; color: #93c5fd; }
+        .ecRowName {
+          min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          font-size: 12px; font-weight: 700; color: rgba(148,163,184,0.9);
+        }
+        .ecRowFigures { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; text-align: right; }
+        .ecRowLabel { font-size: 9px; font-weight: 900; letter-spacing: 0.05em; text-transform: uppercase; color: rgba(148,163,184,0.62); }
+        .ecRowValue { font-size: 14.5px; font-weight: 900; color: #f1f5f9; white-space: nowrap; }
+        .ecRowSub { font-size: 11.5px; font-weight: 800; white-space: nowrap; color: rgba(148,163,184,0.9); }
+        .ecRowExpand {
+          flex: 0 0 auto; width: 34px; height: 34px; border-radius: 10px;
+          border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04);
+          color: rgba(226,232,240,0.75); font-size: 10px; cursor: pointer; font-family: inherit;
+        }
+        .ecRow.open .ecRowExpand { border-color: rgba(96,165,250,0.45); color: #93c5fd; }
+
+        .ecRowPanel { border-top: 1px solid rgba(255,255,255,0.08); padding: 4px 12px 12px; }
+        .ecRowFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; }
+        .ecRowField {
+          display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+          padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.055); min-width: 0;
+        }
+        .ecRowFieldLabel { font-size: 11px; font-weight: 800; color: rgba(148,163,184,0.8); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ecRowFieldValue { flex: 0 0 auto; font-size: 12.5px; font-weight: 800; color: rgba(226,232,240,0.94); white-space: nowrap; }
+        .ecRowEmpty { padding: 8px 0 2px; font-size: 12px; color: rgba(148,163,184,0.75); }
+        .ecRowLinks { display: flex; gap: 6px; margin-top: 10px; }
+        .ecRowLink {
+          flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center;
+          padding: 9px 6px; border-radius: 10px;
+          border: 1px solid rgba(147,197,253,0.28); background: rgba(147,197,253,0.10);
+          color: #93c5fd; text-decoration: none; font-weight: 800; font-size: 12px; white-space: nowrap;
+        }
+
+        @media (max-width: 430px) {
+          /* Two columns of label+value stops fitting once "Revenue Est." and
+             "Market Cap" are both on screen -- one column keeps every value on
+             the same line as its own label. */
+          .ecRowFields { grid-template-columns: minmax(0, 1fr); }
+          .ecRowName { font-size: 11.5px; }
+        }
+      `}</style>
     </div>
   );
 }
