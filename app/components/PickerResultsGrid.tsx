@@ -344,7 +344,7 @@ function fmtVolume(v: number | null) {
 
 const MUTED = <span className="muted">–</span>;
 
-// ── cell formatters (return display nodes) ──────────────────────────────────
+// ── cell formatters (return display nodes) ────────────────────────────────
 function capCell(v: number | null): ReactNode {
   return fmtCap(v) ?? MUTED;
 }
@@ -540,7 +540,7 @@ export default function PickerResultsGrid({
   // other. They're one decision, so they're now one row.
   screenerControl?: ReactNode;
 }) {
-  const { predicates, selectedFilters, setMatchCount, isPristine } = usePickerFilter();
+  const { predicates, selectedFilters, setMatchCount, setConditionCounts, isPristine } = usePickerFilter();
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [activeTab, setActiveTab] = useState<TabKey>(defaultTab);
   const [sort, setSort] = useState<SortState>(null);
@@ -783,6 +783,47 @@ export default function PickerResultsGrid({
     setMatchCount(predicates.length ? filteredEntries.length : null);
     return () => setMatchCount(null);
   }, [filteredEntries.length, predicates.length, setMatchCount]);
+
+  // How many of the currently shown results also satisfy each checkable
+  // condition -- what you would be left with if you ticked it.
+  //
+  // Counted against filteredEntries, not `entries`, so the numbers compose:
+  // predicates AND, so (current results) INTERSECT (this condition) is exactly
+  // the set ticking it would produce. A condition already ticked therefore
+  // counts every current result, which is correct rather than coincidental.
+  //
+  // The `predicates.length ?` guard is for hideUntilFiltered pages, where
+  // filteredEntries is deliberately empty until something is selected. Counting
+  // against that would report 0 for all 25 conditions and paint every one as a
+  // dead end on the exact page where the visitor most needs to know where to
+  // start.
+  //
+  // Every checkable key is a flag predicate (valueSatisfies: `value === true`),
+  // so this is one boolean read per key per row -- ~25 x 700 at the largest
+  // universe, on a set already materialised in memory. No new data and no
+  // request.
+  const countBase = predicates.length ? filteredEntries : entries;
+
+  const conditionCounts = useMemo(() => {
+    const counts: Partial<Record<AnyFilterKey, number>> = {};
+    const keys: AnyFilterKey[] = [
+      ...FILTER_DEFS.map((d) => d.key),
+      ...CATEGORY_FILTER_DEFS.map((d) => d.key),
+    ];
+    for (const key of keys) counts[key] = 0;
+    for (const entry of countBase) {
+      const record = entry as unknown as Record<string, unknown>;
+      for (const key of keys) {
+        if (record[key] === true) counts[key] = (counts[key] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }, [countBase]);
+
+  useEffect(() => {
+    setConditionCounts(conditionCounts);
+    return () => setConditionCounts(null);
+  }, [conditionCounts, setConditionCounts]);
 
   const shown = sortedEntries.slice(0, visibleCount);
   const hasMore = visibleCount < sortedEntries.length;
