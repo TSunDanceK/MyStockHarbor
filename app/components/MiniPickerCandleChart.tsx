@@ -18,6 +18,7 @@ export type MiniCandlePoint = {
 
 type ChartOverlay =
   | "none"
+  | "ma50"
   | "ma200"
   | "ath"
   | "recentHigh"
@@ -272,6 +273,11 @@ export default function MiniPickerCandleChart({
       if (isFiniteNumber(value)) priceOverlayValues.push(value);
     }
   }
+  if (overlay === "ma50") {
+    for (const value of ma50Values) {
+      if (isFiniteNumber(value)) priceOverlayValues.push(value);
+    }
+  }
   if (overlay === "trend") {
     for (const value of ma50Values) {
       if (isFiniteNumber(value)) priceOverlayValues.push(value);
@@ -468,6 +474,17 @@ export default function MiniPickerCandleChart({
           <path
             d={ma200Path}
             stroke="#facc15"
+            strokeWidth="2"
+            fill="none"
+            strokeLinecap="round"
+            opacity="0.95"
+          />
+        ) : null}
+
+        {overlay === "ma50" && ma50Path ? (
+          <path
+            d={ma50Path}
+            stroke="#22c55e"
             strokeWidth="2"
             fill="none"
             strokeLinecap="round"
