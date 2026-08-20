@@ -101,21 +101,14 @@ export default function BottlenecksMobileTabs({
     }
   };
 
-  // Both BottleneckList and BottleneckLeaderboard cap their scroll window by
-  // measuring their first rendered row, and a row inside a display:none block
-  // measures zero. Both already re-measure on window resize, so a synthetic
-  // resize after the switch is all either needs -- one frame later, once the
-  // newly shown block has been laid out.
-  //
-  // A zero measurement is handled gracefully at the other end too: both
-  // components treat it as falsy and simply leave the list uncapped, so the
-  // worst case here is a long list for one frame, never a broken one.
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      window.dispatchEvent(new Event("resize"));
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [tab]);
+  // No re-measure hook needed on switching, and that is worth stating because
+  // it very nearly was. Both blocks used to size an inner scroll window by
+  // measuring their first rendered row, which measures zero inside a
+  // display:none block -- so showing a tab would have needed a synthetic
+  // resize to get a correct height. Neither has an inner scroll window at
+  // this width any more: the leaderboard caps what it renders instead, and
+  // the list's window is switched off under 960px. Nothing here measures, so
+  // nothing here has to be told it became visible.
 
   return (
     <>
