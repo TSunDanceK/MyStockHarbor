@@ -131,12 +131,6 @@ type Point = {
   volume?: number;
 };
 
-type SymbolResult = {
-  symbol: string;
-  name: string;
-  exchange: string;
-};
-
 type StockSymbolPageClientProps = {
   symbol: string;
   // Short-lived signed token minted server-side (lib/server/quoteToken.ts) and
@@ -944,7 +938,15 @@ export default function StockSymbolPageClient({ symbol, pageToken, latestEarning
       : null
   );
   const [history, setHistory] = useState<Point[]>(initialHistory ?? []);
-  const [companyName, setCompanyName] = useState(seed?.companyName ?? "");
+  // Was seeded from `seed` alone and then overwritten by a third
+  // /api/symbols call in the load effect below, purely to look up a name the
+  // server already had. Worse than redundant: when that lookup found no exact
+  // match it set "" and wiped a correct server-rendered company name.
+  // `profile` (the FMP company profile, server-fetched) is the better source
+  // and `seed` stays as the fallback.
+  const [companyName] = useState(
+    profile?.companyName ?? seed?.companyName ?? ""
+  );
   // When we have server-seeded history, the layout renders immediately (no gate);
   // the effect below still refreshes data in the background.
   const [priceLoading, setPriceLoading] = useState(!seededHistory);
@@ -955,41 +957,92 @@ export default function StockSymbolPageClient({ symbol, pageToken, latestEarning
   const [analystRatingLoading, setAnalystRatingLoading] = useState(true);
   const [openScoreHelp, setOpenScoreHelp] = useState<"fundamentals" | "future" | null>(null);
 
+  // Two independent effects, deliberately not one Promise.all.
+  //
+  // They were coupled, and that coupling was the whole problem: the chart
+  // could not paint until the quote had also resolved, and neither could be
+  // skipped without skipping both. Splitting them lets the history fetch
+  // disappear entirely on a seeded render while the quote still refreshes.
+
+  // -- History -------------------------------------------------------------
+  // Skipped outright when the server seeded it. Previously `seededHistory`
+  // only suppressed the SPINNER, so a cache=HIT page shipped a complete,
+  // correct history in its HTML and then immediately re-fetched it over the
+  // network and threw the seeded copy away.
+  //
+  // The seed is sized for this: the chart renders history.slice(-240) and
+  // ma200 needs 200 prior bars to be defined across that window, so 440 is
+  // the real floor. page.tsx now seeds 500 (was 300, which left MA200
+  // undefined over roughly half the visible chart and is why the client
+  // asked for 900 in the first place).
+  //
+  // Staleness: the page is ISR-cached for 900s, so a seeded daily history can
+  // be up to 15 minutes behind on its most recent bar. That is acceptable for
+  // daily candles -- the last bar is a running close that moves continuously
+  // anyway, and the next revalidation picks it up. It would NOT be acceptable
+  // for the quote, which is why the quote is handled separately below.
   useEffect(() => {
+    if (seededHistory) return;
+
     let cancelled = false;
-    async function load() {
+    async function loadHistory() {
       setErr(null);
-      if (!seededHistory) setPriceLoading(true);
+      setPriceLoading(true);
       try {
-        const [quoteRes, historyRes, symbolsRes] = await Promise.all([
-          fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, {
-            cache: "no-store",
-            // Only /api/quote is token-gated in this pilot, so only this fetch
-            // carries the header. Omitted entirely when unconfigured.
-            ...(pageToken ? { headers: { "x-msh-page-token": pageToken } } : {}),
-          }),
-          fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=900`, { cache: "no-store" }),
-          fetch(`/api/symbols?q=${encodeURIComponent(symbol)}`, { cache: "no-store" }),
-        ]);
-        if (!quoteRes.ok) throw new Error("Quote fetch failed");
-        if (!historyRes.ok) throw new Error("History fetch failed");
-        const quoteData = (await quoteRes.json()) as Quote;
-        const historyData = (await historyRes.json()) as { symbol: string; points: any[] };
-        let name = "";
-        if (symbolsRes.ok) { const symbolsData = (await symbolsRes.json()) as { results?: SymbolResult[] }; const exact = (symbolsData.results ?? []).find((r) => (r.symbol ?? "").toUpperCase() === symbol.toUpperCase()); name = exact?.name ?? ""; }
+        // No cache:"no-store". /api/history already declares revalidate = 900
+        // and returns its own tiered s-maxage; a no-store request header opted
+        // the browser and the CDN out of both.
+        const res = await fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=900`);
+        if (!res.ok) throw new Error("History fetch failed");
+        const data = (await res.json()) as { symbol: string; points: any[] };
         if (cancelled) return;
-        const ptsRaw = Array.isArray(historyData.points) ? historyData.points : [];
+        const ptsRaw = Array.isArray(data.points) ? data.points : [];
         const pts: Point[] = ptsRaw.map((p: any) => ({ date: String(p?.date ?? ""), close: Number(p?.close), high: p?.high == null ? undefined : Number(p.high), low: p?.low == null ? undefined : Number(p.low), volume: p?.volume == null ? undefined : Number(p.volume) })).filter((p) => p.date && Number.isFinite(p.close));
-        setQuote(quoteData); setHistory(pts); setCompanyName(name);
+        setHistory(pts);
       } catch {
         if (cancelled) return;
-        // A failed background refresh must not wipe server-seeded content.
-        if (seededHistory) return;
-        setErr("Failed to load stock page."); setQuote(null); setHistory([]); setCompanyName("");
+        setErr("Failed to load stock page."); setHistory([]);
       }
       finally { if (!cancelled) setPriceLoading(false); }
     }
-    load();
+    loadHistory();
+    return () => { cancelled = true; };
+  }, [symbol, seededHistory]);
+
+  // -- Quote ---------------------------------------------------------------
+  // Still fetched on every load, and deliberately so. `initialQuote` seeds the
+  // header stats so they paint immediately from the server, but the HTML is
+  // ISR-cached for 900s, so during market hours that seeded price can be a
+  // quarter of an hour old -- and a stale price presented as current is a
+  // correctness problem on a stock page, not a performance trade-off.
+  //
+  // What changed is that it no longer blocks anything: it does not gate the
+  // chart, it does not set priceLoading, and a failure leaves the seeded quote
+  // in place rather than clearing the page. It is a background correction to
+  // already-painted content, not part of the first-paint path.
+  //
+  // (It also keeps the stock page contributing to the QUOTE_TOKEN pilot, which
+  // is log-only today -- see lib/server/quoteToken.ts. Dropping the call
+  // entirely would silence that sample as a side effect, which is not a
+  // decision this change should be making on its own.)
+  useEffect(() => {
+    let cancelled = false;
+    async function loadQuote() {
+      try {
+        const res = await fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, {
+          cache: "no-store",
+          // Only /api/quote is token-gated in this pilot, so only this fetch
+          // carries the header. Omitted entirely when unconfigured.
+          ...(pageToken ? { headers: { "x-msh-page-token": pageToken } } : {}),
+        });
+        if (!res.ok) return;
+        const quoteData = (await res.json()) as Quote;
+        if (!cancelled) setQuote(quoteData);
+      } catch {
+        // Leave the server-seeded quote showing.
+      }
+    }
+    loadQuote();
     return () => { cancelled = true; };
     // pageToken is a stable server-minted prop for the life of this render,
     // so including it satisfies exhaustive-deps without causing a refetch.

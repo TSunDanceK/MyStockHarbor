@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { timingCache, beginTiming } from "./timing";
 
 export type Quote = {
   symbol: string;
@@ -88,13 +89,24 @@ function getQuoteCacheKey(symbol: string) {
 }
 
 async function readQuoteCache(symbol: string): Promise<Quote | null> {
-  if (!redis) return null;
+  if (!redis) {
+    timingCache("quote", "redis", "skip", "no-credentials");
+    return null;
+  }
 
   try {
     const cached = await redis.get<Quote>(getQuoteCacheKey(symbol));
-    if (!cached || typeof cached !== "object" || cached.symbol !== symbol) return null;
+    if (!cached || typeof cached !== "object" || cached.symbol !== symbol) {
+      // A miss here means the next step is a live FMP call. That is the
+      // distinction the whole measurement exists for -- QUOTE_CACHE_TTL_SECONDS
+      // is 60, so at the dashboard's render rate this may miss most of the time.
+      timingCache("quote", "redis", "miss", symbol);
+      return null;
+    }
+    timingCache("quote", "redis", "hit", symbol);
     return cached;
   } catch {
+    timingCache("quote", "redis", "miss", `${symbol} threw`);
     return null;
   }
 }
@@ -175,6 +187,15 @@ async function fetchQuoteFromFmp(symbol: string): Promise<Quote> {
 // endpoint and any in-process caller always return identically-shaped data,
 // and now share the same Redis cache + in-flight dedupe above.
 export async function fetchQuoteSnapshot(symbolInput: string): Promise<Quote> {
+  const endTiming = beginTiming("quote", "fetchQuoteSnapshot");
+  try {
+    return await fetchQuoteSnapshotInner(symbolInput);
+  } finally {
+    endTiming();
+  }
+}
+
+async function fetchQuoteSnapshotInner(symbolInput: string): Promise<Quote> {
   const symbol = String(symbolInput ?? "").trim().toUpperCase();
   if (!symbol) return emptyQuote(String(symbolInput ?? ""));
 

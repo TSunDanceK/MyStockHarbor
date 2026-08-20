@@ -1,4 +1,14 @@
+// The FMP calls below carried `cache: "no-store"`, which opts any route that
+// reaches them out of static rendering entirely -- the same class of bailout
+// @upstash/redis caused via its own no-store default (lib/server/redisCacheMode.ts).
+// They only fire on a Redis miss, so the bailout is intermittent and invisible:
+// the route silently renders per request whenever the cache happens to be cold.
+// Redis remains the real cache here, with its own TTL; this short Next
+// revalidate exists so the call stops forcing the route dynamic, and it dedupes
+// identical misses inside one render pass. Same fix as historyCache.ts; see
+// claude/picker-pages-isr-2026-08-20.md.
 import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 
 // Cron-warmed, Redis-cached fundamentals (market cap, PE ratio, industry) for
@@ -19,7 +29,7 @@ import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
 const FUND_KEY_PREFIX = "msh:pickers:fundamentals:v1:";
@@ -313,7 +323,7 @@ async function fetchQuoteFundamentals(
           group.join(",")
         )}&apikey=${encodeURIComponent(apiKey)}`;
         const res = await fetch(url, {
-          cache: "no-store",
+          next: { revalidate: 300 },
           headers: { accept: "application/json" },
         });
         if (res.status === 401 || res.status === 402 || res.status === 403) {
@@ -344,7 +354,7 @@ async function fetchQuoteFundamentals(
             sym
           )}&apikey=${encodeURIComponent(apiKey)}`;
           const res = await fetch(url, {
-            cache: "no-store",
+            next: { revalidate: 300 },
             headers: { accept: "application/json" },
           });
           if (!res.ok) continue;
@@ -367,7 +377,7 @@ async function fetchProfile(sym: string, apiKey: string): Promise<ProfileLite | 
     const url = `https://financialmodelingprep.com/stable/profile?symbol=${encodeURIComponent(
       sym
     )}&apikey=${encodeURIComponent(apiKey)}`;
-    const res = await fetch(url, { cache: "no-store", headers: { accept: "application/json" } });
+    const res = await fetch(url, { next: { revalidate: 300 }, headers: { accept: "application/json" } });
     if (!res.ok) return null;
     const json = await res.json().catch(() => null);
     const row = Array.isArray(json) ? json[0] : json;

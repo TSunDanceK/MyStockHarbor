@@ -12,12 +12,14 @@
 // lock defined in this module and stay perfectly consistent.
 
 import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { detectBullFlag, type BullFlagResult } from "../ta/bullFlag";
 import { getCachedDailyHistory, getDailyHistory } from "./historyCache";
 
 import { addToDynamicUniverse, readDynamicUniverse } from "./dynamicUniverseCache";
 import { getCompanyNameMap } from "./companyNames";
 import { PRESET_UNIVERSE } from "./presetUniverse";
+import { readMarketState } from "./marketState";
 
 type Point = {
   date: string;
@@ -144,7 +146,7 @@ let memo:
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
 const MEMORY_CACHE_MS = 60_000;
@@ -352,18 +354,23 @@ async function releasePlaysLock(token: string | null) {
   }
 }
 
-async function fetchJSON<T>(url: string, forceFresh = false) {
-  const res = await fetch(
-    forceFresh ? `${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}` : url,
-    forceFresh ? { cache: "no-store" } : { next: { revalidate: 300 } }
-  );
-
-  if (!res.ok) throw new Error(`Fetch failed: ${url}`);
-  return (await res.json()) as T;
-}
-
-async function fetchMarket(origin: string, forceFresh = false) {
-  return fetchJSON<MarketPayload>(`${origin}/api/market`, forceFresh);
+// Reads the discovery universe in-process instead of fetching this
+// deployment's own /api/market URL.
+//
+// That self-request had no browser BotID header and no session cookie, so the
+// Vercel firewall could challenge it on production and the SSO gate refused it
+// outright on every preview deployment. fetchJSON threw on the non-ok
+// response, and with a cold plays cache getBullFlagsData's catch returned
+// status 500 -- surfacing as "Failed to load chart plays" on a page whose data
+// was sitting in Redis the whole time. Same self-block already fixed in
+// claude/pickers-firewall-selfblock-2026-07-17.md and in this page's own SSR
+// path; the builder's market call was missed then.
+//
+// readMarketState never throws: a Redis miss degrades to empty rankings and
+// the universe falls back to readDynamicUniverse() + PRESET_UNIVERSE below,
+// rather than taking the page down.
+async function fetchMarket(_origin: string, _forceFresh = false): Promise<MarketPayload> {
+  return readMarketState();
 }
 
 async function fetchHistory(symbol: string, days: number): Promise<Point[]> {
@@ -971,6 +978,8 @@ async function buildPlaysPayload(
 export type BullFlagsDataOpts = {
   forceRefresh?: boolean;
   debugSymbol?: string | null;
+  // Set by the page during prerender. See the cacheOnly branch below.
+  cacheOnly?: boolean;
 };
 
 export type BullFlagsDataResult = {
@@ -1009,6 +1018,36 @@ export async function getBullFlagsData(
       headers: {
         "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
       },
+    };
+  }
+
+  // Read the cache but never trigger a build.
+  //
+  // These pages are prerendered now, and a full scan does not fit inside Next's
+  // 60s per-page static-generation budget: measured, all three timed out on
+  // three attempts each and FAILED THE BUILD outright against a cold cache.
+  // Leaving that in place would mean a deploy that breaks whenever the cron has
+  // not warmed Redis, which is a far worse failure than a stale page.
+  //
+  // Returning 503 rather than throwing is deliberate: the page already maps
+  // `status >= 400` to a null payload, and the client fetches /api/plays on
+  // mount regardless, so a miss degrades to the same shell a visitor would have
+  // seen anyway rather than to an error. The scan still happens -- via the API
+  // route and the warm cron -- just never inside a build.
+  if (opts.cacheOnly) {
+    // Say so out loud. A cacheOnly miss during prerender means the artefact for
+    // this page ships without data until the next revalidate, and a silent
+    // degradation is exactly the failure mode this project keeps re-learning
+    // (see the three verification rules in
+    // claude/picker-pages-isr-2026-08-20.md). In a build log this line is the
+    // signal that the cron had not warmed Redis before the deploy.
+    console.warn(
+      "[bull-flags] cacheOnly miss -- prerendering without data; page will fill in on the next revalidate"
+    );
+    return {
+      data: {} as PlaysPayload,
+      headers: { "X-Bull-Flags-Cache": "miss-cache-only" },
+      status: 503,
     };
   }
 

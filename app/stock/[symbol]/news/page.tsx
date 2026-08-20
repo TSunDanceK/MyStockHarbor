@@ -30,16 +30,23 @@ import RelatedStocks from "@/app/components/RelatedStocks";
 
 export const runtime = "nodejs";
 
-// Force per-request rendering rather than ISR/Full Route Cache. The
-// underlying data (getStockNewsBaseData) is already cached via
-// unstable_cache (1hr) in lib/stock-news-data.ts, so this doesn't add
-// real cost -- but Vercel's Full Route Cache for this page was observed
-// to keep serving pre-deploy HTML snapshots well past a code change
-// (a new deployment does not reset it; only revalidate-window elapsing
-// or on-demand revalidation does). For a news page whose filtering logic
-// gets tuned periodically, "always reflects the latest deploy" matters
-// more than shaving the render step off an already-cached data fetch.
-export const dynamic = "force-dynamic";
+// This page previously set `dynamic = "force-dynamic"`, for a real reason worth
+// keeping on the record: Vercel's Full Route Cache was observed serving
+// pre-deploy HTML for this page well past a code change, and for a news page
+// whose filtering logic gets tuned periodically, "always reflects the latest
+// deploy" was judged worth a per-request render.
+//
+// That trade-off is revisited, not discarded. The staleness window is now
+// bounded by the layout's `revalidate = 900`, so the worst case is 15 minutes
+// behind a deploy rather than indefinite. Against that: every request to this
+// route -- and most of them are prefetches and crawlers, not readers -- was
+// paying a full serverless render, ~615 of them in 24h, to produce
+// substantially identical HTML.
+//
+// No `dynamic`/`revalidate` export here on purpose: segment config cascades
+// from app/stock/[symbol]/layout.tsx, so the three routes under it cannot
+// drift apart. If this page ever genuinely needs to bypass the cache after a
+// deploy, on-demand revalidation is the tool, not force-dynamic.
 
 type Props = {
   params: Promise<{ symbol: string }>;

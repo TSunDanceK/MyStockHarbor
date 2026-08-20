@@ -87,6 +87,20 @@ export function EarningsScoreWatermark() {
 // Used on the stock news page's score panel, in place of the plain
 // absolutely-positioned brand label, so it can be hidden via the toggle
 // above.
+//
+// POSITIONING: the panel (scorePanelStyle in NewsScoreGauge.tsx) has 18px of
+// padding and opens with the kicker -- "NEWS SCORE" on the stock page,
+// "SECTOR NEWS SCORE" on the sector pages. At top: 14 this label sat on the
+// same line as that kicker and, once the kicker got longer, ran straight
+// through it: on a phone "SECTOR NEWS SCORE" and "MyStockHarbor.com"
+// overlapped mid-word.
+//
+// top: 40 drops it onto the line below. The kicker is 11px at ~1.2 line
+// height starting at y=18, so it ends around y=31; the gauge SVG below it
+// starts at y=45 but its arc doesn't reach the top of its own viewBox
+// (apex is 15 user units down, and the arc is centred), so the strip this
+// now occupies is empty on both sides. Anything that changes the kicker's
+// size or the panel's padding should re-check this number.
 export function NewsScoreWatermark() {
   const hidden = useWatermarkHidden();
   if (hidden) return null;
@@ -96,7 +110,7 @@ export function NewsScoreWatermark() {
       aria-hidden="true"
       style={{
         position: "absolute",
-        top: 14,
+        top: 40,
         right: 16,
         pointerEvents: "none",
         userSelect: "none",

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import SiteHeader from "./components/SiteHeader";
+import CrawlableNav from "./components/CrawlableNav";
 import PageViewTracker from "./components/PageViewTracker";
 import { getLatestYouTubeVideos } from "@/lib/youtube";
 import "./globals.css";
@@ -107,6 +108,14 @@ export default async function RootLayout({
   // link passes but that the page exists one hop from everywhere so a crawler
   // reaches it early. One link, opening a path to 483 pages that previously
   // had none. See app/stocks/page.tsx for the full reasoning.
+  //
+  // 2026-08-18: the sentence above -- "Discovery is the header's job, and the
+  // header does it well" -- was wrong, and expensively so. The header renders
+  // every dropdown through createPortal and only while open, so it does that
+  // job for humans and not at all for crawlers. See CrawlableNav below and
+  // claude/header-nav-not-crawlable-2026-08-17.md. The four columns here are
+  // still deliberately small; the fix went into a collapsed block rather than
+  // into this list precisely so the readability argument above survives it.
   const footerColumns: {
     heading: string;
     links: { href: string; label: string }[];
@@ -200,15 +209,87 @@ export default async function RootLayout({
                 grid-template-columns: repeat(4, minmax(150px, max-content));
               }
 
+              .site-map-grid {
+                grid-template-columns: repeat(5, minmax(150px, 1fr));
+              }
+
+              .site-map-details > summary::-webkit-details-marker {
+                color: rgba(241,245,249,0.56);
+              }
+
+              /* The four footer columns are <details> so a phone can collapse
+                 them to four headings. The default marker is suppressed at
+                 every width -- desktop never shows one because the column is
+                 always open, and mobile draws its own +/- on the right, which
+                 reads better in a full-width row than a triangle jammed
+                 against the heading. */
+              .footer-col > summary {
+                list-style: none;
+              }
+
+              .footer-col > summary::-webkit-details-marker {
+                display: none;
+              }
+
+              @media (min-width: 721px) {
+                /* Desktop keeps all four columns open permanently, so the
+                   heading must not behave like a control: no pointer cursor
+                   and, more importantly, no way to click a column shut. */
+                .footer-col > summary {
+                  pointer-events: none;
+                }
+              }
+
               @media (max-width: 720px) {
                 .site-footer {
                   padding-left: 16px !important;
                   padding-right: 16px !important;
                 }
 
+                /* One full-width row per column, not two side by side --
+                   a collapsed row is a tap target and wants the whole width.
+                   Gap goes to 0 because each row now carries its own rule
+                   line and padding. */
                 .site-footer-main-grid {
+                  grid-template-columns: 1fr;
+                  gap: 0 !important;
+                }
+
+                .footer-col {
+                  border-bottom: 1px solid rgba(255,255,255,0.07);
+                }
+
+                .footer-col > summary {
+                  cursor: pointer;
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  /* ~40px tall closed, which is the tap target rather than
+                     the text. */
+                  padding: 11px 0;
+                }
+
+                .footer-col > summary::after {
+                  content: "+";
+                  font-size: 16px;
+                  font-weight: 700;
+                  line-height: 1;
+                  color: rgba(241,245,249,0.5);
+                }
+
+                /* U+2212 minus, not a hyphen -- a hyphen next to a 16px "+"
+                   reads as a speck. */
+                .footer-col[open] > summary::after {
+                  content: "\\2212";
+                }
+
+                .footer-col[open] > .footer-col-links {
+                  padding-bottom: 12px;
+                }
+
+                .site-map-grid {
                   grid-template-columns: 1fr 1fr;
-                  gap: 18px !important;
+                  gap: 18px 20px !important;
                 }
               }
 
@@ -217,7 +298,7 @@ export default async function RootLayout({
                   padding: 20px 14px 14px !important;
                 }
 
-                .site-footer-main-grid {
+                .site-map-grid {
                   grid-template-columns: 1fr;
                   gap: 20px !important;
                 }
@@ -315,16 +396,25 @@ export default async function RootLayout({
                   alignItems: "start",
                 }}
               >
+                {/* Each column is a <details> rendered OPEN, and the `open`
+                    attribute here is the safe default rather than an
+                    oversight. Server-rendered, this footer is byte-for-byte
+                    what it has always been: four expanded columns, 14 links.
+                    Crawlers, no-JS clients and every desktop visitor get
+                    exactly that. The inline script after </footer> is what
+                    closes them, and only below 720px.
+
+                    Doing it that way round matters. The obvious alternative --
+                    render closed, let CSS force it open on desktop -- does not
+                    work: Chrome and Firefox hide a closed <details>'s children
+                    through content-visibility on a shadow-DOM slot, which
+                    light-DOM CSS cannot override. `details::details-content`
+                    would do it, but it is too recent to rely on here. So the
+                    choice was JS, or a footer that degrades closed. Degrading
+                    OPEN is the version where a failure costs nothing. */}
                 {footerColumns.map((column) => (
-                  <div
-                    key={column.heading}
-                    style={{
-                      display: "grid",
-                      gap: 6,
-                      alignContent: "start",
-                    }}
-                  >
-                    <div
+                  <details key={column.heading} className="footer-col" open>
+                    <summary
                       style={{
                         fontSize: 12,
                         fontWeight: 700,
@@ -332,18 +422,27 @@ export default async function RootLayout({
                       }}
                     >
                       {column.heading}
-                    </div>
+                    </summary>
 
-                    <div style={{ display: "grid", gap: 4 }}>
+                    <div
+                      className="footer-col-links"
+                      style={{ display: "grid", gap: 4, paddingTop: 6 }}
+                    >
                       {column.links.map((link) => (
                         <Link key={link.href} href={link.href} style={footerLinkStyle}>
                           {link.label}
                         </Link>
                       ))}
                     </div>
-                  </div>
+                  </details>
                 ))}
               </div>
+
+              {/* The full nav link set, server-rendered. The 14-link footer
+                  above is unchanged and the reasoning behind its size still
+                  stands -- this is collapsed by default and adds one row.
+                  See app/components/CrawlableNav.tsx. */}
+              <CrawlableNav />
 
               <div
                 style={{
@@ -357,6 +456,38 @@ export default async function RootLayout({
               </div>
             </div>
           </footer>
+
+          {/* Collapses the four footer columns on phones. See the comment on
+              the <details> above for why this is JS and not CSS.
+
+              Placed immediately after </footer> so it parses and runs with
+              the footer already in the DOM and before first paint of it --
+              no flash of an expanded footer on the way down.
+
+              The matchMedia listener covers rotation: without it, a phone
+              turned landscape past 720px would hit the desktop rule that sets
+              pointer-events: none on the summary, leaving four columns closed
+              and no way to open them. */}
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `
+                (function(){
+                  try{
+                    var mq = window.matchMedia('(max-width: 720px)');
+                    var sync = function(){
+                      var cols = document.querySelectorAll('details.footer-col');
+                      for (var i = 0; i < cols.length; i++) {
+                        cols[i].open = !mq.matches;
+                      }
+                    };
+                    sync();
+                    if (mq.addEventListener) mq.addEventListener('change', sync);
+                    else if (mq.addListener) mq.addListener(sync);
+                  }catch(e){}
+                })();
+              `,
+            }}
+          />
 
           <a
             href="/api/internal/feed-index"

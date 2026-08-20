@@ -1,5 +1,5 @@
+import { Suspense } from "react";
 import Link from "next/link";
-import { headers } from "next/headers";
 import type { MiniCandlePoint, SupportResistanceZone } from "@/app/components/MiniPickerCandleChart";
 import PickerHighlightScroller from "@/app/components/PickerHighlightScroller";
 import ScreenerNav from "@/app/components/ScreenerNav";
@@ -7,8 +7,7 @@ import HowToCollapse from "@/app/components/HowToCollapse";
 import ScreenerHeroHeading from "@/app/components/ScreenerHeroHeading";
 import PickerResultsGrid, { type TabKey } from "@/app/components/PickerResultsGrid";
 import ScanFooter from "@/app/components/ScanFooter";
-import CustomScreenerSymbolSearch from "@/app/components/CustomScreenerSymbolSearch";
-import { PickerFilterProvider } from "@/app/components/PickerFilterContext";
+import { PickerFilterProvider, PickerFilterUrlSync } from "@/app/components/PickerFilterContext";
 import { getCompanyNameMap } from "@/lib/server/companyNames";
 import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
 import { readPricePoolBulk } from "@/lib/server/pricePool";
@@ -434,12 +433,14 @@ function formatUpdatedAt(value?: string | null) {
   });
 }
 
-async function getOriginFromHeaders() {
-  const headerStore = await headers();
-  const host = headerStore.get("x-forwarded-host") || headerStore.get("host") || "www.mystockharbor.com";
-  const proto = headerStore.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
-  return `${proto}://${host}`;
-}
+// The origin used to be derived per-request from headers(). It is a constant
+// now: headers() alone forces dynamic rendering, and this value fed exactly one
+// thing -- getPickersData(origin), whose fetchMarket() self-fetches
+// `${origin}/api/market` on a cold cache. A fixed production origin is correct
+// for every environment that actually serves these pages, and the self-fetch
+// itself is on its way out (see the deferred pickersBuilder fix in
+// claude/picker-pages-isr-2026-08-20.md).
+const SITE_ORIGIN = "https://www.mystockharbor.com";
 
 function findSection(sections: PickerSection[], includes: string[] = []) {
   return sections.find((section) => {
@@ -760,15 +761,34 @@ function valueForPredicateField(entry: ResultEntry, field: string): unknown {
 
 async function getPickerData(config: PickerResultConfig) {
   try {
-    const origin = await getOriginFromHeaders();
     // Read the pickers payload in-process (the same Redis-cached builder the
     // /api/pickers route uses) instead of the server fetching its own public
     // URL. That self-request looked like an anonymous bot to our own Vercel
     // firewall; going in-process removes it entirely. See
     // claude/pickers-firewall-selfblock-2026-07-17.md.
-    const payload = (await getPickersData(origin)) as unknown as PickersPayload;
+    const payload = (await getPickersData(SITE_ORIGIN)) as unknown as PickersPayload;
     const sections = Array.isArray(payload.sections) ? payload.sections : [];
     const signalRecords = Array.isArray(payload.signalRecords) ? payload.signalRecords : [];
+
+    // A payload with neither sections nor signalRecords is a broken read, not a
+    // quiet market. Every one of these pages is built from this one payload, so
+    // "the screener found nothing" and "the data layer failed" are the same
+    // render -- and once these routes prerender, that render becomes the
+    // artefact every visitor and crawler is served until the next revalidate.
+    //
+    // Throwing is what keeps that from shipping. At build time it fails the
+    // build loudly instead of baking 32 empty pages; during ISR revalidation
+    // Next keeps serving the last good prerender when regeneration throws, so a
+    // transient Redis blip can no longer replace a good page with an empty one.
+    //
+    // Deliberately checked on the PAYLOAD, not on `entries`: a section page
+    // legitimately having no items today (no ATH breakouts) is real, and is
+    // what config.emptyText is for. An empty payload never is.
+    if (!sections.length && !signalRecords.length) {
+      throw new Error(
+        `[pickers] Refusing to render ${config.href}: payload has no sections and no signalRecords`
+      );
+    }
     const matchedSection = config.kind === "section" ? findSection(sections, config.sectionIncludes ?? []) : undefined;
     // Full matched set (bounded only by RESULT_SAFETY_CAP, not by
     // config.maxItems) -- config.maxItems is now just the initial "shown"
@@ -910,8 +930,20 @@ async function getPickerData(config: PickerResultConfig) {
       seoEntries,
       foundCount: config.filterTimeframe ? seoEntries.length : typeof matchedSection?.foundCount === "number" ? matchedSection.foundCount : seoEntries.length,
     };
-  } catch {
-    return { updatedAt: null, universeSize: null, dynamicUniverseCount: null, entries: [], seoEntries: [], foundCount: 0 };
+  } catch (error) {
+    // Rethrow rather than degrading to an empty result.
+    //
+    // This catch used to return `entries: []`, which made a failed Redis read,
+    // a thrown builder and a genuinely quiet screener completely
+    // indistinguishable -- all three rendered as "0 of 0 / No current results".
+    // That is what hid the no-store bailout, and then what let a failed build
+    // bake an empty page as the prerendered artefact.
+    //
+    // The narrow try/catches inside this function stay: company names and the
+    // extended fundamentals block really are optional decoration. The core
+    // payload is not.
+    console.error(`[pickers] getPickerData failed for ${config.href}:`, error);
+    throw error instanceof Error ? error : new Error("Unknown pickers error");
   }
 }
 
@@ -919,13 +951,7 @@ function isEarningsPickerPage(config: PickerResultConfig) {
   return config.href.includes("earnings");
 }
 
-export default async function PickerResultPage({
-  config,
-  searchParams,
-}: {
-  config: PickerResultConfig;
-  searchParams?: Promise<{ symbol?: string | string[] }>;
-}) {
+export default async function PickerResultPage({ config }: { config: PickerResultConfig }) {
   const { entries, seoEntries, updatedAt, universeSize, dynamicUniverseCount, foundCount } = await getPickerData(config);
   const initialVisibleCount = config.maxItems ?? 36;
 
@@ -982,14 +1008,6 @@ export default async function PickerResultPage({
   // working and cannot be misread the same way. See
   // claude/preset-pages-universe-blocker-2026-08-04.md.
 
-  // Supports deep links from the /pickers accordion like
-  // /all-time-high-breakout-stocks?symbol=MTB -- scrolls to and briefly
-  // highlights that specific card instead of just landing at the top of
-  // the list. See PickerHighlightScroller for the client-side scroll/pulse.
-  const resolvedSearchParams = searchParams ? await searchParams : undefined;
-  const rawHighlight = resolvedSearchParams?.symbol;
-  const highlightSymbol = cleanSymbol(Array.isArray(rawHighlight) ? rawHighlight[0] : rawHighlight);
-
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
@@ -1025,7 +1043,6 @@ export default async function PickerResultPage({
         .heroHowToLabel { display: block; font-size: 11px; font-weight: 950; letter-spacing: 0.1em; text-transform: uppercase; color: #93c5fd; }
         .heroHowToChevron { flex: 0 0 auto; margin-left: 10px; color: #93c5fd; font-size: 12px; transition: transform 160ms ease; }
         .heroHowTo p { margin: 7px 0 0; max-width: 860px; color: rgba(226,232,240,0.8); font-size: 14px; line-height: 1.65; }
-        .screenerTriggerWrap { margin: 20px 0 4px; }
         .resultsHeader { margin-top: 22px; }
         .resultsHeaderTop { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
         .resultsHeaderTop h2 { margin: 0; font-size: 26px; letter-spacing: -0.04em; }
@@ -1077,7 +1094,7 @@ export default async function PickerResultPage({
         .viewTab { padding: 7px 13px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.03); color: rgba(226,232,240,0.78); font-weight: 800; font-size: 12.5px; cursor: pointer; white-space: nowrap; font-family: inherit; }
         .viewTab:hover { border-color: rgba(96,165,250,0.45); color: #dbeafe; }
         .viewTab.active { background: rgba(59,130,246,0.16); border-color: rgba(96,165,250,0.6); color: #eff6ff; }
-        /* Mobile: the tab row collapses to a dropdown pill next to Chart View Mode */
+        /* Mobile: the tab row collapses to a dropdown pill in the controls row */
         .tabSelectWrap { display: none; flex: 0 0 auto; }
         .tabSelect { padding: 9px 15px; border-radius: 999px; border: 1px solid rgba(96,165,250,0.4); background: rgba(59,130,246,0.10); color: #dbeafe; font-weight: 800; font-size: 12.5px; font-family: inherit; cursor: pointer; }
         /* Grey horizontal scrollbar (matches /insights) + a synced top scrollbar */
@@ -1109,8 +1126,17 @@ export default async function PickerResultPage({
         .listTable tbody tr:last-child td { border-bottom: none; }
         .listSym { display: inline-flex; align-items: center; gap: 8px; font-weight: 900; font-size: 14px; color: #eaf2ff; text-decoration: none; }
         .listSym .dot { width: 8px; height: 8px; border-radius: 999px; flex: 0 0 auto; }
-        .listName { color: rgba(148,163,184,0.92); max-width: 230px; overflow: hidden; text-overflow: ellipsis; }
-        .listInd { color: rgba(148,163,184,0.86); max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
+        /* display:inline-block is load-bearing, not cosmetic. A <span> is an
+           inline box, and max-width / overflow / text-overflow do not apply to
+           inline non-replaced elements -- so the caps below were silently
+           ignored and a 133-character company name (PAC) stretched the cell,
+           the table, and every column to its right clean off the screen.
+           The td caps are the belt to that braces: they stop the COLUMN
+           growing even if a cell's content escapes the span. */
+        .listName { display: inline-block; vertical-align: middle; max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgba(148,163,184,0.92); }
+        .listInd { display: inline-block; vertical-align: middle; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgba(148,163,184,0.86); }
+        .listTable thead th.colName, .listTable tbody td.colName { max-width: 258px; }
+        .listTable thead th.colInd, .listTable tbody td.colInd { max-width: 218px; }
         .chgUp { color: #4ade80; font-weight: 800; }
         .chgDown { color: #f87171; font-weight: 800; }
         .muted { color: rgba(148,163,184,0.55); }
@@ -1124,40 +1150,14 @@ export default async function PickerResultPage({
         .listTable tbody tr.highlight { animation: pickerHighlightPulse 2.4s ease-out 1; scroll-margin-top: 90px; }
         @media (max-width: 980px) {
           .resultShell { grid-template-columns: 1fr; gap: 14px; }
-          /* The Select Screener bar sticks HERE, on the wrapper, not on
-             .screenerMobileBar inside it. A sticky element can only travel
-             within its own parent's box, and that wrapper is only as tall as
-             the button -- so sticking the button to it gave it nowhere to go
-             and it scrolled away immediately. This wrapper's parent is
-             .resultMain, which spans the whole page body, so there's real
-             travel available.
-
-             That's a separate rule from the overflow one below: an ancestor
-             that is a scroll container ALSO breaks sticky, which is why
-             .resultWrap uses overflow-x: clip rather than hidden. Both had to
-             be right; fixing only the overflow left this still not sticking.
-
-             top matches the site header's height so it docks flush underneath
-             (header is z-index 100, this is 60, the results table's sticky
-             cells are 1-3, and the Select Screener overlay is 70 so it still
-             covers this when open). */
-          .screenerTriggerWrap {
-            position: sticky;
-            top: 62px;
-            z-index: 60;
-            margin: 20px 0 4px;
-            padding: 8px 0;
-            /* Opaque, and deliberately NO backdrop-filter. backdrop-filter (like
-               transform and filter) makes an element a containing block for
-               position: fixed descendants -- and the Select Screener overlay is
-               rendered inside this wrapper. Blurring here silently reparented
-               that overlay, so "position: fixed; inset: 0" stopped meaning the
-               viewport and started meaning this bar: the sheet opened anchored
-               to wherever the button happened to be instead of filling the
-               screen. A flat colour gives the same visual result at this scroll
-               position, since the page gradient has faded to #06080d by then. */
-            background: #06080d;
-          }
+          /* NOTE: the mobile screener trigger no longer lives in its own sticky
+             bar here. It's now the first pill in the results controls row (see
+             .screenerControls in PickerResultsGrid.tsx), which is where the
+             sticky behaviour moved with it -- hung off the results <section> so
+             it has real travel, the same lesson the old .screenerTriggerWrap
+             taught. The overflow rule below still matters to it: an ancestor
+             that is a scroll container breaks position: sticky, which is why
+             .resultWrap uses overflow-x: clip rather than hidden. */
         }
         @media (max-width: 720px) {
           .pickerResultPage, .pickerResultPage * { box-sizing: border-box; }
@@ -1166,11 +1166,11 @@ export default async function PickerResultPage({
              compute as auto, which turns the element into a scroll container --
              and a scroll container silently breaks position: sticky for
              everything inside it. That's the exact bug that stopped the results
-             table's sticky header working, and it would stop the Select
-             Screener bar sticking here. "clip" is the carve-out: paired with
-             "visible" on the other axis neither value is coerced, and clip
-             never creates a scroll container. Same horizontal-overflow
-             protection, without the side effect. */
+             table's sticky header working, and it would stop the controls row
+             sticking too. "clip" is the carve-out: paired with "visible" on the
+             other axis neither value is coerced, and clip never creates a
+             scroll container. Same horizontal-overflow protection, without the
+             side effect. */
           .pickerResultPage { overflow-x: clip; }
           .resultWrap { width: 100%; padding: 14px 10px 44px; overflow-x: clip; }
           .hero { border-radius: 20px; padding: 15px; }
@@ -1194,19 +1194,40 @@ export default async function PickerResultPage({
           .reasonChip { font-size: 10.5px; padding: 4px 8px; }
           .note { min-height: 0; font-size: 13px; }
           .listTableWrap { max-height: 58vh; }
-          /* Header is shorter below this breakpoint (10px padding + 40px
-             hamburger + border, vs 12px + 38px logo above it). */
-          .screenerTriggerWrap { top: 60px; }
+          /* Tighter name/industry caps on phones -- the table already scrolls
+             sideways here, so every pixel the name column gives back is one
+             fewer swipe to reach the numbers. */
+          .listName { max-width: 150px; }
+          .listInd { max-width: 130px; }
+          .listTable thead th.colName, .listTable tbody td.colName { max-width: 178px; }
+          .listTable thead th.colInd, .listTable tbody td.colInd { max-width: 158px; }
         }
         @media (max-width: 390px) { .resultWrap { padding-left: 8px; padding-right: 8px; } .hero, .resultCard { padding: 12px; } }
       `}</style>
 
         <div className="resultWrap">
           <PickerFilterProvider initialFilters={initialFilters} initialPredicates={initialPredicates}>
+            {/* Feeds the live query string into the filter provider. It owns
+                the useSearchParams() call so the provider itself doesn't: the
+                provider wraps the whole results tree, so a boundary around it
+                would keep the grid out of the prerendered HTML. This renders
+                null, so its boundary contributes nothing. */}
+            <Suspense fallback={null}>
+              <PickerFilterUrlSync />
+            </Suspense>
+
             <div className="resultShell">
               <ScreenerNav currentHref={config.href} variant="sidebar" showFilters showSearch alwaysFilterMode={isFilterablePage} categoryValues={categoryValues} />
 
               <div className="resultMain">
+                {/* The hero's "Search a ticker" box has been removed. It answered
+                    "does this one stock meet any tracked condition", which is a
+                    single-stock question on a page whose whole job is ranking a
+                    list -- and it sat between the visitor and the results,
+                    costing a screenful on a phone. The site's other ticker
+                    searches (header, stock pages, earnings) already cover
+                    looking one name up. CustomScreenerSymbolSearch.tsx is left
+                    in the repo unreferenced in case it wants a home elsewhere. */}
                 <section className="hero">
                   <ScreenerHeroHeading
                     eyebrow={config.eyebrow}
@@ -1218,25 +1239,20 @@ export default async function PickerResultPage({
                   >
                     <HowToCollapse title={config.explainerTitle} body={config.explainerBody} />
                   </ScreenerHeroHeading>
-                  {config.kind === "allSymbols" ? (
-                    <div style={{ marginTop: 16 }}>
-                      <CustomScreenerSymbolSearch
-                        universe={entries.map((e) => ({
-                          symbol: e.symbol,
-                          companyName: e.companyName,
-                          reasons: e.reasons,
-                          score: e.score,
-                        }))}
-                      />
-                    </div>
-                  ) : null}
                 </section>
 
-                <div className="screenerTriggerWrap">
-                  <ScreenerNav currentHref={config.href} variant="trigger" showFilters showSearch alwaysFilterMode={isFilterablePage} categoryValues={categoryValues} />
-                </div>
-
-                {highlightSymbol ? <PickerHighlightScroller symbol={highlightSymbol} /> : null}
+                {/* Supports deep links from the /pickers accordion like
+                    /all-time-high-breakout-stocks?symbol=MTB -- scrolls to and
+                    briefly highlights that card instead of just landing at the
+                    top of the list. Rendered unconditionally and reading the
+                    param itself: awaiting searchParams here would opt this
+                    route back out of static rendering for a value only the
+                    browser ever uses. The Suspense boundary is mandatory --
+                    useSearchParams() without one bails the whole page out of
+                    static generation and fails the build. */}
+                <Suspense fallback={null}>
+                  <PickerHighlightScroller />
+                </Suspense>
 
                 <PickerResultsGrid
                   entries={entries}
@@ -1248,6 +1264,23 @@ export default async function PickerResultPage({
                   isEarnings={isEarningsPickerPage(config)}
                   hideUntilFiltered={config.kind === "allSymbols" && !config.showAllImmediately}
                   splitReasonsBySelection={isFilterablePage}
+                  // The mobile screener trigger, handed to the grid so it can
+                  // render as the first pill in the results controls row rather
+                  // than occupying its own full-width sticky bar above them. It
+                  // has to be constructed here, not in the grid: it's a
+                  // ScreenerNav instance and needs this page's currentHref,
+                  // filter mode and categoryValues, none of which the grid has.
+                  screenerControl={
+                    <ScreenerNav
+                      currentHref={config.href}
+                      variant="trigger"
+                      compact
+                      showFilters
+                      showSearch
+                      alwaysFilterMode={isFilterablePage}
+                      categoryValues={categoryValues}
+                    />
+                  }
                   // Collapse the qualifying-condition chips into a single
                   // dropdown on any page whose own condition is NOT one of the
                   // 25 tracked booleans.
