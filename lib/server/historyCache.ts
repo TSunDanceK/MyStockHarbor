@@ -349,8 +349,20 @@ const url = `https://financialmodelingprep.com/stable/historical-price-eod/full?
   fmpSymbol
 )}&apikey=${encodeURIComponent(apiKey)}`;
 
+  // `cache: "no-store"` here used to opt every route that reached this call out
+  // of static rendering entirely -- the same class of bailout @upstash/redis
+  // caused via its own no-store default (see lib/server/redisCacheMode.ts and
+  // claude/picker-pages-isr-2026-08-20.md). It only fires on a Redis miss, so it
+  // is intermittent and invisible: the route silently renders per request.
+  //
+  // Redis remains the real cache for this data, with its own market-aware TTL
+  // (getRedisHistoryTtlSeconds). This short Next revalidate is not a second
+  // cache tier of any consequence -- it exists so the call stops forcing the
+  // route dynamic, and it dedupes a burst of identical misses inside one render
+  // pass. It is deliberately far shorter than the Redis TTL, so Redis still
+  // decides when this data is stale.
   const res = await fetch(url, {
-    cache: "no-store",
+    next: { revalidate: 300 },
     headers: {
       accept: "application/json,text/plain;q=0.9,*/*;q=0.8",
     },
