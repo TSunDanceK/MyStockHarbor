@@ -214,6 +214,49 @@ Two pages that also live under `app/` and reference `PickerResultPage` are
 with their own `headers()` call that only mention `PickerResultPage` in a
 comment. 34 files match a naive grep; 32 are the real set.
 
+## The verification rules, numbered
+
+These are the rules the rest of this doc keeps referring to. Each one was
+learned by shipping something that looked right and was not.
+
+**Rule 1 — a build without Redis credentials proves nothing.** The client
+short-circuits and never issues the call that does the bailing, so the route
+table reports static whether or not it is. Check `redis_hits > 0` before
+believing any result.
+
+**Rule 2 — `next build` going green does not mean the routes are static.** Read
+the route table, per route.
+
+**Rule 3 — a route showing as cached does not mean the page has DATA.** Check
+the emitted HTML contains actual rows. "The HTML has structure" is not evidence
+the data arrived. Silent catches make a failed read and a quiet market render
+identically.
+
+**Rule 4 — a dynamic segment cannot be ISR without a `generateStaticParams`
+export, even after every dynamic API and no-store call is removed.** Measured on
+`/stock/[symbol]` (#280): the routes stayed `ƒ` until the export existed.
+Removing the blockers is necessary and not sufficient.
+- An EMPTY list is usually right: prerendering paths at build is both an
+  API-quota risk and the thing that bakes data-less artefacts.
+- A real list is right when prerendering is genuinely free — `/sector/[slug]` is
+  a redirect with no per-slug fetch, so its 11 slugs cost nothing and make the
+  redirect itself cacheable.
+
+**Corollary (from #281) — a guard that prevents a bad artefact must not do it
+with a 5xx on a route that receives enumerated junk input.** `/stock/ZZZZQQ`
+returned 500 because a no-data guard threw; with ~1,519 distinct request paths
+something is enumerating tickers, and sustained 5xx makes Google throttle crawl
+rate site-wide — undoing the ISR work. 200 + `noindex` is the tool.
+
+**Corollary (from this round) — prerendering a page whose data must be BUILT can
+fail the deploy outright.** The three `/plays` pages each exceeded Next's 60s
+per-page static-generation budget on three attempts against a cold cache and
+failed the build. Fixed with a `cacheOnly` option: prerender reads the cache and
+never triggers a scan. The trade is that a cold cache at deploy bakes a shell
+for one revalidate window — which is now logged (`cacheOnly miss`) rather than
+silent, because an invisible degradation is how three of these rounds went
+wrong.
+
 ## Bundler: not a variable (checked)
 
 Vercel builds this project with **Turbopack** (`"bundler": "turbopack"` in the

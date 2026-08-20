@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
 
 import { PRESET_UNIVERSE } from "./presetUniverse";
 import { readDynamicUniverse } from "./dynamicUniverseCache";
@@ -33,7 +34,7 @@ import { SECTORS, sectorSlugFromLabel } from "@/lib/sectors";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
 const SECTOR_INDEX_KEY = "msh:sector-index:v1";
