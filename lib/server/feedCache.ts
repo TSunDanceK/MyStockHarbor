@@ -157,9 +157,19 @@ export async function readFeed<T>(
  * reality (e.g. "IPOs that listed in the last 30 days"), so an empty one is a
  * free monitor for an upstream problem that did not surface as an error --
  * a parser drifting off FMP's field names, or a silently changed schema.
+ *
+ * Gated on source === "fresh" deliberately. The interesting event is the
+ * upstream READ returning nothing, which happens once per cache fill; a
+ * memory or Redis hit just replays that same answer. Without the gate a
+ * genuinely empty window logs on every page view for the life of the cache
+ * entry, which buries the signal in its own repetition and makes the log
+ * volume a function of traffic rather than of anything going wrong.
+ *
+ * `stale` is excluded for the same reason -- it is a replay of an older read,
+ * and its failure was already logged loudly by readFeed when it happened.
  */
 export function warnIfImplausiblyEmpty(feed: Feed<unknown>, key: string, why: string): void {
-  if (feed.ok && feed.items.length === 0) {
-    console.warn(`[feed:${key}] returned an EMPTY list from source=${feed.source}. ${why}`);
+  if (feed.ok && feed.source === "fresh" && feed.items.length === 0) {
+    console.warn(`[feed:${key}] upstream read returned an EMPTY list. ${why}`);
   }
 }
