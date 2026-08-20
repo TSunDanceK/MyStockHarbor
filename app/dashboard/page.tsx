@@ -8,6 +8,7 @@ import DashboardClient, {
   type NewsPayload,
   type StockEarningsSummary,
 } from "../components/DashboardClient";
+import StockPagesBottomNav from "@/app/components/StockPagesBottomNav";
 import { getDailyHistory } from "@/lib/server/historyCache";
 import { getBenchmarksData } from "@/lib/server/benchmarksBuilder";
 import { fetchQuoteSnapshot } from "@/lib/server/quoteData";
@@ -156,28 +157,39 @@ export default async function DashboardPage({ searchParams }: Props) {
   const { quote: initialQuote, name: initialSymbolName } = quoteAndName;
 
   return (
-    <Suspense
-      fallback={
-        <div style={{ padding: 40, fontFamily: "system-ui, Arial" }}>
-          Loading dashboard…
-        </div>
-      }
-    >
-      <DashboardClient
-        defaultSymbol={symbol}
-        initialQuote={initialQuote}
-        initialHistory={initialHistory}
-        initialSymbolName={initialSymbolName}
-        initialBenchmarks={benchmarks}
-        initialNews={news}
-        initialEarningsSummary={earningsSummary}
-        // Proves to /api/quote that this client rendered a real page. Empty
-        // string when QUOTE_TOKEN_SECRET is unset, in which case the client
-        // sends no header and behaviour is unchanged. Session-scoped, not
-        // symbol-scoped, precisely because chooseSymbol() swaps symbols here
-        // without a reload. See lib/server/quoteToken.ts.
-        pageToken={mintQuoteToken()}
-      />
-    </Suspense>
+    <>
+      <Suspense
+        fallback={
+          <div style={{ padding: 40, fontFamily: "system-ui, Arial" }}>
+            Loading dashboard…
+          </div>
+        }
+      >
+        <DashboardClient
+          defaultSymbol={symbol}
+          initialQuote={initialQuote}
+          initialHistory={initialHistory}
+          initialSymbolName={initialSymbolName}
+          initialBenchmarks={benchmarks}
+          initialNews={news}
+          initialEarningsSummary={earningsSummary}
+          // Proves to /api/quote that this client rendered a real page. Empty
+          // string when QUOTE_TOKEN_SECRET is unset, in which case the client
+          // sends no header and behaviour is unchanged. Session-scoped, not
+          // symbol-scoped, precisely because chooseSymbol() swaps symbols here
+          // without a reload. See lib/server/quoteToken.ts.
+          pageToken={mintQuoteToken()}
+        />
+      </Suspense>
+
+      {/* The fourth item of the bar the three /stock/[symbol] routes mount
+          from their shared layout. Deliberately OUTSIDE the Suspense
+          boundary: the fallback replaces everything inside it, and a nav bar
+          that vanishes while the dashboard is still resolving is worse than
+          one that is simply always there. It takes no props -- it reads the
+          ticker from msh_last_symbol, which DashboardClient writes on every
+          symbol change. */}
+      <StockPagesBottomNav />
+    </>
   );
 }
