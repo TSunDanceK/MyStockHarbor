@@ -13,6 +13,7 @@
 // module and stay perfectly consistent.
 
 import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
 import {
   detectDescendingTriangle,
   type DescendingTriangleResult,
@@ -140,7 +141,7 @@ let memo:
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
 const MEMORY_CACHE_MS = 60_000;

@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
 
 import { SECTORS, type SectorDef } from "@/lib/sectors";
 import { getSectorConstituents, getSectorIndex } from "./sectorUniverse";
@@ -32,7 +33,7 @@ import { getCompanyNameMap } from "./companyNames";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
 const PERFORMANCE_KEY = "msh:sector-performance:v1";

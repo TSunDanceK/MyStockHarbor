@@ -60,12 +60,13 @@
 // every real quote call still waits on.
 
 import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { reserveFmpCallSlot } from "./historyCache";
 import { readPricePoolBulk } from "./pricePool";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
 // Hard ceiling on real, per-symbol FMP /quote calls this feature is allowed
