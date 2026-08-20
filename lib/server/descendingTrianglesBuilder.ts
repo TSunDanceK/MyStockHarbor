@@ -1069,6 +1069,15 @@ export async function getDescendingTrianglesData(
   // seen anyway rather than to an error. The scan still happens -- via the API
   // route and the warm cron -- just never inside a build.
   if (opts.cacheOnly) {
+    // Say so out loud. A cacheOnly miss during prerender means the artefact for
+    // this page ships without data until the next revalidate, and a silent
+    // degradation is exactly the failure mode this project keeps re-learning
+    // (see the three verification rules in
+    // claude/picker-pages-isr-2026-08-20.md). In a build log this line is the
+    // signal that the cron had not warmed Redis before the deploy.
+    console.warn(
+      "[descending-triangles] cacheOnly miss -- prerendering without data; page will fill in on the next revalidate"
+    );
     return {
       data: {} as PlaysPayload,
       headers: { "X-Descending-Cache": "miss-cache-only" },
