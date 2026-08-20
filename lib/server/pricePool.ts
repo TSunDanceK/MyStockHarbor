@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 
 // A single Redis HASH holding a lightweight, rolling-fresh quote for every
@@ -59,7 +60,7 @@ import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
 const PRICE_POOL_KEY = "msh:price-pool:v1";

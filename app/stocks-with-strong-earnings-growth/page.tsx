@@ -3,6 +3,15 @@ import PickerResultPage, {
   type PickerResultConfig,
 } from "@/app/components/PickerResultPage";
 
+// ISR rather than force-dynamic. `force-dynamic` shipped Cache-Control:
+// no-store, so every visit and every crawl of this page paid a full
+// serverless render -- 24h of runtime logs showed cache=MISS on every
+// request, never a HIT or PRERENDER. 300s matches the underlying pickers
+// cache cycle (and what /pickers already runs at), and the payload is
+// cron-warmed into Redis on a shorter cycle than that, so nothing here goes
+// stale. See claude/picker-pages-isr-2026-08-20.md.
+export const revalidate = 300;
+
 // kind is "preset", not "section": ships the whole universe with
 // `strongEarningsGrowth` pre-ticked so Select Screener filters in place --
 // which on an earnings page is the point, since combining it with a technical
@@ -51,10 +60,6 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function StocksWithStrongEarningsGrowthPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ symbol?: string | string[] }>;
-}) {
-  return <PickerResultPage config={config} searchParams={searchParams} />;
+export default function StocksWithStrongEarningsGrowthPage() {
+  return <PickerResultPage config={config} />;
 }
