@@ -175,3 +175,34 @@ So: **`git fetch --unshallow` before believing any cross-branch comparison**,
 and check `git rev-parse --is-shallow-repository` first if a result looks
 suspiciously tidy. Both merge-base-dependent commands need real history; only
 one of them tells you when it does not have it.
+
+### Same shape, no git involved: inference about a source you cannot open
+
+The merge-tree trap generalises. A check that *cannot run* rarely reports that
+it could not run — it returns something that reads like an answer.
+
+In the same session, assessing PR #246 meant reasoning about the Claude Project
+copy of `BOTTLENECKS.md`, which a repo session cannot open. Every other claim in
+that assessment was verified against current `main` rather than taken from a PR
+body. For that one unreachable document, #246's own description was trusted
+instead — and it said the Project doc still carried a stale SK hynix example.
+
+The description was written 2026-08-15 and was stale that same day; the Project
+copy had already been corrected. The inference was merged into
+`claude/BOTTLENECKS.md` as a statement of fact, and was wrong twice over: the
+policy was already fixed, and the automation said to be "reintroducing the
+error" had been retired on 2026-08-17.
+
+Two rules out of it:
+
+- **The unreachable source is where inference is least safe and most tempting.**
+  It is also where nothing pushes back, so the guess gets written down more
+  firmly than the things that were actually checked. If a source cannot be
+  opened, say "not verified — could not read X", never a conclusion about X.
+- **A mirror can run *ahead* of its source, not just behind.** The Project copy
+  described #246's backfill as done before it was done, so the repo was the
+  stale copy. "Check the mirror against the source" assumes a lag direction that
+  does not always hold; a doc describing intended state as completed reads
+  identically to one describing reality.
+
+Written up in full in `claude/BOTTLENECKS.md`.
