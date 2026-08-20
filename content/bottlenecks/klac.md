@@ -111,14 +111,15 @@ customers:
       A historically large KLA customer for both its own leading-edge fabs
       and its newer Intel Foundry business, though not currently named at
       KLA's 10%-of-revenue disclosure threshold in the most recent 10-K.
-  - name: SK Hynix
-    ticker: null
+  - name: SK hynix
+    ticker: SKHY
     pct: 7
     blurb: >
       A significant buyer of KLA's process-control tools for memory-fab
       yield management, per analyst coverage, though not currently named
-      at KLA's 10%-of-revenue disclosure threshold. Trades primarily on
-      the Korea Exchange, with no proper US-listed ticker.
+      at KLA's 10%-of-revenue disclosure threshold. Its primary listing is
+      the Korea Exchange, but it has also traded on Nasdaq as an ADR since
+      July 2026.
   - name: Micron Technology
     ticker: MU
     pct: 5

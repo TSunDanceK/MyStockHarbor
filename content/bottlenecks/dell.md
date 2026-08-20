@@ -48,12 +48,14 @@ supplyChain:
     pct: 10
     blurb: >
       Supplies memory used across Dell's PC and server products.
-  - name: SK Hynix
-    ticker: null
+  - name: SK hynix
+    ticker: SKHY
     pct: 8
     blurb: >
-      A major memory supplier to Dell's server business. Trades primarily
-      on the Korea Exchange with no proper US-listed ticker.
+      A major memory supplier to Dell's server business, and the source of
+      the 321-layer QLC SSDs Dell began shipping in its AI PCs in 2026. Its
+      primary listing is the Korea Exchange, but it has also traded on
+      Nasdaq as an ADR since July 2026.
   - name: Samsung Electronics
     ticker: null
     pct: 8

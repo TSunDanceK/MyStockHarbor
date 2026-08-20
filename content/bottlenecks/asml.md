@@ -123,13 +123,15 @@ customers:
       DUV purchases from multiple domestic fabs ahead of tightening export
       controls. No individual Chinese foundry has a proper US-listed
       ticker.
-  - name: SK Hynix
-    ticker: null
+  - name: SK hynix
+    ticker: SKHY
     pct: 12
     blurb: >
       A major memory and HBM customer whose AI-driven DRAM expansion has
-      made it an increasingly important EUV and DUV buyer. Trades
-      primarily in Seoul, with no proper US-listed ticker.
+      made it an increasingly important EUV and DUV buyer — it disclosed a
+      roughly KRW 11.9 trillion order for around 30 EUV scanners in March
+      2026. Its primary listing is the Korea Exchange, but it has also
+      traded on Nasdaq as an ADR since July 2026.
   - name: Micron Technology
     ticker: MU
     pct: 8
