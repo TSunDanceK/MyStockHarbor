@@ -82,7 +82,13 @@ const indexBadgeStyle: React.CSSProperties = {
 };
 
 export default async function RecentlyAddedToIndexPage() {
-  const additions = await getRecentIndexAdditions();
+  const additionsFeed = await getRecentIndexAdditions();
+  const additions = additionsFeed.items;
+
+  // Same reasoning as /upcoming-ipos: on a failed read `additions` is [] and
+  // means nothing, so emit no ItemList at all rather than one asserting zero
+  // items on a page whose whole subject is that list.
+  const hasItemList = additionsFeed.ok;
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -110,17 +116,21 @@ export default async function RecentlyAddedToIndexPage() {
           url: "https://www.mystockharbor.com",
         },
         publisher: { "@id": "https://www.mystockharbor.com/#organization" },
-        mainEntity: { "@id": `${PAGE_URL}#itemlist` },
+        ...(hasItemList ? { mainEntity: { "@id": `${PAGE_URL}#itemlist` } } : {}),
       },
-      {
-        "@type": "ItemList",
-        "@id": `${PAGE_URL}#itemlist`,
-        itemListElement: additions.map((item, index) => ({
-          "@type": "ListItem",
-          position: index + 1,
-          name: `${item.company} (${item.symbol})`,
-        })),
-      },
+      ...(hasItemList
+        ? [
+            {
+              "@type": "ItemList",
+              "@id": `${PAGE_URL}#itemlist`,
+              itemListElement: additions.map((item, index) => ({
+                "@type": "ListItem",
+                position: index + 1,
+                name: `${item.company} (${item.symbol})`,
+              })),
+            },
+          ]
+        : []),
       {
         "@type": "BreadcrumbList",
         "@id": `${PAGE_URL}#breadcrumb`,
@@ -217,9 +227,19 @@ export default async function RecentlyAddedToIndexPage() {
           >
             {additions.length === 0 ? (
               <div style={{ padding: 32, textAlign: "center", opacity: 0.75, fontSize: 15 }}>
-                No index additions in the last 30 days. Check back soon —
-                this list updates as S&amp;P Dow Jones Indices and Nasdaq
-                announce reconstitution changes.
+                {additionsFeed.ok ? (
+                  <>
+                    No index additions in the last 30 days. Check back soon —
+                    this list updates as S&amp;P Dow Jones Indices and Nasdaq
+                    announce reconstitution changes.
+                  </>
+                ) : (
+                  <>
+                    We couldn&apos;t load index changes just now. This is a
+                    temporary problem on our side, not an empty list — please
+                    refresh in a moment.
+                  </>
+                )}
               </div>
             ) : (
               <div style={{ overflowX: "auto" }}>

@@ -49,10 +49,20 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function UpcomingIposPage() {
-  const [ipos, recentIpos] = await Promise.all([
+  const [upcomingFeed, recentFeed] = await Promise.all([
     getUpcomingConfirmedIpos(),
     getRecentIpos(),
   ]);
+
+  const ipos = upcomingFeed.items;
+  const recentIpos = recentFeed.items;
+
+  // Only claim an ItemList when the read actually succeeded. On a failed read
+  // `ipos` is [] and means nothing, and emitting an ItemList with zero items
+  // asserts to Google that this page's entire subject does not exist -- a
+  // stronger negative signal than the visible copy, on a page whose ranking
+  // case IS the list. Asserting nothing is the correct degradation.
+  const hasItemList = upcomingFeed.ok;
 
   const ipoJsonLd = {
     "@context": "https://schema.org",
@@ -80,17 +90,22 @@ export default async function UpcomingIposPage() {
           url: "https://www.mystockharbor.com",
         },
         publisher: { "@id": "https://www.mystockharbor.com/#organization" },
-        mainEntity: { "@id": `${PAGE_URL}#itemlist` },
+        // Omitted alongside the ItemList itself, so this never dangles.
+        ...(hasItemList ? { mainEntity: { "@id": `${PAGE_URL}#itemlist` } } : {}),
       },
-      {
-        "@type": "ItemList",
-        "@id": `${PAGE_URL}#itemlist`,
-        itemListElement: ipos.map((ipo, index) => ({
-          "@type": "ListItem",
-          position: index + 1,
-          name: `${ipo.company} (${ipo.symbol})`,
-        })),
-      },
+      ...(hasItemList
+        ? [
+            {
+              "@type": "ItemList",
+              "@id": `${PAGE_URL}#itemlist`,
+              itemListElement: ipos.map((ipo, index) => ({
+                "@type": "ListItem",
+                position: index + 1,
+                name: `${ipo.company} (${ipo.symbol})`,
+              })),
+            },
+          ]
+        : []),
       {
         "@type": "BreadcrumbList",
         "@id": `${PAGE_URL}#breadcrumb`,
@@ -190,7 +205,11 @@ export default async function UpcomingIposPage() {
             <IpoList
               ipos={ipos}
               dateColumnLabel="IPO Date"
-              emptyMessage="No confirmed IPOs are currently scheduled in the next 30 days. Check back soon — this list updates as new deals are priced."
+              emptyMessage={
+                upcomingFeed.ok
+                  ? "No confirmed IPOs are currently scheduled in the next 30 days. Check back soon — this list updates as new deals are priced."
+                  : "We couldn't load the IPO calendar just now. This is a temporary problem on our side, not an empty calendar — please refresh in a moment."
+              }
             />
           </section>
 
@@ -235,7 +254,11 @@ export default async function UpcomingIposPage() {
             <IpoList
               ipos={recentIpos}
               dateColumnLabel="Listing Date"
-              emptyMessage="No confirmed IPOs listed in the last 30 days."
+              emptyMessage={
+                recentFeed.ok
+                  ? "No confirmed IPOs listed in the last 30 days."
+                  : "We couldn't load recent IPO listings just now. This is a temporary problem on our side — please refresh in a moment."
+              }
             />
           </section>
 
