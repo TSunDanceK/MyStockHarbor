@@ -368,6 +368,38 @@ export default async function StockPage({ params }: Props) {
     (p) => p.date && Number.isFinite(p.close)
   );
 
+  // Refuse to cache a render that has nothing in it.
+  //
+  // fetchQuote() returns an all-null `empty` quote when FMP fails, and
+  // getDailyHistory() is .catch(() => []) above, so a total data failure used to
+  // render a normal-looking page with a null price, no company name and an
+  // "Unavailable" state -- indistinguishable from a real render, and green in
+  // the build. That is survivable while this route renders per request. It is
+  // not survivable now that it is cached: the artefact is what every subsequent
+  // visitor and crawler receives for the next 15 minutes, and most traffic here
+  // is prefetch and crawlers rather than readers.
+  //
+  // Throwing is what keeps it out of the cache. Next does not cache a render
+  // that throws, and on ISR regeneration it keeps serving the last good copy, so
+  // a transient FMP or Redis failure can no longer replace a good page with an
+  // empty one. Same reasoning as the payload guard in PickerResultPage; see
+  // claude/picker-pages-isr-2026-08-20.md.
+  //
+  // Deliberately requires BOTH to be missing. A symbol with a price but no
+  // history (a fresh listing) and one with history but a momentarily unavailable
+  // quote are both real pages worth serving; nothing at all is not.
+  //
+  // NOTE: this throws rather than notFound() because it cannot tell a genuinely
+  // unknown ticker from a transient outage, and cached 404s on real symbols
+  // would be far worse than a retry. Giving unknown symbols a real 404 needs a
+  // symbol-directory check (searchSymbols is already imported here) and is its
+  // own change.
+  if (!points.length && quote.price == null) {
+    throw new Error(
+      `[stock] Refusing to render /stock/${upper}: no history points and no quote price`
+    );
+  }
+
   // Compute indicators once on the server; pass as seed so the client
   // renders real content immediately rather than showing "Loading…".
   const seed: IndicatorSeed = computeIndicatorSeed(
