@@ -1,13 +1,26 @@
 // app/learn/[slug]/page.tsx
-export const dynamic = "force-dynamic";
-
 import Link from "next/link";
 import type { LessonImage } from "../lessons";
-import { getLesson, getNextLesson } from "../all-lessons";
+import { ALL_LESSONS, getLesson, getNextLesson } from "../all-lessons";
 import LearnShell from "../LearnShell";
 
+// Lesson content is a static TS module (ALL_LESSONS) -- no fetch, no Redis, no
+// per-request input. Nothing here needed the server per request; `force-dynamic`
+// was re-rendering hand-written prose on every visit and every crawl.
+export const revalidate = 86400;
+
+// Rule 4's "prerendering is genuinely free" case, like /sector/[slug]: the slug
+// set is finite, known at build time and costs zero API calls to enumerate, so
+// a REAL list is correct here. (The usual guidance -- an empty list -- exists to
+// avoid build-time API storms and data-less artefacts; neither applies to a
+// module import.) Without this export the routes stay `f` however much else is
+// removed, measured on /stock/[symbol] in #280.
+export function generateStaticParams() {
+  return ALL_LESSONS.map((lesson) => ({ slug: lesson.slug }));
+}
+
 type Props = {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 };
 
 function TipBox(props: { title: string; children: React.ReactNode }) {
@@ -225,9 +238,7 @@ function relatedSetupCard(): React.CSSProperties {
 }
 
 export default async function LessonPage({ params }: Props) {
-  // Defensive: some builds pass params strangely (or as a Promise)
-  const resolvedParams: any = await Promise.resolve(params as any);
-  const slug = String(resolvedParams?.slug ?? "").trim();
+  const { slug } = await params;
 
   const lesson = getLesson(slug);
   const nextLesson = getNextLesson(slug);
