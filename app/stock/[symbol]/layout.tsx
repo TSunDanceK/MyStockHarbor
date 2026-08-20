@@ -73,3 +73,37 @@ export default function StockSymbolLayout({ children }: { children: ReactNode })
 // showing as cached does not mean the HTML has DATA in it. Both rules were
 // learned the hard way; see claude/picker-pages-isr-2026-08-20.md.
 export const revalidate = 900;
+
+// Returns no params ON PURPOSE. Without a generateStaticParams export at all,
+// a dynamic segment cannot be ISR at all -- measured, not assumed: with the
+// force-dynamic exports and the historyCache no-store already gone, all three
+// routes still built as `f` (server-rendered on demand) until this existed.
+// With it they build as `●` at 15m, and `dynamicParams` (true by default) means
+// every symbol still resolves.
+//
+// Returning an EMPTY list rather than a symbol list is the whole point, for two
+// reasons:
+//
+// 1. Prerendering a list would be a build-time FMP storm. Each path calls
+//    getDailyHistory(), which on a Redis miss hits FMP, against a 300/min
+//    ceiling with a documented history of stage starvation. This is exactly why
+//    app/insights/[slug]/page.tsx deliberately REMOVED its generateStaticParams
+//    -- read the comment there before adding a list here. Three routes per
+//    symbol multiplies it by three.
+//
+// 2. A build-time render is the one render that happens with no live request
+//    behind it, and it is what bakes a bad artefact. Verified: a two-symbol
+//    probe against a cold cache emitted /stock/AAPL.html carrying
+//    `initialQuote: {price: null}`, no company name and an "Unavailable" state
+//    -- a green build producing a data-less page, the same failure the screener
+//    pages shipped (claude/picker-pages-isr-2026-08-20.md). With no params, the
+//    HTML that gets cached is produced by a real request at runtime, when Redis
+//    is warm and FMP is reachable, and the guard in page.tsx refuses to cache it
+//    if it is not.
+//
+// Net effect for a crawler is identical -- first request generates, everyone
+// after that gets cached HTML for 15 minutes -- with no build cost and no
+// empty artefact.
+export function generateStaticParams() {
+  return [];
+}
