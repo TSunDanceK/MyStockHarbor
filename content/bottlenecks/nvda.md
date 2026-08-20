@@ -30,13 +30,15 @@ supplyChain:
       packaging used to combine GPU dies with HBM memory. No other foundry
       currently matches TSMC's capacity or yields at this node, making it
       NVIDIA's single largest manufacturing concentration risk.
-  - name: SK Hynix
+  - name: SK hynix
+    ticker: SKHY
     pct: 14
     blurb: >
       A leading supplier of the HBM (high-bandwidth memory) stacked onto
-      NVIDIA's data-center GPUs, and historically NVIDIA's primary HBM3e
-      source before Samsung and Micron ramped competing supply. Trades
-      primarily on the Korea Exchange with no proper US-listed ticker.
+      NVIDIA's data-center GPUs, and historically NVIDIA's primary HBM3E
+      source before Samsung and Micron ramped competing supply. Its primary
+      listing is the Korea Exchange, but it has also traded on Nasdaq as an
+      ADR since July 2026.
   - name: Micron Technology
     ticker: MU
     pct: 11

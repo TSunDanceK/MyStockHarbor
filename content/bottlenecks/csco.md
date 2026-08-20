@@ -100,14 +100,14 @@ supplyChain:
       Supplies memory chips and other components used across Cisco's
       hardware lines. Samsung trades on the Korea Exchange and only as a
       thinly traded US OTC ADR, with no proper US-listed ticker.
-  - name: SK Hynix
-    ticker: null
+  - name: SK hynix
+    ticker: SKHY
     pct: 5
     blurb: >
       Another major memory supplier for Cisco's hardware, subject to the
-      same cyclical DRAM/NAND pricing swings as other chip customers. SK
-      Hynix trades on the Korea Exchange and only as a thin OTC ADR in the
-      US, with no proper US-listed ticker.
+      same cyclical DRAM/NAND pricing swings as other chip customers. Its
+      primary listing is the Korea Exchange, but it has also traded on
+      Nasdaq as an ADR since July 2026.
 customers:
   - name: World Wide Technology
     ticker: null

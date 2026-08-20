@@ -55,12 +55,13 @@ supplyChain:
     pct: 8
     blurb: >
       Supplies memory used across Meta's AI training infrastructure.
-  - name: SK Hynix
-    ticker: null
+  - name: SK hynix
+    ticker: SKHY
     pct: 8
     blurb: >
-      A major memory and HBM supplier to Meta's AI infrastructure. Trades
-      primarily on the Korea Exchange with no proper US-listed ticker.
+      A major memory and HBM supplier to Meta's AI infrastructure. Its
+      primary listing is the Korea Exchange, but it has also traded on
+      Nasdaq as an ADR since July 2026.
   - name: Vertiv Holdings
     ticker: VRT
     pct: 5
