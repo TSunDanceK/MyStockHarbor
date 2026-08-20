@@ -978,6 +978,8 @@ async function buildPlaysPayload(
 export type BullFlagsDataOpts = {
   forceRefresh?: boolean;
   debugSymbol?: string | null;
+  // Set by the page during prerender. See the cacheOnly branch below.
+  cacheOnly?: boolean;
 };
 
 export type BullFlagsDataResult = {
@@ -1016,6 +1018,27 @@ export async function getBullFlagsData(
       headers: {
         "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
       },
+    };
+  }
+
+  // Read the cache but never trigger a build.
+  //
+  // These pages are prerendered now, and a full scan does not fit inside Next's
+  // 60s per-page static-generation budget: measured, all three timed out on
+  // three attempts each and FAILED THE BUILD outright against a cold cache.
+  // Leaving that in place would mean a deploy that breaks whenever the cron has
+  // not warmed Redis, which is a far worse failure than a stale page.
+  //
+  // Returning 503 rather than throwing is deliberate: the page already maps
+  // `status >= 400` to a null payload, and the client fetches /api/plays on
+  // mount regardless, so a miss degrades to the same shell a visitor would have
+  // seen anyway rather than to an error. The scan still happens -- via the API
+  // route and the warm cron -- just never inside a build.
+  if (opts.cacheOnly) {
+    return {
+      data: {} as PlaysPayload,
+      headers: { "X-Bull-Flags-Cache": "miss-cache-only" },
+      status: 503,
     };
   }
 
