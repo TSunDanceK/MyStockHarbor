@@ -67,7 +67,7 @@ supplyChain:
     ticker: null
     pct: 6
     blurb: >
-      Another major merchant DRAM supplier alongside SK Hynix and Micron.
+      Another major merchant DRAM supplier alongside SK hynix and Micron.
       Trades primarily on the Korea Exchange, with no proper US-listed
       ticker.
   - name: Rare-earth magnet & materials supply chain

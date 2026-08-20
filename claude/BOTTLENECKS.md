@@ -16,3 +16,35 @@ Key facts as of 2026-07-09:
 - Full schema, ticker-availability policy, note-override pattern, and
   step-by-step build process are documented in the Claude Project copy of
   this file — read that for the authoritative, up-to-date version.
+---
+
+## Correction: SK hynix is Nasdaq-listed — use `ticker: SKHY`, not `ticker: null`
+
+**Added 2026-08-20.** The ticker-availability policy in the Claude Project copy
+of this doc still cites SK hynix as an example of the "OTC-only pink sheet, so
+use `ticker: null`" case. That is now factually wrong:
+
+- SK hynix listed ADRs on the **Nasdaq Global Select Market on 10 July 2026**
+  (when-issued `SKHYV`; regular-way **`SKHY`** from 13 July).
+- ~$848bn market cap, ~20.7m ADS/day average volume, 1 ADS = 1/10 ordinary
+  share. Korea Exchange `000660` remains the primary listing.
+- It therefore meets the policy's own bar for "a straightforward NYSE/Nasdaq
+  ADR that trades with real volume" and must be written as `ticker: SKHY`.
+
+**Spelling matters as much as the ticker.** `getBottleneckCompanyCounts()` keys
+by company **name**, so `SK Hynix` and `SK hynix` count as two separate
+companies and silently undercount both on the Bottleneck Leaderboard. The
+company's own styling is lowercase-h: always write **`SK hynix`**.
+
+### This mirror cannot stop the automation on its own
+
+This file is a read-only mirror. The daily bottlenecks task runs from its own
+stored trigger prompt plus the Claude Project copy of this doc — neither of
+which updates from this repo. Until **both** of those are corrected, the daily
+automation will keep reintroducing `ticker: null` and `SK Hynix` on newly
+built pages. Per the root `CLAUDE.md` lesson, three things must be kept in
+sync, and only the trigger's stored prompt actually runs:
+
+1. the bottlenecks trigger's stored prompt (the actual mechanism),
+2. the Claude Project copy of this doc,
+3. this repo mirror  ← *only this one is fixed by the PR that added this note.*
