@@ -102,13 +102,14 @@ customers:
       buying etch and deposition systems to support its leading-edge
       logic and foundry capacity expansions.
   - name: SK hynix
-    ticker: null
+    ticker: SKHY
     pct: 8
     blurb: >
       SK hynix was named among Lam's most significant customers in Lam's
       FY2020-2022 filings and remains a major buyer of etch and deposition
-      tools for its DRAM and HBM/NAND production. SK hynix trades primarily
-      on the Korea Exchange, with no proper US-listed ticker.
+      tools for its DRAM and HBM/NAND production. Its primary listing is
+      the Korea Exchange, but it has also traded on Nasdaq as an ADR since
+      July 2026.
   - name: Micron Technology
     ticker: MU
     pct: 7
