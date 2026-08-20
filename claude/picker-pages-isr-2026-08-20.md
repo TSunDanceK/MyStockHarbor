@@ -1,8 +1,14 @@
 # Screener pages: force-dynamic → ISR (2026-08-20)
 
-Branch `perf/picker-pages-isr`. **Partially pushed.** `PickerHighlightScroller.tsx`
-is in. The 32 page files and `PickerResultPage.tsx` are written, verified and
-recorded here, but not committed — see "Why this is a patch" below.
+Branch `perf/picker-pages-isr`. **Landed and verified against a real build.**
+All 32 page files, `PickerResultPage.tsx`, `PickerHighlightScroller.tsx` and
+`PickerFilterContext.tsx` are in. All 32 routes now build as `○ ... 5m`.
+
+Two things in this doc were written before anything had been through `next
+build` — only `ts.transpileModule` — and the build corrected both. See
+"What the build actually found" below: **blocker 4 (Redis) is disproven**, and
+a fifth blocker the doc never anticipated is what was actually holding the
+routes dynamic.
 
 ## The problem, measured
 
@@ -38,11 +44,37 @@ scrolls/pulses a card in a `useEffect`. It never needed the server.
 nothing. The origin existed solely so `pickersBuilder.fetchMarket()` could HTTP
 self-fetch `${origin}/api/market`.
 
-**4. Redis — still unknown.** `@upstash/redis` issues its REST calls with
-`cache: "no-store"`, which can opt a route out on its own. Untestable on these
-pages until 1–3 are gone. **`/pickers` is not evidence either way** — it is
-static because it is a static shell that fetches client-side, not because its
-Redis reads are harmless. That was an early wrong call, corrected here.
+**4. Redis — RESOLVED, it was never a blocker.** The worry was that
+`@upstash/redis` issues its REST calls with `cache: "no-store"`, which can opt a
+route out on its own. With 1–3 removed, all 32 routes prerender as `○ 5m` while
+still reading Redis through `getPickersData`. The no-store on those REST calls
+does not propagate to the route's own rendering mode. No `unstable_cache`
+wrapping is needed, and the contingency plan at the bottom of this doc is moot.
+
+**5. `useSearchParams()` in `PickerFilterProvider` — the real remaining
+blocker, and the one this doc missed.** `PickerFilterContext.tsx` called
+`useSearchParams()` to seed the filter selection from the URL. Removing 1–3
+does not help while that call stands: the build does not merely fall back to
+`ƒ`, it **fails outright** with "useSearchParams() should be wrapped in a
+suspense boundary". Only found because this was the first time the change was
+put through `next build` rather than a syntax check.
+
+The obvious fix — wrapping `<PickerFilterProvider>` in `<Suspense>` — is
+**wrong, and quietly so**. That provider wraps the entire results tree, so the
+boundary renders its fallback into the prerendered HTML and the results only
+appear after hydration. The build would go green and every one of these pages
+would ship an empty shell to crawlers, which is the precise opposite of what
+this work is for.
+
+What was done instead: the hook moved into `PickerFilterUrlSync`, a
+null-rendering child that reports the query string up to the provider through
+its own context, and *that* is what sits inside `<Suspense fallback={null}>` —
+the same shape `PickerHighlightScroller` already uses. The boundary contains
+nothing, so nothing leaves the prerendered HTML, and because it is still the
+real hook the provider stays reactive to back/forward, shared links, and a nav
+link back to the clean path while it stays mounted (the case the URL -> state
+effect exists for; a mount-only `window.location.search` read would have
+silently broken it).
 
 ## What was changed
 
@@ -58,9 +90,17 @@ Redis reads are harmless. That was an early wrong call, corrected here.
 - **`PickerResultPage.tsx`** — `headers()`, `getOriginFromHeaders()`, the
   `next/headers` import and the whole `searchParams` thread-through removed;
   scroller rendered unconditionally inside `<Suspense fallback={null}>`; origin
-  replaced with a `SITE_ORIGIN` constant.
+  replaced with a `SITE_ORIGIN` constant; `<PickerFilterUrlSync />` rendered in
+  its own `<Suspense fallback={null}>` just inside `PickerFilterProvider`.
+- **`PickerFilterContext.tsx`** *(not in the original plan — see blocker 5)* —
+  the provider no longer calls `useSearchParams()`. It holds the query string
+  as state, seeded `""` so the prerendered HTML is query-independent, and the
+  new exported `PickerFilterUrlSync` owns the hook and reports the value in
+  through a second, setter-only context.
 
-All 35 files: `ts.transpileModule` clean, 0 diagnostics.
+All 36 files: `tsc --noEmit` clean, `next build` green, and `eslint` reports no
+new problems (the one `set-state-in-effect` error in `PickerFilterContext.tsx`
+is pre-existing — confirmed by running eslint on the base commit).
 
 **Gotcha worth keeping:** two of the 32 pages
 (`stocks-with-positive-last-earnings`, `stocks-with-strong-earnings-growth`) use
@@ -97,7 +137,7 @@ rankings and the universe falls back to `readDynamicUniverse()` +
 
 Deferred because it is a two-line change to a **119KB** file. Its own PR.
 
-## Why this is a patch
+## Why this was held back as a patch (historical)
 
 Same reason as `claude/patches/picker-controls-tab-bar-2026-08-19.md`: the
 GitHub connector has no patch API, so editing ~15 lines of a 73KB file means
@@ -105,18 +145,48 @@ retransmitting all 73KB, and a truncated upload of the component that renders
 all 32 screener pages is worse than an unshipped one. The change is finished,
 not unfinished — this is a transport limit.
 
-With a local checkout: `git apply claude/patches/picker-result-page-isr-2026-08-20.patch`
+Resolved: this landed from a local checkout, where the file could be edited in
+place. The referenced patch file was never committed and does not exist in the
+repo — the changes above are the record.
 
-## Verification when it lands
+## What the build actually found
 
-Read the build output, not the page. All 32 should flip:
+`npm run build`, all 32 target routes:
 
 ```
-○ /oversold-stocks-today                  5m
+○ /oversold-stocks-today                  5m      1y
+○ /overbought-stocks-today                5m      1y
+...                                       (32/32)
 ```
 
-If they stay `ƒ`, blocker 4 (Redis) is real and the next step is wrapping the
-Redis-backed reads in `unstable_cache` — the pattern `lib/youtube.ts` uses.
+Confirmed on the emitted HTML (`.next/server/app/oversold-stocks-today.html`),
+not just the route table — the point being that `○` alone would not have caught
+the empty-shell failure mode above:
+
+- JSON-LD, hero, `ScreenerNav` and the results grid are all present in the
+  prerendered HTML. The Suspense boundary did not swallow the tree.
+- The grid renders its empty state (`"No oversold stocks are currently
+  available..."`) because the build sandbox has no `UPSTASH_REDIS_REST_*`
+  credentials, so the payload is empty. That is an environment artifact — the
+  grid server-rendered, it just had no rows. On Vercel the cards populate.
+
+Two pages that also live under `app/` and reference `PickerResultPage` are
+**not** part of this set and stay `ƒ` by design:
+`bullish-divergence-stocks` and `bearish-divergence-stocks` are bespoke pages
+with their own `headers()` call that only mention `PickerResultPage` in a
+comment. 34 files match a naive grep; 32 are the real set.
+
+## One behaviour change, inherent to caching these routes
+
+A shared filtered link (`?filters=...`) used to server-render its own filtered
+set. Under ISR it cannot: one cached HTML is served for every query string. It
+now seeds the page's own preset and applies the URL's filters immediately after
+hydration, via the existing URL -> state effect.
+
+This is forced by the caching, not a preference. The SEO invariant is unchanged
+and in fact now unconditional — a crawler on the clean path gets exactly this
+page's own condition in the HTML — and every condition page's canonical was
+already pinned to the bare path, so filtered URLs were never indexed separately.
 
 ## Safety review (unchanged by any of this)
 
