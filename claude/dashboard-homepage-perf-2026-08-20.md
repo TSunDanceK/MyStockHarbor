@@ -152,7 +152,7 @@ Sequencing follows: do the quote refresh before or with A-soft, never after.
 
 ---
 
-## Item 3 — the seeding discard, and Option A-soft
+## Item 3 — the seeding discard
 
 ### Observed live
 
@@ -163,41 +163,77 @@ Cause is `app/components/DashboardClient.tsx:340` — initial state reads
 `localStorage.msh_last_symbol` and falls back to `defaultSymbol` only when
 absent. A returning visitor whose stored symbol differs from the server's
 therefore discards the entire server render. `seedMatchesSymbol` (~:344–350)
-gates every seeded value (`symbolName`, `quote`, `historyAll`) on the two
-agreeing.
+gates every seeded value on the two agreeing.
 
-### Option A-soft — the chosen design
+### Option A-soft — PROPOSED, BUILT, REJECTED (2026-08-20)
 
-- Server **always** renders `defaultSymbol` (SPY, or `?symbol=` when present).
-- Client **stops overriding** from localStorage.
-- On mount, read `msh_last_symbol`; if set and different from what rendered,
-  show a small dismissible chip — **"Resume CAG →"** — calling the **existing**
-  `chooseSymbol()` path. No reload, no new machinery.
+Server always renders `defaultSymbol`; client stops overriding; a dismissible
+"Resume CAG →" chip offers the remembered symbol.
 
-Fixes three things at once:
+**Rejected on product grounds, and the rejection is final.** `/dashboard` should
+stay on the symbol the visitor was last looking at. One click to resume is one
+click too many for the primary path. Built and fully tested in #294, closed
+unmerged — do not re-propose it.
 
-1. the seed always matches, so nothing is discarded;
-2. the URL always wins, so the deep-link flash goes;
-3. bare `/dashboard` renders identically for everyone — **which keeps the ISR
-   door open**, the exact property the cookie-based alternatives give up
-   permanently.
+The rejection also settles a trade-off that had been treated as open: keeping
+the memory means **`/dashboard` can never be ISR**, because the rendered symbol
+is per-visitor. Every later option should assume that, not argue against it.
 
-**Cost:** one click to resume instead of zero. In exchange an explicit, visible
-affordance replaces invisible state — today a returning visitor has no way to
-tell why they landed on CAG.
+### THE LANDMINE — read this before touching the seeding again
 
-**Decide before building:**
-- chip persists vs dismisses per session;
-- where it sits, so client-only rendering does not shift layout;
-- whether `?symbol=` suppresses it.
+`app/components/DashboardClient.tsx:499` persists the symbol on mount:
 
-### The deep-link flash (independent correctness bug)
+```js
+useEffect(() => { ... window.localStorage.setItem("msh_last_symbol", symbol...) }, [symbol, assetType]);
+```
+
+**That write is only safe because `symbol` is initialised FROM localStorage.**
+A passive mount reads CAG and writes CAG — a no-op. The safety is a coincidence
+of the two lines agreeing, and nothing states it.
+
+The moment `symbol` starts from anything else — a server default, a cookie, a
+URL param — the same line **overwrites the remembered symbol with whatever
+rendered**, on the very first visit, destroying the memory it exists to keep.
+
+Found the hard way in #294: under A-soft the Resume chip appeared exactly once
+and never again, because visit 1 wiped CAG and wrote SPY. It passed every
+single-session test. **Only an assertion that the chip returned in a NEW browser
+session exposed it.**
+
+The fix, if seeding changes again: gate the write on an explicit choice
+(`chooseSymbol`, or a `?symbol=` deep link) rather than on mount. Keep
+`setLastStockSymbol` unconditional — it drives the stock/crypto toggle within a
+session and is not persisted.
+
+> Generalised: **when two pieces of state are kept consistent only because one
+> is seeded from the other, changing the seed silently breaks the write.** The
+> invariant is real but unwritten, so nothing fails loudly when it goes.
+
+### `msh_last_symbol` has THREE writers, not one
+
+Any scheme that mirrors or relocates this value has to cover all of them:
+
+| Writer | When |
+|---|---|
+| `DashboardClient.tsx:499` | on every symbol change on `/dashboard` |
+| `SiteHeader.tsx:91` | when the pathname is a `/stock/SYMBOL` page |
+| `StockPagesBottomNav.tsx:130` | when the pathname is a `/stock/SYMBOL` page |
+
+Read-only consumers: `MobileHomePage.tsx:113`, `SiteHeader.tsx:95`/`:103`,
+`StockPagesBottomNav.tsx:119`. Missing a writer does not break loudly — it just
+makes the value stale in one path, which is the hardest kind of bug to notice.
+
+### The deep-link flash — a correctness bug, independent of any seeding option
 
 `app/components/DashboardClient.tsx:439` — the `?symbol=` effect runs **after**
 mount, so initial state at `:340` is localStorage **regardless of the URL**.
-`/pickers` → `/dashboard?symbol=NVDA` shows CAG first, then swaps. This is a
-correctness bug on its own, separate from the perf story, and Option A-soft
-fixes it as a side effect.
+`/pickers` → `/dashboard?symbol=NVDA` shows the stored symbol first, then swaps.
+
+This is wrong under every option, including keeping the memory: an explicit
+symbol in the URL is a more specific instruction than a remembered one, and it
+currently loses. Fix by consulting the URL **before** localStorage in the
+initial state rather than waiting for a post-mount effect. No change to the
+memory behaviour, small and standalone.
 
 ---
 
