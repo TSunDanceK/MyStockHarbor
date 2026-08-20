@@ -15,10 +15,11 @@
 // claude/popular-searches-universe-spec-2026-07-23.md.
 
 import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
 const DAILY_PREFIX = "msh:search-demand:daily:v1:"; // + YYYYMMDD -> ZSET symbol->count

@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 
 // Cron-warmed, Redis-cached "extended stock data" for the site-wide rolling
@@ -28,7 +29,7 @@ import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
 const KEY_PREFIX = "msh:stockdata:v1:";
