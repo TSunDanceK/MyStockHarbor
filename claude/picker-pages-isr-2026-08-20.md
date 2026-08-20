@@ -4,11 +4,14 @@ Branch `perf/picker-pages-isr`. **Landed and verified against a real build.**
 All 32 page files, `PickerResultPage.tsx`, `PickerHighlightScroller.tsx` and
 `PickerFilterContext.tsx` are in. All 32 routes now build as `○ ... 5m`.
 
-Two things in this doc were written before anything had been through `next
-build` — only `ts.transpileModule` — and the build corrected both. See
-"What the build actually found" below: **blocker 4 (Redis) is disproven**, and
-a fifth blocker the doc never anticipated is what was actually holding the
-routes dynamic.
+Blockers 1–3 were necessary but not sufficient. **Blocker 4 (Redis) is real**
+— it was the last thing holding the routes dynamic — and there was also a fifth
+blocker (`useSearchParams()` in `PickerFilterProvider`) that this doc never
+anticipated. Both are written up below.
+
+**Read the verification rules before trusting any build result here:** a build
+without Redis credentials silently proves nothing, and `next build` going green
+does not mean the routes are static. See blocker 4.
 
 ## The problem, measured
 
@@ -44,12 +47,43 @@ scrolls/pulses a card in a `useEffect`. It never needed the server.
 nothing. The origin existed solely so `pickersBuilder.fetchMarket()` could HTTP
 self-fetch `${origin}/api/market`.
 
-**4. Redis — RESOLVED, it was never a blocker.** The worry was that
-`@upstash/redis` issues its REST calls with `cache: "no-store"`, which can opt a
-route out on its own. With 1–3 removed, all 32 routes prerender as `○ 5m` while
-still reading Redis through `getPickersData`. The no-store on those REST calls
-does not propagate to the route's own rendering mode. No `unstable_cache`
-wrapping is needed, and the contingency plan at the bottom of this doc is moot.
+**4. Redis — REAL, and it was the last blocker.** `@upstash/redis` issues
+every REST call with `cache: "no-store"` (`nodejs.mjs:228`,
+`cache: configOrRequester.cache ?? "no-store"`), and one such fetch opts a route
+out of static rendering:
+
+```
+Dynamic server usage: Route /x couldn't be rendered statically because it
+used no-store fetch <upstash>/pipeline
+```
+
+On these pages it is **silent**: `getPickerData()` wraps its reads in
+`try/catch`, so the `DynamicServerError` is swallowed, the build stays green,
+and the route goes `ƒ` with nothing in the log to explain it. The only visible
+symptom is the route table.
+
+> **This doc twice recorded Redis as "not a blocker". Both times that was
+> wrong, and the second time it was recorded as *disproven by a build*.** That
+> build had no `UPSTASH_REDIS_REST_*` credentials, so the client short-circuited
+> and never issued a request — the call that does the bailing never happened.
+> **A build without Redis credentials cannot say anything about whether Redis
+> bails a route.** Check `redis_hits > 0` before believing any result here.
+
+Reproduced against a stub Upstash server, credentials the only variable:
+
+| build | Redis reads | `○ 5m` | `ƒ` |
+|---|---|---|---|
+| creds, `no-store` | 263 | 0 | 32 |
+| no creds | 0 | 32 | 0 |
+| creds, `cache: "default"` | 450 | 32 | 0 |
+
+The fix is `lib/server/redisCacheMode.ts`: an explicit `cache: "default"` passed
+to the eight clients a prerendered page reads through. It only drops the hint —
+Upstash's REST API is POST and Next's fetch cache only caches GET, so no read
+becomes cacheable and freshness stays governed by each page's `revalidate`. The
+rate-limit and auth clients (`trapBlock`, `backfillAuth`, `dailyPageLimit`) keep
+the no-store default: never on a static render path, and a cached auth or
+rate-limit read would be a correctness bug. `unstable_cache` was not needed.
 
 **5. `useSearchParams()` in `PickerFilterProvider` — the real remaining
 blocker, and the one this doc missed.** `PickerFilterContext.tsx` called
@@ -151,13 +185,17 @@ repo — the changes above are the record.
 
 ## What the build actually found
 
-`npm run build`, all 32 target routes:
+`npm run build` **with Redis credentials pointed at a stub** (825 reads), all 32
+target routes:
 
 ```
 ○ /oversold-stocks-today                  5m      1y
 ○ /overbought-stocks-today                5m      1y
 ...                                       (32/32)
 ```
+
+The credentials are not optional to the test. Without them the same command
+also printed 32/32 static while the deployed build was 32/32 dynamic.
 
 Confirmed on the emitted HTML (`.next/server/app/oversold-stocks-today.html`),
 not just the route table — the point being that `○` alone would not have caught
@@ -175,6 +213,18 @@ Two pages that also live under `app/` and reference `PickerResultPage` are
 `bullish-divergence-stocks` and `bearish-divergence-stocks` are bespoke pages
 with their own `headers()` call that only mention `PickerResultPage` in a
 comment. 34 files match a naive grep; 32 are the real set.
+
+## Bundler: not a variable (checked)
+
+Vercel builds this project with **Turbopack** (`"bundler": "turbopack"` in the
+deployment metadata, `▲ Next.js 16.1.6 (Turbopack)` in the log), which is also
+the local default. Both sides were always the same bundler, so it was never the
+explanation for a local/deployed disagreement.
+
+`next build --webpack` cannot build this repo at all right now, for reasons
+unrelated to any of this: a `params` type error in `app/learn/[slug]/page.tsx`
+(`{ slug: string }` where a `Promise` is required) plus an Edge-runtime warning
+from `trapBlock.ts`. Worth knowing separately; not in play here.
 
 ## One behaviour change, inherent to caching these routes
 
