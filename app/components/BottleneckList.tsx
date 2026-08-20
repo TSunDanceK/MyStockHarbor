@@ -82,6 +82,9 @@ export default function BottleneckList({ posts }: { posts: BottleneckPost[] }) {
   const hasMore = sorted.length > visible.length;
   const remaining = sorted.length - visible.length;
 
+  // Sizes the desktop scroll window to exactly VISIBLE_ROWS rows. Under 960px
+  // the window is switched off entirely (see the style block at the bottom),
+  // so this measurement is simply unused there.
   useEffect(() => {
     const measure = () => {
       if (firstItemRef.current) {
@@ -249,6 +252,11 @@ export default function BottleneckList({ posts }: { posts: BottleneckPost[] }) {
           className="bottleneckListScroll"
           style={{
             display: "grid",
+            // minmax(0, 1fr) rather than the implicit `auto` track. An auto
+            // track may grow to its max-content width, and a row's min-width
+            // defaults to auto, so a long company name could size the column
+            // wider than the screen instead of ellipsing inside it.
+            gridTemplateColumns: "minmax(0, 1fr)",
             gap: ROW_GAP,
             maxHeight,
             overflowY: "auto",
@@ -360,6 +368,28 @@ export default function BottleneckList({ posts }: { posts: BottleneckPost[] }) {
       </div>
 
       <style>{`
+        /* No scroll window on a phone.
+           A scrolling box inside a scrolling page is a coin toss under a
+           thumb: a drag either moves the list or the page and you cannot
+           tell which until it happens, and once the inner one hits its end
+           the gesture stops doing anything at all. On a pointer the window
+           earns its place -- it keeps the leaderboard beside it in view --
+           but a phone has nothing beside it to keep in view, and the list is
+           already bounded by its own See more button at 30 rows.
+
+           overflow goes to visible along with the height, which also takes
+           away the horizontal scrolling that came free with it: a non-visible
+           overflow on one axis makes the other compute to auto.
+
+           !important because both properties are set inline on the element. */
+        @media (max-width: 960px) {
+          .bottleneckListScroll {
+            max-height: none !important;
+            overflow: visible !important;
+            padding-right: 0 !important;
+          }
+        }
+
         @media (max-width: 480px) {
           .bottleneckListRow {
             padding: 12px 14px !important;
