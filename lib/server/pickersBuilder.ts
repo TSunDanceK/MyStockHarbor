@@ -11,6 +11,8 @@
 // CACHING_REFRESH_ARCHITECTURE_PLAN.md (project doc) for the full context.
 
 import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
+import { readMarketState } from "./marketState";
 import { NextRequest, NextResponse } from "next/server";
 import { detectDivergenceFromHistory } from "../ta/divergence";
 import { getDailyHistoryBulk } from "./historyCache";
@@ -292,7 +294,7 @@ type EarningsCandidate = {
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
 /* ----------------------------- caching ------------------------------ */
@@ -2253,20 +2255,25 @@ function pLimit(limit: number) {
 
 /* ------------------------------ fetchers ----------------------------- */
 
-async function fetchJSON<T>(url: string, forceFresh = false) {
-  const res = await fetch(
-    forceFresh ? `${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}` : url,
-    forceFresh
-      ? { cache: "no-store" }
-      : { next: { revalidate: 300 } }
-  );
-
-  if (!res.ok) throw new Error(`Fetch failed: ${url}`);
-  return (await res.json()) as T;
-}
-
-async function fetchMarket(origin: string, forceFresh = false) {
-  return fetchJSON<MarketPayload>(`${origin}/api/market`, forceFresh);
+// Reads the market snapshot in-process instead of the server HTTP-fetching its
+// own public URL. Same self-block class already fixed for playsBuilder.ts and
+// descendingTrianglesBuilder.ts in #262/#263 -- pickersBuilder was missed.
+//
+// The self-fetch carried no BotID header and no session cookie, so our own
+// firewall could challenge it; fetchJSON throws on non-ok, and this is the
+// FIRST thing buildPickersPayload does, so that throw took the whole build with
+// it whenever the pickers cache was also cold. getPickerData() then swallowed
+// it into an empty page -- which is how a deploy came to bake 32 empty screener
+// pages as their prerendered artefacts. See
+// claude/picker-pages-isr-2026-08-20.md.
+//
+// readMarketState() never throws: a miss degrades to an empty snapshot, the
+// universe falls back to readDynamicUniverse() + PRESET_UNIVERSE, and the
+// emptiness guard in PickerResultPage catches the case where that leaves
+// nothing worth prerendering. MarketStateSnapshot is structurally identical to
+// MarketPayload -- same six fields, same row shape.
+async function fetchMarket(): Promise<MarketPayload> {
+  return readMarketState();
 }
 
 // Pure transform over already-fetched points -- the actual Redis/FMP fetch
@@ -2327,9 +2334,15 @@ const POPULAR_SEARCH_QUOTA = 30; // FMP sub-cap: max promoted names per build
 
 /* --------------------------- builder function ------------------------ */
 
+// `origin` and `forceFreshMarket` are vestigial: both existed only to drive the
+// old fetchMarket() self-fetch, which now reads in-process. They are kept on the
+// signature because getPickersData() still takes an `origin` from seven callers
+// (the ticker-lookup and debug routes, warmTargets, the two divergence pages),
+// and threading that removal through all of them is a separate change. Nothing
+// in here reads them.
 async function buildPickersPayload(origin: string, forceFreshMarket = false): Promise<PickersPayload> {
   const buildStartedAt = Date.now();
-  const market = await fetchMarket(origin, forceFreshMarket);
+  const market = await fetchMarket();
 
   const topTraded = (market?.topTraded ?? [])
     .map((x) => x.symbol)

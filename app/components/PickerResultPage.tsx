@@ -1,5 +1,5 @@
+import { Suspense } from "react";
 import Link from "next/link";
-import { headers } from "next/headers";
 import type { MiniCandlePoint, SupportResistanceZone } from "@/app/components/MiniPickerCandleChart";
 import PickerHighlightScroller from "@/app/components/PickerHighlightScroller";
 import ScreenerNav from "@/app/components/ScreenerNav";
@@ -7,7 +7,7 @@ import HowToCollapse from "@/app/components/HowToCollapse";
 import ScreenerHeroHeading from "@/app/components/ScreenerHeroHeading";
 import PickerResultsGrid, { type TabKey } from "@/app/components/PickerResultsGrid";
 import ScanFooter from "@/app/components/ScanFooter";
-import { PickerFilterProvider } from "@/app/components/PickerFilterContext";
+import { PickerFilterProvider, PickerFilterUrlSync } from "@/app/components/PickerFilterContext";
 import { getCompanyNameMap } from "@/lib/server/companyNames";
 import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
 import { readPricePoolBulk } from "@/lib/server/pricePool";
@@ -433,12 +433,14 @@ function formatUpdatedAt(value?: string | null) {
   });
 }
 
-async function getOriginFromHeaders() {
-  const headerStore = await headers();
-  const host = headerStore.get("x-forwarded-host") || headerStore.get("host") || "www.mystockharbor.com";
-  const proto = headerStore.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https");
-  return `${proto}://${host}`;
-}
+// The origin used to be derived per-request from headers(). It is a constant
+// now: headers() alone forces dynamic rendering, and this value fed exactly one
+// thing -- getPickersData(origin), whose fetchMarket() self-fetches
+// `${origin}/api/market` on a cold cache. A fixed production origin is correct
+// for every environment that actually serves these pages, and the self-fetch
+// itself is on its way out (see the deferred pickersBuilder fix in
+// claude/picker-pages-isr-2026-08-20.md).
+const SITE_ORIGIN = "https://www.mystockharbor.com";
 
 function findSection(sections: PickerSection[], includes: string[] = []) {
   return sections.find((section) => {
@@ -759,15 +761,34 @@ function valueForPredicateField(entry: ResultEntry, field: string): unknown {
 
 async function getPickerData(config: PickerResultConfig) {
   try {
-    const origin = await getOriginFromHeaders();
     // Read the pickers payload in-process (the same Redis-cached builder the
     // /api/pickers route uses) instead of the server fetching its own public
     // URL. That self-request looked like an anonymous bot to our own Vercel
     // firewall; going in-process removes it entirely. See
     // claude/pickers-firewall-selfblock-2026-07-17.md.
-    const payload = (await getPickersData(origin)) as unknown as PickersPayload;
+    const payload = (await getPickersData(SITE_ORIGIN)) as unknown as PickersPayload;
     const sections = Array.isArray(payload.sections) ? payload.sections : [];
     const signalRecords = Array.isArray(payload.signalRecords) ? payload.signalRecords : [];
+
+    // A payload with neither sections nor signalRecords is a broken read, not a
+    // quiet market. Every one of these pages is built from this one payload, so
+    // "the screener found nothing" and "the data layer failed" are the same
+    // render -- and once these routes prerender, that render becomes the
+    // artefact every visitor and crawler is served until the next revalidate.
+    //
+    // Throwing is what keeps that from shipping. At build time it fails the
+    // build loudly instead of baking 32 empty pages; during ISR revalidation
+    // Next keeps serving the last good prerender when regeneration throws, so a
+    // transient Redis blip can no longer replace a good page with an empty one.
+    //
+    // Deliberately checked on the PAYLOAD, not on `entries`: a section page
+    // legitimately having no items today (no ATH breakouts) is real, and is
+    // what config.emptyText is for. An empty payload never is.
+    if (!sections.length && !signalRecords.length) {
+      throw new Error(
+        `[pickers] Refusing to render ${config.href}: payload has no sections and no signalRecords`
+      );
+    }
     const matchedSection = config.kind === "section" ? findSection(sections, config.sectionIncludes ?? []) : undefined;
     // Full matched set (bounded only by RESULT_SAFETY_CAP, not by
     // config.maxItems) -- config.maxItems is now just the initial "shown"
@@ -909,8 +930,20 @@ async function getPickerData(config: PickerResultConfig) {
       seoEntries,
       foundCount: config.filterTimeframe ? seoEntries.length : typeof matchedSection?.foundCount === "number" ? matchedSection.foundCount : seoEntries.length,
     };
-  } catch {
-    return { updatedAt: null, universeSize: null, dynamicUniverseCount: null, entries: [], seoEntries: [], foundCount: 0 };
+  } catch (error) {
+    // Rethrow rather than degrading to an empty result.
+    //
+    // This catch used to return `entries: []`, which made a failed Redis read,
+    // a thrown builder and a genuinely quiet screener completely
+    // indistinguishable -- all three rendered as "0 of 0 / No current results".
+    // That is what hid the no-store bailout, and then what let a failed build
+    // bake an empty page as the prerendered artefact.
+    //
+    // The narrow try/catches inside this function stay: company names and the
+    // extended fundamentals block really are optional decoration. The core
+    // payload is not.
+    console.error(`[pickers] getPickerData failed for ${config.href}:`, error);
+    throw error instanceof Error ? error : new Error("Unknown pickers error");
   }
 }
 
@@ -918,13 +951,7 @@ function isEarningsPickerPage(config: PickerResultConfig) {
   return config.href.includes("earnings");
 }
 
-export default async function PickerResultPage({
-  config,
-  searchParams,
-}: {
-  config: PickerResultConfig;
-  searchParams?: Promise<{ symbol?: string | string[] }>;
-}) {
+export default async function PickerResultPage({ config }: { config: PickerResultConfig }) {
   const { entries, seoEntries, updatedAt, universeSize, dynamicUniverseCount, foundCount } = await getPickerData(config);
   const initialVisibleCount = config.maxItems ?? 36;
 
@@ -980,14 +1007,6 @@ export default async function PickerResultPage({
   // had never existed. Two numbers, each labelled, still show the top-up job
   // working and cannot be misread the same way. See
   // claude/preset-pages-universe-blocker-2026-08-04.md.
-
-  // Supports deep links from the /pickers accordion like
-  // /all-time-high-breakout-stocks?symbol=MTB -- scrolls to and briefly
-  // highlights that specific card instead of just landing at the top of
-  // the list. See PickerHighlightScroller for the client-side scroll/pulse.
-  const resolvedSearchParams = searchParams ? await searchParams : undefined;
-  const rawHighlight = resolvedSearchParams?.symbol;
-  const highlightSymbol = cleanSymbol(Array.isArray(rawHighlight) ? rawHighlight[0] : rawHighlight);
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -1188,6 +1207,15 @@ export default async function PickerResultPage({
 
         <div className="resultWrap">
           <PickerFilterProvider initialFilters={initialFilters} initialPredicates={initialPredicates}>
+            {/* Feeds the live query string into the filter provider. It owns
+                the useSearchParams() call so the provider itself doesn't: the
+                provider wraps the whole results tree, so a boundary around it
+                would keep the grid out of the prerendered HTML. This renders
+                null, so its boundary contributes nothing. */}
+            <Suspense fallback={null}>
+              <PickerFilterUrlSync />
+            </Suspense>
+
             <div className="resultShell">
               <ScreenerNav currentHref={config.href} variant="sidebar" showFilters showSearch alwaysFilterMode={isFilterablePage} categoryValues={categoryValues} />
 
@@ -1213,7 +1241,18 @@ export default async function PickerResultPage({
                   </ScreenerHeroHeading>
                 </section>
 
-                {highlightSymbol ? <PickerHighlightScroller symbol={highlightSymbol} /> : null}
+                {/* Supports deep links from the /pickers accordion like
+                    /all-time-high-breakout-stocks?symbol=MTB -- scrolls to and
+                    briefly highlights that card instead of just landing at the
+                    top of the list. Rendered unconditionally and reading the
+                    param itself: awaiting searchParams here would opt this
+                    route back out of static rendering for a value only the
+                    browser ever uses. The Suspense boundary is mandatory --
+                    useSearchParams() without one bails the whole page out of
+                    static generation and fails the build. */}
+                <Suspense fallback={null}>
+                  <PickerHighlightScroller />
+                </Suspense>
 
                 <PickerResultsGrid
                   entries={entries}

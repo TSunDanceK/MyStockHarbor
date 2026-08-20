@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
 
 export type Point = {
   date: string;
@@ -19,7 +20,7 @@ export type HistoryCacheEntry = {
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
 const REDIS_HISTORY_PREFIX = "msh:history:v7";

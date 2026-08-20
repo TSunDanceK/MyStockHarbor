@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
 
 // Off-payload storage for the pickers' per-symbol chart series.
 //
@@ -48,7 +49,7 @@ import { Redis } from "@upstash/redis";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
 const PICKER_CHARTS_KEY = "msh:picker-charts:v1";
