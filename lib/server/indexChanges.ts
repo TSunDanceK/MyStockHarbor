@@ -16,6 +16,8 @@
 // for that index, so the 30-day "recently added" window is applied
 // client-side after fetching, and only additions (not removals) are kept.
 
+import { readFeed, type Feed } from "./feedCache";
+
 export type IndexAddition = {
   symbol: string;
   company: string;
@@ -27,9 +29,6 @@ export type IndexAddition = {
 };
 
 type FmpRow = Record<string, unknown>;
-
-const CACHE_MS = 30 * 60_000;
-const caches: Record<string, { at: number; items: IndexAddition[] }> = {};
 
 function str(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -105,97 +104,88 @@ function parseChangeRow(row: FmpRow): ParsedChange | null {
 // Recently added stocks across S&P 500, Nasdaq 100, and Dow Jones, most
 // recent first, with price/market cap filled in from a single batched
 // quote call.
-export async function getRecentIndexAdditions(): Promise<IndexAddition[]> {
-  const cacheKey = "recent";
-  const cached = caches[cacheKey];
-  if (cached && Date.now() - cached.at < CACHE_MS) {
-    return cached.items;
-  }
+export async function getRecentIndexAdditions(): Promise<Feed<IndexAddition>> {
+  return readFeed("index:additions", fetchRecentIndexAdditions);
+}
 
+async function fetchRecentIndexAdditions(): Promise<IndexAddition[]> {
   const apiKey = process.env.FMP_API_KEY;
-  if (!apiKey) return cached?.items ?? [];
+  // Throw rather than return [] -- see the note in feedCache.ts. A missing key
+  // is "could not answer", not "there were no additions".
+  if (!apiKey) throw new Error("FMP_API_KEY is not set");
 
-  try {
-    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-    const changesByIndex = await Promise.all(
-      INDEXES.map(async ({ name, url }) => {
-        const res = await fetch(`${url}?apikey=${encodeURIComponent(apiKey)}`, {
-          cache: "no-store",
-          headers: { accept: "application/json" },
-        });
-        if (!res.ok) throw new Error(`FMP ${name} constituent history failed: ${res.status}`);
-
-        const payload = await res.json();
-        const rows: FmpRow[] = Array.isArray(payload) ? payload : [];
-
-        return rows
-          .map(parseChangeRow)
-          .filter((row): row is ParsedChange => row !== null)
-          .filter((row) => {
-            const added = new Date(`${row.dateAdded}T00:00:00Z`);
-            return !Number.isNaN(added.getTime()) && added >= cutoff;
-          })
-          .map((row) => ({ ...row, indexName: name }));
-      })
-    );
-
-    const recentChanges = changesByIndex.flat();
-
-    if (recentChanges.length === 0) {
-      const items: IndexAddition[] = [];
-      caches[cacheKey] = { at: Date.now(), items };
-      return items;
-    }
-
-    // One batched quote call for price + market cap across every symbol
-    // found, rather than a per-symbol request -- keeps this page to a
-    // small, fixed number of FMP calls regardless of visitor traffic.
-    const symbols = Array.from(new Set(recentChanges.map((row) => row.symbol)));
-    const quoteUrl = `https://financialmodelingprep.com/stable/batch-quote?symbols=${encodeURIComponent(
-      symbols.join(",")
-    )}&apikey=${encodeURIComponent(apiKey)}`;
-
-    let quoteBySymbol = new Map<string, FmpRow>();
-    try {
-      const quoteRes = await fetch(quoteUrl, {
+  const changesByIndex = await Promise.all(
+    INDEXES.map(async ({ name, url }) => {
+      const res = await fetch(`${url}?apikey=${encodeURIComponent(apiKey)}`, {
         cache: "no-store",
         headers: { accept: "application/json" },
       });
-      if (quoteRes.ok) {
-        const quoteRows = await quoteRes.json();
-        for (const row of Array.isArray(quoteRows) ? (quoteRows as FmpRow[]) : []) {
-          const sym = firstStr(row, ["symbol"]);
-          if (sym) quoteBySymbol.set(sym, row);
-        }
+      if (!res.ok) throw new Error(`FMP ${name} constituent history failed: ${res.status}`);
+
+      const payload = await res.json();
+      const rows: FmpRow[] = Array.isArray(payload) ? payload : [];
+
+      return rows
+        .map(parseChangeRow)
+        .filter((row): row is ParsedChange => row !== null)
+        .filter((row) => {
+          const added = new Date(`${row.dateAdded}T00:00:00Z`);
+          return !Number.isNaN(added.getTime()) && added >= cutoff;
+        })
+        .map((row) => ({ ...row, indexName: name }));
+    })
+  );
+
+  const recentChanges = changesByIndex.flat();
+
+  // A genuine empty: upstream answered, there were simply no additions in
+  // the window. Returned as [] (not thrown) so it caches and reads as real.
+  if (recentChanges.length === 0) return [];
+
+  // One batched quote call for price + market cap across every symbol
+  // found, rather than a per-symbol request -- keeps this page to a
+  // small, fixed number of FMP calls regardless of visitor traffic.
+  const symbols = Array.from(new Set(recentChanges.map((row) => row.symbol)));
+  const quoteUrl = `https://financialmodelingprep.com/stable/batch-quote?symbols=${encodeURIComponent(
+    symbols.join(",")
+  )}&apikey=${encodeURIComponent(apiKey)}`;
+
+  let quoteBySymbol = new Map<string, FmpRow>();
+  try {
+    const quoteRes = await fetch(quoteUrl, {
+      cache: "no-store",
+      headers: { accept: "application/json" },
+    });
+    if (quoteRes.ok) {
+      const quoteRows = await quoteRes.json();
+      for (const row of Array.isArray(quoteRows) ? (quoteRows as FmpRow[]) : []) {
+        const sym = firstStr(row, ["symbol"]);
+        if (sym) quoteBySymbol.set(sym, row);
       }
-    } catch {
-      // If the quote call fails, still show the additions themselves --
-      // price/market cap just render as "-" -- rather than failing the
-      // whole page over a secondary enrichment call.
-      quoteBySymbol = new Map();
     }
-
-    const items: IndexAddition[] = recentChanges
-      .map((row) => {
-        const quote = quoteBySymbol.get(row.symbol);
-        return {
-          symbol: row.symbol,
-          company: row.company,
-          indexName: row.indexName,
-          dateAdded: row.dateAdded,
-          reason: row.reason,
-          price: quote ? firstNum(quote, ["price"]) : null,
-          marketCap: quote ? firstNum(quote, ["marketCap", "marketcap"]) : null,
-        };
-      })
-      .sort((a, b) => b.dateAdded.localeCompare(a.dateAdded));
-
-    caches[cacheKey] = { at: Date.now(), items };
-    return items;
   } catch {
-    // Serve the last good cache (even if stale) rather than an empty page
-    // on a transient FMP failure; fall back to empty only on a cold start.
-    return cached?.items ?? [];
+    // If the quote call fails, still show the additions themselves --
+    // price/market cap just render as "-" -- rather than failing the
+    // whole page over a secondary enrichment call.
+    quoteBySymbol = new Map();
   }
+
+  const items: IndexAddition[] = recentChanges
+    .map((row) => {
+      const quote = quoteBySymbol.get(row.symbol);
+      return {
+        symbol: row.symbol,
+        company: row.company,
+        indexName: row.indexName,
+        dateAdded: row.dateAdded,
+        reason: row.reason,
+        price: quote ? firstNum(quote, ["price"]) : null,
+        marketCap: quote ? firstNum(quote, ["marketCap", "marketcap"]) : null,
+      };
+    })
+    .sort((a, b) => b.dateAdded.localeCompare(a.dateAdded));
+
+  return items;
 }

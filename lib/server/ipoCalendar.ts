@@ -20,6 +20,8 @@
 // same FMP endpoint, just with the date range flipped, and are cached
 // separately below.
 
+import { readFeed, warnIfImplausiblyEmpty, type Feed } from "./feedCache";
+
 export type ConfirmedIpo = {
   symbol: string;
   company: string;
@@ -34,9 +36,6 @@ export type ConfirmedIpo = {
 };
 
 type FmpIpoRow = Record<string, unknown>;
-
-const CACHE_MS = 30 * 60_000;
-const caches: Record<string, { at: number; items: ConfirmedIpo[] }> = {};
 
 function toIsoDate(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -148,55 +147,56 @@ function parseRow(row: FmpIpoRow): ConfirmedIpo | null {
   };
 }
 
-async function fetchConfirmedIpos(
-  from: string,
-  to: string,
-  cacheKey: string
-): Promise<ConfirmedIpo[]> {
-  const cached = caches[cacheKey];
-  if (cached && Date.now() - cached.at < CACHE_MS) {
-    return cached.items;
-  }
-
+async function fetchIpoRows(from: string, to: string): Promise<ConfirmedIpo[]> {
   const apiKey = process.env.FMP_API_KEY;
-  if (!apiKey) return cached?.items ?? [];
+  // Throwing (rather than returning []) is deliberate: readFeed treats a throw
+  // as "could not answer" and a [] as "genuinely none". A missing key is the
+  // former, and used to be silently indistinguishable from the latter.
+  if (!apiKey) throw new Error("FMP_API_KEY is not set");
 
   const url = `https://financialmodelingprep.com/stable/ipos-calendar?from=${encodeURIComponent(
     from
   )}&to=${encodeURIComponent(to)}&apikey=${encodeURIComponent(apiKey)}`;
 
-  try {
-    const res = await fetch(url, { cache: "no-store", headers: { accept: "application/json" } });
-    if (!res.ok) throw new Error(`FMP IPO calendar failed: ${res.status}`);
+  const res = await fetch(url, { cache: "no-store", headers: { accept: "application/json" } });
+  if (!res.ok) throw new Error(`FMP IPO calendar failed: ${res.status}`);
 
-    const payload = await res.json();
-    const rows: FmpIpoRow[] = Array.isArray(payload) ? payload : [];
+  const payload = await res.json();
+  const rows: FmpIpoRow[] = Array.isArray(payload) ? payload : [];
 
-    const items = rows
-      .map(parseRow)
-      .filter((row): row is ConfirmedIpo => row !== null)
-      .sort((a, b) => a.date.localeCompare(b.date));
-
-    caches[cacheKey] = { at: Date.now(), items };
-    return items;
-  } catch {
-    // Serve the last good cache (even if stale) rather than an empty page
-    // on a transient FMP failure; fall back to empty only on a cold start.
-    return cached?.items ?? [];
-  }
+  return rows
+    .map(parseRow)
+    .filter((row): row is ConfirmedIpo => row !== null)
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export async function getUpcomingConfirmedIpos(): Promise<ConfirmedIpo[]> {
+export async function getUpcomingConfirmedIpos(): Promise<Feed<ConfirmedIpo>> {
   const now = new Date();
   const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-  return fetchConfirmedIpos(toIsoDate(now), toIsoDate(in30Days), "upcoming");
+  return readFeed("ipo:upcoming", () =>
+    fetchIpoRows(toIsoDate(now), toIsoDate(in30Days))
+  );
 }
 
 // Confirmed IPOs that priced/listed within the last 30 days, most recent
 // first.
-export async function getRecentIpos(): Promise<ConfirmedIpo[]> {
+export async function getRecentIpos(): Promise<Feed<ConfirmedIpo>> {
   const now = new Date();
   const past30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  const items = await fetchConfirmedIpos(toIsoDate(past30Days), toIsoDate(now), "recent");
-  return [...items].sort((a, b) => b.date.localeCompare(a.date));
+  const feed = await readFeed("ipo:recent", () =>
+    fetchIpoRows(toIsoDate(past30Days), toIsoDate(now))
+  );
+
+  // This window is a free monitor. A month with zero US IPO listings is
+  // essentially unheard of, so a successful-but-empty result here almost
+  // always means the read or the parser is broken in a way that did not
+  // throw -- worth a log line even though `ok` is true.
+  warnIfImplausiblyEmpty(
+    feed,
+    "ipo:recent",
+    "A 30-day window with no US IPO listings is essentially never true -- " +
+      "suspect a failed read or a parser drift off FMP's field names, not a quiet market."
+  );
+
+  return { ...feed, items: [...feed.items].sort((a, b) => b.date.localeCompare(a.date)) };
 }
