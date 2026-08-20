@@ -11,6 +11,7 @@
 // CACHING_REFRESH_ARCHITECTURE_PLAN.md (project doc) for the full context.
 
 import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { NextRequest, NextResponse } from "next/server";
 import { detectDivergenceFromHistory } from "../ta/divergence";
 import { getDailyHistoryBulk } from "./historyCache";
@@ -292,7 +293,7 @@ type EarningsCandidate = {
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
 /* ----------------------------- caching ------------------------------ */

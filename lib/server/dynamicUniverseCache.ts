@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
 
 // The site-wide rolling universe: which tickers MyStockHarbor currently cares
 // about. Fed by the market route's discovery map and by search demand; read by
@@ -47,7 +48,7 @@ import { Redis } from "@upstash/redis";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
 const LEGACY_KEY = "msh:dynamic-universe:v1";
