@@ -14,7 +14,12 @@ import { IncomeStatementCard, AnnualConsensusCard, CashFlowCard, SegmentationCar
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
 
-export const dynamic = "force-dynamic";
+// No segment config here on purpose -- it cascades from
+// app/stock/[symbol]/layout.tsx (`revalidate = 900`), so the overview, /news
+// and /earnings share one cache policy and cannot drift apart. This page used
+// to carry `dynamic = "force-dynamic"`, which meant every request and every
+// crawl paid a full serverless render (~575 in 24h) of what is, between
+// reports, the same HTML.
 
 type Props = {
   params: Promise<{ symbol: string }>;
