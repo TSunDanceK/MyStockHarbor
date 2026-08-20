@@ -257,6 +257,19 @@ const CRYPTO_PRESETS: { symbol: string; name: string }[] = [
 
 const DEFAULT_CRYPTO_SYMBOL = "BTCUSD";
 
+// Deliberately IDENTICAL in behaviour to cleanSymbolParam() in
+// app/dashboard/page.tsx: trim, upper-case, then STRIP disallowed characters.
+//
+// Stripping rather than rejecting matters. The server turns "NVDA!" into
+// "NVDA" and renders it; a client that rejected the whole string would fall
+// through to the remembered symbol and disagree with the HTML it was just
+// sent -- reintroducing the exact flash this change removes, for the narrow
+// set of inputs where the two disagree. Any future edit to either function
+// must be made to both.
+function cleanClientSymbol(raw: string | null | undefined): string {
+  return String(raw ?? "").trim().toUpperCase().replace(/[^A-Z0-9.-]/g, "");
+}
+
 const TIMEFRAMES = [{ label: "D", interval: "d" as ChartInterval, fetchBars: 2600, defaultVisibleBars: 75 }, { label: "W", interval: "w" as ChartInterval, fetchBars: 2600, defaultVisibleBars: 75 }, { label: "M", interval: "m" as ChartInterval, fetchBars: 360, defaultVisibleBars: 75 }];
 const PRICE_OVERLAY_OPTIONS: Overlay[] = ["MA50", "MA200", "EMA20", "VWMA(20)", "Bollinger(20,2)", "Trend Helper (Smooth)", "Trend Helper (Fast)", "Support/Resistance"];
 const LOWER_OVERLAY_OPTIONS: Overlay[] = ["RSI(14)", "MACD(12,26,9)", "Stochastic(14,3)", "ATR(14)", "Volume"];
@@ -337,8 +350,32 @@ export default function DashboardClient({
 }) {
   const router = useRouter(), searchParams = useSearchParams();
   const [assetType, setAssetType] = useState<AssetType>("stock");
-  const [symbol, setSymbol] = useState(() => { if (typeof window === "undefined") return defaultSymbol; const s = window.localStorage.getItem("msh_last_symbol"); return s && s.trim() ? s.trim().toUpperCase() : defaultSymbol; });
-  const [lastStockSymbol, setLastStockSymbol] = useState(() => { if (typeof window === "undefined") return defaultSymbol; const s = window.localStorage.getItem("msh_last_symbol"); return s && s.trim() ? s.trim().toUpperCase() : defaultSymbol; });
+  // Initial symbol resolution: URL -> remembered -> server default.
+  //
+  // The URL used to lose. `?symbol=` was only applied by an effect that runs
+  // AFTER mount, so initial state was localStorage regardless of the URL, and
+  // /pickers -> /dashboard?symbol=NVDA rendered the remembered symbol first and
+  // swapped once hydrated. An explicit symbol in the URL is a more specific
+  // instruction than a remembered one and should never lose to it.
+  //
+  // Note the server render was always correct -- app/dashboard/page.tsx already
+  // resolves `?symbol=` into `defaultSymbol` -- so this flash was purely the
+  // client disagreeing with the HTML it had just been sent.
+  //
+  // The remembered-symbol behaviour below is deliberately unchanged.
+  const initialSymbol = () => {
+    const fromUrl = cleanClientSymbol(searchParams.get("symbol"));
+    if (fromUrl) return fromUrl;
+    if (typeof window === "undefined") return defaultSymbol;
+    try {
+      const s = cleanClientSymbol(window.localStorage.getItem("msh_last_symbol"));
+      return s || defaultSymbol;
+    } catch {
+      return defaultSymbol;
+    }
+  };
+  const [symbol, setSymbol] = useState(initialSymbol);
+  const [lastStockSymbol, setLastStockSymbol] = useState(initialSymbol);
   // Server-rendered seed data (quote/history/benchmarks/news/earnings) only
   // matches `symbol` when this render landed on the same symbol the server
   // fetched for (the common case: a fresh visitor or crawler with no
