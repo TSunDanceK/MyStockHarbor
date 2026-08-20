@@ -36,8 +36,9 @@
 // which is the specific behaviour change that fixes the reported bug.
 
 import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
 
-const redis = Redis.fromEnv();
+const redis = Redis.fromEnv(PAGE_READ_CACHE);
 
 // Same key the route owns. Read-only here.
 const REDIS_KEY = "msh:market:state";
