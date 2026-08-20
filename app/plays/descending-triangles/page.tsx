@@ -55,7 +55,7 @@ const SITE_ORIGIN = "https://www.mystockharbor.com";
 // rarely triggers a fresh scan.
 async function getInitialDescendingTrianglesPayload(): Promise<PlaysPayload | null> {
   try {
-    const { data, status } = await getDescendingTrianglesData(SITE_ORIGIN);
+    const { data, status } = await getDescendingTrianglesData(SITE_ORIGIN, { cacheOnly: true });
 
     if (status && status >= 400) return null;
     if ((data as { error?: unknown })?.error) return null;
