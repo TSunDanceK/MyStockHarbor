@@ -139,16 +139,28 @@ Today that is safe, because `/dashboard` is `force-dynamic`
 (`app/dashboard/page.tsx:50`) — the seed is minted per request, so a seeded
 quote is always current.
 
-**It stops being safe the moment `/dashboard` goes ISR** — which is exactly what
-Option A-soft is justified by ("keeps the ISR door open"). Under ISR the seeded
+**It stops being safe if `/dashboard` ever goes ISR.** Under ISR the seeded
 quote would be up to a full revalidate window old and displayed as the live
-price. That is precisely the correctness bug PR-B refused to accept, and why it
-kept the quote fetch **non-blocking rather than skipped** while skipping history.
+price — precisely the correctness bug PR-B refused to accept, and why it kept
+the quote fetch **non-blocking rather than skipped** while skipping history.
+
+> **Correction (same day).** This section first called the quote refresh a
+> *prerequisite* for A-soft, on the reasoning that A-soft opens the ISR door.
+> **It does not.** `/dashboard` carries an explicit
+> `export const dynamic = "force-dynamic"` (`app/dashboard/page.tsx:50`), and
+> that stays until it is deliberately deleted — a separate, third change. So
+> the intermediate state (A-soft merged, still force-dynamic) is perfectly
+> safe, and nothing was blocking anything.
+>
+> They were still shipped together, for a better reason: **the quote refresh
+> alone has no user-visible effect today**, so it would have been a PR nobody
+> could verify. Bundled with A-soft it is at least exercised by the same
+> change. Recorded because "X blocks Y" is the kind of claim that hardens into
+> a constraint nobody re-checks.
 
 So item 2's real deliverable is the inverse of the brief's expectation: there is
 no redundant refetch to delete. What is missing is PR-B's **non-blocking quote
-refresh**, and it is a **prerequisite for item 3**, not a standalone perf win.
-Sequencing follows: do the quote refresh before or with A-soft, never after.
+refresh** — worth having before ISR is ever considered, but not a gate on A-soft.
 
 ---
 

@@ -337,15 +337,25 @@ export default function DashboardClient({
 }) {
   const router = useRouter(), searchParams = useSearchParams();
   const [assetType, setAssetType] = useState<AssetType>("stock");
-  const [symbol, setSymbol] = useState(() => { if (typeof window === "undefined") return defaultSymbol; const s = window.localStorage.getItem("msh_last_symbol"); return s && s.trim() ? s.trim().toUpperCase() : defaultSymbol; });
-  const [lastStockSymbol, setLastStockSymbol] = useState(() => { if (typeof window === "undefined") return defaultSymbol; const s = window.localStorage.getItem("msh_last_symbol"); return s && s.trim() ? s.trim().toUpperCase() : defaultSymbol; });
+  // Option A-soft: the client no longer overrides the server's symbol from
+  // localStorage. It used to, which meant a returning visitor whose stored
+  // symbol differed from the rendered one discarded ALL FIVE server-fetched
+  // payloads (quote, history, name, news, earnings) and refetched them --
+  // observed live as "server rendered SPY, browser showed CAG". It also made
+  // the URL lose to localStorage: /dashboard?symbol=NVDA rendered the stored
+  // symbol first and swapped after mount, because the ?symbol= effect below
+  // runs after this initialiser. Starting from defaultSymbol fixes both, and
+  // the remembered symbol is offered as an explicit chip instead (see
+  // resumeSymbol below) rather than applied invisibly.
+  const [symbol, setSymbol] = useState(defaultSymbol);
+  const [lastStockSymbol, setLastStockSymbol] = useState(defaultSymbol);
   // Server-rendered seed data (quote/history/benchmarks/news/earnings) only
   // matches `symbol` when this render landed on the same symbol the server
-  // fetched for (the common case: a fresh visitor or crawler with no
-  // remembered "last symbol" in localStorage). A returning visitor whose
-  // localStorage points at a different symbol just falls through to the
-  // pre-existing client-fetch-on-mount behaviour for that symbol below --
-  // no regression, the seed is simply unused in that case.
+  // fetched for. Since Option A-soft this is true for EVERY first render --
+  // `symbol` now starts as `defaultSymbol` unconditionally -- so the seed is
+  // always used and never discarded. Kept as an explicit guard rather than
+  // deleted: these are useState initialisers, and the invariant they depend
+  // on is worth stating rather than assuming.
   const seedMatchesSymbol = symbol === defaultSymbol;
   const [symbolName, setSymbolName] = useState(() => (seedMatchesSymbol ? initialSymbolName : ""));
   const [activeTimeframe, setActiveTimeframe] = useState("D");
@@ -437,6 +447,8 @@ export default function DashboardClient({
   useEffect(() => { setChartInterval(selectedTimeframe.interval); setVisibleBars(selectedTimeframe.defaultVisibleBars); setWindowOffset(0); }, [symbol, selectedTimeframe]);
   useEffect(() => {
     const us = searchParams.get("symbol"); const cleaned = us ? us.trim().toUpperCase() : ""; if (!cleaned) return;
+    // A deep link is an explicit choice, so it is worth remembering.
+    symbolWasChosenRef.current = true;
     const tf = (searchParams.get("tf") || "").trim().toUpperCase();
     const indi = (searchParams.get("indicator") || "").trim();
     const indicatorsRaw = (searchParams.get("indicators") || "").trim();
@@ -496,7 +508,60 @@ export default function DashboardClient({
     setVisibleBars(win.visibleBars);
     setWindowOffset(win.windowOffset);
   }, [chartFocus, historyAll]);
-  useEffect(() => { if (!symbol.trim()) return; if (assetType === "stock") { window.localStorage.setItem("msh_last_symbol", symbol.trim().toUpperCase()); setLastStockSymbol(symbol.trim().toUpperCase()); } }, [symbol, assetType]);
+  // The "Resume <SYMBOL>" chip. Replaces the invisible localStorage override
+  // with an explicit affordance: before this, a returning visitor landed on a
+  // different symbol with no way to tell why. Client-only by nature (it reads
+  // localStorage), so it is rendered out of normal flow -- see the chip markup
+  // near the end of this component.
+  const [resumeSymbol, setResumeSymbol] = useState("");
+  useEffect(() => {
+    // An explicit ?symbol= in the URL is an explicit choice; offering to
+    // resume a different one is noise.
+    if (searchParams.get("symbol")) return;
+    let stored = "";
+    try {
+      stored = (window.localStorage.getItem("msh_last_symbol") || "").trim().toUpperCase();
+      // Dismissal is per session, not permanent: a chip that never returns is
+      // useless to someone who did not click it this time, and the next visit
+      // is exactly when it becomes useful again.
+      if (window.sessionStorage.getItem("msh_resume_dismissed") === "1") return;
+    } catch {
+      // Private-mode / blocked storage -- no remembered symbol, no chip.
+      return;
+    }
+    if (!stored || stored === defaultSymbol.trim().toUpperCase()) return;
+    setResumeSymbol(stored);
+    // Mount-only on purpose: this offers the symbol remembered from a PREVIOUS
+    // visit. Re-running it as `symbol` changes would re-offer a symbol the
+    // visitor just navigated away from within this session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function dismissResume() {
+    setResumeSymbol("");
+    try { window.sessionStorage.setItem("msh_resume_dismissed", "1"); } catch { }
+  }
+
+  // Only an EXPLICIT choice is remembered. Before Option A-soft this effect
+  // could write unconditionally and be harmless, because `symbol` was
+  // initialised FROM localStorage -- so a passive mount just wrote the same
+  // value back. Now `symbol` always starts as `defaultSymbol`, so writing
+  // unconditionally would overwrite the remembered symbol with the
+  // server-rendered one on the very first visit, destroying the thing the
+  // Resume chip exists to offer. The chip would appear exactly once and never
+  // again, which is worse than the behaviour it replaced.
+  //
+  // `lastStockSymbol` is still tracked unconditionally: it drives the
+  // stock<->crypto toggle within this session and is not persisted.
+  const symbolWasChosenRef = useRef(false);
+  useEffect(() => {
+    if (!symbol.trim()) return;
+    if (assetType !== "stock") return;
+    const next = symbol.trim().toUpperCase();
+    setLastStockSymbol(next);
+    if (!symbolWasChosenRef.current) return;
+    try { window.localStorage.setItem("msh_last_symbol", next); } catch { }
+  }, [symbol, assetType]);
   useEffect(() => { if (!expanded) return; const k = (e: KeyboardEvent) => { if (e.key === "Escape") setExpanded(false); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [expanded]);
 
   // Fullscreen overlay: Escape closes it, and we best-effort request true
@@ -554,7 +619,26 @@ export default function DashboardClient({
     let c = false;
     async function load() {
       const ck = `${symbol}:${activeTimeframe}:${selectedTimeframe.fetchBars}:${selectedTimeframe.interval}`; const hit = symbolCache[ck];
-      if (hit) { setErr(null); setQuote(hit.quote); setHistoryAll(hit.history); setLoading(false); return; }
+      if (hit) {
+        setErr(null); setQuote(hit.quote); setHistoryAll(hit.history); setLoading(false);
+        // History is safe to reuse -- past bars do not change -- but the QUOTE
+        // is a live price, and a cache hit here can be served from a payload
+        // the server minted some time ago. PR-B (#286) made the same call on
+        // /stock/[symbol]: skip the history fetch, keep the quote fetch, and
+        // make it NON-BLOCKING so it costs nothing visible. Showing a stale
+        // price as the current one is a correctness bug, not a perf trade.
+        // Deliberately does not setLoading or setErr: a failed refresh leaves
+        // the already-rendered price in place rather than blanking the page.
+        void (async () => {
+          try {
+            const r = await fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, pageToken ? { headers: { "x-msh-page-token": pageToken } } : undefined);
+            if (!r.ok) return;
+            const fresh = (await r.json()) as Quote;
+            if (!c) setQuote(fresh);
+          } catch { }
+        })();
+        return;
+      }
       setLoading(true); setErr(null);
       try {
         const [qR, hR] = await Promise.all([fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, pageToken ? { headers: { "x-msh-page-token": pageToken } } : undefined), fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=${selectedTimeframe.fetchBars}&interval=${chartInterval}`)]);
@@ -668,7 +752,7 @@ export default function DashboardClient({
 
   const customMode = selectedIndicators.length > 0;
   function chartIndicatorLabel(v: Overlay[]) { return !v.length ? "Overview" : v.join(", "); }
-  function chooseSymbol(s: string, name?: string, nextAssetType?: AssetType) { const c = s.trim().toUpperCase(); if (!c) return; if (nextAssetType) setAssetType(nextAssetType); setSymbol(c); setSymbolName(name?.trim() ? name.trim() : ""); setQuery(c); setResults([]); setOpen(false); setActiveTimeframe("D"); setSelectedIndicators([]); setIndicator("None"); setWindowOffset(0); }
+  function chooseSymbol(s: string, name?: string, nextAssetType?: AssetType) { const c = s.trim().toUpperCase(); if (!c) return; symbolWasChosenRef.current = true; if (nextAssetType) setAssetType(nextAssetType); setSymbol(c); setSymbolName(name?.trim() ? name.trim() : ""); setQuery(c); setResults([]); setOpen(false); setActiveTimeframe("D"); setSelectedIndicators([]); setIndicator("None"); setWindowOffset(0); }
   function switchAssetType(next: AssetType) {
     if (next === assetType) return;
     if (next === "crypto") { chooseSymbol(DEFAULT_CRYPTO_SYMBOL, CRYPTO_PRESETS[0]?.name, "crypto"); return; }
@@ -1192,6 +1276,24 @@ export default function DashboardClient({
         </div>
         );
       })() : null}
+
+      {/* Fixed rather than in normal flow: this renders client-only, so anything
+          in flow would shift the layout on hydration, and reserving a
+          fixed-height slot would cost vertical space on every page view for a
+          chip most visitors never see. Sits above StockPagesBottomNav (which is
+          itself fixed) rather than overlapping it. */}
+      {resumeSymbol ? (
+        <div style={{ position: "fixed", left: 12, bottom: 86, zIndex: 90, display: "flex", alignItems: "center", gap: 6, background: COLORS.cardBg, border: `1px solid ${COLORS.border}`, borderRadius: 999, padding: "6px 6px 6px 12px", boxShadow: "0 10px 24px rgba(0,0,0,0.4)", maxWidth: "calc(100vw - 24px)" }}>
+          <button type="button" onClick={() => { const s = resumeSymbol; setResumeSymbol(""); chooseSymbol(s, undefined, "stock"); }}
+            style={{ background: "none", border: "none", color: COLORS.cardFg, fontWeight: 800, fontSize: 13, cursor: "pointer", padding: 0, whiteSpace: "nowrap" }}>
+            Resume {resumeSymbol} →
+          </button>
+          <button type="button" onClick={dismissResume} aria-label="Dismiss"
+            style={{ background: "none", border: "none", color: COLORS.mutedFg, fontSize: 15, lineHeight: 1, cursor: "pointer", padding: "2px 8px" }}>
+            ×
+          </button>
+        </div>
+      ) : null}
 
       {loading ? <div style={{ position: "fixed", bottom: 20, right: 20, fontSize: 12, color: COLORS.mutedFg, background: COLORS.cardBg, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "8px 12px", fontWeight: 700 }}>Loading chart data…</div> : null}
     </main>
