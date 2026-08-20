@@ -55,6 +55,22 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
       }
     }
 
+    // Nothing to fetch for a closed dropdown showing the symbol we are
+    // already on. `query` is seeded to currentSymbol, so without this guard
+    // every page load fired a search for results that were never rendered --
+    // and this component mounts TWICE per stock page (a desktop
+    // "sidebar-change-stock" instance and a mobile "mobile-change-stock"
+    // one, with CSS hiding whichever does not apply), so it was two wasted
+    // requests each time, racing the third from StockSymbolPageClient.
+    //
+    // Gating on `open` is safe because results are only ever rendered while
+    // the dropdown is open, and both onFocus and onChange set open = true --
+    // so the fetch still happens the instant the field is touched, one
+    // debounce interval before any result could be displayed.
+    if (!open && exactStillSelected) {
+      return;
+    }
+
     const timer = window.setTimeout(async () => {
       try {
         const res = await fetch(`/api/symbols?q=${encodeURIComponent(q)}`);
@@ -75,8 +91,12 @@ export default function StockTickerJump({ currentSymbol }: StockTickerJumpProps)
     // above: this effect calls setResults, so including it re-triggered the
     // effect on every fetch and left the picker fetching /api/symbols in a
     // loop for as long as the query stayed put.
+    //
+    // `open` IS a dependency: it gates the fetch above, so opening the
+    // dropdown has to be able to trigger the search that mounting no longer
+    // does.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, selected?.symbol]);
+  }, [query, selected?.symbol, open]);
 
   // Tap-outside / Escape. Deliberately leaves `query` and `selected`
   // untouched: dismissing means "I didn't pick anything", not "undo what I

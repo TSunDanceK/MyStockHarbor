@@ -131,12 +131,6 @@ type Point = {
   volume?: number;
 };
 
-type SymbolResult = {
-  symbol: string;
-  name: string;
-  exchange: string;
-};
-
 type StockSymbolPageClientProps = {
   symbol: string;
   // Short-lived signed token minted server-side (lib/server/quoteToken.ts) and
@@ -944,7 +938,15 @@ export default function StockSymbolPageClient({ symbol, pageToken, latestEarning
       : null
   );
   const [history, setHistory] = useState<Point[]>(initialHistory ?? []);
-  const [companyName, setCompanyName] = useState(seed?.companyName ?? "");
+  // Was seeded from `seed` alone and then overwritten by a third
+  // /api/symbols call in the load effect below, purely to look up a name the
+  // server already had. Worse than redundant: when that lookup found no exact
+  // match it set "" and wiped a correct server-rendered company name.
+  // `profile` (the FMP company profile, server-fetched) is the better source
+  // and `seed` stays as the fallback.
+  const [companyName] = useState(
+    profile?.companyName ?? seed?.companyName ?? ""
+  );
   // When we have server-seeded history, the layout renders immediately (no gate);
   // the effect below still refreshes data in the background.
   const [priceLoading, setPriceLoading] = useState(!seededHistory);
@@ -961,31 +963,35 @@ export default function StockSymbolPageClient({ symbol, pageToken, latestEarning
       setErr(null);
       if (!seededHistory) setPriceLoading(true);
       try {
-        const [quoteRes, historyRes, symbolsRes] = await Promise.all([
+        const [quoteRes, historyRes] = await Promise.all([
           fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`, {
             cache: "no-store",
             // Only /api/quote is token-gated in this pilot, so only this fetch
             // carries the header. Omitted entirely when unconfigured.
             ...(pageToken ? { headers: { "x-msh-page-token": pageToken } } : {}),
           }),
-          fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=900`, { cache: "no-store" }),
-          fetch(`/api/symbols?q=${encodeURIComponent(symbol)}`, { cache: "no-store" }),
+          // No cache:"no-store" on history. /api/history already declares
+          // revalidate = 900 and returns its own tiered s-maxage; a no-store
+          // request header opted the browser and the CDN out of both, so a
+          // route built to be cached was never once served from cache.
+          fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&days=900`),
         ]);
         if (!quoteRes.ok) throw new Error("Quote fetch failed");
         if (!historyRes.ok) throw new Error("History fetch failed");
         const quoteData = (await quoteRes.json()) as Quote;
         const historyData = (await historyRes.json()) as { symbol: string; points: any[] };
-        let name = "";
-        if (symbolsRes.ok) { const symbolsData = (await symbolsRes.json()) as { results?: SymbolResult[] }; const exact = (symbolsData.results ?? []).find((r) => (r.symbol ?? "").toUpperCase() === symbol.toUpperCase()); name = exact?.name ?? ""; }
         if (cancelled) return;
         const ptsRaw = Array.isArray(historyData.points) ? historyData.points : [];
         const pts: Point[] = ptsRaw.map((p: any) => ({ date: String(p?.date ?? ""), close: Number(p?.close), high: p?.high == null ? undefined : Number(p.high), low: p?.low == null ? undefined : Number(p.low), volume: p?.volume == null ? undefined : Number(p.volume) })).filter((p) => p.date && Number.isFinite(p.close));
-        setQuote(quoteData); setHistory(pts); setCompanyName(name);
+        setQuote(quoteData); setHistory(pts);
       } catch {
         if (cancelled) return;
         // A failed background refresh must not wipe server-seeded content.
         if (seededHistory) return;
-        setErr("Failed to load stock page."); setQuote(null); setHistory([]); setCompanyName("");
+        // companyName is no longer cleared here: it now comes from the
+        // server-rendered `profile`/`seed` props, which a failed client
+        // refresh does not invalidate.
+        setErr("Failed to load stock page."); setQuote(null); setHistory([]);
       }
       finally { if (!cancelled) setPriceLoading(false); }
     }
