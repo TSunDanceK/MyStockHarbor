@@ -11,6 +11,9 @@
 // endpoint and SSR share the same in-memory cache Map defined in this
 // module and stay perfectly consistent.
 
+import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
+import { withRedisTimeout } from "./redisGuardTimeout";
 import { timingCache, beginTiming } from "./timing";
 
 export type BenchScope = "stock" | "crypto";
@@ -34,6 +37,70 @@ export type BenchPayload = {
 
 const CACHE_MS = 5 * 60_000;
 const cache = new Map<string, { at: number; payload: BenchPayload }>();
+
+// Durable second layer behind the per-instance Map above.
+//
+// The Map is scoped to one serverless instance and dies with it, and
+// fetchFmpQuote passes cache:"no-store" so the Next Data Cache cannot help
+// either. A miss therefore costs FOUR live FMP calls, on a code path that
+// both / and /dashboard render through -- so at real traffic most renders
+// were paying that, which is the TTFB story rather than any route config.
+// Redis makes one instance's fetch serve every other instance.
+const redis =
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+    ? Redis.fromEnv(PAGE_READ_CACHE)
+    : null;
+
+const REDIS_PREFIX = "msh:benchmarks";
+
+// Retained well beyond CACHE_MS on purpose. After 5 minutes an entry stops
+// being served as fresh, but keeping it lets a failed FMP round degrade to
+// real (if slightly old) prices instead of to a payload of nulls.
+const REDIS_TTL_SECONDS = 24 * 60 * 60;
+
+type RedisEntry = { at: number; payload: BenchPayload };
+
+// A payload whose every row is null is what a total FMP failure produces.
+// It must never be cached: before this module had a shared cache it poisoned
+// one instance for 5 minutes, but writing it to Redis would poison EVERY
+// instance, and for as long as the entry lives. Adding a durable cache
+// without this check would make an outage worse, not better.
+function hasRealData(payload: BenchPayload): boolean {
+  return payload.items.some((item) => item.close !== null);
+}
+
+async function readRedis(scope: string): Promise<RedisEntry | null> {
+  if (!redis) {
+    timingCache("benchmarks", "redis", "skip", "no-credentials");
+    return null;
+  }
+  const entry = await withRedisTimeout(
+    () => redis.get<RedisEntry>(`${REDIS_PREFIX}:${scope}`),
+    null,
+    "benchmarks",
+    `scope=${scope}`
+  );
+  if (!entry || typeof entry.at !== "number" || !entry.payload) {
+    timingCache("benchmarks", "redis", "miss", scope);
+    return null;
+  }
+  timingCache("benchmarks", "redis", "hit", scope);
+  return entry;
+}
+
+async function writeRedis(scope: string, entry: RedisEntry): Promise<void> {
+  if (!redis) return;
+  try {
+    await redis.set(`${REDIS_PREFIX}:${scope}`, entry, { ex: REDIS_TTL_SECONDS });
+  } catch (err) {
+    // Never fail a render over a cache write.
+    console.error(`[benchmarks] redis write failed scope=${scope}:`, err);
+  }
+}
+
+const FRESH_HEADERS = {
+  "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+};
 
 function toNum(x: unknown): number | null {
   const n = typeof x === "number" ? x : typeof x === "string" ? Number(x) : NaN;
@@ -107,23 +174,30 @@ async function getBenchmarksDataInner(
   const cached = cache.get(scope);
   if (cached && Date.now() - cached.at < CACHE_MS) {
     timingCache("benchmarks", "memcache", "hit", scope);
-    return {
-      data: cached.payload,
-      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
-    };
+    return { data: cached.payload, headers: FRESH_HEADERS };
   }
 
-  // A miss costs FOUR live FMP calls (see below). `cache` is a module-scope
-  // Map -- per serverless instance, gone on every cold start, never shared --
-  // and fetchFmpQuote passes cache:"no-store", so the Next Data Cache cannot
-  // help either. If this logs "miss" on most renders, this call is the TTFB
-  // story and a durable (Redis) cache is worth more than any route-config change.
   timingCache("benchmarks", "memcache", "miss", scope);
+
+  // Second layer: another instance's recent fetch, or this instance's own
+  // from before it was recycled. Promoted into the Map so the rest of this
+  // instance's requests do not re-read Redis.
+  const stored = await readRedis(scope);
+  if (stored && Date.now() - stored.at < CACHE_MS) {
+    cache.set(scope, { at: stored.at, payload: stored.payload });
+    return { data: stored.payload, headers: FRESH_HEADERS };
+  }
 
   const apiKey = process.env.FMP_API_KEY;
   const defs = getBenchDefs(scope);
 
   if (!apiKey) {
+    // A stale-but-real payload beats an empty one even here: the page shows
+    // real prices with an older timestamp rather than four blank tiles.
+    if (stored) {
+      console.error("[benchmarks] FMP_API_KEY is not set -- serving stale cached payload");
+      return { data: stored.payload, headers: {} };
+    }
     const payload: BenchPayload = {
       updatedAt: new Date().toISOString(),
       scope: scope === "crypto" ? "Crypto Benchmarks (FMP)" : "Benchmarks (FMP)",
@@ -164,10 +238,27 @@ async function getBenchmarksDataInner(
     items,
   };
 
-  cache.set(scope, { at: Date.now(), payload });
+  // Total FMP failure. Serve the stale copy rather than four blank tiles,
+  // and do NOT cache the null payload -- see hasRealData.
+  if (!hasRealData(payload)) {
+    if (stored) {
+      const ageMin = Math.round((Date.now() - stored.at) / 60_000);
+      console.error(
+        `[benchmarks] all ${defs.length} FMP quotes failed for scope=${scope}; ` +
+          `serving stale cached payload ${ageMin}m old`
+      );
+      return { data: stored.payload, headers: {} };
+    }
+    console.error(
+      `[benchmarks] all ${defs.length} FMP quotes failed for scope=${scope} ` +
+        `with no cached copy -- returning a payload of nulls, not caching it`
+    );
+    return { data: payload, headers: {}, status: 500 };
+  }
 
-  return {
-    data: payload,
-    headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
-  };
+  const entry: RedisEntry = { at: Date.now(), payload };
+  cache.set(scope, entry);
+  await writeRedis(scope, entry);
+
+  return { data: payload, headers: FRESH_HEADERS };
 }
