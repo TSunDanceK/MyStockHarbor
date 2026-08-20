@@ -206,3 +206,9 @@ Two rules out of it:
   identically to one describing reality.
 
 Written up in full in `claude/BOTTLENECKS.md`.
+
+### Index of the other traps
+
+A return type that cannot express failure (`/upcoming-ipos` asserting the IPO
+market was empty when the read had failed), and the full list of these,
+now live in `claude/silent-failure-traps.md`.
