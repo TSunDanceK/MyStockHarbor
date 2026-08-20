@@ -45,7 +45,12 @@ export default function PickerTickerSearch({
     }
     const timer = window.setTimeout(async () => {
       try {
-        const res = await fetch(`/api/symbols?q=${encodeURIComponent(q)}`, { cache: "no-store" });
+        // No cache:"no-store" here. /api/symbols is already declared
+        // revalidate = 86400 with a matching s-maxage, and a no-store request
+        // header opts the BROWSER and the CDN out of that, turning a route
+        // that should almost always hit into a guaranteed function
+        // invocation. The symbol list changes at most daily.
+        const res = await fetch(`/api/symbols?q=${encodeURIComponent(q)}`);
         const data = (await res.json()) as { results?: SymbolResult[] };
         setResults(Array.isArray(data.results) ? data.results : []);
       } catch {
