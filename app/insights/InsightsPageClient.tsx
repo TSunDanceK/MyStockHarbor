@@ -188,9 +188,9 @@ function PaginationNav({ page, totalPages }: { page: number; totalPages: number 
 // package.json, and adding one to ship three glyphs would put a dependency into
 // a client bundle on a page that is already under crawl-budget pressure.
 //
-// All three take a size, because each is drawn twice at two scales: 15-17px
-// beside text in the page body, and 22px stacked over a caption in the docked
-// bottom bar. One component per glyph rather than two keeps them from drifting.
+// They take a size because the two tab glyphs are drawn at 22px in the docked
+// bottom bar and the magnifier at 17px inside the search field. One component
+// per glyph rather than one per size keeps them from drifting apart.
 //
 // aria-hidden throughout -- each sits inside a control that carries its own
 // text label, so announcing the icon would just repeat it.
@@ -265,9 +265,6 @@ function SearchBox({ value, onChange }: { value: string; onChange: (value: strin
     // Relative wrapper so the icon can sit inside the field. The input keeps
     // width: 100% + box-sizing: border-box, and the extra left padding makes
     // room for the glyph rather than letting the placeholder run under it.
-    //
-    // Desktop only now -- on a phone the field lives in the docked bar, which
-    // is why this is no longer rendered from the mobile branch.
     <div style={{ position: "relative", width: "100%" }}>
       <SearchIcon
         size={17}
@@ -332,53 +329,14 @@ export default function InsightsPageClient({ posts, videos, page, totalPages, to
     }
   };
 
-  // Search is a MODE of the bottom bar, not a fourth surface. Opening it
-  // replaces the three tabs with the field in place, so the results appear in
-  // the list already on screen behind it rather than in a panel stacked over
-  // it. Search only looks at posts, so opening it from the Videos tab moves
-  // you to the tab whose list is about to change.
-  const [searchOpen, setSearchOpen] = useState(false);
-  const openSearch = () => {
-    if (mobileTab !== "insights") selectMobileTab("insights");
-    setSearchOpen(true);
-  };
-  const closeSearch = () => {
-    setSearchOpen(false);
-    setQuery("");
-  };
-
-  // iOS Safari does not move position: fixed elements when the keyboard opens
-  // -- they stay pinned to the bottom of the LAYOUT viewport, which is now
-  // behind the keyboard, so a docked input becomes an input you cannot see
-  // yourself typing into. visualViewport reports the difference; translating
-  // the bar by it puts the field back on top of the keyboard where it belongs.
+  // Search stays in the page, above the list it filters.
   //
-  // Android resizes the layout viewport instead, so the measurement comes out
-  // near zero there and the bar is left alone, which is already correct. The
-  // 40px floor keeps browser chrome collapsing on scroll from being mistaken
-  // for a keyboard.
-  const [kbOffset, setKbOffset] = useState(0);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const vv = window.visualViewport;
-    if (!vv) return;
-    if (!searchOpen) {
-      setKbOffset(0);
-      return;
-    }
-    const apply = () => {
-      const hidden = window.innerHeight - vv.height - vv.offsetTop;
-      setKbOffset(hidden > 40 ? Math.round(hidden) : 0);
-    };
-    apply();
-    vv.addEventListener("resize", apply);
-    vv.addEventListener("scroll", apply);
-    return () => {
-      vv.removeEventListener("resize", apply);
-      vv.removeEventListener("scroll", apply);
-    };
-  }, [searchOpen]);
-
+  // It was briefly a mode of the bottom bar. Two things were wrong with that.
+  // A field docked over the keyboard put the query, the result count and the
+  // results themselves in three separate parts of the screen, and it read as
+  // a search of whatever tab you were on -- so from Videos it looked like it
+  // would search videos, which it cannot. Sitting on the written-insights tab
+  // it can only mean one thing, and the count sits directly under it.
   const [searchResults, setSearchResults] = useState<InsightSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState(false);
@@ -476,15 +434,15 @@ export default function InsightsPageClient({ posts, videos, page, totalPages, to
           </div>
         </section>
 
-        {/* ── MOBILE: list only. The tab switcher and the search field that used
-            to sit here are in the docked bar at the foot of the screen -- see
-            .insightsBar below. Between them they were costing ~110px of a
-            ~740px viewport, directly under a 62px header already doing the
-            same thing, so the first post started below the fold on a phone. ── */}
+        {/* ── MOBILE: the two lists. The tab switcher that used to sit above
+            them is in the docked bar at the foot of the screen -- see
+            .insightsBar below. The search field stays here, on the tab whose
+            list it filters and directly above the count of what it matched. ── */}
         <div className="mobileTabs" style={{ marginTop: 20, display: "none" }}>
           {mobileTab === "insights" && (
             <div>
-              <div style={{ fontSize: 11, opacity: 0.55, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase" }}>
+              <SearchBox value={query} onChange={setQuery} />
+              <div style={{ marginTop: 12, fontSize: 11, opacity: 0.55, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase" }}>
                 {listLabel}
               </div>
               <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
@@ -548,73 +506,35 @@ export default function InsightsPageClient({ posts, videos, page, totalPages, to
           shares so no item can push another off the edge, icon over caption,
           flat and opaque. What you read is the list; what you press is the bar.
 
+          Two items today. Deliberately left as a bar rather than folded back
+          into an inline switcher, because it is the page's permanent
+          navigation surface and more will land in it as the site grows -- the
+          equal-share layout takes a third or fourth item without any of the
+          overflow trouble the picker bar had with pills.
+
           It is a sibling of .insightsWrap rather than a child so nothing in the
           page's own layout can clip or offset it, and it renders on every
           breakpoint but only displays under 980px, which is the same width at
           which the page swaps to its single-column form. */}
-      <div
-        className="insightsBar"
-        style={kbOffset ? { transform: `translateY(-${kbOffset}px)` } : undefined}
-      >
-        {searchOpen ? (
-          <div className="insightsSearchRow">
-            <SearchIcon size={18} style={{ color: "rgba(241,245,249,0.45)" }} />
-            <input
-              className="insightsSearchInput"
-              type="text"
-              value={query}
-              // Opening the field and then asking for a second tap to type in
-              // it would make this two gestures where the bar promised one.
-              autoFocus
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") closeSearch();
-              }}
-              placeholder="Ticker or title..."
-              aria-label="Search all insight posts by ticker or title"
-            />
-            <button
-              type="button"
-              className="insightsSearchClose"
-              onClick={closeSearch}
-              aria-label="Close search"
-            >
-              ✕
-            </button>
-          </div>
-        ) : (
-          <>
-            <button
-              type="button"
-              className={mobileTab === "insights" ? "insightsBarItem isActive" : "insightsBarItem"}
-              onClick={() => selectMobileTab("insights")}
-              aria-current={mobileTab === "insights" ? "true" : undefined}
-            >
-              <WrittenIcon size={22} />
-              <span>Insights</span>
-            </button>
-            <button
-              type="button"
-              className={mobileTab === "videos" ? "insightsBarItem isActiveVideos" : "insightsBarItem"}
-              onClick={() => selectMobileTab("videos")}
-              aria-current={mobileTab === "videos" ? "true" : undefined}
-            >
-              <VideoIcon size={22} />
-              <span>Videos</span>
-            </button>
-            <button
-              type="button"
-              className={isSearchActive ? "insightsBarItem isActive" : "insightsBarItem"}
-              onClick={openSearch}
-            >
-              <SearchIcon size={22} />
-              {/* While a query is live the caption reports it, because the
-                  field itself is closed and the list would otherwise be
-                  filtered with nothing on screen saying why. */}
-              <span className="insightsBarLabel">{isSearchActive ? trimmedQuery : "Search"}</span>
-            </button>
-          </>
-        )}
+      <div className="insightsBar">
+        <button
+          type="button"
+          className={mobileTab === "insights" ? "insightsBarItem isActive" : "insightsBarItem"}
+          onClick={() => selectMobileTab("insights")}
+          aria-current={mobileTab === "insights" ? "true" : undefined}
+        >
+          <WrittenIcon size={22} />
+          <span className="insightsBarLabel">Insights</span>
+        </button>
+        <button
+          type="button"
+          className={mobileTab === "videos" ? "insightsBarItem isActiveVideos" : "insightsBarItem"}
+          onClick={() => selectMobileTab("videos")}
+          aria-current={mobileTab === "videos" ? "true" : undefined}
+        >
+          <VideoIcon size={22} />
+          <span className="insightsBarLabel">Videos</span>
+        </button>
       </div>
 
       <style>{`
@@ -638,7 +558,6 @@ export default function InsightsPageClient({ posts, videos, page, totalPages, to
             background: #080b12;
             border-top: 1px solid rgba(255,255,255,0.10);
             padding: 0 0 env(safe-area-inset-bottom);
-            transition: transform 120ms ease;
           }
 
           /* Reserves the bar's height at the foot of the document so the last
@@ -661,44 +580,15 @@ export default function InsightsPageClient({ posts, videos, page, totalPages, to
           .insightsBarItem:active { background: rgba(255,255,255,0.04); }
           .insightsBarItem.isActive { color: #93c5fd; }
           .insightsBarItem.isActiveVideos { color: #fca5a5; }
-          /* A ticker fits; a title does not, and a caption that ellipses is
-             still telling you a search is on. */
           .insightsBarLabel {
             max-width: 100%; overflow: hidden;
             text-overflow: ellipsis; white-space: nowrap;
-          }
-
-          .insightsSearchRow {
-            flex: 1 1 auto; min-width: 0;
-            display: flex; align-items: center; gap: 10px;
-            padding: 9px 12px;
-          }
-          .insightsSearchInput {
-            flex: 1 1 auto; min-width: 0;
-            border: 0; background: none; outline: none;
-            color: #f1f5f9;
-            font-family: system-ui, Arial; font-weight: 600;
-            /* 16px is the threshold below which iOS zooms the page on focus. */
-            font-size: 16px;
-            padding: 6px 0;
-          }
-          .insightsSearchClose {
-            flex: 0 0 auto; width: 32px; height: 32px;
-            border-radius: 999px;
-            border: 1px solid rgba(255,255,255,0.14);
-            background: rgba(255,255,255,0.05);
-            color: #f1f5f9; font-size: 12px; cursor: pointer;
-            font-family: system-ui, Arial;
           }
         }
 
         @media (min-width: 981px) {
           .mobileTabs { display: none !important; }
           .desktopVideos { position: sticky; top: 24px; }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          .insightsBar { transition: none; }
         }
 
         /* Phone density.
