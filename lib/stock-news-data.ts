@@ -1,4 +1,5 @@
 import { unstable_cache } from "next/cache";
+import { beginTiming } from "./server/timing";
 import {
   getAiNewsBriefs,
   getAiNewsInsight,
@@ -2293,6 +2294,18 @@ const getCachedStockNewsBaseData = unstable_cache(
 );
 
 export async function getStockNewsBaseData(
+  symbol: string,
+  options: BuildOptions = {}
+): Promise<StockNewsBaseData> {
+  const endTiming = beginTiming("news", "getStockNewsBaseData");
+  try {
+    return await getStockNewsBaseDataInner(symbol, options);
+  } finally {
+    endTiming();
+  }
+}
+
+async function getStockNewsBaseDataInner(
   symbol: string,
   options: BuildOptions = {}
 ): Promise<StockNewsBaseData> {
