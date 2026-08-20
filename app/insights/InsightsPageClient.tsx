@@ -185,18 +185,22 @@ function PaginationNav({ page, totalPages }: { page: number; totalPages: number 
 }
 
 // Inline SVGs rather than an icon-library import: there is no icon package in
-// package.json, and adding one to ship two glyphs would put a dependency into
+// package.json, and adding one to ship three glyphs would put a dependency into
 // a client bundle on a page that is already under crawl-budget pressure.
 //
-// aria-hidden on both -- each sits inside a button that still carries its own
+// All three take a size, because each is drawn twice at two scales: 15-17px
+// beside text in the page body, and 22px stacked over a caption in the docked
+// bottom bar. One component per glyph rather than two keeps them from drifting.
+//
+// aria-hidden throughout -- each sits inside a control that carries its own
 // text label, so announcing the icon would just repeat it.
 
 /** Pen over paper: the written insight posts. */
-function WrittenIcon() {
+function WrittenIcon({ size = 15 }: { size?: number }) {
   return (
     <svg
-      width="15"
-      height="15"
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -215,11 +219,11 @@ function WrittenIcon() {
 }
 
 /** YouTube's rounded-rectangle-and-play mark, drawn rather than imported. */
-function VideoIcon() {
+function VideoIcon({ size = 17 }: { size?: number }) {
   return (
     <svg
-      width="17"
-      height="17"
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -235,22 +239,38 @@ function VideoIcon() {
   );
 }
 
+/** Magnifier. */
+function SearchIcon({ size = 17, style }: { size?: number; style?: React.CSSProperties }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      style={{ flexShrink: 0, ...style }}
+    >
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </svg>
+  );
+}
+
 function SearchBox({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return (
     // Relative wrapper so the icon can sit inside the field. The input keeps
     // width: 100% + box-sizing: border-box, and the extra left padding makes
     // room for the glyph rather than letting the placeholder run under it.
+    //
+    // Desktop only now -- on a phone the field lives in the docked bar, which
+    // is why this is no longer rendered from the mobile branch.
     <div style={{ position: "relative", width: "100%" }}>
-      <svg
-        width="17"
-        height="17"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
+      <SearchIcon
+        size={17}
         style={{
           position: "absolute",
           left: 15,
@@ -261,10 +281,7 @@ function SearchBox({ value, onChange }: { value: string; onChange: (value: strin
           // the SVG.
           pointerEvents: "none",
         }}
-      >
-        <circle cx="11" cy="11" r="7" />
-        <path d="m20 20-3.5-3.5" />
-      </svg>
+      />
       <input
         type="text"
         value={value}
@@ -291,12 +308,12 @@ export default function InsightsPageClient({ posts, videos, page, totalPages, to
   const [mobileTab, setMobileTab] = useState<"insights" | "videos">("insights");
   const [query, setQuery] = useState("");
 
-  // Remember which mobile tab (Latest Insights vs Watch Videos) the visitor
-  // last had open, so returning here via the browser Back button after opening
-  // a video restores that tab instead of snapping back to the default. Read on
-  // mount (in an effect, not the initial state, to avoid an SSR hydration
-  // mismatch) and written on every tab change. sessionStorage keeps it scoped
-  // to the current browsing session.
+  // Remember which mobile tab (Insights vs Videos) the visitor last had open,
+  // so returning here via the browser Back button after opening a video
+  // restores that tab instead of snapping back to the default. Read on mount
+  // (in an effect, not the initial state, to avoid an SSR hydration mismatch)
+  // and written on every tab change. sessionStorage keeps it scoped to the
+  // current browsing session.
   useEffect(() => {
     try {
       const saved = sessionStorage.getItem("insightsMobileTab");
@@ -314,6 +331,54 @@ export default function InsightsPageClient({ posts, videos, page, totalPages, to
       /* ignore persistence failures (private mode, storage disabled) */
     }
   };
+
+  // Search is a MODE of the bottom bar, not a fourth surface. Opening it
+  // replaces the three tabs with the field in place, so the results appear in
+  // the list already on screen behind it rather than in a panel stacked over
+  // it. Search only looks at posts, so opening it from the Videos tab moves
+  // you to the tab whose list is about to change.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const openSearch = () => {
+    if (mobileTab !== "insights") selectMobileTab("insights");
+    setSearchOpen(true);
+  };
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setQuery("");
+  };
+
+  // iOS Safari does not move position: fixed elements when the keyboard opens
+  // -- they stay pinned to the bottom of the LAYOUT viewport, which is now
+  // behind the keyboard, so a docked input becomes an input you cannot see
+  // yourself typing into. visualViewport reports the difference; translating
+  // the bar by it puts the field back on top of the keyboard where it belongs.
+  //
+  // Android resizes the layout viewport instead, so the measurement comes out
+  // near zero there and the bar is left alone, which is already correct. The
+  // 40px floor keeps browser chrome collapsing on scroll from being mistaken
+  // for a keyboard.
+  const [kbOffset, setKbOffset] = useState(0);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    if (!searchOpen) {
+      setKbOffset(0);
+      return;
+    }
+    const apply = () => {
+      const hidden = window.innerHeight - vv.height - vv.offsetTop;
+      setKbOffset(hidden > 40 ? Math.round(hidden) : 0);
+    };
+    apply();
+    vv.addEventListener("resize", apply);
+    vv.addEventListener("scroll", apply);
+    return () => {
+      vv.removeEventListener("resize", apply);
+      vv.removeEventListener("scroll", apply);
+    };
+  }, [searchOpen]);
+
   const [searchResults, setSearchResults] = useState<InsightSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState(false);
@@ -411,44 +476,15 @@ export default function InsightsPageClient({ posts, videos, page, totalPages, to
           </div>
         </section>
 
-        {/* ── MOBILE: tab switcher ── */}
-        <div className="mobileTabs" style={{ marginTop: 24, display: "none" }}>
-          <div style={{ display: "flex", borderRadius: 12, overflow: "hidden", border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.03)" }}>
-            <button
-              onClick={() => selectMobileTab("insights")}
-              style={{
-                flex: 1, padding: "12px 0", border: "none", cursor: "pointer",
-                fontSize: 14, fontWeight: 800, fontFamily: "system-ui, Arial", borderRadius: 0,
-                background: mobileTab === "insights" ? "rgba(59,130,246,0.18)" : "transparent",
-                color: mobileTab === "insights" ? "#93c5fd" : "rgba(241,245,249,0.55)",
-                borderRight: "1px solid rgba(255,255,255,0.10)",
-                transition: "background 0.15s, color 0.15s",
-                display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8,
-              }}
-            >
-              <WrittenIcon />
-              Latest Insights
-            </button>
-            <button
-              onClick={() => selectMobileTab("videos")}
-              style={{
-                flex: 1, padding: "12px 0", border: "none", cursor: "pointer",
-                fontSize: 14, fontWeight: 800, fontFamily: "system-ui, Arial", borderRadius: 0,
-                background: mobileTab === "videos" ? "rgba(239,68,68,0.15)" : "transparent",
-                color: mobileTab === "videos" ? "#fca5a5" : "rgba(241,245,249,0.55)",
-                transition: "background 0.15s, color 0.15s",
-                display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8,
-              }}
-            >
-              <VideoIcon />
-              Watch Videos
-            </button>
-          </div>
-
+        {/* ── MOBILE: list only. The tab switcher and the search field that used
+            to sit here are in the docked bar at the foot of the screen -- see
+            .insightsBar below. Between them they were costing ~110px of a
+            ~740px viewport, directly under a 62px header already doing the
+            same thing, so the first post started below the fold on a phone. ── */}
+        <div className="mobileTabs" style={{ marginTop: 20, display: "none" }}>
           {mobileTab === "insights" && (
-            <div style={{ marginTop: 14 }}>
-              <SearchBox value={query} onChange={setQuery} />
-              <div style={{ marginTop: 12, fontSize: 11, opacity: 0.55, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase" }}>
+            <div>
+              <div style={{ fontSize: 11, opacity: 0.55, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase" }}>
                 {listLabel}
               </div>
               <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
@@ -463,7 +499,7 @@ export default function InsightsPageClient({ posts, videos, page, totalPages, to
           )}
 
           {mobileTab === "videos" && (
-            <div style={{ marginTop: 14 }}>
+            <div>
               <div style={{ display: "grid", gap: 8 }}>
                 {videos.length === 0 ? (
                   <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", padding: 14, opacity: 0.7 }}>Videos could not be loaded.</div>
@@ -507,14 +543,162 @@ export default function InsightsPageClient({ posts, videos, page, totalPages, to
         </section>
       </div>
 
+      {/* ── PHONE: docked bar ──
+          Same treatment as the picker controls bar: fixed to the bottom, equal
+          shares so no item can push another off the edge, icon over caption,
+          flat and opaque. What you read is the list; what you press is the bar.
+
+          It is a sibling of .insightsWrap rather than a child so nothing in the
+          page's own layout can clip or offset it, and it renders on every
+          breakpoint but only displays under 980px, which is the same width at
+          which the page swaps to its single-column form. */}
+      <div
+        className="insightsBar"
+        style={kbOffset ? { transform: `translateY(-${kbOffset}px)` } : undefined}
+      >
+        {searchOpen ? (
+          <div className="insightsSearchRow">
+            <SearchIcon size={18} style={{ color: "rgba(241,245,249,0.45)" }} />
+            <input
+              className="insightsSearchInput"
+              type="text"
+              value={query}
+              // Opening the field and then asking for a second tap to type in
+              // it would make this two gestures where the bar promised one.
+              autoFocus
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") closeSearch();
+              }}
+              placeholder="Ticker or title..."
+              aria-label="Search all insight posts by ticker or title"
+            />
+            <button
+              type="button"
+              className="insightsSearchClose"
+              onClick={closeSearch}
+              aria-label="Close search"
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          <>
+            <button
+              type="button"
+              className={mobileTab === "insights" ? "insightsBarItem isActive" : "insightsBarItem"}
+              onClick={() => selectMobileTab("insights")}
+              aria-current={mobileTab === "insights" ? "true" : undefined}
+            >
+              <WrittenIcon size={22} />
+              <span>Insights</span>
+            </button>
+            <button
+              type="button"
+              className={mobileTab === "videos" ? "insightsBarItem isActiveVideos" : "insightsBarItem"}
+              onClick={() => selectMobileTab("videos")}
+              aria-current={mobileTab === "videos" ? "true" : undefined}
+            >
+              <VideoIcon size={22} />
+              <span>Videos</span>
+            </button>
+            <button
+              type="button"
+              className={isSearchActive ? "insightsBarItem isActive" : "insightsBarItem"}
+              onClick={openSearch}
+            >
+              <SearchIcon size={22} />
+              {/* While a query is live the caption reports it, because the
+                  field itself is closed and the list would otherwise be
+                  filtered with nothing on screen saying why. */}
+              <span className="insightsBarLabel">{isSearchActive ? trimmedQuery : "Search"}</span>
+            </button>
+          </>
+        )}
+      </div>
+
       <style>{`
+        /* Off by default: this is the phone's control surface, and above 980px
+           the page already shows both columns and its own search field. */
+        .insightsBar { display: none; }
+
         @media (max-width: 980px) {
           .mobileTabs { display: block !important; }
           .desktopLayout { display: none !important; }
+
+          .insightsBar {
+            display: flex;
+            position: fixed; left: 0; right: 0; bottom: 0;
+            /* Under the site header (100) and any sheet, over the page. Same
+               layer the picker controls bar uses. */
+            z-index: 55;
+            align-items: stretch;
+            /* Opaque. A translucent bar over a column of cards reads as
+               smeared rather than as depth. */
+            background: #080b12;
+            border-top: 1px solid rgba(255,255,255,0.10);
+            padding: 0 0 env(safe-area-inset-bottom);
+            transition: transform 120ms ease;
+          }
+
+          /* Reserves the bar's height at the foot of the document so the last
+             post, the pagination row and the YouTube button are not sitting
+             underneath it. Without this it is not docked, it is covering
+             something. */
+          body { padding-bottom: calc(58px + env(safe-area-inset-bottom)); }
+
+          .insightsBarItem {
+            flex: 1 1 0; min-width: 0;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 3px;
+            padding: 7px 4px 6px;
+            border: 0; background: none; cursor: pointer;
+            font-family: system-ui, Arial;
+            font-size: 10.5px; font-weight: 800; line-height: 1;
+            color: rgba(148,163,184,0.85);
+            transition: color 0.15s;
+          }
+          .insightsBarItem:active { background: rgba(255,255,255,0.04); }
+          .insightsBarItem.isActive { color: #93c5fd; }
+          .insightsBarItem.isActiveVideos { color: #fca5a5; }
+          /* A ticker fits; a title does not, and a caption that ellipses is
+             still telling you a search is on. */
+          .insightsBarLabel {
+            max-width: 100%; overflow: hidden;
+            text-overflow: ellipsis; white-space: nowrap;
+          }
+
+          .insightsSearchRow {
+            flex: 1 1 auto; min-width: 0;
+            display: flex; align-items: center; gap: 10px;
+            padding: 9px 12px;
+          }
+          .insightsSearchInput {
+            flex: 1 1 auto; min-width: 0;
+            border: 0; background: none; outline: none;
+            color: #f1f5f9;
+            font-family: system-ui, Arial; font-weight: 600;
+            /* 16px is the threshold below which iOS zooms the page on focus. */
+            font-size: 16px;
+            padding: 6px 0;
+          }
+          .insightsSearchClose {
+            flex: 0 0 auto; width: 32px; height: 32px;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,0.14);
+            background: rgba(255,255,255,0.05);
+            color: #f1f5f9; font-size: 12px; cursor: pointer;
+            font-family: system-ui, Arial;
+          }
         }
+
         @media (min-width: 981px) {
           .mobileTabs { display: none !important; }
           .desktopVideos { position: sticky; top: 24px; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .insightsBar { transition: none; }
         }
 
         /* Phone density.
