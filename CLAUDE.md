@@ -325,14 +325,34 @@ the other two are documentation of it.
   anything else. This matters even more for the automated path, since there's
   no human present to notice a stuck/failed run beyond the notification sent.
 
-- **Claude's cloud sandbox has a restrictive outbound network allowlist.**
-  Confirmed reachable: GitHub's API. Confirmed blocked: googleapis.com,
-  oauth2.googleapis.com, npm registry, PyPI. Any future automation idea that
-  needs to call a third-party API directly from a Claude session/scheduled
-  task should check reachability first (a plain `curl -sI <host>` test) rather
-  than assuming it'll work — GitHub Actions (triggered via the GitHub API,
-  which Claude's sandbox can reach) is the fallback relay for anything that
-  needs real internet access Claude's own sandbox doesn't have.
+- **Claude's cloud sandbox has a restrictive outbound network allowlist, and
+  it has CHANGED — re-test rather than trusting this list.** Retested
+  2026-08-20; the earlier blanket "npm is blocked" claim was half wrong, and
+  deleting it outright would have created the opposite wrong belief, so the
+  three facts are recorded separately:
+  - **Reachable:** GitHub's API. **npm registry** — `npm ping` and `npm ci`
+    both succeed through the agent proxy (this is new; the old note said
+    blocked, and that is what made `tsc`/`eslint` verification possible at
+    all).
+  - **NOT reachable:** `*.vercel.app` preview hosts and the production domain
+    `www.mystockharbor.com` — both return `403 CONNECT tunnel failed` from the
+    proxy. **A Claude session cannot fetch its own preview or the live site**,
+    so "verify the deployed page renders" is an owner-side step, not something
+    Claude can do. Also still blocked: googleapis.com, oauth2.googleapis.com.
+  - **Local `next build` cannot complete in this repo** without
+    `UPSTASH_REDIS_REST_URL` / `_TOKEN`: the ISR'd screener pages exceed Next's
+    60s per-page static-generation budget against a cold cache and the export
+    aborts. Verified by building unmodified `main` (`76014d03`) and a working
+    tree side by side — identical failure, same pages, same exit 1.
+    **Operationally this is the important one: a local build failure here is
+    NOT evidence that a change broke something.** `tsc --noEmit` and `eslint`
+    are the checks that do work locally; the Vercel preview is the only build
+    check available, and the only place a rendered page can be seen.
+
+  Check reachability with a plain `curl -sI <host>` before assuming any of the
+  above still holds. GitHub Actions (triggered via the GitHub API, which the
+  sandbox can reach) remains the fallback relay for anything needing real
+  internet access the sandbox lacks.
 
 - **This file can drift from the actual live automation, and has, twice.**
   Once when the "Full daily automation" section didn't exist on `main` for a

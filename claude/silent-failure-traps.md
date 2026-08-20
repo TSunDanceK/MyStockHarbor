@@ -172,11 +172,21 @@ credentials. This is the practical face of Rule 1 in
 `claude/picker-pages-isr-2026-08-20.md`: *a build without Redis credentials
 proves nothing.*
 
-**Also corrected 2026-08-20:** the root `CLAUDE.md` lesson listing the npm
-registry as blocked from Claude's sandbox is **out of date** — `npm ping` and
-`npm ci` both succeed through the agent proxy. Re-test reachability rather than
-trusting that list; it is exactly the kind of stale note this file exists to
-catch.
+**And the check you cannot run at all:** `*.vercel.app` preview hosts and
+`www.mystockharbor.com` both return `403 CONNECT tunnel failed` from the
+sandbox proxy. A Claude session **cannot fetch its own preview or the live
+site**, so "confirm the deployed page renders rows" is owner-side. Worth
+stating plainly on a page whose whole bug was that it compiled fine and
+rendered a falsehood: a green build is not a rendered page.
+
+**Also corrected 2026-08-20:** the root `CLAUDE.md` allowlist lesson was *half*
+wrong, which is worse than wholly wrong — the npm registry is now reachable
+(`npm ping` and `npm ci` both succeed through the agent proxy, which is what
+makes local `tsc`/`eslint` possible), while the preview and production hosts
+are not. It was split into its three separate facts rather than deleted, since
+deleting it would have created the opposite wrong belief. Re-test reachability
+rather than trusting any such list; it is exactly the kind of stale note this
+file exists to catch.
 
 ---
 
