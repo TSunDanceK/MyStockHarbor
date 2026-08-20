@@ -7,6 +7,7 @@ import {
 import BottleneckList from "@/app/components/BottleneckList";
 import BottleneckArchive from "@/app/components/BottleneckArchive";
 import BottleneckLeaderboard from "@/app/components/BottleneckLeaderboard";
+import BottlenecksMobileTabs from "@/app/components/BottlenecksMobileTabs";
 
 const PAGE_TITLE =
   "Stock Bottlenecks | Supply Chain & Customer Dependency | MyStockHarbor";
@@ -169,89 +170,102 @@ export default function BottlenecksIndexPage() {
             </Link>
           </div>
 
-          {/* Named grid areas rather than nesting, so the single-column
-              mobile layout can order the three blocks independently of the
-              desktop one. The archive used to sit inside the main column,
-              which put it above the leaderboard once the grid collapsed --
-              on a phone that meant scrolling past 100+ A-Z links to reach
-              the leaderboard. Row gap is 0 and vertical spacing comes from
-              each block's own margin, so the desktop layout is unchanged. */}
-          <div
-            className="bottlenecksIndexLayout"
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 340px",
-              gridTemplateAreas: `"main rail" "archive rail"`,
-              columnGap: 24,
-              rowGap: 0,
-              alignItems: "start",
-            }}
-          >
-            <div style={{ gridArea: "main", minWidth: 0 }}>
-              <section
-                className="bottlenecksIntroCard"
-                style={{
-                  background: "#0b1220",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  borderRadius: 16,
-                  padding: 24,
-                  boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
-                }}
-              >
-                <h1
-                  className="bottlenecksTitle"
-                  style={{
-                    marginTop: 0,
-                    marginBottom: 16,
-                    fontSize: 34,
-                    lineHeight: 1.1,
-                    fontWeight: 900,
-                  }}
-                >
-                  Stock Bottlenecks
-                </h1>
+          {/* Under 960px the three blocks below become two tabs on a docked
+              bottom bar: the list (with the archive under it) and the
+              leaderboard. Each block declares which tab it belongs to via
+              data-bntab; BottlenecksMobileTabs only puts a class on a
+              wrapper and lets CSS hide the inactive one, so everything here
+              still renders on the server and every archive link stays in the
+              served HTML. Above 960px the bar is off and nothing changes.
 
-                <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92 }}>
-                  Every public company depends on other companies to
-                  function - suppliers it can&apos;t easily replace, and
-                  customers that make up an outsized share of its revenue.
-                  This section breaks that down for one stock at a time,
-                  with two pie charts per stock:{" "}
-                  <strong>supply-chain dependency</strong> and{" "}
-                  <strong>customer concentration</strong>.
-                </p>
-
-                <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92 }}>
-                  New stock pages are added roughly one per day.
-                </p>
-              </section>
-
-              <section style={{ marginTop: 24 }}>
-                <BottleneckList posts={posts} />
-              </section>
-            </div>
-
+              The intro card carries no data-bntab on purpose -- it holds the
+              h1, so it stays on screen whichever tab is showing. */}
+          <BottlenecksMobileTabs>
+            {/* Named grid areas rather than nesting, so the single-column
+                mobile layout can order the three blocks independently of the
+                desktop one. The archive used to sit inside the main column,
+                which put it above the leaderboard once the grid collapsed --
+                on a phone that meant scrolling past 100+ A-Z links to reach
+                the leaderboard. Row gap is 0 and vertical spacing comes from
+                each block's own margin, so the desktop layout is unchanged. */}
             <div
-              className="bottlenecksLeaderboardRail"
+              className="bottlenecksIndexLayout"
               style={{
-                gridArea: "rail",
-                position: "sticky",
-                top: 24,
-                minWidth: 0,
+                display: "grid",
+                gridTemplateColumns: "1fr 340px",
+                gridTemplateAreas: `"main rail" "archive rail"`,
+                columnGap: 24,
+                rowGap: 0,
+                alignItems: "start",
               }}
             >
-              <BottleneckLeaderboard counts={counts} />
-            </div>
+              <div style={{ gridArea: "main", minWidth: 0 }}>
+                <section
+                  className="bottlenecksIntroCard"
+                  style={{
+                    background: "#0b1220",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    borderRadius: 16,
+                    padding: 24,
+                    boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
+                  }}
+                >
+                  <h1
+                    className="bottlenecksTitle"
+                    style={{
+                      marginTop: 0,
+                      marginBottom: 16,
+                      fontSize: 34,
+                      lineHeight: 1.1,
+                      fontWeight: 900,
+                    }}
+                  >
+                    Stock Bottlenecks
+                  </h1>
 
-            {/* Crawlable index of the full set. BottleneckList only mounts
-                30 rows before a `See more` button, which Googlebot cannot
-                click -- see the note at the top of BottleneckArchive.tsx.
-                Its own marginTop provides the spacing above it in both
-                layouts, which is why the grid sets rowGap: 0. */}
-            <div style={{ gridArea: "archive", minWidth: 0 }}>
-              <BottleneckArchive posts={posts} />
+                  <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92 }}>
+                    Every public company depends on other companies to
+                    function - suppliers it can&apos;t easily replace, and
+                    customers that make up an outsized share of its revenue.
+                    This section breaks that down for one stock at a time,
+                    with two pie charts per stock:{" "}
+                    <strong>supply-chain dependency</strong> and{" "}
+                    <strong>customer concentration</strong>.
+                  </p>
+
+                  <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92 }}>
+                    New stock pages are added roughly one per day.
+                  </p>
+                </section>
+
+                <section data-bntab="list" style={{ marginTop: 24 }}>
+                  <BottleneckList posts={posts} />
+                </section>
+              </div>
+
+              <div
+                className="bottlenecksLeaderboardRail"
+                data-bntab="board"
+                style={{
+                  gridArea: "rail",
+                  position: "sticky",
+                  top: 24,
+                  minWidth: 0,
+                }}
+              >
+                <BottleneckLeaderboard counts={counts} />
+              </div>
+
+              {/* Crawlable index of the full set. BottleneckList only mounts
+                  30 rows before a `See more` button, which Googlebot cannot
+                  click -- see the note at the top of BottleneckArchive.tsx.
+                  Its own marginTop provides the spacing above it in both
+                  layouts, which is why the grid sets rowGap: 0. */}
+              <div data-bntab="list" style={{ gridArea: "archive", minWidth: 0 }}>
+                <BottleneckArchive posts={posts} />
+              </div>
             </div>
-          </div>
+          </BottlenecksMobileTabs>
         </div>
 
         <style>{`
