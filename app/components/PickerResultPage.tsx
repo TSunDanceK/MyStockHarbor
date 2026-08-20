@@ -769,6 +769,26 @@ async function getPickerData(config: PickerResultConfig) {
     const payload = (await getPickersData(SITE_ORIGIN)) as unknown as PickersPayload;
     const sections = Array.isArray(payload.sections) ? payload.sections : [];
     const signalRecords = Array.isArray(payload.signalRecords) ? payload.signalRecords : [];
+
+    // A payload with neither sections nor signalRecords is a broken read, not a
+    // quiet market. Every one of these pages is built from this one payload, so
+    // "the screener found nothing" and "the data layer failed" are the same
+    // render -- and once these routes prerender, that render becomes the
+    // artefact every visitor and crawler is served until the next revalidate.
+    //
+    // Throwing is what keeps that from shipping. At build time it fails the
+    // build loudly instead of baking 32 empty pages; during ISR revalidation
+    // Next keeps serving the last good prerender when regeneration throws, so a
+    // transient Redis blip can no longer replace a good page with an empty one.
+    //
+    // Deliberately checked on the PAYLOAD, not on `entries`: a section page
+    // legitimately having no items today (no ATH breakouts) is real, and is
+    // what config.emptyText is for. An empty payload never is.
+    if (!sections.length && !signalRecords.length) {
+      throw new Error(
+        `[pickers] Refusing to render ${config.href}: payload has no sections and no signalRecords`
+      );
+    }
     const matchedSection = config.kind === "section" ? findSection(sections, config.sectionIncludes ?? []) : undefined;
     // Full matched set (bounded only by RESULT_SAFETY_CAP, not by
     // config.maxItems) -- config.maxItems is now just the initial "shown"
@@ -910,8 +930,20 @@ async function getPickerData(config: PickerResultConfig) {
       seoEntries,
       foundCount: config.filterTimeframe ? seoEntries.length : typeof matchedSection?.foundCount === "number" ? matchedSection.foundCount : seoEntries.length,
     };
-  } catch {
-    return { updatedAt: null, universeSize: null, dynamicUniverseCount: null, entries: [], seoEntries: [], foundCount: 0 };
+  } catch (error) {
+    // Rethrow rather than degrading to an empty result.
+    //
+    // This catch used to return `entries: []`, which made a failed Redis read,
+    // a thrown builder and a genuinely quiet screener completely
+    // indistinguishable -- all three rendered as "0 of 0 / No current results".
+    // That is what hid the no-store bailout, and then what let a failed build
+    // bake an empty page as the prerendered artefact.
+    //
+    // The narrow try/catches inside this function stay: company names and the
+    // extended fundamentals block really are optional decoration. The core
+    // payload is not.
+    console.error(`[pickers] getPickerData failed for ${config.href}:`, error);
+    throw error instanceof Error ? error : new Error("Unknown pickers error");
   }
 }
 
