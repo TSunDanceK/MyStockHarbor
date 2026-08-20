@@ -25,3 +25,42 @@ export default function StockSymbolLayout({ children }: { children: ReactNode })
     </>
   );
 }
+
+// ── ISR (2026-08-20) ────────────────────────────────────────────────────────
+//
+// None of the three routes under this layout has ever carried a `dynamic` or
+// `revalidate` export, yet every production request logs `cache=MISS`: each
+// one renders from scratch for every visitor and every crawl. Over 24h that
+// is ~650 renders on the overview, ~615 on /news and ~575 on /earnings, all
+// serving substantially the same HTML.
+//
+// Declared here rather than in each page because segment config cascades to
+// nested routes, so one line covers all three and they cannot drift apart.
+//
+// WHY 900 AND NOT 3600 (the value /bottlenecks uses) -- this is a safety
+// constraint, not a freshness one. app/stock/[symbol]/page.tsx calls
+// mintQuoteToken() during render and embeds the result in the HTML, and that
+// token has an 1800s TTL (lib/server/quoteToken.ts). Cache the page longer
+// than the TTL and most visitors are handed an already-expired token.
+// Harmless today -- QUOTE_TOKEN_ENFORCE defaults off, so failures are logged
+// and never blocked -- but it would fill the pilot's logs with false expiries,
+// which is the entire signal that pilot exists to collect, and it would break
+// live quotes for real visitors the day enforcement is turned on. At 900
+// against 1800, every token served still has at least 15 minutes of life.
+//
+// Freshness is unchanged: fetchQuote() in page.tsx already caches the FMP
+// quote for 3600s, so the price in this HTML is ALREADY up to an hour old,
+// and StockSymbolPageClient refetches a live quote on mount regardless.
+//
+// Crawl protection is unchanged: the daily /stock/* cap and the Vercel
+// Firewall rules both run in middleware at the edge, which a cached response
+// still passes through, and the view counting is a client beacon to
+// /api/internal/track-view rather than anything to do with rendering.
+//
+// IF THIS PRODUCES NO CACHE HIT, the cause is upstream and this line is a
+// no-op: the @upstash/redis client issues its REST calls with
+// `cache: "no-store"`, which opts an entire route out of static rendering,
+// and getDailyHistory() reads Redis on every render of the overview page.
+// The fix in that case is to wrap the Redis-backed reads in unstable_cache,
+// the pattern lib/youtube.ts already uses.
+export const revalidate = 900;
