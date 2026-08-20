@@ -1,7 +1,29 @@
 import type { Metadata } from "next";
 import PickerResultPage, { type PickerResultConfig } from "@/app/components/PickerResultPage";
 
-export const dynamic = "force-dynamic";
+// ── ISR probe (2026-08-20) ──────────────────────────────────────────────────
+//
+// Was `export const dynamic = "force-dynamic"`, which ships Cache-Control:
+// no-store and makes every visit and every crawl a full serverless render.
+// Nothing on this page is per-request: the picker data is built by a daily
+// warm cron into Redis and read back from there, exactly like /bottlenecks,
+// which runs on `revalidate` and prerenders happily (○ 1h in the build
+// output).
+//
+// 300s rather than an hour because the underlying pickers cache is itself
+// refreshed on a 5-minute cycle -- matching what /pickers already uses, which
+// the build output confirms as ○ 5m.
+//
+// THIS IS A PROBE, deliberately applied to ONE page so the build output gives
+// a clean A/B against its ~23 identical siblings. The open question is not the
+// directive but the `searchParams` prop below: awaiting searchParams in a
+// server component opts a route out of static rendering on its own, so
+// removing force-dynamic may change nothing. If this page comes back ƒ while
+// carrying revalidate, that is the answer, and the fix is to stop threading
+// searchParams through the server component and read `?symbol=` client-side
+// via useSearchParams instead -- PickerFilterContext.tsx already does exactly
+// that for the filter predicates.
+export const revalidate = 300;
 
 export const metadata: Metadata = {
   title: "Oversold Stocks Today | MyStockHarbor",
