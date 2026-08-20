@@ -1,5 +1,6 @@
 import { Redis } from "@upstash/redis";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
+import { timingCache, beginTiming } from "./timing";
 
 export type Point = {
   date: string;
@@ -304,18 +305,39 @@ async function waitForHistoryCache(symbol: string, maxWaitMs = 12_000) {
 export async function readHistoryEntry(symbol: string) {
   const normalized = normalizeSymbol(symbol);
 
-  if (!redis) return null;
+  if (!redis) {
+    timingCache("history", "redis", "skip", "no-credentials");
+    return null;
+  }
 
   try {
     const entry = await redis.get<HistoryCacheEntry>(getHistoryRedisKey(normalized));
 
-    if (!entry || typeof entry !== "object") return null;
-    if (entry.symbol !== normalized) return null;
-    if (entry.status !== "qualified" && entry.status !== "non_qualified") return null;
-    if (entry.source !== "fmp") return null;
+    // Each of these rejections means the caller falls through to a live FMP
+    // fetch behind a 45s lock, with concurrent requests WAITING on it. The
+    // reason is logged because "miss" and "miss because the entry was there
+    // but stale-shaped" want different fixes.
+    if (!entry || typeof entry !== "object") {
+      timingCache("history", "redis", "miss", `${normalized} absent`);
+      return null;
+    }
+    if (entry.symbol !== normalized) {
+      timingCache("history", "redis", "miss", `${normalized} symbol-mismatch`);
+      return null;
+    }
+    if (entry.status !== "qualified" && entry.status !== "non_qualified") {
+      timingCache("history", "redis", "miss", `${normalized} status=${entry.status}`);
+      return null;
+    }
+    if (entry.source !== "fmp") {
+      timingCache("history", "redis", "miss", `${normalized} source=${entry.source}`);
+      return null;
+    }
 
+    timingCache("history", "redis", "hit", normalized);
     return entry;
   } catch {
+    timingCache("history", "redis", "miss", `${normalized} threw`);
     return null;
   }
 }
@@ -416,6 +438,15 @@ const url = `https://financialmodelingprep.com/stable/historical-price-eod/full?
 }
 
 export async function getDailyHistory(symbol: string) {
+  const endTiming = beginTiming("history", "getDailyHistory");
+  try {
+    return await getDailyHistoryInner(symbol);
+  } finally {
+    endTiming();
+  }
+}
+
+async function getDailyHistoryInner(symbol: string) {
   const normalized = normalizeSymbol(symbol);
   const cached = await readHistoryEntry(normalized);
 

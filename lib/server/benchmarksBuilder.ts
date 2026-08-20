@@ -11,6 +11,8 @@
 // endpoint and SSR share the same in-memory cache Map defined in this
 // module and stay perfectly consistent.
 
+import { timingCache, beginTiming } from "./timing";
+
 export type BenchScope = "stock" | "crypto";
 
 type BenchItem = {
@@ -89,15 +91,34 @@ export type BenchmarksDataResult = {
 export async function getBenchmarksData(
   scopeInput?: string | null
 ): Promise<BenchmarksDataResult> {
+  const endTiming = beginTiming("benchmarks", "getBenchmarksData");
+  try {
+    return await getBenchmarksDataInner(scopeInput);
+  } finally {
+    endTiming();
+  }
+}
+
+async function getBenchmarksDataInner(
+  scopeInput?: string | null
+): Promise<BenchmarksDataResult> {
   const scope = normalizeScope(scopeInput);
 
   const cached = cache.get(scope);
   if (cached && Date.now() - cached.at < CACHE_MS) {
+    timingCache("benchmarks", "memcache", "hit", scope);
     return {
       data: cached.payload,
       headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
     };
   }
+
+  // A miss costs FOUR live FMP calls (see below). `cache` is a module-scope
+  // Map -- per serverless instance, gone on every cold start, never shared --
+  // and fetchFmpQuote passes cache:"no-store", so the Next Data Cache cannot
+  // help either. If this logs "miss" on most renders, this call is the TTFB
+  // story and a durable (Redis) cache is worth more than any route-config change.
+  timingCache("benchmarks", "memcache", "miss", scope);
 
   const apiKey = process.env.FMP_API_KEY;
   const defs = getBenchDefs(scope);
