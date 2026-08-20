@@ -585,7 +585,13 @@ export default async function StockPage({ params }: Props) {
         profile={profile}
         shareHistory={shareHistory}
         seed={seed}
-        initialHistory={points.slice(-300)}
+        // 500, not 300. The chart renders history.slice(-240) and ma200 needs
+        // 200 prior bars to be defined across that window, so 440 is the
+        // floor; 500 leaves slack for the weekly aggregation and the macro
+        // support/resistance scan, which both read the full array. At 300 the
+        // MA200 line was undefined over roughly half the visible chart, which
+        // is why the client re-fetched 900 bars on every load.
+        initialHistory={points.slice(-500)}
         initialQuote={quote}
         // Proves to /api/quote that this client rendered a real page. Empty
         // string when QUOTE_TOKEN_SECRET is unset, in which case the client
