@@ -128,3 +128,81 @@ Related and already known: **cache HITs appear in the runtime logs too**, so a
 raw per-route count is a *request* count, not a render count. Only routes that
 are genuinely dynamic (`force-dynamic`, e.g. `/` and `/dashboard`) can have
 their request count read as a render count.
+
+## `git diff main...branch` describes the past, not the merge
+
+Same genre as the log-grouping trap above: an instrument that answers a
+question you did not ask, in a format that looks like it answered the one you
+did.
+
+Assessing stale PR #274, `git diff --stat origin/main...origin/<branch>`
+reported **447 insertions, 124 deletions across 4 files** — a substantial
+outstanding change. It was not. The branch's content was byte-identical to
+`main`; the work had already landed via PR #275.
+
+The three-dot form diffs the **merge base** against the branch tip. It reports
+*what the branch did relative to where it forked*, which never changes as
+`main` moves on. It is the right tool for "what is this PR's diff" and the
+wrong tool for "what would merging this still add" — and after a squash-merge
+of equivalent content, the two answers diverge completely.
+
+Ask the real question by comparing the trees directly:
+
+```
+# per-file: identical content = nothing to merge, whatever three-dot says
+for f in <files the branch touches>; do
+  a=$(git rev-parse origin/main:$f 2>/dev/null || echo MISSING)
+  b=$(git rev-parse origin/<branch>:$f 2>/dev/null || echo MISSING)
+  [ "$a" = "$b" ] && echo "IDENTICAL $f" || echo "differs   $f"
+done
+```
+
+Blob SHAs settle it: identical hashes mean identical content, no reading
+required. `git diff origin/main origin/<branch>` (**two** dots) answers the
+same question as a diff.
+
+### A shallow clone makes this worse, silently
+
+Claude's sandbox clones are shallow. With no merge base in local history:
+
+- `git diff --stat A...B` fails outright — `fatal: no merge base`. Loud, fine.
+- `git merge-tree --write-tree A B` **exits 0 and reports no conflicts**. That
+  is not a clean merge; it is an unanswerable question returning the reassuring
+  answer. PRs #246 and #115 both read as conflict-free this way. After
+  `git fetch --unshallow`, #115 turned out to conflict in four files.
+
+So: **`git fetch --unshallow` before believing any cross-branch comparison**,
+and check `git rev-parse --is-shallow-repository` first if a result looks
+suspiciously tidy. Both merge-base-dependent commands need real history; only
+one of them tells you when it does not have it.
+
+### Same shape, no git involved: inference about a source you cannot open
+
+The merge-tree trap generalises. A check that *cannot run* rarely reports that
+it could not run — it returns something that reads like an answer.
+
+In the same session, assessing PR #246 meant reasoning about the Claude Project
+copy of `BOTTLENECKS.md`, which a repo session cannot open. Every other claim in
+that assessment was verified against current `main` rather than taken from a PR
+body. For that one unreachable document, #246's own description was trusted
+instead — and it said the Project doc still carried a stale SK hynix example.
+
+The description was written 2026-08-15 and was stale that same day; the Project
+copy had already been corrected. The inference was merged into
+`claude/BOTTLENECKS.md` as a statement of fact, and was wrong twice over: the
+policy was already fixed, and the automation said to be "reintroducing the
+error" had been retired on 2026-08-17.
+
+Two rules out of it:
+
+- **The unreachable source is where inference is least safe and most tempting.**
+  It is also where nothing pushes back, so the guess gets written down more
+  firmly than the things that were actually checked. If a source cannot be
+  opened, say "not verified — could not read X", never a conclusion about X.
+- **A mirror can run *ahead* of its source, not just behind.** The Project copy
+  described #246's backfill as done before it was done, so the repo was the
+  stale copy. "Check the mirror against the source" assumes a lag direction that
+  does not always hold; a doc describing intended state as completed reads
+  identically to one describing reality.
+
+Written up in full in `claude/BOTTLENECKS.md`.
