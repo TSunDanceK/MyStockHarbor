@@ -52,12 +52,13 @@ supplyChain:
     pct: 8
     blurb: >
       Supplies memory used across AWS's server infrastructure.
-  - name: SK Hynix
-    ticker: null
+  - name: SK hynix
+    ticker: SKHY
     pct: 8
     blurb: >
-      A major memory supplier to AWS's server infrastructure. Trades
-      primarily on the Korea Exchange with no proper US-listed ticker.
+      A major memory supplier to AWS's server infrastructure. Its primary
+      listing is the Korea Exchange, but it has also traded on Nasdaq as
+      an ADR since July 2026.
   - name: Samsung Electronics
     ticker: null
     pct: 6

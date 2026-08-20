@@ -30,14 +30,15 @@ supplyChain:
       CPU, GPU, and AI accelerator die. AMD's own 10-K states it relies on
       TSMC for essentially all advanced-node wafers, and no alternative
       currently matches TSMC's yield and capacity at AMD's volume.
-  - name: SK Hynix
-    ticker: null
+  - name: SK hynix
+    ticker: SKHY
     pct: 12
     blurb: >
       The dominant supplier of HBM (high-bandwidth memory) for AI
       accelerators industry-wide, including AMD's Instinct MI300-series —
-      an industry-wide-constrained component. Trades primarily in Seoul,
-      with no proper US-listed ticker.
+      an industry-wide-constrained component. Its primary listing is the
+      Korea Exchange, but it has also traded on Nasdaq as an ADR since
+      July 2026.
   - name: Samsung Electronics
     ticker: null
     pct: 10

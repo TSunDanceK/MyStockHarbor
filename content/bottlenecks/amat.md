@@ -101,14 +101,15 @@ customers:
       memory businesses; press coverage directly ties Applied Materials'
       stock moves to Samsung's capex announcements. Trades primarily on
       the Korea Exchange, with no proper US-listed ticker.
-  - name: SK Hynix
-    ticker: null
+  - name: SK hynix
+    ticker: SKHY
     pct: 16
     blurb: >
       A major memory maker and buyer of Applied Materials' deposition and
-      etch tools for DRAM and HBM capacity expansion, grouped alongside
-      Samsung by analysts as a key driver of chip-tool demand. Trades
-      primarily on the Korea Exchange, with no proper US-listed ticker.
+      etch tools for DRAM and HBM capacity expansion, and since March 2026
+      a long-term R&D partner at Applied's EPIC Center. Its primary listing
+      is the Korea Exchange, but it has also traded on Nasdaq as an ADR
+      since July 2026.
   - name: Intel
     ticker: INTC
     pct: 14
