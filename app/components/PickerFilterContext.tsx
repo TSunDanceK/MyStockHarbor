@@ -104,7 +104,26 @@ export function PickerFilterProvider({
   initialPredicates?: Predicate[];
 }) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
+
+  // The live query string, reported in by <PickerFilterUrlSync /> rather than
+  // read with useSearchParams() here. Calling that hook in this provider opts
+  // the whole page out of static rendering, and wrapping the provider itself
+  // in <Suspense> is not a fix: the provider wraps the entire results tree, so
+  // the boundary would render its fallback into the prerendered HTML and the
+  // results would only appear after hydration -- exactly the SSR content these
+  // pages are indexed on. Isolating the hook in a null-rendering child keeps
+  // the boundary empty, so the grid still prerenders while the URL stays fully
+  // reactive. See claude/picker-pages-isr-2026-08-20.md.
+  //
+  // "" on the server and on the first client render, which is what makes the
+  // prerendered HTML query-independent -- it must be, since one cached HTML is
+  // now served for every query string. A shared filtered link therefore seeds
+  // the page's own preset first and applies its filters right after hydration,
+  // via the URL -> state effect below, instead of arriving pre-filtered from
+  // the server. The SEO invariant is unchanged and in fact now unconditional:
+  // a crawler on the clean path gets this page's own condition in the HTML.
+  const [searchString, setSearchString] = useState("");
+  const searchParams = useMemo(() => new URLSearchParams(searchString), [searchString]);
 
   // The seed as it was at mount, frozen. Frozen because both props are
   // re-created on every render when a page passes no preset, and because the
@@ -294,7 +313,42 @@ export function PickerFilterProvider({
     ]
   );
 
-  return <PickerFilterContext.Provider value={value}>{children}</PickerFilterContext.Provider>;
+  return (
+    <PickerFilterContext.Provider value={value}>
+      <PickerFilterUrlContext.Provider value={setSearchString}>{children}</PickerFilterUrlContext.Provider>
+    </PickerFilterContext.Provider>
+  );
+}
+
+// Carries the query string from PickerFilterUrlSync up into the provider.
+// Separate from PickerFilterContext so the many consumers of that context are
+// not re-rendered by a setter identity they never read.
+const PickerFilterUrlContext = createContext<((value: string) => void) | null>(null);
+
+// Owns the useSearchParams() call for the filter system and renders nothing.
+//
+// MUST be rendered inside a <Suspense> boundary, and inside a
+// PickerFilterProvider. useSearchParams() without a boundary makes Next bail
+// the entire page out of static generation -- the exact thing this split
+// exists to prevent -- and the build fails rather than warning. Because this
+// component renders null, the boundary's fallback is also null, so nothing
+// about the prerendered HTML changes.
+//
+// Keeping the real hook (rather than reading window.location.search in an
+// effect) is deliberate: it stays reactive to back/forward, to a shared link,
+// and to a nav link back to this page's clean path while the provider stays
+// mounted -- the case the URL -> state effect above was built for, and the one
+// a mount-only read would silently break.
+export function PickerFilterUrlSync() {
+  const searchParams = useSearchParams();
+  const setSearchString = useContext(PickerFilterUrlContext);
+  const search = searchParams.toString();
+
+  useEffect(() => {
+    setSearchString?.(search);
+  }, [search, setSearchString]);
+
+  return null;
 }
 
 // Safe to call outside a provider -- returns inert no-op state so ScreenerNav
