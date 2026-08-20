@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { getStockNewsBaseData } from "@/lib/stock-news-data";
+import {
+  getInternalNewsPayload,
+  normaliseInternalNewsSymbol,
+  INTERNAL_NEWS_CACHE_CONTROL,
+} from "@/lib/server/internalNews";
 
 export const runtime = "nodejs";
 export const revalidate = 900;
@@ -11,36 +15,20 @@ export const revalidate = 900;
 // ~650 chars in lib/stock-news-data.ts) instead of an AI summary/"why this
 // matters" line. getStockNewsBaseData() is the same underlying data source
 // with zero LLM calls.
+//
+// The payload construction itself now lives in lib/server/internalNews.ts so
+// app/dashboard/page.tsx can build the same object in-process instead of
+// HTTP self-fetching this route. This handler is the public HTTP face of that
+// function and nothing more -- see that file for why the self-fetch went.
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const symbol = (searchParams.get("symbol") || "SPY").trim().toUpperCase();
+  const symbol = normaliseInternalNewsSymbol(searchParams.get("symbol"));
 
-  const data = await getStockNewsBaseData(symbol, {
-    maxDetailedItems: 3,
-  });
+  const payload = await getInternalNewsPayload(symbol);
 
-  return NextResponse.json(
-    {
-      symbol: data.symbol,
-      companyName: data.companyName,
-      isInvalidTicker: data.isInvalidTicker,
-      trend: data.trend,
-      newsScoreLabel: data.newsScore.label,
-      newsScoreValue: data.newsScore.score,
-      cards: data.detailedNews.map((item) => ({
-        title: item.title,
-        source: item.source,
-        pubDate: item.pubDate,
-        summary: item.description ?? "No summary available yet.",
-        image: item.image ?? null,
-        link: item.link ?? null,
-      })),
-      ctaHref: `/stock/${encodeURIComponent(data.symbol)}/news`,
+  return NextResponse.json(payload, {
+    headers: {
+      "Cache-Control": INTERNAL_NEWS_CACHE_CONTROL,
     },
-    {
-      headers: {
-        "Cache-Control": "public, s-maxage=900, stale-while-revalidate=3600",
-      },
-    }
-  );
+  });
 }
