@@ -14,6 +14,7 @@ import {
   type Point,
 } from "@/lib/indicators";
 import { mintQuoteToken } from "@/lib/server/quoteToken";
+import Link from "next/link";
 import { getRelatedSymbols } from "@/lib/curatedSymbols";
 import RelatedStocks from "@/app/components/RelatedStocks";
 import StockSymbolPageClient, { type InitialQuote } from "./StockSymbolPageClient";
@@ -29,7 +30,22 @@ type Props = {
 // day range, volume vs average volume, previous close and change — all
 // included in the same response — so the header "quote snapshot" can render
 // real numbers in the initial HTML instead of waiting on a client refetch.
-async function fetchQuote(symbol: string): Promise<InitialQuote> {
+// Why fetchQuote reports an outcome as well as a quote.
+//
+// It used to collapse four different situations into one all-null object: no
+// API key, a non-ok response, a thrown request, and FMP answering normally with
+// no row for this symbol. Those are not the same thing. The first three mean we
+// could not ask; the last means we asked and the answer is "this symbol has no
+// data" -- which is a legitimate page, not a failure.
+//
+// Note what this signal does NOT support: concluding that FMP is down. One
+// symbol failing is not evidence of an outage, so "unavailable" here only ever
+// changes the wording on the page, never whether it renders. A real
+// outage/circuit-breaker signal needs state across requests; see the note on
+// the no-data branch in the page component.
+type QuoteOutcome = "ok" | "no-data" | "unavailable";
+
+async function fetchQuote(symbol: string): Promise<{ quote: InitialQuote; outcome: QuoteOutcome }> {
   const apiKey = process.env.FMP_API_KEY;
   const empty: InitialQuote = {
     price: null,
@@ -45,7 +61,7 @@ async function fetchQuote(symbol: string): Promise<InitialQuote> {
     volume: null,
     avgVolume: null,
   };
-  if (!apiKey) return empty;
+  if (!apiKey) return { quote: empty, outcome: "unavailable" };
   try {
     const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(
       symbol
@@ -54,12 +70,13 @@ async function fetchQuote(symbol: string): Promise<InitialQuote> {
       next: { revalidate: 3600 },
       headers: { accept: "application/json" },
     });
-    if (!res.ok) return empty;
+    if (!res.ok) return { quote: empty, outcome: "unavailable" };
     const json = await res.json();
     const row = Array.isArray(json) ? json[0] : json;
     const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
     const price = num(row?.price);
-    return {
+    // A 200 with no usable row is FMP answering "nothing here for that ticker".
+    const quote: InitialQuote = {
       price,
       date: price != null ? new Date().toISOString().slice(0, 10) : null,
       open: num(row?.open),
@@ -73,8 +90,9 @@ async function fetchQuote(symbol: string): Promise<InitialQuote> {
       volume: num(row?.volume),
       avgVolume: num(row?.avgVolume),
     };
+    return { quote, outcome: price == null ? "no-data" : "ok" };
   } catch {
-    return empty;
+    return { quote: empty, outcome: "unavailable" };
   }
 }
 
@@ -300,24 +318,39 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const upper = symbol.toUpperCase();
 
   // Run history + quote in parallel; we only need these for meta generation.
-  const [rawHistory, quote] = await Promise.all([
+  const [rawHistory, quoteResult] = await Promise.all([
     getDailyHistory(upper).catch(() => []),
     fetchQuote(upper),
   ]);
+  const quote = quoteResult.quote;
 
   const points: Point[] = (rawHistory as Point[]).filter(
     (p) => p.date && Number.isFinite(p.close)
   );
 
+  // Same test the page component uses to decide whether it has anything to
+  // show. Kept in step with it deliberately: a page that renders the "no data"
+  // state must not also be advertising itself as indexable.
+  const hasData = points.length > 0 || quote.price != null;
+
   const seed = computeIndicatorSeed(points, "", quote.price, quote.date);
-  const title = buildSeoTitle(upper, seed);
-  const description = buildSeoDescription(upper, seed);
+  const title = hasData ? buildSeoTitle(upper, seed) : `${upper} | No data available | MyStockHarbor`;
+  const description = hasData
+    ? buildSeoDescription(upper, seed)
+    : `We do not currently have market data for ${upper}.`;
 
   return {
     title,
     description,
     robots: {
-      index: true,
+      // noindex on the no-data state so it cannot be indexed as thin content.
+      // `follow` stays true: the page still links out to real stock pages, and
+      // there is no reason to strand a crawler that has arrived here.
+      //
+      // This route is hit with a lot of junk and delisted tickers -- runtime
+      // logs show ~1,519 distinct request paths, i.e. something is enumerating
+      // symbols -- so this state is common, not exceptional.
+      index: hasData,
       follow: true,
     },
     alternates: {
@@ -354,9 +387,15 @@ export default async function StockPage({ params }: Props) {
   const upper = symbol.toUpperCase();
 
   // Fetch everything in parallel — none of these block each other.
-  const [rawHistory, quote, companyName, latestEarnings, profile, shareHistory] =
+  const [historyResult, quoteResult, companyName, latestEarnings, profile, shareHistory] =
     await Promise.all([
-      getDailyHistory(upper).catch(() => [] as Point[]),
+      // .then/.catch rather than .catch(() => []) so a thrown read (FMP or Redis
+      // unreachable) stays distinguishable from a read that legitimately
+      // returned nothing for this symbol.
+      getDailyHistory(upper).then(
+        (pts) => ({ points: pts as Point[], failed: false }),
+        () => ({ points: [] as Point[], failed: true })
+      ),
       fetchQuote(upper),
       fetchCompanyName(upper),
       fetchLatestEarnings(upper),
@@ -364,9 +403,84 @@ export default async function StockPage({ params }: Props) {
       fetchShareHistory(upper).catch(() => null),
     ]);
 
-  const points: Point[] = (rawHistory as Point[]).filter(
+  const quote = quoteResult.quote;
+  const points: Point[] = historyResult.points.filter(
     (p) => p.date && Number.isFinite(p.close)
   );
+
+  // OLD BEHAVIOUR, REMOVED: this threw when there was no history and no price.
+  //
+  // fetchQuote() returns an all-null `empty` quote when FMP fails, and
+  // getDailyHistory() is .catch(() => []) above, so a total data failure used to
+  // render a normal-looking page with a null price, no company name and an
+  // "Unavailable" state -- indistinguishable from a real render, and green in
+  // the build. That is survivable while this route renders per request. It is
+  // not survivable now that it is cached: the artefact is what every subsequent
+  // visitor and crawler receives for the next 15 minutes, and most traffic here
+  // is prefetch and crawlers rather than readers.
+  //
+  // Throwing is what keeps it out of the cache. Next does not cache a render
+  // that throws, and on ISR regeneration it keeps serving the last good copy, so
+  // a transient FMP or Redis failure can no longer replace a good page with an
+  // empty one. Same reasoning as the payload guard in PickerResultPage; see
+  // claude/picker-pages-isr-2026-08-20.md.
+  //
+  // Deliberately requires BOTH to be missing. A symbol with a price but no
+  // history (a fresh listing) and one with history but a momentarily unavailable
+  // quote are both real pages worth serving; nothing at all is not.
+  //
+  // NOTE: this throws rather than notFound() because it cannot tell a genuinely
+  // unknown ticker from a transient outage, and cached 404s on real symbols
+  // would be far worse than a retry. Giving unknown symbols a real 404 needs a
+  // symbol-directory check (searchSymbols is already imported here) and is its
+  // own change.
+  const hasData = points.length > 0 || quote.price != null;
+
+  if (!hasData) {
+    // A symbol with no data is a legitimate page, not a server failure.
+    //
+    // This branch used to throw. That produced a 500, and this route is hit
+    // with a lot of junk and delisted tickers -- ~1,519 distinct request paths
+    // in the runtime logs, i.e. something is enumerating symbols. Sustained 5xx
+    // makes Google throttle crawl rate site-wide, which directly undoes the ISR
+    // work this change exists for. Returning 200 with an honest state, marked
+    // noindex in generateMetadata above, is both truthful and safe: it cannot be
+    // indexed as thin content, and it costs no crawl budget.
+    //
+    // The empty-artefact concern that motivated the throw is real but is
+    // handled elsewhere now: this state is explicit rather than a normal-looking
+    // page full of nulls, so a cached copy says what it is, and it self-heals at
+    // the next revalidate.
+    //
+    // WHAT THIS DELIBERATELY DOES NOT DO: hard-fail on a data-layer outage.
+    // `quoteResult.outcome` and `historyResult.failed` tell us we could not
+    // reach FMP for THIS symbol, which is not evidence that FMP is down -- so
+    // they only change the wording below. A genuine outage signal needs state
+    // across requests (consecutive-failure count or a circuit breaker in Redis)
+    // and is its own change; until it exists, a hard failure here would be a
+    // guess with a 5xx attached.
+    const couldNotReach = quoteResult.outcome === "unavailable" || historyResult.failed;
+
+    // No JSON-LD on this branch on purpose: emitting FinancialProduct data for
+    // a symbol we have no data for would be asserting something untrue.
+    return (
+      <main style={{ maxWidth: 720, margin: "0 auto", padding: "48px 20px 96px" }}>
+        <h1 style={{ fontSize: "1.6rem", marginBottom: 12 }}>
+          {couldNotReach ? `${upper} data is temporarily unavailable` : `No data available for ${upper}`}
+        </h1>
+        <p style={{ opacity: 0.8, lineHeight: 1.6, marginBottom: 8 }}>
+          {couldNotReach
+            ? `We could not load market data for ${upper} just now. This is usually temporary -- please try again shortly.`
+            : `We do not have market data for ${upper}. It may be delisted, not covered by our data provider, or not a valid ticker symbol.`}
+        </p>
+        <p style={{ opacity: 0.8, lineHeight: 1.6 }}>
+          Try <Link href="/stock-search">searching for another symbol</Link>, or browse the{" "}
+          <Link href="/pickers">stock screeners</Link>.
+        </p>
+        <RelatedStocks currentSymbol={upper} symbols={getRelatedSymbols(upper)} />
+      </main>
+    );
+  }
 
   // Compute indicators once on the server; pass as seed so the client
   // renders real content immediately rather than showing "Loading…".
@@ -471,7 +585,13 @@ export default async function StockPage({ params }: Props) {
         profile={profile}
         shareHistory={shareHistory}
         seed={seed}
-        initialHistory={points.slice(-300)}
+        // 500, not 300. The chart renders history.slice(-240) and ma200 needs
+        // 200 prior bars to be defined across that window, so 440 is the
+        // floor; 500 leaves slack for the weekly aggregation and the macro
+        // support/resistance scan, which both read the full array. At 300 the
+        // MA200 line was undefined over roughly half the visible chart, which
+        // is why the client re-fetched 900 bars on every load.
+        initialHistory={points.slice(-500)}
         initialQuote={quote}
         // Proves to /api/quote that this client rendered a real page. Empty
         // string when QUOTE_TOKEN_SECRET is unset, in which case the client

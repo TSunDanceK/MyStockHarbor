@@ -1,4 +1,6 @@
 import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
+import { timingCache, beginTiming } from "./timing";
 
 export type Point = {
   date: string;
@@ -19,7 +21,7 @@ export type HistoryCacheEntry = {
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
 const REDIS_HISTORY_PREFIX = "msh:history:v7";
@@ -303,18 +305,39 @@ async function waitForHistoryCache(symbol: string, maxWaitMs = 12_000) {
 export async function readHistoryEntry(symbol: string) {
   const normalized = normalizeSymbol(symbol);
 
-  if (!redis) return null;
+  if (!redis) {
+    timingCache("history", "redis", "skip", "no-credentials");
+    return null;
+  }
 
   try {
     const entry = await redis.get<HistoryCacheEntry>(getHistoryRedisKey(normalized));
 
-    if (!entry || typeof entry !== "object") return null;
-    if (entry.symbol !== normalized) return null;
-    if (entry.status !== "qualified" && entry.status !== "non_qualified") return null;
-    if (entry.source !== "fmp") return null;
+    // Each of these rejections means the caller falls through to a live FMP
+    // fetch behind a 45s lock, with concurrent requests WAITING on it. The
+    // reason is logged because "miss" and "miss because the entry was there
+    // but stale-shaped" want different fixes.
+    if (!entry || typeof entry !== "object") {
+      timingCache("history", "redis", "miss", `${normalized} absent`);
+      return null;
+    }
+    if (entry.symbol !== normalized) {
+      timingCache("history", "redis", "miss", `${normalized} symbol-mismatch`);
+      return null;
+    }
+    if (entry.status !== "qualified" && entry.status !== "non_qualified") {
+      timingCache("history", "redis", "miss", `${normalized} status=${entry.status}`);
+      return null;
+    }
+    if (entry.source !== "fmp") {
+      timingCache("history", "redis", "miss", `${normalized} source=${entry.source}`);
+      return null;
+    }
 
+    timingCache("history", "redis", "hit", normalized);
     return entry;
   } catch {
+    timingCache("history", "redis", "miss", `${normalized} threw`);
     return null;
   }
 }
@@ -348,8 +371,20 @@ const url = `https://financialmodelingprep.com/stable/historical-price-eod/full?
   fmpSymbol
 )}&apikey=${encodeURIComponent(apiKey)}`;
 
+  // `cache: "no-store"` here used to opt every route that reached this call out
+  // of static rendering entirely -- the same class of bailout @upstash/redis
+  // caused via its own no-store default (see lib/server/redisCacheMode.ts and
+  // claude/picker-pages-isr-2026-08-20.md). It only fires on a Redis miss, so it
+  // is intermittent and invisible: the route silently renders per request.
+  //
+  // Redis remains the real cache for this data, with its own market-aware TTL
+  // (getRedisHistoryTtlSeconds). This short Next revalidate is not a second
+  // cache tier of any consequence -- it exists so the call stops forcing the
+  // route dynamic, and it dedupes a burst of identical misses inside one render
+  // pass. It is deliberately far shorter than the Redis TTL, so Redis still
+  // decides when this data is stale.
   const res = await fetch(url, {
-    cache: "no-store",
+    next: { revalidate: 300 },
     headers: {
       accept: "application/json,text/plain;q=0.9,*/*;q=0.8",
     },
@@ -403,6 +438,15 @@ const url = `https://financialmodelingprep.com/stable/historical-price-eod/full?
 }
 
 export async function getDailyHistory(symbol: string) {
+  const endTiming = beginTiming("history", "getDailyHistory");
+  try {
+    return await getDailyHistoryInner(symbol);
+  } finally {
+    endTiming();
+  }
+}
+
+async function getDailyHistoryInner(symbol: string) {
   const normalized = normalizeSymbol(symbol);
   const cached = await readHistoryEntry(normalized);
 

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { after } from "next/server";
 import type { Metadata } from "next";
 import type React from "react";
+import { cache } from "react";
 import {
   getMonthDaysWithEarnings,
   getDayEarningsForRender,
@@ -25,36 +26,9 @@ const PAGE_DESCRIPTION =
 const PAGE_URL = "https://www.mystockharbor.com/earnings-calendar";
 const OG_IMAGE_URL = "https://www.mystockharbor.com/og-image-v2.png";
 
-export const metadata: Metadata = {
-  title: PAGE_TITLE,
-  description: PAGE_DESCRIPTION,
-  alternates: { canonical: PAGE_URL },
-  robots: { index: true, follow: true },
-  openGraph: {
-    title: PAGE_TITLE,
-    description: PAGE_DESCRIPTION,
-    url: PAGE_URL,
-    siteName: "MyStockHarbor",
-    images: [
-      {
-        url: OG_IMAGE_URL,
-        width: 1200,
-        height: 630,
-        alt: "MyStockHarbor earnings calendar",
-      },
-    ],
-    locale: "en_GB",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: PAGE_TITLE,
-    description: PAGE_DESCRIPTION,
-    images: [OG_IMAGE_URL],
-  },
-};
-
 export const dynamic = "force-dynamic";
+
+type SearchParams = { year?: string; month?: string; date?: string };
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -95,6 +69,152 @@ function formatDateLabel(dateStr: string) {
     year: "numeric",
     timeZone: "UTC",
   });
+}
+
+// ---------------------------------------------------------------------------
+// View resolution
+//
+// Split out of the page body on 2026-08-17 so generateMetadata() and the page
+// component agree on which date is being rendered without duplicating the
+// clamping rules. resolveCalendarView is pure and sync; loadDay is wrapped in
+// React's cache() so the two callers share one fetch per request.
+//
+// Why this exists: the page previously shipped a static title, description and
+// <h1> ("Earnings Calendar") on a page whose entire value is that it is *dated*.
+// See claude/health-check-firewall-indexing-analytics-2026-08-17.md.
+//
+// A sector rollup lived here briefly (#253-#255) and was removed in #256 -- the
+// sector data is only warmed for the screener universe, so it classified 2 of 52
+// reporters on 2026-08-17 and 8 of 44 on the 20th. Reinstating it is a data
+// problem (warm profiles across the earnings window), not a rendering one.
+// ---------------------------------------------------------------------------
+
+type CalendarView = {
+  year: number;
+  month: number;
+  monthPrefix: string;
+  todayDate: string;
+  selectedDate: string;
+  isToday: boolean;
+};
+
+function resolveCalendarView(params: SearchParams): CalendarView {
+  const now = new Date();
+  const todayYear = now.getUTCFullYear();
+  const todayMonth = now.getUTCMonth() + 1;
+  const todayDate = `${todayYear}-${pad2(todayMonth)}-${pad2(now.getUTCDate())}`;
+
+  const windowStart = getWindowStartDate();
+  const windowEnd = getWindowEndDate();
+  const firstYM = windowStart.slice(0, 7);
+  const lastYM = windowEnd.slice(0, 7);
+
+  const yearParam = Number(params.year);
+  const monthParam = Number(params.month);
+
+  let year = Number.isFinite(yearParam) && yearParam > 0 ? yearParam : todayYear;
+  let month =
+    Number.isFinite(monthParam) && monthParam >= 1 && monthParam <= 12 ? monthParam : todayMonth;
+
+  // Clamp the viewed month into the window (a hand-typed or stale URL outside
+  // the window snaps back to the nearest edge rather than 404-ing).
+  let viewedYM = `${year}-${pad2(month)}`;
+  if (viewedYM < firstYM) viewedYM = firstYM;
+  if (viewedYM > lastYM) viewedYM = lastYM;
+  year = Number(viewedYM.slice(0, 4));
+  month = Number(viewedYM.slice(5, 7));
+
+  const monthPrefix = `${year}-${pad2(month)}`;
+  const requestedDate =
+    params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date) ? params.date : null;
+
+  // The first day of the viewed month that's actually inside the window
+  // (e.g. if the window starts on the 15th, the 1st-14th are greyed and not
+  // selectable).
+  const firstInWindowDay = `${monthPrefix}-01` < windowStart ? windowStart : `${monthPrefix}-01`;
+
+  const selectedDate =
+    requestedDate && requestedDate.startsWith(monthPrefix) && isDateInWindow(requestedDate)
+      ? requestedDate
+      : year === todayYear && month === todayMonth && isDateInWindow(todayDate)
+        ? todayDate
+        : firstInWindowDay;
+
+  return {
+    year,
+    month,
+    monthPrefix,
+    todayDate,
+    selectedDate,
+    isToday: selectedDate === todayDate,
+  };
+}
+
+// cache() keeps generateMetadata and the page component to one fetch of the
+// selected day per request rather than two.
+const loadDay = cache((selectedDate: string) => getDayEarningsForRender(selectedDate));
+
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}): Promise<Metadata> {
+  const view = resolveCalendarView(await searchParams);
+  const dateLabel = formatDateLabel(view.selectedDate);
+
+  let title = PAGE_TITLE;
+  let description = PAGE_DESCRIPTION;
+
+  try {
+    const day = await loadDay(view.selectedDate);
+    const count = day.usListedCount;
+
+    if (count > 0) {
+      title = `Earnings Calendar: ${dateLabel} | MyStockHarbor`;
+      description =
+        `${count} US-listed compan${count === 1 ? "y reports" : "ies report"} on ${dateLabel}` +
+        ". EPS and revenue estimates, price and market cap, plus the fortnight ahead.";
+    } else {
+      title = `Earnings Calendar: ${dateLabel} | MyStockHarbor`;
+      description = `No US-listed companies report on ${dateLabel}. Browse the full earnings calendar for the weeks ahead, with EPS and revenue estimates, price and market cap.`;
+    }
+  } catch {
+    // Fall back to the static strings rather than failing the render.
+  }
+
+  return {
+    title,
+    description,
+    // Deliberately still the bare canonical. Every ?date= and ?year=&month=
+    // variant folds onto one URL: this site's constraint is crawl demand (582
+    // URLs discovered and never crawled as of 17 Aug 2026), so minting a URL
+    // per day would add thin pages to a backlog Google is already not working
+    // through. The title/description carry the date instead.
+    alternates: { canonical: PAGE_URL },
+    robots: { index: true, follow: true },
+    openGraph: {
+      title,
+      description,
+      url: PAGE_URL,
+      siteName: "MyStockHarbor",
+      images: [
+        {
+          url: OG_IMAGE_URL,
+          width: 1200,
+          height: 630,
+          alt: "MyStockHarbor earnings calendar",
+        },
+      ],
+      locale: "en_GB",
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [OG_IMAGE_URL],
+    },
+  };
 }
 
 // Rows for the "Next up" strip at the top of the page.
@@ -177,14 +297,9 @@ async function getUpcomingTickerItems(todayDate: string): Promise<UpcomingEarnin
 export default async function EarningsCalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ year?: string; month?: string; date?: string }>;
+  searchParams: Promise<SearchParams>;
 }) {
   const params = await searchParams;
-
-  const now = new Date();
-  const todayYear = now.getUTCFullYear();
-  const todayMonth = now.getUTCMonth() + 1;
-  const todayDate = `${todayYear}-${pad2(todayMonth)}-${pad2(now.getUTCDate())}`;
 
   // Rolling window bounds and the months that hold them. Everything outside
   // [windowStart, windowEnd] is greyed out and non-navigable.
@@ -193,34 +308,7 @@ export default async function EarningsCalendarPage({
   const firstYM = windowStart.slice(0, 7);
   const lastYM = windowEnd.slice(0, 7);
 
-  const yearParam = Number(params.year);
-  const monthParam = Number(params.month);
-
-  let year = Number.isFinite(yearParam) && yearParam > 0 ? yearParam : todayYear;
-  let month = Number.isFinite(monthParam) && monthParam >= 1 && monthParam <= 12 ? monthParam : todayMonth;
-
-  // Clamp the viewed month into the window (a hand-typed or stale URL outside
-  // the window snaps back to the nearest edge rather than 404-ing).
-  let viewedYM = `${year}-${pad2(month)}`;
-  if (viewedYM < firstYM) viewedYM = firstYM;
-  if (viewedYM > lastYM) viewedYM = lastYM;
-  year = Number(viewedYM.slice(0, 4));
-  month = Number(viewedYM.slice(5, 7));
-
-  const monthPrefix = `${year}-${pad2(month)}`;
-  const requestedDate = params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date) ? params.date : null;
-
-  // The first day of the viewed month that's actually inside the window
-  // (e.g. if the window starts on the 15th, the 1st-14th are greyed and not
-  // selectable).
-  const firstInWindowDay = `${monthPrefix}-01` < windowStart ? windowStart : `${monthPrefix}-01`;
-
-  const selectedDate =
-    requestedDate && requestedDate.startsWith(monthPrefix) && isDateInWindow(requestedDate)
-      ? requestedDate
-      : year === todayYear && month === todayMonth && isDateInWindow(todayDate)
-        ? todayDate
-        : firstInWindowDay;
+  const { year, month, monthPrefix, todayDate, selectedDate } = resolveCalendarView(params);
 
   const prevMonthDate = new Date(Date.UTC(year, month - 2, 1));
   const nextMonthDate = new Date(Date.UTC(year, month, 1));
@@ -235,10 +323,13 @@ export default async function EarningsCalendarPage({
 
   const [daysWithEarnings, dayData, dateComplete, upcomingTickerItems] = await Promise.all([
     getMonthDaysWithEarnings(year, month),
-    getDayEarningsForRender(selectedDate),
+    // Shared with generateMetadata via cache() -- this does not re-fetch.
+    loadDay(selectedDate),
     isDateFullyPopulated(selectedDate),
     getUpcomingTickerItems(todayDate),
   ]);
+
+  const selectedDateLabel = formatDateLabel(selectedDate);
 
   // Background auto-populate: after this response is sent, quietly fill in the
   // next not-yet-complete date in the window (front-to-back), a couple at a
@@ -276,7 +367,7 @@ export default async function EarningsCalendarPage({
         "@type": "CollectionPage",
         "@id": `${PAGE_URL}#webpage`,
         url: PAGE_URL,
-        name: "Earnings Calendar",
+        name: `Earnings Calendar: ${selectedDateLabel}`,
         description: PAGE_DESCRIPTION,
         isPartOf: {
           "@type": "WebSite",
@@ -285,6 +376,24 @@ export default async function EarningsCalendarPage({
           url: "https://www.mystockharbor.com",
         },
         publisher: { "@id": "https://www.mystockharbor.com/#organization" },
+        // The page held a list of dated financial events and previously told
+        // Google nothing about any of them. Capped at the 50 rows that are
+        // actually server-rendered, so the markup describes what's on the page.
+        ...(dayData.items.length
+          ? {
+              mainEntity: {
+                "@type": "ItemList",
+                name: `US-listed companies reporting earnings on ${selectedDateLabel}`,
+                numberOfItems: dayData.usListedCount,
+                itemListElement: dayData.items.slice(0, 50).map((item, index) => ({
+                  "@type": "ListItem",
+                  position: index + 1,
+                  name: `${item.company} (${item.symbol})`,
+                  url: `https://www.mystockharbor.com/stock/${encodeURIComponent(item.symbol)}/earnings`,
+                })),
+              },
+            }
+          : {}),
       },
       {
         "@type": "BreadcrumbList",
@@ -361,12 +470,23 @@ export default async function EarningsCalendarPage({
                 fontWeight: 900,
               }}
             >
-              Earnings Calendar
+              Earnings Calendar: {selectedDateLabel}
             </h1>
 
             <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.92, marginBottom: 20 }}>
-              See how many companies report each day, then drill into any date
-              for tickers, EPS/revenue estimates, price and market cap.
+              {dayData.usListedCount > 0 ? (
+                <>
+                  <strong>{dayData.usListedCount}</strong> US-listed{" "}
+                  {dayData.usListedCount === 1 ? "company reports" : "companies report"} on{" "}
+                  {selectedDateLabel}. See how many report each day, then drill into any date for
+                  tickers, EPS/revenue estimates, price and market cap.
+                </>
+              ) : (
+                <>
+                  See how many companies report each day, then drill into any date for tickers,
+                  EPS/revenue estimates, price and market cap.
+                </>
+              )}
             </p>
 
             <EarningsTickerSearch />

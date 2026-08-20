@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { headers } from "next/headers";
 import DashboardClient, {
   type Quote,
   type Point,
@@ -8,11 +7,13 @@ import DashboardClient, {
   type NewsPayload,
   type StockEarningsSummary,
 } from "../components/DashboardClient";
+import StockPagesBottomNav from "@/app/components/StockPagesBottomNav";
 import { getDailyHistory } from "@/lib/server/historyCache";
 import { getBenchmarksData } from "@/lib/server/benchmarksBuilder";
 import { fetchQuoteSnapshot } from "@/lib/server/quoteData";
 import { mintQuoteToken } from "@/lib/server/quoteToken";
 import { getLatestEarningsData } from "@/lib/latest-earnings-data";
+import { getInternalNewsPayload } from "@/lib/server/internalNews";
 
 // Was a plain client-rendered shell (Suspense fallback "Loading dashboard…"
 // with no real content until client effects fetched everything). Now fetches
@@ -38,8 +39,14 @@ import { getLatestEarningsData } from "@/lib/latest-earnings-data";
 // claude/stock-page-earnings-selfblock-2026-07-21.md. Each in-process
 // function is the same one its public API route calls internally, so the
 // public endpoint and this server-rendered path always return identically
-// shaped data. /api/internal-news is NOT BotID-guarded, so it's left as a
-// plain self-fetch below.
+// shaped data.
+//
+// The news payload was the last exception -- it used to be a plain HTTP
+// self-fetch to /api/internal-news, kept because that route is not
+// BotID-guarded. It is now read in-process too, via getInternalNewsPayload().
+// See lib/server/internalNews.ts for what that self-fetch was costing (an
+// extra serverless invocation per render, an edge round-trip, and the only
+// remaining headers() call on this route).
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
@@ -63,34 +70,9 @@ type Props = {
   searchParams: Promise<{ symbol?: string | string[] }>;
 };
 
-async function getOriginFromHeaders() {
-  const headerStore = await headers();
-  const host =
-    headerStore.get("x-forwarded-host") ||
-    headerStore.get("host") ||
-    "www.mystockharbor.com";
-  const proto =
-    headerStore.get("x-forwarded-proto") ||
-    (host.includes("localhost") ? "http" : "https");
-  return `${proto}://${host}`;
-}
-
 function cleanSymbolParam(value?: string | string[]) {
   const raw = Array.isArray(value) ? value[0] : value;
   return (raw ?? "").trim().toUpperCase().replace(/[^A-Z0-9.-]/g, "");
-}
-
-async function fetchJson<T = Record<string, unknown>>(
-  url: string,
-  init: RequestInit
-): Promise<T | null> {
-  try {
-    const res = await fetch(url, init);
-    if (!res.ok) return null;
-    return (await res.json()) as T;
-  } catch {
-    return null;
-  }
 }
 
 async function getInitialBenchmarks(): Promise<BenchPayload | null> {
@@ -124,6 +106,14 @@ async function getInitialQuoteAndName(
   }
 }
 
+async function getInitialNews(symbol: string): Promise<NewsPayload | null> {
+  try {
+    return await getInternalNewsPayload(symbol);
+  } catch {
+    return null;
+  }
+}
+
 async function getInitialEarningsSummary(
   symbol: string
 ): Promise<StockEarningsSummary | null> {
@@ -138,17 +128,13 @@ export default async function DashboardPage({ searchParams }: Props) {
   const params = await searchParams;
   const requested = cleanSymbolParam(params?.symbol);
   const symbol = requested || "SPY";
-  const origin = await getOriginFromHeaders();
 
   const [rawHistory, quoteAndName, benchmarks, news, earningsSummary] =
     await Promise.all([
       getDailyHistory(symbol).catch(() => [] as Point[]),
       getInitialQuoteAndName(symbol),
       getInitialBenchmarks(),
-      fetchJson<NewsPayload>(
-        `${origin}/api/internal-news?symbol=${encodeURIComponent(symbol)}`,
-        { next: { revalidate: 900 } }
-      ),
+      getInitialNews(symbol),
       getInitialEarningsSummary(symbol),
     ]);
 
@@ -156,28 +142,39 @@ export default async function DashboardPage({ searchParams }: Props) {
   const { quote: initialQuote, name: initialSymbolName } = quoteAndName;
 
   return (
-    <Suspense
-      fallback={
-        <div style={{ padding: 40, fontFamily: "system-ui, Arial" }}>
-          Loading dashboard…
-        </div>
-      }
-    >
-      <DashboardClient
-        defaultSymbol={symbol}
-        initialQuote={initialQuote}
-        initialHistory={initialHistory}
-        initialSymbolName={initialSymbolName}
-        initialBenchmarks={benchmarks}
-        initialNews={news}
-        initialEarningsSummary={earningsSummary}
-        // Proves to /api/quote that this client rendered a real page. Empty
-        // string when QUOTE_TOKEN_SECRET is unset, in which case the client
-        // sends no header and behaviour is unchanged. Session-scoped, not
-        // symbol-scoped, precisely because chooseSymbol() swaps symbols here
-        // without a reload. See lib/server/quoteToken.ts.
-        pageToken={mintQuoteToken()}
-      />
-    </Suspense>
+    <>
+      <Suspense
+        fallback={
+          <div style={{ padding: 40, fontFamily: "system-ui, Arial" }}>
+            Loading dashboard…
+          </div>
+        }
+      >
+        <DashboardClient
+          defaultSymbol={symbol}
+          initialQuote={initialQuote}
+          initialHistory={initialHistory}
+          initialSymbolName={initialSymbolName}
+          initialBenchmarks={benchmarks}
+          initialNews={news}
+          initialEarningsSummary={earningsSummary}
+          // Proves to /api/quote that this client rendered a real page. Empty
+          // string when QUOTE_TOKEN_SECRET is unset, in which case the client
+          // sends no header and behaviour is unchanged. Session-scoped, not
+          // symbol-scoped, precisely because chooseSymbol() swaps symbols here
+          // without a reload. See lib/server/quoteToken.ts.
+          pageToken={mintQuoteToken()}
+        />
+      </Suspense>
+
+      {/* The fourth item of the bar the three /stock/[symbol] routes mount
+          from their shared layout. Deliberately OUTSIDE the Suspense
+          boundary: the fallback replaces everything inside it, and a nav bar
+          that vanishes while the dashboard is still resolving is worse than
+          one that is simply always there. It takes no props -- it reads the
+          ticker from msh_last_symbol, which DashboardClient writes on every
+          symbol change. */}
+      <StockPagesBottomNav />
+    </>
   );
 }

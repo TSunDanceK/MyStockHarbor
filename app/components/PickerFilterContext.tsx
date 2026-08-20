@@ -31,6 +31,22 @@ type PickerFilterContextValue = {
   matchCount: number | null;
   setMatchCount: (count: number | null) => void;
 
+  // How many of the CURRENTLY SHOWN results also satisfy each checkable
+  // condition -- i.e. what you would be left with if you ticked it.
+  //
+  // The screener's standing problem is that a condition tells you nothing until
+  // you press it: tick something and the list either changes or empties, and
+  // only then do you learn which. These counts move that answer in front of the
+  // decision, and a 0 marks a dead end before it costs a tap.
+  //
+  // Computed in PickerResultsGrid, which is the only place holding the entries,
+  // and published here for ScreenerNav to render -- the same one-way channel
+  // matchCount already uses. null means "not computed" (a page outside a
+  // provider, or before the grid's first pass) and should render no count at
+  // all rather than a zero, which would claim every condition is a dead end.
+  conditionCounts: Partial<Record<AnyFilterKey, number>> | null;
+  setConditionCounts: (counts: Partial<Record<AnyFilterKey, number>> | null) => void;
+
   // Is the selection still exactly the page's own seeded condition?
   //
   // Several things want to present differently once the visitor has changed the
@@ -88,7 +104,26 @@ export function PickerFilterProvider({
   initialPredicates?: Predicate[];
 }) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
+
+  // The live query string, reported in by <PickerFilterUrlSync /> rather than
+  // read with useSearchParams() here. Calling that hook in this provider opts
+  // the whole page out of static rendering, and wrapping the provider itself
+  // in <Suspense> is not a fix: the provider wraps the entire results tree, so
+  // the boundary would render its fallback into the prerendered HTML and the
+  // results would only appear after hydration -- exactly the SSR content these
+  // pages are indexed on. Isolating the hook in a null-rendering child keeps
+  // the boundary empty, so the grid still prerenders while the URL stays fully
+  // reactive. See claude/picker-pages-isr-2026-08-20.md.
+  //
+  // "" on the server and on the first client render, which is what makes the
+  // prerendered HTML query-independent -- it must be, since one cached HTML is
+  // now served for every query string. A shared filtered link therefore seeds
+  // the page's own preset first and applies its filters right after hydration,
+  // via the URL -> state effect below, instead of arriving pre-filtered from
+  // the server. The SEO invariant is unchanged and in fact now unconditional:
+  // a crawler on the clean path gets this page's own condition in the HTML.
+  const [searchString, setSearchString] = useState("");
+  const searchParams = useMemo(() => new URLSearchParams(searchString), [searchString]);
 
   // The seed as it was at mount, frozen. Frozen because both props are
   // re-created on every render when a page passes no preset, and because the
@@ -129,6 +164,9 @@ export function PickerFilterProvider({
     urlHasFilters ? urlPredicates : presetPredicates
   );
   const [matchCount, setMatchCount] = useState<number | null>(null);
+  const [conditionCounts, setConditionCounts] = useState<
+    Partial<Record<AnyFilterKey, number>> | null
+  >(null);
 
   // One predicate per (kind, field). Adding a second sector extends the
   // existing category predicate's `values` rather than appending another --
@@ -256,6 +294,8 @@ export function PickerFilterProvider({
       toggleSector,
       matchCount,
       setMatchCount,
+      conditionCounts,
+      setConditionCounts,
       isPristine,
     }),
     [
@@ -268,11 +308,47 @@ export function PickerFilterProvider({
       selectedSectors,
       toggleSector,
       matchCount,
+      conditionCounts,
       isPristine,
     ]
   );
 
-  return <PickerFilterContext.Provider value={value}>{children}</PickerFilterContext.Provider>;
+  return (
+    <PickerFilterContext.Provider value={value}>
+      <PickerFilterUrlContext.Provider value={setSearchString}>{children}</PickerFilterUrlContext.Provider>
+    </PickerFilterContext.Provider>
+  );
+}
+
+// Carries the query string from PickerFilterUrlSync up into the provider.
+// Separate from PickerFilterContext so the many consumers of that context are
+// not re-rendered by a setter identity they never read.
+const PickerFilterUrlContext = createContext<((value: string) => void) | null>(null);
+
+// Owns the useSearchParams() call for the filter system and renders nothing.
+//
+// MUST be rendered inside a <Suspense> boundary, and inside a
+// PickerFilterProvider. useSearchParams() without a boundary makes Next bail
+// the entire page out of static generation -- the exact thing this split
+// exists to prevent -- and the build fails rather than warning. Because this
+// component renders null, the boundary's fallback is also null, so nothing
+// about the prerendered HTML changes.
+//
+// Keeping the real hook (rather than reading window.location.search in an
+// effect) is deliberate: it stays reactive to back/forward, to a shared link,
+// and to a nav link back to this page's clean path while the provider stays
+// mounted -- the case the URL -> state effect above was built for, and the one
+// a mount-only read would silently break.
+export function PickerFilterUrlSync() {
+  const searchParams = useSearchParams();
+  const setSearchString = useContext(PickerFilterUrlContext);
+  const search = searchParams.toString();
+
+  useEffect(() => {
+    setSearchString?.(search);
+  }, [search, setSearchString]);
+
+  return null;
 }
 
 // Safe to call outside a provider -- returns inert no-op state so ScreenerNav
@@ -292,6 +368,8 @@ export function usePickerFilter(): PickerFilterContextValue {
     toggleSector: () => {},
     matchCount: null,
     setMatchCount: () => {},
+    conditionCounts: null,
+    setConditionCounts: () => {},
     // Nothing is seeded and nothing can be selected, so "unchanged from the
     // page's own state" is trivially true -- consumers keep their default
     // presentation.

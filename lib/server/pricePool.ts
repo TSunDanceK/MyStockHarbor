@@ -1,4 +1,14 @@
+// The FMP calls below carried `cache: "no-store"`, which opts any route that
+// reaches them out of static rendering entirely -- the same class of bailout
+// @upstash/redis caused via its own no-store default (lib/server/redisCacheMode.ts).
+// They only fire on a Redis miss, so the bailout is intermittent and invisible:
+// the route silently renders per request whenever the cache happens to be cold.
+// Redis remains the real cache here, with its own TTL; this short Next
+// revalidate exists so the call stops forcing the route dynamic, and it dedupes
+// identical misses inside one render pass. Same fix as historyCache.ts; see
+// claude/picker-pages-isr-2026-08-20.md.
 import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 
 // A single Redis HASH holding a lightweight, rolling-fresh quote for every
@@ -59,7 +69,7 @@ import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
 const PRICE_POOL_KEY = "msh:price-pool:v1";
@@ -235,7 +245,7 @@ async function fetchStableQuote(sym: string, apiKey: string): Promise<QuoteLite 
     const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(
       sym
     )}&apikey=${encodeURIComponent(apiKey)}`;
-    const res = await fetch(url, { cache: "no-store", headers: { accept: "application/json" } });
+    const res = await fetch(url, { next: { revalidate: 300 }, headers: { accept: "application/json" } });
     if (!res.ok) return null;
     const json = await res.json().catch(() => null);
     const row = (Array.isArray(json) ? json[0] : json) as Record<string, unknown> | null;
@@ -261,7 +271,7 @@ async function fetchPeTtm(sym: string, apiKey: string): Promise<number | null> {
     const url = `https://financialmodelingprep.com/stable/ratios-ttm?symbol=${encodeURIComponent(
       sym
     )}&apikey=${encodeURIComponent(apiKey)}`;
-    const res = await fetch(url, { cache: "no-store", headers: { accept: "application/json" } });
+    const res = await fetch(url, { next: { revalidate: 300 }, headers: { accept: "application/json" } });
     if (!res.ok) return null;
     const json = await res.json().catch(() => null);
     const row = (Array.isArray(json) ? json[0] : json) as Record<string, unknown> | null;
@@ -293,7 +303,7 @@ async function fetchMoverBucket(
     const url = `https://financialmodelingprep.com/stable/${path}?apikey=${encodeURIComponent(
       apiKey
     )}`;
-    const res = await fetch(url, { cache: "no-store", headers: { accept: "application/json" } });
+    const res = await fetch(url, { next: { revalidate: 300 }, headers: { accept: "application/json" } });
     if (!res.ok) return out;
     const json = await res.json().catch(() => null);
     if (!Array.isArray(json)) return out;

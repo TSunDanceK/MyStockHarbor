@@ -1,11 +1,10 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import type React from "react";
 import {
   getUpcomingConfirmedIpos,
   getRecentIpos,
-  type ConfirmedIpo,
 } from "@/lib/server/ipoCalendar";
+import IpoList from "./IpoList";
 
 const PAGE_TITLE = "Upcoming IPOs This Month | Confirmed IPO Calendar | MyStockHarbor";
 const PAGE_DESCRIPTION =
@@ -48,108 +47,6 @@ export const metadata: Metadata = {
 };
 
 export const dynamic = "force-dynamic";
-
-function formatDate(dateStr: string) {
-  const date = new Date(`${dateStr}T00:00:00Z`);
-  if (Number.isNaN(date.getTime())) return dateStr;
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-}
-
-function formatPriceRange(low: number | null, high: number | null) {
-  if (low === null && high === null) return "-";
-  if (low !== null && high !== null && low !== high) {
-    return `$${low.toFixed(2)} - $${high.toFixed(2)}`;
-  }
-  const single = low ?? high;
-  return single !== null ? `$${single.toFixed(2)}` : "-";
-}
-
-function formatShares(shares: number | null) {
-  if (shares === null) return "-";
-  return shares.toLocaleString("en-US");
-}
-
-function formatCompact(value: number | null) {
-  if (value === null) return "-";
-
-  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`;
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(2)}K`;
-  return value.toLocaleString("en-US");
-}
-
-function IpoTable({
-  ipos,
-  emptyMessage,
-  dateColumnLabel,
-}: {
-  ipos: ConfirmedIpo[];
-  emptyMessage: string;
-  dateColumnLabel: string;
-}) {
-  if (ipos.length === 0) {
-    return (
-      <div style={{ padding: 32, textAlign: "center", opacity: 0.75, fontSize: 15 }}>
-        {emptyMessage}
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ overflowX: "auto" }}>
-      <table
-        className="ipoCalendarTable"
-        style={{
-          width: "100%",
-          borderCollapse: "collapse",
-          fontSize: 14,
-          minWidth: 880,
-        }}
-      >
-        <thead>
-          <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.12)" }}>
-            <th style={thStyle}>{dateColumnLabel}</th>
-            <th style={thStyle}>Symbol</th>
-            <th style={thStyle}>Company Name</th>
-            <th style={thStyle}>Exchange</th>
-            <th style={{ ...thStyle, textAlign: "right" }}>Price Range</th>
-            <th style={{ ...thStyle, textAlign: "right" }}>Shares Offered</th>
-            <th style={{ ...thStyle, textAlign: "right" }}>Deal Size</th>
-            <th style={{ ...thStyle, textAlign: "right" }}>Market Cap</th>
-            <th style={{ ...thStyle, textAlign: "right" }}>Revenue</th>
-          </tr>
-        </thead>
-        <tbody>
-          {ipos.map((ipo: ConfirmedIpo) => (
-            <tr
-              key={`${ipo.symbol}-${ipo.date}`}
-              style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
-            >
-              <td style={tdStyle}>{formatDate(ipo.date)}</td>
-              <td style={{ ...tdStyle, fontWeight: 700 }}>{ipo.symbol}</td>
-              <td style={tdStyle}>{ipo.company}</td>
-              <td style={tdStyle}>{ipo.exchange ?? "-"}</td>
-              <td style={{ ...tdStyle, textAlign: "right" }}>
-                {formatPriceRange(ipo.priceRangeLow, ipo.priceRangeHigh)}
-              </td>
-              <td style={{ ...tdStyle, textAlign: "right" }}>
-                {formatShares(ipo.sharesOffered)}
-              </td>
-              <td style={{ ...tdStyle, textAlign: "right" }}>{formatCompact(ipo.dealSize)}</td>
-              <td style={{ ...tdStyle, textAlign: "right" }}>{formatCompact(ipo.marketCap)}</td>
-              <td style={{ ...tdStyle, textAlign: "right" }}>{formatCompact(ipo.revenue)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
 
 export default async function UpcomingIposPage() {
   const [ipos, recentIpos] = await Promise.all([
@@ -290,7 +187,7 @@ export default async function UpcomingIposPage() {
               marginBottom: 32,
             }}
           >
-            <IpoTable
+            <IpoList
               ipos={ipos}
               dateColumnLabel="IPO Date"
               emptyMessage="No confirmed IPOs are currently scheduled in the next 30 days. Check back soon — this list updates as new deals are priced."
@@ -335,7 +232,7 @@ export default async function UpcomingIposPage() {
               boxShadow: "0 12px 30px rgba(0,0,0,0.28)",
             }}
           >
-            <IpoTable
+            <IpoList
               ipos={recentIpos}
               dateColumnLabel="Listing Date"
               emptyMessage="No confirmed IPOs listed in the last 30 days."
@@ -376,19 +273,3 @@ export default async function UpcomingIposPage() {
     </>
   );
 }
-
-const thStyle: React.CSSProperties = {
-  textAlign: "left",
-  padding: "12px 16px",
-  fontSize: 12,
-  fontWeight: 700,
-  textTransform: "uppercase",
-  letterSpacing: 0.4,
-  color: "#8a97ad",
-  whiteSpace: "nowrap",
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: "12px 16px",
-  whiteSpace: "nowrap",
-};

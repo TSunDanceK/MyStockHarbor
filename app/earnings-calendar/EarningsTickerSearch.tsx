@@ -80,29 +80,64 @@ export default function EarningsTickerSearch() {
 
   return (
     <div ref={wrapRef} style={{ position: "relative", maxWidth: 440 }}>
-      <input
-        value={query}
-        onChange={(event) => {
-          setQuery(event.target.value.toUpperCase());
-          setOpen(true);
-          setInfo(null);
-        }}
-        onFocus={() => setOpen(true)}
-        placeholder="Search a ticker or company for its next earnings date"
-        aria-label="Search ticker for next earnings date"
-        style={{
-          width: "100%",
-          padding: "12px 14px",
-          borderRadius: 12,
-          border: "1px solid rgba(59,130,246,0.32)",
-          background: "rgba(15,23,42,0.72)",
-          color: "#f8fafc",
-          fontSize: 14,
-          fontWeight: 700,
-          outline: "none",
-          boxSizing: "border-box",
-        }}
-      />
+      {/* Icon + input share their own relative box. The results dropdown below
+          is positioned off the OUTER wrapper, not this one -- that wrapper's
+          height is still just the input's when the dropdown is open (the info
+          panel only renders once a result is chosen, which closes it), so
+          top: calc(100% + 8px) is unaffected by this extra element. */}
+      <div style={{ position: "relative" }}>
+        <svg
+          aria-hidden="true"
+          focusable="false"
+          viewBox="0 0 24 24"
+          width={17}
+          height={17}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2.2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{
+            position: "absolute",
+            left: 13,
+            top: "50%",
+            transform: "translateY(-50%)",
+            // Kept brighter than a plain slate grey: the blue-tinted border and
+            // navy fill make a mid grey read as washed-out blue in situ.
+            color: "rgba(203,213,225,0.78)",
+            // Taps in the icon's corner should focus the field, not dead-end
+            // on the SVG.
+            pointerEvents: "none",
+          }}
+        >
+          <circle cx="11" cy="11" r="7" />
+          <line x1="16.2" y1="16.2" x2="21" y2="21" />
+        </svg>
+        <input
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value.toUpperCase());
+            setOpen(true);
+            setInfo(null);
+          }}
+          onFocus={() => setOpen(true)}
+          placeholder="Search a ticker or company for its next earnings date"
+          aria-label="Search ticker for next earnings date"
+          style={{
+            width: "100%",
+            // Left padding clears the 17px icon at left: 13.
+            padding: "12px 14px 12px 38px",
+            borderRadius: 12,
+            border: "1px solid rgba(59,130,246,0.32)",
+            background: "rgba(15,23,42,0.72)",
+            color: "#f8fafc",
+            fontSize: 14,
+            fontWeight: 700,
+            outline: "none",
+            boxSizing: "border-box",
+          }}
+        />
+      </div>
 
       {open && results.length > 0 ? (
         <div

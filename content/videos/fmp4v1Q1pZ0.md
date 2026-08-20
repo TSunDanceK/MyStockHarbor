@@ -1,6 +1,6 @@
 ---
 ticker: LUNR
-datasheetImage:
+datasheetImage: /images/datasheets/lunr-august-2026.png
 statLabel1: Market cap
 statValue1: $3.56B
 statLabel2: Backlog

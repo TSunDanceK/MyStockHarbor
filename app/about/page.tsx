@@ -47,7 +47,7 @@ const SECTIONS: { href: string; title: string; body: string }[] = [
   {
     href: "/stock-screener",
     title: "Advanced Screener",
-    body: "One sortable table with 33 filterable fields across valuation, dividends, financials, performance and analyst data. Combine any conditions you like; the filters live in the URL, so a screen you build is a link you can share or bookmark.",
+    body: "One sortable table with 33 filterable fields across valuation, dividends, financials, performance and analyst data, with a search box that finds any field or industry value by name rather than making you hunt a list. Combine any conditions you like; the filters live in the URL, so a screen you build is a link you can share or bookmark.",
   },
   {
     href: "/pickers",
@@ -106,6 +106,64 @@ const SECTIONS: { href: string; title: string; body: string }[] = [
   },
 ];
 
+// Publisher identity, machine-side. The homepage already declares
+// #organization and #website (see app/page.tsx); this reuses the same @ids
+// rather than minting rival ones, and adds the two properties this page is
+// the natural home for: what the organisation is, and where else it exists.
+//
+// sameAs carries the YouTube channel because it is the one place the site is
+// independently corroborated -- a profile that has to be earned rather than
+// asserted. With no named operator (a deliberate choice, see below), external
+// corroboration is doing work a byline would otherwise do.
+const ABOUT_JSON_LD = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://www.mystockharbor.com/#organization",
+      name: "MyStockHarbor",
+      url: "https://www.mystockharbor.com/",
+      description:
+        "A free stock screening and market research site: advanced and condition-based screeners, chart-pattern detection, company analysis, earnings and IPO calendars, and trading lessons.",
+      logo: {
+        "@type": "ImageObject",
+        url: "https://www.mystockharbor.com/logo.png",
+      },
+      sameAs: ["https://www.youtube.com/@MyStockHarbor"],
+    },
+    {
+      "@type": "AboutPage",
+      "@id": "https://www.mystockharbor.com/about#webpage",
+      url: "https://www.mystockharbor.com/about",
+      name: "About MyStockHarbor",
+      description:
+        "What MyStockHarbor is, how its screens are built, where its data comes from, and how to report something that looks wrong.",
+      inLanguage: "en",
+      isPartOf: { "@id": "https://www.mystockharbor.com/#website" },
+      mainEntity: { "@id": "https://www.mystockharbor.com/#organization" },
+      breadcrumb: { "@id": "https://www.mystockharbor.com/about#breadcrumb" },
+    },
+    {
+      "@type": "BreadcrumbList",
+      "@id": "https://www.mystockharbor.com/about#breadcrumb",
+      itemListElement: [
+        {
+          "@type": "ListItem",
+          position: 1,
+          name: "Home",
+          item: "https://www.mystockharbor.com/",
+        },
+        {
+          "@type": "ListItem",
+          position: 2,
+          name: "About",
+          item: "https://www.mystockharbor.com/about",
+        },
+      ],
+    },
+  ],
+};
+
 export default function AboutPage() {
   return (
     <main
@@ -117,6 +175,10 @@ export default function AboutPage() {
         padding: "40px 20px",
       }}
     >
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(ABOUT_JSON_LD) }}
+      />
       <div style={{ maxWidth: 900, margin: "0 auto" }}>
         <section style={cardStyle}>
           <h1
@@ -146,29 +208,97 @@ export default function AboutPage() {
             explanations — somewhere you can reach them in one click.
           </p>
 
-          {/*
-            TO WRITE — the personal paragraph.
-
-            This is the one part of an About page a reader genuinely wants and
-            the one part that cannot be written from the codebase: who built
-            this, and why they bothered. The paragraph below is a neutral
-            stand-in that claims nothing unverified -- it deliberately does NOT
-            say who runs the site, how many people are involved, or anything
-            about their background, because none of that is knowable from here
-            and a wrong guess on an About page is worse than a vague one.
-
-            Replace it with your own words. A few sentences is plenty. Worth
-            covering: what you were doing before this, what frustrated you
-            enough to build it, and who you had in mind while doing so. A named
-            human is the single biggest credibility gain available on this page.
-
-            Delete this comment once it is written.
-          */}
           <p style={paraStyle}>
             It grew out of wanting a faster way to answer everyday questions
-            about a stock — is it stretched, when does it report, what does the
-            balance sheet look like — without paying for several different
-            tools to do it.
+            about a stock — is it stretched, when does it report, what
+            does the balance sheet look like — without paying for several
+            different tools to do it.
+          </p>
+
+          <h2 style={h2Style}>Who runs it</h2>
+
+          <p style={paraStyle}>
+            MyStockHarbor is independently run. It is not owned by, funded by,
+            or affiliated with any broker, fund, issuer or data vendor, and it
+            carries no sponsored placements — so nothing on it is shaped by
+            whose products it might end up screening. That independence is the
+            direct result of it being small, which is a trade worth making.
+          </p>
+
+          <p style={paraStyle}>
+            My name is not on the site, and that is deliberate rather than an
+            oversight. Nothing here is meant to be believed on the strength of
+            who wrote it. A screen is worth trusting because you can see what
+            went into it and when it was built, not because a person you have
+            never heard of put their name underneath it — so the site
+            tries to earn that a harder way: every list shows its inputs and
+            the time it was last rebuilt, and the section below sets out
+            exactly how the screens are put together.
+          </p>
+
+          <p style={paraStyle}>
+            The honest trade-off is that you cannot look me up, and for a site
+            about money that is a reasonable thing to hold against it. Treat
+            what follows accordingly: check the workings rather than taking the
+            conclusions on faith. That is the right way to read any screener,
+            including one with a name attached.
+          </p>
+
+          <p style={paraStyle}>
+            There is also a{" "}
+            <a
+              href="https://www.youtube.com/@MyStockHarbor"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={linkStyle}
+            >
+              MyStockHarbor YouTube channel
+            </a>{" "}
+            running under the same name, where charts and setups get worked
+            through in full rather than in summary. It is there if you want it.
+            The site is not asking to be judged on it — what is on these pages
+            has to stand on its own workings, whether or not you ever watch a
+            video.
+          </p>
+
+          <h2 style={h2Style}>How the screens are built</h2>
+
+          <p style={paraStyle}>
+            Every condition on the site is computed, not curated. Nothing is
+            hand-picked into a list, and no position in one can be bought —
+            a stock appears in a screen because it meets that screen’s test
+            and for no other reason.
+            Oversold, overbought, breakout, volume and volatility spikes,
+            moving-average proximity, and RSI and MACD divergence are all
+            derived from each company’s own price and volume history by
+            the same rules applied to every symbol in the universe.
+          </p>
+
+          <p style={paraStyle}>
+            Those rules run again from scratch on each rebuild rather than
+            carrying yesterday’s answers forward. That is why a name can
+            leave a screen overnight without anything having gone wrong: the
+            condition stopped being true. It also means a screen has no memory
+            — it will not tell you a stock has been oversold for three
+            weeks, only that it is oversold now.
+          </p>
+
+          <p style={paraStyle}>
+            The screening universe is a few hundred large, liquid, actively
+            traded companies rather than every listed security, and the
+            fundamental screens depend on figures that arrive on their own
+            slower schedules. Where a figure is missing it is shown as missing
+            rather than filled in with an estimate, and a company with no value
+            for a field simply will not appear in a screen built on it. Company
+            pages, the earnings calendar and the news feeds reach considerably
+            wider than the screeners do.
+          </p>
+
+          <p style={paraStyle}>
+            The counts beside each condition in the screener menu are live: they
+            say how many of the results you are currently looking at also meet
+            that condition, so a zero tells you a combination is empty before
+            you spend a click finding out.
           </p>
 
           <h2 style={h2Style}>What&rsquo;s on the site</h2>
@@ -256,9 +386,13 @@ export default function AboutPage() {
           <h2 style={h2Style}>Get in touch</h2>
 
           <p style={paraStyle}>
-            Questions, corrections and feature suggestions are all welcome — if
-            a number looks wrong somewhere on the site, that is worth knowing
-            about.
+            Questions, corrections and feature suggestions are all welcome. If a
+            number looks wrong somewhere on the site, that is worth knowing
+            about — and it is worth saying plainly what happens next:
+            reported errors get checked against the source data, and where the
+            site is wrong it gets fixed rather than quietly left. Sometimes the
+            answer is that a figure is stale rather than wrong, in which case
+            the page will say when it was last refreshed.
           </p>
 
           <p style={{ ...paraStyle, marginBottom: 0 }}>

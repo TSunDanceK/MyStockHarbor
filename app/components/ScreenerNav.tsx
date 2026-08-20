@@ -191,7 +191,7 @@ function NavList({
   filterMode?: boolean;
   categoryValues?: Record<string, string[]>;
 }) {
-  const { selectedFilters, toggleFilter } = usePickerFilter();
+  const { selectedFilters, toggleFilter, conditionCounts } = usePickerFilter();
 
   return (
     <div className="screenerNavList">
@@ -224,9 +224,18 @@ function NavList({
               if (filterMode && item.filterKey) {
                 const key = item.filterKey;
                 const checked = selectedFilters.includes(key);
-                const rowClass = checked
-                  ? "screenerNavItem screenerNavCheckable checked"
-                  : "screenerNavItem screenerNavCheckable";
+                const count = conditionCounts ? conditionCounts[key] ?? 0 : null;
+                // A 0 is dimmed but still tappable. Disabling it would be the
+                // obvious move and the wrong one -- a checkbox that silently
+                // refuses to tick is its own puzzle, and unticking something
+                // else can make this row live again, which the visitor can
+                // only discover if the row still behaves like a control.
+                const dead = count === 0 && !checked;
+                const rowClass = [
+                  "screenerNavItem screenerNavCheckable",
+                  checked ? "checked" : "",
+                  dead ? "dead" : "",
+                ].filter(Boolean).join(" ");
 
                 // With an href the row carries TWO actions, not one: the box
                 // filters this page in place, the word opens that condition's
@@ -252,7 +261,11 @@ function NavList({
                           type="checkbox"
                           checked={checked}
                           onChange={() => toggleFilter(key)}
-                          aria-label={`Filter this page by ${item.label}`}
+                          aria-label={
+                            count == null
+                              ? `Filter this page by ${item.label}`
+                              : `Filter this page by ${item.label}, ${count} of the current results match`
+                          }
                         />
                       </span>
                       <span className="screenerNavIcon" style={{ color: colour }}>
@@ -265,6 +278,9 @@ function NavList({
                         aria-current={active ? "page" : undefined}
                       >
                         <span className="screenerNavLabel">{item.label}</span>
+                        {count != null ? (
+                          <span className="screenerNavCount" aria-hidden="true">{count}</span>
+                        ) : null}
                         <span className="screenerNavGo" aria-hidden="true">›</span>
                       </Link>
                     </div>
@@ -280,6 +296,7 @@ function NavList({
                       {item.icon}
                     </span>
                     <span className="screenerNavLabel">{item.label}</span>
+                    {count != null ? <span className="screenerNavCount">{count}</span> : null}
                   </label>
                 );
               }
@@ -457,6 +474,7 @@ export default function ScreenerNav({
   variant = "full",
   showFilters = false,
   alwaysFilterMode = false,
+  compact = false,
   categoryValues = {},
 }: {
   currentHref: string;
@@ -464,6 +482,16 @@ export default function ScreenerNav({
   showFilters?: boolean;
   showSearch?: boolean;
   alwaysFilterMode?: boolean;
+  // Renders the mobile trigger as a single inline pill instead of its own
+  // full-width bar, so it can sit in the results controls row alongside the
+  // data-tab, sort and view-mode pills.
+  //
+  // The full-width bar said the same thing twice -- "▾ Select Screener" on the
+  // left and "Advanced Screener ▾" on the right, two labels and two chevrons
+  // for one action -- and took a whole row of a phone screen to do it. The pill
+  // carries the current screener's name only, which is the half that actually
+  // tells you anything.
+  compact?: boolean;
   // Values present in the calling page's own results for each category field
   // ("sector", "industry", ...), so neither the Sector group nor the search box
   // ever offers something with nothing behind it. See categoryValues in
@@ -477,8 +505,8 @@ export default function ScreenerNav({
 
   // When arriving from another page's "Open Full Stock Screener" tap on
   // mobile, re-open the overlay immediately so the menu switches straight to
-  // the checkboxes (the page itself loads behind it) instead
-  // of closing and making the visitor tap "Select Screener" again. One-shot:
+  // the checkboxes (the page itself loads behind it) instead of closing and
+  // making the visitor tap "Select Screener" again. One-shot:
   // the flag is cleared the moment it's read. Only the mobile trigger of the
   // All Stocks screener (alwaysFilterMode) honours it, and only at mobile
   // widths so the fixed overlay never covers the desktop layout.
@@ -601,31 +629,77 @@ export default function ScreenerNav({
         </aside>
       ) : null}
 
-      {/* Mobile: single "Select Screener" trigger that opens an overlay */}
+      {/* Mobile: the trigger that opens the screener overlay. `compact` renders
+          it as one inline pill for the results controls row; otherwise it keeps
+          its original full-width bar. */}
       {showTrigger ? (
-        <div className="screenerMobileBar">
-          <button
-            type="button"
-            className="screenerSelectBtn"
-            onClick={() => setOpen(true)}
-            aria-haspopup="dialog"
-            aria-expanded={open}
-          >
-            <span className="screenerSelectMain">
-              <span className="screenerSelectIcon" aria-hidden="true">⏷</span>
-              Select Screener
+        compact ? (
+          <span className="screenerPillWrap">
+            <button
+              type="button"
+              className="screenerPillBtn"
+              onClick={() => setOpen(true)}
+              aria-haspopup="dialog"
+              aria-expanded={open}
+            >
+              {/* Sliders, and the word "Screens" rather than the name of the
+                  screen you are already on. In the docked bar this is a tab
+                  among four, and a tab labelled "Oversold" says what you are
+                  looking at -- which the page heading already says -- instead
+                  of what pressing it does, which is the only thing a control
+                  in that bar has room to say. The count badge still reports
+                  applied filters, so state is not lost, only moved to the one
+                  element whose job it is. */}
+              <svg
+                className="screenerPillIcon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.7}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path d="M4 7h10M18 7h2M4 12h3M11 12h9M4 17h8M16 17h4" />
+                <circle cx="16" cy="7" r="2" />
+                <circle cx="9" cy="12" r="2" />
+                <circle cx="14" cy="17" r="2" />
+              </svg>
+              <span className="screenerPillLabel">Screens</span>
               {predicates.length ? (
                 <span className="screenerSelectCount" aria-label={`${predicates.length} filters applied`}>
                   {predicates.length}
                 </span>
               ) : null}
-            </span>
-            <span className="screenerSelectCurrent">
-              {currentLabel}
               <span className="screenerSelectChevron" aria-hidden="true">▾</span>
-            </span>
-          </button>
-        </div>
+            </button>
+          </span>
+        ) : (
+          <div className="screenerMobileBar">
+            <button
+              type="button"
+              className="screenerSelectBtn"
+              onClick={() => setOpen(true)}
+              aria-haspopup="dialog"
+              aria-expanded={open}
+            >
+              <span className="screenerSelectMain">
+                <span className="screenerSelectIcon" aria-hidden="true">⏷</span>
+                Select Screener
+                {predicates.length ? (
+                  <span className="screenerSelectCount" aria-label={`${predicates.length} filters applied`}>
+                    {predicates.length}
+                  </span>
+                ) : null}
+              </span>
+              <span className="screenerSelectCurrent">
+                {currentLabel}
+                <span className="screenerSelectChevron" aria-hidden="true">▾</span>
+              </span>
+            </button>
+          </div>
+        )
       ) : null}
 
       {showTrigger && open ? (
@@ -725,6 +799,19 @@ export default function ScreenerNav({
           color: inherit; text-decoration: none;
         }
         .screenerNavLabelLink:hover .screenerNavLabel { text-decoration: underline; }
+        /* Sits hard right of the label, so the counts form a readable column
+           down the sheet rather than trailing each label at a different x. */
+        .screenerNavCount {
+          flex: 0 0 auto; margin-left: auto; padding: 1px 7px; border-radius: 999px;
+          font-size: 10.5px; font-weight: 900; font-variant-numeric: tabular-nums;
+          background: rgba(148,163,184,0.14); color: rgba(226,232,240,0.82);
+        }
+        .screenerNavCheckable.checked .screenerNavCount { background: rgba(34,197,94,0.22); color: #dcfce7; }
+        /* Zero: readable but visibly spent, and the whole row dims with it. */
+        .screenerNavCheckable.dead { opacity: 0.45; }
+        .screenerNavCheckable.dead .screenerNavCount { background: rgba(148,163,184,0.10); }
+        /* The count has taken the auto margin, so the chevron just follows it. */
+        .screenerNavCount + .screenerNavGo { margin-left: 6px; }
         .screenerNavGo { flex: 0 0 auto; margin-left: auto; font-size: 16px; line-height: 1; color: rgba(148,163,184,0.5); }
         .screenerNavLabelLink:hover .screenerNavGo { color: #93c5fd; }
 
@@ -770,6 +857,20 @@ export default function ScreenerNav({
         .screenerSearchSource { margin-left: 4px; font-size: 10px; font-weight: 700; opacity: 0.55; }
 
         .screenerMobileBar { display: none; }
+        /* The compact pill. Hidden on desktop for the same reason the full-width
+           bar is: the sidebar is already showing the whole screener list there,
+           so a control that opens it as an overlay is redundant. */
+        .screenerPillWrap { display: none; }
+        .screenerPillBtn {
+          display: inline-flex; align-items: center; gap: 7px; max-width: 62vw;
+          padding: 9px 15px; border-radius: 999px;
+          border: 1px solid rgba(96,165,250,0.4); background: rgba(59,130,246,0.10);
+          color: #dbeafe; font-weight: 800; font-size: 12.5px; font-family: inherit;
+          cursor: pointer; white-space: nowrap;
+        }
+        .screenerPillBtn:active { background: rgba(59,130,246,0.2); }
+        .screenerPillIcon { flex: 0 0 auto; color: #93c5fd; width: 15px; height: 15px; display: block; }
+        .screenerPillLabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .screenerSelectCount {
           display: inline-flex; align-items: center; justify-content: center;
           min-width: 20px; height: 20px; padding: 0 6px; margin-left: 2px;
@@ -882,10 +983,12 @@ export default function ScreenerNav({
              only as tall as the button, so sticking it here gave it nowhere to
              go. See the note there. */
           .screenerMobileBar { display: block; }
+          .screenerPillWrap { display: inline-flex; flex: 0 0 auto; }
         }
         @media (max-width: 420px) {
           .screenerSelectBtn { font-size: 14px; padding: 12px 14px; gap: 10px; }
           .screenerSelectCurrent { font-size: 12px; }
+          .screenerPillBtn { font-size: 12px; padding: 8px 13px; max-width: 56vw; }
           /* Two targets share this row on a phone, so give them a little more
              vertical room to land in. */
           .screenerNavCheckable { padding-top: 11px; padding-bottom: 11px; }

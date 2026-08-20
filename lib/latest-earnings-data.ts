@@ -26,6 +26,8 @@ import type {
   ScoreTone,
 } from "@/app/components/LatestEarningsCard";
 
+import { beginTiming } from "./server/timing";
+
 export type {
   LatestEarningsData,
   EarningsPeriodSummary,
@@ -384,6 +386,18 @@ function buildNumericScore(args: {
 }
 
 export async function getLatestEarningsData(
+  symbol: string,
+  fallbackTone: ScoreTone = "yellow",
+): Promise<LatestEarningsData> {
+  const endTiming = beginTiming("earnings", "getLatestEarningsData");
+  try {
+    return await getLatestEarningsDataInner(symbol, fallbackTone);
+  } finally {
+    endTiming();
+  }
+}
+
+async function getLatestEarningsDataInner(
   symbol: string,
   fallbackTone: ScoreTone = "yellow",
 ): Promise<LatestEarningsData> {

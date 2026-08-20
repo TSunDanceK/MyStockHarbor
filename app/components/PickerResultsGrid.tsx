@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import MiniPickerCandleChart from "@/app/components/MiniPickerCandleChart";
 import { usePickerFilter } from "@/app/components/PickerFilterContext";
 import type { ResultEntry } from "@/app/components/PickerResultPage";
@@ -61,6 +61,11 @@ const TONE_BY_KEY = new Map<AnyFilterKey, PickerTone>([
 // purely because one of the ~25 conditions it happened to qualify for mentioned
 // that indicator, so two cards side by side drew different panels on a page
 // that was about neither.
+//
+// ORDER IS LOAD-BEARING. These are substring tests against the href, and the
+// specific breakout pages have to be checked before the generic one:
+// /all-time-high-breakout-stocks and /3-month-high-breakout-stocks both contain
+// "breakout" but want their own reference line, not the catch-all.
 function chartOverlayForEntry(configHref: string, configTitle: string, entry: ResultEntry) {
   const href = configHref.toLowerCase();
   const perCardIndicator = href.includes("divergence");
@@ -70,10 +75,23 @@ function chartOverlayForEntry(configHref: string, configTitle: string, entry: Re
   const text = `${configTitle} ${entryText}`.toLowerCase();
   if (text.includes("macd")) return "macd" as const;
   if (text.includes("rsi") || href.includes("overbought") || href.includes("oversold")) return "rsi" as const;
-  if (href.includes("200-day") || href.includes("ma200") || href.includes("best-trend")) return href.includes("best-trend") ? ("trend" as const) : ("ma200" as const);
+  if (href.includes("best-trend")) return "trend" as const;
+  // The 50-day pages drew bare candles: the chart has always computed ma50 (and
+  // falls back to a local SMA when the payload omits it) but only ever drew it
+  // under the "trend" overlay, and nothing routed here. Matching the full
+  // "50-day-moving-average" rather than "50-day" so a future /...-150-day-...
+  // route can't land here by accident.
+  if (href.includes("50-day-moving-average") || href.includes("ma50")) return "ma50" as const;
+  if (href.includes("200-day") || href.includes("ma200")) return "ma200" as const;
   if (href.includes("all-time-high-breakout")) return "ath" as const;
   if (href.includes("3-month-high")) return "recentHigh" as const;
   if (href.includes("all-time-highs")) return "ath" as const;
+  // Generic breakout pages -- /breakout-signal-stocks, /breakout-stocks,
+  // /stocks-ready-to-break-out, /stock-screener-for-breakouts. A breakout is
+  // defined against the prior high, so that is the line worth drawing; without
+  // this they fell through to "none" and showed candles with nothing to break
+  // out of. Both spellings, since one route hyphenates "break-out".
+  if (href.includes("breakout") || href.includes("break-out")) return "recentHigh" as const;
   return "none" as const;
 }
 
@@ -222,6 +240,23 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "analysts", label: "Analysts" },
 ];
 
+// The one number each tab leads with on a phone.
+//
+// A 9-column table can show every metric at once and let the visitor pick one
+// by tapping a header. A phone row has space for exactly one headline figure,
+// so each tab needs a defined default -- the metric that tab is *about*. Once
+// the visitor sorts by something else, the sorted metric takes over as the
+// headline (see headlineColumn below), which is what makes sorting legible:
+// sort by Payout Ratio and every row shows its payout ratio.
+const DEFAULT_METRIC_BY_TAB: Record<TabKey, string> = {
+  general: "price",
+  performance: "perf1m",
+  valuation: "pe",
+  dividends: "dyield",
+  financials: "revenue",
+  analysts: "ptgt",
+};
+
 type SortState = { key: string; dir: "asc" | "desc" } | null;
 
 type DerivedRow = {
@@ -309,7 +344,70 @@ function fmtVolume(v: number | null) {
 
 const MUTED = <span className="muted">–</span>;
 
-// ── cell formatters (return display nodes) ──────────────────────────────────
+// ── Control-bar icons ────────────────────────────────
+//
+// The docked bar used text glyphs (▤ ▦ ⇅) and two CSS ::before escapes. Four
+// near-identical hatched rectangles is what they render as at 19px on a phone,
+// so nothing in the bar was distinguishable from anything else in it. These are
+// drawn instead: one shape per job, stroked in currentColor so they inherit the
+// item's active/inactive treatment, and sized by CSS rather than the viewBox.
+function CtrlIcon({ children }: { children: ReactNode }) {
+  return (
+    <svg
+      className="ctrlIcon"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {children}
+    </svg>
+  );
+}
+
+// (The screener item's sliders icon lives in ScreenerNav, which renders it.)
+
+// Candles: what chart view actually shows.
+const ICON_CHARTS = (
+  <CtrlIcon>
+    <path d="M8 4v3M8 15v5M16 4v5M16 17v3" />
+    <rect x="5.5" y="7" width="5" height="8" rx="1.2" />
+    <rect x="13.5" y="9" width="5" height="8" rx="1.2" />
+  </CtrlIcon>
+);
+
+// Rows: what list view shows. Deliberately not the same family as the metrics
+// table below -- these two sit two slots apart and must not be confusable.
+const ICON_LIST = (
+  <CtrlIcon>
+    <path d="M4.6 6.5h.8M4.6 12h.8M4.6 17.5h.8" />
+    <path d="M9 6.5h10.5M9 12h10.5M9 17.5h10.5" />
+  </CtrlIcon>
+);
+
+// A table with a header row and columns: the menu swaps which set of figures
+// the results carry, and that is the thing it swaps.
+const ICON_METRICS = (
+  <CtrlIcon>
+    <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+    <path d="M3.5 9.5h17M10 9.5v10M15.5 9.5v10" />
+  </CtrlIcon>
+);
+
+// Two arrows, opposed. Now that direction is folded into the options this is
+// the only place either arrow appears.
+const ICON_SORT = (
+  <CtrlIcon>
+    <path d="M7 4.5v15M7 4.5 4 8M7 4.5 10 8" />
+    <path d="M17 19.5v-15M17 19.5 14 16M17 19.5 20 16" />
+  </CtrlIcon>
+);
+
+// ── cell formatters (return display nodes)
 function capCell(v: number | null): ReactNode {
   return fmtCap(v) ?? MUTED;
 }
@@ -340,6 +438,31 @@ function textCell(v: string | null | undefined): ReactNode {
   return v ? v : MUTED;
 }
 
+// Hard character cap on the Company Name cell.
+//
+// The CSS cap (.listName, max-width + ellipsis) is the visual guarantee, but a
+// character cap is what keeps the *table* honest: the widest name in the
+// currently-rendered 30 rows sets the column width, so one 133-character entry
+// like PAC's used to blow the table out to several screens wide. Re-sorting
+// then swapped that row in or out, the name column resized underneath you, and
+// every column to its right slid sideways -- which is what made a sort click
+// feel like it threw you off the page. Capping the string keeps the column the
+// same width no matter which rows are on screen.
+//
+// The full name is still exposed via title=, so hovering (or a screen reader)
+// gets the untruncated text.
+const MAX_NAME_CHARS = 40;
+
+function truncateName(name: string, max = MAX_NAME_CHARS) {
+  if (name.length <= max) return name;
+  // Cut on a word boundary when there is one reasonably near the limit, so we
+  // get "Grupo Aeroportuario Del Pacifico…" rather than "…Pacif…".
+  const slice = name.slice(0, max);
+  const lastSpace = slice.lastIndexOf(" ");
+  const base = lastSpace > max * 0.6 ? slice.slice(0, lastSpace) : slice;
+  return `${base.replace(/[\s,;:–-]+$/, "")}…`;
+}
+
 function forwardPe(e: ResultEntry, d: DerivedRow): number | null {
   const eps = num(e.forwardEps);
   if (d.price == null || eps == null || eps <= 0) return null;
@@ -360,6 +483,77 @@ type Col = {
   cell: (e: ResultEntry, d: DerivedRow) => ReactNode;
 };
 
+// Compact price line for a phone row.
+//
+// Deliberately NOT MiniPickerCandleChart: that draws candles, wicks, volume and
+// an optional indicator pane, which is the right thing for a 300px card and far
+// too much ink for a 54x22 strip beside a company name. This is one <path> and
+// no state, so putting one on all 30 rows costs a fraction of what a row of
+// mini-candle charts would. The real chart is one tap away in the panel.
+const SPARK_W = 54;
+const SPARK_H = 22;
+const SPARK_MAX_POINTS = 40;
+
+function sparkCloses(entry: ResultEntry): number[] {
+  const pts = Array.isArray(entry.chartPoints) ? entry.chartPoints : [];
+  const out: number[] = [];
+  for (const p of pts.slice(-SPARK_MAX_POINTS)) {
+    if (typeof p.close === "number" && Number.isFinite(p.close)) out.push(p.close);
+  }
+  return out;
+}
+
+function Sparkline({ closes, up }: { closes: number[]; up: boolean }) {
+  // Two points is the minimum that describes a direction; below that there is
+  // nothing to draw and the row simply goes without one rather than showing a
+  // flat line that would read as "unchanged".
+  if (closes.length < 2) return null;
+  let min = closes[0];
+  let max = closes[0];
+  for (const c of closes) {
+    if (c < min) min = c;
+    if (c > max) max = c;
+  }
+  // A dead-flat series has nothing to scale against. Guarding with span = 1
+  // would put every point at (c - min) / span = 0, i.e. hard along the bottom
+  // edge, which reads as a crash rather than as no movement -- so flat is drawn
+  // through the middle instead.
+  const flat = max === min;
+  const span = flat ? 1 : max - min;
+  const step = SPARK_W / (closes.length - 1);
+  // Inset by half the stroke so the extremes aren't clipped by the viewBox edge.
+  const top = 1;
+  const usable = SPARK_H - 2;
+  const d = closes
+    .map((c, i) => {
+      const x = (i * step).toFixed(1);
+      const y = (flat ? top + usable / 2 : top + usable - ((c - min) / span) * usable).toFixed(1);
+      return `${i === 0 ? "M" : "L"}${x} ${y}`;
+    })
+    .join(" ");
+  return (
+    <svg
+      className="mRowSpark"
+      width={SPARK_W}
+      height={SPARK_H}
+      viewBox={`0 0 ${SPARK_W} ${SPARK_H}`}
+      preserveAspectRatio="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        d={d}
+        fill="none"
+        stroke={up ? "#22c55e" : "#ef4444"}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  );
+}
+
 // Renders the results for a picker/screener page. List view (default) is a
 // sortable, tabbed table; chart view is the mini candle-chart cards. `entries`
 // is the FULL matched set, so filtering / sorting / "Show more" all run off
@@ -375,6 +569,7 @@ export default function PickerResultsGrid({
   splitReasonsBySelection = false,
   collapseReasons = false,
   defaultTab = "general",
+  screenerControl = null,
 }: {
   entries: ResultEntry[];
   initialVisibleCount?: number;
@@ -397,13 +592,59 @@ export default function PickerResultsGrid({
   // cash flow) appear on exactly one tab. See defaultTab in PickerResultPage's
   // config.
   defaultTab?: TabKey;
+  // The mobile screener trigger, rendered as the first pill in the controls row
+  // (see .screenerControls below). Passed in rather than rendered here because
+  // it's a ScreenerNav instance and needs the page's currentHref, filter mode
+  // and categoryValues, all of which live in PickerResultPage.
+  //
+  // It used to sit in its own full-width sticky bar between the hero and the
+  // results, which meant a phone showed two separate control surfaces -- one
+  // for "which screener", one for "how to view it" -- stacked on top of each
+  // other. They're one decision, so they're now one row.
+  screenerControl?: ReactNode;
 }) {
-  const { predicates, selectedFilters, setMatchCount, isPristine } = usePickerFilter();
+  const { predicates, selectedFilters, setMatchCount, setConditionCounts, isPristine } = usePickerFilter();
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [activeTab, setActiveTab] = useState<TabKey>(defaultTab);
   const [sort, setSort] = useState<SortState>(null);
-  const pageSize = viewMode === "list" ? LIST_PAGE_SIZE : CHART_PAGE_SIZE;
   const [visibleCount, setVisibleCount] = useState(LIST_PAGE_SIZE);
+
+  // Phone layout swap. The 9-column table needs horizontal scrolling to read a
+  // single number, which is a spreadsheet gesture, not an app one -- below this
+  // width the same data renders as full-width rows instead (see the mRows
+  // branch below).
+  //
+  // Deliberately state + matchMedia rather than rendering both trees and hiding
+  // one with CSS: two copies of every ticker in the DOM is duplicated content
+  // on pages that are actively being indexed. Starting false means the server
+  // render (and therefore the crawler) always gets the table, which is the
+  // text-richer of the two; a phone swaps to rows on hydration.
+  const [isNarrow, setIsNarrow] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(max-width: 720px)");
+    const apply = () => setIsNarrow(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+
+  // Rows are the phone's LIST view, not the phone's only view.
+  //
+  // These briefly replaced chart view entirely on mobile, on the reasoning that
+  // a sparkline in each row plus a full chart one tap into the panel left a
+  // separate chart *mode* with nothing to offer. That was wrong: the card grid
+  // is its own way of reading the market -- pattern after pattern, no figures
+  // in the way -- and on the chart-pattern pages that browsing is the point.
+  // Removing it took a feature away to save a pill.
+  const showMobileRows = viewMode === "list" && isNarrow;
+
+  const pageSize = viewMode === "list" ? LIST_PAGE_SIZE : CHART_PAGE_SIZE;
+
+  // Which mobile rows are expanded to show their full field set. Keyed by
+  // symbol; cleared whenever the tab changes, since a panel opened on Dividends
+  // is showing fields that no longer exist on Financials.
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set());
 
   const cardHrefFor = (entry: ResultEntry) =>
     isEarnings ? `/stock/${encodeURIComponent(entry.symbol)}/earnings` : entry.chartHref;
@@ -457,12 +698,19 @@ export default function PickerResultsGrid({
       sortType: "str",
       cls: "colName",
       get: (e) => e.companyName ?? "",
-      cell: (e) => (e.companyName ? <span className="listName">{e.companyName}</span> : MUTED),
+      cell: (e) =>
+        e.companyName ? (
+          <span className="listName" title={e.companyName}>
+            {truncateName(e.companyName)}
+          </span>
+        ) : (
+          MUTED
+        ),
     };
     const marketCap: Col = { key: "marketCap", label: "Market Cap", sortType: "num", get: (e) => num(e.marketCap), cell: (e) => capCell(num(e.marketCap)) };
     const price: Col = { key: "price", label: "Stock Price", sortType: "num", get: (_e, d) => d.price, cell: (_e, d) => numCell(d.price) };
     const change: Col = { key: "change", label: "% Change", sortType: "num", get: (_e, d) => d.changePct, cell: (_e, d) => pctCell(d.changePct) };
-    const industry: Col = { key: "industry", label: "Industry", sortType: "str", cls: "colInd", get: (e) => e.industry ?? "", cell: (e) => (e.industry ? <span className="listInd">{e.industry}</span> : MUTED) };
+    const industry: Col = { key: "industry", label: "Industry", sortType: "str", cls: "colInd", get: (e) => e.industry ?? "", cell: (e) => (e.industry ? <span className="listInd" title={e.industry}>{truncateName(e.industry, 32)}</span> : MUTED) };
     const volume: Col = { key: "volume", label: "Volume", sortType: "num", get: (_e, d) => d.volume, cell: (_e, d) => volCell(d.volume) };
     const pe: Col = { key: "pe", label: "PE Ratio", sortType: "num", get: (e) => num(e.peRatio), cell: (e) => numCell(num(e.peRatio)) };
     const ma200: Col = { key: "ma200", label: "200 MA", sortType: "num", get: (_e, d) => d.ma200, cell: (_e, d) => numCell(d.ma200) };
@@ -511,6 +759,32 @@ export default function PickerResultsGrid({
 
   const activeColumns = columnSets[activeTab];
 
+  // Every column a phone row can lead with or sort by -- i.e. everything except
+  // the two identity columns, which are already the row's left-hand side.
+  const metricColumns = useMemo(
+    () => activeColumns.filter((col) => col.key !== "symbol" && col.key !== "name"),
+    [activeColumns]
+  );
+
+  // The single figure each row leads with. Follows the sort when there is one,
+  // so sorting by Payout Ratio makes every row show its payout ratio; otherwise
+  // it's the tab's defining metric. Falls back to the first metric column if
+  // neither resolves (a tab whose default was renamed, say).
+  const headlineColumn = useMemo(() => {
+    const wanted = sort && sort.key !== "symbol" && sort.key !== "name" ? sort.key : DEFAULT_METRIC_BY_TAB[activeTab];
+    return metricColumns.find((col) => col.key === wanted) ?? metricColumns[0] ?? null;
+  }, [sort, activeTab, metricColumns]);
+
+  // The smaller figure under the headline. Usually the day's % change, since
+  // that's the context you want next to any other number -- unless the headline
+  // IS the change, in which case show the price instead. Tabs carrying neither
+  // (Dividends, Financials) simply get no sub-line.
+  const subColumn = useMemo(() => {
+    if (!headlineColumn) return null;
+    const wanted = headlineColumn.key === "change" ? "price" : "change";
+    return activeColumns.find((col) => col.key === wanted) ?? null;
+  }, [headlineColumn, activeColumns]);
+
   const derivedByEntry = useMemo(() => {
     const map = new WeakMap<ResultEntry, DerivedRow>();
     for (const entry of entries) map.set(entry, deriveRow(entry));
@@ -558,19 +832,80 @@ export default function PickerResultsGrid({
     return copy;
   }, [filteredEntries, sort, activeColumns, derivedByEntry]);
 
+  // Reset the page size when the RESULT SET changes (filters, tab, view), but
+  // deliberately NOT when only the sort order changes. Sorting reorders the
+  // same rows -- collapsing 300 expanded rows back to 30 shortens the document
+  // under the visitor's feet, so the browser scrolls them somewhere else the
+  // instant they click a column header. Keeping the count means clicking
+  // "Stock Price" re-orders the list and leaves you exactly where you were.
   useEffect(() => {
     setVisibleCount(pageSize);
-  }, [predicates, sort, viewMode, pageSize, activeTab]);
+  }, [predicates, viewMode, pageSize, activeTab]);
 
   useEffect(() => {
     setMatchCount(predicates.length ? filteredEntries.length : null);
     return () => setMatchCount(null);
   }, [filteredEntries.length, predicates.length, setMatchCount]);
 
+  // How many of the currently shown results also satisfy each checkable
+  // condition -- what you would be left with if you ticked it.
+  //
+  // Counted against filteredEntries, not `entries`, so the numbers compose:
+  // predicates AND, so (current results) INTERSECT (this condition) is exactly
+  // the set ticking it would produce. A condition already ticked therefore
+  // counts every current result, which is correct rather than coincidental.
+  //
+  // The `predicates.length ?` guard is for hideUntilFiltered pages, where
+  // filteredEntries is deliberately empty until something is selected. Counting
+  // against that would report 0 for all 25 conditions and paint every one as a
+  // dead end on the exact page where the visitor most needs to know where to
+  // start.
+  //
+  // Every checkable key is a flag predicate (valueSatisfies: `value === true`),
+  // so this is one boolean read per key per row -- ~25 x 700 at the largest
+  // universe, on a set already materialised in memory. No new data and no
+  // request.
+  const countBase = predicates.length ? filteredEntries : entries;
+
+  const conditionCounts = useMemo(() => {
+    const counts: Partial<Record<AnyFilterKey, number>> = {};
+    const keys: AnyFilterKey[] = [
+      ...FILTER_DEFS.map((d) => d.key),
+      ...CATEGORY_FILTER_DEFS.map((d) => d.key),
+    ];
+    for (const key of keys) counts[key] = 0;
+    for (const entry of countBase) {
+      const record = entry as unknown as Record<string, unknown>;
+      for (const key of keys) {
+        if (record[key] === true) counts[key] = (counts[key] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }, [countBase]);
+
+  useEffect(() => {
+    setConditionCounts(conditionCounts);
+    return () => setConditionCounts(null);
+  }, [conditionCounts, setConditionCounts]);
+
   const shown = sortedEntries.slice(0, visibleCount);
   const hasMore = visibleCount < sortedEntries.length;
 
+  // Synced top + bottom horizontal scrollbars (grey /insights style). The top
+  // strip mirrors the table's scroll width; scrolling either moves the other.
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const tableWrapRef = useRef<HTMLDivElement>(null);
+  const [scrollWidth, setScrollWidth] = useState(0);
+
+  // Where the table was scrolled to, horizontally and vertically, at the moment
+  // a column header was clicked. Restored synchronously after the re-sorted
+  // rows commit (see the layout effect below) so the header you clicked is
+  // still under your cursor rather than somewhere off to the left.
+  const restoreScroll = useRef<{ left: number; top: number } | null>(null);
+
   const onHeaderClick = (key: string, type: "str" | "num") => {
+    const wrap = tableWrapRef.current;
+    if (wrap) restoreScroll.current = { left: wrap.scrollLeft, top: wrap.scrollTop };
     setSort((current) => {
       if (current && current.key === key) {
         return { key, dir: current.dir === "asc" ? "desc" : "asc" };
@@ -580,20 +915,43 @@ export default function PickerResultsGrid({
   };
 
   const onTabChange = (tab: TabKey) => {
+    // A tab swap really is a different table -- different columns, different
+    // widths -- so there is nothing meaningful to restore. Drop the pending
+    // position rather than reapplying it to a layout it doesn't describe.
+    restoreScroll.current = null;
     setActiveTab(tab);
     setSort(null);
+    // Panels opened on the previous tab describe fields this one doesn't have.
+    setExpandedRows(new Set());
   };
 
-  // Synced top + bottom horizontal scrollbars (grey /insights style). The top
-  // strip mirrors the table's scroll width; scrolling either moves the other.
-  const topScrollRef = useRef<HTMLDivElement>(null);
-  const tableWrapRef = useRef<HTMLDivElement>(null);
-  const [scrollWidth, setScrollWidth] = useState(0);
+  const toggleRow = (symbol: string) => {
+    setExpandedRows((current) => {
+      const next = new Set(current);
+      if (next.has(symbol)) next.delete(symbol);
+      else next.add(symbol);
+      return next;
+    });
+  };
 
   useEffect(() => {
     const table = tableWrapRef.current?.querySelector("table");
     setScrollWidth(table ? table.scrollWidth : 0);
   }, [shown, activeColumns, viewMode]);
+
+  // useLayoutEffect, not useEffect: this has to run before the browser paints,
+  // otherwise the visitor sees one frame of the table snapped back to the left
+  // edge before it jumps back.
+  useLayoutEffect(() => {
+    const pending = restoreScroll.current;
+    if (!pending) return;
+    restoreScroll.current = null;
+    const wrap = tableWrapRef.current;
+    if (!wrap) return;
+    wrap.scrollLeft = pending.left;
+    wrap.scrollTop = pending.top;
+    if (topScrollRef.current) topScrollRef.current.scrollLeft = wrap.scrollLeft;
+  }, [sort]);
 
   const syncFromTop = () => {
     if (tableWrapRef.current && topScrollRef.current) {
@@ -607,9 +965,20 @@ export default function PickerResultsGrid({
   };
 
   const description =
-    viewMode === "list"
-      ? "Sortable table of the current screened results — click any column header to sort, or a row to open the full view."
-      : "Each card shows a mini candle preview — select any stock to open its full view.";
+    viewMode === "chart"
+      ? "Each card shows a mini candle preview — select any stock to open its full view."
+      : showMobileRows
+        ? "Tap any row for its chart, the rest of its figures and where to open it."
+        : "Sortable table of the current screened results — click any column header to sort, or a row to open the full view.";
+
+  const sortKey = headlineColumn?.key ?? "";
+
+  // Direction is a property of the chosen sort, not a separate control, so the
+  // select carries both and there is no arrow button beside it. When nothing is
+  // sorted yet this reports the direction that choosing the headline metric
+  // would apply, which is what the old arrow showed too.
+  const sortDir: "asc" | "desc" =
+    sort && sort.key === sortKey ? sort.dir : headlineColumn?.sortType === "str" ? "asc" : "desc";
 
   return (
     <section>
@@ -617,34 +986,7 @@ export default function PickerResultsGrid({
         <div className="resultsHeaderTop">
           <h2>Current screened results</h2>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <p style={{ margin: "8px 0 0" }}>{description}</p>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto" }}>
-            {viewMode === "list" ? (
-              <span className="tabSelectWrap">
-                <select
-                  className="tabSelect"
-                  value={activeTab}
-                  onChange={(e) => onTabChange(e.target.value as TabKey)}
-                  aria-label="Data view"
-                >
-                  {TABS.map((t) => (
-                    <option key={t.key} value={t.key}>{t.label}</option>
-                  ))}
-                </select>
-              </span>
-            ) : null}
-            <button
-              type="button"
-              className="viewToggle"
-              onClick={() => setViewMode((v) => (v === "list" ? "chart" : "list"))}
-              aria-label={viewMode === "list" ? "Switch to chart view" : "Switch to list view"}
-            >
-              {viewMode === "list" ? "Chart View Mode" : "List View Mode"}
-              <span aria-hidden="true" style={{ fontSize: 12 }}>{viewMode === "list" ? "▦" : "▤"}</span>
-            </button>
-          </div>
-        </div>
+        <p>{description}</p>
         {viewMode === "list" ? (
           <div className="viewTabs" role="tablist" aria-label="Data view">
             {TABS.map((t) => (
@@ -664,8 +1006,205 @@ export default function PickerResultsGrid({
         <ScreenerFilterBar matched={filteredEntries.length} total={entries.length} />
       </div>
 
+      {/* One control row: which screener, which view, which data tab, which
+          sort. These four are a single decision about what you're looking at,
+          so they sit together rather than in two stacked bars.
+
+          On a phone this is docked to the BOTTOM of the screen rather than
+          under the header -- see the media query below for why. On desktop it
+          stays exactly where it was, right-aligned above the results, because
+          a mouse has no reach problem and the sidebar is already showing the
+          screener list. */}
+      <div className="screenerControls">
+        {screenerControl}
+        <button
+          type="button"
+          className="viewToggle"
+          onClick={() => setViewMode((v) => (v === "list" ? "chart" : "list"))}
+          aria-label={viewMode === "list" ? "Switch to chart view" : "Switch to list view"}
+        >
+          {viewMode === "list" ? ICON_CHARTS : ICON_LIST}
+          <span className="viewToggleLabel">{viewMode === "list" ? "Charts" : "List"}</span>
+        </button>
+        <span className="ctrlBreak" aria-hidden="true" />
+        {viewMode === "list" ? (
+          <span className="tabSelectWrap">
+            {ICON_METRICS}
+            <span className="ctrlCaption" aria-hidden="true">Metrics</span>
+            <select
+              className="tabSelect"
+              value={activeTab}
+              onChange={(e) => onTabChange(e.target.value as TabKey)}
+              aria-label="Which figures to show"
+            >
+              {TABS.map((t) => (
+                <option key={t.key} value={t.key}>{t.label}</option>
+              ))}
+            </select>
+          </span>
+        ) : null}
+        {/* Sorting on a phone can't be "tap a column header" -- there are no
+            headers once the table is gone, and reaching them meant swiping
+            sideways even when there were. So it becomes a visible control,
+            and the metric it names is the one every row then leads with. */}
+        {showMobileRows && metricColumns.length ? (
+          <span className="mSortWrap">
+            {ICON_SORT}
+            <span className="ctrlCaption" aria-hidden="true">Sort</span>
+            {/* Metric and direction in one list. They were two controls, and the
+                arrow button was the loser of that arrangement: a 26px target
+                wedged into the corner of a quarter-width bar item, showing a
+                state ("descending") that means nothing until you already know
+                which column it applies to. Spelled out per option there is
+                nothing to decode and nothing to cram. */}
+            <select
+              className="tabSelect"
+              value={`${sortKey}:${sortDir}`}
+              onChange={(e) => {
+                const [key, dir] = e.target.value.split(":");
+                const col = metricColumns.find((c) => c.key === key);
+                if (!col) return;
+                setSort({ key: col.key, dir: dir === "asc" ? "asc" : "desc" });
+              }}
+              aria-label="Sort results"
+            >
+              {metricColumns.flatMap((col) => {
+                // Biggest-first for figures, A-Z for names: the order you'd want
+                // if you picked that column and said nothing else.
+                const dirs = col.sortType === "str" ? (["asc", "desc"] as const) : (["desc", "asc"] as const);
+                return dirs.map((dir) => (
+                  <option key={`${col.key}:${dir}`} value={`${col.key}:${dir}`}>
+                    {col.sortType === "str"
+                      ? `${col.label} (${dir === "asc" ? "A to Z" : "Z to A"})`
+                      : `${col.label} (${dir === "desc" ? "high to low" : "low to high"})`}
+                  </option>
+                ));
+              })}
+            </select>
+          </span>
+        ) : null}
+      </div>
+
       {shown.length ? (
-        viewMode === "list" ? (
+        showMobileRows ? (
+          <div className="mRows">
+            {shown.map((entry) => {
+              const d = derivedByEntry.get(entry) ?? deriveRow(entry);
+              const open = expandedRows.has(entry.symbol);
+              // Only the fields this symbol actually has a value for, rather
+              // than a column of dashes.
+              //
+              // Mostly these gaps are REAL, not a warming lag: a company that
+              // pays no dividend has no yield, payout ratio or growth figure and
+              // never will; an ETF has no income statement; a small name may
+              // have no analyst coverage. (Coverage itself is fine -- the
+              // warm-stock-data cron cycles all ~755 targets in about five
+              // hours against a 26-hour TTL, so every symbol is refreshed
+              // several times over before it could expire.) Hence the empty
+              // message says N/A rather than promising the number is on its way.
+              const panelColumns = metricColumns.filter((col) => {
+                const value = col.get(entry, d);
+                return value != null && value !== "";
+              });
+              const closes = sparkCloses(entry);
+              // Direction comes from the day's % change where we have it, so
+              // the line's colour agrees with the % figure printed beside it.
+              // Falling back to first-vs-last close keeps a colour on rows the
+              // price pool missed, where the sparkline is the only signal.
+              const sparkUp =
+                d.changePct != null
+                  ? d.changePct >= 0
+                  : closes.length > 1
+                    ? closes[closes.length - 1] >= closes[0]
+                    : true;
+              return (
+                <div key={`${entry.symbol}-${entry.note}`} id={`picker-${entry.symbol}`} className={open ? "mRow open" : "mRow"}>
+                  <div className="mRowTop">
+                    {/* The whole collapsed row is one target and it only
+                        expands. Nothing here navigates.
+
+                        This was one link filling the row, so the blank space
+                        between the name and the price silently threw you onto
+                        the dashboard; the intermediate fix left the ticker as a
+                        link, which still meant the row had two outcomes
+                        depending on which few pixels you hit, and the
+                        destructive one was the accident. Leaving the page is
+                        now always a deliberate tap on a named button in the
+                        panel. */}
+                    <button
+                      type="button"
+                      className="mRowToggle"
+                      onClick={() => toggleRow(entry.symbol)}
+                      aria-expanded={open}
+                      aria-label={open ? `Hide ${entry.symbol} details` : `Show ${entry.symbol} details`}
+                    >
+                      <span className="mRowId">
+                        <span className="dot" style={{ background: toneColour(toneFor(entry)) }} aria-hidden="true" />
+                        <span className="mRowSym">{entry.symbol}</span>
+                        {entry.companyName ? (
+                          <span className="mRowName" title={entry.companyName}>{entry.companyName}</span>
+                        ) : null}
+                      </span>
+                      <Sparkline closes={closes} up={sparkUp} />
+                      <span className="mRowFigures">
+                        {headlineColumn ? (
+                          <>
+                            <span className="mRowLabel">{headlineColumn.label}</span>
+                            <span className="mRowValue">{headlineColumn.cell(entry, d)}</span>
+                          </>
+                        ) : null}
+                        {subColumn ? <span className="mRowSub">{subColumn.cell(entry, d)}</span> : null}
+                      </span>
+                      <span className="mRowChev" aria-hidden="true">{open ? "▲" : "▼"}</span>
+                    </button>
+                  </div>
+                  {open ? (
+                    <div className="mRowPanel">
+                      {/* The full chart, one tap in. Chart view is still there
+                          as its own mode -- this is for reading one row without
+                          leaving the list. Mounted only while the row is open,
+                          so a 30-row list still holds a handful rather than 30. */}
+                      {closes.length > 1 ? (
+                        <div className="mRowChart">
+                          <MiniPickerCandleChart
+                            points={entry.chartPoints}
+                            tone={displayTone ?? tone}
+                            overlay={chartOverlayForEntry(configHref, configTitle, entry)}
+                            supportResistanceZone={entry.supportResistanceZone}
+                          />
+                        </div>
+                      ) : null}
+                      {panelColumns.length ? (
+                        panelColumns.map((col) => (
+                          <div key={col.key} className="mRowField">
+                            <span className="mRowFieldLabel">{col.label}</span>
+                            <span className="mRowFieldValue">{col.cell(entry, d)}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="mRowEmpty">{TABS.find((t) => t.key === activeTab)?.label} data: N/A</div>
+                      )}
+                      {/* Every way off this row, named, inside the panel the
+                          visitor deliberately opened -- rather than left
+                          implicit in whichever part of the row they happened to
+                          tap. On an earnings page the row used to open the
+                          earnings view, so that destination leads here rather
+                          than disappearing with the link. */}
+                      <div className="mRowActions">
+                        {isEarnings ? (
+                          <Link href={`${entry.stockHref}/earnings`} className="mRowAction">Earnings</Link>
+                        ) : null}
+                        <Link href={entry.chartHref} className="mRowAction">Chart</Link>
+                        <Link href={entry.stockHref} className="mRowAction">Analysis</Link>
+                        <Link href={`${entry.stockHref}/news`} className="mRowAction">News</Link>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        ) : viewMode === "list" ? (
           <>
             <div className="listScrollTop msScrollGrey" ref={topScrollRef} onScroll={syncFromTop} aria-hidden="true">
               <div style={{ width: scrollWidth || 1 }} />
@@ -775,6 +1314,150 @@ export default function PickerResultsGrid({
           </button>
         </div>
       ) : null}
+
+      <style>{`
+        .screenerControls {
+          display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+          justify-content: flex-end; margin-top: 14px;
+        }
+        /* Zero-height full-width flex item -- forces everything after it onto a
+           new line. Only active on mobile; on desktop the tab and sort pills are
+           hidden anyway (the tab row and column headers do those jobs there), so
+           a break would just leave a gap under a lone view-mode button. */
+        .ctrlBreak { display: none; }
+
+        .viewToggleLabel { display: inline; }
+
+        /* Sized here rather than on the viewBox so one number moves every icon
+           in the bar. 15px on desktop, where it sits beside a label on a pill;
+           the docked bar scales it up (see globals.css). */
+        .ctrlIcon { width: 15px; height: 15px; flex: 0 0 auto; display: block; }
+        /* The static word under each icon in the docked bar. Off everywhere
+           else -- desktop shows the select itself, which reads its own value. */
+        .ctrlCaption { display: none; }
+
+        .mSortWrap { display: inline-flex; align-items: stretch; gap: 6px; flex: 0 0 auto; }
+
+        .mRows { margin-top: 12px; display: grid; gap: 8px; }
+        .mRow {
+          border: 1px solid rgba(255,255,255,0.09); border-radius: 14px;
+          background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+          overflow: hidden;
+        }
+        .mRow.open { border-color: rgba(96,165,250,0.4); }
+        .mRowTop { display: flex; }
+        /* The entire collapsed row is the button. */
+        .mRowToggle {
+          flex: 1 1 auto; display: flex; width: 100%; align-items: center; gap: 10px;
+          padding: 11px 12px; border: none; background: none;
+          font-family: inherit; color: inherit; cursor: pointer; text-align: left;
+        }
+        .mRowToggle:active { background: rgba(255,255,255,0.03); }
+        .mRowId { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 auto; }
+        .mRowId .dot { width: 8px; height: 8px; border-radius: 999px; flex: 0 0 auto; }
+        .mRowSym { flex: 0 0 auto; font-size: 15px; font-weight: 950; letter-spacing: -0.02em; color: #eaf2ff; }
+        .mRowName {
+          min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          font-size: 12px; font-weight: 700; color: rgba(148,163,184,0.9);
+        }
+        .mRowSpark { flex: 0 0 auto; display: block; width: 54px; height: 22px; opacity: 0.9; }
+        .mRowFigures { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; text-align: right; }
+        .mRowLabel { font-size: 9px; font-weight: 900; letter-spacing: 0.05em; text-transform: uppercase; color: rgba(148,163,184,0.62); }
+        .mRowValue { font-size: 14.5px; font-weight: 900; color: #f1f5f9; white-space: nowrap; }
+        .mRowSub { font-size: 11.5px; font-weight: 800; white-space: nowrap; }
+        .mRowChev { flex: 0 0 auto; font-size: 10px; color: rgba(226,232,240,0.6); }
+        .mRow.open .mRowChev { color: #93c5fd; }
+
+        .mRowPanel {
+          border-top: 1px solid rgba(255,255,255,0.08);
+          padding: 4px 12px 12px;
+          display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px;
+        }
+        .mRowChart { grid-column: 1 / -1; margin: 8px 0 2px; }
+        .mRowField {
+          display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+          padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.055); min-width: 0;
+        }
+        .mRowFieldLabel { font-size: 11px; font-weight: 800; color: rgba(148,163,184,0.8); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .mRowFieldValue { flex: 0 0 auto; font-size: 12.5px; font-weight: 800; color: rgba(226,232,240,0.94); white-space: nowrap; }
+        .mRowEmpty { grid-column: 1 / -1; padding: 10px 0 4px; font-size: 12px; color: rgba(148,163,184,0.75); }
+
+        /* Wraps rather than a fixed row: earnings pages carry a fourth button,
+           and four labels across a 390px screen leave each about 85px, which
+           "Earnings" plus its padding does not fit without shrinking the type
+           below a comfortable tap target. flex-basis 40% gives 3-up on one line
+           and 2x2 on four. */
+        .mRowActions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+        .mRowAction {
+          flex: 1 1 40%; display: inline-flex; align-items: center; justify-content: center;
+          padding: 10px 6px; border-radius: 10px;
+          border: 1px solid rgba(96,165,250,0.32); background: rgba(59,130,246,0.10);
+          color: #dbeafe; font-size: 12.5px; font-weight: 850; text-decoration: none; white-space: nowrap;
+        }
+        .mRowAction:active { background: rgba(59,130,246,0.2); }
+
+        @media (max-width: 980px) {
+          /* Docked to the BOTTOM of the screen rather than under the header.
+             Three reasons, in order of how much they matter:
+
+             1. Reach. These are the four controls a visitor actually presses
+                on this page, and the top of a 6.7" screen is where a thumb
+                cannot go without shifting grip. The list is what you read; the
+                controls are what you press. They were the wrong way up.
+             2. Height. Under the header they stacked with it -- 62px of header
+                plus ~110px of controls before a single result. At the bottom
+                they stop competing for the same strip, and going to one row
+                halves what they cost either way.
+             3. They stay put. A control docked at the bottom does not need to
+                hide on scroll to earn its space, which is why the scroll
+                machinery came back out.
+
+             z-index 55 keeps it under the screener sheet (70) and the site
+             header (100). While the sheet is open its own Go button owns the
+             bottom of the screen, and this belongs behind it. */
+          .screenerControls {
+            position: fixed; left: 0; right: 0; bottom: 0; top: auto;
+            z-index: 55;
+            justify-content: center;
+            flex-wrap: nowrap;
+            gap: 6px;
+            margin: 0; padding: 9px 10px calc(9px + env(safe-area-inset-bottom));
+            border-top: 1px solid rgba(255,255,255,0.10);
+            /* Opaque. A translucent bar over a dense column of figures reads
+               as smeared rather than as depth. */
+            background: #080b12;
+          }
+          /* Reserves the bar's height at the foot of the document, so the last
+             row of a list and the "Show more" button are not sitting
+             underneath it. Without this it is not docked, it is covering
+             something. */
+          body { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }
+
+          /* One row, so the line break that used to force tab and sort onto a
+             second line is off again. */
+          .ctrlBreak { display: none; }
+
+          /* Four controls across ~370px of usable width. The screener name is
+             the elastic one -- it is the only label that varies in length --
+             so it gives up width first and ellipses, while the three fixed
+             controls keep their full targets. */
+          .screenerControls .screenerPillBtn {
+            max-width: 38vw; padding: 9px 12px; gap: 5px;
+          }
+          .screenerControls .viewToggle { flex: 0 0 auto; }
+          .mSortWrap { min-width: 0; }
+        }
+        @media (max-width: 430px) {
+          /* Two columns of label+value stops fitting once the labels are this
+             long ("Payout Ratio", "Op. Income") -- one column keeps every value
+             on the same line as its own label. */
+          .mRowPanel { grid-template-columns: minmax(0, 1fr); }
+          .mRowName { font-size: 11.5px; }
+          /* The sparkline gives up 10px before the company name does -- the
+             name is the thing you read, the line is the thing you glance at. */
+          .mRowSpark { width: 44px; }
+        }
+      `}</style>
     </section>
   );
 }

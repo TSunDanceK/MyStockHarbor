@@ -54,3 +54,255 @@ body {
 .mobile-change-stock {
   overflow: visible !important;
 }
+
+/* ---------------------------------------------------------------------
+   News pages: one card layer on a phone, not two
+   ---------------------------------------------------------------------
+   The news page family (/stock/[symbol]/news and /sector/[slug]/news)
+   nests cards two deep. Measured on a 390px viewport:
+
+     .newsWrap side padding        12 + 12
+     editorialCardStyle            21 + 21   <- the outer section card
+     newsLeadCardStyle             19 + 17   <- each article card
+
+   102px of 390 -- 26% of the screen -- spent on chrome, leaving a 288px
+   reading column. The sidebar does the same thing: sidebarCardStyle wraps
+   listRowStyle rows that carry their own border and padding.
+
+   On a phone the outer card is doing almost no visual work anyway. It is
+   near-full-bleed, so its border just traces the viewport edge 12px in,
+   and every section inside it already has its own frame. So below 560px
+   the outer layer collapses to a hairline rule and the inner cards become
+   the only card layer. Recovers 42px -- a ~15% wider reading column --
+   and removes the cards-in-cards look rather than just shrinking it.
+
+   Direct children only (`> section`), and every direct child of both
+   columns on both pages is a <section>: verified against the JSX and
+   against the components rendered into those columns (DetailedNewsSection,
+   AiInsightCard, LatestEarningsCard, EarningsNewsSection on the stock
+   page; SectorFeed and the four sidebar cards on the sector pages). A
+   component that renders a <div> root would silently miss this rule.
+
+   Two sections lose a tinted shell here and it costs nothing: the AI
+   insight card's blue gradient is decoration, and LatestEarningsCard's
+   tone-coloured border is duplicated by the tone pill inside its own
+   header. Nothing tone-bearing is only expressed by an outer border.
+
+   Lives here rather than in the pages' own <style> blocks for the reason
+   the rule above does: it would otherwise mean rewriting a 66KB and a
+   48KB page file to say the same thing twice. Both pages set these styles
+   inline, hence !important.
+   --------------------------------------------------------------------- */
+@media (max-width: 560px) {
+  .newsMainColumn > section,
+  .newsSidebar > section {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: none !important;
+    box-shadow: none !important;
+    padding: 18px 0 0 !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  }
+
+  /* The first section in each column sits directly under the hero (main)
+     or under the feed (sidebar, once .newsGrid has collapsed to one
+     column), both of which already provide separation. */
+  .newsMainColumn > section:first-child,
+  .newsSidebar > section:first-child {
+    padding-top: 0 !important;
+    border-top: 0 !important;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Picker controls bar: tab bar, not a row of pills
+   ---------------------------------------------------------------------
+   PickerResultsGrid docks its four controls -- screener, view mode, metrics,
+   sort -- to the bottom of the screen on a phone. It shipped them as pills,
+   and pills were the wrong shape for the job twice over:
+
+   1. They size to their own labels, so four of them overflowed a 390px
+      viewport at BOTH ends: the screener name clipped on the left,
+      "Sort: Stock Price" on the right, with nothing indicating either was
+      cut. No amount of max-width tuning fixes that, because the widths are
+      content-driven and the screener name varies per page.
+   2. A pill reads as something you might dismiss. This is the page's
+      permanent control surface.
+
+   Equal-width flex items cannot overflow: each takes a fixed share of the
+   bar and its own label ellipses inside it. Icon over label, flat, no
+   borders -- the standard docked-bar treatment, and the same one built for
+   the site-wide bar in the closed PR #272.
+
+   Second pass: every caption in the bar is now a static word naming what
+   the item does, and every glyph is a drawn icon. Both were wrong for the
+   same reason. Two of the four captions were reporting a value instead --
+   "Oversold" (which screen you are on) and "General" (which column set is
+   loaded) -- and in a bar of four equal slots there is no room to say both
+   what an item is and what it currently holds. What it is wins: the page
+   heading already names the screen, and the results already show which
+   figures are loaded, so the caption was the one place the information was
+   redundant and the one place the purpose was missing. The four glyphs,
+   meanwhile, were three shaded rectangles and a pair of arrows, which at
+   19px is one shape used three times.
+
+   Lives here for exactly the reason the two rules above do: the component
+   is 69KB and the GitHub connector has no patch API, so putting this in
+   its <style> block means re-uploading the whole file to say the same
+   thing twice. See claude/patches/picker-controls-tab-bar-2026-08-19.md
+   for the equivalent in-component version, which should replace this the
+   next time that file is edited locally.
+
+   !important throughout because the component's own rules live in a
+   <style> tag injected into the body, so they win ties on document order
+   against a stylesheet in <head> regardless of specificity.
+   --------------------------------------------------------------------- */
+@media (max-width: 980px) {
+  .screenerControls {
+    justify-content: stretch !important;
+    align-items: stretch !important;
+    gap: 0 !important;
+    padding: 0 0 env(safe-area-inset-bottom) !important;
+  }
+
+  /* Every item takes an equal share and clips its own label rather than
+     pushing its neighbours off the edge. */
+  .screenerControls > * {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+  }
+
+  /* One size for all five icons, set here rather than per item so the bar
+     cannot drift out of alignment one glyph at a time. */
+  .screenerControls .ctrlIcon,
+  .screenerControls .screenerPillIcon {
+    width: 22px !important;
+    height: 22px !important;
+    color: inherit !important;
+  }
+
+  .screenerControls .ctrlCaption {
+    display: block !important;
+    font-size: 10.5px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  /* 1. Screener. ScreenerNav renders this as a pill; the border, radius
+     and background come off, its icon becomes the tab glyph and its label
+     the caption. The chevron goes -- in a docked bar the affordance is the
+     bar itself, not a caret on one item. */
+  .screenerControls .screenerPillWrap {
+    display: flex !important;
+  }
+
+  .screenerControls .screenerPillBtn {
+    position: relative !important;
+    width: 100% !important;
+    max-width: none !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 3px !important;
+    padding: 7px 4px 6px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: none !important;
+    color: rgba(148, 163, 184, 0.85) !important;
+    font-size: 10.5px !important;
+    font-weight: 800 !important;
+  }
+
+  .screenerControls .screenerPillBtn:active {
+    background: rgba(255, 255, 255, 0.04) !important;
+  }
+
+  .screenerControls .screenerPillLabel {
+    max-width: 100% !important;
+  }
+
+  .screenerControls .screenerSelectChevron {
+    display: none !important;
+  }
+
+  /* The applied-filter count keeps its green badge: it is the one thing in
+     the bar reporting state rather than offering an action, and now the only
+     one, since the caption above stopped naming the current screen. */
+  .screenerControls .screenerSelectCount {
+    position: absolute !important;
+    top: 4px !important;
+    right: 50% !important;
+    margin-right: -22px !important;
+    min-width: 15px !important;
+    height: 15px !important;
+    padding: 0 4px !important;
+    font-size: 9.5px !important;
+  }
+
+  /* 2. View mode. Same flattening. The label stays an action -- "Charts"
+     when you are on the list, "List" when you are on the charts -- because
+     this one is a toggle rather than a menu, and what it does is the only
+     thing about it worth a word. */
+  .screenerControls .viewToggle {
+    width: 100% !important;
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 3px !important;
+    padding: 7px 4px 6px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: none !important;
+    color: rgba(148, 163, 184, 0.85) !important;
+    font-size: 10.5px !important;
+    font-weight: 800 !important;
+  }
+
+  .screenerControls .viewToggle:active {
+    background: rgba(255, 255, 255, 0.04) !important;
+  }
+
+  .screenerControls .viewToggleLabel {
+    display: inline !important;
+  }
+
+  /* 3 & 4. Metrics and Sort stay native <select>s -- the wheel picker is the
+     right control on a phone and nothing here improves on it. But the select
+     stops being the caption: it goes invisible and full-bleed over its item,
+     so the icon and the static word are what you see and the whole tab is
+     what you press. That is what buys the caption the room to say "Metrics"
+     and "Sort" instead of "General" and "Sort: Stock Price". */
+  .screenerControls .tabSelectWrap,
+  .screenerControls .mSortWrap {
+    position: relative !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 3px !important;
+    padding: 7px 4px 6px !important;
+    color: rgba(148, 163, 184, 0.85) !important;
+  }
+
+  .screenerControls .tabSelect {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: none !important;
+    color: transparent !important;
+    opacity: 0 !important;
+    -webkit-appearance: none;
+    appearance: none;
+    /* 16px is the threshold below which iOS zooms the page on focus. The
+       control is invisible, but the zoom is not. */
+    font-size: 16px !important;
+  }
+}
