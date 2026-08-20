@@ -1,11 +1,17 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 import DescendingTrianglesClient, {
   type PlaysPayload,
 } from "./DescendingTrianglesClient";
 import { getDescendingTrianglesData } from "@/lib/server/descendingTrianglesBuilder";
 
-export const dynamic = "force-dynamic";
+// ISR rather than force-dynamic. `force-dynamic` shipped Cache-Control:
+// no-store, so every visit and every crawl paid a full serverless render of
+// what is, between scans, the same HTML.
+//
+// 1800s against a payload whose own Redis TTL is 3600s (PLAYS_REDIS_TTL_SECONDS
+// in playsBuilder.ts), so the page never trails the data by more than half a
+// refresh cycle. See claude/picker-pages-isr-2026-08-20.md.
+export const revalidate = 1800;
 
 export const metadata: Metadata = {
   title: "Descending Triangle Stock Setups | MyStockHarbor",
@@ -30,19 +36,12 @@ export const metadata: Metadata = {
   },
 };
 
-async function getOriginFromHeaders() {
-  const headerStore = await headers();
-  const host =
-    headerStore.get("x-forwarded-host") ||
-    headerStore.get("host") ||
-    "www.mystockharbor.com";
-
-  const proto =
-    headerStore.get("x-forwarded-proto") ||
-    (host.includes("localhost") ? "http" : "https");
-
-  return `${proto}://${host}`;
-}
+// The origin used to be read per-request from the request headers, and that
+// alone forces dynamic rendering. It is a constant now because it is vestigial:
+// the builder's fetchMarket() already reads in-process (it takes `_origin` and
+// ignores it, fixed in #262/#263), so nothing downstream reads this value. A
+// fixed production origin is correct for every environment that serves this page.
+const SITE_ORIGIN = "https://www.mystockharbor.com";
 
 // Reads the descending-triangles payload in-process via
 // getDescendingTrianglesData() (the same memo/Redis-cached builder the
@@ -56,8 +55,7 @@ async function getOriginFromHeaders() {
 // rarely triggers a fresh scan.
 async function getInitialDescendingTrianglesPayload(): Promise<PlaysPayload | null> {
   try {
-    const origin = await getOriginFromHeaders();
-    const { data, status } = await getDescendingTrianglesData(origin);
+    const { data, status } = await getDescendingTrianglesData(SITE_ORIGIN);
 
     if (status && status >= 400) return null;
     if ((data as { error?: unknown })?.error) return null;
