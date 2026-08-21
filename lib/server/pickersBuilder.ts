@@ -3446,6 +3446,320 @@ export async function buildPickerStructureDiagnostics() {
   };
 }
 
+/* ---------------- jitter instrument (debug) ---------------- */
+
+// Does the published ordering survive an ordinary price tick?
+//
+// The composite orders only 20 stocks per section (`take: 20` in the two
+// buildSection calls below), and rank 20 sits in the flattest part of the score
+// distribution -- adjacent gaps there have a median of 0.20 on a ~100-point
+// scale, against a smallest discrete step of 0.90. So the boundary between the
+// badged, ordered block and the unranked tail is decided in the noisiest region
+// of the range. This measures whether that boundary is stable.
+//
+// Deterministic: mulberry32 seeded from the request, so the same seed produces
+// the same result and a finding can be re-run and audited. No Math.random, no
+// Date.now.
+function mulberry32(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// The perturbation is applied to the LAST BAR'S CLOSE and everything is
+// recomputed downstream. lastClose is not a single input: it feeds RSI through
+// the closes series, Bollinger position, EMA20 and MA50 distance, dailyDrop1,
+// dailyDrop5, avgAbsMove and dollar volume in liquidityScore. Perturbing a
+// derived scalar would understate the effect. high/low are clamped so the bar
+// stays internally consistent.
+function jitterLastBar(pts: Point[], fraction: number): Point[] {
+  if (!pts.length) return pts;
+  const out = pts.slice();
+  const last = out[out.length - 1];
+  const close = last.close * (1 + fraction);
+  out[out.length - 1] = {
+    ...last,
+    close,
+    high: typeof last.high === "number" ? Math.max(last.high, close) : last.high,
+    low: typeof last.low === "number" ? Math.min(last.low, close) : last.low,
+  };
+  return out;
+}
+
+type JitterRow = { symbol: string; pts: Point[]; boost: number; volPct: number };
+
+function rankMap(scored: { symbol: string; score: number }[]) {
+  const sorted = [...scored].sort((a, b) => b.score - a.score);
+  const m = new Map<string, number>();
+  sorted.forEach((r, i) => m.set(r.symbol, i + 1));
+  return m;
+}
+
+// Kendall tau-b over the symbols present in both orderings.
+function kendallTauB(a: Map<string, number>, b: Map<string, number>) {
+  const syms = [...a.keys()].filter((s) => b.has(s));
+  let concordant = 0, discordant = 0;
+  for (let i = 0; i < syms.length; i++) {
+    for (let j = i + 1; j < syms.length; j++) {
+      const da = (a.get(syms[i]) as number) - (a.get(syms[j]) as number);
+      const db = (b.get(syms[i]) as number) - (b.get(syms[j]) as number);
+      const s = Math.sign(da) * Math.sign(db);
+      if (s > 0) concordant++;
+      else if (s < 0) discordant++;
+    }
+  }
+  const n = concordant + discordant;
+  return n ? Number(((concordant - discordant) / n).toFixed(6)) : null;
+}
+
+function summarise(deltas: number[]) {
+  const abs = deltas.map(Math.abs).sort((x, y) => x - y);
+  const at = (q: number) => (abs.length ? abs[Math.min(abs.length - 1, Math.floor(q * abs.length))] : 0);
+  const bucket = (lo: number, hi: number) => abs.filter((d) => d >= lo && d <= hi).length;
+  return {
+    n: abs.length,
+    median: at(0.5),
+    p90: at(0.9),
+    max: abs.length ? abs[abs.length - 1] : 0,
+    histogram: { "0": bucket(0, 0), "1": bucket(1, 1), "2": bucket(2, 2), "3-4": bucket(3, 4), "5-9": bucket(5, 9), "10+": abs.filter((d) => d >= 10).length },
+  };
+}
+
+export async function buildPickerJitterDiagnostics(opts: {
+  trials: number;
+  seed: number;
+  bps: number;
+  mode: "all" | "each";
+  scaled: boolean;
+}) {
+  const presetSet = new Set(PRESET_UNIVERSE);
+  const dynamicEntries = await readDynamicUniverse();
+  const dynamicUniverse = dynamicEntries.map((e) => String(e.symbol).trim().toUpperCase());
+  const dynamicSet = new Set(dynamicUniverse);
+
+  let popularSearchSymbols: string[] = [];
+  try {
+    const demand = await readSearchDemand(POPULAR_SEARCH_QUOTA * 4);
+    popularSearchSymbols = demand
+      .filter((d) => d.score >= POPULAR_SEARCH_MIN_SCORE)
+      .map((d) => String(d.symbol).trim().toUpperCase())
+      .filter((sym) => sym && !presetSet.has(sym))
+      .slice(0, POPULAR_SEARCH_QUOTA);
+  } catch {
+    popularSearchSymbols = [];
+  }
+  const popularSet = new Set(popularSearchSymbols);
+
+  const slots = new Set<string>();
+  const fill = (symbols: string[], max: number) => {
+    let added = 0;
+    for (const raw of symbols) {
+      if (slots.size >= UNIVERSE_CAP || added >= max) break;
+      const sym = String(raw).trim().toUpperCase();
+      if (!sym || slots.has(sym)) continue;
+      slots.add(sym);
+      added++;
+    }
+  };
+  fill(PRESET_UNIVERSE, PRESET_UNIVERSE.length);
+  fill(popularSearchSymbols, POPULAR_SEARCH_QUOTA);
+  fill(dynamicUniverse, UNIVERSE_CAP);
+  const universe = Array.from(slots);
+
+  const historyBySymbol = await getDailyHistoryBulk(universe);
+  const rows: JitterRow[] = universe.map((symbol) => {
+    const pts = normalizeHistory(historyBySymbol.get(symbol) ?? [], 1300);
+    return {
+      symbol,
+      pts,
+      boost: (dynamicSet.has(symbol) ? 10 : 0) + (popularSet.has(symbol) ? 10 : 0),
+      volPct: recentVolatilityPct(pts, 20),
+    };
+  });
+
+  // Both lists, scored the way the builder scores them.
+  const scoreList = (list: "oversold" | "overbought", pts: Point[], row: JitterRow) => {
+    const comp = buildCompositeFromHistory(pts);
+    const trendScore = buildTrendScoreFromHistory(pts);
+    const c =
+      list === "oversold"
+        ? computeOversoldCandidate(pts, comp, trendScore)
+        : computeOverboughtCandidate(pts, comp, trendScore);
+    return c ? c.score + row.boost : null;
+  };
+
+  const baselineOf = (list: "oversold" | "overbought") => {
+    const scored: { symbol: string; score: number }[] = [];
+    for (const row of rows) {
+      const v = scoreList(list, row.pts, row);
+      if (v !== null) scored.push({ symbol: row.symbol, score: v });
+    }
+    return scored;
+  };
+
+  // `bps` is 10 by default: 0.1% of last close. Grounded rather than picked --
+  // recentVolatilityPct(pts, 20) is the 20-day mean absolute daily move, which
+  // for these names typically runs 1.2-2%, so 0.1% is roughly a fifteenth of one
+  // ordinary day's range: minutes of trading, smaller than any news. It is
+  // deliberately the FLOOR. `scaled` instead jitters each symbol by 5% of its
+  // own volPct, which is fairer across volatility regimes; the two are reported
+  // side by side because a disagreement between them is itself a finding about
+  // which names are fragile.
+  const fractionFor = (row: JitterRow, rnd: () => number) => {
+    const magnitude = opts.scaled ? (row.volPct / 100) * 0.05 : opts.bps / 10000;
+    return (rnd() < 0.5 ? -1 : 1) * magnitude;
+  };
+
+  const SECTION_TAKE = 20; // pickersBuilder's own take for both sections
+  const PAGE_CAP = 36;     // maxItems on the two screener pages
+
+  const runList = (list: "oversold" | "overbought") => {
+    const base = baselineOf(list);
+    const baseRank = rankMap(base);
+    const inTop = (m: Map<string, number>, n: number, sym: string) => (m.get(sym) ?? Infinity) <= n;
+
+    const perTrial: {
+      seed: number;
+      tau: number | null;
+      deltas: ReturnType<typeof summarise>;
+      cut20: { entered: string[]; left: string[] };
+      cut36: { entered: string[]; left: string[] };
+      top10Changed: number;
+    }[] = [];
+    const pooled: number[] = [];
+    // In `each` mode the pooled distribution is dominated by the symbols that
+    // were deliberately held still, so its median is 0 by construction and says
+    // nothing. Track the PERTURBED symbol's own movement separately -- that is
+    // the quantity `each` exists to measure.
+    const targetDeltas: { symbol: string; delta: number }[] = [];
+
+    for (let t = 0; t < opts.trials; t++) {
+      const seed = opts.seed + t;
+      const rnd = mulberry32(seed);
+      const scored: { symbol: string; score: number }[] = [];
+      let targetSymbol: string | null = null;
+
+      if (opts.mode === "all") {
+        // Every symbol ticks independently -- what actually happens between two
+        // page loads. A uniform same-sign move was considered and rejected:
+        // these scores are largely functions of ratios and distances, so a
+        // correlated move barely disturbs relative order and would produce a
+        // reassuring number that means nothing.
+        for (const row of rows) {
+          const v = scoreList(list, jitterLastBar(row.pts, fractionFor(row, rnd)), row);
+          if (v !== null) scored.push({ symbol: row.symbol, score: v });
+        }
+      } else {
+        // One symbol at a time, competitors frozen: attributes a rank change to
+        // a stock's OWN move. Only the perturbed symbol is rescored.
+        //
+        // base can be empty -- a list with no qualifying candidates is a real
+        // state, and `t % 0` is NaN, which indexed to undefined and threw. Found
+        // by running the instrument against a synthetic universe where every
+        // stock was oversold-biased, so the overbought list came back empty.
+        const target = base.length ? base[t % base.length] : null;
+        targetSymbol = target ? target.symbol : null;
+        const row = target ? rows.find((r) => r.symbol === target.symbol) : undefined;
+        for (const b of base) {
+          if (!target || !row || b.symbol !== target.symbol) { scored.push(b); continue; }
+          const v = scoreList(list, jitterLastBar(row.pts, fractionFor(row, rnd)), row);
+          if (v !== null) scored.push({ symbol: b.symbol, score: v });
+        }
+      }
+
+      const jitRank = rankMap(scored);
+      const deltas: number[] = [];
+      for (const [sym, r] of baseRank) {
+        const j = jitRank.get(sym);
+        if (j != null) deltas.push(j - r);
+      }
+      pooled.push(...deltas);
+      if (targetSymbol) {
+        const before = baseRank.get(targetSymbol), after = jitRank.get(targetSymbol);
+        if (before != null && after != null) targetDeltas.push({ symbol: targetSymbol, delta: after - before });
+      }
+
+      const syms = [...baseRank.keys()];
+      const cross = (n: number) => ({
+        entered: syms.filter((s) => !inTop(baseRank, n, s) && inTop(jitRank, n, s)).sort(),
+        left: syms.filter((s) => inTop(baseRank, n, s) && !inTop(jitRank, n, s)).sort(),
+      });
+
+      perTrial.push({
+        seed,
+        tau: kendallTauB(baseRank, jitRank),
+        deltas: summarise(deltas),
+        cut20: cross(SECTION_TAKE),
+        cut36: cross(PAGE_CAP),
+        top10Changed: syms.filter((s) => inTop(baseRank, 10, s) !== inTop(jitRank, 10, s)).length,
+      });
+    }
+
+    const c20 = perTrial.reduce((a, t) => a + t.cut20.left.length, 0);
+    const c36 = perTrial.reduce((a, t) => a + t.cut36.left.length, 0);
+    return {
+      listSize: base.length,
+      sectionTake: SECTION_TAKE,
+      pageCap: PAGE_CAP,
+      // Named, not just counted: "SATA and MICC swap in and out of the badged
+      // block on a 0.1% tick" is checkable; "0.8 crossings per trial" is not.
+      cut20CrossingsByName: Array.from(
+        new Set(perTrial.flatMap((t) => [...t.cut20.entered, ...t.cut20.left]))
+      ).sort(),
+      cut36CrossingsByName: Array.from(
+        new Set(perTrial.flatMap((t) => [...t.cut36.entered, ...t.cut36.left]))
+      ).sort(),
+      cut20CrossingsPerTrial: Number((c20 / Math.max(1, opts.trials)).toFixed(3)),
+      cut36CrossingsPerTrial: Number((c36 / Math.max(1, opts.trials)).toFixed(3)),
+      pooled: summarise(pooled),
+      // Only populated in mode=each. Read this instead of `pooled` there.
+      perturbedSymbolMovement: targetDeltas.length
+        ? {
+            summary: summarise(targetDeltas.map((d) => d.delta)),
+            moved: targetDeltas.filter((d) => d.delta !== 0).map((d) => `${d.symbol} ${d.delta > 0 ? "+" : ""}${d.delta}`),
+          }
+        : null,
+      medianTau: (() => {
+        const t = perTrial.map((x) => x.tau).filter((x): x is number => x != null).sort((a, b) => a - b);
+        return t.length ? t[Math.floor(t.length / 2)] : null;
+      })(),
+      trials: perTrial,
+    };
+  };
+
+  const oversold = runList("oversold");
+  const overbought = runList("overbought");
+
+  // Stated so a clean jitter result cannot be read as "the ordering is sound".
+  const limits = [
+    "Measures sensitivity to price jitter only. It cannot detect the async tie-break instability: takeTop sorts stably and green/red are pushed from inside pLimit(10) callbacks, so equal scores are ordered by which Redis read finished first, which is a property of build timing rather than of inputs. That stays established by code reading.",
+    "A uniform same-sign move across all symbols was considered and rejected: these scores are largely ratios and distances, so a correlated move barely disturbs relative order and would look reassuring while measuring nothing.",
+  ];
+
+  const preRegistered = {
+    smallestDiscreteStep: 0.9,
+    note: "comp.flagged contributes 3 points to oversoldStrength, weighted 0.3 -> 0.90 composite points. Any median |delta-rank| driven by gaps below this is moving stocks across differences smaller than the smallest real signal the composite can express.",
+    readings: [
+      "median |delta-rank| >= 3 AND >= 1 cut-20 crossing per trial: ordering below the top ten does not carry information at published resolution",
+      "median |delta-rank| <= 1 AND cut-20 crossings ~ 0: ordering is robust and the density concern is theoretical",
+      "anything between: report the numbers and claim nothing",
+    ],
+  };
+
+  return {
+    params: { ...opts, magnitude: opts.scaled ? "5% of each symbol's 20-day mean absolute daily move" : `${opts.bps} bps (${opts.bps / 100}%) of last close` },
+    universeSize: universe.length,
+    preRegistered,
+    limits,
+    oversold,
+    overbought,
+  };
+}
+
 export async function getPickersData(
   origin: string,
   opts: { forceRefresh?: boolean } = {}

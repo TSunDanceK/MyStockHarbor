@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { buildPickerStructureDiagnostics } from "@/lib/server/pickersBuilder";
+import {
+  buildPickerStructureDiagnostics,
+  buildPickerJitterDiagnostics,
+} from "@/lib/server/pickersBuilder";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,8 +37,36 @@ export const dynamic = "force-dynamic";
 // cannot drift from what ships. It is also READ-ONLY: unlike a real build it
 // never calls addToDynamicUniverse, so looking does not change the universe.
 
-export async function GET() {
+// ?jitter=1 switches to the perturbation instrument. Defaults off, so the
+// existing structure-mode output is unchanged.
+//
+//   ?jitter=1                       20 trials, seed 1, 10 bps (0.1%), mode=all
+//   ?jitter=1&scaled=1              magnitude = 5% of each symbol's own 20-day
+//                                   mean absolute daily move (fairness check)
+//   ?jitter=1&mode=each             one symbol at a time, competitors frozen
+//   ?jitter=1&seed=7&trials=50&bps=5
+//
+// Deterministic: same seed, same result. It reuses the universe and history
+// this route already loads, so it costs no extra Redis and no FMP calls.
+export async function GET(request: Request) {
   try {
+    const params = new URL(request.url).searchParams;
+    const int = (key: string, dflt: number, min: number, max: number) => {
+      const raw = Number(params.get(key));
+      return Number.isFinite(raw) ? Math.min(max, Math.max(min, Math.trunc(raw))) : dflt;
+    };
+
+    if (params.get("jitter") === "1") {
+      const data = await buildPickerJitterDiagnostics({
+        trials: int("trials", 20, 1, 200),
+        seed: int("seed", 1, 0, 2 ** 31 - 1),
+        bps: int("bps", 10, 1, 500),
+        mode: params.get("mode") === "each" ? "each" : "all",
+        scaled: params.get("scaled") === "1",
+      });
+      return NextResponse.json(data);
+    }
+
     const data = await buildPickerStructureDiagnostics();
     return NextResponse.json(data);
   } catch (error) {
