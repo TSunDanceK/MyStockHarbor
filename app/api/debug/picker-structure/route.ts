@@ -51,9 +51,26 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   try {
     const params = new URL(request.url).searchParams;
+    // ABSENT must mean the documented default, not the minimum.
+    //
+    // This previously read `Number(params.get(key))` and tested isFinite.
+    // params.get returns null when the key is absent, Number(null) is 0, and 0
+    // IS finite -- so every missing parameter passed the guard and clamped to
+    // its minimum. A bare ?jitter=1 ran trials:1, seed:0, bps:1: a single trial
+    // at 0.01%, a tenth of the designed magnitude. Anyone running it without
+    // parameters got a reassuring near-zero from a perturbation far too small
+    // to detect anything -- a check that under-fires and reads as stability,
+    // which is the failure mode this instrument was built to find.
+    //
+    // Null and empty string are now rejected before the numeric test, so only
+    // a genuinely supplied value can override the default. A supplied but
+    // unparseable value also falls back to the default rather than to min.
     const int = (key: string, dflt: number, min: number, max: number) => {
-      const raw = Number(params.get(key));
-      return Number.isFinite(raw) ? Math.min(max, Math.max(min, Math.trunc(raw))) : dflt;
+      const raw = params.get(key);
+      if (raw === null || raw.trim() === "") return dflt;
+      const parsed = Number(raw);
+      if (!Number.isFinite(parsed)) return dflt;
+      return Math.min(max, Math.max(min, Math.trunc(parsed)));
     };
 
     if (params.get("jitter") === "1") {
