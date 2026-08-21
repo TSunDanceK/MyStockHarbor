@@ -22,6 +22,34 @@ import RelatedInsights from "@/app/components/RelatedInsights";
 // degrades gracefully when absent (see the try/catch below).
 export const revalidate = 86400;
 
+// generateStaticParams is REMOVED, and must stay removed until the condition
+// below is met. #310 added it as an empty array, which made this route ● --
+// and a prerendered route that performs a `no-store` fetch at request time
+// throws DYNAMIC_SERVER_USAGE and returns 500. getOrCreateInsightSnapshot
+// reaches Redis through a BARE client that does not use PAGE_READ_CACHE, so
+// every request to a real slug 500'd in production for ~3.5 hours. Reverted in
+// #323.
+//
+// The finding #310 documented is still true: without this export the
+// `revalidate` above is inert and this route is fully dynamic. That is a
+// performance cost, not an outage, and it is the correct trade until the read
+// path is safe.
+//
+// BEFORE RE-ADDING, both must hold:
+//   1. Every Redis client on this route's transitive read path uses
+//      PAGE_READ_CACHE (lib/server/redisCacheMode.ts), not a bare
+//      Redis.fromEnv(). Start with getOrCreateInsightSnapshot in
+//      lib/insightSnapshots.ts.
+//   2. A real slug has been requested against a preview deployment and
+//      returned 200. The route table showing ● proves the route BECAME static;
+//      it says nothing about whether the route SURVIVES being static, and a
+//      preview build never issues that request on its own.
+//
+// See claude/traps/inert-route-revalidate.md and Rule 4 in
+// claude/picker-pages-isr-2026-08-20.md.
+//
+// ---- what #310 said, kept because the FMP reasoning below is still correct ----
+//
 // `generateStaticParams` returns an EMPTY array, and both halves of that matter.
 //
 // The concern that removed it entirely was correct: prerendering every post at
@@ -45,10 +73,6 @@ export const revalidate = 86400;
 // Empty is the shape that satisfies both: no build-time prerender, and
 // on-demand ISR that actually caches. `dynamicParams` defaults to true, so
 // every slug still resolves.
-export function generateStaticParams(): { slug: string }[] {
-  return [];
-}
-
 type Props = {
   params: Promise<{ slug: string }>;
 };
