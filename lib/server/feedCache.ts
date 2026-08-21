@@ -171,7 +171,7 @@ export async function readFeed<T>(
 // digest === "DYNAMIC_SERVER_USAGE". It is a control-flow signal from the
 // framework, not an upstream fault, and it must reach Next rather than a
 // try/catch meant for network failures.
-function isDynamicServerUsage(err: unknown): boolean {
+export function isDynamicServerUsage(err: unknown): boolean {
   return (
     typeof err === "object" &&
     err !== null &&

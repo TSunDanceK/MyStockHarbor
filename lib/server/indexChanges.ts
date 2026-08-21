@@ -16,7 +16,7 @@
 // for that index, so the 30-day "recently added" window is applied
 // client-side after fetching, and only additions (not removals) are kept.
 
-import { readFeed, type Feed } from "./feedCache";
+import { isDynamicServerUsage, readFeed, type Feed } from "./feedCache";
 
 export type IndexAddition = {
   symbol: string;
@@ -116,7 +116,15 @@ async function fetchRecentIndexAdditions(): Promise<IndexAddition[]> {
 
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-  const changesByIndex = await Promise.all(
+  // allSettled, not all: one index failing must not zero a page that covers
+  // three. FMP returns 402 on the Dow Jones constituent-history endpoint under
+  // this plan, and because the previous Promise.all threw on the first non-ok
+  // response, that single refusal discarded the S&P 500 and Nasdaq 100 results
+  // alongside it. The feed has therefore NEVER once succeeded, its Redis key
+  // has never been written, and the page has rendered as unavailable since it
+  // was built. It only became visible when #304 stopped DynamicServerError
+  // being misreported as an upstream failure.
+  const settled = await Promise.allSettled(
     INDEXES.map(async ({ name, url }) => {
       // See the note in lib/server/ipoCalendar.ts: no-store throws
       // DynamicServerError during prerender, marking the route dynamic before
@@ -142,7 +150,46 @@ async function fetchRecentIndexAdditions(): Promise<IndexAddition[]> {
     })
   );
 
-  const recentChanges = changesByIndex.flat();
+  const succeeded: (ParsedChange & { indexName: string })[][] = [];
+  const failedIndexes: string[] = [];
+
+  settled.forEach((result, i) => {
+    const name = INDEXES[i].name;
+    if (result.status === "fulfilled") {
+      succeeded.push(result.value);
+      return;
+    }
+    // A DynamicServerError is not an index failure -- it is Next saying this
+    // render cannot be static, and allSettled has just caught it where a
+    // throw would have propagated. Rethrowing keeps trap 11's guarantee
+    // intact: without this, adding allSettled here would quietly reintroduce
+    // exactly the bug #304 fixed, one layer further down.
+    if (isDynamicServerUsage(result.reason)) throw result.reason;
+
+    failedIndexes.push(name);
+    console.error(
+      `[index:additions] ${name} constituent history unavailable, continuing ` +
+        `without it:`,
+      result.reason
+    );
+  });
+
+  // Every index failed: that is "could not answer", not "no additions", so it
+  // must throw for readFeed to serve a cached copy or mark the feed not-ok.
+  if (succeeded.length === 0) {
+    throw new Error(
+      `all ${INDEXES.length} index constituent feeds failed: ${failedIndexes.join(", ")}`
+    );
+  }
+
+  if (failedIndexes.length > 0) {
+    console.warn(
+      `[index:additions] serving PARTIAL data -- missing ${failedIndexes.join(", ")}; ` +
+        `${INDEXES.length - failedIndexes.length} of ${INDEXES.length} indexes returned`
+    );
+  }
+
+  const recentChanges = succeeded.flat();
 
   // A genuine empty: upstream answered, there were simply no additions in
   // the window. Returned as [] (not thrown) so it caches and reads as real.
