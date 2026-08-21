@@ -32,7 +32,13 @@ type OverviewItem = { key: string; label: string; tone: "green" | "yellow" | "or
 // they ran and failed. A stock listed under ~9.5 months ago has no ma200, so
 // every check is null, and counting nulls as failures produced a red 0/4.
 type TrendScore = { total: number; passed: number; known: boolean; details: { name: string; ok: boolean | null }[]; };
-type StretchScore = { total: number; flagged: number; oversold: number; overbought: number; details: { name: string; state: "oversold" | "overbought" | "neutral" | "na" }[]; };
+// `ran` is how many of the six checks had inputs. total stays 6 (the number of
+// checks that exist); ran is the number that actually executed. Reporting
+// "0/6 flagged" when six checks were skipped reads as "nothing is stretched",
+// which is a finding, not an absence. Same shape as TrendScore.known in #317,
+// except stretch degrades gradually: RSI needs 15 bars, Bollinger and EMA20 and
+// VWMA need 20, MA50 needs 50, so a 30-bar listing genuinely runs five of six.
+type StretchScore = { total: number; flagged: number; ran: number; oversold: number; overbought: number; details: { name: string; state: "oversold" | "overbought" | "neutral" | "na" }[]; };
 type AssetType = "stock" | "crypto";
 
 function movingAverage(values: number[], window: number): (number | null)[] {
@@ -221,7 +227,15 @@ function renderFlagsMeter(opts: { flagged: number; total: number; color: string;
   const st = Math.max(1, Math.min(20, Math.floor(total))), sf = Math.max(0, Math.min(st, Math.floor(flagged)));
   return (<div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}><div style={{ display: "flex", gap: 6 }}>{Array.from({ length: st }).map((_, i) => <span key={i} style={{ width: 14, height: 6, borderRadius: 999, background: i < sf ? color : isDark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)", border: isDark ? "1px solid rgba(255,255,255,0.14)" : "1px solid rgba(0,0,0,0.10)" }} />)}</div><div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>{sf}/{st}</div></div>);
 }
-function compositeToneFromCounts(ob: number, os: number, sp: number) {
+// ran === 0 means none of the checks executed. "Calm" is a real reading and the
+// intensity <= 1 arm would otherwise claim it from zero evidence -- the tag half
+// of the same bug as the 0/6 chip, and fixing only one would put an honest em
+// dash beside a chip still reading "Calm".
+// `ran` is REQUIRED, not defaulted. A default here would mean a future caller
+// that forgets it silently gets "assume at least one check ran" -- the same
+// unbacked claim `known: true` would have been in #317.
+function compositeToneFromCounts(ob: number, os: number, sp: number, ran: number) {
+  if (ran === 0) return { tone: "muted" as const, tag: "Not enough history yet" };
   const net = ob - os, intensity = ob + os + sp;
   if (intensity <= 1) return { tone: "yellow" as const, tag: "Calm" }; if (net >= 2) return { tone: intensity >= 5 ? "red" as const : "orange" as const, tag: "Overbought-leaning" };
   if (net === 1) return { tone: "orange" as const, tag: "Slightly overbought" }; if (net <= -2) return { tone: intensity >= 5 ? "green" as const : "yellow" as const, tag: "Oversold-leaning" };
@@ -250,7 +264,7 @@ function buildStretchScore(a: { lastClose: number | null; rsi14: number | null; 
   if (typeof lastClose === "number" && typeof bollLower === "number" && typeof bollUpper === "number") { if (lastClose < bollLower) { os++; details.push({ name: "Bollinger", state: "oversold" }); } else if (lastClose > bollUpper) { ob++; details.push({ name: "Bollinger", state: "overbought" }); } else details.push({ name: "Bollinger", state: "neutral" }); } else details.push({ name: "Bollinger", state: "na" });
   const checkPct = (val: number | null, ref: number | null, thresh: number, name: string) => { if (typeof lastClose === "number" && typeof val === "number" && typeof ref === "number" && ref > 0) { const p = (lastClose - ref) / ref; if (p <= -thresh) { os++; details.push({ name, state: "oversold" }); } else if (p >= thresh) { ob++; details.push({ name, state: "overbought" }); } else details.push({ name, state: "neutral" }); } else details.push({ name, state: "na" }); };
   checkPct(vwap, vwap, 0.02, "VWMA dist"); checkPct(ema20, ema20, 0.05, "EMA20 dist"); checkPct(ma50, ma50, 0.05, "MA50 dist");
-  return { total: 6, flagged: os + ob, oversold: os, overbought: ob, details };
+  return { total: 6, flagged: os + ob, ran: details.filter(d => d.state !== "na").length, oversold: os, overbought: ob, details };
 }
 
 const PRESET_TICKERS: { symbol: string; name: string }[] = [
@@ -746,7 +760,7 @@ export default function DashboardClient({
   const stretchScore = useMemo(() => buildStretchScore({ lastClose, rsi14: lastNum(rsi14Arr), stochK: lastNum(stochK), bollUpper: lastNum(bollUpper), bollLower: lastNum(bollLower), ema20: lastNum(ema20Arr), vwap: lastNum(vwma20Arr), ma50: typeof lastMA50 === "number" ? lastMA50 : null }), [lastClose, rsi14Arr, stochK, bollUpper, bollLower, ema20Arr, vwma20Arr, lastMA50]);
   const divergence = useMemo(() => { const div = detectDivergenceFromHistory(historyAll, { lookbackBars: 60, leftRight: 2, minPriceSwingPct: 1.2, minRsiSwing: 4, macdStdMult: 0.35 }); return { div, rsi: divStateForIndicator(div, "rsi"), macd: divStateForIndicator(div, "macd") }; }, [historyAll]);
   const overviewMeta = useMemo(() => {
-    const ti = compositeToneFromCounts(stretchScore.overbought, stretchScore.oversold, 0), tc = toneToColor(ti.tone, true);
+    const ti = compositeToneFromCounts(stretchScore.overbought, stretchScore.oversold, 0, stretchScore.ran), tc = toneToColor(ti.tone, true);
     // "Range / Mixed" is a real market state and must not be the default for a
     // stock whose regime cannot be computed. null means not determinable.
     let trend: string | null = null;
@@ -899,18 +913,17 @@ export default function DashboardClient({
   }
 
   function OverviewPanel() {
-    const tc = toneToColor(trendToneFromScore(trendScore), true), sc = toneToColor(compositeToneFromCounts(stretchScore.overbought, stretchScore.oversold, 0).tone, true);
+    const tc = toneToColor(trendToneFromScore(trendScore), true), sc = toneToColor(compositeToneFromCounts(stretchScore.overbought, stretchScore.oversold, 0, stretchScore.ran).tone, true);
     return (<SectionCard title={`${symbol} Overview`} allowOverflow right={assetType === "stock" ? <Link href={`/stock/${encodeURIComponent(symbol)}`} style={{ display: "inline-flex", alignItems: "center", padding: "6px 11px", borderRadius: 9, border: `1px solid ${COLORS.amberBorder}`, background: COLORS.amberSoft, color: COLORS.amber, textDecoration: "none", fontWeight: 700, fontSize: 11 }}>Company Overview →</Link> : null}>
       <div style={{ display: "grid", gap: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}><div><div style={{ display: "flex", alignItems: "center", gap: 10 }}><TickerLogo symbol={symbol} size={28} radius={8} /><div style={{ fontSize: isMobile ? 24 : 28, fontWeight: 800, lineHeight: 1, letterSpacing: "-0.02em" }}>{symbol}</div></div><div style={{ marginTop: 4, fontSize: 12, color: COLORS.mutedFg, fontWeight: 600 }}>{symbolName || "Name unavailable"}</div></div><div style={{ textAlign: "right" }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>Last price</div><div style={{ fontSize: isMobile ? 22 : 28, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.05 }}>{quote?.price != null ? `$${quote.price.toFixed(2)}` : "—"}</div></div></div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          {/* `known` is omitted for Stretch Score rather than set to true. Stretch has
-              the same shape of bug — all-"na" details still render 0/6, which reads as
-              "nothing is stretched" — but fixing it also means fixing the tone tag it
-              feeds, so it gets its own change instead of a claim asserted here. */}
+          {/* Both scores now carry `known`. Stretch reports out of the number of
+              checks that actually ran, not out of six, and the tone tag it feeds is
+              guarded on the same count. See compositeToneFromCounts. */}
           {([
             { label: "Trend Score", color: tc, score: trendScore.passed, total: trendScore.total, flagged: trendScore.passed, known: trendScore.known, helpText: "Trend score checks price vs MA50/MA200 and MACD histogram direction." },
-            { label: "Stretch Score", color: sc, score: stretchScore.flagged, total: stretchScore.total, flagged: stretchScore.flagged, helpText: "Stretch score checks RSI, Stoch, Bollinger, VWMA(20), EMA20 and MA50 extension." },
+            { label: "Stretch Score", color: sc, score: stretchScore.flagged, total: stretchScore.ran, flagged: stretchScore.flagged, known: stretchScore.ran > 0, helpText: `Stretch score checks RSI, Stoch, Bollinger, VWMA(20), EMA20 and MA50 extension.${stretchScore.ran < stretchScore.total ? ` ${stretchScore.total - stretchScore.ran} of ${stretchScore.total} need more price history than this stock has, so the score is out of ${stretchScore.ran}.` : ""}` },
           ] as { label: string; color: string; score: number; total: number; flagged: number; known?: boolean; helpText: string }[]).map(s => (
             <div key={s.label} style={{ background: COLORS.cardBg2, border: `1px solid ${COLORS.borderSoft}`, borderRadius: 12, padding: 12 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 700, color: COLORS.mutedFg }}><span style={{ color: s.color }}>●</span>{s.label}<HelpTip text={s.helpText} isDark={true} /></div>
