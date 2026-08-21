@@ -25,7 +25,10 @@ export type StockEarningsSummary = { hasStructuredData?: boolean; tone?: "green"
 type CachedSymbolData = { quote: Quote | null; history: Point[]; };
 type DivergenceState = "bullish" | "bearish" | "none";
 type OverviewItem = { key: string; label: string; tone: "green" | "yellow" | "orange" | "red" | "muted"; valueText: string; severity: number; order: number; };
-type TrendScore = { total: number; passed: number; details: { name: string; ok: boolean | null }[]; };
+// `known` is false when the checks had no inputs to run against, not when
+// they ran and failed. A stock listed under ~9.5 months ago has no ma200, so
+// every check is null, and counting nulls as failures produced a red 0/4.
+type TrendScore = { total: number; passed: number; known: boolean; details: { name: string; ok: boolean | null }[]; };
 type StretchScore = { total: number; flagged: number; oversold: number; overbought: number; details: { name: string; state: "oversold" | "overbought" | "neutral" | "na" }[]; };
 type AssetType = "stock" | "crypto";
 
@@ -222,7 +225,9 @@ function compositeToneFromCounts(ob: number, os: number, sp: number) {
   if (net === -1) return { tone: "yellow" as const, tag: "Slightly oversold" }; return { tone: intensity >= 5 ? "orange" as const : "yellow" as const, tag: "Mixed" };
 }
 function trendToneFromScore(ts: TrendScore | null): OverviewItem["tone"] {
-  if (!ts) return "muted"; const r = ts.total > 0 ? ts.passed / ts.total : 0;
+  // Not computable scores get the same muted tone as a missing score. Any of
+  // green/yellow/orange/red would only be choosing which false reading to show.
+  if (!ts || !ts.known) return "muted"; const r = ts.total > 0 ? ts.passed / ts.total : 0;
   if (r >= 0.75) return "green"; if (r >= 0.5) return "yellow"; if (r >= 0.25) return "orange"; return "red";
 }
 function formatPctFromBase(last: number | null, base: number | null) {
@@ -232,7 +237,7 @@ function formatPctFromBase(last: number | null, base: number | null) {
 function buildTrendScore(a: { lastClose: number | null; ma50: number | null; ma200: number | null; macdHist: number | null }): TrendScore {
   const { lastClose, ma50, ma200, macdHist } = a;
   const checks = [{ name: "Price > MA200", ok: typeof lastClose === "number" && typeof ma200 === "number" ? lastClose > ma200 : null }, { name: "Price > MA50", ok: typeof lastClose === "number" && typeof ma50 === "number" ? lastClose > ma50 : null }, { name: "MA50 > MA200", ok: typeof ma50 === "number" && typeof ma200 === "number" ? ma50 > ma200 : null }, { name: "MACD hist > 0", ok: typeof macdHist === "number" ? macdHist > 0 : null }];
-  return { total: 4, passed: checks.reduce((acc, c) => acc + (c.ok === true ? 1 : 0), 0), details: checks };
+  return { total: 4, passed: checks.reduce((acc, c) => acc + (c.ok === true ? 1 : 0), 0), known: checks.every(c => c.ok !== null), details: checks };
 }
 function buildStretchScore(a: { lastClose: number | null; rsi14: number | null; stochK: number | null; bollUpper: number | null; bollLower: number | null; ema20: number | null; vwap: number | null; ma50: number | null }): StretchScore {
   const { lastClose, rsi14, stochK, bollUpper, bollLower, ema20, vwap, ma50 } = a;
@@ -739,8 +744,10 @@ export default function DashboardClient({
   const divergence = useMemo(() => { const div = detectDivergenceFromHistory(historyAll, { lookbackBars: 60, leftRight: 2, minPriceSwingPct: 1.2, minRsiSwing: 4, macdStdMult: 0.35 }); return { div, rsi: divStateForIndicator(div, "rsi"), macd: divStateForIndicator(div, "macd") }; }, [historyAll]);
   const overviewMeta = useMemo(() => {
     const ti = compositeToneFromCounts(stretchScore.overbought, stretchScore.oversold, 0), tc = toneToColor(ti.tone, true);
-    let trend = "Range / Mixed";
-    if (typeof lastClose === "number" && typeof lastMA50 === "number" && typeof lastMA200 === "number") { if (lastClose > lastMA50 && lastMA50 > lastMA200) trend = "Uptrend"; else if (lastClose < lastMA50 && lastMA50 < lastMA200) trend = "Downtrend"; }
+    // "Range / Mixed" is a real market state and must not be the default for a
+    // stock whose regime cannot be computed. null means not determinable.
+    let trend: string | null = null;
+    if (typeof lastClose === "number" && typeof lastMA50 === "number" && typeof lastMA200 === "number") { if (lastClose > lastMA50 && lastMA50 > lastMA200) trend = "Uptrend"; else if (lastClose < lastMA50 && lastMA50 < lastMA200) trend = "Downtrend"; else trend = "Range / Mixed"; }
     const av = lastNum(atr14Arr), as_ = lastNum(atrSma20Arr); let vol = "Normal";
     if (typeof av === "number" && typeof as_ === "number" && as_ > 0) { const r = av / as_; if (r >= 1.5) vol = "Elevated"; else if (r <= 0.85) vol = "Quiet"; }
     return { toneColor: tc, toneTag: ti.tag, trend, vol };
@@ -765,11 +772,15 @@ export default function DashboardClient({
 
   const chartSummaryText = useMemo(() => {
     if (!customMode) {
-      let tt = "mixed structure";
-      if (typeof lastClose === "number" && typeof lastMA50 === "number" && typeof lastMA200 === "number") { if (lastClose > lastMA50 && lastMA50 > lastMA200) tt = "stronger bullish structure"; else if (lastClose < lastMA50 && lastMA50 < lastMA200) tt = "weaker bearish structure"; else if (lastClose > lastMA50) tt = "mildly constructive structure"; else if (lastClose < lastMA50) tt = "softer short-term structure"; }
+      // null = the MAs this reads from do not exist yet. The custom-indicator
+      // branch below already says "needs more data" per indicator; this branch
+      // defaulted to "mixed structure" instead, which reads as a judgement.
+      let tt: string | null = null;
+      if (typeof lastClose === "number" && typeof lastMA50 === "number" && typeof lastMA200 === "number") { if (lastClose > lastMA50 && lastMA50 > lastMA200) tt = "stronger bullish structure"; else if (lastClose < lastMA50 && lastMA50 < lastMA200) tt = "weaker bearish structure"; else if (lastClose > lastMA50) tt = "mildly constructive structure"; else if (lastClose < lastMA50) tt = "softer short-term structure"; else tt = "mixed structure"; }
       let st = "limited stretch signals"; if (stretchScore.overbought >= 3) st = "several overbought-style stretch signals"; else if (stretchScore.oversold >= 3) st = "several oversold-style stretch signals"; else if (stretchScore.flagged >= 2) st = "some mixed stretch signals";
       let mt = ""; if (typeof rsiLast === "number") { if (rsiLast >= 70) mt = ` RSI is ${rsiLast.toFixed(1)} and overbought.`; else if (rsiLast <= 30) mt = ` RSI is ${rsiLast.toFixed(1)} and oversold.`; else mt = ` RSI is ${rsiLast.toFixed(1)} and neutral.`; }
       let dt = ""; if (divergence.rsi === "bullish" || divergence.macd === "bullish") dt = " Bullish divergence is present."; else if (divergence.rsi === "bearish" || divergence.macd === "bearish") dt = " Bearish divergence is present.";
+      if (tt === null) return `${symbol} does not have enough price history yet to read its trend structure, but is showing ${st}.${mt}${dt}`;
       return `${symbol} is showing ${tt} with ${st}.${mt}${dt}`;
     }
     const parts: string[] = [];
@@ -890,15 +901,24 @@ export default function DashboardClient({
       <div style={{ display: "grid", gap: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}><div><div style={{ display: "flex", alignItems: "center", gap: 10 }}><TickerLogo symbol={symbol} size={28} radius={8} /><div style={{ fontSize: isMobile ? 24 : 28, fontWeight: 800, lineHeight: 1, letterSpacing: "-0.02em" }}>{symbol}</div></div><div style={{ marginTop: 4, fontSize: 12, color: COLORS.mutedFg, fontWeight: 600 }}>{symbolName || "Name unavailable"}</div></div><div style={{ textAlign: "right" }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>Last price</div><div style={{ fontSize: isMobile ? 22 : 28, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.05 }}>{quote?.price != null ? `$${quote.price.toFixed(2)}` : "—"}</div></div></div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          {[{ label: "Trend Score", color: tc, score: trendScore.passed, total: trendScore.total, flagged: trendScore.passed, helpText: "Trend score checks price vs MA50/MA200 and MACD histogram direction." }, { label: "Stretch Score", color: sc, score: stretchScore.flagged, total: stretchScore.total, flagged: stretchScore.flagged, helpText: "Stretch score checks RSI, Stoch, Bollinger, VWMA(20), EMA20 and MA50 extension." }].map(s => (
+          {/* `known` is omitted for Stretch Score rather than set to true. Stretch has
+              the same shape of bug — all-"na" details still render 0/6, which reads as
+              "nothing is stretched" — but fixing it also means fixing the tone tag it
+              feeds, so it gets its own change instead of a claim asserted here. */}
+          {([
+            { label: "Trend Score", color: tc, score: trendScore.passed, total: trendScore.total, flagged: trendScore.passed, known: trendScore.known, helpText: "Trend score checks price vs MA50/MA200 and MACD histogram direction." },
+            { label: "Stretch Score", color: sc, score: stretchScore.flagged, total: stretchScore.total, flagged: stretchScore.flagged, helpText: "Stretch score checks RSI, Stoch, Bollinger, VWMA(20), EMA20 and MA50 extension." },
+          ] as { label: string; color: string; score: number; total: number; flagged: number; known?: boolean; helpText: string }[]).map(s => (
             <div key={s.label} style={{ background: COLORS.cardBg2, border: `1px solid ${COLORS.borderSoft}`, borderRadius: 12, padding: 12 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 700, color: COLORS.mutedFg }}><span style={{ color: s.color }}>●</span>{s.label}<HelpTip text={s.helpText} isDark={true} /></div>
-              <div style={{ marginTop: 5, fontSize: 20, fontWeight: 800, color: s.color }}>{s.score}/{s.total}</div>
-              {renderFlagsMeter({ flagged: s.flagged, total: s.total, color: s.color, isDark: true })}
+              <div style={{ marginTop: 5, fontSize: 20, fontWeight: 800, color: s.color }}>{s.known === false ? "—" : `${s.score}/${s.total}`}</div>
+              {/* A meter with 0 of 4 pips lit reads as four failed checks, so it is
+                  omitted rather than drawn empty when the checks could not run. */}
+              {s.known === false ? <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75, fontWeight: 800 }}>Not enough history yet</div> : renderFlagsMeter({ flagged: s.flagged, total: s.total, color: s.color, isDark: true })}
             </div>
           ))}
         </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{[{ label: `Regime: ${overviewMeta.trend}`, hi: false }, { label: `Volatility: ${overviewMeta.vol}`, hi: false }, { label: overviewMeta.toneTag, hi: true }].map(t => <span key={t.label} style={{ fontSize: 11.5, fontWeight: 600, padding: "4px 9px", borderRadius: 7, background: t.hi ? COLORS.amberSoft : COLORS.cardBg2, border: `1px solid ${t.hi ? COLORS.amberBorder : COLORS.borderSoft}`, color: t.hi ? COLORS.amber : COLORS.mutedFg }}>{t.label}</span>)}</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{[{ label: `Regime: ${overviewMeta.trend ?? "Not enough history yet"}`, hi: false }, { label: `Volatility: ${overviewMeta.vol}`, hi: false }, { label: overviewMeta.toneTag, hi: true }].map(t => <span key={t.label} style={{ fontSize: 11.5, fontWeight: 600, padding: "4px 9px", borderRadius: 7, background: t.hi ? COLORS.amberSoft : COLORS.cardBg2, border: `1px solid ${t.hi ? COLORS.amberBorder : COLORS.borderSoft}`, color: t.hi ? COLORS.amber : COLORS.mutedFg }}>{t.label}</span>)}</div>
         <div style={{ background: customMode ? COLORS.amberSoft : COLORS.cardBg2, border: `1px solid ${customMode ? COLORS.amberBorder : COLORS.borderSoft}`, borderRadius: 12, padding: 12, fontSize: 13, lineHeight: 1.55, color: customMode ? COLORS.amber : COLORS.mutedFg }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: customMode ? COLORS.amber : COLORS.cardFg, marginBottom: 5 }}>{customMode ? "Selected Indicator Summary" : "Chart Summary"}</div>{chartSummaryText}</div>
         <div style={{ paddingTop: 10, borderTop: `1px solid ${COLORS.borderSoft}`, fontSize: 11, color: COLORS.mutedFg2, fontWeight: 600 }}>As of {quote?.date ?? "—"} {quote?.time ?? ""} · Source: {quote?.source ?? "financialmodelingprep.com"}</div>
       </div>
