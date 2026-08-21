@@ -14,6 +14,7 @@ import { fetchQuoteSnapshot } from "@/lib/server/quoteData";
 import { mintQuoteToken } from "@/lib/server/quoteToken";
 import { getLatestEarningsData } from "@/lib/latest-earnings-data";
 import { getInternalNewsPayload } from "@/lib/server/internalNews";
+import { cleanSymbol } from "@/lib/symbol";
 
 // Was a plain client-rendered shell (Suspense fallback "Loading dashboard…"
 // with no real content until client effects fetched everything). Now fetches
@@ -70,10 +71,6 @@ type Props = {
   searchParams: Promise<{ symbol?: string | string[] }>;
 };
 
-function cleanSymbolParam(value?: string | string[]) {
-  const raw = Array.isArray(value) ? value[0] : value;
-  return (raw ?? "").trim().toUpperCase().replace(/[^A-Z0-9.-]/g, "");
-}
 
 async function getInitialBenchmarks(): Promise<BenchPayload | null> {
   try {
@@ -126,7 +123,7 @@ async function getInitialEarningsSummary(
 
 export default async function DashboardPage({ searchParams }: Props) {
   const params = await searchParams;
-  const requested = cleanSymbolParam(params?.symbol);
+  const requested = cleanSymbol(params?.symbol);
   const symbol = requested || "SPY";
 
   const [rawHistory, quoteAndName, benchmarks, news, earningsSummary] =
