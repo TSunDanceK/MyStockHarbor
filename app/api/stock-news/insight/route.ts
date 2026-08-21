@@ -39,6 +39,12 @@ function num(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+// The "yellow" arm is a real default, but it is not a fabricated claim: this
+// tone is only consumed by the algorithmic template fallbacks, which branch on
+// tone === "green" and tone === "red" exclusively (lib/stock-news-templates.ts
+// lines 64, 67, 83, 87, 119, 122). "yellow" therefore selects the generic prose
+// in every case -- it degrades to no claim rather than to a neutral verdict.
+// The tone is not sent to the model; only newsScoreLabel/newsScoreValue are.
 function tone(value: unknown): ScoreTone {
   return value === "green" || value === "red" ? value : "yellow";
 }
@@ -55,9 +61,9 @@ type CleanItem = {
 type CachedPayload = {
   symbol: string;
   companyName: string;
-  trend: string;
-  newsScoreLabel: string;
-  newsScoreValue: number;
+  trend: string | null;
+  newsScoreLabel: string | null;
+  newsScoreValue: number | null;
   earningsTone: string;
   rsi: number | null;
   priceVs50: number | null;
@@ -108,10 +114,16 @@ export async function POST(request: NextRequest) {
   }
 
   const companyName = str(body.companyName);
-  const trend = str(body.trend);
+  // "" would reach the model as an empty trend field rather than an absent one.
+  const trend = str(body.trend) || null;
   const newsScoreTone = tone(body.newsScore?.tone);
-  const newsScoreLabel = str(body.newsScore?.label) || "Neutral";
-  const newsScoreValue = num(body.newsScore?.score) ?? 50;
+  // A missing news score means the client had nothing to score, so send null.
+  // `|| "Neutral"` and `?? 50` invented a specific sentiment reading and handed
+  // it to the model as fact -- the whole payload is JSON.stringify'd straight
+  // into the user prompt, so a fabricated 50/"Neutral" became the ground truth
+  // the generated editorial was written around.
+  const newsScoreLabel = str(body.newsScore?.label) || null;
+  const newsScoreValue = num(body.newsScore?.score) ?? null;
   const earningsToneLabel = str(body.earningsScore?.label) || "Unavailable";
   const rsi = num(body.lastRsi);
   const priceVs50 = num(body.priceVs50);

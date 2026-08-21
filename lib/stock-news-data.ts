@@ -95,7 +95,8 @@ export type StockNewsBaseData = {
   quote: Quote | null;
   history: Point[];
   news: NewsItem[];
-  trend: string;
+  // null when the trend could not be established (see trendLabel below).
+  trend: string | null;
   lastClose: number | null;
   lastMA50: number | null;
   lastMA200: number | null;
@@ -833,9 +834,13 @@ function trendLabel(lastClose: number | null, ma50: number | null, ma200: number
     if (lastClose < ma50 && ma50 < ma200) return "Bearish trend";
     if (lastClose > ma200 && lastClose < ma50) return "Pullback in larger uptrend";
     if (lastClose < ma200 && lastClose > ma50) return "Counter-trend bounce";
+    return "Mixed / range";
   }
 
-  return "Mixed / range";
+  // Not determinable: a stock under ~200 bars has no MA200, so none of the five
+  // states above can be established. "Mixed / range" is one of those five real
+  // states and must not double as the value returned when nothing was measured.
+  return null;
 }
 
 export function keywordHits(text: string, words: string[]) {

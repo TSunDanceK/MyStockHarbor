@@ -17,8 +17,8 @@ export type AiNewsBrief = {
 type BatchInput = {
   symbol: string;
   companyName: string;
-  trend: string;
-  newsScoreLabel: string;
+  trend: string | null;
+  newsScoreLabel: string | null;
   items: AiNewsBriefInputItem[];
 };
 
@@ -97,6 +97,7 @@ async function generateAiNewsBriefs(input: BatchInput): Promise<AiNewsBrief[]> {
   const systemPrompt =
     "You write short investor context lines for MyStockHarbor, a beginner-friendly stock analysis site. " +
     "Use only the provided headline, source, publication date, feed description, stock symbol, company name, trend context, and news-score label. " +
+    "Any field that is null was not available. Do not describe it, do not guess it, and do not treat a missing trend or news score as neutral -- neutral is a real reading and these fields are absent, not neutral. " +
     "Return one output item for each input article in the exact same order. " +
     "The page already shows the original headline and FMP feed excerpt, so do not rewrite or summarise the article. " +
     "Set summary to an empty string unless a few words are needed for valid JSON. " +
@@ -208,9 +209,9 @@ export type AiNewsInsight = {
 type InsightInput = {
   symbol: string;
   companyName: string;
-  trend: string;
-  newsScoreLabel: string;
-  newsScoreValue: number;
+  trend: string | null;
+  newsScoreLabel: string | null;
+  newsScoreValue: number | null;
   earningsTone: string;
   rsi: number | null;
   priceVs50: number | null;
@@ -261,6 +262,7 @@ async function generateAiNewsInsight(input: InsightInput): Promise<AiNewsInsight
   const systemPrompt =
     "You write concise stock-news insight copy for MyStockHarbor, a beginner-friendly stock analysis site. " +
     "Use only the provided symbol, company name, trend, news score, earnings tone, RSI, distance vs moving averages, recent range levels, and the provided top article details. " +
+    "Any field that is null was not available. Do not describe it, do not guess it, and do not treat a missing trend or news score as neutral -- neutral is a real reading and these fields are absent, not neutral. " +
     "Do not invent facts. Do not imply full article access or independent verification. " +
     "Your job is to identify the dominant current catalyst in the provided coverage, then combine that with the chart context into one calm editorial read. " +
     "Weight the freshest and most consequential article most heavily. Use older, weaker, or more generic stories only as supporting background. Do not give equal emphasis to every item if one story clearly leads the narrative. " +
