@@ -242,6 +242,36 @@ Removing the blockers is necessary and not sufficient.
   a redirect with no per-slug fetch, so its 11 slugs cost nothing and make the
   redirect itself cacheable.
 
+**Rule 5 — a route table proves a route BECAME static, never that it SURVIVES
+being static.** These are different questions and only the first one is easy.
+#310 verified `●` on the preview route table for `/insights/[slug]` and
+`/insights/videos/[videoId]`, which was a correct measurement of the wrong
+thing: both routes reach Redis through clients built without `PAGE_READ_CACHE`,
+`@upstash/redis` sets `cache: "no-store"` on every REST call, and a no-store
+call on a prerendered route throws `DYNAMIC_SERVER_USAGE` **at request time**.
+Every request 500'd for ~3.5 hours on indexed pages. Reverted in #323.
+
+Before adding `generateStaticParams` to any route, BOTH halves:
+
+1. **Scan the transitive read path.**
+   `node scripts/check-static-safety.mjs "app/your/[route]/page.tsx"`
+   It walks the whole import graph and reports bare `Redis.fromEnv()` clients
+   and literal `cache: "no-store"` fetches. Grepping the route file alone is not
+   enough — `/insights/[slug]`'s blocker was three modules deep, via
+   `getOrCreateInsightSnapshot` → `fetchQuoteSnapshot`. A call inside
+   `unstable_cache` is insulated and safe; the script flags files that use it so
+   you can check which side of the wrapper the call is on.
+2. **Request a real path on the PREVIEW deployment and confirm 200 with real
+   content.** Not the route table. A preview build compiles and prerenders the
+   shell but never issues a runtime request to a prerendered dynamic path, so a
+   green build and a correct route table are both fully consistent with every
+   request 500ing. Nothing in the merge process can catch this; one `curl` can.
+   A sandbox cannot make that request (`*.vercel.app` returns
+   `403 CONNECT tunnel failed`), so this half is owner-side, always.
+
+Rule 5 is Rule 2's shape one level up: Rule 2 says a green build does not mean
+static; Rule 5 says static does not mean working.
+
 **Corollary (from #281) — a guard that prevents a bad artefact must not do it
 with a 5xx on a route that receives enumerated junk input.** `/stock/ZZZZQQ`
 returned 500 because a no-data guard threw; with ~1,519 distinct request paths

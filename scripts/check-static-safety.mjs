@@ -1,0 +1,100 @@
+// Pre-check before adding generateStaticParams to any route.
+//
+// A route table showing "●" proves a route BECAME static. It says nothing about
+// whether the route SURVIVES being static. #310 verified the former and shipped
+// a 3.5-hour production outage: /insights/[slug] reached Redis through a client
+// that did not pass PAGE_READ_CACHE, @upstash/redis defaults every REST call to
+// cache: "no-store", and a no-store fetch on a prerendered route throws
+// DYNAMIC_SERVER_USAGE at request time -- a 500, not a fallback to dynamic.
+//
+// This walks a route's TRANSITIVE import graph and reports every construct that
+// would do that: Redis clients built without PAGE_READ_CACHE, and literal
+// no-store fetches.
+//
+//   node scripts/check-static-safety.mjs "app/insights/[slug]/page.tsx"
+//
+// CLEAN here is necessary, not sufficient. The other half of the pre-check
+// cannot be automated from a sandbox: request a real path on the PREVIEW
+// deployment and confirm 200 with real content. A preview build never issues a
+// runtime request to a prerendered dynamic path, so a green build and a correct
+// route table are both fully consistent with every request 500ing.
+import ts from "typescript";
+import fs from "node:fs";
+import path from "node:path";
+
+const ROOT = process.cwd();
+const resolve = (spec, from) => {
+  let base;
+  if (spec.startsWith("@/")) base = path.join(ROOT, spec.slice(2));
+  else if (spec.startsWith(".")) base = path.resolve(path.dirname(from), spec);
+  else return null;                       // node_modules -- not our code
+  for (const c of [base + ".ts", base + ".tsx", path.join(base, "index.ts"), base]) {
+    if (fs.existsSync(c) && fs.statSync(c).isFile()) return c;
+  }
+  return null;
+};
+
+function imports(file) {
+  const sf = ts.createSourceFile(file, fs.readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const out = [];
+  for (const st of sf.statements) {
+    if ((ts.isImportDeclaration(st) || ts.isExportDeclaration(st)) && st.moduleSpecifier && ts.isStringLiteral(st.moduleSpecifier)) {
+      // type-only imports cannot pull runtime code
+      if (ts.isImportDeclaration(st) && st.importClause?.isTypeOnly) continue;
+      const r = resolve(st.moduleSpecifier.text, file);
+      if (r) out.push(r);
+    }
+  }
+  return out;
+}
+
+// Findings: a Redis client constructed without PAGE_READ_CACHE, or a literal
+// no-store fetch. Both make a prerendered route throw DYNAMIC_SERVER_USAGE.
+function findings(file) {
+  const src = fs.readFileSync(file, "utf8");
+  const hits = [];
+  // A no-store call inside an unstable_cache callback never reaches the
+  // renderer's dynamic detection. This flags the FILE, not the call site, so a
+  // finding here still needs a human to confirm which side of the wrapper it is
+  // on -- lib/youtube.ts is the worked example: bare client, three no-store
+  // fetches, all of them reached only through two unstable_cache wrappers, so
+  // all three are false positives.
+  // Strip comments first. Testing the raw source matched the word
+  // "unstable_cache" inside a comment that merely MENTIONED it, and reported a
+  // module with no wrapper at all as possibly-insulated -- a grep finding the
+  // comment rather than the code (claude/traps/grep-finds-the-comment-not-the-code.md).
+  const code = src
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .filter((l) => !l.trim().startsWith("//"))
+    .join("\n");
+  const insulated = /unstable_cache/.test(code);
+  src.split("\n").forEach((line, i) => {
+    const code = line.replace(/\/\/.*$/, "");
+    if (/Redis\.fromEnv\s*\(/.test(code) && !/PAGE_READ_CACHE/.test(code)) hits.push([i + 1, "bare Redis.fromEnv()", line.trim()]);
+    if (/cache\s*:\s*["']no-store["']/.test(code)) hits.push([i + 1, 'cache: "no-store"', line.trim()]);
+  });
+  return hits.map((h) => [...h, insulated]);
+}
+
+const entry = path.join(ROOT, process.argv[2]);
+const seen = new Set(); const stack = [[entry, []]]; const report = [];
+while (stack.length) {
+  const [file, chain] = stack.pop();
+  if (seen.has(file)) continue;
+  seen.add(file);
+  const f = findings(file);
+  if (f.length) report.push({ file: path.relative(ROOT, file), chain: chain.map(c => path.relative(ROOT, c)), f });
+  for (const dep of imports(file)) stack.push([dep, [...chain, file]]);
+}
+console.log(`entry: ${process.argv[2]}`);
+console.log(`modules on the transitive read path: ${seen.size}`);
+if (!report.length) console.log("  CLEAN -- no bare Redis client, no literal no-store fetch");
+for (const r of report) {
+  console.log(`\n  ${r.file}`);
+  for (const [ln, kind, text, insulated] of r.f) {
+    console.log(`    :${ln}  ${kind}  ${text.slice(0, 80)}`);
+    if (insulated) console.log("           ^ file uses unstable_cache -- confirm by hand whether THIS call site is inside a wrapper");
+  }
+  if (r.chain.length) console.log(`    via: ${r.chain.slice(1).join(" -> ") || "(direct import)"}`);
+}
