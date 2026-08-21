@@ -10,7 +10,7 @@ import { detectDivergenceFromHistory } from "../../lib/ta/divergence";
 import DiscoveryStrip from "./DiscoveryStrip";
 import DashboardTicker from "./DashboardTicker";
 import TickerLogo from "@/app/components/TickerLogo";
-import { cleanSymbol, readRememberedSymbol, rememberSymbol } from "@/lib/symbol";
+import { backfillSymbolCookie, cleanSymbol, readRememberedSymbol, rememberSymbol } from "@/lib/symbol";
 
 export type Quote = { symbol: string; price: number | null; date: string | null; time: string | null; source: string; };
 export type Point = { date: string; open?: number; close: number; high?: number; low?: number; volume?: number; };
@@ -545,6 +545,25 @@ export default function DashboardClient({
     setVisibleBars(win.visibleBars);
     setWindowOffset(win.windowOffset);
   }, [chartFocus, historyAll]);
+  // MIGRATION -- runs once, for visitors who had a remembered symbol before the
+  // cookie existed. See backfillSymbolCookie() for why this is NOT the landmine
+  // above: it copies an EXISTING remembered value into a second store, never a
+  // render-derived one, and writes nothing at all when localStorage is empty.
+  //
+  // Skipped when the URL carries ?symbol=, so a deep link's own explicit write
+  // is never raced by a backfill of a different symbol.
+  //
+  // Mount-only by design: the server has already rendered by the time this
+  // runs, so an existing visitor still discards ONCE and is correct from their
+  // next load on. No client-side scheme can do better -- the server cannot read
+  // localStorage, which is the reason the cookie exists.
+  useEffect(() => {
+    if (cleanSymbol(searchParams.get("symbol"))) return;
+    backfillSymbolCookie();
+    // Mount only: this is a one-time migration, not a sync.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     const current = symbol.trim().toUpperCase();
     if (!current) return;
