@@ -1824,14 +1824,21 @@ function buildTrendScoreFromHistory(points: Point[]): TrendScoreResult | null {
 // How the composite treats a null trendScore. "live" is exactly what ships and
 // is the default, so adding this parameter changes nothing on its own.
 //
-//   live                    structureScore falls back to 50, and the
-//                           structural-weakness penalty is skipped because its
-//                           condition starts `trendScore &&`.
+//   live                    structureScore falls back to the MINIMUM the four
+//                           checks can produce, and the structural-weakness
+//                           penalty applies. An unassessable trend is treated
+//                           as not-yet-qualified, never as passing.
 //   no-structure-waived     structure term dropped and the remaining weights
-//                           renormalised (/0.95); penalty still skipped.
-//   no-structure-penalised  structure term dropped and renormalised; the
-//                           penalty applies when the trend could not be
-//                           assessed, rather than being waived.
+//                           renormalised (/0.95). Kept only so the diagnostic
+//                           can still price "drop the term" against live; it
+//                           was measured and rejected -- see the comment in
+//                           computeOversoldCandidate.
+//   no-structure-penalised  as above. Since `live` now penalises a null
+//                           trendScore too, this differs from
+//                           no-structure-waived only in that both apply it,
+//                           i.e. the two are now equivalent; the pair is
+//                           retained so a future comparison can distinguish
+//                           them again without re-deriving the shape.
 //
 // Only "live" is reachable from buildPickersPayload. The other two exist for
 // app/api/debug/picker-structure, which prices the alternatives against real
@@ -1901,7 +1908,22 @@ function computeOversoldCandidate(points: Point[], comp: CompositeResult | null,
     100
   );
 
-  let structureScore = 50;
+  // A null trendScore (fewer than 220 closes) takes the MINIMUM the four terms
+  // below can produce -- the all-false sum, 20+5+5+5 -- not a mid-range 50.
+  //
+  // 50 was near the weak end of the achievable range anyway, so the structure
+  // term was never the main distortion; the waived penalty below was. But 50 is
+  // still a value the checks can genuinely produce, so an unmeasured stock was
+  // presented as having been measured and scored 50. The minimum says the
+  // opposite: nothing here has been demonstrated.
+  //
+  // Deliberately NOT "drop the term and renormalise". That was measured against
+  // production and reshuffles 313 stocks across the two lists (103 of 135
+  // oversold, 210 of 259 overbought; 53 of them by 5+ places) because adjacent
+  // ranks in the 15-55 band are separated by a median of 0.30 points and the
+  // renormalisation swing is 3.25. This form leaves every stock with a real
+  // trendScore on its exact current score.
+  let structureScore = 20 + 5 + 5 + 5;
   if (trendScore) {
     structureScore =
       (trendScore.priceAboveMA200 ? 45 : 20) +
@@ -1925,7 +1947,7 @@ function computeOversoldCandidate(points: Point[], comp: CompositeResult | null,
   // trend takes the penalty instead -- not-yet-qualified rather than passing.
   const structurallyWeak = trendScore
     ? !trendScore.priceAboveMA200 && !trendScore.ma50AboveMA200
-    : mode === "no-structure-penalised";
+    : true;
   if (structurallyWeak) penalty += 10;
 
   const keep = mode === "live" ? 1 : 1 - STRUCTURE_WEIGHT;
@@ -2003,7 +2025,10 @@ function computeOverboughtCandidate(points: Point[], comp: CompositeResult | nul
     100
   );
 
-  let structureScore = 50;
+  // Minimum achievable, same reasoning as computeOversoldCandidate above: the
+  // all-false sum, 10+5+5+10. There is no trendScore-dependent penalty on this
+  // side, so this term is the whole of the change here.
+  let structureScore = 10 + 5 + 5 + 10;
   if (trendScore) {
     structureScore =
       (trendScore.priceAboveMA200 ? 35 : 10) +
