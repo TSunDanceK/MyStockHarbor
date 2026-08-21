@@ -305,7 +305,8 @@ function scoreExplanation(tone: EarningsTone) {
 }
 
 function buildScoreResult(score: number, tone: EarningsTone) {
-  return { score, tone, label: toneLabel(tone), explanation: scoreExplanation(tone) };
+  return {
+    available: true as const, score, tone, label: toneLabel(tone), explanation: scoreExplanation(tone) };
 }
 
 // Calls the shared lib/latest-earnings-data.ts function IN-PROCESS instead of
@@ -357,7 +358,11 @@ function clamp(value: number, min: number, max: number) {
 
 function scoreEarnings(args: { latest: FmpEarningsRow | null; sameQuarterLastYear: FmpEarningsRow | null; completedRows: FmpEarningsRow[]; }) {
   const { latest, sameQuarterLastYear, completedRows } = args;
-  if (!latest) return { score: 50, tone: "neutral" as EarningsTone, label: "Unavailable", explanation: "Structured earnings data is not available for this symbol yet." };
+  // `available: false` is the point. This returns score 50 because the shape
+  // requires a number, but 50 is NOT a reading -- it is the neutral seed with
+  // nothing added to it, and the card must not render it as one. Callers key
+  // off this flag rather than sniffing label === "Unavailable".
+  if (!latest) return { score: 50, available: false as const, tone: "neutral" as EarningsTone, label: "Unavailable", explanation: "Structured earnings data is not available for this symbol yet." };
   const epsActual = asNumber(latest.epsActual);
   const epsEstimated = asNumber(latest.epsEstimated);
   const revenueActual = asNumber(latest.revenueActual);
@@ -1064,12 +1069,23 @@ export default async function StockEarningsPage({ params }: Props) {
                 <div className="smallLabel">Earnings score</div>
                 <div className="scorePill">{score.label}</div>
               </div>
-              <div className="scoreNumberRow">
-                <div className="scoreNumber">{score.score}/100</div>
-                <EarningsScoreWatermark />
-              </div>
-              <div className="scoreBar" aria-hidden="true"><div className="scoreNeedle" /></div>
-              <div className="scoreLabels"><span>Weak</span><span>Mixed</span><span>Strong</span></div>
+              {/* No number and no needle when there is nothing to score. The
+                  pill already says "Unavailable" and the explanation says why,
+                  but a 48px "50/100" over a Weak-Mixed-Strong gradient with the
+                  needle at dead centre is the visually dominant half of this
+                  card -- it reads as a real neutral reading, and the honest
+                  part is the easiest to miss. Verified rendering exactly that
+                  way before this change. */}
+              {score.available ? (
+                <>
+                  <div className="scoreNumberRow">
+                    <div className="scoreNumber">{score.score}/100</div>
+                    <EarningsScoreWatermark />
+                  </div>
+                  <div className="scoreBar" aria-hidden="true"><div className="scoreNeedle" /></div>
+                  <div className="scoreLabels"><span>Weak</span><span>Mixed</span><span>Strong</span></div>
+                </>
+              ) : null}
               <p style={{ marginTop: 16 }}>{score.explanation}</p>
             </aside>
           </section>
