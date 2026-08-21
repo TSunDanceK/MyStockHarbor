@@ -130,6 +130,22 @@ export async function readFeed<T>(
     await writeRedis(key, entry);
     return { items, ok: true, source: "fresh" };
   } catch (err) {
+    // NEVER swallow a DynamicServerError. It does not mean "upstream is down"
+    // -- it means "you may not do that during a static render", and Next has
+    // ALREADY marked this render dynamic by the time it lands here. Catching
+    // it converts a loud, fixable build error into a green build with a
+    // silently dynamic route and a log line blaming the upstream API.
+    //
+    // That is exactly what happened on dpl_FLJxprw2KApWGfwpRTW6SGbn1afc: three
+    // FMP fetches still carried cache:"no-store", every one threw
+    // DYNAMIC_SERVER_USAGE during prerender, and this handler reported each as
+    // "upstream read failed, serving stale copy 227m old". FMP was fine. The
+    // fresh read had never once succeeded during a build, and nothing said so.
+    //
+    // Rethrowing makes the next call site that does this fail the build
+    // instead of hiding, which is the only reason it would ever be found.
+    if (isDynamicServerUsage(err)) throw err;
+
     if (fallback) {
       const ageMin = Math.round((Date.now() - fallback.at) / 60_000);
       console.error(
@@ -149,6 +165,18 @@ export async function readFeed<T>(
     );
     return { items: [], ok: false, source: "unavailable" };
   }
+}
+
+// Next signals "this render cannot be static" by throwing an error carrying
+// digest === "DYNAMIC_SERVER_USAGE". It is a control-flow signal from the
+// framework, not an upstream fault, and it must reach Next rather than a
+// try/catch meant for network failures.
+function isDynamicServerUsage(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    (err as { digest?: unknown }).digest === "DYNAMIC_SERVER_USAGE"
+  );
 }
 
 /**
