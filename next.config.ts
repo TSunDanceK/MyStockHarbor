@@ -55,6 +55,39 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
 
+      // /recently-added-to-index, retired 2026-08-21. Same destination and the
+      // same reasoning as the line above, and 301 rather than 410 for
+      // consistency with that documented decision rather than a marginal
+      // truthfulness gain.
+      //
+      // This page NEVER RENDERED DATA, on any deploy, for its entire life. It
+      // read FMP's three historical-*-constituent endpoints, and ALL THREE
+      // answer 402 "Restricted Endpoint" on this plan. It was invisible for
+      // two compounding reasons: a cache:"no-store" fetch threw
+      // DynamicServerError first and feedCache misreported it as an upstream
+      // failure (#304), and Promise.all reported only the first of the three
+      // 402s, so the one visible error named a single endpoint and implied the
+      // other two were healthy (#305). See claude/silent-failure-traps.md
+      // traps 11 and 14.
+      //
+      // *** THE SAME 402 WAS ALREADY FOUND AND WORKED AROUND ONCE. ***
+      // app/api/market/route.ts hit it on the sibling sp500/nasdaq/dowjones-
+      // constituent endpoints, where it had silently pinned the discovery
+      // universe to its static fallback, and its comment records the identical
+      // lesson about invisible failure. indexChanges.ts was written against the
+      // same endpoint family months later without the connection being made --
+      // two independent discoveries of one plan limitation, neither aware of
+      // the other. Before adding any FMP constituent endpoint, check
+      // /api/debug/fmp-endpoints; the whole family is restricted on this tier.
+      //
+      // lib/server/indexChanges.ts is deliberately KEPT: the code is correct
+      // and the endpoints may become available on a higher plan.
+      {
+        source: "/recently-added-to-index",
+        destination: "/pickers",
+        permanent: true,
+      },
+
       // ── Thin footer pages retired (301) ──────────────────
       // Seven pages that were only ever reachable from the footer and were
       // thin duplicates of work since done properly elsewhere: /learn now
