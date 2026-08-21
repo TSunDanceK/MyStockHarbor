@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import { getAllPosts } from "@/lib/blog";
-import { getAllVideoIds } from "@/lib/videoContent";
+import { getAllVideoMeta } from "@/lib/videoContent";
 import { getAllBottleneckPosts } from "@/lib/bottlenecks";
 import { LESSONS } from "@/app/learn/lessons";
 import { priorityStocks, uniqueEtfs } from "@/lib/curatedSymbols";
@@ -143,21 +143,43 @@ function toAbsoluteUrl(path: string) {
 }
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const now = new Date();
+  // NO `const now` here, deliberately.
+  //
+  // Every block below used to stamp `lastModified: now`, so the sitemap told
+  // Google that nearly every URL on the site had changed at the moment of the
+  // fetch, on every fetch. lastmod is the ONE sitemap attribute Google
+  // actually uses -- priority and changefreq are ignored -- and it is used
+  // only while it looks trustworthy. A file that always claims everything just
+  // changed teaches Google to discount lastmod site-wide, which was dragging
+  // down the two blocks (insights, bottlenecks) whose dates were real.
+  //
+  // lastmod is OPTIONAL in the sitemap protocol, so the fix is omission, not a
+  // better guess. A URL now carries a date only where a truthful one exists:
+  // a post's own `date`, or a video's frontmatter `date`. Everything else says
+  // nothing.
+  //
+  // If you are tempted to reintroduce a fallback, the two that look reasonable
+  // and are not:
+  //   - git last-commit date per file. Vercel clones SHALLOW, so every file
+  //     older than the clone horizon reports the horizon commit's timestamp.
+  //     Measured: 34 of 60 sampled pages returned one identical second, and
+  //     nothing errored. That is this same bug wearing a plausible date.
+  //   - last market close for /stock/*. Identical for every symbol, so it is
+  //     the same synchronised claim with a better excuse, and it is simply
+  //     wrong for /news (hourly) and /earnings (quarterly).
+  // See claude/silent-failure-traps.md #15 and #16.
   const insightPosts = getAllPosts();
   const bottleneckPosts = getAllBottleneckPosts();
-  const videoIds = getAllVideoIds();
+  const videoMeta = getAllVideoMeta();
 
   const mainPageEntries: MetadataRoute.Sitemap = mainPages.map((page) => ({
     url: toAbsoluteUrl(page.path),
-    lastModified: now,
     changeFrequency: page.changeFrequency,
     priority: page.priority,
   }));
 
   const marketPageEntries: MetadataRoute.Sitemap = marketPages.map((path) => ({
     url: toAbsoluteUrl(path),
-    lastModified: now,
     changeFrequency: "daily" as const,
     priority: 0.88,
   }));
@@ -176,7 +198,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
     .filter((path) => !noindexPickerPaths.has(path))
     .map((path) => ({
       url: toAbsoluteUrl(path),
-      lastModified: now,
       changeFrequency: "weekly",
       priority: 0.8,
     }));
@@ -203,7 +224,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   // https://www.mystockharbor.com/sitemap.xml with this, only add to it.
   const insightEntries: MetadataRoute.Sitemap = insightPosts.map((post) => ({
     url: toAbsoluteUrl(`/insights/${post.slug}`),
-    lastModified: post.date ? new Date(post.date) : now,
+    ...(post.date ? { lastModified: new Date(post.date) } : {}),
     changeFrequency: "yearly",
     priority: 0.72,
   }));
@@ -211,7 +232,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const bottleneckEntries: MetadataRoute.Sitemap = bottleneckPosts.map(
     (post) => ({
       url: toAbsoluteUrl(`/bottlenecks/${post.slug}`),
-      lastModified: post.date ? new Date(post.date) : now,
+      ...(post.date ? { lastModified: new Date(post.date) } : {}),
       changeFrequency: "weekly",
       priority: 0.72,
     })
@@ -219,16 +240,20 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   // Video pages — only pages with a content file are submitted to Google.
   // Auto-updates as new content/videos/*.md files are added.
-  const videoEntries: MetadataRoute.Sitemap = videoIds.map((id) => ({
-    url: toAbsoluteUrl(`/insights/videos/${id}`),
-    lastModified: now,
+  //
+  // The one MIXED block for lastModified: frontmatter `date` is optional, so
+  // publishedAt is "" for any video that omits it (most of them today). Emitted
+  // per item where a real date exists and omitted where it does not, rather
+  // than filling the gap -- see the note above `entries`.
+  const videoEntries: MetadataRoute.Sitemap = videoMeta.map((video) => ({
+    url: toAbsoluteUrl(`/insights/videos/${video.youtubeId}`),
+    ...(video.publishedAt ? { lastModified: new Date(video.publishedAt) } : {}),
     changeFrequency: "monthly" as const,
     priority: 0.75,
   }));
 
   const learnEntries: MetadataRoute.Sitemap = LESSONS.map((lesson) => ({
     url: toAbsoluteUrl(`/learn/${encodeURIComponent(lesson.slug)}`),
-    lastModified: now,
     changeFrequency: "monthly",
     priority: 0.68,
   }));
@@ -251,14 +276,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   const stockPageEntries: MetadataRoute.Sitemap = stockSymbols.map((symbol) => ({
     url: toAbsoluteUrl(`/stock/${symbol}`),
-    lastModified: now,
     changeFrequency: "daily" as const,
     priority: 0.78,
   }));
 
   const stockNewsEntries: MetadataRoute.Sitemap = stockSymbols.map((symbol) => ({
     url: toAbsoluteUrl(`/stock/${symbol}/news`),
-    lastModified: now,
     changeFrequency: "hourly" as const,
     priority: 0.7,
   }));
@@ -276,7 +299,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
     .filter((symbol) => !etfSymbols.has(symbol))
     .map((symbol) => ({
       url: toAbsoluteUrl(`/stock/${symbol}/earnings`),
-      lastModified: now,
       changeFrequency: "weekly" as const,
       priority: 0.68,
     }));
@@ -288,13 +310,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const sectorEntries: MetadataRoute.Sitemap = [
     {
       url: toAbsoluteUrl("/sector"),
-      lastModified: now,
       changeFrequency: "daily" as const,
       priority: 0.75,
     },
     ...SECTORS.map((sector) => ({
       url: toAbsoluteUrl(sectorNewsPath(sector.slug)),
-      lastModified: now,
       changeFrequency: "hourly" as const,
       priority: 0.75,
     })),

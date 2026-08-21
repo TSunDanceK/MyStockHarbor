@@ -212,3 +212,34 @@ Written up in full in `claude/BOTTLENECKS.md`.
 A return type that cannot express failure (`/upcoming-ipos` asserting the IPO
 market was empty when the read had failed), and the full list of these,
 now live in `claude/silent-failure-traps.md`.
+
+## A shallow clone answers confidently from a horizon it does not mention
+
+Second occurrence of the root cause behind the three-dot entry above: **a git
+instrument reporting on history it cannot see, without saying so.**
+
+Vercel clones shallow, and so does this sandbox — 53 commits at the time of
+writing against ~2,760 in the repo. The consequence for per-file dates:
+
+```bash
+git log -1 --format=%cI -- app/how-to-read-stock-charts/page.tsx
+# 2026-08-19T18:32:15+01:00   ... and the same second for margin-trading-explained,
+#                                 lessons.ts, curatedSymbols.ts, ~30 others
+```
+
+Those files have not been touched together, or recently. `1f2a00c` is the
+**clone horizon**, and `git show --stat` reports it as *"626 files changed,
+118436 insertions(+)"* — a shallow clone's boundary commit presents the entire
+tree as one synthetic addition. Every file whose real last edit predates the
+horizon therefore reports the horizon's timestamp.
+
+Measured across 60 sampled `page.tsx` files: **34 returned one identical
+second**, 18 another, and 8 were genuine. A naive per-file `lastmod` built on
+this would have been wrong for ~85% of inputs, with **nothing erroring** and
+every value looking like a plausible recent ISO date.
+
+**Before trusting any per-file git history in a build, check
+`git rev-parse --is-shallow-repository`.** If it returns `true`, `git log
+-- <path>` is answering about the clone, not the repository. `git fetch
+--unshallow` fixes it and costs a full-history fetch on every deploy — which is
+why the sitemap work chose to omit `lastmod` rather than buy real dates.
