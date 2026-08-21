@@ -22,17 +22,32 @@ import RelatedInsights from "@/app/components/RelatedInsights";
 // degrades gracefully when absent (see the try/catch below).
 export const revalidate = 86400;
 
-// `generateStaticParams` was deliberately REMOVED alongside the change above,
-// not just left in place. It was inert while force-dynamic was set, so it has
-// never actually run; re-enabling it by switching to revalidate would have
-// prerendered every post at build time, and each one calls
-// getOrCreateInsightSnapshot below — which, on a Redis cache miss, builds a
-// fresh snapshot from live FMP data. Against a cold cache and hundreds of
-// posts that is a build-time FMP call storm on a plan with a 300/min ceiling
-// and a documented history of stage starvation (see the FMP budget notes in
-// claude/CLAUDE.md). Without it, posts render on demand once and are then
-// cached for `revalidate` — same end state for a crawler, no build-time
-// stampede. `dynamicParams` defaults to true, so every slug still resolves.
+// `generateStaticParams` returns an EMPTY array, and both halves of that matter.
+//
+// The concern that removed it entirely was correct: prerendering every post at
+// build would call getOrCreateInsightSnapshot below for each one, which on a
+// Redis miss builds a fresh snapshot from live FMP data. Against a cold cache
+// and hundreds of posts that is a build-time call storm on a plan with a
+// 300/min ceiling and a documented history of stage starvation (see the FMP
+// budget notes in claude/CLAUDE.md). An empty list still avoids all of that --
+// nothing is prerendered at build.
+//
+// But REMOVING the export did not do what its comment claimed. It said posts
+// would "render on demand once and are then cached for `revalidate`". They did
+// not. A dynamic segment cannot be ISR at all without a generateStaticParams
+// export, even with every dynamic API and no-store call already gone -- so this
+// route stayed fully dynamic and `revalidate = 86400` above has NEVER ONCE HAD
+// ANY EFFECT since it was written. Nothing warns about this: the config reads
+// as active, the build is green, and the only symptom is an `f` in the route
+// table. See claude/traps/inert-route-revalidate.md and Rule 4 in
+// claude/picker-pages-isr-2026-08-20.md.
+//
+// Empty is the shape that satisfies both: no build-time prerender, and
+// on-demand ISR that actually caches. `dynamicParams` defaults to true, so
+// every slug still resolves.
+export function generateStaticParams(): { slug: string }[] {
+  return [];
+}
 
 type Props = {
   params: Promise<{ slug: string }>;
