@@ -96,11 +96,40 @@ export function buildMacd(values: number[]): MacdResult | null {
 }
 
 // ── Trend helpers ─────────────────────────────────────────────────────────────
+// `known` is the whole point of this shape. Without it, a stock that simply has
+// not traded long enough to HAVE a 200-day MA scored the same as one that
+// failed every check:
+//
+//   bars   ma50   ma200   old score
+//   15     null   null    0/3        <- reads as "failed all three"
+//   60     33.8   null    1/3        <- reads as a mild negative assessment
+//   190    85.8   null    1/3        <- same, on a stock rising every single bar
+//   260    113.8  83.8    3/3
+//
+// ma200 needs 200 bars, so EVERY listing under roughly nine and a half months
+// of trading was affected -- most of a new stock's first year. The 1/3 band is
+// the more dangerous of the two: 0/3 at least reads like a null result someone
+// might question, while 1/3 reads like a real, mildly bearish reading.
+//
+// Returning `known: false` rather than null is deliberate. null forces every
+// consumer to invent its own fallback, and inventing fallbacks separately is
+// exactly how the two local copies of this function came to exist. One flag,
+// one source of truth, and each caller renders what suits it. It also survives
+// being serialised into a stored IndicatorSeed, where a null field and a
+// missing field are indistinguishable.
+export type TrendScore = {
+  passed: number;
+  total: number;
+  // False when the inputs could not support the checks at all -- not when the
+  // checks ran and failed. `passed` means nothing when this is false.
+  known: boolean;
+};
+
 export function buildTrendScore(args: {
   lastClose: number | null;
   ma50: number | null;
   ma200: number | null;
-}) {
+}): TrendScore {
   const { lastClose, ma50, ma200 } = args;
   const checks = [
     typeof lastClose === "number" && typeof ma200 === "number" ? lastClose > ma200 : null,
@@ -108,20 +137,29 @@ export function buildTrendScore(args: {
     typeof ma50 === "number" && typeof ma200 === "number" ? ma50 > ma200 : null,
   ];
   const passed = checks.reduce((acc, v) => acc + (v === true ? 1 : 0), 0);
-  return { passed, total: 3 };
+  // Every check needs both of its inputs. If any is null the score is partial,
+  // and a partial score is not a smaller score -- it is not a score.
+  const known = checks.every((c) => c !== null);
+  return { passed, total: 3, known };
 }
 
+// Fails on exactly the same inputs as buildTrendScore, so it gets the same
+// treatment. "Range / Mixed" is a real market state, and asserting it for a
+// stock whose trend cannot be computed yet is the same error as 1/3 -- milder
+// only because it is vaguer. `null` here means "not determinable", and callers
+// must not print it as a state.
 export function trendLabel(args: {
   lastClose: number | null;
   ma50: number | null;
   ma200: number | null;
-}): "Uptrend" | "Downtrend" | "Range / Mixed" {
+}): "Uptrend" | "Downtrend" | "Range / Mixed" | null {
   const { lastClose, ma50, ma200 } = args;
   if (typeof lastClose === "number" && typeof ma50 === "number" && typeof ma200 === "number") {
     if (lastClose > ma50 && ma50 > ma200) return "Uptrend";
     if (lastClose < ma50 && ma50 < ma200) return "Downtrend";
+    return "Range / Mixed";
   }
-  return "Range / Mixed";
+  return null;
 }
 
 export function lastNum(arr: (number | null)[]): number | null {
@@ -143,8 +181,8 @@ export type IndicatorSeed = {
   ma50: number | null;
   ma200: number | null;
   rsi: number | null;
-  trendScore: { passed: number; total: number };
-  trend: "Uptrend" | "Downtrend" | "Range / Mixed";
+  trendScore: TrendScore;
+  trend: "Uptrend" | "Downtrend" | "Range / Mixed" | null;
   macdLabel: "Bullish" | "Bearish" | "Mixed" | null;
   companyName: string;
   price: number | null;
@@ -207,10 +245,24 @@ export function buildSeoTitle(symbol: string, seed: IndicatorSeed): string {
   }
 
   const parts = [maPhrase, rsiPhrase].filter(Boolean).join(", ");
-  const trendPart = trend === "Range / Mixed" ? "Range/Mixed trend" : trend;
 
-  if (parts) {
-    return `${symbol} Stock Analysis: ${trendPart}, ${parts} | MyStockHarbor`;
+  // THE TITLE IS THE PRIMARY FIX HERE. It is the clickable line in search
+  // results, seen by people who never open the page, and it was asserting
+  // "Range/Mixed trend" for stocks rising on every bar they have -- any listing
+  // under ~9.5 months old, because ma200 needs 200 bars. When the trend is not
+  // determinable the phrase is dropped rather than replaced: the rest of the
+  // title (MAs, RSI) is still true, and the generic fallback below covers the
+  // case where nothing is.
+  const trendPart = trend === null
+    ? ""
+    : trend === "Range / Mixed"
+      ? "Range/Mixed trend"
+      : trend;
+
+  const lead = [trendPart, parts].filter(Boolean).join(", ");
+
+  if (lead) {
+    return `${symbol} Stock Analysis: ${lead} | MyStockHarbor`;
   }
   return `${symbol} Stock Analysis: Chart, RSI, MACD & Trend | MyStockHarbor`;
 }
@@ -218,9 +270,14 @@ export function buildSeoTitle(symbol: string, seed: IndicatorSeed): string {
 export function buildSeoDescription(symbol: string, seed: IndicatorSeed): string {
   const { trend, rsi, ma50, ma200, lastClose, macdLabel, trendScore } = seed;
 
-  const trendText = trend === "Range / Mixed"
-    ? `${symbol} is in a range/mixed trend`
-    : `${symbol} is in a ${trend.toLowerCase()}`;
+  // Omitted entirely when the trend is not determinable, rather than softened.
+  // There is no honest short phrase for "this stock has not traded long enough
+  // to have a 200-day moving average" in a meta description.
+  const trendText = trend === null
+    ? ""
+    : trend === "Range / Mixed"
+      ? `${symbol} is in a range/mixed trend`
+      : `${symbol} is in a ${trend.toLowerCase()}`;
 
   const maLine = (() => {
     if (typeof lastClose !== "number" || typeof ma50 !== "number" || typeof ma200 !== "number")
@@ -239,10 +296,16 @@ export function buildSeoDescription(symbol: string, seed: IndicatorSeed): string
 
   const macdLine = macdLabel ? `MACD is ${macdLabel.toLowerCase()}` : "";
 
-  const passLine = `${trendScore.passed}/${trendScore.total} trend checks passing.`;
+  // `passed` means nothing when the checks could not run, so the line is
+  // dropped rather than printed as 0/3 or 1/3.
+  const passLine = trendScore.known
+    ? `${trendScore.passed}/${trendScore.total} trend checks passing.`
+    : "";
+
+  const leadSentence = [trendText, maLine].filter(Boolean).join(", ");
 
   const sentences = [
-    `${trendText}${maLine ? ", " + maLine : ""}.`,
+    leadSentence ? `${leadSentence}.` : "",
     [rsiLine, macdLine].filter(Boolean).join(". ") + (rsiLine || macdLine ? "." : ""),
     passLine,
     "Chart context, macro support levels and AI outlook on MyStockHarbor.",
