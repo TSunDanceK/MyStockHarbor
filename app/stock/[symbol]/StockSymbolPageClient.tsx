@@ -100,29 +100,6 @@ type EarningsYearSummary = {
   weakCount: number;
 };
 
-type StockEarningsData = {
-  hasStructuredData: boolean;
-  tone: ScoreTone;
-  toneLabel: "Good" | "Neutral" | "Weak" | "Unavailable";
-  score?: number | null;
-  reportDate: string | null;
-  actualEps: number | null;
-  estimatedEps: number | null;
-  epsSurprise: number | null;
-  epsSurprisePercent: number | null;
-  revenue: number | null;
-  revenueEstimate: number | null;
-  revenueSurprise: number | null;
-  revenueSurprisePercent: number | null;
-  grossMargin: number | null;
-  operatingMargin: number | null;
-  netIncome: number | null;
-  nextEarningsDate: string | null;
-  recentReports: EarningsPeriodSummary[];
-  yearlySummaries: EarningsYearSummary[];
-  sourceNote: string;
-};
-
 type Point = {
   date: string;
   close: number;
@@ -470,37 +447,6 @@ function supportQualityTone(support: MacroSupportResult | null): "green" | "yell
   return "red";
 }
 
-function scoreBandLabel(score: number) {
-  if (score >= 80) return "Strong";
-  if (score >= 65) return "Good";
-  if (score >= 50) return "Mixed";
-  if (score >= 35) return "Weak";
-  return "High risk";
-}
-
-function scoreExplainText(type: "fundamentals" | "future", score: number) {
-  if (type === "fundamentals") {
-    if (score >= 65) return "This score reflects a stronger current business-quality read, including resilience, profitability potential, demand quality and business durability.";
-    if (score >= 50) return "This score reflects a mixed current business-quality read. The company may have strengths, but there are still financial, execution or resilience questions.";
-    return "This score reflects a weaker current business-quality read, often linked to profitability pressure, cash burn, weak demand, balance-sheet risk or inconsistent execution.";
-  }
-  if (score >= 65) return "This score reflects stronger medium-to-long-term potential, usually linked to growth opportunity, product relevance, adoption, strategic positioning or a clear future narrative.";
-  if (score >= 50) return "This score reflects mixed future potential. There may be upside drivers, but execution risk, competition or unclear adoption still matter.";
-  return "This score reflects weaker future potential, usually because the growth path, demand picture, differentiation or long-term narrative is unclear.";
-}
-
-function scoreTone(score: number): "green" | "yellow" | "red" {
-  if (score >= 65) return "green";
-  if (score >= 50) return "yellow";
-  return "red";
-}
-
-function formatAiUpdatedLabel(value: string) {
-  const dt = new Date(value);
-  if (Number.isNaN(dt.getTime())) return "Unknown";
-  return dt.toLocaleDateString("en-GB", { year: "numeric", month: "short", day: "numeric" });
-}
-
 function buildLongSummary(args: { symbol: string; companyName: string; quote: Quote | null; lastClose: number | null; ma50: number | null; ma200: number | null; trend: string | null; trendScore: { passed: number; total: number; known: boolean }; rsi: number | null }) {
   const { symbol, companyName, quote, lastClose, ma50, ma200, trend, trendScore, rsi } = args;
   const companyLead = companyName ? `${companyName} (${symbol})` : symbol;
@@ -593,122 +539,6 @@ function buildHeroLede(args: {
   if (trend === null) return `${lead} has not traded long enough to establish a trend on these measures.${rsiPhrase}`;
 
   return `${lead} is currently in ${trendText}${maPhrase}.${rsiPhrase}`;
-}
-
-type ContextTone = "green" | "yellow" | "red" | "blue";
-type TradeContextResult = { alignment: "Strong" | "Constructive" | "Early" | "Mixed" | "Conflict" | "Weak"; tone: ContextTone; businessContext: string; technicalContext: string; riskContext: string; read: string; watch: string; };
-
-function buildTradeContext(args: { aiAnalysis: { fundamentalsScore: number | null; futurePotentialScore: number | null } | null; lastClose: number | null; ma50: number | null; ma200: number | null; rsi: number | null; trendScore: { passed: number; total: number } }): TradeContextResult {
-  const { aiAnalysis, lastClose, ma50, ma200, rsi, trendScore } = args;
-  const fundamentalsScore = aiAnalysis?.fundamentalsScore ?? null, futurePotentialScore = aiAnalysis?.futurePotentialScore ?? null;
-  const hasBusinessScores = typeof fundamentalsScore === "number" && typeof futurePotentialScore === "number";
-  const businessBlend = hasBusinessScores ? (fundamentalsScore + futurePotentialScore) / 2 : null;
-  let businessContext = "Business context unavailable", businessState: "supportive" | "mixed" | "weak" | "unknown" = "unknown";
-  if (typeof businessBlend === "number") {
-    if (businessBlend >= 70 && futurePotentialScore !== null && futurePotentialScore >= 65) { businessState = "supportive"; businessContext = "Supportive business backdrop"; }
-    else if (businessBlend <= 45 || (fundamentalsScore !== null && fundamentalsScore <= 40)) { businessState = "weak"; businessContext = "Weak business backdrop"; }
-    else { businessState = "mixed"; businessContext = "Mixed business backdrop"; }
-  }
-  const priceAbove50 = typeof lastClose === "number" && typeof ma50 === "number" ? lastClose > ma50 : false;
-  const priceAbove200 = typeof lastClose === "number" && typeof ma200 === "number" ? lastClose > ma200 : false;
-  const ma50Above200 = typeof ma50 === "number" && typeof ma200 === "number" ? ma50 > ma200 : false;
-  const nearMa200 = typeof lastClose === "number" && typeof ma200 === "number" && ma200 > 0 ? Math.abs(((lastClose - ma200) / ma200) * 100) <= 7 : false;
-  const oversold = typeof rsi === "number" && rsi <= 35, extended = typeof rsi === "number" && rsi >= 70;
-  let technicalContext = "Technical context unavailable", technicalState: "supportive" | "early" | "mixed" | "weak" | "extended" = "mixed";
-  if (priceAbove50 && priceAbove200 && ma50Above200) { technicalState = extended ? "extended" : "supportive"; technicalContext = extended ? "Strong trend, short-term extended" : "Above key trend levels"; }
-  else if (priceAbove200 && (nearMa200 || !priceAbove50)) { technicalState = "early"; technicalContext = "Near long-term trend support"; }
-  else if (!priceAbove200 && oversold) { technicalState = "early"; technicalContext = "Oversold recovery watch"; }
-  else if (!priceAbove200 && trendScore.passed <= 1) { technicalState = "weak"; technicalContext = "Below key trend levels"; }
-  else { technicalState = "mixed"; technicalContext = "Mixed technical structure"; }
-  let riskContext = "No single edge is strong enough to dominate the read.";
-  if (extended) riskContext = "Momentum may be stretched, so timing risk is higher.";
-  else if (oversold) riskContext = "Oversold can bounce, but it still needs confirmation.";
-  else if (businessState === "weak") riskContext = "The business read may limit confidence in technical bounces.";
-  else if (businessState === "supportive" && technicalState === "weak") riskContext = "The story is better than the current chart structure.";
-  let alignment: TradeContextResult["alignment"] = "Mixed", tone: ContextTone = "yellow";
-  let read = "The business read and chart structure are not giving a clean confirmation layer yet.";
-  let watch = "Look for a clearer agreement between story, trend and momentum before drawing stronger conclusions.";
-  if (businessState === "supportive" && technicalState === "supportive") { alignment = "Strong"; tone = "green"; read = "The broader story and the chart structure are broadly aligned."; watch = "Watch whether price can hold above the main moving averages without becoming too stretched."; }
-  else if (businessState === "supportive" && technicalState === "extended") { alignment = "Constructive"; tone = "green"; read = "The story is supportive, but the chart may already be pricing in some strength."; watch = "Watch for controlled pullbacks, bases or continued volume support rather than chasing every move."; }
-  else if (businessState === "supportive" && technicalState === "early") { alignment = "Early"; tone = "blue"; read = "The story is improving, but the chart still needs more technical confirmation."; watch = "Watch for a clean reclaim, support reaction, or improving momentum before treating it as stronger alignment."; }
-  else if (businessState === "weak" && technicalState === "weak") { alignment = "Weak"; tone = "red"; read = "The business read and chart structure are both leaning cautious."; watch = "Watch for signs of stabilisation before trusting rebounds."; }
-  else if ((businessState === "supportive" && technicalState === "weak") || (businessState === "weak" && (technicalState === "supportive" || technicalState === "extended"))) { alignment = "Conflict"; tone = "yellow"; read = "The story and chart are sending different messages."; watch = "Check which side resolves first: improving price structure or a stronger business/news catalyst."; }
-  return { alignment, tone, businessContext, technicalContext, riskContext, read, watch };
-}
-
-function formatMoneyCompact(value: number | null) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
-  const abs = Math.abs(value); const sign = value < 0 ? "-" : "";
-  if (abs >= 1_000_000_000) return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`;
-  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`;
-  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(1)}K`;
-  return `${sign}$${abs.toFixed(2)}`;
-}
-
-function formatEps(value: number | null) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
-  return `${value < 0 ? "-" : ""}$${Math.abs(value).toFixed(2)}`;
-}
-
-function formatSignedPercent(value: number | null) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
-  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
-}
-
-function formatSignedMoney(value: number | null) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
-  return `${value >= 0 ? "+" : "-"}${formatMoneyCompact(Math.abs(value))}`;
-}
-
-function formatShortDate(value: string | null) {
-  if (!value) return "—";
-  const dt = new Date(`${value}T00:00:00Z`);
-  if (Number.isNaN(dt.getTime())) return value;
-  return dt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-}
-
-function earningsReadScore(earnings: StockEarningsData | null, loading: boolean) {
-  if (loading || !earnings?.hasStructuredData) return null;
-  if (typeof earnings.score === "number" && Number.isFinite(earnings.score)) return earnings.score;
-  return null;
-}
-
-function earningsScoreTone(score: number | null): "green" | "yellow" | "red" {
-  if (typeof score !== "number") return "yellow";
-  if (score >= 65) return "green";
-  if (score >= 45) return "yellow";
-  return "red";
-}
-
-function earningsScaleSummary(earnings: StockEarningsData | null, loading: boolean) {
-  if (loading) return "Checking latest earnings";
-  if (!earnings?.hasStructuredData) return "Earnings data unavailable";
-  const eps = formatSignedPercent(earnings.epsSurprisePercent), revenue = formatSignedPercent(earnings.revenueSurprisePercent);
-  return `EPS ${eps} · Revenue ${revenue}`;
-}
-
-function EarningsReadScale({ earnings, loading }: { earnings: StockEarningsData | null; loading: boolean }) {
-  const score = earningsReadScore(earnings, loading), tone = earningsScoreTone(score), markerLeft = `${typeof score === "number" ? score : 50}%`;
-  return (
-    <div style={{ marginTop: 8 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <span style={{ fontSize: 18, lineHeight: 1 }} aria-hidden="true">⚖️</span>
-        <span style={{ fontSize: 20, lineHeight: 1, fontWeight: 800, color: toneColor(tone) }}>{typeof score === "number" ? `${score}/100` : "—"}</span>
-      </div>
-      <div aria-hidden="true" style={{ position: "relative", marginTop: 8, height: 8, borderRadius: 999, background: "linear-gradient(90deg, rgba(239,68,68,0.90), rgba(250,204,21,0.90), rgba(34,197,94,0.90))" }}>
-        <span style={{ position: "absolute", top: "50%", left: markerLeft, width: 14, height: 14, borderRadius: 999, background: "#f8fafc", border: `2px solid ${toneColor(tone)}`, transform: "translate(-50%, -50%)" }} />
-      </div>
-      <div style={{ marginTop: 6, display: "flex", justifyContent: "space-between", fontSize: 9, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "rgba(226,232,240,0.50)" }}>
-        <span>Weak</span><span>Mixed</span><span>Strong</span>
-      </div>
-      <div style={{ marginTop: 4, fontSize: 11, opacity: 0.60, lineHeight: 1.4 }}>{earningsScaleSummary(earnings, loading)}</div>
-    </div>
-  );
-}
-
-function earningsPanelTone(earnings: StockEarningsData | null): "green" | "yellow" | "red" {
-  if (!earnings?.hasStructuredData) return "yellow";
-  return earnings.tone;
 }
 
 // Visual price-target chart: current price plotted on the left, Low/Avg/High
@@ -862,77 +692,9 @@ function AnalystTargetChart({
   );
 }
 
-
-function StockEarningsPanel({ symbol, earnings, loading }: { symbol: string; earnings: StockEarningsData | null; loading: boolean }) {
-  const tone = earningsPanelTone(earnings);
-  return (
-    <section style={{ marginTop: 24, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexWrap: "wrap", marginBottom: 16 }}>
-        <div>
-          <div style={sectionLabelStyle}>Latest Earnings</div>
-          <h2 style={sectionHeadingStyle}>{symbol} earnings snapshot</h2>
-          <p style={{ margin: "6px 0 0", fontSize: 14, lineHeight: 1.6, opacity: 0.68, maxWidth: 680 }}>
-            {loading ? "Loading latest structured earnings data from Financial Modeling Prep." : earnings?.hasStructuredData ? `Latest completed report: ${formatShortDate(earnings.reportDate)}. Next expected: ${formatShortDate(earnings.nextEarningsDate)}.` : "Structured earnings data is not available for this symbol right now."}
-          </p>
-        </div>
-        <span style={{ fontSize: 12, fontWeight: 700, padding: "4px 10px", borderRadius: 7, border: toneBorder(tone), background: toneSoftBackground(tone), color: toneColor(tone) }}>
-          {loading ? "Loading" : earnings?.toneLabel ?? "Unavailable"}
-        </span>
-      </div>
-      <div className="earningsMetricGrid">
-        {[
-          { label: "Actual EPS", value: loading ? "—" : formatEps(earnings?.actualEps ?? null), sub: `Estimate: ${loading ? "—" : formatEps(earnings?.estimatedEps ?? null)}`, tone: metricToneFromPct(earnings?.epsSurprisePercent ?? null) },
-          { label: "EPS Surprise", value: loading ? "—" : formatSignedPercent(earnings?.epsSurprisePercent ?? null), sub: loading ? "—" : formatEps(earnings?.epsSurprise ?? null), tone: metricToneFromPct(earnings?.epsSurprisePercent ?? null) },
-          { label: "Revenue", value: loading ? "—" : formatMoneyCompact(earnings?.revenue ?? null), sub: `Estimate: ${loading ? "—" : formatMoneyCompact(earnings?.revenueEstimate ?? null)}`, tone: metricToneFromPct(earnings?.revenueSurprisePercent ?? null) },
-          { label: "Revenue Surprise", value: loading ? "—" : formatSignedPercent(earnings?.revenueSurprisePercent ?? null), sub: loading ? "—" : formatSignedMoney(earnings?.revenueSurprise ?? null), tone: metricToneFromPct(earnings?.revenueSurprisePercent ?? null) },
-          { label: "Gross Margin", value: loading ? "—" : formatSignedPercent(earnings?.grossMargin ?? null), sub: "If available", tone: metricToneFromPct(earnings?.grossMargin ?? null) },
-          { label: "Operating Margin", value: loading ? "—" : formatSignedPercent(earnings?.operatingMargin ?? null), sub: "If available", tone: metricToneFromPct(earnings?.operatingMargin ?? null) },
-        ].map((m) => (
-          <div key={m.label} style={{ padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ width: 7, height: 7, borderRadius: 999, background: toneColor(m.tone), flex: "0 0 auto", boxShadow: `0 0 6px ${toneColor(m.tone)}66` }} />
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", opacity: 0.60 }}>{m.label}</span>
-            </div>
-            <div style={{ marginTop: 4, fontSize: 20, fontWeight: 800, letterSpacing: "-0.02em" }}>{m.value}</div>
-            <div style={{ marginTop: 2, fontSize: 12, opacity: 0.55 }}>{m.sub}</div>
-          </div>
-        ))}
-      </div>
-      {earnings?.recentReports?.length ? (
-        <div style={{ marginTop: 16 }}>
-          <div style={miniLabelStyle}>Recent earnings trend</div>
-          <div className="earningsDotGrid" style={{ marginTop: 10 }}>
-            {earnings.recentReports.map((item) => (
-              <div key={`${item.label}-${item.date ?? ""}`} style={{ display: "grid", justifyItems: "center", gap: 6 }}>
-                <span title={`${item.label}: ${item.toneLabel}`} style={{ width: 16, height: 16, borderRadius: 999, background: toneColor(item.tone), boxShadow: `0 0 0 4px ${item.tone === "green" ? "rgba(34,197,94,0.12)" : item.tone === "red" ? "rgba(239,68,68,0.12)" : "rgba(250,204,21,0.12)"}` }} />
-                <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.80 }}>{item.label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-      {earnings?.yearlySummaries?.length ? (
-        <div style={{ marginTop: 16 }}>
-          <div style={miniLabelStyle}>Yearly earnings read</div>
-          <div className="yearlyEarningsGrid" style={{ marginTop: 10 }}>
-            {earnings.yearlySummaries.map((item) => (
-              <div key={item.year} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "8px 10px", borderRadius: 9, border: toneBorder(item.tone), background: toneSoftBackground(item.tone), fontSize: 13, fontWeight: 700 }}>
-                <strong>{item.year}</strong><span style={{ color: toneColor(item.tone) }}>{item.toneLabel}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-      <div style={{ marginTop: 12, fontSize: 12, lineHeight: 1.6, opacity: 0.45 }}>{earnings?.sourceNote ?? "Structured earnings data is provided by Financial Modeling Prep when available."}</div>
-    </section>
-  );
-}
-
 const sectionLabelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)", marginBottom: 6 };
 const sectionHeadingStyle: React.CSSProperties = { margin: 0, fontSize: 26, lineHeight: 1.12, letterSpacing: "-0.03em", fontWeight: 700 };
 const miniLabelStyle: React.CSSProperties = { fontSize: 11, opacity: 0.60, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" };
-const miniMetricSubStyle: React.CSSProperties = { marginTop: 6, fontSize: 13, lineHeight: 1.5, opacity: 0.65 };
-const articleTextStyle: React.CSSProperties = { margin: "10px 0 0 0", fontSize: 15, lineHeight: 1.8, opacity: 0.85 };
 
 function sideCardStyle(): React.CSSProperties {
   return { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, overflow: "hidden", background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" };
@@ -985,7 +747,6 @@ export default function StockSymbolPageClient({ symbol, pageToken, latestEarning
   const [valuationLoading, setValuationLoading] = useState(true);
   const [analystRating, setAnalystRating] = useState<AnalystRatingData | null>(null);
   const [analystRatingLoading, setAnalystRatingLoading] = useState(true);
-  const [openScoreHelp, setOpenScoreHelp] = useState<"fundamentals" | "future" | null>(null);
 
   // Two independent effects, deliberately not one Promise.all.
   //
@@ -1158,7 +919,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, latestEarning
   );
 
   return (
-    <main onClick={() => setOpenScoreHelp(null)} style={{ minHeight: "100vh", background: "radial-gradient(circle at top left, rgba(37,99,235,0.18), transparent 22%), radial-gradient(circle at top right, rgba(34,197,94,0.10), transparent 22%), #06080d", color: "#f1f5f9", fontFamily: "system-ui, Arial" }}>
+    <main style={{ minHeight: "100vh", background: "radial-gradient(circle at top left, rgba(37,99,235,0.18), transparent 22%), radial-gradient(circle at top right, rgba(34,197,94,0.10), transparent 22%), #06080d", color: "#f1f5f9", fontFamily: "system-ui, Arial" }}>
       <div className="stock-wrap">
 
         {/* -- Page header -------------------------------------------- */}
@@ -1640,14 +1401,6 @@ function chartLinkStyle(tone: "blue" | "red" | "green"): React.CSSProperties {
   const s = map[tone];
   return { display: "inline-flex", alignItems: "center", padding: "7px 10px", borderRadius: 9, border: `1px solid ${s.border}`, background: s.bg, color: s.color, textDecoration: "none", fontWeight: 700, fontSize: 12, whiteSpace: "nowrap" };
 }
-
-function scoreChipStyle(tone: "green" | "yellow" | "red"): React.CSSProperties {
-  return { display: "flex", flexDirection: "column", gap: 2, padding: "10px 12px", borderRadius: 10, border: `1px solid ${tone === "green" ? "rgba(34,197,94,0.18)" : tone === "red" ? "rgba(239,68,68,0.18)" : "rgba(250,204,21,0.18)"}`, background: tone === "green" ? "rgba(34,197,94,0.04)" : tone === "red" ? "rgba(239,68,68,0.04)" : "rgba(250,204,21,0.04)", position: "relative", minWidth: 110 };
-}
-
-const scoreHelpButtonStyle: React.CSSProperties = { position: "absolute", top: 8, right: 8, width: 15, height: 15, borderRadius: 999, border: "1px solid rgba(255,255,255,0.18)", background: "rgba(15,23,42,0.90)", color: "#e2e8f0", fontSize: 10, fontWeight: 900, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 };
-
-const scoreHelpInlineBoxStyle: React.CSSProperties = { position: "absolute", top: "100%", right: 0, zIndex: 20, marginTop: 8, padding: 12, borderRadius: 10, border: "1px solid rgba(148,163,184,0.25)", background: "#020617", color: "#f8fafc", fontSize: 12, lineHeight: 1.6, fontWeight: 500, boxShadow: "0 16px 40px rgba(0,0,0,0.65)", width: 240, maxWidth: "min(240px, 80vw)" };
 
 function learnDotStyle(tone: "blue" | "green" | "red"): React.CSSProperties {
   const c = tone === "blue" ? "#60a5fa" : tone === "green" ? "#22c55e" : "#ef4444";
