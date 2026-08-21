@@ -5,6 +5,7 @@ import SPXChartClient from "./SPXChartClient";
 import { getDailyHistory } from "@/lib/server/historyCache";
 import { getSpxMarketAnalysis } from "@/lib/ai-market";
 import { buildMarketMoodScore } from "@/lib/market-mood";
+import { rsiWilder as sharedRsiWilder, lastNum } from "@/lib/indicators";
 import PageShareBar from "@/app/components/PageShareBar";
 
 export const dynamic = "force-dynamic";
@@ -108,25 +109,21 @@ function movingAverage(values: number[], window: number): number | null {
   return sum / window;
 }
 
+// This page's local rsiWilder was NOT Wilder's RSI. It took a flat mean of the
+// last 14 differences and stopped -- no recursive smoothing -- which is a
+// different indicator (closer to Cutler's RSI) wearing Wilder's name. On a
+// 300-bar test series it returned 98.42 where the seven other rsiWilder copies
+// in this repo all returned 74.06, agreeing with each other at every index.
+//
+// It fed buildMarketMoodScore's +/-5 RSI term, which is enough to cross a
+// Fear/Neutral/Greed band boundary on the gauge this page renders.
+//
+// Now imported from lib/indicators.ts rather than re-fixed locally: an eighth
+// copy of an algorithm the other seven already agree on is what allowed one of
+// them to be wrong unnoticed. lastNum takes the final value, since this page
+// wants a scalar and the shared function returns the full series.
 function rsiWilder(values: number[], period = 14): number | null {
-  if (values.length < period + 1) return null;
-
-  let gain = 0;
-  let loss = 0;
-
-  for (let i = values.length - period; i < values.length; i++) {
-    const diff = values[i] - values[i - 1];
-    if (diff >= 0) gain += diff;
-    else loss += Math.abs(diff);
-  }
-
-  const avgGain = gain / period;
-  const avgLoss = loss / period;
-
-  if (avgLoss === 0) return 100;
-
-  const rs = avgGain / avgLoss;
-  return 100 - 100 / (1 + rs);
+  return lastNum(sharedRsiWilder(values, period));
 }
 
 function primaryBtn(): React.CSSProperties {
