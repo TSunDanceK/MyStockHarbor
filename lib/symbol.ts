@@ -68,10 +68,45 @@ export const SYMBOL_STORAGE_KEY = "msh_last_symbol";
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
 
 // Deliberately NOT HttpOnly: this cookie is written by client JS, so it cannot
-// be. It holds a ticker the visitor chose on this site -- no identifier, no
-// account, nothing that is not already in the URL of the page they came from.
-// SameSite=Lax keeps it off cross-site requests; Secure is added on https so
-// it never travels in the clear, while localhost development still works.
+// be. It mirrors a local preference the visitor set on this site -- a ticker
+// they chose -- and holds no identifier, no account, and nothing that is not
+// already in the URL of the page they came from. SameSite=Lax keeps it off
+// cross-site requests; Secure is added on https so it never travels in the
+// clear, while localhost development still works.
+function writeSymbolCookie(symbol: string): void {
+  try {
+    const secure = window.location.protocol === "https:" ? "; Secure" : "";
+    document.cookie =
+      `${SYMBOL_COOKIE}=${encodeURIComponent(symbol)}` +
+      `; Max-Age=${ONE_YEAR_SECONDS}; Path=/; SameSite=Lax${secure}`;
+  } catch {
+    /* Cookies blocked -- localStorage still carries the memory. */
+  }
+}
+
+// A cookie is attacker-writable, so its value is normalised on the way out
+// rather than trusted, and an undecodable escape returns "" instead of
+// throwing.
+function readSymbolCookie(): string {
+  try {
+    const match = document.cookie.match(
+      new RegExp(`(?:^|; )${SYMBOL_COOKIE}=([^;]*)`)
+    );
+    return cleanSymbol(match ? decodeURIComponent(match[1]) : "");
+  } catch {
+    return "";
+  }
+}
+
+function readStoredSymbol(): string {
+  try {
+    return cleanSymbol(window.localStorage.getItem(SYMBOL_STORAGE_KEY));
+  } catch {
+    return "";
+  }
+}
+
+// Records an EXPLICIT choice. Writes both stores.
 export function rememberSymbol(value: SymbolInput): void {
   const symbol = cleanSymbol(value);
   if (!symbol) return;
@@ -83,38 +118,55 @@ export function rememberSymbol(value: SymbolInput): void {
     /* Safari private mode and friends -- the cookie below may still work. */
   }
 
-  try {
-    const secure = window.location.protocol === "https:" ? "; Secure" : "";
-    document.cookie =
-      `${SYMBOL_COOKIE}=${encodeURIComponent(symbol)}` +
-      `; Max-Age=${ONE_YEAR_SECONDS}; Path=/; SameSite=Lax${secure}`;
-  } catch {
-    /* Cookies blocked -- localStorage above still carries the memory. */
-  }
+  writeSymbolCookie(symbol);
 }
 
 // Reads the memory the way the SERVER will read it: cookie first, so a client
 // seeding from this agrees with the HTML it was just sent. localStorage is the
 // fallback for visitors who block cookies, and for the window between this
-// shipping and their first write of the new cookie.
+// shipping and their first cookie write.
 export function readRememberedSymbol(): string {
   if (typeof window === "undefined") return "";
+  return readSymbolCookie() || readStoredSymbol();
+}
 
-  try {
-    const match = document.cookie.match(
-      new RegExp(`(?:^|; )${SYMBOL_COOKIE}=([^;]*)`)
-    );
-    const fromCookie = cleanSymbol(
-      match ? decodeURIComponent(match[1]) : ""
-    );
-    if (fromCookie) return fromCookie;
-  } catch {
-    /* fall through to localStorage */
-  }
+// One-time migration for a visitor who already had a remembered symbol before
+// the cookie existed -- which is EVERY existing user, exactly once.
+//
+// Without this, #300 helps only visitors who pick a symbol after it ships, and
+// for them the discard was never the problem: their first explicit choice
+// writes the cookie anyway. A returning visitor would keep getting a
+// server-rendered SPY and a client-rendered CAG on every single visit, forever,
+// which is the discard the cookie exists to remove.
+//
+// THIS IS NOT THE LANDMINE, and the difference is the thing to understand
+// before editing either:
+//
+//   The landmine writes a RENDER-DERIVED value -- `symbol`, which may be a
+//   server default -- into the memory, and so can overwrite CAG with SPY and
+//   destroy the thing it is meant to keep.
+//
+//   This writes an EXISTING REMEMBERED value into a second store. Same value,
+//   different place. Nothing here is derived from what rendered.
+//
+// The guarantee is structural, not a matter of care: it writes ONLY when
+// localStorage already holds something. Both stores empty -- a genuinely new
+// visitor -- writes nothing, so a server default can never be pinned. #294's
+// failure mode is unreachable by construction rather than merely avoided.
+//
+// The caller must also skip this when the URL carries an explicit ?symbol=, so
+// a deep link's own write is never raced by a backfill of a different symbol.
+//
+// Returns the symbol it migrated, or "" if it did nothing.
+export function backfillSymbolCookie(): string {
+  if (typeof window === "undefined") return "";
+  // Already migrated (or chosen since) -- nothing to do.
+  if (readSymbolCookie()) return "";
 
-  try {
-    return cleanSymbol(window.localStorage.getItem(SYMBOL_STORAGE_KEY));
-  } catch {
-    return "";
-  }
+  // The structural guarantee. No stored memory -> no write.
+  const stored = readStoredSymbol();
+  if (!stored) return "";
+
+  writeSymbolCookie(stored);
+  return stored;
 }
