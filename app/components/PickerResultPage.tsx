@@ -102,6 +102,7 @@ type PickerSectionItem = {
   supportResistanceZone?: SupportResistanceZone;
   chartFocus?: PickerChartFocus;
   dominantIndicator?: string;
+  firedIndicators?: string[];
 };
 
 type PickerSection = {
@@ -199,6 +200,12 @@ export type ResultEntry = ResultEntryFlags & {
   chartHref: string;
   chartPoints: MiniCandlePoint[];
   badge?: string;
+  // Which of the composite's six checks actually fired for this stock,
+  // strongest first. The screener's membership rule is "2 or more of six", so a
+  // count alone ("3 oversold") leaves a reader unable to tell WHICH three -- and
+  // in particular unable to tell whether RSI was among them, which is what
+  // /stock/[symbol] means when it says the same word.
+  firedIndicators?: string[];
   score?: number;
   reasons?: string[];
   supportResistanceZone?: SupportResistanceZone;
@@ -497,6 +504,7 @@ function entriesFromSection(args: {
       chartHref: chartHrefForEntry(args.configHref, symbol, item.dashboardHref || record?.dashboardHref, item),
       chartPoints,
       badge: [item.timeframe, item.indicator].filter(Boolean).join(" · "),
+      firedIndicators: item.firedIndicators,
       score: typeof item.score === "number" ? item.score : typeof record?.score === "number" ? record.score : undefined,
       supportResistanceZone: item.supportResistanceZone,
       ...flagsFromRecord(record),
@@ -655,6 +663,7 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
         if (item.tone) entry.tone = item.tone;
         const badge = [item.timeframe, item.indicator].filter(Boolean).join(" · ");
         if (badge) entry.badge = badge;
+        if (item.firedIndicators?.length) entry.firedIndicators = item.firedIndicators;
         return { entry, rank: hit.rank };
       });
 
