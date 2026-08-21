@@ -85,12 +85,6 @@ const FIELDS: FieldDef[] = [
     format: (i) => formatCompact(i.marketCap),
     has: (i) => i.marketCap !== null,
   },
-  {
-    key: "revenue",
-    label: "Revenue",
-    format: (i) => formatCompact(i.revenue),
-    has: (i) => i.revenue !== null,
-  },
 ];
 
 function rowKey(ipo: ConfirmedIpo) {
@@ -144,9 +138,9 @@ export default function IpoList({ ipos, emptyMessage, dateColumnLabel }: Props) 
         {ipos.map((ipo) => {
           const key = rowKey(ipo);
           const open = expandedRows.has(key);
-          // Only the terms this deal actually has. A listing with no reported
-          // revenue has none to report -- a column of dashes reads like a
-          // loading state rather than an answer.
+          // Only the terms this deal actually has. A listing with no
+          // reported market cap has none to report -- a column of dashes reads
+          // like a loading state rather than an answer.
           const fields = FIELDS.filter((field) => field.has(ipo));
           const priceRange = formatPriceRange(ipo.priceRangeLow, ipo.priceRangeHigh);
           return (
@@ -285,7 +279,6 @@ export default function IpoList({ ipos, emptyMessage, dateColumnLabel }: Props) 
             <th style={{ ...thStyle, textAlign: "right" }}>Shares Offered</th>
             <th style={{ ...thStyle, textAlign: "right" }}>Deal Size</th>
             <th style={{ ...thStyle, textAlign: "right" }}>Market Cap</th>
-            <th style={{ ...thStyle, textAlign: "right" }}>Revenue</th>
           </tr>
         </thead>
         <tbody>
@@ -301,7 +294,6 @@ export default function IpoList({ ipos, emptyMessage, dateColumnLabel }: Props) 
               <td style={{ ...tdStyle, textAlign: "right" }}>{formatShares(ipo.sharesOffered)}</td>
               <td style={{ ...tdStyle, textAlign: "right" }}>{formatCompact(ipo.dealSize)}</td>
               <td style={{ ...tdStyle, textAlign: "right" }}>{formatCompact(ipo.marketCap)}</td>
-              <td style={{ ...tdStyle, textAlign: "right" }}>{formatCompact(ipo.revenue)}</td>
             </tr>
           ))}
         </tbody>

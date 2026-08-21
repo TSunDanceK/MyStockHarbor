@@ -32,7 +32,6 @@ export type ConfirmedIpo = {
   sharesOffered: number | null;
   dealSize: number | null;
   marketCap: number | null;
-  revenue: number | null;
 };
 
 type FmpIpoRow = Record<string, unknown>;
@@ -115,7 +114,6 @@ function parseRow(row: FmpIpoRow): ConfirmedIpo | null {
   const sharesOffered = firstNum(row, ["shares", "sharesOffered", "numberOfShares"]);
   const marketCap = firstNum(row, ["marketCap", "marketcap"]);
   const dealSize = firstNum(row, ["dealSize", "totalOfferSize", "offerSize"]);
-  const revenue = firstNum(row, ["revenue"]);
 
   // "Confirmed" = pricing has been finalized. If none of the pricing
   // fields FMP would fill in after pricing are present, this listing is
@@ -143,7 +141,6 @@ function parseRow(row: FmpIpoRow): ConfirmedIpo | null {
         ? sharesOffered * ((low + high) / 2)
         : null),
     marketCap,
-    revenue,
   };
 }
 
