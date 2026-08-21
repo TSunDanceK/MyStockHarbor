@@ -33,7 +33,6 @@ const mainPages = [
   { path: "/upcoming-ipos", changeFrequency: "daily" as const, priority: 0.75 },
   { path: "/headlines", changeFrequency: "hourly" as const, priority: 0.8 },
   { path: "/earnings-calendar", changeFrequency: "daily" as const, priority: 0.85 },
-  { path: "/recently-added-to-index", changeFrequency: "daily" as const, priority: 0.75 },
   { path: "/about", changeFrequency: "monthly" as const, priority: 0.5 },
   { path: "/contact", changeFrequency: "monthly" as const, priority: 0.5 },
   { path: "/privacy-policy", changeFrequency: "monthly" as const, priority: 0.4 },
