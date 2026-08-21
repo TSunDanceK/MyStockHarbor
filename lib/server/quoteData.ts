@@ -1,5 +1,6 @@
 import { Redis } from "@upstash/redis";
 import { timingCache, beginTiming } from "./timing";
+import { PAGE_READ_CACHE } from "./redisCacheMode";
 
 export type Quote = {
   symbol: string;
@@ -76,9 +77,18 @@ export function emptyQuote(symbol: string): Quote {
 // updates faster than once a minute) -- cache only ever gets populated for
 // symbols someone actually requests (a page view, a search, a background
 // snapshot build), never a blanket prefetch of the whole ticker universe.
+// PAGE_READ_CACHE: this client is on the render path of BOTH /insights/[slug]
+// (via getOrCreateInsightSnapshot) and /insights/videos/[videoId] (via
+// getVideoStockData), and neither call site sits inside unstable_cache, so a
+// bare client's no-store hint reaches the renderer directly.
+//
+// NOTE: this does NOT by itself make either route safe to prerender.
+// fetchQuoteFromFmp below still issues a literal `cache: "no-store"` fetch on a
+// cache miss, which is not something a Redis client option can fix. See the
+// comment there.
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
+    ? Redis.fromEnv(PAGE_READ_CACHE)
     : null;
 
 const QUOTE_CACHE_PREFIX = "msh:quote:v1";
@@ -132,6 +142,14 @@ async function fetchQuoteFromFmp(symbol: string): Promise<Quote> {
   try {
     const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(apiKey)}`;
 
+    // THE REMAINING BLOCKER for prerendering any route that reaches this
+    // module. On a Redis cache miss this runs during the render, and a literal
+    // no-store fetch on a static route throws DYNAMIC_SERVER_USAGE -> 500.
+    // A warm cache hides it, which is exactly why it must not be reasoned about
+    // as "rarely fires": #310 shipped on that class of reasoning. Wrapping this
+    // in unstable_cache (as lib/youtube.ts does for its own no-store fetches)
+    // is the fix, and it is a freshness decision -- quotes have a 60s TTL here
+    // -- so it is deliberately not made in an outage-recovery PR.
     const res = await fetch(url, { cache: "no-store", headers: { accept: "application/json" } });
 
     if (!res.ok) throw new Error(`FMP quote failed: ${res.status}`);

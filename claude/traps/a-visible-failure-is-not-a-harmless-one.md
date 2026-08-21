@@ -36,6 +36,29 @@ with      req1 STALE/good   req2 HIT/good       req3 HIT/good
 /bailparam/[id]  (generateStaticParams)  -> 500
 ```
 
+**CONFIRMED IN PRODUCTION, 2026-08-21.** When this limit was first written, the
+500 was measured against `next start` and #302's PR body hedged that it might be
+a local artefact — that Vercel would "degrade to per-request rendering instead
+of erroring." That was labelled as inference rather than measurement, which was
+honest, but the inference was wrong and it granted the mechanism a free pass.
+
+It is fatal in production. #310 added an empty `generateStaticParams` to
+`/insights/[slug]` and `/insights/videos/[videoId]`, both of which reach Redis
+through clients that did not pass `PAGE_READ_CACHE`. Every request to a real
+slug returned **500** for ~3.5 hours on live traffic, on pages that are in the
+sitemap:
+
+```
+Route /insights/[slug] couldn't be rendered statically because it used
+no-store fetch https://game-dinosaur-75465.upstash.io/pipeline
+digest: 'DYNAMIC_SERVER_USAGE'
+```
+
+Reverted in #323. The lesson is not only about `connection()`: ANY no-store call
+reaching the renderer on a prerendered route does this, and a Redis client built
+without `PAGE_READ_CACHE` is one, because `@upstash/redis` sets
+`cache: "no-store"` on every REST call by default.
+
 A 500 there is worse than the problem. `/stock/[symbol]` receives enumerated
 junk from something crawling ~1,519 distinct paths, and sustained 5xx makes
 Google throttle crawl rate **site-wide** — undoing the ISR work this enables.
