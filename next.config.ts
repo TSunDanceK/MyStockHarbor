@@ -68,7 +68,8 @@ const nextConfig: NextConfig = {
       // failure (#304), and Promise.all reported only the first of the three
       // 402s, so the one visible error named a single endpoint and implied the
       // other two were healthy (#305). See claude/silent-failure-traps.md
-      // traps 11 and 14.
+      // claude/traps/framework-signal-swallowed-by-a-network-handler.md and
+      // claude/traps/promise-all-reports-only-the-first-rejection.md.
       //
       // *** THE SAME 402 WAS ALREADY FOUND AND WORKED AROUND ONCE. ***
       // app/api/market/route.ts hit it on the sibling sp500/nasdaq/dowjones-
