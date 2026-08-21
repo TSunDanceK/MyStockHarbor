@@ -155,7 +155,18 @@ async function fetchIpoRows(from: string, to: string): Promise<ConfirmedIpo[]> {
     from
   )}&to=${encodeURIComponent(to)}&apikey=${encodeURIComponent(apiKey)}`;
 
-  const res = await fetch(url, { cache: "no-store", headers: { accept: "application/json" } });
+  // NOT no-store. During prerender -- a build, or an ISR revalidation -- a
+  // no-store fetch throws DynamicServerError, which marks the render dynamic
+  // IRREVERSIBLY and is then swallowed by readFeed's catch and misreported as
+  // an upstream failure, so the route silently ships as dynamic while the log
+  // blames FMP. Measured on dpl_FLJxprw2KApWGfwpRTW6SGbn1afc.
+  //
+  // 1800s matches feedCache's FRESH_MS: feedCache owns freshness, and two
+  // caches with different opinions about staleness generate bugs.
+  const res = await fetch(url, {
+    next: { revalidate: 1800 },
+    headers: { accept: "application/json" },
+  });
   if (!res.ok) throw new Error(`FMP IPO calendar failed: ${res.status}`);
 
   const payload = await res.json();
