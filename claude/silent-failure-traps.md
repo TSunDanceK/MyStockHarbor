@@ -244,3 +244,82 @@ Symptoms, when it goes wrong: content that flashes and corrects itself, a
 hydration mismatch on some inputs but not others, or a value that "works
 everywhere except one weird ticker". None of them point at the validator,
 which is what makes this expensive to debug.
+
+---
+
+## 6. Measuring the visible artefact instead of the one carrying the answer
+
+The instrument works, the number is real, and it is a number about something
+adjacent to the question. Three instances, same shape:
+
+| Read | What it actually reported | The answer was in |
+|---|---|---|
+| `1253` bars from `/api/history` | `dailyCount` in a debug **log line** | the response, capped at the requested 900 |
+| a green `next build` route table | that the build **completed** | the per-route `○`/`ƒ` column, and then the emitted HTML |
+| the ticker shown in the **DOM** | what the client had swapped to | the flight payload's `defaultSymbol` — what the SERVER sent |
+
+The third nearly shipped a broken #300. The migration test asserted on the
+rendered ticker, and the client hydrates to the remembered symbol *whether or
+not the server got it right* — so a completely failed migration renders `CAG`
+and passes. The seed had to be read out of the flight payload
+(`defaultSymbol\":\"…\"`) precisely because that is the value the client has not
+touched yet.
+
+**Before trusting a measurement, name which layer produced the number.** A log
+line is not a payload. A build completing is not a route being static. The DOM
+is not the server's output. When a client can overwrite the thing being
+measured, measure upstream of the client.
+
+---
+
+## 7. Test the SECOND visit, not the first
+
+Two changes in one day would have shipped looking like fixes while doing
+nothing for the case they were built for. Both passed every first-visit test.
+
+- **#294** — the "Resume" chip appeared exactly once and never again. Visit 1
+  overwrote the remembered symbol with what merely rendered, so visit 2 had
+  nothing to resume.
+- **#300** — the cookie was never written for anyone who already had a
+  remembered symbol, so every existing user got a server-rendered `SPY` and a
+  client-rendered `CAG`, **forever**, and the PR looked like it removed a
+  discard it had left entirely in place.
+
+Neither is visible in one load. Both are obvious in two.
+
+**The rule:** any change touching persisted state — localStorage, a cookie, a
+cache, a remembered preference — is not tested until a SECOND read has
+happened, and where the state is per-origin or per-session, in a genuinely
+fresh context.
+
+A corollary that cost real time on #300: **a preview deployment is a different
+hostname, so `localStorage` there is empty.** Testing a migration path on a
+preview makes you a brand-new visitor by construction — the one case the
+migration does not cover. That test cannot fail, which is not the same as
+passing.
+
+---
+
+## 8. Playwright in this sandbox — two things that cost an hour
+
+Both are environment facts, not bugs, and neither is guessable.
+
+**`networkidle` never fires on `/dashboard`.** The client polls continuously,
+so the network is never idle and `page.goto(..., { waitUntil: "networkidle" })`
+times out at whatever limit it is given. Use `domcontentloaded` plus an
+explicit `waitForTimeout` settle instead. Anything that mounts `DashboardClient`
+has this property.
+
+**The preinstalled Chromium is build 1194; a fresh `npm i playwright` expects
+1234.** It fails with "Executable doesn't exist … chromium_headless_shell-1234"
+and helpfully suggests `npx playwright install`, which the environment notes
+say not to run. Pass the existing binary instead:
+
+```js
+chromium.launch({
+  executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome",
+});
+```
+
+Install `playwright` into a scratch directory rather than the repo, so
+`package.json` and the lockfile stay untouched.
