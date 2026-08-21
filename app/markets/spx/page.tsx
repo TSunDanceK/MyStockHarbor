@@ -49,11 +49,23 @@ type Point = {
   volume?: number;
 };
 
-async function getSpxChartPoints(): Promise<Point[]> {
+// Mirrors the Feed<T> shape in lib/server/feedCache.ts, and for the same
+// reason: a bare `catch { return [] }` here made a FAILED read
+// indistinguishable from "the S&P 500 has no price history" -- a state that
+// never occurs. Everything downstream then treated the failure as data. See
+// claude/traps/return-type-cannot-express-failure.md.
+type SpxChartRead = {
+  points: Point[];
+  // True when `points` reflects a real answer from upstream. False ONLY when
+  // the read failed, in which case `points` is [] and means nothing.
+  ok: boolean;
+};
+
+async function getSpxChartPoints(): Promise<SpxChartRead> {
   try {
     const points = await getDailyHistory("^GSPC");
 
-    return points
+    const mapped = points
       .map((point) => ({
         date: String(point?.date ?? ""),
         close: Number(point?.close),
@@ -62,8 +74,28 @@ async function getSpxChartPoints(): Promise<Point[]> {
         volume: point?.volume == null ? undefined : Number(point.volume),
       }))
       .filter((point) => point.date && Number.isFinite(point.close));
-  } catch {
-    return [];
+
+    // A successful read returning nothing is not a real market state -- the
+    // S&P 500 has price history every trading day it has ever existed. Same
+    // free monitor as warnIfImplausiblyEmpty in feedCache: it catches a parser
+    // drifting off FMP's field names, or a silently changed schema, neither of
+    // which surfaces as an error.
+    if (mapped.length === 0) {
+      console.warn(
+        "[spx] history read SUCCEEDED but returned an empty series. The S&P 500 " +
+          "always has history, so this is a parse or schema problem, not an " +
+          "empty market."
+      );
+    }
+
+    return { points: mapped, ok: true };
+  } catch (err) {
+    console.error(
+      "[spx] history read failed -- page renders as unavailable, not as a " +
+        "market with no data:",
+      err
+    );
+    return { points: [], ok: false };
   }
 }
 
@@ -333,7 +365,7 @@ function sectionEyebrowStyle(type: "green" | "red" | "blue" | "yellow"): React.C
 }
 
 export default async function SPXPage() {
-  const spxChartPoints = await getSpxChartPoints();
+  const { points: spxChartPoints, ok: chartOk } = await getSpxChartPoints();
   const marketAnalysis = await getSpxMarketAnalysis();
 
   const closes = spxChartPoints.map((point) => point.close);
@@ -342,12 +374,14 @@ export default async function SPXPage() {
   const ma200 = movingAverage(closes, 200);
   const rsi = rsiWilder(closes, 14);
 
-  const marketMood = buildMarketMoodScore({
-    lastClose,
-    ma50,
-    ma200,
-    rsi,
-  });
+  // buildMarketMoodScore starts at 50 and only moves when it has real inputs,
+  // so on a failed read every branch is skipped and it returns a confident
+  // "50/100 -- Neutral". That is a specific market assessment derived from zero
+  // data, rendered identically to a real one, on a page about the S&P 500.
+  // Compute it only when the read actually answered.
+  const marketMood = chartOk
+    ? buildMarketMoodScore({ lastClose, ma50, ma200, rsi })
+    : null;
 
   return (
     <main
@@ -464,142 +498,156 @@ export default async function SPXPage() {
 
             </div>
 
-            <aside style={marketMoodCardStyle(marketMood.score)}>
-              <div style={statLabelStyle()}>Market mood</div>
+            {marketMood ? (
+              <aside style={marketMoodCardStyle(marketMood.score)}>
+                <div style={statLabelStyle()}>Market mood</div>
 
-              <div
-                style={{
-                  marginTop: 12,
-                  display: "grid",
-                  gridTemplateColumns: "64px minmax(0, 1fr)",
-                  gap: 14,
-                  alignItems: "center",
-                }}
-              >
                 <div
                   style={{
-                    position: "relative",
-                    minHeight: 230,
-                    height: "100%",
-                    display: "flex",
-                    alignItems: "stretch",
-                    justifyContent: "center",
+                    marginTop: 12,
+                    display: "grid",
+                    gridTemplateColumns: "64px minmax(0, 1fr)",
+                    gap: 14,
+                    alignItems: "center",
                   }}
                 >
                   <div
                     style={{
                       position: "relative",
-                      width: 34,
+                      minHeight: 230,
                       height: "100%",
-                      minHeight: 210,
-                      borderRadius: 999,
-                      border: "3px solid rgba(255,255,255,0.48)",
-                      background: "rgba(2,6,23,0.62)",
-                      overflow: "hidden",
-                      boxShadow: "0 0 24px rgba(255,255,255,0.10)",
-                    }}
-                  >
-                    <div style={thermometerFillStyle(marketMood.score)} />
-                  </div>
-
-                  <div
-                    style={{
-                      position: "absolute",
-                      bottom: 0,
-                      width: 48,
-                      height: 48,
-                      borderRadius: 999,
-                      border: "3px solid rgba(255,255,255,0.48)",
-                      background:
-                        marketMood.score >= 56
-                          ? "#22c55e"
-                          : marketMood.score <= 44
-                          ? "#ef4444"
-                          : "#eab308",
-                      boxShadow:
-                        marketMood.score >= 56
-                          ? "0 0 20px rgba(34,197,94,0.45)"
-                          : marketMood.score <= 44
-                          ? "0 0 20px rgba(239,68,68,0.45)"
-                          : "0 0 20px rgba(234,179,8,0.42)",
-                    }}
-                  />
-
-
-                </div>
-
-                <div>
-                  <div
-                    style={{
-                      fontSize: 38,
-                      lineHeight: 1,
-                      fontWeight: 950,
-                      letterSpacing: "-0.06em",
-                    }}
-                  >
-                    {marketMood.score}/100
-                  </div>
-
-                  <div
-                    style={{
-                      marginTop: 10,
-                      fontSize: 18,
-                      fontWeight: 950,
-                      color:
-                        marketMood.score >= 56
-                          ? "#86efac"
-                          : marketMood.score <= 44
-                          ? "#fecaca"
-                          : "#fde68a",
-                    }}
-                  >
-                    {marketMood.label}
-                  </div>
-
-                  <p
-                    style={{
-                      margin: "10px 0 0",
-                      fontSize: 13,
-                      lineHeight: 1.55,
-                      opacity: 0.82,
-                    }}
-                  >
-                    MyStockHarbor mood read based on SPX trend, moving averages and RSI momentum.
-                  </p>
-
-                  <div
-                    style={{
-                      marginTop: 10,
-                      paddingTop: 10,
-                      borderTop: "1px solid rgba(255,255,255,0.12)",
-                      display: "grid",
-                      gap: 8,
+                      display: "flex",
+                      alignItems: "stretch",
+                      justifyContent: "center",
                     }}
                   >
                     <div
                       style={{
-                        fontSize: 11,
-                        fontWeight: 950,
-                        letterSpacing: "0.08em",
-                        opacity: 0.72,
+                        position: "relative",
+                        width: 34,
+                        height: "100%",
+                        minHeight: 210,
+                        borderRadius: 999,
+                        border: "3px solid rgba(255,255,255,0.48)",
+                        background: "rgba(2,6,23,0.62)",
+                        overflow: "hidden",
+                        boxShadow: "0 0 24px rgba(255,255,255,0.10)",
                       }}
                     >
-                      KEY DRIVERS
+                      <div style={thermometerFillStyle(marketMood.score)} />
                     </div>
 
-                    <div style={{ fontSize: 12, lineHeight: 1.45, opacity: 0.86 }}>
-                      • Price vs MA50 and MA200
+                    <div
+                      style={{
+                        position: "absolute",
+                        bottom: 0,
+                        width: 48,
+                        height: 48,
+                        borderRadius: 999,
+                        border: "3px solid rgba(255,255,255,0.48)",
+                        background:
+                          marketMood.score >= 56
+                            ? "#22c55e"
+                            : marketMood.score <= 44
+                            ? "#ef4444"
+                            : "#eab308",
+                        boxShadow:
+                          marketMood.score >= 56
+                            ? "0 0 20px rgba(34,197,94,0.45)"
+                            : marketMood.score <= 44
+                            ? "0 0 20px rgba(239,68,68,0.45)"
+                            : "0 0 20px rgba(234,179,8,0.42)",
+                      }}
+                    />
+
+
+                  </div>
+
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 38,
+                        lineHeight: 1,
+                        fontWeight: 950,
+                        letterSpacing: "-0.06em",
+                      }}
+                    >
+                      {marketMood.score}/100
                     </div>
-                    <div style={{ fontSize: 12, lineHeight: 1.45, opacity: 0.86 }}>
-                      • MA50 vs MA200 structure
+
+                    <div
+                      style={{
+                        marginTop: 10,
+                        fontSize: 18,
+                        fontWeight: 950,
+                        color:
+                          marketMood.score >= 56
+                            ? "#86efac"
+                            : marketMood.score <= 44
+                            ? "#fecaca"
+                            : "#fde68a",
+                      }}
+                    >
+                      {marketMood.label}
                     </div>
-                    <div style={{ fontSize: 12, lineHeight: 1.45, opacity: 0.86 }}>
-                      • RSI momentum reading
+
+                    <p
+                      style={{
+                        margin: "10px 0 0",
+                        fontSize: 13,
+                        lineHeight: 1.55,
+                        opacity: 0.82,
+                      }}
+                    >
+                      MyStockHarbor mood read based on SPX trend, moving averages and RSI momentum.
+                    </p>
+
+                    <div
+                      style={{
+                        marginTop: 10,
+                        paddingTop: 10,
+                        borderTop: "1px solid rgba(255,255,255,0.12)",
+                        display: "grid",
+                        gap: 8,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 950,
+                          letterSpacing: "0.08em",
+                          opacity: 0.72,
+                        }}
+                      >
+                        KEY DRIVERS
+                      </div>
+
+                      <div style={{ fontSize: 12, lineHeight: 1.45, opacity: 0.86 }}>
+                        • Price vs MA50 and MA200
+                      </div>
+                      <div style={{ fontSize: 12, lineHeight: 1.45, opacity: 0.86 }}>
+                        • MA50 vs MA200 structure
+                      </div>
+                      <div style={{ fontSize: 12, lineHeight: 1.45, opacity: 0.86 }}>
+                        • RSI momentum reading
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </aside>
+              </aside>
+            ) : (
+              // The read failed, so there is no mood to report. Saying so is
+              // the only honest option: the alternative is a 50/100 Neutral
+              // gauge that looks exactly like a real reading.
+              <aside style={marketMoodCardStyle(50)}>
+                <div style={statLabelStyle()}>Market mood</div>
+                <div style={{ marginTop: 10, fontSize: 14, lineHeight: 1.5, color: "rgba(241,245,249,0.72)" }}>
+                  We couldn&apos;t load the S&amp;P 500 price history just now, so the
+                  mood reading is unavailable. This is a problem on our side, not a
+                  market with no data &mdash; it should return on a refresh.
+                </div>
+              </aside>
+            )}
 
 <div
   style={{
