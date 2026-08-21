@@ -66,6 +66,13 @@ export type FmpStockNewsItem = {
 export type ScoreTone = "green" | "yellow" | "red";
 
 export type NewsScoreResult = {
+  // `available` is false when there was nothing to score, not when the score
+  // came out neutral. Both cases previously returned 50/"Neutral", so a stock
+  // with no usable headlines rendered a full sentiment gauge with the needle at
+  // dead centre -- a specific reading derived from no input. Consumers should
+  // branch on this flag rather than sniffing label === "Neutral", which is also
+  // a real result.
+  available: boolean;
   score: number;
   tone: ScoreTone;
   label: string;
@@ -1142,6 +1149,7 @@ function rankNews(news: NewsItem[], symbol = "", companyName = "") {
 export function scoreNews(news: NewsItem[]): NewsScoreResult {
   if (!news.length) {
     return {
+      available: false,
       score: 50,
       tone: "yellow",
       label: "Neutral",
@@ -1279,6 +1287,7 @@ export function scoreNews(news: NewsItem[]): NewsScoreResult {
 
   if (!totalWeight) {
     return {
+      available: false,
       score: 50,
       tone: "yellow",
       label: "Neutral",
@@ -1337,6 +1346,7 @@ export function scoreNews(news: NewsItem[]): NewsScoreResult {
   }
 
   return {
+    available: true,
     score,
     tone,
     label,
