@@ -1821,7 +1821,30 @@ function buildTrendScoreFromHistory(points: Point[]): TrendScoreResult | null {
   };
 }
 
-function computeOversoldCandidate(points: Point[], comp: CompositeResult | null, trendScore: TrendScoreResult | null): OversoldCandidate | null {
+// How the composite treats a null trendScore. "live" is exactly what ships and
+// is the default, so adding this parameter changes nothing on its own.
+//
+//   live                    structureScore falls back to 50, and the
+//                           structural-weakness penalty is skipped because its
+//                           condition starts `trendScore &&`.
+//   no-structure-waived     structure term dropped and the remaining weights
+//                           renormalised (/0.95); penalty still skipped.
+//   no-structure-penalised  structure term dropped and renormalised; the
+//                           penalty applies when the trend could not be
+//                           assessed, rather than being waived.
+//
+// Only "live" is reachable from buildPickersPayload. The other two exist for
+// app/api/debug/picker-structure, which prices the alternatives against real
+// universe data rather than against an estimate.
+export type StructureMode = "live" | "no-structure-waived" | "no-structure-penalised";
+
+// The structure term's weight in both composites. Named because it is easy to
+// misread: there is a SECOND `structureScore` in the divergence block further
+// down this file, weighted 0.2 and derived from real divergence data. They are
+// unrelated. Read the weight at the site that uses the value.
+const STRUCTURE_WEIGHT = 0.05;
+
+function computeOversoldCandidate(points: Point[], comp: CompositeResult | null, trendScore: TrendScoreResult | null, mode: StructureMode = "live"): OversoldCandidate | null {
   const closes = points.map((p) => p.close).filter((x) => Number.isFinite(x));
   if (closes.length < 60 || !comp) return null;
   if (!pickIsGreenOverallSignal(comp)) return null;
@@ -1896,15 +1919,24 @@ function computeOversoldCandidate(points: Point[], comp: CompositeResult | null,
   let penalty = 0;
   if (dailyDrop1 < 0.6 && dailyDrop5 < 3) penalty += 12;
   if (advScore < 35) penalty += 25;
-  if (trendScore && !trendScore.priceAboveMA200 && !trendScore.ma50AboveMA200) penalty += 10;
+  // `trendScore &&` reads as a null check but decides an outcome: when the
+  // trend cannot be assessed the penalty is skipped, so unmeasured scores the
+  // same as measured-and-fine. Under "no-structure-penalised" an unassessable
+  // trend takes the penalty instead -- not-yet-qualified rather than passing.
+  const structurallyWeak = trendScore
+    ? !trendScore.priceAboveMA200 && !trendScore.ma50AboveMA200
+    : mode === "no-structure-penalised";
+  if (structurallyWeak) penalty += 10;
 
+  const keep = mode === "live" ? 1 : 1 - STRUCTURE_WEIGHT;
   const score =
-    oversoldStrength * 0.3 +
-    advScore * 0.25 +
-    exhaustionScore * 0.2 +
-    distanceScore * 0.15 +
-    clamp(structureScore, 0, 100) * 0.05 +
-    recencyScore * 0.05 -
+    (oversoldStrength * 0.3 +
+      advScore * 0.25 +
+      exhaustionScore * 0.2 +
+      distanceScore * 0.15 +
+      (mode === "live" ? clamp(structureScore, 0, 100) * STRUCTURE_WEIGHT : 0) +
+      recencyScore * 0.05) /
+      keep -
     penalty;
 
   return {
@@ -1914,7 +1946,7 @@ function computeOversoldCandidate(points: Point[], comp: CompositeResult | null,
   };
 }
 
-function computeOverboughtCandidate(points: Point[], comp: CompositeResult | null, trendScore: TrendScoreResult | null): OverboughtCandidate | null {
+function computeOverboughtCandidate(points: Point[], comp: CompositeResult | null, trendScore: TrendScoreResult | null, mode: StructureMode = "live"): OverboughtCandidate | null {
   const closes = points.map((p) => p.close).filter((x) => Number.isFinite(x));
   if (closes.length < 60 || !comp) return null;
   if (!pickIsRedOverallSignal(comp)) return null;
@@ -1988,13 +2020,15 @@ function computeOverboughtCandidate(points: Point[], comp: CompositeResult | nul
   if (dailyJump1 < 0.6 && dailyJump5 < 3) penalty += 12;
   if (advScore < 35) penalty += 25;
 
+  const keep = mode === "live" ? 1 : 1 - STRUCTURE_WEIGHT;
   const score =
-    overboughtStrength * 0.3 +
-    advScore * 0.25 +
-    extensionScore * 0.2 +
-    distanceScore * 0.15 +
-    clamp(structureScore, 0, 100) * 0.05 +
-    100 * 0.05 -
+    (overboughtStrength * 0.3 +
+      advScore * 0.25 +
+      extensionScore * 0.2 +
+      distanceScore * 0.15 +
+      (mode === "live" ? clamp(structureScore, 0, 100) * STRUCTURE_WEIGHT : 0) +
+      100 * 0.05) /
+      keep -
     penalty;
 
   return {
@@ -3241,6 +3275,152 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
 // firewall/bot rules would otherwise treat as an anonymous bot and block. It
 // shares memo/cache/lock with GET (same module), so the public endpoint and
 // SSR stay perfectly consistent.
+/* ------------------- structure-mode diagnostics (debug) ------------------ */
+
+export type PickerStructureRow = {
+  symbol: string;
+  closes: number;
+  /** null when buildTrendScoreFromHistory refused: fewer than 220 usable closes. */
+  trendScoreNull: boolean;
+  source: "preset" | "popular-search" | "dynamic";
+  oversold: { live: number | null; waived: number | null; penalised: number | null };
+  overbought: { live: number | null; waived: number | null; penalised: number | null };
+};
+
+/**
+ * Prices the three structure modes against the real universe.
+ *
+ * READ-ONLY. buildPickersPayload's own universe assembly calls
+ * addToDynamicUniverse() as a side effect; this does not, so running the
+ * diagnostic never alters what the next build sees. It reads the same three
+ * sources in the same priority order, so membership matches a build's universe
+ * except for that write.
+ *
+ * Scores come from computeOversoldCandidate/computeOverboughtCandidate -- the
+ * functions that actually ship -- called three times per symbol with different
+ * modes. Nothing here reimplements the composite.
+ */
+export async function buildPickerStructureDiagnostics() {
+  const presetSet = new Set(PRESET_UNIVERSE);
+
+  const dynamicEntries = await readDynamicUniverse();
+  const dynamicUniverse = dynamicEntries.map((e) => String(e.symbol).trim().toUpperCase());
+  const dynamicSet = new Set(dynamicUniverse);
+
+  let popularSearchSymbols: string[] = [];
+  try {
+    const demand = await readSearchDemand(POPULAR_SEARCH_QUOTA * 4);
+    popularSearchSymbols = demand
+      .filter((d) => d.score >= POPULAR_SEARCH_MIN_SCORE)
+      .map((d) => String(d.symbol).trim().toUpperCase())
+      .filter((sym) => sym && !presetSet.has(sym))
+      .slice(0, POPULAR_SEARCH_QUOTA);
+  } catch {
+    popularSearchSymbols = [];
+  }
+  const popularSet = new Set(popularSearchSymbols);
+
+  const slots = new Set<string>();
+  const fill = (symbols: string[], max: number) => {
+    let added = 0;
+    for (const raw of symbols) {
+      if (slots.size >= UNIVERSE_CAP || added >= max) break;
+      const sym = String(raw).trim().toUpperCase();
+      if (!sym || slots.has(sym)) continue;
+      slots.add(sym);
+      added++;
+    }
+  };
+  fill(PRESET_UNIVERSE, PRESET_UNIVERSE.length);
+  fill(popularSearchSymbols, POPULAR_SEARCH_QUOTA);
+  fill(dynamicUniverse, UNIVERSE_CAP);
+  const universe = Array.from(slots);
+
+  const historyBySymbol = await getDailyHistoryBulk(universe);
+  const boost = (sym: string) => (dynamicSet.has(sym) ? 10 : 0) + (popularSet.has(sym) ? 10 : 0);
+
+  const rows: PickerStructureRow[] = [];
+  for (const symbol of universe) {
+    const pts = normalizeHistory(historyBySymbol.get(symbol) ?? [], 1300);
+    const closes = pts.map((pt) => pt.close).filter((x) => Number.isFinite(x)).length;
+    const comp = buildCompositeFromHistory(pts);
+    const trendScore = buildTrendScoreFromHistory(pts);
+    const b = boost(symbol);
+    const os = (mode: StructureMode) => {
+      const c = computeOversoldCandidate(pts, comp, trendScore, mode);
+      return c ? c.score + b : null;
+    };
+    const ob = (mode: StructureMode) => {
+      const c = computeOverboughtCandidate(pts, comp, trendScore, mode);
+      return c ? c.score + b : null;
+    };
+    rows.push({
+      symbol,
+      closes,
+      trendScoreNull: trendScore === null,
+      source: presetSet.has(symbol) ? "preset" : popularSet.has(symbol) ? "popular-search" : "dynamic",
+      oversold: { live: os("live"), waived: os("no-structure-waived"), penalised: os("no-structure-penalised") },
+      overbought: { live: ob("live"), waived: ob("no-structure-waived"), penalised: ob("no-structure-penalised") },
+    });
+  }
+
+  // Rank within each list/mode, highest score first, exactly as the builder
+  // sorts. A symbol absent from a list has no rank in that mode.
+  const rankOf = (list: "oversold" | "overbought", mode: "live" | "waived" | "penalised") => {
+    const ranked = rows
+      .filter((r) => r[list][mode] !== null)
+      .sort((a, b2) => (b2[list][mode] as number) - (a[list][mode] as number))
+      .map((r) => r.symbol);
+    const map = new Map<string, number>();
+    ranked.forEach((sym, i) => map.set(sym, i + 1));
+    return map;
+  };
+
+  const build = (list: "oversold" | "overbought") => {
+    const live = rankOf(list, "live");
+    const waived = rankOf(list, "waived");
+    const penalised = rankOf(list, "penalised");
+    return rows
+      .filter((r) => live.has(r.symbol) || waived.has(r.symbol) || penalised.has(r.symbol))
+      .map((r) => ({
+        symbol: r.symbol,
+        closes: r.closes,
+        trendScoreNull: r.trendScoreNull,
+        source: r.source,
+        rankLive: live.get(r.symbol) ?? null,
+        rankNoStructureWaived: waived.get(r.symbol) ?? null,
+        rankNoStructurePenalised: penalised.get(r.symbol) ?? null,
+        scoreLive: r[list].live === null ? null : Number((r[list].live as number).toFixed(2)),
+        scoreNoStructureWaived: r[list].waived === null ? null : Number((r[list].waived as number).toFixed(2)),
+        scoreNoStructurePenalised: r[list].penalised === null ? null : Number((r[list].penalised as number).toFixed(2)),
+        rankDeltaPenalised:
+          live.get(r.symbol) != null && penalised.get(r.symbol) != null
+            ? (penalised.get(r.symbol) as number) - (live.get(r.symbol) as number)
+            : null,
+      }))
+      .sort((a, b2) => (a.rankLive ?? 9999) - (b2.rankLive ?? 9999));
+  };
+
+  const thin = rows.filter((r) => r.trendScoreNull);
+  const scorable = rows.filter((r) => r.closes >= 60);
+
+  return {
+    universeSize: universe.length,
+    withHistory: rows.filter((r) => r.closes > 0).length,
+    // The band where the composites run (>= 60 closes) but the trend score
+    // refuses (< 220). This is the population the whole question is about.
+    scorableCount: scorable.length,
+    trendScoreNullCount: thin.length,
+    affectedBand: scorable.filter((r) => r.trendScoreNull).length,
+    affectedBandSymbols: scorable
+      .filter((r) => r.trendScoreNull)
+      .map((r) => ({ symbol: r.symbol, closes: r.closes, source: r.source }))
+      .sort((a, b2) => a.closes - b2.closes),
+    oversold: build("oversold"),
+    overbought: build("overbought"),
+  };
+}
+
 export async function getPickersData(
   origin: string,
   opts: { forceRefresh?: boolean } = {}
