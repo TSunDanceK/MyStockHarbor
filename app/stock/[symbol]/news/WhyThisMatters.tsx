@@ -13,8 +13,10 @@ type ArticleForBrief = {
 type WhyThisMattersProps = {
   symbol: string;
   companyName: string;
-  trend: string;
-  newsScoreLabel: string;
+  trend: string | null;
+  // null when there was nothing to score. The route used to substitute
+  // "Neutral" for a missing label and hand that to the model as fact.
+  newsScoreLabel: string | null;
   item: ArticleForBrief;
   /**
    * Algorithmic fallback text, computed server-side (via

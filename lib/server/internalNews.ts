@@ -58,9 +58,12 @@ export type InternalNewsPayload = {
   symbol: string;
   companyName: string;
   isInvalidTicker: boolean;
-  trend: string;
-  newsScoreLabel: string;
-  newsScoreValue: number;
+  trend: string | null;
+  // null when scoreNews had nothing to score (see NewsScoreResult.available).
+  // Carrying "Neutral"/50 through here is what made /dashboard render
+  // "Neutral tone" for a stock with no headlines at all.
+  newsScoreLabel: string | null;
+  newsScoreValue: number | null;
   cards: InternalNewsCard[];
   ctaHref: string;
 };
@@ -87,8 +90,8 @@ export async function getInternalNewsPayload(
     companyName: data.companyName,
     isInvalidTicker: data.isInvalidTicker,
     trend: data.trend,
-    newsScoreLabel: data.newsScore.label,
-    newsScoreValue: data.newsScore.score,
+    newsScoreLabel: data.newsScore.available ? data.newsScore.label : null,
+    newsScoreValue: data.newsScore.available ? data.newsScore.score : null,
     cards: data.detailedNews.map((item) => ({
       title: item.title,
       source: item.source,
