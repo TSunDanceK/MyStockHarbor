@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { cookies } from "next/headers";
 import DashboardClient, {
   type Quote,
   type Point,
@@ -14,7 +15,7 @@ import { fetchQuoteSnapshot } from "@/lib/server/quoteData";
 import { mintQuoteToken } from "@/lib/server/quoteToken";
 import { getLatestEarningsData } from "@/lib/latest-earnings-data";
 import { getInternalNewsPayload } from "@/lib/server/internalNews";
-import { cleanSymbol } from "@/lib/symbol";
+import { cleanSymbol, SYMBOL_COOKIE } from "@/lib/symbol";
 
 // Was a plain client-rendered shell (Suspense fallback "Loading dashboard…"
 // with no real content until client effects fetched everything). Now fetches
@@ -124,7 +125,29 @@ async function getInitialEarningsSummary(
 export default async function DashboardPage({ searchParams }: Props) {
   const params = await searchParams;
   const requested = cleanSymbol(params?.symbol);
-  const symbol = requested || "SPY";
+
+  // The remembered symbol, resolved BEFORE rendering so the HTML this sends is
+  // already the one the client will want -- which is the entire point: without
+  // it the server rendered SPY, the client hydrated to the remembered symbol,
+  // and all five payloads below were fetched, discarded and fetched again.
+  //
+  // cookies() IS DELIBERATELY CONFINED TO THIS FILE. Reading it opts the route
+  // out of static rendering, so every module that calls it drags whatever
+  // imports it dynamic too. /dashboard is already dynamic and always will be --
+  // the rendered symbol is per-visitor, which is the trade accepted when the
+  // "Resume" affordance was rejected (#294) -- so the cost is already paid
+  // HERE and nowhere else. Read it in a shared helper or a layout and that
+  // stops being true silently. If another route ever needs this, give it its
+  // own cookies() call rather than reaching for a shared one.
+  //
+  // The response therefore varies by cookie. Next sets no Vary: Cookie header
+  // for this, and does not need to: the route is dynamic, so it is rendered
+  // per request and never served from a shared cache. Should /dashboard ever
+  // be made cacheable, THIS is the line that makes that unsafe.
+  const remembered = cleanSymbol((await cookies()).get(SYMBOL_COOKIE)?.value);
+
+  // An explicit ?symbol= outranks the memory, which outranks the default.
+  const symbol = requested || remembered || "SPY";
 
   const [rawHistory, quoteAndName, benchmarks, news, earningsSummary] =
     await Promise.all([

@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { SECTORS, sectorNewsPath } from "@/lib/sectors";
+import { rememberSymbol } from "@/lib/symbol";
 
 type StockNavKind = "earnings" | "analysis" | "news";
 
@@ -88,7 +89,7 @@ function useLastStockSymbol(pathname: string | null) {
 
     if (pathSymbol) {
       setLastSymbol(pathSymbol);
-      window.localStorage.setItem("msh_last_symbol", pathSymbol);
+      rememberSymbol(pathSymbol);
       return;
     }
 
