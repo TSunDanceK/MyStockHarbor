@@ -371,12 +371,19 @@ function scoreEarnings(args: { latest: FmpEarningsRow | null; sameQuarterLastYea
   const revenueSurprisePct = calcPercentDifference(revenueActual, revenueEstimated);
   const yoyEpsGrowth = calcGrowth(epsActual, asNumber(sameQuarterLastYear?.epsActual));
   const yoyRevenueGrowth = calcGrowth(revenueActual, asNumber(sameQuarterLastYear?.revenueActual));
+  // #314 guarded !latest -- total absence. This is the partial case it missed:
+  // completedRows is filtered on epsActual OR revenueActual, so `latest` can be
+  // a row carrying only revenueActual with no estimate to compare it against.
+  // Every term below then skips and the score stays on its 50 seed, which
+  // rendered as a 50/100 "Mixed" gauge with the needle at dead centre.
   let score = 50;
-  if (epsSurprisePct != null) score += clamp(epsSurprisePct * 1.35, -22, 22);
-  if (revenueSurprisePct != null) score += clamp(revenueSurprisePct * 3.2, -20, 20);
-  if (epsActual != null) score += epsActual > 0 ? 6 : -8;
-  if (yoyEpsGrowth != null) score += clamp(yoyEpsGrowth * 0.18, -10, 10);
-  if (yoyRevenueGrowth != null) score += clamp(yoyRevenueGrowth * 0.22, -10, 10);
+  let signals = 0;
+  if (epsSurprisePct != null) { score += clamp(epsSurprisePct * 1.35, -22, 22); signals++; }
+  if (revenueSurprisePct != null) { score += clamp(revenueSurprisePct * 3.2, -20, 20); signals++; }
+  if (epsActual != null) { score += epsActual > 0 ? 6 : -8; signals++; }
+  if (yoyEpsGrowth != null) { score += clamp(yoyEpsGrowth * 0.18, -10, 10); signals++; }
+  if (yoyRevenueGrowth != null) { score += clamp(yoyRevenueGrowth * 0.22, -10, 10); signals++; }
+  if (signals === 0) return { score: 50, available: false as const, tone: "neutral" as EarningsTone, label: "Unavailable", explanation: "This report has no figures that can be scored yet -- there are no estimates to compare against and no prior-year quarter to measure growth from." };
   const recent = completedRows.slice(0, 4);
   for (const row of recent) { const tone = classifyQuarter(row); if (tone === "good") score += 2.5; if (tone === "weak") score -= 2.5; }
   const recentTones = completedRows.slice(0, 6).map(classifyQuarter);
