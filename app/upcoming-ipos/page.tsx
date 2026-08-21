@@ -5,6 +5,7 @@ import {
   getRecentIpos,
 } from "@/lib/server/ipoCalendar";
 import IpoList from "./IpoList";
+import { refuseToCacheDegradedRender } from "@/lib/server/degradedRender";
 
 const PAGE_TITLE = "Upcoming IPOs This Month | Confirmed IPO Calendar | MyStockHarbor";
 const PAGE_DESCRIPTION =
@@ -46,13 +47,39 @@ export const metadata: Metadata = {
   },
 };
 
-export const dynamic = "force-dynamic";
+// 1800s, and this number is NOT independently chosen -- it deliberately agrees
+// with the next: { revalidate: 1800 } on the FMP fetch inside
+// lib/server/ipoCalendar.ts, because THAT is what actually governs the cadence.
+//
+// Next takes the MINIMUM of a route's revalidate and any fetch revalidate
+// reached during its render, so a fetch-level value silently overrides a larger
+// page constant. This page previously declared 14400 (four hours) and shipped
+// as "30m" in the route table, and nothing in the source said why. See
+// claude/silent-failure-traps.md #13.
+//
+// Stating 1800 here rather than leaving 14400 is the point: 48 revalidations a
+// day against a feed FMP serves happily is not worth optimising, but a constant
+// describing a cadence the page does not have is worth removing.
+//
+// Was force-dynamic purely because a failed read used to be unsafe to cache;
+// refuseToCacheDegradedRender() below is what removes that.
+export const revalidate = 1800;
 
 export default async function UpcomingIposPage() {
   const [upcomingFeed, recentFeed] = await Promise.all([
     getUpcomingConfirmedIpos(),
     getRecentIpos(),
   ]);
+
+  // EITHER feed being degraded is enough to refuse the artefact: this page
+  // renders both lists, so a failed read on one would bake "we couldn't load
+  // it" into a cached page and serve that claim to every visitor and every
+  // crawler for the whole revalidate window. Safe here because /upcoming-ipos
+  // is a PARAMLESS STATIC route -- on a generateStaticParams route the same
+  // call returns a 500. See lib/server/degradedRender.ts.
+  if (!upcomingFeed.ok || !recentFeed.ok) {
+    await refuseToCacheDegradedRender("/upcoming-ipos");
+  }
 
   const ipos = upcomingFeed.items;
   const recentIpos = recentFeed.items;
