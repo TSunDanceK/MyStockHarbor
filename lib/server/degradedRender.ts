@@ -10,7 +10,8 @@ import { connection } from "next/server";
  *
  * `feedCache` made a failed upstream read VISIBLE (a failed read and a
  * genuinely empty market no longer look alike -- see
- * claude/silent-failure-traps.md #1). It did not make it HARMLESS.
+ * claude/traps/return-type-cannot-express-failure.md). It did not make it
+ * HARMLESS.
  *
  * Under ISR a failed read is baked into the prerendered artefact and served to
  * every visitor and every crawler for the whole revalidate window, with no
