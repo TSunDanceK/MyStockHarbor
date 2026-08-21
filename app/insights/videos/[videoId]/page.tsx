@@ -24,6 +24,21 @@ import PageShareBar from "@/app/components/PageShareBar";
 // inside that tolerance. See claude/seo-recovery-plan-2026-08-15.md item 3.1.
 export const revalidate = 1800;
 
+// EMPTY, deliberately -- and required, not optional. A dynamic segment cannot
+// be ISR without this export, so without it the `revalidate` above has never
+// had any effect and this route has been fully dynamic since it was written.
+// Nothing warns about that; see claude/traps/inert-route-revalidate.md.
+//
+// Empty rather than the 21 known video ids: each page calls getYouTubeVideoById,
+// and the YouTube quota is already tight enough to be logging "Hourly call
+// budget exhausted -- serving last-known-good video" in production. Prerendering
+// the full set at build would spend that budget to bake pages that on-demand ISR
+// produces just as well, once, on first request. `dynamicParams` defaults to
+// true, so every id still resolves.
+export function generateStaticParams(): { videoId: string }[] {
+  return [];
+}
+
 type Props = {
   params: Promise<{ videoId: string }>;
 };
