@@ -69,3 +69,13 @@ nobody returns to it.
 
 Create `claude/traps/<slug>.md` with an `# H1` title. Nothing to renumber,
 nothing to insert into, no index to update.
+
+## Triaged and deliberately left alone
+
+- **Unused declarations outside the two files cleaned in #320.** eslint reports
+  77 across 27 files. 32 of those were the superseded generations on
+  `app/stock/[symbol]/news/page.tsx` and `StockSymbolPageClient.tsx`, which are
+  gone. The remaining 45 are 1–5 per file — mostly single unused style
+  constants — which is ordinary drift, not a whole copy left behind that
+  another reader could mistake for canonical. Not worth a pass. Re-derive this
+  only if a file's count starts climbing.

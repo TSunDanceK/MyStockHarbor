@@ -366,12 +366,19 @@ function buildNumericScore(args: {
   const yoyEpsGrowth = calcGrowth(actualEps, safeNumber(sameQuarterLastYear?.epsActual));
   const yoyRevenueGrowth = calcGrowth(revenue, safeNumber(sameQuarterLastYear?.revenueActual));
 
+  // The !completedRows.length guard above covers TOTAL absence. It does not
+  // cover a row that exists with no usable numbers on it: completedRows is
+  // filtered on epsActual OR revenueActual, so a row carrying only revenueActual
+  // and no estimate contributes nothing to any of the five terms below, and the
+  // score stays on its 50 seed. Count the terms that actually fired instead.
   let score = 50;
-  if (epsSurprisePct != null) score += clamp(epsSurprisePct * 1.35, -22, 22);
-  if (revenueSurprisePct != null) score += clamp(revenueSurprisePct * 3.2, -20, 20);
-  if (actualEps != null) score += actualEps > 0 ? 6 : -8;
-  if (yoyEpsGrowth != null) score += clamp(yoyEpsGrowth * 0.18, -10, 10);
-  if (yoyRevenueGrowth != null) score += clamp(yoyRevenueGrowth * 0.22, -10, 10);
+  let signals = 0;
+  if (epsSurprisePct != null) { score += clamp(epsSurprisePct * 1.35, -22, 22); signals++; }
+  if (revenueSurprisePct != null) { score += clamp(revenueSurprisePct * 3.2, -20, 20); signals++; }
+  if (actualEps != null) { score += actualEps > 0 ? 6 : -8; signals++; }
+  if (yoyEpsGrowth != null) { score += clamp(yoyEpsGrowth * 0.18, -10, 10); signals++; }
+  if (yoyRevenueGrowth != null) { score += clamp(yoyRevenueGrowth * 0.22, -10, 10); signals++; }
+  if (signals === 0) return null;
 
   const recentTones = completedRows.slice(0, 6).map(completedEarningsTone);
   for (const tone of recentTones.slice(0, 4)) {
