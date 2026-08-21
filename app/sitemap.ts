@@ -167,7 +167,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
   //   - last market close for /stock/*. Identical for every symbol, so it is
   //     the same synchronised claim with a better excuse, and it is simply
   //     wrong for /news (hourly) and /earnings (quarterly).
-  // See claude/silent-failure-traps.md #15 and #16.
+  // See claude/traps/absence-needs-the-producer-to-have-run.md and
+  // claude/traps/suspicious-uniformity.md.
   const insightPosts = getAllPosts();
   const bottleneckPosts = getAllBottleneckPosts();
   const videoMeta = getAllVideoMeta();

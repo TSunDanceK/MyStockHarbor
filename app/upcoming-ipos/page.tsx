@@ -55,7 +55,7 @@ export const metadata: Metadata = {
 // reached during its render, so a fetch-level value silently overrides a larger
 // page constant. This page previously declared 14400 (four hours) and shipped
 // as "30m" in the route table, and nothing in the source said why. See
-// claude/silent-failure-traps.md #13.
+// claude/traps/fetch-revalidate-caps-the-page.md.
 //
 // Stating 1800 here rather than leaving 14400 is the point: 48 revalidations a
 // day against a feed FMP serves happily is not worth optimising, but a constant

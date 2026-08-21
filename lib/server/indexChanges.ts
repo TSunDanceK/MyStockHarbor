@@ -161,7 +161,8 @@ async function fetchRecentIndexAdditions(): Promise<IndexAddition[]> {
     }
     // A DynamicServerError is not an index failure -- it is Next saying this
     // render cannot be static, and allSettled has just caught it where a
-    // throw would have propagated. Rethrowing keeps trap 11's guarantee
+    // throw would have propagated. Rethrowing keeps the guarantee in
+    // claude/traps/framework-signal-swallowed-by-a-network-handler.md
     // intact: without this, adding allSettled here would quietly reintroduce
     // exactly the bug #304 fixed, one layer further down.
     if (isDynamicServerUsage(result.reason)) throw result.reason;
