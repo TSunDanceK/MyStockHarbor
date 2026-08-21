@@ -17,6 +17,10 @@ import type { CSSProperties } from "react";
 type ScoreTone = "green" | "yellow" | "red";
 
 export type NewsScoreGaugeInput = {
+  // False when there was nothing to score. Not optional: a caller that has not
+  // decided yet should be made to decide, because the failure mode here is a
+  // gauge that renders a full reading from no input.
+  available: boolean;
   score: number;
   tone: ScoreTone;
   label: string;
@@ -71,7 +75,19 @@ export function scoreLabelStyle(tone: ScoreTone): CSSProperties {
   };
 }
 
-export function scorePanelStyle(tone: ScoreTone): CSSProperties {
+// tone === null means the score is unavailable. The yellow tint is the same one
+// a genuine "Neutral" reading gets, so tinting an unscored panel yellow restates
+// the verdict the number was just removed for making.
+export function scorePanelStyle(tone: ScoreTone | null): CSSProperties {
+  if (tone === null) {
+    return {
+      position: "relative",
+      border: "1px solid rgba(255,255,255,0.10)",
+      borderRadius: 20,
+      padding: 18,
+      background: "linear-gradient(135deg, rgba(148,163,184,0.10), rgba(12,14,18,0.96))",
+    };
+  }
   if (tone === "green")
     return {
       position: "relative",
@@ -104,6 +120,18 @@ export default function NewsScoreGauge({
   newsScore: NewsScoreGaugeInput;
   kicker?: string;
 }) {
+  // Nothing to score means no number, no needle and no Bearish/Neutral/Bullish
+  // scale. A "50/100" with the marker at dead centre reads as a genuine neutral
+  // verdict rather than an absent one.
+  if (!newsScore.available) {
+    return (
+      <div>
+        <div style={scorePanelKickerStyle}>{kicker}</div>
+        <div style={{ marginTop: 14, fontSize: 20, fontWeight: 800, letterSpacing: "-0.02em" }}>Not enough headlines to score</div>
+      </div>
+    );
+  }
+
   const safeScore = Math.max(0, Math.min(100, newsScore.score));
   const colour = newsGaugeColour(newsScore.tone);
   const markerX = 24 + (192 * safeScore) / 100;
