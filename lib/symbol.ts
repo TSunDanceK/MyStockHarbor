@@ -45,3 +45,76 @@ export function cleanSymbol(value: SymbolInput): string {
     .toUpperCase()
     .replace(/[^A-Z0-9.-]/g, "");
 }
+
+// ---------------------------------------------------------------------------
+// The remembered "last stock symbol"
+// ---------------------------------------------------------------------------
+//
+// /dashboard renders whichever symbol the visitor was last looking at. That
+// memory lived only in localStorage, which the SERVER cannot read -- so the
+// server rendered SPY, the client hydrated to the remembered symbol, and all
+// five server-fetched payloads were discarded and refetched. Observed live:
+// three loads out of three.
+//
+// Mirroring the same value into a cookie lets the server resolve the symbol
+// BEFORE rendering, so the HTML it sends is already the one the client wants.
+// localStorage is still written and is still the fallback: it is the older of
+// the two, several components read it directly, and a visitor who blocks
+// cookies keeps exactly today's behaviour.
+
+export const SYMBOL_COOKIE = "msh_sym";
+export const SYMBOL_STORAGE_KEY = "msh_last_symbol";
+
+const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
+
+// Deliberately NOT HttpOnly: this cookie is written by client JS, so it cannot
+// be. It holds a ticker the visitor chose on this site -- no identifier, no
+// account, nothing that is not already in the URL of the page they came from.
+// SameSite=Lax keeps it off cross-site requests; Secure is added on https so
+// it never travels in the clear, while localhost development still works.
+export function rememberSymbol(value: SymbolInput): void {
+  const symbol = cleanSymbol(value);
+  if (!symbol) return;
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(SYMBOL_STORAGE_KEY, symbol);
+  } catch {
+    /* Safari private mode and friends -- the cookie below may still work. */
+  }
+
+  try {
+    const secure = window.location.protocol === "https:" ? "; Secure" : "";
+    document.cookie =
+      `${SYMBOL_COOKIE}=${encodeURIComponent(symbol)}` +
+      `; Max-Age=${ONE_YEAR_SECONDS}; Path=/; SameSite=Lax${secure}`;
+  } catch {
+    /* Cookies blocked -- localStorage above still carries the memory. */
+  }
+}
+
+// Reads the memory the way the SERVER will read it: cookie first, so a client
+// seeding from this agrees with the HTML it was just sent. localStorage is the
+// fallback for visitors who block cookies, and for the window between this
+// shipping and their first write of the new cookie.
+export function readRememberedSymbol(): string {
+  if (typeof window === "undefined") return "";
+
+  try {
+    const match = document.cookie.match(
+      new RegExp(`(?:^|; )${SYMBOL_COOKIE}=([^;]*)`)
+    );
+    const fromCookie = cleanSymbol(
+      match ? decodeURIComponent(match[1]) : ""
+    );
+    if (fromCookie) return fromCookie;
+  } catch {
+    /* fall through to localStorage */
+  }
+
+  try {
+    return cleanSymbol(window.localStorage.getItem(SYMBOL_STORAGE_KEY));
+  } catch {
+    return "";
+  }
+}

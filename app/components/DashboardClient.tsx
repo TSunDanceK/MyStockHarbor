@@ -10,7 +10,7 @@ import { detectDivergenceFromHistory } from "../../lib/ta/divergence";
 import DiscoveryStrip from "./DiscoveryStrip";
 import DashboardTicker from "./DashboardTicker";
 import TickerLogo from "@/app/components/TickerLogo";
-import { cleanSymbol } from "@/lib/symbol";
+import { cleanSymbol, readRememberedSymbol, rememberSymbol } from "@/lib/symbol";
 
 export type Quote = { symbol: string; price: number | null; date: string | null; time: string | null; source: string; };
 export type Point = { date: string; open?: number; close: number; high?: number; low?: number; volume?: number; };
@@ -355,13 +355,32 @@ export default function DashboardClient({
     const fromUrl = cleanSymbol(searchParams.get("symbol"));
     if (fromUrl) return fromUrl;
     if (typeof window === "undefined") return defaultSymbol;
-    try {
-      const s = cleanSymbol(window.localStorage.getItem("msh_last_symbol"));
-      return s || defaultSymbol;
-    } catch {
-      return defaultSymbol;
-    }
+    // readRememberedSymbol() reads the msh_sym COOKIE first, which is what
+    // app/dashboard/page.tsx resolved this render from, so the two agree and
+    // the server's seed payloads are usable instead of discarded. localStorage
+    // is still the fallback inside that helper. On "/" there is no
+    // cookie-aware server resolution (app/page.tsx is untouched), so this is
+    // simply the memory read it always was.
+    return readRememberedSymbol() || defaultSymbol;
   };
+  // THE LANDMINE (claude/dashboard-homepage-perf-2026-08-20.md).
+  //
+  // The persist effect below used to be safe only by coincidence: `symbol` was
+  // seeded FROM localStorage, so a passive mount read X and wrote X back -- a
+  // no-op. Nothing said so. The moment the seed came from anywhere else, that
+  // same line overwrote the memory with whatever happened to render, on the
+  // first visit, destroying the thing it exists to keep. #294 hit exactly this:
+  // the Resume chip appeared once and never again, and it passed every
+  // single-session test because only a NEW browser session exposes it.
+  //
+  // This change moves the seed to the cookie, so the coincidence is gone and
+  // the invariant has to be made explicit: persist only what the visitor
+  // ACTUALLY CHOSE -- a chooseSymbol() call, or a ?symbol= deep link -- never
+  // what merely rendered. A passive visit now writes nothing at all.
+  const symbolWasChosenRef = useRef(
+    Boolean(cleanSymbol(searchParams.get("symbol")))
+  );
+
   const [symbol, setSymbol] = useState(initialSymbol);
   const [lastStockSymbol, setLastStockSymbol] = useState(initialSymbol);
   // Server-rendered seed data (quote/history/benchmarks/news/earnings) only
@@ -462,6 +481,11 @@ export default function DashboardClient({
   useEffect(() => { setChartInterval(selectedTimeframe.interval); setVisibleBars(selectedTimeframe.defaultVisibleBars); setWindowOffset(0); }, [symbol, selectedTimeframe]);
   useEffect(() => {
     const us = searchParams.get("symbol"); const cleaned = us ? us.trim().toUpperCase() : ""; if (!cleaned) return;
+    // A ?symbol= deep link is an explicit choice and must be remembered, even
+    // when it arrives by client-side navigation AFTER mount (/pickers ->
+    // /dashboard?symbol=NVDA). The ref is seeded from the URL at mount for the
+    // full-load case; this covers the soft-navigation one.
+    symbolWasChosenRef.current = true;
     const tf = (searchParams.get("tf") || "").trim().toUpperCase();
     const indi = (searchParams.get("indicator") || "").trim();
     const indicatorsRaw = (searchParams.get("indicators") || "").trim();
@@ -521,7 +545,19 @@ export default function DashboardClient({
     setVisibleBars(win.visibleBars);
     setWindowOffset(win.windowOffset);
   }, [chartFocus, historyAll]);
-  useEffect(() => { if (!symbol.trim()) return; if (assetType === "stock") { window.localStorage.setItem("msh_last_symbol", symbol.trim().toUpperCase()); setLastStockSymbol(symbol.trim().toUpperCase()); } }, [symbol, assetType]);
+  useEffect(() => {
+    const current = symbol.trim().toUpperCase();
+    if (!current) return;
+    // Stock-only, as before: the crypto symbol drives the toggle but is never
+    // the remembered "last stock symbol".
+    if (assetType !== "stock") return;
+    // Unconditional: this is session state for the stock/crypto toggle and is
+    // never persisted, so the landmine does not apply to it.
+    setLastStockSymbol(current);
+    // Persisted ONLY on an explicit choice -- see symbolWasChosenRef above.
+    if (!symbolWasChosenRef.current) return;
+    rememberSymbol(current);
+  }, [symbol, assetType]);
   useEffect(() => { if (!expanded) return; const k = (e: KeyboardEvent) => { if (e.key === "Escape") setExpanded(false); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [expanded]);
 
   // Fullscreen overlay: Escape closes it, and we best-effort request true
@@ -693,7 +729,7 @@ export default function DashboardClient({
 
   const customMode = selectedIndicators.length > 0;
   function chartIndicatorLabel(v: Overlay[]) { return !v.length ? "Overview" : v.join(", "); }
-  function chooseSymbol(s: string, name?: string, nextAssetType?: AssetType) { const c = s.trim().toUpperCase(); if (!c) return; if (nextAssetType) setAssetType(nextAssetType); setSymbol(c); setSymbolName(name?.trim() ? name.trim() : ""); setQuery(c); setResults([]); setOpen(false); setActiveTimeframe("D"); setSelectedIndicators([]); setIndicator("None"); setWindowOffset(0); }
+  function chooseSymbol(s: string, name?: string, nextAssetType?: AssetType) { const c = s.trim().toUpperCase(); if (!c) return; symbolWasChosenRef.current = true; if (nextAssetType) setAssetType(nextAssetType); setSymbol(c); setSymbolName(name?.trim() ? name.trim() : ""); setQuery(c); setResults([]); setOpen(false); setActiveTimeframe("D"); setSelectedIndicators([]); setIndicator("None"); setWindowOffset(0); }
   function switchAssetType(next: AssetType) {
     if (next === assetType) return;
     if (next === "crypto") { chooseSymbol(DEFAULT_CRYPTO_SYMBOL, CRYPTO_PRESETS[0]?.name, "crypto"); return; }

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { rememberSymbol } from "@/lib/symbol";
 
 /**
  * Bottom nav across the four symbol-scoped pages: the chart (/dashboard),
@@ -126,11 +127,10 @@ export default function StockPagesBottomNav() {
       setSymbol(pathSymbol);
       // Same write SiteHeader makes, for the same reason: arriving at a stock
       // page is what makes it the last-viewed symbol everywhere else.
-      try {
-        window.localStorage.setItem(STORAGE_KEY, pathSymbol);
-      } catch {
-        /* localStorage unavailable -- the nav still works, it just forgets */
-      }
+      // rememberSymbol writes localStorage AND the msh_sym cookie, and
+      // swallows its own failures -- localStorage unavailable (Safari private
+      // mode) or cookies blocked just means the nav forgets, as before.
+      rememberSymbol(pathSymbol);
       return;
     }
 
