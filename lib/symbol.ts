@@ -20,7 +20,7 @@
 // whoever edits one happens to read it.
 //
 // One exported function with two call sites makes divergence impossible
-// instead of discouraged. See claude/silent-failure-traps.md #5.
+// instead of discouraged. See claude/traps/two-validators-for-one-value.md.
 //
 // Deliberately in lib/ and NOT lib/server/: a "use client" module cannot
 // import from lib/server, and the entire point is that both sides import the
