@@ -8,7 +8,7 @@ import IpoList from "./IpoList";
 
 const PAGE_TITLE = "Upcoming IPOs This Month | Confirmed IPO Calendar | MyStockHarbor";
 const PAGE_DESCRIPTION =
-  "Confirmed, priced IPOs expected in the next 30 days - ticker, exchange, price range, shares offered, deal size, market cap and revenue for each listing.";
+  "Confirmed, priced IPOs expected in the next 30 days - ticker, exchange, price range, shares offered, deal size and market cap for each listing.";
 const PAGE_URL = "https://www.mystockharbor.com/upcoming-ipos";
 const OG_IMAGE_URL = "https://www.mystockharbor.com/og-image-v2.png";
 
