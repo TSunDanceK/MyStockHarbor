@@ -118,8 +118,12 @@ async function fetchRecentIndexAdditions(): Promise<IndexAddition[]> {
 
   const changesByIndex = await Promise.all(
     INDEXES.map(async ({ name, url }) => {
+      // See the note in lib/server/ipoCalendar.ts: no-store throws
+      // DynamicServerError during prerender, marking the route dynamic before
+      // readFeed's catch swallows it as an upstream failure. 1800s matches
+      // feedCache's FRESH_MS.
       const res = await fetch(`${url}?apikey=${encodeURIComponent(apiKey)}`, {
-        cache: "no-store",
+        next: { revalidate: 1800 },
         headers: { accept: "application/json" },
       });
       if (!res.ok) throw new Error(`FMP ${name} constituent history failed: ${res.status}`);
@@ -154,8 +158,9 @@ async function fetchRecentIndexAdditions(): Promise<IndexAddition[]> {
 
   let quoteBySymbol = new Map<string, FmpRow>();
   try {
+    // Same reason as the constituent fetch above.
     const quoteRes = await fetch(quoteUrl, {
-      cache: "no-store",
+      next: { revalidate: 1800 },
       headers: { accept: "application/json" },
     });
     if (quoteRes.ok) {
