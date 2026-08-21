@@ -185,6 +185,15 @@ function rsiWilder(values: number[], period = 14): (number | null)[] {
   return out;
 }
 
+// Mirrors lib/indicators.ts buildTrendScore, including `known`. This is one of
+// three copies and is NOT deduped here on purpose: #315 fixed the lib copy,
+// which drives the SEO title; this copy drives what a reader actually sees.
+// Consolidating three copies is two-validators-for-one-value and wants its own
+// PR and its own argument.
+//
+// `known` is false when the checks had no inputs, not when they ran and failed.
+// ma200 needs 200 bars, so any listing under ~9.5 months old. Confirmed live on
+// /stock/SKHY. See claude/traps/return-type-cannot-express-failure.md.
 function buildTrendScore(args: { lastClose: number | null; ma50: number | null; ma200: number | null }) {
   const { lastClose, ma50, ma200 } = args;
   const checks = [
@@ -193,7 +202,7 @@ function buildTrendScore(args: { lastClose: number | null; ma50: number | null; 
     typeof ma50 === "number" && typeof ma200 === "number" ? ma50 > ma200 : null,
   ];
   const passed = checks.reduce((acc, v) => acc + (v === true ? 1 : 0), 0);
-  return { passed, total: 3 };
+  return { passed, total: 3, known: checks.every((c) => c !== null) };
 }
 
 function trendLabel(args: { lastClose: number | null; ma50: number | null; ma200: number | null }) {
@@ -201,8 +210,11 @@ function trendLabel(args: { lastClose: number | null; ma50: number | null; ma200
   if (typeof lastClose === "number" && typeof ma50 === "number" && typeof ma200 === "number") {
     if (lastClose > ma50 && ma50 > ma200) return "Uptrend";
     if (lastClose < ma50 && ma50 < ma200) return "Downtrend";
+    return "Range / Mixed";
   }
-  return "Range / Mixed";
+  // Not determinable. "Range / Mixed" is a real market state and must not be
+  // asserted for a stock whose trend cannot be computed yet.
+  return null;
 }
 
 function formatValuationMultiple(value: number | null | undefined) {
@@ -489,12 +501,16 @@ function formatAiUpdatedLabel(value: string) {
   return dt.toLocaleDateString("en-GB", { year: "numeric", month: "short", day: "numeric" });
 }
 
-function buildLongSummary(args: { symbol: string; companyName: string; quote: Quote | null; lastClose: number | null; ma50: number | null; ma200: number | null; trend: string; trendScore: { passed: number; total: number }; rsi: number | null }) {
+function buildLongSummary(args: { symbol: string; companyName: string; quote: Quote | null; lastClose: number | null; ma50: number | null; ma200: number | null; trend: string | null; trendScore: { passed: number; total: number; known: boolean }; rsi: number | null }) {
   const { symbol, companyName, quote, lastClose, ma50, ma200, trend, trendScore, rsi } = args;
   const companyLead = companyName ? `${companyName} (${symbol})` : symbol;
   const priceText = typeof quote?.price === "number" ? `$${quote.price.toFixed(2)}` : "an unavailable latest price";
   const ma50Pct = pctFromBase(lastClose, ma50), ma200Pct = pctFromBase(lastClose, ma200);
-  let trendLead = `${companyLead} currently looks mixed rather than cleanly directional.`;
+  // trend === null means the trend is not computable yet (under ~200 bars), NOT
+  // that it is mixed. Say so rather than describing the stock as uncertain.
+  let trendLead = trend === null
+    ? `${companyLead} has not traded long enough to establish a trend on these measures.`
+    : `${companyLead} currently looks mixed rather than cleanly directional.`;
   if (trend === "Uptrend") {
     if (trendScore.passed === trendScore.total) trendLead = `${companyLead} is still trading in a constructive trend overall.`;
     else if (trendScore.passed >= 2) trendLead = `${companyLead} still shows some constructive trend features, even if the setup is not perfect.`;
@@ -502,7 +518,7 @@ function buildLongSummary(args: { symbol: string; companyName: string; quote: Qu
   } else if (trend === "Downtrend") {
     if (trendScore.passed <= 1) trendLead = `${companyLead} currently looks weaker on the chart and is not showing much trend strength.`;
     else trendLead = `${companyLead} is leaning weaker overall, although not every signal is fully bearish.`;
-  } else {
+  } else if (trend !== null) {
     if (trendScore.passed >= 2) trendLead = `${companyLead} looks more range-bound than strongly trending, but there are still a few supportive signs on the chart.`;
     else trendLead = `${companyLead} currently looks more uncertain than directional, with a fairly mixed technical picture.`;
   }
@@ -514,7 +530,13 @@ function buildLongSummary(args: { symbol: string; companyName: string; quote: Qu
   } else if (typeof ma200Pct === "number") {
     movingAverageText = ` Price is ${ma200Pct >= 0 ? "trading above" : "trading below"} the 200-day moving average by ${Math.abs(ma200Pct).toFixed(1)}%.`;
   }
-  const trendParagraph = `${trendLead} The latest available price is ${priceText}, and ${trendScore.passed} of ${trendScore.total} core trend checks are currently passing.` + movingAverageText;
+  // "0 of 3 core trend checks are currently passing" reads as three failed
+  // checks. When !known the checks did not run at all, so the clause is dropped
+  // rather than reported as a score.
+  const checksSentence = trendScore.known
+    ? ` The latest available price is ${priceText}, and ${trendScore.passed} of ${trendScore.total} core trend checks are currently passing.`
+    : ` The latest available price is ${priceText}, and there is not yet enough price history to run the core trend checks.`;
+  const trendParagraph = `${trendLead}${checksSentence}` + movingAverageText;
   let momentumParagraph = `${symbol} currently looks fairly balanced from a momentum perspective.`;
   if (typeof rsi === "number") {
     if (rsi >= 75) momentumParagraph = `${symbol} currently has an RSI reading of ${rsi.toFixed(1)}, which points to very strong short-term momentum but also a fairly extended setup. Stocks can stay strong for longer than expected, but this kind of reading often tells beginners not to confuse strength with low-risk entry timing.`;
@@ -538,8 +560,8 @@ function buildLongSummary(args: { symbol: string; companyName: string; quote: Qu
 function buildHeroLede(args: {
   symbol: string;
   companyName: string;
-  trend: "Uptrend" | "Downtrend" | "Range / Mixed";
-  trendScore: { passed: number; total: number };
+  trend: "Uptrend" | "Downtrend" | "Range / Mixed" | null;
+  trendScore: { passed: number; total: number; known: boolean };
   rsi: number | null;
   lastClose: number | null;
   ma50: number | null;
@@ -547,6 +569,8 @@ function buildHeroLede(args: {
 }): string {
   const { symbol, companyName, trend, trendScore, rsi, lastClose, ma50, ma200 } = args;
   const lead = companyName ? `${companyName} (${symbol})` : symbol;
+  // trend === null must not fall through to the last arm of a ternary chain. It
+  // is handled ahead of the trend sentence entirely, below.
   const trendText = trend === "Range / Mixed" ? "a range/mixed trend" : trend === "Uptrend" ? "an uptrend" : "a downtrend";
 
   let maPhrase = "";
@@ -558,9 +582,15 @@ function buildHeroLede(args: {
     else maPhrase = ", above the 50-day MA but below the 200-day MA";
   }
 
+  const checksPhrase = trendScore.known ? `${trendScore.passed}/${trendScore.total} trend checks passing` : "";
   const rsiPhrase = typeof rsi === "number"
-    ? ` RSI is at ${rsi.toFixed(1)}${rsi >= 70 ? " (overbought)" : rsi <= 30 ? " (oversold)" : ""}, with ${trendScore.passed}/${trendScore.total} trend checks passing.`
-    : ` ${trendScore.passed}/${trendScore.total} trend checks are currently passing.`;
+    ? ` RSI is at ${rsi.toFixed(1)}${rsi >= 70 ? " (overbought)" : rsi <= 30 ? " (oversold)" : ""}${checksPhrase ? `, with ${checksPhrase}` : ""}.`
+    : checksPhrase ? ` ${checksPhrase[0].toUpperCase()}${checksPhrase.slice(1)} currently.` : "";
+
+  // When the trend is not computable, say that instead of naming a trend. This
+  // is the same input condition as maPhrase being empty (all three of lastClose,
+  // ma50 and ma200 are needed for either), so no MA clause is lost here.
+  if (trend === null) return `${lead} has not traded long enough to establish a trend on these measures.${rsiPhrase}`;
 
   return `${lead} is currently in ${trendText}${maPhrase}.${rsiPhrase}`;
 }
@@ -1080,7 +1110,12 @@ export default function StockSymbolPageClient({ symbol, pageToken, latestEarning
   const lastMA50 = lastNum(ma50), lastMA200 = lastNum(ma200), lastRsi = lastNum(rsi14);
   const trendScore = useMemo(() => buildTrendScore({ lastClose, ma50: typeof lastMA50 === "number" ? lastMA50 : null, ma200: typeof lastMA200 === "number" ? lastMA200 : null }), [lastClose, lastMA50, lastMA200]);
   const trend = useMemo(() => trendLabel({ lastClose, ma50: typeof lastMA50 === "number" ? lastMA50 : null, ma200: typeof lastMA200 === "number" ? lastMA200 : null }), [lastClose, lastMA50, lastMA200]);
-  const trendTone: "green" | "yellow" | "red" = trendScore.passed >= 3 ? "green" : trendScore.passed === 2 ? "yellow" : "red";
+  // null tone = inherit the default text colour. Forcing green/yellow/red would
+  // only pick which false reading to show, and red for an uncomputable trend is
+  // the bug this fixes.
+  const trendTone: "green" | "yellow" | "red" | null = !trendScore.known
+    ? null
+    : trendScore.passed >= 3 ? "green" : trendScore.passed === 2 ? "yellow" : "red";
   const longSummary = useMemo(() => buildLongSummary({ symbol, companyName, quote, lastClose, ma50: typeof lastMA50 === "number" ? lastMA50 : null, ma200: typeof lastMA200 === "number" ? lastMA200 : null, trend, trendScore, rsi: typeof lastRsi === "number" ? lastRsi : null }), [symbol, companyName, quote, lastClose, lastMA50, lastMA200, trend, trendScore, lastRsi]);
   const heroLede = useMemo(() => buildHeroLede({ symbol, companyName, trend, trendScore, rsi: typeof lastRsi === "number" ? lastRsi : null, lastClose, ma50: typeof lastMA50 === "number" ? lastMA50 : null, ma200: typeof lastMA200 === "number" ? lastMA200 : null }), [symbol, companyName, trend, trendScore, lastRsi, lastClose, lastMA50, lastMA200]);
   const ma50Pct = pctFromBase(lastClose, typeof lastMA50 === "number" ? lastMA50 : null);
@@ -1165,8 +1200,8 @@ export default function StockSymbolPageClient({ symbol, pageToken, latestEarning
               </div>
               <div className="stock-stat-cell">
                 <div className="stock-stat-label">Trend score</div>
-                <div className="stock-stat-value" style={{ color: toneColor(trendTone) }}>{trendScore.passed}/{trendScore.total}</div>
-                <div className="stock-stat-sub">{trend}</div>
+                <div className="stock-stat-value" style={trendTone ? { color: toneColor(trendTone) } : undefined}>{trendScore.known ? `${trendScore.passed}/${trendScore.total}` : "—"}</div>
+                <div className="stock-stat-sub">{trend ?? "Not enough history yet"}</div>
               </div>
               <div className="stock-stat-cell">
                 <div className="stock-stat-label">RSI (14)</div>
@@ -1389,7 +1424,7 @@ export default function StockSymbolPageClient({ symbol, pageToken, latestEarning
                 <div style={sectionLabelStyle}>Chart Summary</div>
                 <div>
                   {[
-                    { heading: `Trend summary for ${symbol}`, text: longSummary.trendParagraph, dot: trendTone },
+                    { heading: `Trend summary for ${symbol}`, text: longSummary.trendParagraph, dot: trendTone ?? "yellow" },
                     { heading: "Momentum and stretch context", text: longSummary.momentumParagraph, dot: rsiTone(typeof lastRsi === "number" ? lastRsi : null) },
                     { heading: "What traders may watch next", text: longSummary.structureParagraph, dot: "yellow" as const },
                   ].map((item, i) => (
