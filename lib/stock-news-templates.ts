@@ -38,7 +38,10 @@ function formatMoney(value: number | null) {
 export function buildWhyItMatters(
   item: ArticleLike,
   symbol: string,
-  trend: string,
+  // null when the trend could not be established. Every use below compares
+  // trend against a specific state, so null simply matches none of them --
+  // except the one !== check at buildBeyondHeadline, which is guarded there.
+  trend: string | null,
   newsScore: ToneLike
 ) {
   const lower = item.title.toLowerCase();
@@ -72,7 +75,7 @@ export function buildWhyItMatters(
 
 export function buildWhatItMeans(args: {
   symbol: string;
-  trend: string;
+  trend: string | null;
   newsScore: ToneLike;
   rsi: number | null;
   priceVs50: number | null;
@@ -110,13 +113,16 @@ export function buildWhatItMeans(args: {
 export function buildBeyondHeadline(args: {
   symbol: string;
   newsScore: ToneLike;
-  trend: string;
+  trend: string | null;
   recentHigh: number | null;
   recentLow: number | null;
 }) {
   const { symbol, newsScore, trend, recentHigh, recentLow } = args;
 
-  if (newsScore.tone === "red" && trend !== "Bearish trend") {
+  // trend !== "Bearish trend" is true for null too, which would assert "price
+  // keeps holding above important structure" for a stock whose structure was
+  // never established. Require a known trend.
+  if (newsScore.tone === "red" && trend !== null && trend !== "Bearish trend") {
     return `The outside-the-box read for ${symbol} is that apparently bad news does not always become lasting damage. If price keeps holding above important structure despite weaker headlines, that can mean some fear was already priced in or that stronger hands are still supporting the stock.`;
   }
   if (newsScore.tone === "green" && trend === "Bearish trend") {

@@ -330,8 +330,13 @@ function formatPlainDate(value: string | null) {
   }).format(date);
 }
 
-function earningsToneScore(earnings: LatestEarningsData) {
-  if (!earnings.hasStructuredData) return 50;
+// getLatestEarningsData already returns score: null when !hasStructuredData --
+// that is #314's fix, in the lib. This function threw that away and substituted
+// a literal 50, which rendered as a 24px number directly above the caption
+// "Structured data unavailable". null now means the same thing here that it
+// already meant one layer down.
+function earningsToneScore(earnings: LatestEarningsData): number | null {
+  if (!earnings.hasStructuredData) return null;
   if (earnings.tone === "green") return 78;
   if (earnings.tone === "red") return 28;
   return 55;
@@ -559,13 +564,16 @@ function scoreEarnings(news: NewsItem[]) {
 function buildLeadSummary(args: {
   symbol: string;
   companyName: string;
-  trend: string;
-  newsScore: NewsScoreResult;
+  trend: string | null;
+  newsScore: LiveNewsScore;
   earningsScore: { score: number; tone: ScoreTone; label: string; reason: string; };
 }) {
   const { symbol, companyName, trend, newsScore, earningsScore } = args;
   const lead = companyName ? `${companyName} (${symbol})` : symbol;
-  return `${lead} is currently showing a ${newsScore.label.toLowerCase()} headline tone with a ${trend.toLowerCase()} backdrop. The latest news flow is being framed here as context rather than prediction, so beginners can quickly see whether headlines are helping, hurting, or complicating the chart story. Earnings tone is currently ${earningsScore.label.toLowerCase()}.`;
+  // A null trend is not a "mixed backdrop", it is no backdrop. Drop the clause
+  // rather than naming a state that was never established.
+  const backdrop = trend === null ? "" : ` with a ${trend.toLowerCase()} backdrop`;
+  return `${lead} is currently showing a ${newsScore.label.toLowerCase()} headline tone${backdrop}. The latest news flow is being framed here as context rather than prediction, so beginners can quickly see whether headlines are helping, hurting, or complicating the chart story. Earnings tone is currently ${earningsScore.label.toLowerCase()}.`;
 }
 
 function buildNewsSummary(item: NewsItem, symbol: string, trend: string, newsScore: NewsScoreResult) {
@@ -668,19 +676,24 @@ function buildTechnicalRead(args: {
   price: number | null;
   ma50: number | null;
   ma200: number | null;
-  trend: string;
+  trend: string | null;
   rsi: number | null;
   priceVs50: number | null;
   priceVs200: number | null;
 }) {
   const { symbol, price, ma50, ma200, trend, rsi, priceVs50, priceVs200 } = args;
 
+  // The final arm of a ternary chain must not carry the value used when the
+  // input was never established: "not giving a fully clean trend read"
+  // describes a stock that was measured, not one that could not be.
   const trendText =
-    trend === "Bullish trend"
-      ? `${symbol} is trading in a stronger trend structure, with price holding above the shorter and longer trend references.`
-      : trend === "Bearish trend"
-        ? `${symbol} is trading in a weaker trend structure, with price still sitting below key trend references.`
-        : `${symbol} is not giving a fully clean trend read right now, which makes the quality of follow-through especially important.`;
+    trend === null
+      ? `${symbol} has not traded long enough to establish a trend structure on these measures, so the levels below matter more than any trend read.`
+      : trend === "Bullish trend"
+        ? `${symbol} is trading in a stronger trend structure, with price holding above the shorter and longer trend references.`
+        : trend === "Bearish trend"
+          ? `${symbol} is trading in a weaker trend structure, with price still sitting below key trend references.`
+          : `${symbol} is not giving a fully clean trend read right now, which makes the quality of follow-through especially important.`;
 
   let momentumText = "Momentum is not especially stretched right now, so price behaviour around fresh headlines may matter more than an extreme oscillator reading.";
   if (typeof rsi === "number" && rsi >= 70) momentumText = "Momentum looks hot rather than calm, which can support strength but also raises the chance of chop, pause, or pullback after fast gains.";
@@ -802,8 +815,8 @@ function DetailedNewsSection({
 }: {
   symbol: string;
   companyName: string;
-  trend: string;
-  newsScore: NewsScoreResult;
+  trend: string | null;
+  newsScore: LiveNewsScore;
   detailedNews: NewsItem[];
   compactNews: NewsItem[];
 }) {
@@ -830,7 +843,7 @@ function DetailedNewsSection({
                 symbol={symbol}
                 companyName={companyName}
                 trend={trend}
-                newsScoreLabel={newsScore.label}
+                newsScoreLabel={newsScore.available ? newsScore.label : null}
                 item={{
                   title: item.title,
                   link: item.link,
@@ -1027,7 +1040,7 @@ export default async function StockNewsPage({ params }: Props) {
             <div style={miniScoreGridStyle}>
               <div style={miniScoreCardStyle(latestEarnings.tone)}>
                 <div style={miniScoreTitleStyle}>Earnings Tone</div>
-                <div style={miniScoreNumberStyle}>{earningsToneScore(latestEarnings)}</div>
+                <div style={miniScoreNumberStyle}>{earningsToneScore(latestEarnings) ?? "—"}</div>
                 <div style={miniScoreLabelStyle}>{latestEarnings.hasStructuredData ? `${latestEarnings.toneLabel} based on actual EPS/revenue` : "Structured data unavailable"}</div>
               </div>
               <div style={miniScoreCardStyle(newsScore.tone)}>
@@ -1043,7 +1056,7 @@ export default async function StockNewsPage({ params }: Props) {
               </div>
               <div style={heroMetricStyle}>
                 <div style={heroMetricLabelStyle}>Trend Context</div>
-                <div style={heroMetricValueStyle}>{trend}</div>
+                <div style={heroMetricValueStyle}>{trend ?? "Not enough history yet"}</div>
               </div>
             </div>
           </div>
@@ -1056,7 +1069,7 @@ export default async function StockNewsPage({ params }: Props) {
               symbol={upper}
               companyName={companyName}
               trend={trend}
-              newsScore={{ score: newsScore.score, tone: newsScore.tone, label: newsScore.label }}
+              newsScore={newsScore.available ? { score: newsScore.score, tone: newsScore.tone, label: newsScore.label } : null}
               earningsScore={{ label: earningsScore.label }}
               lastRsi={lastRsi}
               priceVs50={priceVs50}

@@ -20,7 +20,10 @@ type SymbolResult = { symbol: string; name: string; exchange: string };
 type BenchItem = { key: string; label: string; symbol: string; date: string | null; time: string | null; close: number | null; prevClose: number | null; changePct: number | null; };
 export type BenchPayload = { updatedAt: string; scope: string; items: BenchItem[]; };
 type InternalNewsCard = { title: string; source: string | null; pubDate: string | null; summary: string; image?: string | null; link?: string | null; };
-export type NewsPayload = { symbol: string; companyName: string; isInvalidTicker: boolean; trend: string; newsScoreLabel: string; newsScoreValue: number; cards: InternalNewsCard[]; ctaHref: string; };
+// trend and newsScoreLabel are null when they could not be established. This
+// card sits beside the Overview card fixed in #317 and was still rendering
+// "Neutral tone \u00b7 Mixed / range" from a different code path entirely.
+export type NewsPayload = { symbol: string; companyName: string; isInvalidTicker: boolean; trend: string | null; newsScoreLabel: string | null; newsScoreValue: number | null; cards: InternalNewsCard[]; ctaHref: string; };
 export type StockEarningsSummary = { hasStructuredData?: boolean; tone?: "green" | "yellow" | "red"; toneLabel?: "Good" | "Neutral" | "Weak" | "Unavailable"; reportDate?: string | null; epsSurprisePercent?: number | null; revenueSurprisePercent?: number | null; };
 type CachedSymbolData = { quote: Quote | null; history: Point[]; };
 type DivergenceState = "bullish" | "bearish" | "none";
@@ -1122,7 +1125,7 @@ export default function DashboardClient({
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: COLORS.mutedFg2 }}>MyStockHarbor Briefing</div>
               <div style={{ marginTop: 5, fontSize: isMobile ? 18 : 20, fontWeight: 800, lineHeight: 1.1 }}>Latest headlines on {news.symbol}</div>
-              <div style={{ marginTop: 6, fontSize: 13, color: COLORS.mutedFg }}>{news.companyName ? `${news.companyName} · ` : ""}{news.newsScoreLabel} tone · {news.trend}</div>
+              <div style={{ marginTop: 6, fontSize: 13, color: COLORS.mutedFg }}>{news.companyName ? `${news.companyName} · ` : ""}{[news.newsScoreLabel ? `${news.newsScoreLabel} tone` : null, news.trend].filter(Boolean).join(" · ") || "Not enough data to summarise yet"}</div>
             </div>
             <Link href={news.ctaHref} style={{ textDecoration: "none", padding: "10px 13px", borderRadius: 10, border: `1px solid ${COLORS.amberBorder}`, background: COLORS.amberSoft, color: COLORS.amber, fontWeight: 700, fontSize: 12, whiteSpace: "nowrap" }}>Open full {news.symbol} news page</Link>
           </div>

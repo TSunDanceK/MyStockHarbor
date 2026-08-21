@@ -32,8 +32,8 @@ function strOrNull(value: unknown): string | null {
 type CachedPayload = {
   symbol: string;
   companyName: string;
-  trend: string;
-  newsScoreLabel: string;
+  trend: string | null;
+  newsScoreLabel: string | null;
   item: AiNewsBriefInputItem;
 };
 
@@ -97,8 +97,10 @@ export async function POST(request: NextRequest) {
   const payload: CachedPayload = {
     symbol,
     companyName: str(body.companyName),
-    trend: str(body.trend),
-    newsScoreLabel: str(body.newsScoreLabel) || "Neutral",
+    trend: str(body.trend) || null,
+    // null, not "Neutral": see the note in ../insight/route.ts. This payload is
+    // also the cache key, so a fabricated default was cached as well as sent.
+    newsScoreLabel: str(body.newsScoreLabel) || null,
     item,
   };
 
