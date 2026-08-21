@@ -19,6 +19,29 @@ function parsePage(value: string | undefined): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
 }
 
+// THIS ROUTE IS DELIBERATELY DYNAMIC. Do not "fix" it in an ISR sweep.
+//
+// Awaiting `searchParams` here opts the route out of static rendering, and that
+// is the point rather than an oversight. The per-page canonical below is a
+// deliberate SEO decision, and it cannot survive caching: Next has no per-query-
+// string cache split, so under ISR every `?page=N` would be served page 1's
+// HTML, page 1's canonical, page 1's title and page 1's JSON-LD ItemList. Two
+// URLs would then claim to be /insights while PaginationNav still links to them
+// -- the exact duplicate-content collapse the canonical exists to prevent, on a
+// site mid-indexing-recovery.
+//
+// Moving pagination client-side (the fix applied to the 32 screener pages in
+// #281) does NOT apply here. There, `?filters=` URLs were never indexed and
+// every canonical was already pinned to the bare path, so one cached HTML was
+// free. Here the paginated URLs are meant to be distinct.
+//
+// WHAT WOULD CHANGE THIS ANSWER: today the archive is 59 posts across 3 pages,
+// `?page=N` is not in the sitemap, and every post is submitted individually via
+// insightEntries -- so pagination is not a discovery route for Google, and the
+// cost of leaving one URL dynamic is one render per crawl. If the archive grows
+// far enough that pagination becomes a genuine discovery path, the answer is a
+// real route (`/insights/page/[n]`) that can be cached per page, NOT caching
+// this one and losing the canonicals. Revisit then, not before.
 export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
   const { page: pageParam } = await searchParams;
   const requestedPage = parsePage(pageParam);
