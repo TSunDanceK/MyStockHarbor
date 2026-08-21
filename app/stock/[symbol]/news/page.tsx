@@ -2,7 +2,12 @@ import type { CSSProperties } from "react";
 import StockNewsTickerJump from "./StockNewsTickerJump";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getStockNewsBaseData } from "@/lib/stock-news-data";
+// The rendered score comes from getStockNewsBaseData, i.e. the lib's scorer.
+// This file also declares a local NewsScoreResult and a local scoreNews, but
+// both belong to an unused local copy (eslint reports scoreNews, trendLabel
+// and scoreEarnings here as never used). The gauge must be typed against the
+// type that actually reaches it, not the lookalike declared below.
+import { getStockNewsBaseData, type NewsScoreResult as LiveNewsScore } from "@/lib/stock-news-data";
 import {
   buildWhyItMatters,
   buildBeyondHeadline,
@@ -1015,7 +1020,7 @@ export default async function StockNewsPage({ params }: Props) {
           </div>
 
           <div className="newsHeroRight" style={heroRightStyle}>
-            <div style={scorePanelStyle(newsScore.tone)}>
+            <div style={scorePanelStyle(newsScore.available ? newsScore.tone : null)}>
               <NewsScoreWatermark />
               <NewsScoreGauge newsScore={newsScore} />
             </div>
@@ -1153,7 +1158,11 @@ const heroPrimaryCtaStyle: CSSProperties = { display: "inline-flex", alignItems:
 const heroSecondaryCtaStyle: CSSProperties = { display: "inline-flex", alignItems: "center", justifyContent: "center", minHeight: 46, padding: "12px 16px", borderRadius: 14, border: "1px solid rgba(34,197,94,0.30)", background: "linear-gradient(135deg, rgba(34,197,94,0.16), rgba(21,128,61,0.08))", color: "#dcfce7", textDecoration: "none", fontWeight: 900, fontSize: 13, letterSpacing: "0.04em" };
 const heroSubCopyStyle: CSSProperties = { marginTop: 10, fontSize: 13, lineHeight: 1.6, color: "rgba(241,245,249,0.62)" };
 
-function scorePanelStyle(tone: ScoreTone): CSSProperties {
+// tone === null means the score is unavailable. The yellow tint is the same
+// one a genuine "Neutral" reading gets, so tinting an unscored panel yellow
+// restates the verdict the number was just removed for making.
+function scorePanelStyle(tone: ScoreTone | null): CSSProperties {
+  if (tone === null) return { position: "relative", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 20, padding: 18, background: "linear-gradient(135deg, rgba(148,163,184,0.10), rgba(12,14,18,0.96))" };
   if (tone === "green") return { position: "relative", border: "1px solid rgba(34,197,94,0.26)", borderRadius: 20, padding: 18, background: "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(7,16,12,0.96))" };
   if (tone === "red") return { position: "relative", border: "1px solid rgba(248,113,113,0.24)", borderRadius: 20, padding: 18, background: "linear-gradient(135deg, rgba(248,113,113,0.16), rgba(18,10,10,0.96))" };
   return { position: "relative", border: "1px solid rgba(250,204,21,0.24)", borderRadius: 20, padding: 18, background: "linear-gradient(135deg, rgba(250,204,21,0.14), rgba(18,16,8,0.96))" };
@@ -1162,7 +1171,22 @@ function scorePanelStyle(tone: ScoreTone): CSSProperties {
 const scorePanelKickerStyle: CSSProperties = { fontSize: 11, fontWeight: 950, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(255,255,255,0.76)" };
 function newsGaugeColour(tone: ScoreTone) { if (tone === "green") return "#22c55e"; if (tone === "red") return "#ef4444"; return "#eab308"; }
 
-function NewsScoreGauge({ newsScore }: { newsScore: NewsScoreResult }) {
+function NewsScoreGauge({ newsScore }: { newsScore: LiveNewsScore }) {
+  // Nothing to score means no number, no needle and no Bearish/Neutral/Bullish
+  // scale. The 42px "50/100" over a red-to-green arc with the marker at dead
+  // centre is the visually dominant element of this page, and it read as a
+  // genuine neutral verdict on stocks that simply had no usable headlines.
+  // The HEADLINE TAKE paragraph below already explains why, in words.
+  if (!newsScore.available) {
+    return (
+      <div>
+        <div style={scorePanelKickerStyle}>NEWS SCORE</div>
+        <div style={{ marginTop: 14, fontSize: 20, fontWeight: 800, letterSpacing: "-0.02em" }}>Not enough headlines to score</div>
+        <div style={{ marginTop: 8, fontSize: 13, lineHeight: 1.6, color: "rgba(241,245,249,0.72)" }}>{newsScore.reason}</div>
+      </div>
+    );
+  }
+
   const safeScore = Math.max(0, Math.min(100, newsScore.score));
   const colour = newsGaugeColour(newsScore.tone);
   const markerX = 24 + (192 * safeScore) / 100;

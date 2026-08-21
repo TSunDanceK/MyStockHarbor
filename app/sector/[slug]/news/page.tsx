@@ -328,7 +328,7 @@ export default async function SectorNewsPage({ params }: Props) {
             </div>
 
             <div className="newsHeroRight" style={heroRightStyle}>
-              <div style={scorePanelStyle(newsScore.tone)}>
+              <div style={scorePanelStyle(newsScore.available ? newsScore.tone : null)}>
                 <NewsScoreWatermark />
                 <NewsScoreGauge newsScore={newsScore} kicker="SECTOR NEWS SCORE" />
               </div>
