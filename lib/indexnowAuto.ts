@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "@/lib/server/redisCacheMode";
 import { submitUrlsToIndexNow } from "@/lib/indexnow";
 
 function getRedisClient() {
@@ -7,7 +8,10 @@ function getRedisClient() {
 
   if (!url || !token) return null;
 
-  return Redis.fromEnv();
+  // Read from /insights/[slug]'s render (submitInsightToIndexNowOnce), so it is
+  // on a prerendered page's read path and takes PAGE_READ_CACHE for the same
+  // reason as the snapshot client above it.
+  return Redis.fromEnv(PAGE_READ_CACHE);
 }
 
 function getBaseUrl() {

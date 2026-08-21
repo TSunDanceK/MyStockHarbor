@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { PAGE_READ_CACHE } from "@/lib/server/redisCacheMode";
 import type { InsightSnapshot, InsightSnapshotPoint } from "@/lib/blog";
 import { getDailyHistory } from "@/lib/server/historyCache";
 import { fetchQuoteSnapshot, type Quote } from "@/lib/server/quoteData";
@@ -18,7 +19,12 @@ function getRedisClient() {
 
   if (!url || !token) return null;
 
-  return Redis.fromEnv();
+  // PAGE_READ_CACHE, not a bare client. @upstash/redis defaults every REST call
+  // to cache: "no-store", and on a prerendered route that throws
+  // DYNAMIC_SERVER_USAGE at request time -- a 500, not a fallback. This client
+  // is read by /insights/[slug], which #310 made static and which 500'd in
+  // production for ~3.5 hours until #323 reverted it.
+  return Redis.fromEnv(PAGE_READ_CACHE);
 }
 
 function movingAverage(values: number[], window: number): (number | null)[] {
