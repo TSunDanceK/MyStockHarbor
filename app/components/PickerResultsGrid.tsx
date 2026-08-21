@@ -712,6 +712,32 @@ export default function PickerResultsGrid({
     const change: Col = { key: "change", label: "% Change", sortType: "num", get: (_e, d) => d.changePct, cell: (_e, d) => pctCell(d.changePct) };
     const industry: Col = { key: "industry", label: "Industry", sortType: "str", cls: "colInd", get: (e) => e.industry ?? "", cell: (e) => (e.industry ? <span className="listInd" title={e.industry}>{truncateName(e.industry, 32)}</span> : MUTED) };
     const volume: Col = { key: "volume", label: "Volume", sortType: "num", get: (_e, d) => d.volume, cell: (_e, d) => volCell(d.volume) };
+    // Which of the six composite checks fired, strongest first.
+    //
+    // The oversold/overbought screeners select on "2 or more of six", so the
+    // existing note ("3 oversold") tells a reader how many fired and never
+    // which. That matters most for RSI: /stock/[symbol] says "Overbought" when
+    // RSI >= 70 and nothing else, so the same word on the two pages can rest on
+    // entirely different evidence. Naming the checks lets a reader see that for
+    // themselves instead of inferring it.
+    //
+    // Sorted as a string on the joined label so the column is orderable like
+    // any other; the underlying order is by how far each check passed its own
+    // trigger, which is the same order the chart deep-link's dominant indicator
+    // is picked from.
+    const signals: Col = {
+      key: "signals",
+      label: "Signals",
+      sortType: "str",
+      cls: "colInd",
+      get: (e) => (e.firedIndicators ?? []).join(", "),
+      cell: (e) =>
+        e.firedIndicators?.length ? (
+          <span className="listInd" title={e.firedIndicators.join(" · ")}>{e.firedIndicators.join(" · ")}</span>
+        ) : (
+          MUTED
+        ),
+    };
     const pe: Col = { key: "pe", label: "PE Ratio", sortType: "num", get: (e) => num(e.peRatio), cell: (e) => numCell(num(e.peRatio)) };
     const ma200: Col = { key: "ma200", label: "200 MA", sortType: "num", get: (_e, d) => d.ma200, cell: (_e, d) => numCell(d.ma200) };
 
@@ -745,7 +771,7 @@ export default function PickerResultsGrid({
     const ptups: Col = { key: "ptups", label: "PT Upside", sortType: "num", get: (e, d) => ptUpside(e, d), cell: (e, d) => pctCell(ptUpside(e, d)) };
 
     const sets: Record<TabKey, Col[]> = {
-      general: [symbol, name, marketCap, price, change, industry, volume, pe, ma200],
+      general: [symbol, name, marketCap, price, change, signals, industry, volume, pe, ma200],
       performance: [symbol, name, marketCap, price, change, perf1w, perf1m, perf6m, perfYtd, perf1y],
       valuation: [symbol, name, marketCap, ev, pe, fwdpe, ps, pb, pfcf],
       dividends: [symbol, name, marketCap, dps, dyield, payout, dgrowth, freq],
