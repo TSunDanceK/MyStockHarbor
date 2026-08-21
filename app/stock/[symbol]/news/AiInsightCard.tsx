@@ -12,8 +12,11 @@ type InsightArticle = {
 type AiInsightCardProps = {
   symbol: string;
   companyName: string;
-  trend: string;
-  newsScore: { score: number; tone: "green" | "yellow" | "red"; label: string };
+  trend: string | null;
+  // null when there was nothing to score. The route used to substitute
+  // "Neutral"/50 for a missing score and hand that to the model as fact, so the
+  // absence has to survive the trip rather than be filled in at either end.
+  newsScore: { score: number; tone: "green" | "yellow" | "red"; label: string } | null;
   earningsScore: { label: string };
   lastRsi: number | null;
   priceVs50: number | null;
