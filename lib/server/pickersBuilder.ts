@@ -3305,6 +3305,20 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
 export type PickerStructureRow = {
   symbol: string;
   closes: number;
+  /**
+   * Last RSI(14), computed with THIS file's rsiWilder off the same daily
+   * history the composite uses. #326 established that this implementation and
+   * lib/indicators.ts (which drives /stock/[symbol]) agree at every index of a
+   * 300-bar series, so the two surfaces' RSI values are comparable.
+   *
+   * Caveat worth keeping in mind when reading a near-threshold row: the stock
+   * page reads its history through its own path, so bar count and recency can
+   * differ slightly. A stock at 69.8 here could be 70.1 there.
+   */
+  rsi: number | null;
+  /** How many of the composite's ~6 overbought checks fired. RSI is one. */
+  compOverbought: number | null;
+  compOversold: number | null;
   /** null when buildTrendScoreFromHistory refused: fewer than 220 usable closes. */
   trendScoreNull: boolean;
   source: "preset" | "popular-search" | "dynamic";
@@ -3370,6 +3384,8 @@ export async function buildPickerStructureDiagnostics() {
     const closes = pts.map((pt) => pt.close).filter((x) => Number.isFinite(x)).length;
     const comp = buildCompositeFromHistory(pts);
     const trendScore = buildTrendScoreFromHistory(pts);
+    const closesArr = pts.map((pt) => pt.close).filter((x) => Number.isFinite(x));
+    const rsi = closesArr.length ? lastNum(rsiWilder(closesArr, 14)) : null;
     const b = boost(symbol);
     const os = (mode: StructureMode) => {
       const c = computeOversoldCandidate(pts, comp, trendScore, mode);
@@ -3382,6 +3398,9 @@ export async function buildPickerStructureDiagnostics() {
     rows.push({
       symbol,
       closes,
+      rsi: typeof rsi === "number" ? Number(rsi.toFixed(2)) : null,
+      compOverbought: comp ? comp.overbought : null,
+      compOversold: comp ? comp.oversold : null,
       trendScoreNull: trendScore === null,
       source: presetSet.has(symbol) ? "preset" : popularSet.has(symbol) ? "popular-search" : "dynamic",
       oversold: { live: os("live"), waived: os("no-structure-waived"), penalised: os("no-structure-penalised") },
@@ -3410,6 +3429,9 @@ export async function buildPickerStructureDiagnostics() {
       .map((r) => ({
         symbol: r.symbol,
         closes: r.closes,
+        rsi: r.rsi,
+        compOverbought: r.compOverbought,
+        compOversold: r.compOversold,
         trendScoreNull: r.trendScoreNull,
         source: r.source,
         rankLive: live.get(r.symbol) ?? null,
@@ -3429,9 +3451,41 @@ export async function buildPickerStructureDiagnostics() {
   const thin = rows.filter((r) => r.trendScoreNull);
   const scorable = rows.filter((r) => r.closes >= 60);
 
+  // Does a stock get called overbought on one surface and not on another?
+  //
+  // The two surfaces answer different questions, so this is derivable rather
+  // than coincidental:
+  //   /stock/[symbol]            tile reads "Overbought" iff rsi >= 70.
+  //   /overbought-stocks-today   lists a stock iff comp.overbought >= 2 AND
+  //                              comp.overbought > comp.oversold AND it lands
+  //                              in the section's top 20.
+  // RSI is one of roughly six checks feeding the second, so neither implies the
+  // other. The rule is spelled out here so it can be checked rather than taken
+  // on trust; both directions are listed separately.
+  const obRank = new Map<string, number>();
+  rows
+    .filter((r) => r.overbought.live !== null)
+    .sort((a, b2) => (b2.overbought.live as number) - (a.overbought.live as number))
+    .forEach((r, i) => obRank.set(r.symbol, i + 1));
+  const SECTION_TAKE = 20;
+  const inSection = (sym: string) => (obRank.get(sym) ?? Infinity) <= SECTION_TAKE;
+
+  const vocabularyContradictions = {
+    rule: "stock page says Overbought iff rsi >= 70; screener lists iff compOverbought >= 2 && compOverbought > compOversold && sectionRank <= 20",
+    onScreenerButNotOverboughtOnStockPage: rows
+      .filter((r) => inSection(r.symbol) && (r.rsi === null || r.rsi < 70))
+      .map((r) => ({ symbol: r.symbol, rsi: r.rsi, compOverbought: r.compOverbought, compOversold: r.compOversold, sectionRank: obRank.get(r.symbol) ?? null }))
+      .sort((a, b2) => (a.sectionRank ?? 0) - (b2.sectionRank ?? 0)),
+    overboughtOnStockPageButNotOnScreener: rows
+      .filter((r) => typeof r.rsi === "number" && r.rsi >= 70 && !inSection(r.symbol))
+      .map((r) => ({ symbol: r.symbol, rsi: r.rsi, compOverbought: r.compOverbought, compOversold: r.compOversold, sectionRank: obRank.get(r.symbol) ?? null }))
+      .sort((a, b2) => (b2.rsi as number) - (a.rsi as number)),
+  };
+
   return {
     universeSize: universe.length,
     withHistory: rows.filter((r) => r.closes > 0).length,
+    vocabularyContradictions,
     // The band where the composites run (>= 60 closes) but the trend score
     // refuses (< 220). This is the population the whole question is about.
     scorableCount: scorable.length,
