@@ -323,3 +323,102 @@ chromium.launch({
 
 Install `playwright` into a scratch directory rather than the repo, so
 `package.json` and the lockfile stay untouched.
+---
+
+## 9. A visible failure is not a harmless one — and how to refuse to cache it
+
+`feedCache` (trap 1) made a failed upstream read distinguishable from a
+genuinely empty one. That fixed the *diagnosis* and not the *blast radius*.
+
+**Under ISR, a failed read is baked into the prerendered artefact** and served
+to every visitor and every crawler for the whole revalidate window, with no
+reload path out. "We couldn't load the IPO calendar" stops being a blip a
+refresh fixes and becomes *the page*, for everyone, until the window expires.
+`/upcoming-ipos` and `/recently-added-to-index` were held back from ISR for
+exactly this reason: their `f` status is what makes the failure self-heal.
+
+### The technique
+
+`await connection()` on the degraded path, via
+`lib/server/degradedRender.ts`. It does better than "don't persist the
+failure": the visitor keeps being served the **last known-good HTML**, so a
+failed *revalidation* is invisible to them rather than merely non-permanent.
+With no good copy it degrades to exactly today's dynamic behaviour.
+
+Measured against `next start` (Next 16.1.6), upstream toggled mid-run:
+
+```
+without   req1 STALE/good   req2 HIT/DEGRADED   req3 HIT/DEGRADED
+with      req1 STALE/good   req2 HIT/good       req3 HIT/good
+```
+
+### The limit — this is the half that will bite someone
+
+**Safe only on paramless static routes.** On a route with
+`generateStaticParams` it returns a **500**, measured on the same probe:
+
+```
+/pbail           (paramless)             -> 200, last known-good HTML
+/bailparam/[id]  (generateStaticParams)  -> 500
+```
+
+A 500 there is worse than the problem. `/stock/[symbol]` receives enumerated
+junk from something crawling ~1,519 distinct paths, and sustained 5xx makes
+Google throttle crawl rate **site-wide** — undoing the ISR work this enables.
+Per the #281 corollary: on a dynamic segment the tool is **200 + noindex**,
+never a 5xx.
+
+So: `/upcoming-ipos` yes. `/stock/[symbol]` never.
+
+### The cost, which is silent
+
+If the read fails **during a build**, the route cannot be prerendered and ships
+`f` for that entire deployment — not until upstream recovers, but until the
+next deploy. **The build stays green.** Measured: probe built with upstream
+failing, exit code 0, `f /pbail` in the route table.
+
+That trade is acceptable (a dynamic route behaves as these pages do today; a
+route with a failure baked in does not) but it is only acceptable *because
+something says it happened*. The `console.warn` naming the route is the entire
+early-warning system. Without it this becomes "the page quietly stopped being
+cached six weeks ago" — which is trap 7's shape, and this project has paid for
+it three times already.
+
+---
+
+## 10. An unchecked `cd` writes into whatever directory you were already in
+
+A scratch directory built earlier in the session was gone — containers recycle
+between sessions, taking `node_modules` and everything under `/home/user/*`
+scratch with them. The rebuild script started with `cd /home/user/isr-bail`,
+which failed. Every heredoc after it then wrote **relative paths into the repo**:
+
+```
+app/data.ts        app/pbail/page.tsx        app/pcontrol/page.tsx
+```
+
+`git add -A` committed all three into a PR about something else entirely.
+
+The failure is general and has nothing to do with probes: **an unchecked `cd`
+does not stop a script, it silently re-points every subsequent relative path at
+whatever directory the shell happens to be in** — which, in this setup, is
+always the repo. `set -e` does not save you here if the `cd` is not the last
+command in its own statement; the run that caused this printed
+`cd: No such file or directory` and carried on to `BUILD_EXIT=127`.
+
+Two fixes, either sufficient:
+
+```bash
+cd /home/user/probe || exit 1          # refuse to continue in the wrong place
+cat > /home/user/probe/app/data.ts     # or never use a relative path at all
+```
+
+**The habit that caught it is the part worth keeping:** reading the file list
+in the `git push` / `git show --stat` output instead of assuming the commit
+contains what was intended. The commit message, the diff summary and the PR
+title all described one change; only the file list showed three extra files.
+
+A related tail, once the strays were removed: `tsc` then failed on
+`.next/types/validator.ts` still importing the deleted routes. Stale generated
+types outlive the files they describe — `rm -rf .next` and rebuild before
+believing a type error about a file that no longer exists.
