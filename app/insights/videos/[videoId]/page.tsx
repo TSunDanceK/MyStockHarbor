@@ -35,10 +35,11 @@ export const revalidate = 1800;
 // the full set at build would spend that budget to bake pages that on-demand ISR
 // produces just as well, once, on first request. `dynamicParams` defaults to
 // true, so every id still resolves.
-export function generateStaticParams(): { videoId: string }[] {
-  return [];
-}
-
+// REMOVED in #323. Same cause as /insights/[slug]: #310 made this route ● and
+// a prerendered route doing a request-time `no-store` fetch throws
+// DYNAMIC_SERVER_USAGE and 500s. Do not re-add until every Redis client on
+// this route's transitive read path uses PAGE_READ_CACHE AND a real videoId
+// has been requested against a preview deployment and returned 200.
 type Props = {
   params: Promise<{ videoId: string }>;
 };
