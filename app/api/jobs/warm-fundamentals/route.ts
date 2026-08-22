@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getWarmTargetSymbols } from "../../../../lib/server/warmTargets";
 import { warmFundamentals } from "../../../../lib/server/fundamentalsCache";
+import { recordJobRun } from "../../../../lib/server/jobRuns";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -73,11 +74,24 @@ export async function GET(req: NextRequest) {
     // Logged as well as returned: the cron invokes this and discards the body,
     // so without this line the run's coverage is invisible in Vercel logs.
     console.log("[warm-fundamentals]", JSON.stringify(result));
+    // Same summary, written where something can READ IT BACK. Every one of
+    // these jobs already logged its outcome, and every failure on 22 Aug still
+    // went unnoticed -- a log line is only seen by someone who goes looking in
+    // the right window.
+    await recordJobRun("warm-fundamentals", result.ok !== false, {
+      universe: result.universe ?? null,
+      quotesFetched: result.quotesFetched ?? null,
+      industryMissing: result.industryMissing ?? null,
+      screenerCovered: result.screenerCovered ?? null,
+      selection: result.quoteSelection ?? null,
+    });
     return NextResponse.json(result);
   } catch (error) {
-    return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "warm-fundamentals failed" },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "warm-fundamentals failed";
+    // A THROWN run must be recorded too, or the health page shows the last
+    // SUCCESSFUL run's timestamp and reads as healthy while the job has been
+    // failing for days -- stale-green, the exact failure this page exists for.
+    await recordJobRun("warm-fundamentals", false, { error: message });
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }
