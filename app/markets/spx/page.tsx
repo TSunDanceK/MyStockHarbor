@@ -464,7 +464,7 @@ export default async function SPXPage() {
                   opacity: 0.92,
                 }}
               >
-                The S&amp;P 500 closed last week at 7,785.76 on Friday, August 14 — just below Wednesday's record closing high of 7,798.99 and an intraday record near 7,817 — after cooling inflation data drove a third straight weekly gain. The index is now up roughly 13–14% for the year, with this week's FOMC minutes, a wave of retail-sector earnings, and the run-up to Fed Chair Warsh's Jackson Hole remarks later this month the key things to watch from here.
+                The S&amp;P 500 closed at 7,674.31 on Friday, August 21 — about 1.6% below its record closing high of 7,798.99 set on August 13 — after rising Treasury yields and a bond-market selloff snapped a three-week winning streak with the index's first weekly loss (-1.9%) since late July. The index is still up roughly 11–12% for the year, with the run-up to Fed Chair Warsh's Jackson Hole debut, the U.S.-Iran standoff, and Nvidia's upcoming earnings the key things to watch from here.
               </div>
 
               <div
@@ -685,7 +685,7 @@ export default async function SPXPage() {
 
   <div>
     <strong style={{ color: "#4ade80", letterSpacing: "0.02em" }}>SIMPLE VIEW:</strong>{" "}
-    the SPX closed out last week near its all-time highs — 7,785.76 on Friday, August 14, just below Wednesday's record close of 7,798.99 and an intraday record near 7,817 — locking in a third consecutive weekly gain. The catalyst was familiar: soft inflation data (July CPI +0.1% month-over-month, 3.4% annually, plus a flat PPI reading) eased worries the Fed hikes again in September. But the week also delivered a reality check on the consumer — July retail sales fell 0.6% (versus +0.2% expected), the weakest control-group reading since January 2025, and University of Michigan sentiment slipped further below forecast — a reminder that a resilient stock market and a cooling household sector can coexist for a while. Sentiment has stayed elevated, with the CNN Fear &amp; Greed Index reading around 60–61 (&quot;Greed&quot;), down modestly from a more stretched reading earlier in the month. RSI touched an overbought extreme near 74–75 in early August before easing, and short interest in S&amp;P 500 stocks remains near a record 3.79% of free float — a sign some investors are still hedging even with the index sitting near record highs.
+    the SPX closed at 7,674.31 on Friday, August 21 — about 1.6% below its all-time high closing record of 7,798.99 set on Wednesday, August 13 — after a rough week for bonds spilled over into stocks. Rising long-term Treasury yields, a spike in oil prices on U.S.-Iran tensions, and a disappointing sales update from Walmart combined to snap the index's three-week winning streak, with the S&amp;P 500 down 1.9% for the week even after Friday's late bounce. Treasury Secretary Scott Bessent's move to double the size of the government's debt buybacks (to at least $4 billion per operation) helped calm yields into the weekend. Sentiment has cooled alongside price: the CNN Fear &amp; Greed Index sits at 52.5 (&quot;Neutral&quot;), down from 57 a week earlier, and RSI has eased back to a neutral reading in the mid-50s after touching an overbought extreme near 74–75 in early August — a sign some of the summer's froth has come out of the market even as it holds close to record territory.
   </div>
 </div>
           </section>
@@ -813,15 +813,15 @@ export default async function SPXPage() {
                 <div style={insightIconStyle("yellow")}>📈</div>
                 <div>
                   <div style={{ ...statLabelStyle(), color: "#fde68a", opacity: 1 }}>
-                    Near record highs, but consolidating
+                    Near record highs, but pulling back
                   </div>
                   <div style={{ marginTop: 5, fontSize: 21, fontWeight: 950 }}>
-                    Third straight weekly gain, cooling data on both sides
+                    First weekly loss in a month as bond yields bite
                   </div>
                 </div>
               </div>
               <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                The SPX closed last week at 7,785.76, just below Wednesday's record close of 7,798.99 and an intraday record near 7,817 — its third consecutive weekly gain. The push higher came from cooling inflation (July CPI +0.1% month-over-month, a flat PPI print), which eased fears of a September Fed hike, but soft retail sales and consumer sentiment data late in the week added a note of caution. Sentiment remains in &quot;Greed&quot; territory, with the CNN Fear &amp; Greed Index near 60.
+                The SPX closed Friday, August 21 at 7,674.31, about 1.6% below its record close of 7,798.99 set on August 13. Rising Treasury yields, an oil-price spike tied to U.S.-Iran tensions, and weak retail sales data from Walmart drove the index to a 1.9% weekly loss — its first down week after three straight weekly gains — even as Friday brought a partial bounce. Sentiment has cooled to &quot;Neutral&quot; on the CNN Fear &amp; Greed Index (52.5), down from 57 a week earlier.
               </div>
             </div>
 
@@ -850,7 +850,7 @@ export default async function SPXPage() {
                 </div>
               </div>
               <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                Breadth has stayed reasonably constructive without being pristine — a majority of S&amp;P 500 members trade above their own 200-day moving average, but the index's gains still lean heavily on a handful of AI-linked mega-caps, with Nvidia again headlining this earnings season. Short interest in S&amp;P 500 stocks remains near a record 3.79% of free float, a sign some investors are still hedging even as the index sits near all-time highs.
+                Breadth has softened somewhat alongside this week's pullback, with fewer S&amp;P 500 members holding above their own 200-day moving average than during the early-August highs — a reminder that the index's gains still lean heavily on a handful of AI-linked mega-caps. Nvidia's upcoming earnings report looks like the next big test of whether that leadership can broaden out or stays this narrow.
               </div>
             </div>
 
@@ -862,12 +862,12 @@ export default async function SPXPage() {
                     Weekly chart
                   </div>
                   <div style={{ marginTop: 5, fontSize: 21, fontWeight: 950 }}>
-                    Uptrend intact, momentum cooling from overbought
+                    Uptrend intact, momentum back to neutral
                   </div>
                 </div>
               </div>
               <div style={{ marginTop: 12, opacity: 0.84, lineHeight: 1.65 }}>
-                The S&amp;P 500 is trading comfortably above its rising daily and weekly 50- and 200-period moving averages, with the broader trend structure still aligned bullishly. RSI(14) has eased from the overbought extreme (~74–75) touched in early August to a more neutral reading, suggesting less froth than a couple of weeks ago even as the index holds near record highs.
+                The S&amp;P 500 remains above its rising daily and weekly moving averages even after this week's pullback, with the broader trend structure still bullish. RSI(14) has eased to a neutral reading in the mid-50s, down from an overbought extreme near 74–75 touched in early August — suggesting this week's dip has worked off some of the summer's froth rather than signaling a trend change.
               </div>
             </div>
           </section>
@@ -901,11 +901,11 @@ export default async function SPXPage() {
               }}
             >
               <p style={{ margin: 0 }}>
-                The S&amp;P 500's uptrend remains intact heading into the week of August 17, though momentum has cooled from its early-August sprint. The index closed Friday, August 14 at 7,785.76, just below Wednesday's record close of 7,798.99 and an intraday record near 7,817 — enough to lock in a third straight weekly gain even as the index eased modestly into the weekend. The index is up roughly 13–14% for the year and on pace for one of its strongest Augusts in more than four decades. A wave of Wall Street banks has kept raising 2026 year-end targets: Citigroup lifted its target to 8,100 (from 7,700), Goldman Sachs and Morgan Stanley both sit at 8,000, and JPMorgan, Barclays and Stifel have all moved up to 7,800. Bank of America remains the holdout on the fundamental side at 7,100, citing concentration risk, even as its own technicians have already cleared their earlier target and are eyeing resistance in the 8,000–8,500 zone.
+                The S&amp;P 500's uptrend remains intact heading into the week of August 24, though it just logged its first weekly loss in a month. The index closed Friday, August 21 at 7,674.31, up 0.43% on the day but down 1.9% for the week and about 1.6% below its record closing high of 7,798.99 set on Wednesday, August 13. The index is up roughly 11–12% for the year. Sell-side targets have kept climbing into the pullback: JPMorgan raised its year-end target to 8,000 (from 7,800) on August 11, citing a strong Q2 earnings season in which 86% of S&amp;P 500 companies beat EPS estimates and clearer signs that AI investment is translating into revenue growth. Goldman Sachs holds a matching 8,000 target, raised from 7,600 back in May on the same AI-earnings thesis.
               </p>
 
               <p style={{ margin: 0 }}>
-                The trigger for the latest leg higher was calmer than earlier August's jobs-report shock: back-to-back soft inflation data. Wednesday's July CPI report rose just 0.1% month-over-month, with the annual rate at 3.4%, and Friday's producer price data came in flat versus an expected 0.2% rise — both easing fears the Federal Reserve needs to raise rates again at its September meeting. The Fed funds rate has held at 3.50%–3.75%, and while some measures still show elevated year-end hike odds, futures markets have increasingly leaned toward the Fed staying on hold or cutting later in the year. Q2 earnings season has also stayed strong, with the index tracking a second consecutive quarter of year-over-year profit growth above 20%, AI-related capital spending continuing to do much of the heavy lifting. That strength sits alongside a cooling consumer: July retail sales fell 0.6% (versus +0.2% expected, the weakest control-group reading since January 2025), and University of Michigan consumer sentiment slipped further below forecast — a divergence between resilient corporate earnings and a softer household sector.
+                The trigger for this week's pullback was a bond-market story rather than an equity-specific one. Long-term Treasury yields moved higher through the week, reviving worries that elevated borrowing costs will weigh on already-rich valuations. Crude oil jumped as U.S.-Iran tensions escalated — with U.S. officials signaling further economic pressure on Iran — pushing WTI above $86 a barrel and adding an inflation wrinkle to the yield story. Walmart's disappointing comparable-sales update added to the unease around the health of the consumer. Treasury Secretary Scott Bessent tried to steady the bond market by doubling the size of debt buyback operations, from $2 billion to at least $4 billion per operation, and that move — along with an oversold bounce — helped stocks recover somewhat on Friday. None of this displaces the bigger picture: cooling July inflation data (headline CPI of 3.4%, core at 2.5%) was the catalyst that drove the index to its record close on August 13 in the first place, and that disinflation trend hasn't reversed.
               </p>
 
               <div
@@ -922,12 +922,12 @@ export default async function SPXPage() {
               >
                 <div style={overviewIconStyle("red")}>⚠️</div>
                 <div style={{ lineHeight: 1.65 }}>
-                  <strong style={{ color: "#fca5a5" }}>Watch the breadth and the crowded trade:</strong> leadership remains concentrated in a handful of AI-linked mega-caps, and while a majority of S&amp;P 500 members trade above their own 200-day moving average, breadth hasn't been as broad-based as the index-level records might suggest. RSI touched an overbought extreme near 74–75 in early August before easing, and short interest in S&amp;P 500 stocks remains near a record 3.79% of free float — a reminder that positioning is stretched even as fresh records keep being set. From here, this week's FOMC minutes, a wave of retail-sector earnings (Home Depot, Target, Walmart), and the run-up to Fed Chair Warsh's Jackson Hole remarks later this month look more likely to move this rally than another broad macro catalyst.
+                  <strong style={{ color: "#fca5a5" }}>Watch the breadth and the crowded trade:</strong> leadership remains concentrated in a handful of AI-linked mega-caps, and breadth has softened somewhat during this week's pullback as fewer members hold above their own 200-day moving average than at the early-August highs. Sentiment has cooled from &quot;Greed&quot; to &quot;Neutral&quot; on the CNN Fear &amp; Greed Index (52.5, down from 57), and RSI has eased from an overbought extreme near 74–75 in early August to a neutral mid-50s reading. From here, Fed Chair Warsh's Jackson Hole debut (August 27–29), developments in the U.S.-Iran standoff, and Nvidia's earnings report look more likely to move this market than another routine macro data print.
                 </div>
               </div>
 
               <p style={{ margin: 0 }}>
-                Zooming out to the <strong>weekly chart</strong>, the picture stays constructive: price sits comfortably above its 50-week and 200-week moving averages, both well below the current ~7,750–7,800 range, and the daily 50-day moving average has remained above the 200-day since mid-2025. Market breadth has held up reasonably well without being pristine, and this month's records keep the index within close range of Wells Fargo's 7,950 marker, leaving the cluster of 8,000–8,100 targets from Goldman, Citi, Morgan Stanley and others as the more relevant markers for the rest of the year.
+                Zooming out to the <strong>weekly chart</strong>, the picture stays constructive: price sits comfortably above its rising 50-week and 200-week moving averages, both well below the current level, and the daily 50-day moving average has remained above the 200-day for months. This week's 1.9% pullback is the kind of routine give-back a genuine three-week rally can absorb without threatening the broader uptrend, keeping the cluster of 8,000 year-end targets from JPMorgan and Goldman Sachs as the more relevant markers for the rest of the year.
               </p>
             </div>
           </section>
@@ -968,15 +968,15 @@ export default async function SPXPage() {
                 }}
               >
                 <p style={{ margin: 0 }}>
-                  Coming off a week that saw the S&amp;P 500 touch a fresh intraday record near 7,817 before easing back toward 7,785 by Friday's close, the daily chart alone doesn't tell the full story. The weekly chart shows an index that remains comfortably above both its 50-week and 200-week moving averages, levels that sit well below the current ~7,750–7,800 range — this week's mild pullback has plenty of room before it would threaten the longer-term trend.
+                  Coming off a week that saw the S&amp;P 500 slip 1.9% — its first weekly loss in a month — the daily chart alone doesn't tell the full story. The weekly chart shows an index that remains comfortably above both its 50-week and 200-week moving averages, levels that sit well below the current ~7,650–7,700 range — this week's pullback has plenty of room before it would threaten the longer-term trend.
                 </p>
 
                 <p style={{ margin: 0 }}>
-                  The bigger picture: the S&amp;P 500 is up roughly 13–14% for the year, on pace for one of its strongest Augusts in more than 40 years, and is now closing in on or has cleared several Wall Street banks' full-year 2026 targets. Its daily 200-day moving average — unbroken since early April — sits comfortably beneath current levels.
+                  The bigger picture: the S&amp;P 500 is up roughly 11–12% for the year and sits only about 1.6% below the record closing high of 7,798.99 it set on August 13. Its daily 200-day moving average — unbroken for months — sits comfortably beneath current levels, and the index remains within reach of the 8,000 year-end targets now shared by JPMorgan and Goldman Sachs.
                 </p>
 
                 <p style={{ margin: 0 }}>
-                  The real question isn't whether this month's records are real — a genuine catalyst (cooling inflation, not just hope) makes them real. It's whether the market can hold these levels once this week's FOMC minutes and the next batch of retail earnings land, especially with RSI having touched overbought territory in early August, short interest near a record high, and a consumer sector — via soft retail sales and sentiment data — that's cooling faster than the stock market is.
+                  The real question isn't whether the early-August records were real — cooling inflation data made them real. It's whether the rally can shake off a bond-market scare once Fed Chair Warsh's Jackson Hole debut and the next read on U.S.-Iran tensions land, especially with breadth softening slightly and leadership still concentrated in a narrow group of AI names.
                 </p>
 
                 <p style={{ margin: 0 }}>
@@ -1002,10 +1002,10 @@ export default async function SPXPage() {
 
               <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
                 {[
-                  ["📈", "ATH", "record closing high of 7,798.99 set Wednesday, August 13, 2026, with an intraday record near 7,817 — the index's third straight weekly gain, before easing modestly to 7,785.76 by Friday's close"],
-                  ["⚠️", "Risk", "RSI touched an overbought extreme near 74–75 in early August, short interest in S&P 500 stocks remains near a record 3.79% of free float, July retail sales and consumer sentiment both came in soft, and leadership still leans heavily on a handful of AI mega-caps"],
-                  ["🔎", "Weekly structure", "still bullish — price sits well above its 200-day and 200-week moving averages, and a majority of members trade above their own 200-day MA"],
-                  ["🟡", "Current stance", "up roughly 13–14% for the year after a cooling-inflation-driven rally; this week's FOMC minutes, retail-sector earnings, and the run-up to Fed Chair Warsh's Jackson Hole remarks are the next big catalysts"],
+                  ["📈", "ATH", "record closing high of 7,798.99 set Wednesday, August 13, 2026, with an intraday record near 7,817 — the index has since pulled back about 1.6%, closing at 7,674.31 on Friday, August 21"],
+                  ["⚠️", "Risk", "rising Treasury yields, an oil-price spike tied to U.S.-Iran tensions, and weak retail sales data drove a 1.9% weekly loss — the index's first down week in a month — with breadth softening slightly and leadership still concentrated in AI mega-caps"],
+                  ["🔎", "Weekly structure", "still bullish — price sits well above its 50-week and 200-week moving averages, with RSI back to a neutral mid-50s reading after touching overbought levels in early August"],
+                  ["🟡", "Current stance", "up roughly 11–12% for the year after a cooling-inflation-driven summer rally; Fed Chair Warsh's Jackson Hole debut, the U.S.-Iran standoff, and Nvidia's earnings are the next big catalysts"],
                 ].map(([icon, label, text]) => (
                   <div
                     key={label}
@@ -1068,7 +1068,7 @@ export default async function SPXPage() {
                 maxWidth: 920,
               }}
             >
-              The weekly chart shows the S&amp;P 500 consolidating just below its all-time highs after touching a fresh intraday record near 7,817 in mid-August and a record close of 7,798.99 on Wednesday, August 13 — its third consecutive weekly gain — before easing to 7,785.76 by Friday's close. The broader trend structure remains bullish, with the index comfortably above its rising daily and weekly 50- and 200-period moving averages. Momentum has eased from an overbought RSI near 74–75 in early August to a calmer reading, while a majority of S&amp;P 500 members continue to trade above their own 200-day moving average — a backdrop that looks constructive heading into this week's FOMC minutes and the following retail-earnings wave, even with leadership still concentrated in a handful of AI-linked mega-caps.
+              The weekly chart shows the S&amp;P 500 pulling back modestly from its all-time highs after touching a record close of 7,798.99 on Wednesday, August 13 and an intraday record near 7,817 — the index has since eased about 1.6% to 7,674.31 by Friday, August 21, logging its first weekly loss (-1.9%) in a month. The broader trend structure remains bullish, with the index comfortably above its rising daily and weekly moving averages. Momentum has cooled from an overbought RSI near 74–75 in early August to a calmer mid-50s reading, while breadth has softened slightly as fewer S&amp;P 500 members hold above their own 200-day moving average — a backdrop that still looks constructive heading into Fed Chair Warsh's Jackson Hole debut, even with leadership still concentrated in a handful of AI-linked mega-caps.
             </div>
 
             <div style={{ marginTop: 18 }}>
@@ -1127,13 +1127,13 @@ export default async function SPXPage() {
                     SPX closes back below its rising daily 50-day moving average on a weekly basis
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    A hotter-than-expected inflation, jobs, or PPI print revives fears the Fed hikes rates at its September meeting
+                    Treasury yields keep climbing and the bond-market selloff deepens rather than stabilizes, even after Treasury's expanded buybacks
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Short interest keeps climbing beyond its already-record 3.79% of free float, or a real bout of profit-taking hits AI-linked mega-caps
+                    The U.S.-Iran standoff escalates further, sending oil prices — and inflation expectations — higher
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Weekly close below the 200-day moving average — the primary trend line that's held since early April
+                    Weekly close below the 200-day moving average — the primary trend line that's held for months
                   </li>
                 </ul>
               </div>
@@ -1148,16 +1148,16 @@ export default async function SPXPage() {
 
                 <ul style={{ margin: "12px 0 0", paddingLeft: 18, display: "grid", gap: 8 }}>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Price holds above 7,800 and pushes on toward the cluster of 8,000–8,100 year-end targets from Goldman Sachs, Citi and Morgan Stanley
+                    Price reclaims the record high of 7,798.99 and pushes on toward the 8,000 year-end targets from JPMorgan and Goldman Sachs
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    This week's FOMC minutes and upcoming labor-market data stay consistent with the Fed holding steady, or open the door to a rate cut later this year
+                    Treasury yields stabilize or ease, taking pressure off equity valuations
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Q2 earnings season finishes with S&P 500 profit growth holding above its current 20%+ year-over-year pace
+                    Nvidia's upcoming earnings reinforce the AI-monetization story that's been driving mega-cap leadership
                   </li>
                   <li style={{ lineHeight: 1.5, opacity: 0.88 }}>
-                    Market breadth keeps improving, with a growing share of members holding above their 200-day moving average even as retail sales and consumer sentiment stay soft
+                    Market breadth stops narrowing, with a growing share of members holding above their 200-day moving average
                   </li>
                 </ul>
               </div>
@@ -1193,7 +1193,7 @@ export default async function SPXPage() {
               }}
             >
               <p style={{ margin: 0 }}>
-                The honest answer depends on timeframe. The weekly trend is unambiguously bullish — the SPX closed last week at 7,785.76, just off a record close of 7,798.99 set Wednesday, August 13, and up roughly 13–14% for the year — putting it within striking distance of Wells Fargo's 7,950 target and the cluster of 8,000–8,100 targets from Goldman Sachs, Citi and Morgan Stanley. None of the bullish sell-side calls have been walked back; Bank of America remains the outlier on the fundamental side, still at 7,100 on concerns about how concentrated the market's gains have become.
+                The honest answer depends on timeframe. The weekly trend is still constructive — the SPX closed at 7,674.31 on Friday, August 21, only about 1.6% below its record close of 7,798.99 set on August 13, and up roughly 11–12% for the year — but this week's 1.9% pullback, its first down week in a month, is a reminder the summer rally hasn't been a one-way street. None of the bullish sell-side calls have been walked back; JPMorgan and Goldman Sachs both hold year-end targets of 8,000.
               </p>
 
               <div
@@ -1210,12 +1210,12 @@ export default async function SPXPage() {
               >
                 <div style={overviewIconStyle("blue")}>🧭</div>
                 <div style={{ lineHeight: 1.65 }}>
-                  <strong style={{ color: "#93c5fd" }}>The nuance:</strong> this month's rally was set off by cooling inflation data, not runaway economic strength — and the same week that delivered a third straight record-adjacent close also delivered weak retail sales and a sliding consumer sentiment reading, a reminder that strength in stocks and strength in the underlying economy aren't always moving in lockstep. Sentiment has caught up to price too: the CNN Fear &amp; Greed Index sits around 60 (&quot;Greed&quot;), and RSI touched an overbought extreme near 74–75 in early August. Short interest in S&amp;P 500 stocks remains near a record 3.79% of free float, and market leadership still leans on a fairly narrow set of AI-linked mega-caps even though breadth overall has held up reasonably well. None of that means the uptrend is over — the 200-day moving average is nowhere close — but it does mean the easy, undervalued entry point of a few months ago is behind us. This week's FOMC minutes and the run-up to Fed Chair Warsh's Jackson Hole remarks are the next real tests of that thesis.
+                  <strong style={{ color: "#93c5fd" }}>The nuance:</strong> this week's pullback was a bond-market story — rising Treasury yields, an oil-price spike from U.S.-Iran tensions, and weak retail sales data — rather than a reassessment of the earnings backdrop that drove the index to records in the first place. Sentiment has cooled with price: the CNN Fear &amp; Greed Index sits at 52.5 (&quot;Neutral&quot;), down from 57 a week ago, and RSI has eased to a neutral mid-50s reading from an overbought extreme near 74–75 in early August. Market leadership still leans on a fairly narrow set of AI-linked mega-caps, and breadth has softened slightly during the pullback. None of that means the uptrend is over — the 200-day moving average is nowhere close — but it's a reminder that valuations can wobble when bond yields move, even with earnings still coming in strong. Fed Chair Warsh's Jackson Hole debut and Nvidia's earnings are the next real tests of that thesis.
                 </div>
               </div>
 
               <p style={{ margin: 0 }}>
-                The SPX near 7,785–7,800 is sitting just below a fresh all-time high, up solidly for the year with real earnings growth doing work beneath the surface. But with RSI having touched overbought levels in early August, short interest at a record, sentiment still in &quot;Greed&quot; territory, a cooling consumer showing up in the data, and leadership still concentrated in a handful of AI names, chasing this specific level looks less compelling than waiting for either a routine pullback toward the rising 50-day moving average or confirmation from this week's Fed minutes and the Jackson Hole speech later this month.
+                The SPX near 7,650–7,700 is sitting just below a fresh all-time high, up solidly for the year with real earnings growth doing work beneath the surface. But with breadth softening, leadership still concentrated in a handful of AI names, and bond-market volatility still unresolved heading into Jackson Hole, chasing this specific level looks less compelling than waiting for either a clearer stabilization in Treasury yields or confirmation from Fed Chair Warsh's speech and Nvidia's earnings later this month.
               </p>
             </div>
           </section>
