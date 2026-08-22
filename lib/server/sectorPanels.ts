@@ -25,10 +25,30 @@ import { getCompanyNameMap } from "./companyNames";
 // mover list is at least internally consistent.
 //
 // WHAT THIS IS NOT. The performance figures are a constituent-weighted read of
-// OUR universe's largest names in a sector -- not the sector index itself. FMP
-// Starter has no confirmed sector-performance endpoint in use anywhere in this
-// repo (see the probes added to /api/debug/fmp-endpoints), so the pages label
-// this as a constituent read rather than implying an index print.
+// OUR universe's largest names in a sector -- not the sector index itself. The
+// pages label it as a constituent read rather than implying an index print.
+//
+// FMP'S OWN SECTOR ENDPOINTS ARE AVAILABLE ON THIS PLAN. Measured 2026-08-22
+// via /api/debug/fmp-endpoints: `sector-performance-snapshot` returns all 11
+// sectors in ONE call, and `historical-sector-performance` works too. The
+// earlier note here said no such endpoint was confirmed; that is now known to be
+// wrong and is corrected rather than deleted, because "we checked and it is
+// unavailable" and "nobody ever checked" are different claims and only one of
+// them was ever true.
+//
+// DO NOT SWAP ONE FOR THE OTHER WITHOUT DECIDING THAT DELIBERATELY. FMP's
+// `averageChange` is EQUAL-WEIGHTED and split per exchange. This file computes a
+// CAP-WEIGHTED read over the top PERFORMANCE_SAMPLE names of our universe. Same
+// name, same units, different metric -- so replacing one with the other changes
+// every number on the page while nothing errors, and the shift reads as a data
+// bug rather than as the definition change it actually is
+// (claude/traps/measuring-the-wrong-layer.md).
+//
+// That is not an argument against adopting it. One call for 11 sectors is a real
+// saving over PERFORMANCE_SAMPLE * 11 price-pool reads, and FMP's figure is
+// arguably the more defensible number to publish. It is an argument for making
+// the switch as an explicit decision with the label updated to match, never as a
+// quiet substitution.
 // ---------------------------------------------------------------------------
 
 const redis =

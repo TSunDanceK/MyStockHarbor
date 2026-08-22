@@ -8,7 +8,7 @@ import Link from "next/link";
 // both belong to an unused local copy (eslint reports scoreNews, trendLabel
 // and scoreEarnings here as never used). The gauge must be typed against the
 // type that actually reaches it, not the lookalike declared below.
-import { getStockNewsBaseData, isEarningsNewsItem, type NewsScoreResult as LiveNewsScore } from "@/lib/stock-news-data";
+import { getStockNewsBaseData, type NewsScoreResult as LiveNewsScore } from "@/lib/stock-news-data";
 import { keywordHits } from "@/lib/keywordMatch";
 import {
   buildWhyItMatters,
@@ -128,30 +128,6 @@ function buildLeadSummary(args: {
 // lib's blocks "52-week"/"stocks to watch" and marketbeat/etfdailynews). Left
 // alone on purpose -- collapsing them would change what this page shows, which
 // is a content decision, not the matcher fix. Flagged rather than merged.
-function isLowValueNewsItem(item: NewsItem) {
-  const title = item.title.toLowerCase();
-  const source = (item.source ?? "").toLowerCase();
-
-  const lowValuePatterns = [
-    "stock price","current price","live price","price chart","quote today","stock quote",
-    "company profile","market cap","forecast 2025","forecast 2026","forecast 2030",
-    "buy sell hold","prediction","how to buy","review","price prediction","current chart",
-  ];
-
-  const lowValueSources = ["financialcontent","capital.com"];
-
-  if (lowValuePatterns.some((pattern) => title.includes(pattern))) return true;
-
-  if (
-    lowValueSources.includes(source) &&
-    !keywordHits(title, ["earnings","revenue","guidance","analyst","upgrade","downgrade","price target","delivery","deliveries","production","lawsuit","investigation","recall","partnership","launch","insider","sec"])
-  ) {
-    return true;
-  }
-
-  return false;
-}
-
 function buildTechnicalRead(args: {
   symbol: string;
   price: number | null;
@@ -373,66 +349,6 @@ function DetailedNewsSection({
   );
 }
 
-function getEarningsNewsItems(news: NewsItem[]) {
-  return [...news]
-    // isEarningsNewsItem, not a local isEarningsHeadline. The local copy held a
-    // character-for-character duplicate of the lib's 14-word list, so THIS page
-    // -- the one where the misclassified stories were actually seen -- would
-    // have kept its own broken matcher if only the lib had been fixed.
-    .filter((item) => !isLowValueNewsItem(item) && isEarningsNewsItem(item))
-    .sort((a, b) => {
-      const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
-      const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
-      return bTime - aTime;
-    })
-    .slice(0, 5);
-}
-
-function EarningsNewsSection({ symbol, earningsNews }: { symbol: string; earningsNews: NewsItem[]; }) {
-  // NOTHING TO SAY MEANS SAY NOTHING. This used to render the full card -- an
-  // eyebrow, a heading, an explanatory paragraph -- wrapped around a box reading
-  // "No recent earnings-specific headlines found", which is a section whose
-  // entire content is an apology for having no content. The structured earnings
-  // snapshot it pointed at is rendered separately by SharedLatestEarningsCard
-  // and is unaffected, so there is genuinely nothing left here to show.
-  //
-  // Worth noting alongside the word-boundary matcher fix: this branch will be
-  // reached MORE often now, because the old substring matcher counted any story
-  // containing "headquartered" or "nonprofit" as earnings coverage. Emptier is
-  // the correct reading, not a regression.
-  if (!earningsNews.length) return null;
-
-  return (
-    <section style={sidebarCardStyle}>
-      <div style={sectionEyebrowStyle}>Earnings news</div>
-      <h2 style={sectionTitleSmallStyle}>{symbol} earnings headlines</h2>
-      <p style={bodyCopyStyle}>This section is separated from the general news feed so investors can quickly connect the latest headlines with the structured earnings report.</p>
-      <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
-        {earningsNews.slice(0, 2).map((item, index) => (
-            <a key={`${item.link}-${index}`} href={item.link} target="_blank" rel="noopener noreferrer" style={earningsNewsRowStyle}>
-              <div style={earningsNewsNumberStyle}>{index + 1}</div>
-              {/* The thumbnail floats at the top-right of this content column so the
-                  meta row / heading / description wrap around it, instead of sitting
-                  in its own flex slot and forcing everything else into a tall,
-                  separate text column below a fixed-height image. */}
-              <div style={{ minWidth: 0, overflow: "hidden" }}>
-                {item.image ? (
-                  <img src={item.image} alt="" loading="lazy" style={earningsThumbStyle} />
-                ) : null}
-                <div style={newsMetaRowStyle}>
-                  <span style={newsSourcePillStyle}>{compactSource(item.source)}</span>
-                  <span style={newsDateStyle}>{formatDate(item.pubDate)}</span>
-                </div>
-                <h3 style={earningsNewsHeadlineStyle}>{stripAnyHtml(item.title)}</h3>
-                {item.description ? <p style={earningsNewsTextStyle}>{stripAnyHtml(item.description)}</p> : null}
-              </div>
-            </a>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 export default async function StockNewsPage({ params }: Props) {
   const { symbol } = await params;
   const upper = symbol.toUpperCase();
@@ -449,7 +365,6 @@ export default async function StockNewsPage({ params }: Props) {
   } = newsData;
 
   const latestEarnings = await getLatestEarningsData(upper, earningsScore.tone);
-  const earningsNewsItems = getEarningsNewsItems(news);
 
   const leadSummary = buildLeadSummary({ symbol: upper, companyName, trend, newsScore, earningsScore });
   const whatItMeans = buildWhatItMeans({ symbol: upper, trend, newsScore, rsi: lastRsi, priceVs50 });
@@ -592,8 +507,25 @@ export default async function StockNewsPage({ params }: Props) {
                 </div>
               </div>
             </section>
+            {/* The earnings NEWS card used to sit here and is gone deliberately
+                (owner's call, 2026-08-22). Three things together:
+
+                  * SharedLatestEarningsCard immediately above already carries
+                    actual EPS, revenue, surprise and margins -- the structured
+                    figures, not headlines about them.
+                  * There is no dedicated earnings source to build it on.
+                    Measured, not assumed: news/press-releases 402,
+                    press-releases-latest 402, the v3 vintage 403 (legacy
+                    subscribers only) and earning-call-transcript-latest 402 on
+                    this plan. The card could only ever be a keyword filter over
+                    the general feed.
+                  * That filter now matches on word boundaries, so it no longer
+                    counts every story containing "headquartered" or "nonprofit"
+                    as earnings coverage -- which is correct, and means the card
+                    would be empty far more often than it used to be.
+
+                An empty card beside a full snapshot is worse than no card. */}
             <SharedLatestEarningsCard earnings={latestEarnings} symbol={upper} />
-            <EarningsNewsSection symbol={upper} earningsNews={earningsNewsItems} />
             <section style={sidebarCardStyle}>
               <div style={sectionEyebrowStyle}>Chart context</div>
               <h2 style={sectionTitleSmallStyle}>Technical Picture</h2>
@@ -732,11 +664,6 @@ const miniScoreNumberStyle: CSSProperties = { marginTop: 8, fontSize: 24, lineHe
 const miniScoreLabelStyle: CSSProperties = { marginTop: 6, fontSize: 13, color: "rgba(241,245,249,0.76)" };
 const newsGridStyle: CSSProperties = {};
 const editorialCardStyle: CSSProperties = { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 24, padding: 20, background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.025))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" };
-const earningsNewsRowStyle: CSSProperties = { display: "flex", alignItems: "flex-start", gap: 12, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.035)", borderRadius: 16, padding: 14, color: "#f1f5f9", textDecoration: "none" };
-const earningsNewsNumberStyle: CSSProperties = { width: 28, height: 28, borderRadius: 999, display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(59,130,246,0.36)", background: "rgba(59,130,246,0.14)", color: "#bfdbfe", fontSize: 13, fontWeight: 950, flexShrink: 0 };
-const earningsThumbStyle: CSSProperties = { float: "right", width: 64, height: 64, borderRadius: 10, objectFit: "cover", marginLeft: 12, marginBottom: 6, background: "rgba(255,255,255,0.04)" };
-const earningsNewsHeadlineStyle: CSSProperties = { margin: "9px 0 0", fontSize: 16, lineHeight: 1.38, color: "#f8fafc" };
-const earningsNewsTextStyle: CSSProperties = { margin: "8px 0 0", fontSize: 13, lineHeight: 1.6, color: "rgba(226,232,240,0.76)" };
 const sidebarCardStyle: CSSProperties = { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 20, padding: 18, background: "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" };
 const sectionEyebrowStyle: CSSProperties = { fontSize: 11, fontWeight: 950, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)" };
 const sectionTitleStyle: CSSProperties = { margin: "8px 0 0 0", fontSize: 28, lineHeight: 1.08, letterSpacing: "-0.04em" };
