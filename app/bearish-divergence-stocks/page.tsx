@@ -210,10 +210,27 @@ export default async function BullishBearishDivergenceStocksPage() {
     description:
       "Live page showing bullish and bearish divergence stocks from the MyStockHarbor picker feed.",
     mainEntity: {
+      // No `position`, and ItemListUnordered saying so rather than leaving it to
+      // be inferred from a missing field. Divergence strength is not a single
+      // quantity: the section rank is a six-term composite (timeframe 0.30 +
+      // duration 0.20 + structure 0.20 + magnitude 0.15 + location 0.10 +
+      // reaction 0.05, minus three penalties, plus a +10/+20 popularity boost),
+      // and its LARGEST term is a binary -- weekly scores 100 where daily scores
+      // 65 -- so the published order is roughly "weeklies, then dailies" with
+      // the rest decided in a band where adjacent stocks sit 0.2-0.3 points
+      // apart and a 0.1% price tick reshuffles them (#327).
+      //
+      // Sharper here than on the config-driven pages: this file and its bearish
+      // twin render the SAME combined bullish-and-bearish section, unfiltered,
+      // so a position would rank a list that is not the list the URL claims.
+      //
+      // The ItemList stays -- membership is a true statement. See
+      // claude/picker-ordering-classification-2026-08-22.md. The BreadcrumbList
+      // below keeps its positions: those are genuinely ordered and required.
       "@type": "ItemList",
-      itemListElement: entries.slice(0, 24).map((entry, index) => ({
+      itemListOrder: "https://schema.org/ItemListUnordered",
+      itemListElement: entries.slice(0, 24).map((entry) => ({
         "@type": "ListItem",
-        position: index + 1,
         item: {
           "@type": "Thing",
           name: `${entry.symbol} divergence stock setup`,
