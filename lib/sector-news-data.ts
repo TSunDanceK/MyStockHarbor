@@ -14,6 +14,7 @@ import {
   isLowValueNewsItem,
   isMajorWireSource,
   isVideoOrLowQualitySource,
+  logResponseWindow,
   mergeNewsPools,
   newestFirst,
   scoreEarnings,
@@ -214,6 +215,13 @@ async function fetchFmpSectorNews(symbols: string[]): Promise<NewsItem[]> {
 
       const data = (await res.json()) as unknown;
       if (!Array.isArray(data)) continue;
+
+      // The same reading the per-stock feed takes, on the same payload shape and
+      // equally free. Different question here, though, and the label says which:
+      // this chunk carries up to 20 SYMBOLS, so a high maxPerDay is expected and
+      // is not evidence of saturation the way it is for one ticker. What matters
+      // for the sector pool is distinctDays and the inversion count.
+      logResponseWindow("sector", group.join("+"), data, SECTOR_NEWS_LIMIT_PER_CHUNK);
 
       const items = data
         .map((row: FmpStockNewsItem, index: number) => {
