@@ -20,15 +20,30 @@ const ROOT = process.cwd();
 const PAGE = "app/cache-health/page.tsx";
 const src = fs.readFileSync(path.join(ROOT, PAGE), "utf8");
 
-// Comments in this page explain the very constructs being asserted, so prose
-// would satisfy several of these checks
-// (claude/traps/grep-finds-the-comment-not-the-code.md).
-const code = src
-  .replace(/\/\*[\s\S]*?\*\//g, "")
-  .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
-  .split("\n")
-  .map((l) => (l.trim().startsWith("//") ? "" : l))
-  .join("\n");
+// EVERY source read here goes through this. The first version stripped comments
+// from the page and read backfillAuth.ts, stalenessQueue.ts and sitemap.ts RAW,
+// which made this script an instance of the exact trap it was written to guard
+// against (claude/traps/grep-finds-the-comment-not-the-code.md).
+//
+// It was not theoretical. `/CACHE_HEALTH_KEY/.test(auth)` was satisfied by the
+// COMMENT on backfillAuth.ts:79 explaining the key, so pointing the actual read
+// at EARNINGS_BACKFILL_KEY -- sharing the key that authorises FMP spend, the
+// single thing the spec forbids most emphatically -- left all 33 checks passing.
+// Reported by the owner and reproduced before fixing.
+//
+// The lesson generalises past this file: a checker that reads one source
+// carefully and the rest casually is only as good as its most casual read.
+const codeOf = (text) =>
+  text
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
+    .split("\n")
+    .map((l) => (l.trim().startsWith("//") ? "" : l))
+    .join("\n");
+
+const readCode = (rel) => codeOf(fs.readFileSync(path.join(ROOT, rel), "utf8"));
+
+const code = codeOf(src);
 
 let failures = 0;
 const check = (label, ok, detail = "") => {
@@ -56,8 +71,20 @@ check(
 );
 check("does NOT reuse CRON_SECRET", !/CRON_SECRET/.test(code));
 
-const auth = fs.readFileSync(path.join(ROOT, "lib/server/backfillAuth.ts"), "utf8");
-check("its key is CACHE_HEALTH_KEY, and fails closed when unset", /CACHE_HEALTH_KEY/.test(auth) && /if \(!expected \|\| !submitted\) return false;/.test(auth));
+const auth = readCode("lib/server/backfillAuth.ts");
+// Both halves matter, and presence of the NAME is not one of them. This asserts
+// the actual read -- `const expected = process.env.CACHE_HEALTH_KEY` -- so a
+// checkCacheHealthKey rewired to any other variable fails here regardless of
+// what the surrounding prose still says.
+check(
+  "checkCacheHealthKey READS process.env.CACHE_HEALTH_KEY",
+  /const expected = process\.env\.CACHE_HEALTH_KEY\s*;/.test(auth)
+);
+check(
+  "...and no other env var is read inside it",
+  !/export function checkCacheHealthKey[\s\S]*?process\.env\.(?!CACHE_HEALTH_KEY)[A-Z_]+/.test(auth)
+);
+check("...and it fails closed when unset", /if \(!expected \|\| !submitted\) return false;/.test(auth));
 check(
   "its lockout namespace is separate from the backfill one",
   /msh:cache-health-fail/.test(auth) && /msh:earnings-backfill-fail/.test(auth)
@@ -105,12 +132,12 @@ check(
   "no hardcoded global staleness constant",
   !/stale\s*=\s*24|STALE_HOURS|GLOBAL_STALE/.test(code)
 );
-const queue = fs.readFileSync(path.join(ROOT, "lib/server/stalenessQueue.ts"), "utf8");
+const queue = readCode("lib/server/stalenessQueue.ts");
 check("every registered dataset declares its own ttlSeconds", (queue.match(/ttlSeconds:/g) ?? []).length >= 5);
 
 console.log("\n=== 6. Unlinked and unindexed ===\n");
 check("noindex + nofollow", /index:\s*false/.test(code) && /follow:\s*false/.test(code));
-const sitemap = fs.readFileSync(path.join(ROOT, "app/sitemap.ts"), "utf8");
+const sitemap = readCode("app/sitemap.ts");
 check("absent from app/sitemap.ts", !sitemap.includes("cache-health"));
 // Linked from nowhere. Searched across the app, excluding the page itself.
 const linkers = [];
@@ -122,7 +149,7 @@ const walk = (dir) => {
     else if (/\.tsx?$/.test(e.name)) {
       const rel = path.relative(ROOT, full);
       if (rel === PAGE) continue;
-      const body = fs.readFileSync(full, "utf8");
+      const body = codeOf(fs.readFileSync(full, "utf8"));
       if (/href=["'`]\/cache-health/.test(body)) linkers.push(rel);
     }
   }
