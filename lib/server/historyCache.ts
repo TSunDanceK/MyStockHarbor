@@ -27,6 +27,15 @@ const redis =
     : null;
 
 const REDIS_HISTORY_PREFIX = "msh:history:v7";
+// ORDERING CONSTRAINT FOR WHOEVER RAISES THIS. Points already in Redis carrying
+// a close of 0 -- written before the typeof allowlist in toFiniteNumber landed
+// -- stay until their TTL expires. At 6h that self-heals within a day and needs
+// no action. At 24h it does not: the blast radius of every stale zero bar
+// becomes four times longer.
+//
+// So the order is load-bearing. Before raising this value: the parser fix must
+// be LIVE, and the history namespace must be FLUSHED. Raising it first turns a
+// bug that expires by itself into one that persists a day per symbol.
 const REDIS_HISTORY_TTL_SECONDS = 6 * 60 * 60;
 const MIN_QUALIFIED_POINTS = 30;
 
@@ -157,27 +166,78 @@ function buildFmpSymbol(symbol: string) {
 }
 
 function toFiniteNumber(value: unknown) {
-  // null AND empty string are rejected BEFORE Number(), because Number(null) is
-  // 0 and Number("") is 0 -- not NaN. Without this, an FMP row carrying
-  // `"close": null` became a Point with close 0: a real-looking bar priced at
-  // zero, which drags a 200-day mean, prints a fake gap on the chart and can
-  // trip the support/resistance detector. Only `undefined` coerces to NaN, so
-  // the Number.isFinite guard alone caught exactly one of the three empty
-  // shapes and looked like it caught all of them.
+  // TYPEOF ALLOWLIST, matching ipoCalendar.ts, indexChanges.ts,
+  // stockDataCache.ts, quoteData.ts and marketState.ts. This file was the only
+  // coercion helper in lib/server/ that ran Number() first, and it was wrong for
+  // it -- one file diverged from a pattern five siblings already applied.
   //
-  // Found while adding collapseDuplicateDates, and it had to be fixed with it:
-  // a zero bar merely sat in the series before, but "last occurrence wins" would
-  // let it REPLACE the real bar for that date. A latent bug and a new rule that
-  // together make a worse one.
-  if (value === null || value === undefined || value === "") return null;
-  const num = Number(value);
-  return Number.isFinite(num) ? num : null;
+  // WHY A DENYLIST COULD NOT WORK HERE. Number() coerces far more than the empty
+  // shapes anyone thinks to list. Measured, all producing a finite number from
+  // something that is not a price:
+  //
+  //   null -> 0      "" -> 0       " " -> 0      "\n" -> 0
+  //   []   -> 0      false -> 0    true -> 1     [7]  -> 7
+  //
+  // The last two are the reason this is an allowlist and not a longer set of
+  // guards: `true` becomes a price of 1, and a single-element ARRAY becomes its
+  // element -- a bar invented out of a shape that was never a number. A closed
+  // form is right about the cases nobody thought of; an enumerated one is only
+  // ever right about the cases someone did.
+  //
+  // A fake zero here is not cosmetic: it drags a 200-day mean, prints a gap on
+  // the chart, and next to collapseDuplicateDates' last-wins rule it would
+  // REPLACE the real bar for its date.
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string" && value.trim() !== "") {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+  }
+  return null;
 }
 
-function parseFmpHistoricalRows(rows: FmpHistoricalRow[] | undefined) {
+// ---------------------------------------------------------------------------
+// HOW OFTEN DOES THAT ACTUALLY HAPPEN?
+//
+// Calling the zero-bar bug "latent" was an assumption about FMP's payload, not
+// a measurement -- the same shape as calling an unprobed endpoint "probably
+// fine". This counts it.
+//
+// A counter that has fired at least once and then goes quiet is evidence. A
+// counter that has never run is not
+// (claude/traps/absence-needs-the-producer-to-have-run.md), which is why the
+// value is reported alongside the number of rows PARSED: zero drops out of zero
+// rows says nothing, zero drops out of 900k rows says the bug was genuinely
+// latent.
+//
+// Module state, read-and-reset by the job route. Same shape as fmpUsage's
+// buffer and for the same reason: this must not cost a Redis round-trip per
+// parsed row.
+let historyRowsParsed = 0;
+let historyRowsDroppedNoClose = 0;
+const historyDropSymbols = new Set<string>();
+const MAX_DROP_SYMBOLS = 12;
+
+export function readHistoryDropCounts(): {
+  rowsParsed: number;
+  rowsDroppedNoClose: number;
+  symbols: string[];
+} {
+  const out = {
+    rowsParsed: historyRowsParsed,
+    rowsDroppedNoClose: historyRowsDroppedNoClose,
+    symbols: [...historyDropSymbols],
+  };
+  historyRowsParsed = 0;
+  historyRowsDroppedNoClose = 0;
+  historyDropSymbols.clear();
+  return out;
+}
+
+function parseFmpHistoricalRows(rows: FmpHistoricalRow[] | undefined, symbol = "") {
   if (!Array.isArray(rows) || rows.length === 0) return [] as Point[];
 
   const daily: Point[] = [];
+  historyRowsParsed += rows.length;
 
   for (const row of rows) {
     const date = typeof row.date === "string" ? row.date.trim() : "";
@@ -187,7 +247,17 @@ function parseFmpHistoricalRows(rows: FmpHistoricalRow[] | undefined) {
     const low = toFiniteNumber(row.low);
     const volume = toFiniteNumber(row.volume);
 
-    if (!date || close === null) continue;
+    if (!date || close === null) {
+      // Counted, not just skipped. Before the typeof allowlist above these rows
+      // did NOT reach here -- Number(null) is 0, so they became bars priced at
+      // zero. The counter is what turns "we think that never happened" into
+      // something known either way.
+      if (date && close === null) {
+        historyRowsDroppedNoClose += 1;
+        if (symbol && historyDropSymbols.size < MAX_DROP_SYMBOLS) historyDropSymbols.add(symbol);
+      }
+      continue;
+    }
 
     daily.push({
       date,
@@ -464,7 +534,7 @@ const url = `https://financialmodelingprep.com/stable/historical-price-eod/full?
     throw new Error(`FMP history error for ${normalized}: ${payload.Error}`);
   }
 
-  const parsed = parseFmpHistoricalRows(Array.isArray(payload) ? payload : undefined);
+  const parsed = parseFmpHistoricalRows(Array.isArray(payload) ? payload : undefined, normalized);
   const daily =
     parsed.length > MAX_CACHED_HISTORY_DAYS
       ? parsed.slice(-MAX_CACHED_HISTORY_DAYS)

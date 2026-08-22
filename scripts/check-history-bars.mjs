@@ -39,7 +39,7 @@ const grab = (name) => {
   return out;
 };
 
-const wanted = ["parseFmpHistoricalRows", "collapseDuplicateDates", "toFiniteNumber"];
+const wanted = ["parseFmpHistoricalRows", "collapseDuplicateDates", "toFiniteNumber", "readHistoryDropCounts"];
 const fns = Object.fromEntries(wanted.map((n) => [n, grab(n)]));
 const missing = wanted.filter((n) => !fns[n]);
 if (missing.length) {
@@ -47,9 +47,16 @@ if (missing.length) {
   process.exit(1);
 }
 
+// The module-level counters the drop tracker closes over, lifted verbatim from
+// the source rather than restated.
+const counterDecls = raw
+  .split("\n")
+  .filter((l) => /^(let historyRows|const historyDropSymbols|const MAX_DROP_SYMBOLS)/.test(l))
+  .join("\n");
+
 const js = ts.transpileModule(
-  `${fns.toFiniteNumber}\n${fns.collapseDuplicateDates}\n${fns.parseFmpHistoricalRows}\n` +
-    `export { parseFmpHistoricalRows, collapseDuplicateDates };`,
+  `${counterDecls}\n${fns.toFiniteNumber}\n${fns.collapseDuplicateDates}\n${fns.parseFmpHistoricalRows}\n${fns.readHistoryDropCounts}\n` +
+    `export { parseFmpHistoricalRows, collapseDuplicateDates, toFiniteNumber, readHistoryDropCounts };`,
   { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext } }
 ).outputText;
 const m = await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
@@ -126,7 +133,93 @@ check(
   "a high of 0 would make ATR and the S/R detector read a real level"
 );
 
-console.log("\n=== 4. The collapse is wired into the parser, not just present ===\n");
+console.log("\n=== 4. toFiniteNumber is an allowlist, not a denylist ===\n");
+// EVERY shape Number() turns into a finite number from something that is not a
+// price. Rejecting null/undefined/"" closed two of eight; the typeof allowlist
+// closes all of them, including the two that are not "empty" at all.
+const COERCION_TRAPS = [
+  ["null", null],
+  ['""', ""],
+  ['" "', " "],
+  ['"\\n"', "\n"],
+  ["[]", []],
+  ["false", false],
+  ["true", true],
+  ["[7]", [7]],
+  ["{}", {}],
+  ["NaN", NaN],
+  ["Infinity", Infinity],
+];
+for (const [label, value] of COERCION_TRAPS) {
+  check(`${label} -> null, not a number`, m.toFiniteNumber(value) === null, `got ${JSON.stringify(m.toFiniteNumber(value))}`);
+}
+// The two that must still work, or the allowlist has gone too far.
+check("a real number passes", m.toFiniteNumber(123.45) === 123.45);
+check("a numeric string passes", m.toFiniteNumber("123.45") === 123.45);
+check("zero itself still passes — it is a legal price for volume", m.toFiniteNumber(0) === 0);
+
+// End to end: a row whose close is one of these must be DROPPED, not priced.
+for (const [label, value] of [['" "', " "], ["[]", []], ["false", false], ["[7]", [7]], ["true", true]]) {
+  const parsed = m.parseFmpHistoricalRows([bar("2026-08-20", 100), { date: "2026-08-19", close: value }]);
+  check(
+    `a close of ${label} produces no bar at all`,
+    parsed.length === 1 && parsed[0].close === 100,
+    `${parsed.length} bars, closes ${parsed.map((p) => p.close).join(",")}`
+  );
+}
+// Asserted on the FUNCTION'S FIRST STATEMENT, not on whether Number() appears
+// anywhere. Number(value) legitimately survives inside the string branch, so a
+// bare "no Number() first" regex over the whole file fails on correct code --
+// which is exactly what it did on first run. The shape that matters is that a
+// typeof gate comes before any coercion.
+const firstStatement = (fns.toFiniteNumber.match(/\{\s*(?:\/\/[^\n]*\n\s*)*([^\n]+)/) ?? [])[1] ?? "";
+check(
+  "toFiniteNumber gates on typeof BEFORE coercing, like its five siblings",
+  /^if \(typeof value === "number"\)/.test(firstStatement.trim()),
+  `first statement: ${firstStatement.trim().slice(0, 60)}`
+);
+check(
+  "...and the string branch is gated on a non-blank string",
+  /if \(typeof value === "string" && value\.trim\(\) !== ""\)/.test(fns.toFiniteNumber)
+);
+check(
+  "...with a catch-all null, so unlisted types cannot fall through",
+  /\n\s*return null;\n\}$/.test(fns.toFiniteNumber.trim()),
+  "the closed form is the whole point — it is right about shapes nobody listed"
+);
+
+console.log("\n=== 5. The drop counter, so 'latent' stops being an assumption ===\n");
+m.readHistoryDropCounts(); // reset
+m.parseFmpHistoricalRows([bar("2026-08-20", 100), { date: "2026-08-19", close: null }], "MU");
+m.parseFmpHistoricalRows([{ date: "2026-08-18", close: "" }], "NVDA");
+const counted = m.readHistoryDropCounts();
+check("dropped rows are counted", counted.rowsDroppedNoClose === 2, `${counted.rowsDroppedNoClose}`);
+check("rows parsed is counted too", counted.rowsParsed === 3, `${counted.rowsParsed}`);
+check(
+  "...which is what makes a zero reading mean anything",
+  counted.rowsParsed > 0,
+  "0 drops out of 0 rows says nothing; 0 out of ~900k says the bug was latent"
+);
+check("the affected symbols are named", counted.symbols.join(",") === "MU,NVDA", counted.symbols.join(","));
+check("reading resets, so each run reports its own figures", m.readHistoryDropCounts().rowsDroppedNoClose === 0);
+// A row with no DATE is malformed rather than an instance of this bug, and
+// counting it here would inflate the signal the flush decision rests on.
+m.readHistoryDropCounts();
+m.parseFmpHistoricalRows([{ close: 100 }], "AMD");
+check(
+  "a row missing its DATE is not counted as a null-close drop",
+  m.readHistoryDropCounts().rowsDroppedNoClose === 0,
+  "different defect; counting it would inflate the signal the flush decision rests on"
+);
+check(
+  "the counter is reported on the warm-picker-universe run record",
+  /historyRowsDroppedNoClose: drops\.rowsDroppedNoClose/.test(
+    fs.readFileSync(path.join(ROOT, "app/api/jobs/warm-picker-universe/route.ts"), "utf8")
+  ),
+  "a counter nothing reads is a counter that never ran"
+);
+
+console.log("\n=== 6. The collapse is wired into the parser, not just present ===\n");
 const code = raw.replace(/\/\*[\s\S]*?\*\//g, "").split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
 check(
   "parseFmpHistoricalRows returns through collapseDuplicateDates",
