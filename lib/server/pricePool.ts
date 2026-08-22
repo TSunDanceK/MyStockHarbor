@@ -259,6 +259,23 @@ export async function seedColdPricePoolRows(
   return Object.keys(payload).length;
 }
 
+/**
+ * Should a run warn that no quote carried a session open?
+ *
+ * PULLED OUT AS A PREDICATE so it can be RUN rather than pattern-matched. The
+ * harness previously asserted this with two regexes, one of which was a strict
+ * substring of the other and therefore could never fail independently -- it
+ * looked like two checks and was one
+ * (claude/traps/a-regex-over-source-has-no-scope.md).
+ *
+ * The condition itself: a run that fetched quotes and got an open from none of
+ * them is the signal. A run that fetched NO quotes has nothing to say about the
+ * fields, and warning there would report our own idleness as FMP's outage.
+ */
+export function shouldWarnMissingOpen(pxRefreshed: number, openCarried: number): boolean {
+  return pxRefreshed > 0 && openCarried === 0;
+}
+
 type QuoteLite = {
   price: number | null;
   changePct: number | null;
@@ -532,7 +549,7 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
   // fetched NO quotes at all is silent here: it has nothing to say about the
   // fields, and warning would be reporting our own idleness as their outage
   // (claude/traps/absence-needs-the-producer-to-have-run.md).
-  if (pxRefreshed > 0 && openCarried === 0) {
+  if (shouldWarnMissingOpen(pxRefreshed, openCarried)) {
     console.warn(
       `[warm-price-pool] WARNING: ${pxRefreshed} quotes fetched and NOT ONE carried an "open". ` +
         "stable/quote has probably stopped returning open/dayHigh/dayLow on this plan. " +
