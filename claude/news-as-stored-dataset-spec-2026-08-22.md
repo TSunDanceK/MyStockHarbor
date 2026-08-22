@@ -25,16 +25,35 @@ and this collapses to tuning `limit`, which is a different and much smaller job.
 
 *(implementation note)* Claude's sandbox cannot reach `financialmodelingprep.com`
 — `403 CONNECT tunnel failed`, retested 2026-08-22 — so this probe is
-owner-side. The probes are built and shipped; the answer is not. Do not start
-building until the probe has been run and its result recorded in this file.
+owner-side. Do not start building until the probe has been run and its result
+recorded in the table at the foot of this file.
 
-*(implementation note)* Worth stating so the fallback is not overstated: if
-`from` is ignored, the *store* is still buildable — cold-start-shaped refreshes
-(`limit=15`, no `from`) merged into Redis would still buy persistent earnings
-articles, no FMP call on render, and news on the health page. What is lost is
-the incremental *saving*, since each refresh re-fetches the same window. The
-owner's judgement is that this collapses to tuning `limit`; that call stands,
-and this note only records what the fallback would and would not still deliver.
+**Status 2026-08-22: still unanswered, and the reason is worth recording.** The
+owner ran `/api/debug/fmp-endpoints` against production (`55c8bc86`) and the
+response carried no `newsFromGate` block — because the gate probe was on an
+unmerged branch and production was running code that predates it. Every *other*
+probe in that run returned real results (see "Measured" below), which is exactly
+what makes this the easy mistake: the response looked complete. **A probe that is
+not deployed returns no evidence, and no evidence is not a negative result.**
+
+### If the gate fails — the fallback, and it is not nothing
+
+**Owner-accepted 2026-08-22, superseding the original "collapses to tuning
+`limit`" framing.**
+
+A failed gate does *not* collapse this to tuning `limit`. Even with `from`
+ignored, storing news in Redis still buys:
+
+- persistent earnings articles (the earnings pin, which only persistence makes
+  possible at all),
+- no FMP call on render,
+- news on the cache health page like every other dataset.
+
+Only the **incremental saving** is lost: each refresh re-fetches the same window
+instead of just the new tail, so refresh bandwidth stays where it is today.
+
+Recorded here explicitly so the fallback does not vanish if the probe comes back
+FAIL. A FAIL narrows the win to correctness; it does not remove it.
 
 ---
 
@@ -96,6 +115,67 @@ the moment it leaves FMP's latest-N window regardless of relevance.
 
 ---
 
+## Measured, 2026-08-22 — what the probes came back with
+
+Run against production. These are results, not assumptions.
+
+### There is no dedicated earnings source on this plan
+
+| Probe | Result |
+|---|---|
+| `news/press-releases?symbols=…` | **402** |
+| `news/press-releases-latest` | **402** |
+| `press-releases/{symbol}` (v3) | **403** — legacy, pre-Aug-2025 subscribers only |
+| `earning-call-transcript-latest` | **402** |
+
+**Item 2b is closed.** The keyword filter over the general feed cannot be
+replaced — only kept or removed.
+
+**Consequence, owner-approved:** the earnings *news card* on
+`/stock/[symbol]/news` is removed entirely. The structured Earnings Snapshot
+directly above it already carries actual EPS, revenue, surprise and margins, and
+the card would be empty far more often now the word-boundary matcher has stopped
+counting "headquartered" as earnings coverage. An empty card beside a full
+snapshot is worse than no card.
+
+The lib-side `fetchEarningsNews` / `scoreEarnings` path **stays** — it still
+feeds the Earnings Tone reading and the lead summary. Only the card is gone.
+
+### `symbols=` accepts a list — confirmed
+
+`news/stock?symbols=<10 tickers>&limit=100` returned **100 articles across 10
+unique symbols in a single call.** One call covers ten constituents instead of
+ten calls.
+
+This changes the sector half of this design — see below.
+
+### Sector performance endpoints are available
+
+`sector-performance-snapshot` returns all 11 sectors in one call;
+`historical-sector-performance` works too.
+
+**The trap, and it is a live one.** FMP's `averageChange` is **equal-weighted and
+split per exchange**. `lib/server/sectorPanels.ts` computes a **cap-weighted**
+read over the top 25 names of our universe. Same name, same units, *different
+metric* — so swapping one for the other changes every number on the page while
+nothing errors, and the shift reads as a data bug rather than the definition
+change it is. Recorded at the call site in `sectorPanels.ts` as well as here.
+
+Not an argument against adopting it: one call for 11 sectors is a real saving.
+An argument for making the switch a deliberate decision with the label updated,
+never a quiet substitution.
+
+### Index changes — unprobed until now
+
+`lib/server/indexChanges.ts` calls all three `historical-*-constituent`
+endpoints, and the **plain** `sp500-constituent` variants all answer 402. The
+historical variants were never probed. `fetchIndexChanges` swallows a non-ok
+response, so if they are restricted too the feature renders "no recent index
+changes" — indistinguishable from a genuinely quiet week, forever. All three are
+now in the probe set.
+
+---
+
 ## Sector news
 
 Same mechanism, per-sector key, more articles, **no earnings pin.**
@@ -107,9 +187,22 @@ Dedup matters far more there — ~40 constituents means market-wide stories arri
 many times over — so **check the threshold behaves on that traffic rather than
 assuming it carries over.**
 
+**One call per ten constituents, not one per constituent.** `symbols=` is
+list-aware (measured above), so a 40-constituent sector refreshes in ~4 calls,
+not 40. This is what makes the sector half affordable at all, and it is a
+measured fact rather than an assumption about the parameter's documentation.
+
+*(implementation note)* The existing `lib/sector-news-data.ts` already chunks at
+`SECTOR_NEWS_CHUNK_SIZE = 20`, so it is already exploiting this. The finding
+confirms the current cost model rather than unlocking a new one — worth stating
+plainly, because "confirmed what we already do" and "found a new saving" are
+different results and only the first one is true here.
+
 *(implementation note)* The #343 threshold is `STORY_OVERLAP_THRESHOLD = 0.6`,
 an overlap coefficient against the smaller token set. It was calibrated on
-single-ticker traffic. Sector traffic is the case it was never tested against.
+single-ticker traffic. Sector traffic is the case it was never tested against —
+~40 constituents means a market-wide story arrives many times over, which is
+both the case dedup matters most for and the case the threshold has never seen.
 
 ---
 

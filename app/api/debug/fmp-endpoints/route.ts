@@ -92,6 +92,36 @@ const PROBES: Probe[] = [
     note: "wider net, same endpoint",
   },
   { id: "stock-list", path: "stock-list", note: "full symbol directory if available" },
+
+  // INDEX CHANGES (2026-08-22). lib/server/indexChanges.ts calls all three
+  // `historical-*-constituent` endpoints and NONE of them were probed -- while
+  // the plain sp500/nasdaq/dowjones-constituent variants all answer 402 on this
+  // plan.
+  //
+  // THAT COMBINATION IS THE WHOLE POINT. fetchIndexChanges swallows a non-ok
+  // response, exactly as fetchFmpConstituentSymbols does, so if the historical
+  // variants are restricted too the feature returns an empty list and renders as
+  // "no recent index changes" -- indistinguishable from a genuinely quiet week,
+  // forever, with nothing reporting it
+  // (claude/traps/absence-needs-the-producer-to-have-run.md).
+  //
+  // All three, not just S&P 500: they are three separate endpoints on the same
+  // plan and there is no reason to assume they share an answer.
+  {
+    id: "historical-sp500-constituent",
+    path: "historical-sp500-constituent",
+    note: "USED LIVE by lib/server/indexChanges.ts -- a 402 here means that feature has been silently empty",
+  },
+  {
+    id: "historical-nasdaq-constituent",
+    path: "historical-nasdaq-constituent",
+    note: "USED LIVE by lib/server/indexChanges.ts -- same question, separate endpoint",
+  },
+  {
+    id: "historical-dowjones-constituent",
+    path: "historical-dowjones-constituent",
+    note: "USED LIVE by lib/server/indexChanges.ts -- same question, separate endpoint",
+  },
   // Decides whether warmFundamentals' quote stage is permanently one call per
   // symbol or could be one call per 50.
   //
