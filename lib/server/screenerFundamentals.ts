@@ -26,6 +26,7 @@
 // same function, so the two cannot drift
 // (claude/traps/two-validators-for-one-value.md).
 import { reserveFmpCallSlot } from "./historyCache";
+import { fmpFetch, flushFmpUsage } from "./fmpUsage";
 import { cacheScreenerFundamentals } from "./fundamentalsCache";
 
 // Kept identical to the values app/api/market/route.ts used when this lived
@@ -81,7 +82,7 @@ export async function refreshScreenerFundamentals(
 
   try {
     await reserveFmpCallSlot();
-    const res = await fetch(url, {
+    const res = await fmpFetch(url, {
       cache: "no-store",
       headers: { accept: "application/json" },
     });
@@ -127,6 +128,11 @@ export async function refreshScreenerFundamentals(
     } else {
       console.log(`[screener-fundamentals] cached ${cached} of ${json.length} rows (${symbols.length} clean symbols)`);
     }
+
+    // One FMP call per run, so flush the sample now rather than leaving it
+    // buffered for whichever unrelated invocation flushes next. Cheap here,
+    // unlike in warmFundamentals' ~477-call loop.
+    await flushFmpUsage();
 
     return { ok: true, status: res.status, rows: json.length, cached, symbols };
   } catch (error) {

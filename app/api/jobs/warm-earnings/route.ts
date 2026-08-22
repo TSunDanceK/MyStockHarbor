@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { fmpFetch } from "@/lib/server/fmpUsage";
 import { Redis } from "@upstash/redis";
 import {
   hasFmpCapacity,
@@ -205,7 +206,7 @@ async function fetchFmpEarnings(symbol: string): Promise<FmpEarningsRow[]> {
     symbol
   )}&apikey=${encodeURIComponent(apiKey)}`;
 
-  const res = await fetch(url, {
+  const res = await fmpFetch(url, {
     cache: "no-store",
     headers: {
       accept: "application/json,text/plain;q=0.9,*/*;q=0.8",

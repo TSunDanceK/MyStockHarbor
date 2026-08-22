@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { fmpFetch } from "@/lib/server/fmpUsage";
 import Link from "next/link";
 import EarningsSymbolPicker from "./EarningsSymbolPicker";
 import { getDailyHistory } from "@/lib/server/historyCache";
@@ -423,7 +424,7 @@ async function fetchFmpJson<T>(path: string): Promise<T | null> {
   if (!apiKey) return null;
   const url = `${FMP_BASE}${path}${path.includes("?") ? "&" : "?"}apikey=${apiKey}`;
   try {
-    const response = await fetch(url, { next: { revalidate: 60 * 60 * 6 } });
+    const response = await fmpFetch(url, { next: { revalidate: 60 * 60 * 6 } });
     if (!response.ok) return null;
     return (await response.json()) as T;
   } catch { return null; }
@@ -434,7 +435,7 @@ async function fetchFmpLegacyJson<T>(path: string): Promise<T | null> {
   if (!apiKey) return null;
   const url = `https://financialmodelingprep.com/api/v3${path}${path.includes("?") ? "&" : "?"}apikey=${apiKey}`;
   try {
-    const response = await fetch(url, { next: { revalidate: 60 * 60 * 6 } });
+    const response = await fmpFetch(url, { next: { revalidate: 60 * 60 * 6 } });
     if (!response.ok) return null;
     return (await response.json()) as T;
   } catch { return null; }
@@ -821,7 +822,7 @@ async function fetchQuoteForMeta(symbol: string): Promise<{ price: number | null
   if (!apiKey) return { price: null, date: null };
   try {
     const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(apiKey)}`;
-    const res = await fetch(url, { next: { revalidate: 900 }, headers: { accept: "application/json" } });
+    const res = await fmpFetch(url, { next: { revalidate: 900 }, headers: { accept: "application/json" } });
     if (!res.ok) return { price: null, date: null };
     const json = await res.json();
     const row = Array.isArray(json) ? json[0] : json;

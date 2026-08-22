@@ -21,6 +21,7 @@
 // separately below.
 
 import { readFeed, warnIfImplausiblyEmpty, type Feed } from "./feedCache";
+import { fmpFetch } from "./fmpUsage";
 
 export type ConfirmedIpo = {
   symbol: string;
@@ -163,7 +164,7 @@ async function fetchIpoRows(from: string, to: string): Promise<ConfirmedIpo[]> {
   //
   // 1800s matches feedCache's FRESH_MS: feedCache owns freshness, and two
   // caches with different opinions about staleness generate bugs.
-  const res = await fetch(url, {
+  const res = await fmpFetch(url, {
     next: { revalidate: 1800 },
     headers: { accept: "application/json" },
   });

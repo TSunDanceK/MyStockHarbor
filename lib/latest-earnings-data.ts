@@ -26,6 +26,7 @@ import type {
   ScoreTone,
 } from "@/app/components/LatestEarningsCard";
 
+import { fmpFetch } from "@/lib/server/fmpUsage";
 import { beginTiming } from "./server/timing";
 
 export type {
@@ -106,7 +107,7 @@ function findClosestByDate<T extends { date?: string }>(
 
 async function fetchFmpJson<T>(url: string): Promise<T | null> {
   try {
-    const res = await fetch(url, {
+    const res = await fmpFetch(url, {
       next: { revalidate: 86400 },
     });
 
