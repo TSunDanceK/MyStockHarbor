@@ -79,35 +79,43 @@ for (const field of ["oversoldIndicators", "overboughtIndicators"]) {
   check(`${field}: on PickerResultPage's SignalRecord mirror`, pageRecordMembers.includes(field));
 }
 
+// All THREE branches of buildEntries that build entries from signalRecords feed
+// the same grid and the same Signals column. The universe branch was fixed
+// first and the other two were left blank, which is the same partial-plumbing
+// shape as #330 one level down -- so the count is asserted, not just presence.
+const firedCallSites = (page.match(/firedIndicators:\s*firedIndicatorsFor\(record\)/g) ?? []).length;
 check(
-  "consumer reads them in the universe branch",
-  /firedIndicators:\s*record\.oversold/.test(page),
-  "buildEntries preset/allSymbols entry literal"
+  "all three signalRecords branches set firedIndicators (buySignals, sellSignals, universe)",
+  firedCallSites === 3,
+  `${firedCallSites} call site(s)`
+);
+check(
+  "they share ONE selection rule rather than three copies",
+  /function firedIndicatorsFor\s*\(/.test(page) && !/firedIndicators:\s*record\.oversold/.test(page),
+  "firedIndicatorsFor"
 );
 
 // ------------------------------------------------- 2. the selection expression
-console.log("\n=== 2. Which list a row shows, extracted from the source ===\n");
+console.log("\n=== 2. The shared selection rule, extracted from the source ===\n");
 
-let expr = null;
+let fn = null;
 const findFired = (node) => {
-  if (
-    ts.isPropertyAssignment(node) &&
-    node.name.getText(sfP) === "firedIndicators" &&
-    /record\.oversold/.test(node.initializer.getText(sfP))
-  ) {
-    expr = node.initializer.getText(sfP);
+  if (ts.isFunctionDeclaration(node) && node.name?.text === "firedIndicatorsFor") {
+    fn = node.getText(sfP);
   }
   ts.forEachChild(node, findFired);
 };
 findFired(sfP);
 
-if (!expr) {
-  console.error("FAIL: could not find the universe branch's firedIndicators expression — measuring nothing.");
+if (!fn) {
+  console.error("FAIL: could not find firedIndicatorsFor in PickerResultPage.tsx — measuring nothing.");
   process.exit(1);
 }
-console.log(`    ${expr.replace(/\s+/g, " ")}\n`);
+console.log(
+  `    ${fn.split("\n").filter((l) => !l.trim().startsWith("*") && !l.trim().startsWith("/*")).join(" ").replace(/\s+/g, " ")}\n`
+);
 
-const js = ts.transpileModule(`export const pick = (record) => (${expr});`, {
+const js = ts.transpileModule(`${fn}\nexport const pick = firedIndicatorsFor;`, {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext },
 }).outputText;
 const { pick } = await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
