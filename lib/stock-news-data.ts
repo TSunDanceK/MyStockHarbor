@@ -1,3 +1,4 @@
+import { keywordHits } from "@/lib/keywordMatch";
 import { unstable_cache } from "next/cache";
 import { fmpFetch } from "@/lib/server/fmpUsage";
 import { beginTiming } from "./server/timing";
@@ -44,6 +45,16 @@ export type NewsItem = {
   fmpSymbols?: string[];
   /** True when the item came back from a symbol-specific FMP request. */
   fmpSymbolMatched?: boolean;
+  /**
+   * Position in the raw upstream response, before any filtering or ranking.
+   *
+   * MEASUREMENT ONLY, and the reason it has to be stamped rather than inferred:
+   * every stage between the fetch and the render filters, dedupes and re-sorts,
+   * so by the time an item is displayed its position tells you nothing about how
+   * deep into the fetched list it came from. That depth is the ONLY thing that
+   * says whether `limit=50` is buying anything -- see logNewsDepth.
+   */
+  sourceIndex?: number;
 };
 
 export type FmpStockNewsItem = {
@@ -533,8 +544,19 @@ async function fetchFmpStockNews(symbol: string): Promise<NewsItem[]> {
 
   for (const url of endpoints) {
     try {
+      // 3600, not 900. /stable/news/stock is the single largest line on the FMP
+      // byte meter -- ~34% of 30-day bandwidth against a cap already at 73.6% --
+      // and it was the ONLY fetch in this file still on 900s; its siblings sit
+      // at 1800, 3600 and 86400. A 4x cut in frequency with no content loss:
+      // the feed is not 15-minute-critical, and the callers are wrapped in an
+      // unstable_cache at 3600 anyway, so 900 was buying refreshes nothing
+      // downstream could see.
+      //
+      // Deliberately NOT paired with a cut to `limit=50`. That WOULD lose
+      // content, and how much is unmeasured -- see the depth instrumentation
+      // below, which exists to answer that before anyone touches the number.
       const res = await fmpFetch(url, {
-        next: { revalidate: 900 },
+        next: { revalidate: 3600 },
       });
 
       if (!res.ok) continue;
@@ -543,7 +565,7 @@ async function fetchFmpStockNews(symbol: string): Promise<NewsItem[]> {
       if (!Array.isArray(data)) continue;
 
       const items = data
-        .map((item: FmpStockNewsItem): NewsItem | null => {
+        .map((item: FmpStockNewsItem, index: number): NewsItem | null => {
           const title = typeof item.title === "string" ? item.title.trim() : "";
           const link =
             typeof item.url === "string" && item.url.trim()
@@ -589,6 +611,9 @@ async function fetchFmpStockNews(symbol: string): Promise<NewsItem[]> {
                 : null,
             fmpSymbols,
             fmpSymbolMatched: fmpSymbols.includes(symbol.toUpperCase()),
+            // Stamped here, at the only point where the upstream ordering is
+            // still intact.
+            sourceIndex: index,
           };
         })
         .filter((item): item is NewsItem => Boolean(item));
@@ -603,8 +628,23 @@ async function fetchFmpStockNews(symbol: string): Promise<NewsItem[]> {
 }
 
 export function isVideoOrLowQualitySource(item: NewsItem) {
-  const combined = `${item.source ?? ""} ${item.link} ${item.title}`.toLowerCase();
+  // THE IMAGE URL IS PART OF THE EVIDENCE, and leaving it out was a real miss.
+  // Reported live: a Motley Fool podcast held the third lead card on
+  // /stock/MU/news because the only place the word "Podcast" appeared was the
+  // article's IMAGE -- source, link and title were all clean. A filter that
+  // reads three of the four fields carrying the signal reads as "this is not a
+  // podcast" rather than "I did not look there"
+  // (claude/traps/measuring-the-wrong-layer.md).
+  //
+  // The cost, stated rather than discovered: a written article whose thumbnail
+  // happens to sit at a .../podcast-... path is now filtered too. That is the
+  // right side to err on for a lead card, and it is a small set.
+  const combined = `${item.source ?? ""} ${item.link} ${item.title} ${item.image ?? ""}`.toLowerCase();
 
+  // Substring, NOT keywordHits, and deliberately so. These are URL fragments,
+  // not English words: "youtube.com" and "podcasts.apple.com" have no useful
+  // word boundaries around them, and boundary-matching would stop catching
+  // both. keywordHits is for prose; this is for hosts and paths.
   return [
     "youtube.com",
     "youtu.be",
@@ -683,14 +723,56 @@ export function isEarningsNewsItem(item: NewsItem) {
   ]);
 }
 
+/**
+ * How deep into the fetched list the surviving items actually came from.
+ *
+ * THIS EXISTS TO STOP A GUESS BEING ACTED ON. `limit=50` on
+ * /stable/news/stock is the single largest line on the FMP byte meter, and the
+ * obvious saving is to lower it. Obvious and unmeasured: nobody knows whether
+ * the earnings items that get displayed sit at indices 0-5 (in which case 50 is
+ * 45 wasted articles) or are scattered out to index 47 (in which case cutting
+ * the limit empties the section on exactly the symbols with the least
+ * coverage). The arithmetic reads the same either way, which is what makes it
+ * dangerous (claude/traps/measuring-the-wrong-layer.md).
+ *
+ * `maxIndex` is the number that decides it: it is the smallest `limit` that
+ * would have produced the same output for this symbol on this run.
+ *
+ * A LOG LINE, NOT A HEALTH SIGNAL, and the difference matters here. This is a
+ * one-off measurement taken to settle one decision, not something that needs
+ * reading back later -- so it does not belong in Redis beside the byte meter.
+ * If it turns out to be hard to catch in the log window, that is the moment to
+ * move it, not before.
+ */
+function logNewsDepth(label: string, symbol: string, fetched: number, kept: NewsItem[]): void {
+  const indices = kept
+    .map((item) => item.sourceIndex)
+    .filter((i): i is number => typeof i === "number")
+    .sort((a, b) => a - b);
+  console.log(
+    `[news-depth] ${label} ${symbol} fetched=${fetched} kept=${kept.length}` +
+      ` maxIndex=${indices.length ? indices[indices.length - 1] : "none"}` +
+      ` indices=[${indices.join(",")}]`
+  );
+}
+
 async function fetchEarningsNews(symbol: string, _companyName: string): Promise<NewsItem[]> {
   const fmpNews = await fetchFmpStockNews(symbol);
 
-  return mergeNewsPools([
+  const kept = mergeNewsPools([
     fmpNews
       .filter((item) => !isVideoOrLowQualitySource(item))
       .filter(isEarningsNewsItem),
   ]).slice(0, 30);
+
+  // Measured BEFORE anything is changed about `limit`. Note this reading only
+  // becomes meaningful once the word-boundary matcher is deployed -- against the
+  // old substring matcher the "earnings" items included every story containing
+  // "headquartered", so the depth it reported was the depth of a false positive
+  // rate, not of real earnings coverage.
+  logNewsDepth("earnings", symbol, fmpNews.length, kept);
+
+  return kept;
 }
 
 function movingAverage(values: number[], window: number): (number | null)[] {
@@ -844,10 +926,10 @@ function trendLabel(lastClose: number | null, ma50: number | null, ma200: number
   return null;
 }
 
-export function keywordHits(text: string, words: string[]) {
-  const lower = text.toLowerCase();
-  return words.some((word) => lower.includes(word));
-}
+// The word-boundary matcher, in lib/keywordMatch.ts. Re-exported here because
+// lib/news-scoring.ts and a dozen call sites already import it from this
+// module; the implementation moved, the import surface did not.
+export { keywordHits };
 
 // Benzinga and Zacks publish a lot of low-value SEO content ("stock price
 // today", "price prediction"), but they are also two of the most prolific
@@ -917,6 +999,83 @@ export function isLowValueNewsItem(item: NewsItem) {
 // the same theme at once it reads as duplicate coverage even though each
 // headline is technically distinct. Those are routed to the lighter feed
 // instead, alongside older items -- see mainFeedNews below.
+/**
+ * Publisher tiers, in one table, matched on WORD BOUNDARIES.
+ *
+ * TWO BUGS LIVED IN THE TWO COPIES THIS REPLACES.
+ *
+ * 1. THE LIST WAS TOO SHORT, and the gate and the scorer disagreed about it.
+ *    isMajorWireSource accepted only reuters/bloomberg/ap, so CNBC, the WSJ,
+ *    the FT, Barron's, MarketWatch, Dow Jones, Business Wire and PR Newswire
+ *    were all excluded from the lead feed -- while scoreNewsItem, ten lines
+ *    away in the same file, already scored several of them as second-tier
+ *    quality. The same file rated CNBC highly and then refused to lead with it.
+ *    Confirmed live on /stock/MU/news: all three lead cards were fool.com while
+ *    a CNBC interview sat in the lighter feed.
+ *
+ * 2. THE MATCH WAS A SUBSTRING, which is the keywordHits bug again in a
+ *    different file. `source.includes("ap")` makes capital.com and AppleInsider
+ *    major wires; `source.includes("ft")` makes Microsoft, software and draft
+ *    ones too. Two-letter publisher codes cannot be matched by substring, and
+ *    "ap" and "ft" are both real, correct entries -- so the fix is the matcher,
+ *    not the list.
+ */
+const WIRE_TIERS: Array<{ score: number; names: string[] }> = [
+  // Top-tier wires. Dow Jones and Associated Press spelled out alongside their
+  // codes, because FMP attributes both ways.
+  { score: 8, names: ["reuters", "bloomberg", "ap", "associated press", "dow jones"] },
+  // The publishers that actually carry market news. These were the ones missing
+  // from the gate entirely.
+  {
+    score: 5,
+    names: [
+      "cnbc",
+      "wsj",
+      "wall street journal",
+      "ft",
+      "financial times",
+      "barron's",
+      "barrons",
+      "marketwatch",
+      "market watch",
+      "business wire",
+      "businesswire",
+      "pr newswire",
+      "prnewswire",
+      "globenewswire",
+    ],
+  },
+  { score: 2, names: ["yahoo"] },
+];
+
+const wireCache = new Map<string, RegExp>();
+
+function sourceMatches(source: string, name: string): boolean {
+  let re = wireCache.get(name);
+  if (!re) {
+    // No inflection allowance, unlike keywordHits: a publisher name is a proper
+    // noun, and "aps"/"aped" are not variants of "AP".
+    re = new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+    wireCache.set(name, re);
+  }
+  return re.test(source);
+}
+
+/** The publisher tier score for a source string, or 0 if it is in no tier. */
+export function sourceTierScore(source: string): number {
+  for (const tier of WIRE_TIERS) {
+    if (tier.names.some((name) => sourceMatches(source, name))) return tier.score;
+  }
+  return 0;
+}
+
+/**
+ * Is this item from a publisher good enough to lead with?
+ *
+ * Tier 5 and above -- the top wires plus the market-news publishers. Tier 2
+ * (Yahoo, an aggregator) is deliberately below the bar: it scores as better
+ * than nothing without being lead material.
+ */
 export function isMajorWireSource(item: NewsItem) {
   const source = (item.source ?? "").toLowerCase();
 
@@ -925,7 +1084,7 @@ export function isMajorWireSource(item: NewsItem) {
   // routing it to the lighter feed by default.
   if (source === "fmp news") return true;
 
-  return ["reuters", "bloomberg", "ap"].some((name) => source.includes(name));
+  return sourceTierScore(source) >= 5;
 }
 
 export function scoreNewsItem(item: NewsItem) {
@@ -1009,17 +1168,10 @@ export function scoreNewsItem(item: NewsItem) {
     score += 5;
   }
 
-  if (["reuters", "bloomberg", "ap"].some((name) => source.includes(name))) {
-    score += 8;
-  } else if (
-    ["cnbc", "marketwatch", "barron's", "wsj", "ft"].some((name) =>
-      source.includes(name)
-    )
-  ) {
-    score += 5;
-  } else if (["yahoo"].some((name) => source.includes(name))) {
-    score += 2;
-  }
+  // The same tier table the lead-feed gate uses. It was two separate lists that
+  // disagreed: this one already rated CNBC/MarketWatch/Barron's/WSJ/FT as
+  // second tier while isMajorWireSource excluded them from the feed outright.
+  score += sourceTierScore(source);
 
   if (item.pubDate) {
     const ageHours = Math.max(0, (Date.now() - new Date(item.pubDate).getTime()) / 36e5);
@@ -1054,70 +1206,87 @@ function normaliseTitleForDedupe(title: string) {
     .trim();
 }
 
-function storySignature(item: NewsItem) {
-  const text = normaliseTitleForDedupe(`${item.title} ${item.description ?? ""}`);
-
-  const themeWords = text
-    .split(" ")
-    .filter((word) => word.length > 2)
-    .filter((word) =>
-      [
-        "amazon",
-        "meta",
-        "chip",
-        "chips",
-        "ai",
-        "deal",
-        "partnership",
-        "anthropic",
-        "aws",
-        "graviton",
-        "tesla",
-        "elon",
-        "musk",
-        "spacex",
-        "xai",
-        "earnings",
-        "revenue",
-        "guidance",
-        "profit",
-        "lawsuit",
-        "probe",
-        "investigation",
-        "upgrade",
-        "downgrade",
-        "analyst",
-        "price",
-        "target",
-      ].includes(word)
-    );
-
-  if (themeWords.length >= 2) {
-    return [...new Set(themeWords)].slice(0, 5).sort().join("-");
-  }
-
-  return text.split(" ").slice(0, 7).join(" ");
+/**
+ * The meaningful words of a headline, as a set.
+ *
+ * REPLACES A CURATED THEME-WORD LIST. storySignature used to keep only words
+ * appearing in a hardcoded list of ~25 themes ("chip", "ai", "earnings",
+ * "musk", ...) and treat two items sharing two of them as the same story. That
+ * is the same maintenance-forever problem as the publisher allowlist, and it
+ * deduped badly in both directions: two unrelated stories that both said "ai"
+ * and "chip" collapsed into one, while two reports of the SAME story collapsed
+ * only if their shared words happened to be on the list.
+ *
+ * Token overlap needs no list. It compares what the headlines actually say.
+ */
+function titleTokens(item: NewsItem): Set<string> {
+  return new Set(
+    normaliseTitleForDedupe(item.title)
+      .split(" ")
+      .filter((word) => word.length > 2)
+  );
 }
 
+/**
+ * Overlap coefficient: shared tokens over the SMALLER set.
+ *
+ * Not Jaccard, deliberately. Wire services and aggregators run the same story
+ * at wildly different headline lengths ("Micron beats on revenue" vs "Micron
+ * Technology tops Q3 revenue estimates as memory demand accelerates, shares
+ * rise"), and Jaccard punishes that difference as if it were a difference in
+ * subject. Dividing by the smaller set asks "is the shorter headline contained
+ * in the longer one", which is the question.
+ */
+function titleOverlap(a: Set<string>, b: Set<string>): number {
+  const smaller = a.size <= b.size ? a : b;
+  const larger = smaller === a ? b : a;
+  if (!smaller.size) return 0;
+  let shared = 0;
+  for (const token of smaller) if (larger.has(token)) shared += 1;
+  return shared / smaller.size;
+}
+
+/**
+ * Two headlines are the same story at this much overlap.
+ *
+ * 0.6 by eyeball, and it is meant to stay eyeball-able: at 0.6 a four-word
+ * shared core out of a six-word headline is a duplicate, and two genuinely
+ * different stories about the same company on the same day are not. Raise it if
+ * real duplicates get through; lower it if distinct stories vanish.
+ */
+const STORY_OVERLAP_THRESHOLD = 0.6;
+
+/**
+ * Drop repeats of the same story, keeping the first occurrence.
+ *
+ * Callers pass items in the order they want preferred -- newest first, or
+ * highest-scoring first -- and the first of a duplicate group wins. That makes
+ * "drop the weaker duplicate" a property of the caller's sort rather than a
+ * second ranking rule hidden in here.
+ *
+ * O(n * kept) with kept bounded by the pools this runs on (<= ~120). Compared
+ * against every kept item rather than a hash bucket, because near-duplicates by
+ * definition do not share a key.
+ */
 export function dedupeNews(items: NewsItem[]): NewsItem[] {
   const seenLinks = new Set<string>();
-  const seenStories = new Set<string>();
   const deduped: NewsItem[] = [];
+  const keptTokens: Set<string>[] = [];
 
   for (const item of items) {
     const linkKey = item.link.trim();
-    const storyKey = storySignature(item);
+    if (!linkKey || seenLinks.has(linkKey)) continue;
 
-    if (!linkKey || seenLinks.has(linkKey)) {
-      continue;
-    }
-
-    if (!storyKey || seenStories.has(storyKey)) {
+    const tokens = titleTokens(item);
+    // A headline with nothing left after normalisation cannot be compared, so
+    // it is kept rather than silently dropped -- the link check already stops
+    // exact repeats.
+    if (tokens.size && keptTokens.some((kept) => titleOverlap(tokens, kept) >= STORY_OVERLAP_THRESHOLD)) {
       continue;
     }
 
     seenLinks.add(linkKey);
-    seenStories.add(storyKey);
+    keptTokens.push(tokens);
     deduped.push(item);
   }
 
@@ -1152,7 +1321,67 @@ function rankNews(news: NewsItem[], symbol = "", companyName = "") {
   );
 }
 
-export function scoreNews(news: NewsItem[]): NewsScoreResult {
+/**
+ * How recent a headline has to be to count toward the news tone.
+ *
+ * THE SCORE HAD NO TIME WINDOW AT ALL. scoreNews took `.slice(0, 5)` of
+ * rankNews output, and rankNews sorts by scoreNewsItem with date only as a
+ * TIEBREAK -- so the five headlines being scored were the most dramatic ever
+ * returned for the ticker, not the most recent. A six-month-old headline could
+ * take the 1.35x first-position weight, and did. Meanwhile the page says the
+ * tone reads "right now".
+ *
+ * 14 days is the starting value, chosen to be short enough that "right now" is
+ * true and long enough that a normal ticker clears the minimum. It is a
+ * constant rather than a literal so moving it is one edit and one number to
+ * argue about.
+ */
+const NEWS_SCORE_WINDOW_DAYS = 14;
+/**
+ * How far back the FEED will walk to fill its slots. Separate from the SCORE's
+ * window on purpose, and much longer: a headline from six weeks ago is still
+ * worth reading and is not evidence of what the tone is right now.
+ *
+ * 90 days is a floor, not a target. Past a quarter a card claiming to be part of
+ * the current picture is from a different one, and a short feed on a thin ticker
+ * is the honest outcome.
+ */
+const NEWS_FEED_MAX_AGE_DAYS = 90;
+/** Lighter feed size, below the large cards. */
+const MAX_COMPACT_NEWS_ITEMS = 10;
+/**
+ * Below this many in-window headlines, the honest answer is that there is not
+ * enough recent coverage -- NOT a score built by reaching further back. Reaching
+ * back is what produced "High confidence" on five emotive articles from last
+ * spring while a page with genuinely fresh news read "Low".
+ */
+const NEWS_SCORE_MIN_ITEMS = 3;
+/** How many of the in-window headlines are scored, most recent first. */
+const NEWS_SCORE_MAX_ITEMS = 8;
+
+/**
+ * Recency weight: 1.0 for something published now, decaying linearly to 0.35 at
+ * the window edge.
+ *
+ * REPLACES POSITION WEIGHT. The old weights (1.35 / 1.18 / 1.02 / 0.9) keyed off
+ * an item's index in a list sorted by dramatic-ness, so the loudest headline got
+ * the biggest multiplier regardless of when it was published. Weighting by age
+ * means the multiplier answers the question the label claims to answer.
+ *
+ * The 0.35 floor is deliberate: a 13-day-old headline still counts, just less.
+ * A weight decaying to zero would make the window edge a cliff, where one day's
+ * drift swings the score.
+ */
+function recencyWeight(pubDate: string | null, nowMs: number): number {
+  if (!pubDate) return 0;
+  const t = new Date(pubDate).getTime();
+  if (!Number.isFinite(t)) return 0;
+  const ageDays = Math.max(0, (nowMs - t) / 86_400_000);
+  if (ageDays > NEWS_SCORE_WINDOW_DAYS) return 0;
+  return 0.35 + 0.65 * (1 - ageDays / NEWS_SCORE_WINDOW_DAYS);
+}
+
+export function scoreNews(news: NewsItem[], nowMs = Date.now()): NewsScoreResult {
   if (!news.length) {
     return {
       available: false,
@@ -1169,7 +1398,40 @@ export function scoreNews(news: NewsItem[]): NewsScoreResult {
 
   const ranked = rankNews(news);
   const highValue = ranked.filter((item) => !isLowValueNewsItem(item));
-  const candidates = (highValue.length ? highValue : ranked).slice(0, 5);
+  const pool = highValue.length ? highValue : ranked;
+
+  // THE WINDOW, applied before anything else. An item with no publish date is
+  // excluded rather than assumed recent: it cannot be SHOWN to be inside the
+  // window, and assuming it is would reintroduce exactly the bug this fixes
+  // (claude/traps/absence-needs-the-producer-to-have-run.md).
+  const inWindow = pool.filter((item) => recencyWeight(item.pubDate, nowMs) > 0);
+
+  if (inWindow.length < NEWS_SCORE_MIN_ITEMS) {
+    return {
+      available: false,
+      score: 50,
+      tone: "yellow",
+      label: "Neutral",
+      reason:
+        `Only ${inWindow.length} of ${pool.length} usable headline${pool.length === 1 ? "" : "s"} ` +
+        `${inWindow.length === 1 ? "was" : "were"} published in the last ${NEWS_SCORE_WINDOW_DAYS} days, ` +
+        `which is not enough recent coverage to read a current tone from.`,
+      positives: [],
+      negatives: [],
+      confidence: "Low",
+    };
+  }
+
+  // MOST RECENT FIRST, not most dramatic first. This is the other half of the
+  // fix: the window decides what is eligible, and recency decides which of the
+  // eligible ones are actually read.
+  const candidates = [...inWindow]
+    .sort((a, b) => {
+      const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+      const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
+      return bTime - aTime;
+    })
+    .slice(0, NEWS_SCORE_MAX_ITEMS);
 
   const positiveTitles: string[] = [];
   const negativeTitles: string[] = [];
@@ -1178,11 +1440,11 @@ export function scoreNews(news: NewsItem[]): NewsScoreResult {
   let totalWeight = 0;
   let signalCount = 0;
 
-  for (let i = 0; i < candidates.length; i++) {
-    const item = candidates[i];
+  for (const item of candidates) {
     const title = item.title.toLowerCase();
 
-    const positionWeight = i === 0 ? 1.35 : i === 1 ? 1.18 : i === 2 ? 1.02 : 0.9;
+    // Age, not rank. See recencyWeight.
+    const weight = recencyWeight(item.pubDate, nowMs);
     let itemScore = 0;
 
     const strongPositive = [
@@ -1287,8 +1549,8 @@ export function scoreNews(news: NewsItem[]): NewsScoreResult {
       signalCount += 1;
     }
 
-    weightedSum += itemScore * positionWeight;
-    totalWeight += positionWeight;
+    weightedSum += itemScore * weight;
+    totalWeight += weight;
   }
 
   if (!totalWeight) {
@@ -1331,8 +1593,16 @@ export function scoreNews(news: NewsItem[]): NewsScoreResult {
     label = "Slightly Bearish";
   }
 
+  // CONFIDENCE IS ABOUT COVERAGE, NOT DRAMA. It used to count signalCount --
+  // how many of the scored headlines tripped a keyword hard enough to register
+  // as positive or negative -- so five emotive articles from last spring read
+  // "High" while a ticker with genuinely fresh but measured coverage read
+  // "Low". It now reports how much RECENT coverage there is, which is what a
+  // reader takes it to mean.
   const confidence: "Low" | "Medium" | "High" =
-    signalCount >= 4 ? "High" : signalCount >= 2 ? "Medium" : "Low";
+    inWindow.length >= 8 ? "High" : inWindow.length >= 5 ? "Medium" : "Low";
+
+  const windowNote = ` Based on ${candidates.length} of ${inWindow.length} headline${inWindow.length === 1 ? "" : "s"} from the last ${NEWS_SCORE_WINDOW_DAYS} days.`;
 
   let reason =
     "The current headline mix looks balanced, so the overall news tone reads neutral right now.";
@@ -1356,7 +1626,9 @@ export function scoreNews(news: NewsItem[]): NewsScoreResult {
     score,
     tone,
     label,
-    reason,
+    // The window is stated in the reason rather than left implicit. A tone that
+    // claims to read "right now" should say what "now" it means.
+    reason: reason + windowNote,
     positives: positiveTitles.slice(0, 3),
     negatives: negativeTitles.slice(0, 3),
     confidence,
@@ -2013,35 +2285,25 @@ export const newestFirst = (items: NewsItem[]) =>
  * Collapses a feed to one article per calendar date. Lifted to module scope
  * alongside newestFirst above; body unchanged.
  */
-export function oneArticlePerDate(items: NewsItem[]) {
-  const seenDates = new Set<string>();
-  const filtered: NewsItem[] = [];
-
-  for (const item of items) {
-    const dateKey = item.pubDate
-      ? new Date(item.pubDate).toISOString().slice(0, 10)
-      : "unknown";
-
-    // Actual earnings-result headlines are exempt from the per-date cap.
-    // On earnings day it's normal for several distinct, legitimate stories
-    // (beat/miss, guidance, stock reaction) to land on the same date, and
-    // collapsing them down to one hid real signal right when it mattered
-    // most. Non-earnings items on an already-seen date still collapse.
-    if (seenDates.has(dateKey) && !isActualEarningsResultNews(item)) continue;
-
-    seenDates.add(dateKey);
-    filtered.push(item);
-  }
-
-  return filtered;
-}
+// oneArticlePerDate is gone. Its real goal was never "one per day" -- it was
+// "don't show the same story twice", and a date is a bad proxy for that in both
+// directions: too strict, since two genuinely different stories on the same
+// Thursday collapsed into one (which is why actual earnings results needed a
+// special exemption from it); and too loose, since the same story reported
+// Thursday and Friday sailed through as two. dedupeNews compares what the
+// headlines say instead, which needs no exemption and no calendar.
 
 async function buildStockNewsBaseData(
   symbol: string,
   options: BuildOptions
 ): Promise<StockNewsBaseData> {
   const upper = symbol.trim().toUpperCase();
-  const maxDetailedItems = Math.max(1, Math.min(options.maxDetailedItems ?? 3, 3));
+  // 5 large cards by default, up from 3. The feed can now walk back to fill
+  // them (see NEWS_FEED_MAX_AGE_DAYS), so the old cap of 3 was a limit set by
+  // how little the source gate used to clear, not by what the page wants.
+  // Callers wanting fewer -- the discovery strip, internal news -- still pass
+  // their own value.
+  const maxDetailedItems = Math.max(1, Math.min(options.maxDetailedItems ?? 5, 5));
 
   const [quote, history, companyName] = await Promise.all([
     fetchQuote(upper),
@@ -2118,79 +2380,68 @@ async function buildStockNewsBaseData(
       : "FMP did not return recent earnings-specific headlines. Use the structured earnings snapshot instead.",
   };
 
+  // ---------------------------------------------------------------------------
+  // THE FEED, after the source gate was removed (owner's call, 2026-08-22).
+  //
+  // WHAT WENT, AND WHY. There used to be a two-tier pool, a curated wire
+  // allowlist, an earnings exemption for two named publishers, and a
+  // gate-then-backfill split. Between them they produced the INVERSE of their
+  // intent: the gate was narrow enough that most tickers cleared nothing, so
+  // the backfill -- which ignored the gate entirely -- became the normal path
+  // and filled the lead slots with exactly the publishers the gate existed to
+  // exclude. Confirmed live on /stock/MU/news: three fool.com lead cards, one a
+  // podcast, while a CNBC interview sat in the lighter feed.
+  //
+  // Widening the allowlist would have fixed that day's symptom and left the
+  // shape: a curated publisher list maintained forever against a feed nobody
+  // controls, with a fallback path that silently disagrees with it. Simple and
+  // predictable beats a sorting rule that has been quietly inverted.
+  //
+  // WHAT IS LEFT is one ordered pass: drop junk, drop repeats, take the newest.
+  // Two filters survive, and both fail visibly rather than silently --
+  // isVideoOrLowQualitySource (podcasts and video, now including the article
+  // image) and isLowValueNewsItem (SEO stock-quote pages). Neither is a
+  // publisher allowlist; both are pattern blocklists, and a miss shows up as an
+  // obviously wrong card rather than as an absence nobody can see.
   const displayNewsPool = rankedNews.length ? rankedNews : dedupeNews(news);
-  const highValueNews = displayNewsPool.filter((item) => !isLowValueNewsItem(item));
-  const fallbackNews = displayNewsPool.filter((item) => isLowValueNewsItem(item));
 
-  // Main feed = FMP's own unattributed items, the handful of top-tier wires,
-  // or a genuine Benzinga/Zacks earnings-result headline (the earnings-
-  // coverage fix above, deliberately scoped to those two sources rather
-  // than every source -- isActualEarningsResultNews checks title+
-  // description together, and during an earnings news cycle almost any
-  // opinion/analysis piece ends up mentioning "reported"/"revenue"/
-  // "results" somewhere in its body even when it isn't fundamentally about
-  // the earnings event. Applying the exemption to every source let that
-  // loose match defeat the source gate entirely; scoping it back to the
-  // two sources it was built for keeps genuine earnings coverage in while
-  // still routing Motley Fool/247wallst/Investorplace/Seeking Alpha/etc.
-  // opinion pieces to the lighter feed.
-  const mainFeedNews = highValueNews.filter(
-    (item) =>
-      isMajorWireSource(item) ||
-      (isEarningsExceptionSource(item) && isActualEarningsResultNews(item))
+  // One pool, newest first, junk removed, repeats collapsed by title similarity
+  // (see dedupeNews). No tiers: position in this list is the only ranking.
+  const feedPool = dedupeNews(
+    newestFirst(displayNewsPool.filter((item) => !isLowValueNewsItem(item)))
   );
 
-const primaryDetailedNews = oneArticlePerDate(newestFirst(mainFeedNews)).slice(0, maxDetailedItems);
+  // OPEN-ENDED BACKFILL, with a floor. The old rule was one article per DATE,
+  // which was a bad proxy for "don't show the same story twice" in both
+  // directions -- too strict (two genuinely different Thursday stories became
+  // one) and too loose (the same story reported Thursday and Friday became two).
+  // Similarity dedup does that job properly, so the feed can simply walk back
+  // until it is full.
+  //
+  // The floor is 90 days rather than unbounded: past a quarter a headline is
+  // not news, and a card claiming to be part of the current picture should not
+  // be from another one. Running short is the correct outcome for a thin
+  // ticker -- fewer cards is honest, padding with year-old stories is not.
+  const oldestAllowedMs = Date.now() - NEWS_FEED_MAX_AGE_DAYS * 86_400_000;
+  const withinFeedWindow = feedPool.filter((item) => {
+    if (!item.pubDate) return false;
+    const t = new Date(item.pubDate).getTime();
+    return Number.isFinite(t) && t >= oldestAllowedMs;
+  });
 
-// Backfill only kicks in when the major-wire/earnings gate above doesn't
-// clear the target item count on its own (e.g. a quiet news day, or a
-// ticker with no Reuters/Bloomberg/AP/FMP coverage and no genuine
-// Benzinga/Zacks earnings piece). It draws from the same highValueNews
-// pool the main gate does -- still excludes the low-value fallback tier
-// entirely -- so a thin day doesn't leave the main feed empty, but a
-// normal day with enough major-wire/earnings coverage never touches this
-// path and the feed stays exactly as tight as the gate intends.
-let detailedNews = primaryDetailedNews;
-
-if (detailedNews.length < maxDetailedItems) {
-  const usedDates = new Set(
-    detailedNews.map((item) =>
-      item.pubDate ? new Date(item.pubDate).toISOString().slice(0, 10) : "unknown"
-    )
+  const detailedNews = withinFeedWindow.slice(0, maxDetailedItems);
+  const compactNews = withinFeedWindow.slice(
+    maxDetailedItems,
+    maxDetailedItems + MAX_COMPACT_NEWS_ITEMS
   );
-  const usedLinks = new Set(detailedNews.map((item) => item.link));
 
-  const backfillCandidates = newestFirst(highValueNews).filter(
-    (item) => !usedLinks.has(item.link) && !mainFeedNews.some((picked) => picked.link === item.link)
+  // Short of target is a real state and worth being able to see, since it is now
+  // the only way the feed can under-deliver -- there is no gate left to blame.
+  console.log(
+    `[news-feed] ${upper} pool=${displayNewsPool.length} afterFilters=${feedPool.length}` +
+      ` within${NEWS_FEED_MAX_AGE_DAYS}d=${withinFeedWindow.length}` +
+      ` lead=${detailedNews.length}/${maxDetailedItems} compact=${compactNews.length}/${MAX_COMPACT_NEWS_ITEMS}`
   );
-
-  const backfill: NewsItem[] = [];
-
-  for (const item of backfillCandidates) {
-    if (detailedNews.length + backfill.length >= maxDetailedItems) break;
-
-    const dateKey = item.pubDate ? new Date(item.pubDate).toISOString().slice(0, 10) : "unknown";
-    if (usedDates.has(dateKey) && !isActualEarningsResultNews(item)) continue;
-
-    usedDates.add(dateKey);
-    backfill.push(item);
-  }
-
-  if (backfill.length) {
-    detailedNews = [...detailedNews, ...backfill];
-  }
-}
-
-// Everything that didn't make the main feed -- major-wire/earnings items
-// that lost out on space, the secondary aggregator/opinion-blog publishers,
-// low-value fallback items, and older news generally -- lands in the
-// lighter feed instead.
-const compactPool = dedupeNews([
-  ...highValueNews.filter((item) => !detailedNews.some((picked) => picked.link === item.link)),
-  ...fallbackNews,
-]);
-
-const compactNews = oneArticlePerDate(newestFirst(compactPool)).slice(0, 6);
 
   return {
     symbol: upper,

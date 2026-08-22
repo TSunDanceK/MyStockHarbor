@@ -13,4 +13,26 @@
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
-export { GET } from "../../../../lib/server/pickersBuilder";
+import type { NextRequest } from "next/server";
+import { GET as buildPickerUniverse } from "../../../../lib/server/pickersBuilder";
+import { recordJobRun } from "../../../../lib/server/jobRuns";
+
+// WRAPPED, NOT REWRITTEN. This stays the identical handler -- the whole point of
+// the re-export is that this route and /api/pickers can never drift -- with one
+// run record added around it.
+//
+// Only the status is recorded. Reading the body to build a richer summary would
+// mean cloning a payload that carries the entire picker universe, on a route
+// whose own comment records a timeout cliff; the question this answers is "did
+// the daily build run, and did it succeed".
+export async function GET(req: NextRequest) {
+  try {
+    const res = await buildPickerUniverse(req);
+    await recordJobRun("warm-picker-universe", res.ok, { status: res.status });
+    return res;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "warm-picker-universe failed";
+    await recordJobRun("warm-picker-universe", false, { error: message });
+    throw error;
+  }
+}

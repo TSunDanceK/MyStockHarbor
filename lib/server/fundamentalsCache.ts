@@ -309,6 +309,7 @@ export async function cacheScreenerFundamentals(
 
   const now = new Date().toISOString();
   const pipeline = redis.pipeline();
+  const written: string[] = [];
   let queued = 0;
 
   for (const raw of rows) {
@@ -329,6 +330,7 @@ export async function cacheScreenerFundamentals(
     pipeline.set(`${SCREENER_FUND_KEY_PREFIX}${symbol}`, entry, {
       ex: SCREENER_FUND_TTL_SECONDS,
     });
+    written.push(symbol);
     queued++;
   }
 
@@ -336,6 +338,11 @@ export async function cacheScreenerFundamentals(
 
   try {
     await pipeline.exec();
+    // Staleness bookkeeping for the dataset this function IS the producer of.
+    // Without it screenerFundamentals sits in the DATASETS registry with no
+    // queue behind it, and the health page can only say "not instrumented" --
+    // honest, but a gap where a one-line write would do.
+    if (written.length) await markRefreshed("screenerFundamentals", written);
   } catch {
     return 0; // fail open
   }

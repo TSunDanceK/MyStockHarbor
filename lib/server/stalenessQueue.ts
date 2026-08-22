@@ -36,6 +36,21 @@ const redis =
 
 const QUEUE_PREFIX = "msh:staleness:v1";
 const DEFER_PREFIX = "msh:staleness-defer:v1";
+// When this dataset's queue was FIRST seeded.
+//
+// WHY A THIRD KEY. registerSymbols scores everything 0, so the instant a
+// dataset is instrumented, every symbol in it reads "never refreshed". Rendering
+// that as a fault is wrong -- nothing has had a chance to run yet -- but
+// rendering it as permanently neutral is worse, because a dataset whose warm job
+// is dead looks exactly the same and would stay neutral forever. That is the
+// uninstrumented-job-reads-as-dead failure inverted, and this page exists to end
+// it (claude/traps/absence-needs-the-producer-to-have-run.md).
+//
+// The score field cannot answer it: an all-zero set has no timestamp to age
+// against. So the seed moment is recorded once, and the health page can say
+// "seeded 4 minutes ago" (neutral) or "seeded 9 days ago and still nothing has
+// refreshed" (fault) instead of guessing.
+const SEEDED_PREFIX = "msh:staleness-seeded:v1";
 
 /**
  * The datasets with real bookkeeping, and the TTL each is SUPPOSED to hold to.
@@ -71,17 +86,17 @@ export const DATASETS = {
   pricePool: {
     label: "Price pool",
     ttlSeconds: 60 * 15,
-    note: "warm-price-pool, every 3 min — NOT yet on a staleness set",
+    note: "warm-price-pool, every 3 min",
   },
   dailyHistory: {
     label: "Daily history",
     ttlSeconds: 60 * 60 * 12,
-    note: "historyCache — NOT yet on a staleness set",
+    note: "historyCache, on every write",
   },
   earnings: {
     label: "Earnings",
     ttlSeconds: 60 * 60 * 24 * 7,
-    note: "warm-earnings — NOT yet on a staleness set",
+    note: "warm-earnings, daily 07:15",
   },
 } as const;
 
@@ -89,6 +104,7 @@ export type DatasetKey = keyof typeof DATASETS;
 
 const queueKey = (dataset: DatasetKey) => `${QUEUE_PREFIX}:${dataset}`;
 const deferKey = (dataset: DatasetKey) => `${DEFER_PREFIX}:${dataset}`;
+const seededKey = (dataset: DatasetKey) => `${SEEDED_PREFIX}:${dataset}`;
 
 /**
  * Record that these symbols were just successfully refreshed.
@@ -138,6 +154,11 @@ export async function registerSymbols(dataset: DatasetKey, symbols: string[]): P
       const slice = symbols.slice(i, i + 500).map((s) => ({ score: 0, member: s }));
       p.zadd(queueKey(dataset), { nx: true }, slice[0], ...slice.slice(1));
     }
+    // `nx` so this records the FIRST seed and never moves. A timestamp that
+    // refreshed on every run would reset the clock the health page ages
+    // against, and a permanently-young seed is a permanently-neutral status --
+    // exactly the reading this key exists to prevent.
+    p.set(seededKey(dataset), Date.now(), { nx: true });
     await p.exec();
   } catch {
     // bookkeeping -- never throws into the caller
@@ -227,6 +248,12 @@ export type DatasetHealth = {
   deferred: number;
   /** Oldest refresh timestamp among tracked symbols, ms. Null if none. */
   oldestMs: number | null;
+  /**
+   * When this dataset's queue was first seeded, ms. Null for a queue seeded
+   * before this key existed -- which is a real state and is reported as such,
+   * not silently treated as "just now".
+   */
+  seededAtMs: number | null;
   instrumented: boolean;
 };
 
@@ -246,13 +273,14 @@ export async function readDatasetHealth(dataset: DatasetKey): Promise<DatasetHea
     never: 0,
     deferred: 0,
     oldestMs: null,
+    seededAtMs: null,
     instrumented: false,
   };
   if (!redis) return base;
 
   try {
     const cutoff = Date.now() - def.ttlSeconds * 1000;
-    const [tracked, stale, never, deferred, oldest] = await Promise.all([
+    const [tracked, stale, never, deferred, oldest, seeded] = await Promise.all([
       redis.zcard(queueKey(dataset)),
       // `1` excludes the never-refreshed (score 0) so the two counts do not
       // double-report the same symbols; `never` carries those separately.
@@ -260,6 +288,7 @@ export async function readDatasetHealth(dataset: DatasetKey): Promise<DatasetHea
       redis.zcount(queueKey(dataset), 0, 0),
       redis.zcard(deferKey(dataset)),
       redis.zrange<(string | number)[]>(queueKey(dataset), 0, 0, { withScores: true }),
+      redis.get<number | string | null>(seededKey(dataset)),
     ]);
 
     const oldestScore = Array.isArray(oldest) && oldest.length >= 2 ? Number(oldest[1]) : null;
@@ -272,6 +301,7 @@ export async function readDatasetHealth(dataset: DatasetKey): Promise<DatasetHea
       never: Number(never) || 0,
       deferred: Number(deferred) || 0,
       oldestMs: oldestScore && oldestScore > 0 ? oldestScore : null,
+      seededAtMs: Number(seeded) > 0 ? Number(seeded) : null,
       instrumented: trackedN > 0,
     };
   } catch {
