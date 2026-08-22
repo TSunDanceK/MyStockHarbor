@@ -30,6 +30,15 @@ const check = (label, ok, detail = "") => {
   if (!ok) failures++;
 };
 
+// Comments stripped for the "does the code do X" assertions below, so this
+// script cannot be satisfied by its own subject's prose.
+const codeOfTs = (src) =>
+  src
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .filter((l) => !l.trim().startsWith("//"))
+    .join("\n");
+
 const sourceFile = (rel, kind = ts.ScriptKind.TS) =>
   ts.createSourceFile(rel, read(rel), ts.ScriptTarget.Latest, true, kind);
 
@@ -47,12 +56,33 @@ const extract = (sf, names) => {
 
 const { keywordHits } = extract(sourceFile("lib/keywordMatch.ts"), ["keywordHits"]);
 const helpers = extract(sourceFile("lib/keywordMatch.ts"), ["matcher"]);
-const { isEarningsNewsItem, isVideoOrLowQualitySource } = extract(
-  sourceFile("lib/stock-news-data.ts"),
-  ["isEarningsNewsItem", "isVideoOrLowQualitySource"]
-);
+const { isEarningsNewsItem, isVideoOrLowQualitySource, isMajorWireSource, sourceTierScore, sourceMatches } =
+  extract(sourceFile("lib/stock-news-data.ts"), [
+    "isEarningsNewsItem",
+    "isVideoOrLowQualitySource",
+    "isMajorWireSource",
+    "sourceTierScore",
+    "sourceMatches",
+  ]);
 
-if (!keywordHits || !helpers.matcher || !isEarningsNewsItem || !isVideoOrLowQualitySource) {
+// The tier table and its regex cache, lifted verbatim rather than restated.
+const newsSrc = read("lib/stock-news-data.ts");
+const tierTable = newsSrc.slice(
+  newsSrc.indexOf("const WIRE_TIERS"),
+  newsSrc.indexOf("const wireCache")
+);
+const wireCacheDecl = "const wireCache = new Map();";
+
+if (
+  !keywordHits ||
+  !helpers.matcher ||
+  !isEarningsNewsItem ||
+  !isVideoOrLowQualitySource ||
+  !isMajorWireSource ||
+  !sourceTierScore ||
+  !sourceMatches ||
+  !tierTable.trim()
+) {
   console.error("FAIL: could not extract the shipping functions — measuring nothing.");
   process.exit(1);
 }
@@ -66,7 +96,8 @@ const preamble = read("lib/keywordMatch.ts")
 
 const js = ts.transpileModule(
   `${preamble}\n${helpers.matcher}\n${keywordHits}\n${isEarningsNewsItem}\n${isVideoOrLowQualitySource}\n` +
-    `export { keywordHits, isEarningsNewsItem, isVideoOrLowQualitySource };`,
+    `${tierTable}\n${wireCacheDecl}\n${sourceMatches}\n${sourceTierScore}\n${isMajorWireSource}\n` +
+    `export { keywordHits, isEarningsNewsItem, isVideoOrLowQualitySource, isMajorWireSource, sourceTierScore };`,
   { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext } }
 ).outputText;
 const m = await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
@@ -205,6 +236,63 @@ check(
 check(
   "still catches a YouTube link",
   m.isVideoOrLowQualitySource({ title: "Interview", link: "https://youtube.com/watch?v=x", source: "YT" })
+);
+
+console.log("\n=== 7. The lead-feed source gate ===\n");
+// Confirmed live on /stock/MU/news: three fool.com lead cards, one a podcast,
+// while a CNBC interview sat in the lighter feed. The gate accepted only
+// reuters/bloomberg/ap, so it cleared nothing for most tickers and the backfill
+// -- which ignores the gate -- filled the lead slots with the publishers the
+// gate exists to exclude.
+const wire = (source) => m.isMajorWireSource({ title: "x", link: "https://x", source });
+for (const source of [
+  "Reuters",
+  "Bloomberg",
+  "AP",
+  "Dow Jones Newswires",
+  "CNBC",
+  "The Wall Street Journal",
+  "Financial Times",
+  "Barron's",
+  "MarketWatch",
+  "Business Wire",
+  "PR Newswire",
+]) {
+  check(`"${source}" can lead the feed`, wire(source));
+}
+for (const source of ["The Motley Fool", "247wallst", "InvestorPlace", "Seeking Alpha", "Finbold"]) {
+  check(`"${source}" still cannot`, !wire(source));
+}
+check('"Yahoo Finance" scores but does not lead', m.sourceTierScore("yahoo finance") === 2 && !wire("Yahoo Finance"));
+
+// SAME CLASS AS THE keywordHits BUG, in a different file. "ap" and "ft" are
+// correct entries; substring-matching them is what was wrong.
+check('"capital.com" is NOT the AP', !wire("capital.com"));
+check('"AppleInsider" is NOT the AP', !wire("AppleInsider"));
+check('"Microsoft News" is NOT the FT', !wire("Microsoft News"));
+check('"Draft Report" is NOT the FT', !wire("Draft Report"));
+check('but "FT.com" still is', wire("FT.com"));
+
+console.log("\n=== 8. One tier table, and an honest backfill ===\n");
+const newsCode = codeOfTs(read("lib/stock-news-data.ts"));
+check(
+  "scoreNewsItem uses the SAME tier table as the gate",
+  /score \+= sourceTierScore\(source\)/.test(newsCode) &&
+    !/\["reuters", "bloomberg", "ap"\]/.test(newsCode),
+  "the two lists disagreed: the scorer rated CNBC highly while the gate excluded it"
+);
+check(
+  "the backfill picks by quality, not pure recency",
+  /backfillCandidates[\s\S]{0,400}scoreNewsItem\(b\) - scoreNewsItem\(a\)/.test(newsCode) &&
+    !/const backfillCandidates = newestFirst\(/.test(newsCode)
+);
+check(
+  "the backfill's depth is reported rather than asserted in a comment",
+  /newsBackfillDepth/.test(newsCode) && /fromBackfill=/.test(read("lib/stock-news-data.ts"))
+);
+check(
+  'the false "never touches this path" claim is gone',
+  !/normal day with enough major-wire\/earnings coverage never touches this/.test(read("lib/stock-news-data.ts"))
 );
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);

@@ -999,6 +999,83 @@ export function isLowValueNewsItem(item: NewsItem) {
 // the same theme at once it reads as duplicate coverage even though each
 // headline is technically distinct. Those are routed to the lighter feed
 // instead, alongside older items -- see mainFeedNews below.
+/**
+ * Publisher tiers, in one table, matched on WORD BOUNDARIES.
+ *
+ * TWO BUGS LIVED IN THE TWO COPIES THIS REPLACES.
+ *
+ * 1. THE LIST WAS TOO SHORT, and the gate and the scorer disagreed about it.
+ *    isMajorWireSource accepted only reuters/bloomberg/ap, so CNBC, the WSJ,
+ *    the FT, Barron's, MarketWatch, Dow Jones, Business Wire and PR Newswire
+ *    were all excluded from the lead feed -- while scoreNewsItem, ten lines
+ *    away in the same file, already scored several of them as second-tier
+ *    quality. The same file rated CNBC highly and then refused to lead with it.
+ *    Confirmed live on /stock/MU/news: all three lead cards were fool.com while
+ *    a CNBC interview sat in the lighter feed.
+ *
+ * 2. THE MATCH WAS A SUBSTRING, which is the keywordHits bug again in a
+ *    different file. `source.includes("ap")` makes capital.com and AppleInsider
+ *    major wires; `source.includes("ft")` makes Microsoft, software and draft
+ *    ones too. Two-letter publisher codes cannot be matched by substring, and
+ *    "ap" and "ft" are both real, correct entries -- so the fix is the matcher,
+ *    not the list.
+ */
+const WIRE_TIERS: Array<{ score: number; names: string[] }> = [
+  // Top-tier wires. Dow Jones and Associated Press spelled out alongside their
+  // codes, because FMP attributes both ways.
+  { score: 8, names: ["reuters", "bloomberg", "ap", "associated press", "dow jones"] },
+  // The publishers that actually carry market news. These were the ones missing
+  // from the gate entirely.
+  {
+    score: 5,
+    names: [
+      "cnbc",
+      "wsj",
+      "wall street journal",
+      "ft",
+      "financial times",
+      "barron's",
+      "barrons",
+      "marketwatch",
+      "market watch",
+      "business wire",
+      "businesswire",
+      "pr newswire",
+      "prnewswire",
+      "globenewswire",
+    ],
+  },
+  { score: 2, names: ["yahoo"] },
+];
+
+const wireCache = new Map<string, RegExp>();
+
+function sourceMatches(source: string, name: string): boolean {
+  let re = wireCache.get(name);
+  if (!re) {
+    // No inflection allowance, unlike keywordHits: a publisher name is a proper
+    // noun, and "aps"/"aped" are not variants of "AP".
+    re = new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+    wireCache.set(name, re);
+  }
+  return re.test(source);
+}
+
+/** The publisher tier score for a source string, or 0 if it is in no tier. */
+export function sourceTierScore(source: string): number {
+  for (const tier of WIRE_TIERS) {
+    if (tier.names.some((name) => sourceMatches(source, name))) return tier.score;
+  }
+  return 0;
+}
+
+/**
+ * Is this item from a publisher good enough to lead with?
+ *
+ * Tier 5 and above -- the top wires plus the market-news publishers. Tier 2
+ * (Yahoo, an aggregator) is deliberately below the bar: it scores as better
+ * than nothing without being lead material.
+ */
 export function isMajorWireSource(item: NewsItem) {
   const source = (item.source ?? "").toLowerCase();
 
@@ -1007,7 +1084,7 @@ export function isMajorWireSource(item: NewsItem) {
   // routing it to the lighter feed by default.
   if (source === "fmp news") return true;
 
-  return ["reuters", "bloomberg", "ap"].some((name) => source.includes(name));
+  return sourceTierScore(source) >= 5;
 }
 
 export function scoreNewsItem(item: NewsItem) {
@@ -1091,17 +1168,10 @@ export function scoreNewsItem(item: NewsItem) {
     score += 5;
   }
 
-  if (["reuters", "bloomberg", "ap"].some((name) => source.includes(name))) {
-    score += 8;
-  } else if (
-    ["cnbc", "marketwatch", "barron's", "wsj", "ft"].some((name) =>
-      source.includes(name)
-    )
-  ) {
-    score += 5;
-  } else if (["yahoo"].some((name) => source.includes(name))) {
-    score += 2;
-  }
+  // The same tier table the lead-feed gate uses. It was two separate lists that
+  // disagreed: this one already rated CNBC/MarketWatch/Barron's/WSJ/FT as
+  // second tier while isMajorWireSource excluded them from the feed outright.
+  score += sourceTierScore(source);
 
   if (item.pubDate) {
     const ageHours = Math.max(0, (Date.now() - new Date(item.pubDate).getTime()) / 36e5);
@@ -2224,14 +2294,27 @@ async function buildStockNewsBaseData(
 
 const primaryDetailedNews = oneArticlePerDate(newestFirst(mainFeedNews)).slice(0, maxDetailedItems);
 
-// Backfill only kicks in when the major-wire/earnings gate above doesn't
-// clear the target item count on its own (e.g. a quiet news day, or a
-// ticker with no Reuters/Bloomberg/AP/FMP coverage and no genuine
-// Benzinga/Zacks earnings piece). It draws from the same highValueNews
-// pool the main gate does -- still excludes the low-value fallback tier
-// entirely -- so a thin day doesn't leave the main feed empty, but a
-// normal day with enough major-wire/earnings coverage never touches this
-// path and the feed stays exactly as tight as the gate intends.
+// BACKFILL IS THE COMMON PATH, NOT AN EXCEPTIONAL ONE. The comment that stood
+// here said "a normal day with enough major-wire/earnings coverage never
+// touches this path and the feed stays exactly as tight as the gate intends".
+// That was not true and had not been true for a long time: with the gate
+// accepting only Reuters/Bloomberg/AP/FMP, most tickers on most days clear
+// nothing at all, so the backfill -- which ignores the source gate entirely --
+// was filling the lead feed with the opinion publishers the gate exists to
+// exclude. Confirmed live on /stock/MU/news: three fool.com lead cards, one of
+// them a podcast, while a CNBC interview sat in the lighter feed.
+//
+// A comment asserting a path is exceptional, on a path that is the norm, is
+// worse than no comment: it is what stops anyone looking at it
+// (claude/traps/grep-finds-the-comment-not-the-code.md).
+//
+// Two things changed rather than one. The gate was widened (see WIRE_TIERS), so
+// it clears real coverage more often. And the backfill now picks by QUALITY
+// rather than pure recency, because widening the gate cannot make the backfill
+// rare on a thin ticker -- and when it runs, the lead cards should be the best
+// available, not merely the newest. `newsBackfillDepth` in the returned data
+// reports how many lead slots came from the backfill, so the answer to "how
+// common is this really" stops being a guess.
 let detailedNews = primaryDetailedNews;
 
 if (detailedNews.length < maxDetailedItems) {
@@ -2242,9 +2325,22 @@ if (detailedNews.length < maxDetailedItems) {
   );
   const usedLinks = new Set(detailedNews.map((item) => item.link));
 
-  const backfillCandidates = newestFirst(highValueNews).filter(
-    (item) => !usedLinks.has(item.link) && !mainFeedNews.some((picked) => picked.link === item.link)
-  );
+  // QUALITY FIRST, recency as the tiebreak -- not newestFirst. scoreNewsItem
+  // already weighs publisher tier and headline substance, so this is the
+  // existing ranking applied where it was not being applied. Under pure
+  // recency, whichever opinion blog posted most recently took the lead slot
+  // over a better piece from the same morning.
+  const backfillCandidates = [...highValueNews]
+    .filter(
+      (item) => !usedLinks.has(item.link) && !mainFeedNews.some((picked) => picked.link === item.link)
+    )
+    .sort((a, b) => {
+      const byScore = scoreNewsItem(b) - scoreNewsItem(a);
+      if (byScore !== 0) return byScore;
+      const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+      const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
+      return bTime - aTime;
+    });
 
   const backfill: NewsItem[] = [];
 
@@ -2262,6 +2358,16 @@ if (detailedNews.length < maxDetailedItems) {
     detailedNews = [...detailedNews, ...backfill];
   }
 }
+
+// How many of the lead slots the source gate could NOT fill on its own. The
+// whole point of 2f: the backfill's frequency was asserted in a comment and
+// measured nowhere, so nobody could tell an exceptional path from the normal
+// one. A number makes that answerable.
+const newsBackfillDepth = detailedNews.length - primaryDetailedNews.length;
+console.log(
+  `[news-feed] ${upper} lead=${detailedNews.length} fromGate=${primaryDetailedNews.length}` +
+    ` fromBackfill=${newsBackfillDepth} gatePool=${mainFeedNews.length} highValuePool=${highValueNews.length}`
+);
 
 // Everything that didn't make the main feed -- major-wire/earnings items
 // that lost out on space, the secondary aggregator/opinion-blog publishers,
