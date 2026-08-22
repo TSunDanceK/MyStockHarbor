@@ -63,6 +63,14 @@ type Probe = {
   id: string;
   path: string;
   note: string;
+  /**
+   * API vintage. Defaults to "stable", which is every probe that predates the
+   * press-release set below. Press releases historically lived on v3 and may
+   * still be served there when the stable path is restricted, so a probe that
+   * only ever asks `stable/` cannot distinguish "not on this plan" from "not at
+   * this address".
+   */
+  base?: "stable" | "api/v3" | "api/v4";
 };
 
 // `symbol`-bearing list endpoints worth knowing about, plus two known-good
@@ -132,6 +140,49 @@ const PROBES: Probe[] = [
     id: "news-stock-multi-symbol",
     path: "news/stock?symbols=AAPL,MSFT,NVDA,AVGO,ORCL,CRM,AMD,ADBE,CSCO,ACN&limit=100",
     note: "SECTOR NEWS -- does symbols= accept a LIST? (rows = articles, not companies)",
+  },
+
+  // EARNINGS NEWS (2026-08-22). Is there a DEDICATED source, so the earnings
+  // section stops being a keyword filter over a general feed?
+  //
+  // Today /stock/[symbol]/news finds earnings stories by substring-matching 14
+  // words against a general news feed. That is the wrong shape twice over: it
+  // misclassifies (a story headlined "...Research Lab" landed in the earnings
+  // section because its body said "headquartered", which contains "quarter"),
+  // and it pays for 50 general articles per symbol to keep a handful of real
+  // ones -- on the endpoint that is ~34% of the 30-day FMP byte cap.
+  //
+  // A company's own press releases ARE the earnings releases ("Micron
+  // Technology, Inc. Reports Results for the Third Quarter of Fiscal 2026").
+  // If any of these four answer 200, the filter is replaceable rather than
+  // tunable, and almost certainly cheaper in bytes as well as more accurate.
+  // If they all answer 402, the keyword filter is what there is and the limit
+  // question is the only lever left -- which is exactly the fork that decides
+  // whether tuning `limit=50` is worth doing at all.
+  //
+  // READ sampleRow AND titleSample, not just httpStatus: an endpoint that
+  // returns 200 with generic wire copy rather than issuer releases answers the
+  // question NO just as firmly as a 402 does.
+  {
+    id: "press-releases-by-symbol",
+    path: "news/press-releases?symbols=MU,AAPL&limit=20",
+    note: "BEST CANDIDATE -- issuer press releases per symbol; would replace the keyword filter outright",
+  },
+  {
+    id: "press-releases-latest",
+    path: "news/press-releases-latest?limit=50",
+    note: "market-wide variant -- if list-aware like news/stock, one call could cover many symbols",
+  },
+  {
+    id: "press-releases-v3",
+    path: "press-releases/MU?limit=20",
+    base: "api/v3",
+    note: "SAME QUESTION, older vintage -- separates 'not on this plan' from 'not at this address'",
+  },
+  {
+    id: "earnings-transcript-latest",
+    path: "earning-call-transcript-latest?limit=10",
+    note: "LONG SHOT -- transcripts are not headlines, but their presence dates the actual report",
   },
 ];
 
@@ -229,7 +280,7 @@ export async function GET(request: Request) {
 
   for (const probe of probes) {
     const joiner = probe.path.includes("?") ? "&" : "?";
-    const url = `https://financialmodelingprep.com/stable/${probe.path}${joiner}apikey=${encodeURIComponent(apiKey)}`;
+    const url = `https://financialmodelingprep.com/${probe.base ?? "stable"}/${probe.path}${joiner}apikey=${encodeURIComponent(apiKey)}`;
 
     // Diagnostics must never crowd out the crons or a live page render.
     if (!(await hasFmpCapacity(1, FMP_MIN_HEADROOM_CALLS))) {
@@ -296,6 +347,16 @@ export async function GET(request: Request) {
         // which fields come back rather than assuming.
         rowKeys: arr && arr[0] ? Object.keys(arr[0]) : null,
         sampleRow: arr && arr[0] ? arr[0] : null,
+        // For the news-shaped probes, the headline question is not "did it
+        // answer" but "is what came back actually issuer releases". Three
+        // titles settles that at a glance; a 200 full of generic wire copy is
+        // a NO, and httpStatus alone cannot say so.
+        titleSample: arr
+          ? arr
+              .slice(0, 3)
+              .map((row) => String(row?.title ?? "").trim())
+              .filter(Boolean)
+          : null,
         // Fixed lookup of TARGET_SYMBOLS within this probe's rows, so
         // liquidity-dependent staleness can be checked for names other than
         // whichever mega-cap happens to sort first.
@@ -317,6 +378,7 @@ export async function GET(request: Request) {
         sample: [],
         rowKeys: null,
         sampleRow: null,
+        titleSample: null,
         targetSamples: null,
         message: scrub(error instanceof Error ? error.message : "fetch failed", apiKey),
       });

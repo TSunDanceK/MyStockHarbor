@@ -45,6 +45,16 @@ export type NewsItem = {
   fmpSymbols?: string[];
   /** True when the item came back from a symbol-specific FMP request. */
   fmpSymbolMatched?: boolean;
+  /**
+   * Position in the raw upstream response, before any filtering or ranking.
+   *
+   * MEASUREMENT ONLY, and the reason it has to be stamped rather than inferred:
+   * every stage between the fetch and the render filters, dedupes and re-sorts,
+   * so by the time an item is displayed its position tells you nothing about how
+   * deep into the fetched list it came from. That depth is the ONLY thing that
+   * says whether `limit=50` is buying anything -- see logNewsDepth.
+   */
+  sourceIndex?: number;
 };
 
 export type FmpStockNewsItem = {
@@ -555,7 +565,7 @@ async function fetchFmpStockNews(symbol: string): Promise<NewsItem[]> {
       if (!Array.isArray(data)) continue;
 
       const items = data
-        .map((item: FmpStockNewsItem): NewsItem | null => {
+        .map((item: FmpStockNewsItem, index: number): NewsItem | null => {
           const title = typeof item.title === "string" ? item.title.trim() : "";
           const link =
             typeof item.url === "string" && item.url.trim()
@@ -601,6 +611,9 @@ async function fetchFmpStockNews(symbol: string): Promise<NewsItem[]> {
                 : null,
             fmpSymbols,
             fmpSymbolMatched: fmpSymbols.includes(symbol.toUpperCase()),
+            // Stamped here, at the only point where the upstream ordering is
+            // still intact.
+            sourceIndex: index,
           };
         })
         .filter((item): item is NewsItem => Boolean(item));
@@ -710,14 +723,56 @@ export function isEarningsNewsItem(item: NewsItem) {
   ]);
 }
 
+/**
+ * How deep into the fetched list the surviving items actually came from.
+ *
+ * THIS EXISTS TO STOP A GUESS BEING ACTED ON. `limit=50` on
+ * /stable/news/stock is the single largest line on the FMP byte meter, and the
+ * obvious saving is to lower it. Obvious and unmeasured: nobody knows whether
+ * the earnings items that get displayed sit at indices 0-5 (in which case 50 is
+ * 45 wasted articles) or are scattered out to index 47 (in which case cutting
+ * the limit empties the section on exactly the symbols with the least
+ * coverage). The arithmetic reads the same either way, which is what makes it
+ * dangerous (claude/traps/measuring-the-wrong-layer.md).
+ *
+ * `maxIndex` is the number that decides it: it is the smallest `limit` that
+ * would have produced the same output for this symbol on this run.
+ *
+ * A LOG LINE, NOT A HEALTH SIGNAL, and the difference matters here. This is a
+ * one-off measurement taken to settle one decision, not something that needs
+ * reading back later -- so it does not belong in Redis beside the byte meter.
+ * If it turns out to be hard to catch in the log window, that is the moment to
+ * move it, not before.
+ */
+function logNewsDepth(label: string, symbol: string, fetched: number, kept: NewsItem[]): void {
+  const indices = kept
+    .map((item) => item.sourceIndex)
+    .filter((i): i is number => typeof i === "number")
+    .sort((a, b) => a - b);
+  console.log(
+    `[news-depth] ${label} ${symbol} fetched=${fetched} kept=${kept.length}` +
+      ` maxIndex=${indices.length ? indices[indices.length - 1] : "none"}` +
+      ` indices=[${indices.join(",")}]`
+  );
+}
+
 async function fetchEarningsNews(symbol: string, _companyName: string): Promise<NewsItem[]> {
   const fmpNews = await fetchFmpStockNews(symbol);
 
-  return mergeNewsPools([
+  const kept = mergeNewsPools([
     fmpNews
       .filter((item) => !isVideoOrLowQualitySource(item))
       .filter(isEarningsNewsItem),
   ]).slice(0, 30);
+
+  // Measured BEFORE anything is changed about `limit`. Note this reading only
+  // becomes meaningful once the word-boundary matcher is deployed -- against the
+  // old substring matcher the "earnings" items included every story containing
+  // "headquartered", so the depth it reported was the depth of a false positive
+  // rate, not of real earnings coverage.
+  logNewsDepth("earnings", symbol, fmpNews.length, kept);
+
+  return kept;
 }
 
 function movingAverage(values: number[], window: number): (number | null)[] {
