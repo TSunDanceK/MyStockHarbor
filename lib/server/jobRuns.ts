@@ -30,13 +30,33 @@ const JOB_RUN_PREFIX = "msh:job-run:v1";
 // reads as gone rather than as old-but-fine.
 const JOB_RUN_TTL_SECONDS = 60 * 60 * 24 * 8;
 
+/**
+ * The jobs the page reports on, and whether each one actually calls
+ * recordJobRun.
+ *
+ * `instrumented` EXISTS BECAUSE ITS ABSENCE WAS A LIE. The first version listed
+ * all six and only two recorded anything, so warm-price-pool -- which runs every
+ * three minutes -- rendered "never run, or older than the 8-day record TTL".
+ * That is an uninstrumented job reading exactly like a dead one: the precise
+ * failure this page was built to remove, reproduced inside the page itself.
+ *
+ * All six are instrumented now, so every flag is true. The field stays because
+ * the NEXT job added here will not be, and the honest default for it is "not
+ * measured" rather than "never ran"
+ * (claude/traps/absence-needs-the-producer-to-have-run.md).
+ *
+ * The flag is a declaration, so scripts/check-cache-health-page.mjs verifies it
+ * against reality: a job declared instrumented must have a matching
+ * recordJobRun("<key>") call somewhere in the tree. A declaration nothing checks
+ * is just a second thing that can be wrong.
+ */
 export const JOBS = {
-  "warm-fundamentals": "Fundamentals (hourly)",
-  "warm-screener-fundamentals": "Screener fundamentals (daily 06:50)",
-  "warm-price-pool": "Price pool (every 3 min)",
-  "warm-stock-data": "Stock data (every 10 min)",
-  "warm-earnings": "Earnings (daily 07:15)",
-  "warm-picker-universe": "Picker universe (daily 07:00)",
+  "warm-fundamentals": { label: "Fundamentals (hourly)", instrumented: true },
+  "warm-screener-fundamentals": { label: "Screener fundamentals (daily 06:50)", instrumented: true },
+  "warm-price-pool": { label: "Price pool (every 3 min)", instrumented: true },
+  "warm-stock-data": { label: "Stock data (every 10 min)", instrumented: true },
+  "warm-earnings": { label: "Earnings (daily 07:15)", instrumented: true },
+  "warm-picker-universe": { label: "Picker universe (daily 07:00)", instrumented: true },
 } as const;
 
 export type JobKey = keyof typeof JOBS;
@@ -66,12 +86,12 @@ export async function recordJobRun(
   }
 }
 
-export type JobRunView = { job: JobKey; label: string; run: JobRun | null };
+export type JobRunView = { job: JobKey; label: string; instrumented: boolean; run: JobRun | null };
 
 /** All jobs' latest runs, in one pipelined read. */
 export async function readJobRuns(): Promise<JobRunView[]> {
   const keys = Object.keys(JOBS) as JobKey[];
-  const empty = keys.map((job) => ({ job, label: JOBS[job], run: null }));
+  const empty = keys.map((job) => ({ job, label: JOBS[job].label, instrumented: JOBS[job].instrumented, run: null }));
   if (!redis) return empty;
   try {
     const values = await redis.mget<(JobRun | null)[]>(
@@ -83,7 +103,7 @@ export async function readJobRuns(): Promise<JobRunView[]> {
         raw && typeof raw === "object" && typeof (raw as JobRun).at === "number"
           ? (raw as JobRun)
           : null;
-      return { job, label: JOBS[job], run };
+      return { job, label: JOBS[job].label, instrumented: JOBS[job].instrumented, run };
     });
   } catch {
     return empty;
