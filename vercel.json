@@ -38,7 +38,7 @@
     },
     {
       "path": "/api/jobs/warm-fundamentals",
-      "schedule": "*/30 * * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/jobs/warm-price-pool",
