@@ -47,9 +47,12 @@ const extract = (sf, names) => {
 
 const { keywordHits } = extract(sourceFile("lib/keywordMatch.ts"), ["keywordHits"]);
 const helpers = extract(sourceFile("lib/keywordMatch.ts"), ["matcher"]);
-const { isEarningsNewsItem } = extract(sourceFile("lib/stock-news-data.ts"), ["isEarningsNewsItem"]);
+const { isEarningsNewsItem, isVideoOrLowQualitySource } = extract(
+  sourceFile("lib/stock-news-data.ts"),
+  ["isEarningsNewsItem", "isVideoOrLowQualitySource"]
+);
 
-if (!keywordHits || !helpers.matcher || !isEarningsNewsItem) {
+if (!keywordHits || !helpers.matcher || !isEarningsNewsItem || !isVideoOrLowQualitySource) {
   console.error("FAIL: could not extract the shipping functions — measuring nothing.");
   process.exit(1);
 }
@@ -62,8 +65,8 @@ const preamble = read("lib/keywordMatch.ts")
   .join("\n");
 
 const js = ts.transpileModule(
-  `${preamble}\n${helpers.matcher}\n${keywordHits}\n${isEarningsNewsItem}\n` +
-    `export { keywordHits, isEarningsNewsItem };`,
+  `${preamble}\n${helpers.matcher}\n${keywordHits}\n${isEarningsNewsItem}\n${isVideoOrLowQualitySource}\n` +
+    `export { keywordHits, isEarningsNewsItem, isVideoOrLowQualitySource };`,
   { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext } }
 ).outputText;
 const m = await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
@@ -167,6 +170,41 @@ const newsPage = read("app/stock/[symbol]/news/page.tsx");
 check(
   "the news page uses the lib's earnings classifier, not a local copy",
   /isEarningsNewsItem\(item\)/.test(newsPage) && !/function isEarningsHeadline/.test(newsPage)
+);
+
+console.log("\n=== 6. The podcast filter looks at every field carrying the signal ===\n");
+// Reported live: a Motley Fool podcast was the third lead card on /stock/MU/news
+// because "Podcast" appeared ONLY in the article image URL. source, link and
+// title were all clean, and the filter read three of the four fields.
+const MU_PODCAST = {
+  title: "Micron's Memory Boom, and What Comes Next",
+  link: "https://www.fool.com/investing/2026/08/21/microns-memory-boom/",
+  source: "The Motley Fool",
+  description: "A discussion of the memory cycle.",
+  image: "https://g.foolcdn.com/editorial/images/podcast-motley-fool-money-thumb.jpg",
+};
+check(
+  "the MU podcast card is filtered on its image URL alone",
+  m.isVideoOrLowQualitySource(MU_PODCAST),
+  "source, link and title are all clean — the image is the only evidence"
+);
+check(
+  "an ordinary article with an ordinary image still passes",
+  !m.isVideoOrLowQualitySource({
+    ...MU_PODCAST,
+    image: "https://g.foolcdn.com/editorial/images/797421/memory-chips.jpg",
+  })
+);
+check(
+  "a missing image does not throw or change the verdict",
+  !m.isVideoOrLowQualitySource({ ...MU_PODCAST, image: null }) &&
+    !m.isVideoOrLowQualitySource({ title: MU_PODCAST.title, link: MU_PODCAST.link, source: "Reuters" })
+);
+// The pre-existing fields must keep working -- the image is an addition, not a
+// replacement.
+check(
+  "still catches a YouTube link",
+  m.isVideoOrLowQualitySource({ title: "Interview", link: "https://youtube.com/watch?v=x", source: "YT" })
 );
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
