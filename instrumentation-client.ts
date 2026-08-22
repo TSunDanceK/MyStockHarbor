@@ -25,14 +25,24 @@ import { initBotId } from "botid/client/core";
  *   - /api/pickers -- its GET handler (lib/server/pickersBuilder.ts) is
  *     re-exported verbatim by the /api/jobs/warm-picker-universe cron route,
  *     so a guard here would also block that scheduled warm-up. It's also
- *     still HTTP self-fetched with `cache: "no-store"` and no client
- *     fallback by app/bullish-divergence-stocks/page.tsx and
- *     app/bearish-divergence-stocks/page.tsx -- the exact self-fetch-gets-
- *     blocked failure mode already documented in
+ *     still HTTP self-fetched server-side by app/pickers/page.tsx
+ *     (`fetch(`${base}/api/pickers`, { next: { revalidate: 300 } })`, line
+ *     ~81) with no client fallback -- the exact self-fetch-gets-blocked
+ *     failure mode already documented in
  *     claude/pickers-firewall-selfblock-2026-07-17.md (a past production
  *     outage from a *different* blocking mechanism). Not safe to touch
- *     without first giving pickers the same in-process treatment
+ *     without first giving that page the same in-process treatment
  *     PickerResultPage.tsx already got (getPickersData()).
+ *
+ *     Corrected 2026-08-22. This previously named
+ *     app/bullish-divergence-stocks/page.tsx and its bearish twin as the
+ *     self-fetchers. Both had already been converted to getPickersData() --
+ *     they imported it and never called fetch at all -- and both have now
+ *     been deleted outright (next.config.ts 301s the two routes, so neither
+ *     had rendered since that redirect landed). The HAZARD IS STILL REAL; only
+ *     the file that carries it was wrong. Anyone who checked the two named
+ *     files, found no self-fetch, and concluded the constraint had lapsed
+ *     would have guarded /api/pickers and broken /pickers.
  *
  * NOTE on SSR: BotID protects these API/data routes, NOT server-rendered page
  * HTML. Data embedded directly in page HTML stays readable (it must, for
