@@ -273,7 +273,7 @@ check('"Microsoft News" is NOT the FT', !wire("Microsoft News"));
 check('"Draft Report" is NOT the FT', !wire("Draft Report"));
 check('but "FT.com" still is', wire("FT.com"));
 
-console.log("\n=== 8. One tier table, and an honest backfill ===\n");
+console.log("\n=== 8. One tier table, and no gate ===\n");
 const newsCode = codeOfTs(read("lib/stock-news-data.ts"));
 check(
   "scoreNewsItem uses the SAME tier table as the gate",
@@ -281,14 +281,16 @@ check(
     !/\["reuters", "bloomberg", "ap"\]/.test(newsCode),
   "the two lists disagreed: the scorer rated CNBC highly while the gate excluded it"
 );
+// The two checks that stood here asserted the QUALITY-ORDERED BACKFILL, and
+// they are gone because the thing they guarded is gone: the gate and its
+// backfill were removed outright rather than tuned further (owner's call), so
+// scripts/check-news-feed.mjs now owns the feed's shape. Deleted rather than
+// left failing -- a red check nobody can satisfy trains people to ignore the
+// whole run.
 check(
-  "the backfill picks by quality, not pure recency",
-  /backfillCandidates[\s\S]{0,400}scoreNewsItem\(b\) - scoreNewsItem\(a\)/.test(newsCode) &&
-    !/const backfillCandidates = newestFirst\(/.test(newsCode)
-);
-check(
-  "the backfill's depth is reported rather than asserted in a comment",
-  /newsBackfillDepth/.test(newsCode) && /fromBackfill=/.test(read("lib/stock-news-data.ts"))
+  "the stock feed no longer gates on the wire list at all",
+  !/isMajorWireSource\(item\)\s*\|\|/.test(newsCode),
+  "see scripts/check-news-feed.mjs section 5"
 );
 check(
   'the false "never touches this path" claim is gone',
