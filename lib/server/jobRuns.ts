@@ -51,13 +51,34 @@ const JOB_RUN_TTL_SECONDS = 60 * 60 * 24 * 8;
  * is just a second thing that can be wrong.
  */
 export const JOBS = {
-  "warm-fundamentals": { label: "Fundamentals (hourly)", instrumented: true },
-  "warm-screener-fundamentals": { label: "Screener fundamentals (daily 06:50)", instrumented: true },
-  "warm-price-pool": { label: "Price pool (every 3 min)", instrumented: true },
-  "warm-stock-data": { label: "Stock data (every 10 min)", instrumented: true },
-  "warm-earnings": { label: "Earnings (daily 07:15)", instrumented: true },
-  "warm-picker-universe": { label: "Picker universe (daily 07:00)", instrumented: true },
+  "warm-fundamentals": { label: "Fundamentals (hourly)", instrumented: true, cron: "0 * * * *" },
+  "warm-screener-fundamentals": { label: "Screener fundamentals (daily 06:50)", instrumented: true, cron: "50 6 * * *" },
+  "warm-price-pool": { label: "Price pool (every 3 min)", instrumented: true, cron: "*/3 * * * *" },
+  "warm-stock-data": { label: "Stock data (every 10 min)", instrumented: true, cron: "*/10 * * * *" },
+  "warm-earnings": { label: "Earnings (daily 07:15)", instrumented: true, cron: "15 7 * * *" },
+  "warm-picker-universe": { label: "Picker universe (daily 07:00)", instrumented: true, cron: "0 7 * * *" },
 } as const;
+
+/**
+ * Roughly how often a cron fires, in seconds. Coarse on purpose -- this exists
+ * to decide whether SILENCE IS ALARMING, and that only needs the order of
+ * magnitude.
+ *
+ * WHY IT IS NEEDED. "No run recorded" reads identically for a job that fires
+ * every three minutes and one that fires once a day, and the two mean opposite
+ * things. Confirmed live 2026-08-22: warm-picker-universe and warm-earnings both
+ * showed "no run recorded" on /cache-health, and the reason was neither failure
+ * nor a missing schedule -- recordJobRun reached those two routes at 19:18 UTC
+ * in #343, and their crons fire at 07:00 and 07:15. Neither had had an
+ * opportunity to record. The page was telling the truth and the truth read like
+ * a fault (claude/traps/absence-needs-the-producer-to-have-run.md).
+ */
+export function cronIntervalSeconds(cron: string): number {
+  const [minute, hour] = cron.trim().split(/\s+/);
+  if (minute?.startsWith("*/")) return Math.max(60, Number(minute.slice(2)) * 60);
+  if (hour === "*") return 60 * 60;
+  return 60 * 60 * 24;
+}
 
 export type JobKey = keyof typeof JOBS;
 
@@ -86,12 +107,29 @@ export async function recordJobRun(
   }
 }
 
-export type JobRunView = { job: JobKey; label: string; instrumented: boolean; run: JobRun | null };
+export type JobRunView = {
+  job: JobKey;
+  label: string;
+  instrumented: boolean;
+  /** The vercel.json schedule this job is declared to run on. */
+  cron: string;
+  /** Coarse cadence, so the page can judge whether silence is alarming. */
+  intervalSeconds: number;
+  run: JobRun | null;
+};
 
 /** All jobs' latest runs, in one pipelined read. */
 export async function readJobRuns(): Promise<JobRunView[]> {
   const keys = Object.keys(JOBS) as JobKey[];
-  const empty = keys.map((job) => ({ job, label: JOBS[job].label, instrumented: JOBS[job].instrumented, run: null }));
+  const view = (job: JobKey, run: JobRun | null): JobRunView => ({
+    job,
+    label: JOBS[job].label,
+    instrumented: JOBS[job].instrumented,
+    cron: JOBS[job].cron,
+    intervalSeconds: cronIntervalSeconds(JOBS[job].cron),
+    run,
+  });
+  const empty = keys.map((job) => view(job, null));
   if (!redis) return empty;
   try {
     const values = await redis.mget<(JobRun | null)[]>(
@@ -103,7 +141,7 @@ export async function readJobRuns(): Promise<JobRunView[]> {
         raw && typeof raw === "object" && typeof (raw as JobRun).at === "number"
           ? (raw as JobRun)
           : null;
-      return { job, label: JOBS[job].label, instrumented: JOBS[job].instrumented, run };
+      return view(job, run);
     });
   } catch {
     return empty;
