@@ -345,7 +345,7 @@ export default function StocksWithHighRsiPage() {
             </div>
           </Link>
 
-          <Link href="/bearish-divergence-stocks" style={cardStyle}>
+          <Link href="/bullish-bearish-divergence-stocks" style={cardStyle}>
             <div style={{ fontSize: 18, fontWeight: 950 }}>
               Explore bearish divergence
             </div>
