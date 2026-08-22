@@ -9,14 +9,7 @@ import type { CSSProperties } from "react";
 // duplicated gauge would have been the same mistake in a different shape.
 //
 // Server component by design -- it is pure SVG with no interactivity, so it
-// belongs in the crawlable initial HTML, per the rendering policy.
-//
-// That policy lives in the "My Stock Harbor Website" Claude Project, NOT in this
-// repo. This comment used to cite it as `claude/RENDERING_POLICY.md`, a path that
-// has never existed in the tree -- so anyone following the reference found
-// nothing and had no way to tell a missing file from a wrong path. Same drift
-// class as the CLAUDE.md/trigger divergence in CLAUDE.md's own "Lessons
-// learned": a pointer nothing checks is a second thing that can be wrong.
+// belongs in the crawlable initial HTML, per the rendering policy (claude/RENDERING_POLICY.md).
 //
 // Fully symbol-agnostic: it takes a score/tone/label and nothing else, which is
 // exactly why it works unchanged for a sector-level score.
