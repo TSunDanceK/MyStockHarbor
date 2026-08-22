@@ -201,14 +201,7 @@ function normalizeSnapshot(input: unknown): InsightSnapshot | null {
 // Builds a new Insight post's SEO snapshot (price, trend, MA levels, chart
 // points) once, then caches it in Redis forever (see
 // getOrCreateInsightSnapshot below) so the post's initial HTML always has
-// real data embedded for crawlers, per the rendering policy.
-//
-// That policy lives in the "My Stock Harbor Website" Claude Project, NOT in this
-// repo. This comment used to cite it as `claude/RENDERING_POLICY.md`, a path that
-// has never existed in the tree -- so anyone following the reference found
-// nothing and had no way to tell a missing file from a wrong path. Same drift
-// class as the CLAUDE.md/trigger divergence in CLAUDE.md's own "Lessons
-// learned": a pointer nothing checks is a second thing that can be wrong.
+// real data embedded for crawlers, per the rendering policy (claude/RENDERING_POLICY.md).
 //
 // This used to self-fetch the public /api/quote, /api/history and
 // /api/symbols routes over HTTP (`fetch(`${baseUrl}/api/...`)`). Once those
