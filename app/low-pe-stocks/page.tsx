@@ -41,6 +41,12 @@ const config: PickerResultConfig = {
   tone: "blue",
   kind: "preset",
   presetPredicates: [{ kind: "number", field: "peRatio", max: 15 }],
+  // The predicate that defines the set is also the order. Before this the page
+  // shipped in `reasons.length` order -- how many of 25 technical conditions a
+  // stock happens to meet -- which on a page called Lowest P/E is not an
+  // imprecise ranking, it is a ranking of something else. Same accessor as the
+  // predicate above, so membership and order can never disagree.
+  orderBy: { field: "peRatio", dir: "asc", label: "P/E Ratio" },
   maxItems: 36,
   // P/E is the screen, and the Valuation tab is the only place it sits next to
   // forward P/E, P/S, P/B and P/FCF -- the cross-checks that tell a cheap stock
