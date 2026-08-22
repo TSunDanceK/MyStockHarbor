@@ -41,14 +41,15 @@ const grab = (name) => {
 };
 
 const readGate = grab("readNewsFromGate");
+const readHead = grab("readHeadProbe");
 const gateDate = grab("gateFromDate");
-if (!readGate || !gateDate) {
+if (!readGate || !gateDate || !readHead) {
   console.error("FAIL: could not extract the gate functions — measuring nothing.");
   process.exit(1);
 }
 
 const js = ts.transpileModule(
-  `${gateDate}\n${readGate}\nexport { readNewsFromGate, gateFromDate };`,
+  `${gateDate}\n${readGate}\n${readHead}\nexport { readNewsFromGate, gateFromDate, readHeadProbe };`,
   { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext } }
 ).outputText;
 const m = await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
@@ -152,6 +153,94 @@ check(
   "oldest is a real minimum over all rows, not the last one",
   /times\.reduce\(\(a, b\) => \(b\.t < a\.t \? b : a\)\)/.test(code),
   "assuming newest-first ordering would be assuming what the probe verifies"
+);
+
+console.log("\n=== 5. HEAD: can a size be had without the body? ===\n");
+// Two of the three failure modes look like success, which is the whole reason
+// this is read rather than eyeballed. A 200 is not a pass; a present
+// Content-Length is not a pass; only one that MATCHES the GET body is.
+const H = (over = {}) => ({ id: "news-stock-HEAD", httpStatus: 200, contentLength: 100_000, bodyBytes: 0, ...over });
+const G = (over = {}) => ({ id: "baseline", httpStatus: 200, contentLength: null, bodyBytes: 100_000, ...over });
+
+check(
+  "content-length matching the GET body -> PASS",
+  (() => {
+    const r = m.readHeadProbe(H(), G());
+    return r.verdict === "PASS" && r.freeCountPossible === true;
+  })()
+);
+check(
+  "...and the PASS still warns that bytes are not an article count",
+  /not an article count/.test(m.readHeadProbe(H(), G()).detail),
+  "deriving one from the other assumes a stable bytes-per-article"
+);
+check("405 -> FAIL", m.readHeadProbe(H({ httpStatus: 405 }), G()).verdict === "FAIL");
+check("404 -> FAIL", m.readHeadProbe(H({ httpStatus: 404 }), G()).verdict === "FAIL");
+// THE ONE THAT LOOKS LIKE SUCCESS.
+check(
+  "200 with NO content-length -> FAIL, not pass",
+  (() => {
+    const r = m.readHeadProbe(H({ contentLength: null }), G());
+    return r.verdict === "FAIL" && r.freeCountPossible === false;
+  })(),
+  "a 200 that answers the question with nothing"
+);
+// THE WORST ONE: a number that would be believed and is wrong.
+check(
+  "200 with a MISMATCHED content-length -> FAIL",
+  (() => {
+    const r = m.readHeadProbe(H({ contentLength: 12_000 }), G({ bodyBytes: 100_000 }));
+    return r.verdict === "FAIL" && r.freeCountPossible === false;
+  })(),
+  "a wrong number is worse than no number"
+);
+check(
+  "...and it says so, rather than reporting a bare mismatch",
+  /worse than none|would be believed/.test(m.readHeadProbe(H({ contentLength: 12_000 }), G()).detail)
+);
+check(
+  "a 1% difference is tolerated, a 12% one is not",
+  m.readHeadProbe(H({ contentLength: 100_500 }), G()).verdict === "PASS" &&
+    m.readHeadProbe(H({ contentLength: 112_000 }), G()).verdict === "FAIL"
+);
+// Unanswered is never a pass -- same rule as the from= gate.
+check(
+  "HEAD probe absent -> UNKNOWN",
+  m.readHeadProbe(undefined, G()).verdict === "UNKNOWN"
+);
+check(
+  "no GET body to compare against -> UNKNOWN, not PASS on the header alone",
+  m.readHeadProbe(H(), G({ bodyBytes: 0 })).verdict === "UNKNOWN",
+  "an unverified length is not a verified one"
+);
+check(
+  "every non-PASS leaves freeCountPossible false",
+  [
+    m.readHeadProbe(H({ httpStatus: 405 }), G()),
+    m.readHeadProbe(H({ contentLength: null }), G()),
+    m.readHeadProbe(H({ contentLength: 12_000 }), G()),
+    m.readHeadProbe(undefined, G()),
+    m.readHeadProbe(H(), G({ bodyBytes: 0 })),
+  ].every((r) => r.freeCountPossible === false)
+);
+
+console.log("\n=== 5b. The probe pairs with the GET on the same URL ===\n");
+check(
+  "the HEAD probe exists and declares its method",
+  /id: "news-stock-HEAD"[\s\S]{0,200}method: "HEAD"/.test(src)
+);
+check(
+  "it asks the SAME url as the baseline it is compared against",
+  (src.match(/path: "news\/stock\?symbols=MU&limit=50",/g) ?? []).length === 2,
+  "an approximately-comparable URL is not comparable"
+);
+check(
+  "the request actually sends the declared method",
+  /method: probe\.method \?\? "GET"/.test(src)
+);
+check(
+  "both the header and the real body length are reported, never one for the other",
+  /contentLength,\n\s*bodyBytes,/.test(src)
 );
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
