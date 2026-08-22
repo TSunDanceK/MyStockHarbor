@@ -17,6 +17,14 @@
 // Two things are checked: that every hop of the chain carries the fields, and
 // that the consumer's selection expression behaves (real expression, extracted
 // by AST -- claude/traps/two-validators-for-one-value.md).
+//
+// EXTENDED for the same bug's third appearance. /best-trend-score-stocks
+// rendered `4/4 trend checks` -- a bare count -- with a dashed Signals column
+// beside it, because that column reads the composite's oversold/overbought
+// lists and a trend leader is normally neither. The four trend booleans were
+// computed for every symbol and discarded at the same object literal #330 had
+// missed. So the trend chain gets the same hop-by-hop treatment, and the
+// selection rule is now page-aware and exercised in BOTH modes.
 import ts from "typescript";
 import fs from "node:fs";
 import path from "node:path";
@@ -79,13 +87,48 @@ for (const field of ["oversoldIndicators", "overboughtIndicators"]) {
   check(`${field}: on PickerResultPage's SignalRecord mirror`, pageRecordMembers.includes(field));
 }
 
+// The trend chain, same shape. The producer computes the booleans, the record
+// type declares them, the push populates them, the page mirrors them -- and the
+// SECTION item carries the derived list too, because /best-trend-score-stocks
+// renders 36 rows from the universe while the section holds only the top 20. A
+// fix applied to just the section item would populate ~20 rows and dash the
+// rest, which is #330's own failure shape a third time.
+const recordMembersB = typeMembers(sfB, "SignalRecord") ?? [];
+const pageRecordMembersP = typeMembers(sfP, "SignalRecord") ?? [];
+check("trendChecks: on pickersBuilder SignalRecord", recordMembersB.includes("trendChecks"));
+check("trendChecks: on PickerResultPage's SignalRecord mirror", pageRecordMembersP.includes("trendChecks"));
+check(
+  "trendChecks: populated in signalRecords.push from the real trendScore",
+  /trendChecks:\s*trendScore\s*\n?\s*\?\s*\{[\s\S]{0,320}?macdBullish:\s*trendScore\.macdBullish/.test(builder)
+);
+check(
+  "trendChecks: absent when trendScore is null, rather than four falses",
+  /trendChecks:\s*trendScore[\s\S]{0,400}?:\s*undefined/.test(builder),
+  "buildTrendScoreFromHistory returns null under 220 closes"
+);
+check(
+  "the trend SECTION item also carries firedIndicators",
+  /trendLeaders\.push\(\{[\s\S]{0,600}?firedIndicators:\s*trendIndicatorsFrom\(trendScore\)/.test(builder)
+);
+check(
+  "...from the SAME derivation the page uses, not a second copy",
+  (builder.match(/function trendIndicatorsFrom\s*\(/g) ?? []).length === 1 &&
+    /import \{[^}]*trendIndicatorsFrom[^}]*\} from "@\/lib\/server\/pickersBuilder"/.test(page),
+  "one definition in the builder, imported by the page"
+);
+check(
+  "/best-trend-score-stocks DECLARES signalsFrom: \"trend\"",
+  /signalsFrom:\s*"trend"/.test(codeOf(read("app/best-trend-score-stocks/page.tsx"))),
+  "without it the column silently falls back to the composite and dashes every row"
+);
+
 // All THREE branches of buildEntries that build entries from signalRecords feed
 // the same grid and the same Signals column. The universe branch was fixed
 // first and the other two were left blank, which is the same partial-plumbing
 // shape as #330 one level down -- so the count is asserted, not just presence.
-const firedCallSites = (page.match(/firedIndicators:\s*firedIndicatorsFor\(record\)/g) ?? []).length;
+const firedCallSites = (page.match(/firedIndicators:\s*firedIndicatorsFor\(record,\s*signalsSource\)/g) ?? []).length;
 check(
-  "all three signalRecords branches set firedIndicators (buySignals, sellSignals, universe)",
+  "all three signalRecords branches set firedIndicators, all page-aware",
   firedCallSites === 3,
   `${firedCallSites} call site(s)`
 );
@@ -94,47 +137,100 @@ check(
   /function firedIndicatorsFor\s*\(/.test(page) && !/firedIndicators:\s*record\.oversold/.test(page),
   "firedIndicatorsFor"
 );
+check(
+  "the source is resolved ONCE, not re-derived per branch",
+  (page.match(/config\.signalsFrom\s*\?\?/g) ?? []).length === 1,
+  "three copies of the default is the same divergence risk one hop up"
+);
 
 // ------------------------------------------------- 2. the selection expression
 console.log("\n=== 2. The shared selection rule, extracted from the source ===\n");
 
-let fn = null;
-const findFired = (node) => {
-  if (ts.isFunctionDeclaration(node) && node.name?.text === "firedIndicatorsFor") {
-    fn = node.getText(sfP);
-  }
-  ts.forEachChild(node, findFired);
+const fnNamed = (sf, name) => {
+  let out = null;
+  const visit = (node) => {
+    if (ts.isFunctionDeclaration(node) && node.name?.text === name) out = node.getText(sf);
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return out;
 };
-findFired(sfP);
 
-if (!fn) {
-  console.error("FAIL: could not find firedIndicatorsFor in PickerResultPage.tsx — measuring nothing.");
+const fn = fnNamed(sfP, "firedIndicatorsFor");
+// The trend branch DELEGATES to the builder's derivation, so extracting the
+// selection rule alone would leave that branch calling an undefined function
+// and every trend assertion below would throw rather than measure. The real
+// derivation is pulled in beside it -- both functions as they actually ship.
+const trendFn = fnNamed(sfB, "trendIndicatorsFrom");
+
+if (!fn || !trendFn) {
+  console.error(
+    `FAIL: could not extract ${!fn ? "firedIndicatorsFor" : "trendIndicatorsFrom"} — measuring nothing.`
+  );
   process.exit(1);
 }
 console.log(
   `    ${fn.split("\n").filter((l) => !l.trim().startsWith("*") && !l.trim().startsWith("/*")).join(" ").replace(/\s+/g, " ")}\n`
 );
 
-const js = ts.transpileModule(`${fn}\nexport const pick = firedIndicatorsFor;`, {
+const js = ts.transpileModule(`${trendFn}\n${fn}\nexport const pick = firedIndicatorsFor;\nexport const trend = trendIndicatorsFrom;`, {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext },
 }).outputText;
-const { pick } = await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
+const { pick, trend } = await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
 
 const OS = ["RSI(14)", "Bollinger(20,2)"];
 const OB = ["EMA20", "MACD(12,26,9)"];
 
-check("oversold row shows the oversold list", JSON.stringify(pick({ oversold: true, oversoldIndicators: OS, overboughtIndicators: OB })) === JSON.stringify(OS));
-check("overbought row shows the overbought list", JSON.stringify(pick({ overbought: true, oversoldIndicators: OS, overboughtIndicators: OB })) === JSON.stringify(OB));
+check("oversold row shows the oversold list", JSON.stringify(pick({ oversold: true, oversoldIndicators: OS, overboughtIndicators: OB }, "composite")) === JSON.stringify(OS));
+check("overbought row shows the overbought list", JSON.stringify(pick({ overbought: true, oversoldIndicators: OS, overboughtIndicators: OB }, "composite")) === JSON.stringify(OB));
 // Not normally both; if the composite says so, green wins, matching
 // pickIsGreenOverallSignal's precedence.
-check("both flags -> oversold wins (green precedence)", JSON.stringify(pick({ oversold: true, overbought: true, oversoldIndicators: OS, overboughtIndicators: OB })) === JSON.stringify(OS));
+check("both flags -> oversold wins (green precedence)", JSON.stringify(pick({ oversold: true, overbought: true, oversoldIndicators: OS, overboughtIndicators: OB }, "composite")) === JSON.stringify(OS));
 
 // THE POINT OF POINT 4. undefined, not []. The grid renders MUTED for both, but
 // an empty array says "measured, found none" where undefined says "no fired
 // checks to report" -- and a future consumer that prints a count would turn the
 // first into a false "0 signals".
-check("neither flag -> undefined, NOT []", pick({ oversoldIndicators: OS, overboughtIndicators: OB }) === undefined);
-check("oversold with no list stays undefined", pick({ oversold: true }) === undefined);
+check("neither flag -> undefined, NOT []", pick({ oversoldIndicators: OS, overboughtIndicators: OB }, "composite") === undefined);
+check("oversold with no list stays undefined", pick({ oversold: true }, "composite") === undefined);
+
+// ---------------------------------------------------------- the trend branch
+// THE BUG ITSELF, as an assertion. A trend leader with all four checks firing
+// and neither composite flag set: the old rule returned undefined here, which
+// is exactly what a dashed Signals column beside "4/4 trend checks" was.
+const ALL4 = { priceAboveMA200: true, priceAboveMA50: true, ma50AboveMA200: true, macdBullish: true };
+check(
+  "composite mode on a pure trend leader -> undefined (the bug, pinned)",
+  pick({ trendChecks: ALL4 }, "composite") === undefined,
+  "the default rule genuinely has nothing to say about this row"
+);
+check(
+  "trend mode on the same row -> all four, strongest first",
+  JSON.stringify(pick({ trendChecks: ALL4 }, "trend")) ===
+    JSON.stringify(["Price > MA200", "MA50 > MA200", "Price > MA50", "MACD(12,26,9) > 0"])
+);
+check(
+  "trend mode reports only what fired",
+  JSON.stringify(pick({ trendChecks: { ...ALL4, priceAboveMA50: false, macdBullish: false } }, "trend")) ===
+    JSON.stringify(["Price > MA200", "MA50 > MA200"])
+);
+// The order is the score's own weighting (18/18/12/12), not declaration order.
+// Asserted because "strongest first" is a claim the column makes.
+check(
+  "MA50 > MA200 outranks Price > MA50, matching the score weights",
+  JSON.stringify(trend({ priceAboveMA200: false, priceAboveMA50: true, ma50AboveMA200: true, macdBullish: false })) ===
+    JSON.stringify(["MA50 > MA200", "Price > MA50"])
+);
+// Same rule as the composite side, one level down: undefined, never [].
+check("trend mode, nothing fired -> undefined NOT []", trend({ priceAboveMA200: false, priceAboveMA50: false, ma50AboveMA200: false, macdBullish: false }) === undefined);
+check("trend mode, never computed -> undefined", pick({}, "trend") === undefined);
+// A trend page must not silently fall back to the composite lists: the two
+// measure different things and a row showing RSI(14) under a trend heading is
+// a wrong answer, not a partial one.
+check(
+  "trend mode never leaks the composite lists",
+  pick({ oversold: true, oversoldIndicators: OS }, "trend") === undefined
+);
 
 console.log("\n=== 3. The grid never prints a count ===\n");
 const grid = codeOf(read("app/components/PickerResultsGrid.tsx"));
