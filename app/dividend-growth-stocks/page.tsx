@@ -44,6 +44,11 @@ const config: PickerResultConfig = {
     { kind: "number", field: "divYield", min: 2 },
     { kind: "number", field: "divGrowth", min: 5 },
   ],
+  // Two predicates define the set, so the ordering key is a choice rather than
+  // a reading: divGrowth, because the page is called Dividend GROWTH and yield
+  // is the qualifying floor, not the subject. The other one stays visible as a
+  // column so a reader can see both. See /low-pe-stocks.
+  orderBy: { field: "divGrowth", dir: "desc", label: "Dividend Growth" },
   maxItems: 36,
   // Dividend growth appears on this tab and nowhere else, so opening anywhere
   // else would hide the metric the page is named after.
