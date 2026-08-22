@@ -403,6 +403,37 @@ function getReasons(record: SignalRecord, defs: Array<{ key: keyof SignalRecord;
   return defs.filter((def) => record[def.key] === true).map((def) => def.label);
 }
 
+/**
+ * Which composite checks fired for this symbol, for the Signals column.
+ *
+ * ONE implementation for all three branches of buildEntries that build from
+ * signalRecords -- buySignals, sellSignals and the universe branch. It was
+ * briefly an inline ternary in one of them; three copies of a selection rule
+ * that must agree is claude/traps/two-validators-for-one-value.md waiting to
+ * happen, and the divergence would show up as one page disagreeing with another
+ * about the same stock on the same day.
+ *
+ * Whichever side the stock is actually on. A stock is not normally both; where
+ * the composite says it is, oversold wins, matching the green-before-red
+ * precedence pickIsGreenOverallSignal already applies.
+ *
+ * Returns undefined -- NOT [] -- when neither flag is set. A stock that is
+ * neither oversold nor overbought genuinely has no fired checks, so the grid's
+ * "--" is the correct rendering. An empty array asserts "measured, found none",
+ * and a consumer printing a count would turn that into a false "0 signals".
+ *
+ * Deliberately NOT gated on the buy/sell `qualifies` flag at those two call
+ * sites. That flag governs the buy/sell CONDITION COUNT and its chips; the
+ * Signals column reports the composite's oversold/overbought checks, which are
+ * a different measurement and are true regardless of whether the visitor has
+ * the page's own condition ticked.
+ */
+function firedIndicatorsFor(record: SignalRecord): string[] | undefined {
+  if (record.oversold) return record.oversoldIndicators;
+  if (record.overbought) return record.overboughtIndicators;
+  return undefined;
+}
+
 // Combined labels for every checkable condition -- the 18 custom-builder
 // FILTER_DEFS plus the 7 category-membership CATEGORY_FILTER_DEFS (both
 // from lib/pickerFilters.ts) -- used only by the "allSymbols" kind (the
@@ -560,6 +591,10 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
         stockHref: `/stock/${encodeURIComponent(symbol)}`,
         chartHref: chartHrefFor(symbol, record.dashboardHref),
         chartPoints: Array.isArray(record.chartPoints) ? record.chartPoints : [],
+        // Same Signals column, same source, same rule as the universe branch --
+        // this page feeds the identical grid, so leaving it out showed a blank
+        // column on every row of /top-stocks-with-buy-signals.
+        firedIndicators: firedIndicatorsFor(record),
         ...flagsFromRecord(record),
       };
     }).filter((entry): entry is ResultEntry => Boolean(entry)).sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.symbol.localeCompare(b.symbol)).slice(0, RESULT_SAFETY_CAP);
@@ -588,6 +623,8 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
         stockHref: `/stock/${encodeURIComponent(symbol)}`,
         chartHref: chartHrefFor(symbol, record.dashboardHref),
         chartPoints: Array.isArray(record.chartPoints) ? record.chartPoints : [],
+        // As above -- /top-stocks-with-sell-signals feeds the same grid.
+        firedIndicators: firedIndicatorsFor(record),
         ...flagsFromRecord(record),
       };
     }).filter((entry): entry is ResultEntry => Boolean(entry)).sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.symbol.localeCompare(b.symbol)).slice(0, RESULT_SAFETY_CAP);
@@ -621,22 +658,8 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
         // path, so without it the column populated only for the ~20 rows a page
         // that also appear in a section (which carry their own firedIndicators
         // from the section item) and was blank for everything else -- reading as
-        // "no signals" rather than "not plumbed here".
-        //
-        // Whichever side the stock is actually on. A stock is not normally both,
-        // and where the composite says it is, oversold wins to match the
-        // green-before-red precedence pickIsGreenOverallSignal already applies.
-        //
-        // DELIBERATELY undefined when neither flag is set. A stock that is
-        // neither oversold nor overbought genuinely has no fired checks, so the
-        // grid's "--" is the correct and honest rendering. An empty array would
-        // render as "0 signals", which asserts a measurement was taken and came
-        // back empty -- a different and false claim.
-        firedIndicators: record.oversold
-          ? record.oversoldIndicators
-          : record.overbought
-            ? record.overboughtIndicators
-            : undefined,
+        // "no signals" rather than "not plumbed here". See firedIndicatorsFor.
+        firedIndicators: firedIndicatorsFor(record),
         ...flags,
       };
     }).filter((entry): entry is ResultEntry => Boolean(entry)).sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.symbol.localeCompare(b.symbol)).slice(0, RESULT_SAFETY_CAP);
