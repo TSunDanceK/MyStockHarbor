@@ -1,5 +1,6 @@
 // app/stock/[symbol]/page.tsx
 import type { Metadata } from "next";
+import { fmpFetch } from "@/lib/server/fmpUsage";
 import { getDailyHistory } from "@/lib/server/historyCache";
 import { getLatestEarningsData } from "@/lib/latest-earnings-data";
 import { searchSymbols } from "@/lib/server/symbolSearch";
@@ -66,7 +67,7 @@ async function fetchQuote(symbol: string): Promise<{ quote: InitialQuote; outcom
     const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(
       symbol
     )}&apikey=${encodeURIComponent(apiKey)}`;
-    const res = await fetch(url, {
+    const res = await fmpFetch(url, {
       next: { revalidate: 3600 },
       headers: { accept: "application/json" },
     });
@@ -190,7 +191,7 @@ async function fetchCompanyProfile(symbol: string): Promise<CompanyProfile | nul
   ];
   for (const url of urls) {
     try {
-      const res = await fetch(url, { next: { revalidate: 60 * 60 * 24 } });
+      const res = await fmpFetch(url, { next: { revalidate: 60 * 60 * 24 } });
       if (!res.ok) continue;
       const json = await res.json();
       const row = Array.isArray(json) ? json[0] : json;
@@ -276,7 +277,7 @@ async function fetchShareHistory(symbol: string): Promise<DilutionHistoryData | 
 
   for (const url of sources) {
     try {
-      const res = await fetch(url, { next: { revalidate: 60 * 60 * 24 } });
+      const res = await fmpFetch(url, { next: { revalidate: 60 * 60 * 24 } });
       if (!res.ok) continue;
       const json = await res.json();
       const rows: unknown[] = Array.isArray(json) ? json : [];

@@ -1,5 +1,6 @@
 import { unstable_cache } from "next/cache";
 
+import { fmpFetch } from "@/lib/server/fmpUsage";
 /**
  * A single general market headline, already trimmed down to exactly what
  * the /headlines page needs. Deliberately NOT reusing NewsItem from
@@ -92,7 +93,7 @@ async function fetchFmpGeneralNews(): Promise<GeneralHeadline[]> {
 
   for (const url of endpoints) {
     try {
-      const res = await fetch(url, {
+      const res = await fmpFetch(url, {
         next: { revalidate: 900 },
       });
 

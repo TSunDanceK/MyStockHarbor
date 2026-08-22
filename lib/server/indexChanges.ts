@@ -17,6 +17,7 @@
 // client-side after fetching, and only additions (not removals) are kept.
 
 import { isDynamicServerUsage, readFeed, type Feed } from "./feedCache";
+import { fmpFetch } from "./fmpUsage";
 
 export type IndexAddition = {
   symbol: string;
@@ -130,7 +131,7 @@ async function fetchRecentIndexAdditions(): Promise<IndexAddition[]> {
       // DynamicServerError during prerender, marking the route dynamic before
       // readFeed's catch swallows it as an upstream failure. 1800s matches
       // feedCache's FRESH_MS.
-      const res = await fetch(`${url}?apikey=${encodeURIComponent(apiKey)}`, {
+      const res = await fmpFetch(`${url}?apikey=${encodeURIComponent(apiKey)}`, {
         next: { revalidate: 1800 },
         headers: { accept: "application/json" },
       });
@@ -207,7 +208,7 @@ async function fetchRecentIndexAdditions(): Promise<IndexAddition[]> {
   let quoteBySymbol = new Map<string, FmpRow>();
   try {
     // Same reason as the constituent fetch above.
-    const quoteRes = await fetch(quoteUrl, {
+    const quoteRes = await fmpFetch(quoteUrl, {
       next: { revalidate: 1800 },
       headers: { accept: "application/json" },
     });

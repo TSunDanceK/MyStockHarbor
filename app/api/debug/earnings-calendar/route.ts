@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { fmpFetch } from "@/lib/server/fmpUsage";
 // Debug-only route (same shape as app/api/debug/ipo-calendar/route.ts) to
 // confirm the earnings-calendar endpoint is actually reachable on the
 // current FMP subscription and see its real field names, before building
@@ -11,7 +12,7 @@ import { NextResponse } from "next/server";
 const FMP_API_KEY = process.env.FMP_API_KEY;
 
 async function fetchJson(url: string) {
-  const response = await fetch(url, { next: { revalidate: 0 } });
+  const response = await fmpFetch(url, { next: { revalidate: 0 } });
   const text = await response.text();
 
   try {

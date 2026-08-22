@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fmpFetch } from "@/lib/server/fmpUsage";
 import { isUnwantedBot } from "@/lib/botid-guard";
 
 export const runtime = "nodejs";
@@ -78,7 +79,7 @@ function normaliseRows(value: unknown): Record<string, unknown>[] {
 
 async function fetchFmpJson<T>(url: string): Promise<T | null> {
   try {
-    const response = await fetch(url, {
+    const response = await fmpFetch(url, {
       next: { revalidate: 60 * 60 * 6 },
     });
 

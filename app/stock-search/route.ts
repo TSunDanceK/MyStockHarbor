@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { fmpFetch } from "@/lib/server/fmpUsage";
 type FmpSearchItem = {
   symbol?: string;
   name?: string;
@@ -103,7 +104,7 @@ export async function GET(request: Request) {
   )}&apikey=${apiKey}`;
 
   try {
-    const response = await fetch(url, {
+    const response = await fmpFetch(url, {
       next: { revalidate: 60 * 60 },
     });
 

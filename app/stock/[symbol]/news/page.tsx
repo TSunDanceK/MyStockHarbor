@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { fmpFetch } from "@/lib/server/fmpUsage";
 import StockNewsTickerJump from "./StockNewsTickerJump";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -240,7 +241,7 @@ async function fetchQuoteForMeta(symbol: string): Promise<{ price: number | null
   if (!apiKey) return { price: null, date: null };
   try {
     const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(apiKey)}`;
-    const res = await fetch(url, { next: { revalidate: 900 }, headers: { accept: "application/json" } });
+    const res = await fmpFetch(url, { next: { revalidate: 900 }, headers: { accept: "application/json" } });
     if (!res.ok) return { price: null, date: null };
     const json = await res.json();
     const row = Array.isArray(json) ? json[0] : json;

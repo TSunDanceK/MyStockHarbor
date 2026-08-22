@@ -8,6 +8,7 @@
 // identical misses inside one render pass. Same fix as historyCache.ts; see
 // claude/picker-pages-isr-2026-08-20.md.
 import { Redis } from "@upstash/redis";
+import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 
@@ -135,7 +136,7 @@ export async function readCachedStockDataBulk(
 
 async function fetchJson(url: string): Promise<unknown> {
   await reserveFmpCallSlot();
-  const res = await fetch(url, { next: { revalidate: 300 }, headers: { accept: "application/json" } });
+  const res = await fmpFetch(url, { next: { revalidate: 300 }, headers: { accept: "application/json" } });
   if (!res.ok) return null;
   return res.json().catch(() => null);
 }

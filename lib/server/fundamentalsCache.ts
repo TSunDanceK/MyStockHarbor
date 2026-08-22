@@ -8,6 +8,7 @@
 // identical misses inside one render pass. Same fix as historyCache.ts; see
 // claude/picker-pages-isr-2026-08-20.md.
 import { Redis } from "@upstash/redis";
+import { fmpFetch, flushFmpUsage } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 
@@ -446,7 +447,7 @@ async function fetchQuoteFundamentals(
         const url = `https://financialmodelingprep.com/stable/batch-quote?symbols=${encodeURIComponent(
           group.join(",")
         )}&apikey=${encodeURIComponent(apiKey)}`;
-        const res = await fetch(url, {
+        const res = await fmpFetch(url, {
           next: { revalidate: 300 },
           headers: { accept: "application/json" },
         });
@@ -480,7 +481,7 @@ async function fetchQuoteFundamentals(
           const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(
             sym
           )}&apikey=${encodeURIComponent(apiKey)}`;
-          const res = await fetch(url, {
+          const res = await fmpFetch(url, {
             next: { revalidate: 300 },
             headers: { accept: "application/json" },
           });
@@ -504,7 +505,7 @@ async function fetchProfile(sym: string, apiKey: string): Promise<ProfileLite | 
     const url = `https://financialmodelingprep.com/stable/profile?symbol=${encodeURIComponent(
       sym
     )}&apikey=${encodeURIComponent(apiKey)}`;
-    const res = await fetch(url, { next: { revalidate: 300 }, headers: { accept: "application/json" } });
+    const res = await fmpFetch(url, { next: { revalidate: 300 }, headers: { accept: "application/json" } });
     if (!res.ok) return null;
     const json = await res.json().catch(() => null);
     const row = Array.isArray(json) ? json[0] : json;
@@ -706,6 +707,13 @@ export async function warmFundamentals(symbols: string[]) {
   for (const sym of cleanSymbols) {
     if (cachedProfiles.get(sym)?.industry || screenerFund.get(sym)?.industry) industryKnown++;
   }
+
+  // Write the buffered FMP byte samples once, at the end, rather than a Redis
+  // round-trip per FMP response. This run makes ~477 calls and already spends
+  // its full 90s wait budget, so per-call writes would have made the meter a
+  // measurable cost of the job it measures. Awaited so the samples are durable
+  // before the route returns rather than relying on after().
+  await flushFmpUsage();
 
   // Incomplete quote coverage must never be silent.
   //
