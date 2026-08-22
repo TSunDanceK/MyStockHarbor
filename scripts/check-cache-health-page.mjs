@@ -360,6 +360,34 @@ const tree = treeFiles.map((f) => codeOf(fs.readFileSync(f, "utf8"))).join("\n")
 const jobs = readCode("lib/server/jobRuns.ts");
 const jobEntries = [...jobs.matchAll(/"([a-z-]+)":\s*\{\s*label:[^}]*instrumented:\s*(true|false)/g)];
 check("the JOBS registry declares instrumentation per job", jobEntries.length >= 6, `${jobEntries.length} entries`);
+
+// THE CRON IS A DECLARATION TOO. The page now judges a job's silence against
+// its stated cadence -- a daily job quiet since deploy is neutral, a 3-minute
+// job quiet is a fault -- so a registry cron that has drifted from vercel.json
+// makes the page confidently wrong in whichever direction the drift went. Same
+// treatment as `instrumented`: verified against reality, not trusted.
+const vercelCrons = new Map(
+  (JSON.parse(fs.readFileSync(path.join(ROOT, "vercel.json"), "utf8")).crons ?? []).map((c) => [
+    String(c.path).replace("/api/jobs/", ""),
+    String(c.schedule),
+  ])
+);
+const registryCrons = new Map(
+  [...jobs.matchAll(/"([a-z-]+)":\s*\{[^}]*cron:\s*"([^"]+)"/g)].map((m) => [m[1], m[2]])
+);
+check("every job in the registry declares a cron", registryCrons.size === jobEntries.length, `${registryCrons.size} of ${jobEntries.length}`);
+for (const [job, cron] of registryCrons) {
+  check(
+    `${job}: registry cron matches vercel.json`,
+    vercelCrons.get(job) === cron,
+    `registry "${cron}" vs vercel.json "${vercelCrons.get(job) ?? "ABSENT"}"`
+  );
+}
+// And the other direction: a scheduled job with no registry entry is invisible
+// on the page entirely, which is the absence this whole page exists to end.
+for (const [job] of vercelCrons) {
+  check(`${job}: scheduled in vercel.json AND present in the registry`, registryCrons.has(job));
+}
 for (const [, job, flag] of jobEntries) {
   const has = new RegExp(`recordJobRun\\(\\s*"${job}"`).test(tree);
   if (flag === "true") {
