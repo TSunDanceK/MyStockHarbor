@@ -35,6 +35,24 @@ export const metadata: Metadata = {
 };
 
 const GB = 1024 ** 3;
+/**
+ * A policy duration, at whatever scale it actually is.
+ *
+ * The first version was `>= 48h ? days : hours`, which had no sub-hour branch:
+ * the price pool's real 900-second policy rendered as "0h". The CONFIG was
+ * right and the status logic read `ttlSeconds` directly, so the judgement on
+ * that row was always correct -- only the label lied, which is worse than a
+ * wrong judgement, because it makes a correct one look untrustworthy and
+ * invites someone to "fix" a value that was never broken.
+ */
+function fmtDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "—";
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+  if (seconds < 48 * 3600) return `${Math.round(seconds / 3600)}h`;
+  return `${Math.round(seconds / 86400)}d`;
+}
+
 const fmtBytes = (n: number) =>
   n >= GB ? `${(n / GB).toFixed(2)} GB` : n >= 1024 ** 2 ? `${(n / 1024 ** 2).toFixed(1)} MB` : n >= 1024 ? `${(n / 1024).toFixed(1)} KB` : `${n} B`;
 
@@ -213,7 +231,7 @@ export default async function CacheHealthPage({
                     </td>
                     <td style={cell}>{d.instrumented ? d.stale : "—"}</td>
                     <td style={cell}>{fmtAge(d.oldestMs)}</td>
-                    <td style={cell}>{Math.round(d.ttlSeconds / 3600) >= 48 ? `${Math.round(d.ttlSeconds / 86400)}d` : `${Math.round(d.ttlSeconds / 3600)}h`}</td>
+                    <td style={cell}>{fmtDuration(d.ttlSeconds)}</td>
                     <td style={cell}>{d.instrumented ? d.deferred : "—"}</td>
                     <td style={cell}>
                       <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 999, background: STATUS_COLOR[status], marginRight: 7 }} />
@@ -238,21 +256,37 @@ export default async function CacheHealthPage({
               <tr><th style={th}>Job</th><th style={th}>When</th><th style={th}>Outcome</th><th style={th}>Summary</th></tr>
             </thead>
             <tbody>
-              {jobs.map(({ job, label, run }) => (
-                <tr key={job}>
-                  <td style={cell}>{label}</td>
-                  <td style={cell}>{run ? fmtAge(run.at) : "—"}</td>
-                  <td style={cell}>
-                    <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 999, background: run ? (run.ok ? STATUS_COLOR.ok : STATUS_COLOR.fault) : STATUS_COLOR.unknown, marginRight: 7 }} />
-                    {run ? (run.ok ? "ok" : "failed") : "no run recorded"}
-                  </td>
-                  <td style={{ ...cell, color: "#94a3b8", fontSize: 12 }}>
-                    {run
-                      ? Object.entries(run.summary).map(([k, v]) => `${k} ${v}`).join(" · ")
-                      : "never run, or older than the 8-day record TTL"}
-                  </td>
-                </tr>
-              ))}
+              {jobs.map(({ job, label, instrumented, run }) => {
+                // THREE outcomes, not two. An uninstrumented job reading the
+                // same as a dead one is the failure this page exists to remove,
+                // and the first version reproduced it: four of six jobs recorded
+                // nothing, so warm-price-pool -- which runs every three minutes
+                // -- rendered "never run".
+                const status: Status = !instrumented ? "unknown" : run ? (run.ok ? "ok" : "fault") : "unknown";
+                const outcome = !instrumented
+                  ? "not instrumented"
+                  : run
+                    ? run.ok
+                      ? "ok"
+                      : "failed"
+                    : "no run recorded";
+                const detail = !instrumented
+                  ? "this job does not call recordJobRun — nothing is known about it, which is not the same as nothing happening"
+                  : run
+                    ? Object.entries(run.summary).map(([k, v]) => `${k} ${v}`).join(" · ")
+                    : "never run, or older than the 8-day record TTL";
+                return (
+                  <tr key={job}>
+                    <td style={cell}>{label}</td>
+                    <td style={cell}>{run ? fmtAge(run.at) : "—"}</td>
+                    <td style={cell}>
+                      <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 999, background: STATUS_COLOR[status], marginRight: 7 }} />
+                      {outcome}
+                    </td>
+                    <td style={{ ...cell, color: "#94a3b8", fontSize: 12 }}>{detail}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </section>
