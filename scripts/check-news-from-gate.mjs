@@ -42,14 +42,24 @@ const grab = (name) => {
 
 const readGate = grab("readNewsFromGate");
 const readHead = grab("readHeadProbe");
+const readToday = grab("readTodayBarProbe");
 const gateDate = grab("gateFromDate");
-if (!readGate || !gateDate || !readHead) {
-  console.error("FAIL: could not extract the gate functions — measuring nothing.");
+
+// ALL FOUR, and the check NAMES the missing one rather than reporting a generic
+// failure. This file has now survived one squash-merge rebase in which both
+// sides of a conflict added a reader to the same object; a resolution that kept
+// only one would leave the other's whole section silently unexercised, and a
+// harness that skips is indistinguishable from a harness that passes.
+const extracted = { readNewsFromGate: readGate, gateFromDate: gateDate, readHeadProbe: readHead, readTodayBarProbe: readToday };
+const missing = Object.entries(extracted).filter(([, v]) => !v).map(([k]) => k);
+if (missing.length) {
+  console.error(`FAIL: could not extract ${missing.join(", ")} from ${ROUTE} — measuring nothing.`);
   process.exit(1);
 }
 
 const js = ts.transpileModule(
-  `${gateDate}\n${readGate}\n${readHead}\nexport { readNewsFromGate, gateFromDate, readHeadProbe };`,
+  `${gateDate}\n${readGate}\n${readHead}\n${readToday}\n` +
+    `export { readNewsFromGate, gateFromDate, readHeadProbe, readTodayBarProbe };`,
   { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext } }
 ).outputText;
 const m = await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
@@ -241,6 +251,80 @@ check(
 check(
   "both the header and the real body length are reported, never one for the other",
   /contentLength,\n\s*bodyBytes,/.test(src)
+);
+
+// Section 6 was section 5 on its own branch. Both sections were added in
+// parallel and both declared `const H`; the today-bar fixtures are `HIST` so
+// the two can coexist. Renumbered rather than merged -- they test different
+// readers and share nothing but the file.
+console.log("\n=== 6. Today's EOD bar: does it append or replace? ===\n");
+// Decides whether a price-pool-synthesised intraday bar appends or replaces.
+// Getting it wrong puts two Points with the same date into the series that
+// feeds every indicator -- parseFmpHistoricalRows sorts by date and does not
+// collapse duplicates.
+const MID = new Date("2026-08-20T15:00:00Z"); // Thursday, mid-session
+const HIST = (over = {}) => ({ id: "history-today-bar", ok: true, rows: 5, newestPublished: "2026-08-20", sampleRow: { close: 101 }, ...over });
+const Q = (over = {}) => ({ id: "quote", ok: true, rows: 1, newestPublished: null, sampleRow: { price: 101.2 }, ...over });
+
+const live = m.readTodayBarProbe(HIST(), Q(), MID);
+check("a bar dated today, mid-session -> LIVE", live.verdict === "LIVE");
+check("...and the synthesised bar must REPLACE", live.synthesisedBarMust === "replace");
+check("...and the detail says why a duplicate date is fatal", /does not collapse duplicates/.test(live.detail));
+
+const appends = m.readTodayBarProbe(HIST({ newestPublished: "2026-08-19" }), Q(), MID);
+check("newest bar is yesterday, mid-session -> APPENDS", appends.verdict === "APPENDS");
+check("...and the synthesised bar appends", appends.synthesisedBarMust === "append");
+check(
+  "...but it STILL asks for a duplicate-date guard",
+  /duplicate-date guard/.test(appends.detail),
+  "the answer holds only until FMP changes it, and the failure would be silent"
+);
+
+console.log("\n=== 6b. It refuses to answer when the answer would be meaningless ===\n");
+// THE POINT OF THIS SECTION. Run before the open, the probe finds no bar dated
+// today and would read as "it appends" -- confidently wrong, because there has
+// been no opportunity for the bar to exist.
+const cases = [
+  ["07:00 UTC, before the open", new Date("2026-08-20T07:00:00Z")],
+  ["12:00 UTC, still before the open", new Date("2026-08-20T12:00:00Z")],
+  ["21:00 UTC, after the close", new Date("2026-08-20T21:00:00Z")],
+  ["Saturday mid-day", new Date("2026-08-22T15:00:00Z")],
+  ["Sunday mid-day", new Date("2026-08-23T15:00:00Z")],
+];
+for (const [label, when] of cases) {
+  const r = m.readTodayBarProbe(HIST({ newestPublished: "2026-08-19" }), Q(), when);
+  check(`${label} -> UNKNOWN, not APPENDS`, r.verdict === "UNKNOWN" && r.synthesisedBarMust === "undecided", r.verdict);
+}
+check(
+  "the refusal explains that a 'no' would be meaningless there",
+  /would mean nothing/.test(m.readTodayBarProbe(HIST(), Q(), new Date("2026-08-20T07:00:00Z")).detail)
+);
+// Failed probes are never an answer either.
+check("history probe failed -> UNKNOWN", m.readTodayBarProbe(HIST({ ok: false }), Q(), MID).verdict === "UNKNOWN");
+check("quote probe failed -> UNKNOWN", m.readTodayBarProbe(HIST(), Q({ ok: false }), MID).verdict === "UNKNOWN");
+check("no dates in the history rows -> UNKNOWN", m.readTodayBarProbe(HIST({ newestPublished: null }), Q(), MID).verdict === "UNKNOWN");
+check(
+  "every non-answer leaves synthesisedBarMust undecided",
+  [
+    m.readTodayBarProbe(HIST(), Q(), new Date("2026-08-20T07:00:00Z")),
+    m.readTodayBarProbe(HIST({ ok: false }), Q(), MID),
+    m.readTodayBarProbe(HIST({ newestPublished: null }), Q(), MID),
+  ].every((r) => r.synthesisedBarMust === "undecided")
+);
+// A today bar that exists but is NOT tracking the quote is still a today bar.
+check(
+  "a stale today bar still forces replace",
+  m.readTodayBarProbe(HIST({ sampleRow: { close: 80 } }), Q(), MID).synthesisedBarMust === "replace",
+  "the duplicate date is the hazard, not the price"
+);
+
+console.log("\n=== 6c. The probe pair, and its cost ===\n");
+check("a today-bar probe exists", /id: "history-today-bar"/.test(src));
+check("paired with a quote for the SAME symbol", /id: "history-today-bar-QUOTE"[\s\S]{0,120}quote\?symbol=MU/.test(src));
+check(
+  "it asks for a WEEK, not the full 1400 days",
+  /historical-price-eod\/full\?symbol=MU&from=\$\{weekAgoIso\}&to=\$\{todayIso\}/.test(src),
+  "that endpoint is ~180 KB a call and 63% of the byte cap"
 );
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);

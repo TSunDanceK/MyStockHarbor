@@ -276,6 +276,26 @@ function buildDatedProbes(now: Date): Probe[] {
   // answer, the response CONTENT is.
   const gateFrom = gateFromDate(now);
 
+  // DOES historical-price-eod/full CARRY A LIVE-UPDATING BAR FOR TODAY?
+  //
+  // This decides whether a price-pool-synthesised intraday bar APPENDS or
+  // REPLACES, and getting it wrong corrupts every indicator at once:
+  // parseFmpHistoricalRows sorts by date and does NOT collapse duplicates, so
+  // two Points carrying today's date both survive into the series feeding
+  // MA/RSI/MACD/ATR and the support-resistance detector.
+  //
+  // A SHORT WINDOW, not the full 1400 days. historical-price-eod/full is ~180 KB
+  // a call and 63% of the 30-day byte cap (9.33 of 14.86 GB, measured on FMP's
+  // dashboard); asking for a week answers the same question for a fraction of
+  // it. If from/to are not honoured here the probe costs one full payload --
+  // acceptable once for a diagnostic, and `rows` in the result says which
+  // happened.
+  //
+  // PAIRED with a quote for the SAME symbol, because the question is not only
+  // "is there a bar dated today" but "does its close track the live price".
+  const todayIso = iso(now);
+  const weekAgoIso = iso(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000));
+
   return [
     // CAN A COUNT BE HAD WITHOUT RETRIEVING THE ARTICLES?
     //
@@ -304,6 +324,16 @@ function buildDatedProbes(now: Date): Probe[] {
       path: "news/stock?symbols=MU&limit=50",
       method: "HEAD",
       note: "Free-count probe. PASS only if contentLength is present AND equals bodyBytes on news-stock-BASELINE-no-from.",
+    },
+    {
+      id: "history-today-bar",
+      path: `historical-price-eod/full?symbol=MU&from=${weekAgoIso}&to=${todayIso}`,
+      note: `TODAY-BAR probe -- is there a bar dated ${todayIso}, and does its close track the live quote? MUST be run mid-session; see readTodayBarProbe.`,
+    },
+    {
+      id: "history-today-bar-QUOTE",
+      path: "quote?symbol=MU",
+      note: "CONTROL for history-today-bar -- same symbol, same moment. The live price the newest bar is compared against.",
     },
     {
       id: "news-stock-BASELINE-no-from",
@@ -546,6 +576,102 @@ export function readHeadProbe(
   };
 }
 
+export type TodayBarRow = {
+  id: string;
+  ok: boolean;
+  rows: number | null;
+  newestPublished: string | null;
+  sampleRow: Record<string, unknown> | null;
+};
+
+/**
+ * Is the newest EOD bar today's, and is it live?
+ *
+ * REFUSES TO ANSWER OUTSIDE MARKET HOURS, which is the most important thing in
+ * here. Run at 07:00 UTC this finds no bar dated today and would read as "it
+ * appends" -- the wrong answer, arrived at confidently, because before the open
+ * there is genuinely nothing to find. Absence means something only once there
+ * has been an opportunity for presence
+ * (claude/traps/absence-needs-the-producer-to-have-run.md).
+ *
+ * The regular session is 13:30-20:00 UTC while New York is on EDT. The window
+ * below is deliberately narrower at both ends: a probe run in the first or last
+ * minutes of the session is the least informative moment to ask.
+ */
+export function readTodayBarProbe(
+  history: TodayBarRow | undefined,
+  quote: TodayBarRow | undefined,
+  now: Date
+): {
+  verdict: "LIVE" | "APPENDS" | "UNKNOWN";
+  detail: string;
+  synthesisedBarMust: "replace" | "append" | "undecided";
+} {
+  const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const weekday = now.getUTCDay();
+  const midSession =
+    weekday >= 1 && weekday <= 5 && utcMinutes >= 14 * 60 && utcMinutes <= 19 * 60 + 45;
+
+  if (!midSession) {
+    return {
+      verdict: "UNKNOWN",
+      detail:
+        `Run at ${now.toISOString()} — outside the Mon-Fri 14:00-19:45 UTC window this probe is ` +
+        "valid in. Before the open there is no today bar to find, so a 'no' here would mean nothing " +
+        "and would read as 'it appends'. Re-run mid-session.",
+      synthesisedBarMust: "undecided",
+    };
+  }
+  if (!history?.ok || !quote?.ok) {
+    return {
+      verdict: "UNKNOWN",
+      detail: "One or both probes did not return 200. Not an answer.",
+      synthesisedBarMust: "undecided",
+    };
+  }
+  if (!history.newestPublished) {
+    return {
+      verdict: "UNKNOWN",
+      detail: `The history probe returned ${history.rows ?? 0} rows with no usable dates. Not an answer.`,
+      synthesisedBarMust: "undecided",
+    };
+  }
+
+  const today = now.toISOString().slice(0, 10);
+  const newestDay = history.newestPublished.slice(0, 10);
+
+  if (newestDay < today) {
+    return {
+      verdict: "APPENDS",
+      detail:
+        `Mid-session, the newest EOD bar is ${newestDay} — not ${today}. Today's bar only appears ` +
+        "after the close, so a synthesised intraday bar APPENDS. Add a duplicate-date guard to " +
+        "parseFmpHistoricalRows anyway: this answer holds only until FMP changes it, and the " +
+        "failure would be silent.",
+      synthesisedBarMust: "append",
+    };
+  }
+
+  const barClose = Number(history.sampleRow?.close);
+  const livePrice = Number(quote.sampleRow?.price);
+  const comparable = Number.isFinite(barClose) && Number.isFinite(livePrice) && livePrice > 0;
+  const drift = comparable ? Math.abs(barClose - livePrice) / livePrice : null;
+
+  return {
+    verdict: "LIVE",
+    detail:
+      `Mid-session, a bar dated ${newestDay} already exists. ` +
+      (drift === null
+        ? "Its close could not be compared against the quote. "
+        : `Its close (${barClose}) sits ${(drift * 100).toFixed(2)}% from the live quote ` +
+          `(${livePrice}), so it is ${drift < 0.005 ? "tracking the live price" : "present but not tracking closely — either way it exists"}. `) +
+      "A synthesised intraday bar must REPLACE it, never append: two Points carrying the same date " +
+      "both survive parseFmpHistoricalRows, which sorts by date and does not collapse duplicates, " +
+      "and every indicator downstream reads the series positionally.",
+    synthesisedBarMust: "replace",
+  };
+}
+
 function scrub(text: string, apiKey: string) {
   return apiKey ? text.split(apiKey).join("<key>") : text;
 }
@@ -743,8 +869,19 @@ export async function GET(request: Request) {
     ),
   };
 
+  const todayBar = {
+    question: "Does historical-price-eod/full carry a live-updating bar for today, or only after the close?",
+    decides: "Whether a price-pool-synthesised intraday bar appends or replaces.",
+    ...readTodayBarProbe(
+      results.find((r) => r.id === "history-today-bar"),
+      results.find((r) => r.id === "history-today-bar-QUOTE"),
+      probedAtDate
+    ),
+  };
+
   return NextResponse.json({
     probedAt: probedAtDate.toISOString(),
+    todayBar,
     newsFromGate,
     newsHeadProbe,
     // Non-zero means the FMP budget was tight and some probes were skipped
