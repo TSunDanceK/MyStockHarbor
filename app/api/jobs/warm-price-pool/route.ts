@@ -62,6 +62,12 @@ export async function GET(req: NextRequest) {
     await recordJobRun("warm-price-pool", result.ok !== false, {
       targets: symbols.length,
       written: result.written ?? null,
+      // Surfaced on the cache health page next to priceRefreshed. Zero opens
+      // against a non-zero refresh count means stable/quote stopped carrying
+      // OHLC -- a degradation that is otherwise completely invisible, since
+      // every consumer treats those fields as optional.
+      priceRefreshed: result.priceRefreshed ?? null,
+      openCarried: result.openCarried ?? null,
       reason: result.reason ?? null,
     });
     return NextResponse.json(result);
