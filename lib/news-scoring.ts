@@ -38,6 +38,7 @@ export {
   cleanRssDescription,
   // Item-level classification
   keywordHits,
+  logResponseWindow,
   isVideoOrLowQualitySource,
   isEarningsNewsItem,
   isEarningsExceptionSource,
