@@ -94,6 +94,25 @@ export type PricePoolRow = {
   changePct: number | null;
   volume: number | null;
   marketCap: number | null;
+  /**
+   * Today's session open / high / low, when the quote carried them.
+   *
+   * ZERO EXTRA BANDWIDTH. stable/quote already returns open, dayHigh and dayLow
+   * in the same response fetchStableQuote reads price and volume from; those
+   * bytes are paid for and were being thrown away.
+   *
+   * NULL IS MEANINGFUL AND MUST STAY VISIBLE. A price-pool row is close to
+   * being able to stand in for a daily bar, and Point's open/high/low are
+   * OPTIONAL -- so a synthesised bar missing them would type-check and slot
+   * silently into the series. MA, RSI, MACD and Bollinger read `close` and would
+   * look fine; ATR spike and the support/resistance detector read high/low and
+   * would quietly stop firing, with no error anywhere
+   * (claude/traps/a-visible-failure-is-not-a-harmless-one.md). Explicit null
+   * beats absent, and warmPricePool logs once if a whole run produced no opens.
+   */
+  open: number | null;
+  dayHigh: number | null;
+  dayLow: number | null;
   pe: number | null;
   ts: number; // ms epoch price was last fetched
   peTs?: number; // ms epoch PE was last fetched (independent rotation)
@@ -146,6 +165,9 @@ export async function readPricePoolBulk(
             price: num(row.price),
             changePct: num(row.changePct),
             volume: num(row.volume),
+            open: num(row.open),
+            dayHigh: num(row.dayHigh),
+            dayLow: num(row.dayLow),
             marketCap: num(row.marketCap),
             pe: num(row.pe),
             ts: row.ts,
@@ -214,6 +236,12 @@ export async function seedColdPricePoolRows(
       changePct: row.changePct,
       volume: row.volume,
       marketCap: row.marketCap,
+      // Discovery's quote is not re-read here, so OHLC is genuinely unknown at
+      // seed time. Explicit null, same reasoning as `pe` below: absent and
+      // "not fetched yet" must not be the same reading.
+      open: null,
+      dayHigh: null,
+      dayLow: null,
       pe: null, // unknown until warm-price-pool's PE rotation reaches it
       ts: nowMs,
       peTs: 0,
@@ -231,11 +259,31 @@ export async function seedColdPricePoolRows(
   return Object.keys(payload).length;
 }
 
+/**
+ * Should a run warn that no quote carried a session open?
+ *
+ * PULLED OUT AS A PREDICATE so it can be RUN rather than pattern-matched. The
+ * harness previously asserted this with two regexes, one of which was a strict
+ * substring of the other and therefore could never fail independently -- it
+ * looked like two checks and was one
+ * (claude/traps/a-regex-over-source-has-no-scope.md).
+ *
+ * The condition itself: a run that fetched quotes and got an open from none of
+ * them is the signal. A run that fetched NO quotes has nothing to say about the
+ * fields, and warning there would report our own idleness as FMP's outage.
+ */
+export function shouldWarnMissingOpen(pxRefreshed: number, openCarried: number): boolean {
+  return pxRefreshed > 0 && openCarried === 0;
+}
+
 type QuoteLite = {
   price: number | null;
   changePct: number | null;
   volume: number | null;
   marketCap: number | null;
+  open: number | null;
+  dayHigh: number | null;
+  dayLow: number | null;
 };
 
 // Per-symbol live quote (price/%chg/volume/marketCap). stable/quote is the only
@@ -257,6 +305,12 @@ async function fetchStableQuote(sym: string, apiKey: string): Promise<QuoteLite 
       changePct: num(row.changePercentage) ?? num(row.changesPercentage),
       volume: num(row.volume),
       marketCap: num(row.marketCap),
+      // Already in this response. `num` returns null for anything non-finite,
+      // so a plan that stops sending these degrades to explicit nulls rather
+      // than to absent keys.
+      open: num(row.open),
+      dayHigh: num(row.dayHigh),
+      dayLow: num(row.dayLow),
     };
   } catch {
     return null;
@@ -379,10 +433,13 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
     payload[sym] = {
       price: row.price ?? prev?.price ?? null,
       changePct: row.changePct ?? prev?.changePct ?? null,
-      // Buckets don't carry volume/marketCap -- carry forward whatever the pool
-      // already has; the per-symbol rotation is still the only source for these.
+      // Buckets don't carry volume/marketCap/OHLC -- carry forward whatever the
+      // pool already has; the per-symbol rotation is still the only source.
       volume: prev?.volume ?? null,
       marketCap: prev?.marketCap ?? null,
+      open: prev?.open ?? null,
+      dayHigh: prev?.dayHigh ?? null,
+      dayLow: prev?.dayLow ?? null,
       pe: prev?.pe ?? null,
       ts: nowMs,
       peTs: prev?.peTs ?? 0,
@@ -415,6 +472,10 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
 
   let pxRefreshed = 0;
   let peRefreshed = 0;
+  // How many of this run's quotes actually carried a session open. The guard
+  // below turns "the plan stopped sending OHLC" from an invisible degradation
+  // into a line in the log and a field on the run record.
+  let openCarried = 0;
 
   for (const sym of targets) {
     const prev = existing.get(sym);
@@ -447,12 +508,16 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
       changePct: quote ? quote.changePct : already?.changePct ?? prev?.changePct ?? null,
       volume: quote ? quote.volume : already?.volume ?? prev?.volume ?? null,
       marketCap: quote ? quote.marketCap : already?.marketCap ?? prev?.marketCap ?? null,
+      open: quote ? quote.open : already?.open ?? prev?.open ?? null,
+      dayHigh: quote ? quote.dayHigh : already?.dayHigh ?? prev?.dayHigh ?? null,
+      dayLow: quote ? quote.dayLow : already?.dayLow ?? prev?.dayLow ?? null,
       // carry forward last-known PE if this run didn't (re)fetch a value
       pe: peFetched ? peValue ?? prev?.pe ?? null : already?.pe ?? prev?.pe ?? null,
       ts: quote ? nowMs : already?.ts ?? prev?.ts ?? nowMs,
       peTs: peFetched ? nowMs : already?.peTs ?? prev?.peTs ?? 0,
     };
     if (quote) pxRefreshed++;
+    if (quote && quote.open != null) openCarried++;
     if (peFetched && peValue != null) peRefreshed++;
   }
 
@@ -476,12 +541,33 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
     // fail open -- a failed warm just means the pool keeps its prior values.
   }
 
+  // ONCE PER RUN, AND ONLY WHEN IT MEANS SOMETHING. A run that fetched quotes
+  // and got a session open from none of them is the signal that stable/quote has
+  // stopped carrying OHLC on this plan -- which would otherwise show up nowhere,
+  // because every consumer of open/dayHigh/dayLow treats them as optional and
+  // simply stops firing (ATR spike, the support/resistance detector). A run that
+  // fetched NO quotes at all is silent here: it has nothing to say about the
+  // fields, and warning would be reporting our own idleness as their outage
+  // (claude/traps/absence-needs-the-producer-to-have-run.md).
+  if (shouldWarnMissingOpen(pxRefreshed, openCarried)) {
+    console.warn(
+      `[warm-price-pool] WARNING: ${pxRefreshed} quotes fetched and NOT ONE carried an "open". ` +
+        "stable/quote has probably stopped returning open/dayHigh/dayLow on this plan. " +
+        "ATR spike and the support/resistance detector read high/low and will quietly stop firing."
+    );
+  }
+
   return {
     ok: true,
     universe: clean.length,
     priceCap,
     bucketFreshened: bucketFreshened.size,
     priceRefreshed: pxRefreshed,
+    // Reported alongside priceRefreshed rather than only warned about, so the
+    // ratio is visible on the cache health page's job record before it reaches
+    // zero -- a slow decline is a different thing from a cliff, and a warning
+    // that only fires at zero cannot show one.
+    openCarried,
     peRefreshed,
     written,
   };
