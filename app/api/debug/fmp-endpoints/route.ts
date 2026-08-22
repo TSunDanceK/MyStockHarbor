@@ -92,6 +92,36 @@ const PROBES: Probe[] = [
     note: "wider net, same endpoint",
   },
   { id: "stock-list", path: "stock-list", note: "full symbol directory if available" },
+
+  // INDEX CHANGES (2026-08-22). lib/server/indexChanges.ts calls all three
+  // `historical-*-constituent` endpoints and NONE of them were probed -- while
+  // the plain sp500/nasdaq/dowjones-constituent variants all answer 402 on this
+  // plan.
+  //
+  // THAT COMBINATION IS THE WHOLE POINT. fetchIndexChanges swallows a non-ok
+  // response, exactly as fetchFmpConstituentSymbols does, so if the historical
+  // variants are restricted too the feature returns an empty list and renders as
+  // "no recent index changes" -- indistinguishable from a genuinely quiet week,
+  // forever, with nothing reporting it
+  // (claude/traps/absence-needs-the-producer-to-have-run.md).
+  //
+  // All three, not just S&P 500: they are three separate endpoints on the same
+  // plan and there is no reason to assume they share an answer.
+  {
+    id: "historical-sp500-constituent",
+    path: "historical-sp500-constituent",
+    note: "USED LIVE by lib/server/indexChanges.ts -- a 402 here means that feature has been silently empty",
+  },
+  {
+    id: "historical-nasdaq-constituent",
+    path: "historical-nasdaq-constituent",
+    note: "USED LIVE by lib/server/indexChanges.ts -- same question, separate endpoint",
+  },
+  {
+    id: "historical-dowjones-constituent",
+    path: "historical-dowjones-constituent",
+    note: "USED LIVE by lib/server/indexChanges.ts -- same question, separate endpoint",
+  },
   // Decides whether warmFundamentals' quote stage is permanently one call per
   // symbol or could be one call per 50.
   //
@@ -217,7 +247,38 @@ function buildDatedProbes(now: Date): Probe[] {
   const to = iso(day);
   const from = iso(new Date(day.getTime() - 30 * 24 * 60 * 60 * 1000));
 
+  // THE GATE for claude/news-as-stored-dataset-spec-2026-08-22.md, and the only
+  // question that matters before any of it gets built.
+  //
+  // `from=` is in /stable/news/stock's signature. Nothing has ever confirmed it
+  // FILTERS rather than being accepted and silently ignored, and the whole
+  // stored-dataset design rests on it: without incremental fetching there is no
+  // incremental refresh, and the design collapses to tuning `limit`.
+  //
+  // A PAIR, not a single probe, because a lone `from=` request proves nothing.
+  // 200 with rows looks like success whether the parameter worked or was
+  // dropped on the floor; only the baseline says which. Read `oldestPublished`
+  // on both rows:
+  //
+  //   from-row oldest >= yesterday          -> it filters. Design cleared.
+  //   from-row oldest == baseline oldest    -> ignored. Stop.
+  //   from-row oldest anywhere before `from`-> ignored. Stop.
+  //
+  // Same shape as the 400-vs-402 lesson above: the response CODE is not the
+  // answer, the response CONTENT is.
+  const gateFrom = gateFromDate(now);
+
   return [
+    {
+      id: "news-stock-BASELINE-no-from",
+      path: "news/stock?symbols=MU&limit=50",
+      note: "GATE CONTROL -- the same request WITHOUT from=. Compare oldestPublished against the row below.",
+    },
+    {
+      id: "news-stock-GATE-from",
+      path: `news/stock?symbols=MU&limit=50&from=${gateFrom}`,
+      note: `GATE -- does from= filter? PASS only if oldestPublished >= ${gateFrom}. Equal to the baseline means IGNORED.`,
+    },
     {
       id: "sector-performance-snapshot",
       path: `sector-performance-snapshot?date=${to}`,
@@ -244,6 +305,119 @@ const TARGET_SYMBOLS = ["NVDA", "F", "COO"];
 // Leave room for the crons and live page traffic. This route is a diagnostic;
 // it should always lose a race against real work.
 const FMP_MIN_HEADROOM_CALLS = 60;
+
+/** Oldest / newest publish timestamp across a probe's rows, or null. */
+function publishedRange(rows: Record<string, unknown>[] | null): {
+  oldest: string | null;
+  newest: string | null;
+} {
+  if (!rows) return { oldest: null, newest: null };
+  // A real min/max over every row rather than reading the first and last. FMP
+  // returns news newest-first today, but a probe that ASSUMES the ordering it
+  // is trying to verify is not a measurement.
+  const times = rows
+    .map((row) => String(row?.publishedDate ?? row?.date ?? "").trim())
+    .filter(Boolean)
+    .map((value) => ({ value, t: new Date(value).getTime() }))
+    .filter((entry) => Number.isFinite(entry.t));
+  if (!times.length) return { oldest: null, newest: null };
+  return {
+    oldest: times.reduce((a, b) => (b.t < a.t ? b : a)).value,
+    newest: times.reduce((a, b) => (b.t > a.t ? b : a)).value,
+  };
+}
+
+/**
+ * The `from=` value the gate probe sends.
+ *
+ * ONE definition, used by the probe that sends it and by the reader that judges
+ * against it. Two copies of "yesterday" that drift by a day would make the gate
+ * report FAIL on a working parameter, which is the worst outcome available here
+ * -- it would kill a sound design (claude/traps/two-validators-for-one-value.md).
+ */
+export function gateFromDate(now: Date): string {
+  return new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+export type GateRow = {
+  id: string;
+  ok: boolean;
+  httpStatus: number | null;
+  rows: number | null;
+  oldestPublished: string | null;
+};
+
+/**
+ * Does `from=` on /stable/news/stock actually filter?
+ *
+ * THE ONLY QUESTION THAT MATTERS before claude/news-as-stored-dataset-spec-2026-08-22.md
+ * gets built, and the reason it needs reading rather than eyeballing: a 200 with
+ * 50 rows looks identical whether the parameter worked or was accepted and
+ * dropped. Only the comparison against the no-`from` baseline separates them.
+ *
+ * Deliberately reports UNKNOWN rather than guessing when either probe failed or
+ * carried no dates. An inconclusive gate must not read as a pass -- that is the
+ * whole shape of the failure this project keeps paying for
+ * (claude/traps/absence-needs-the-producer-to-have-run.md).
+ */
+export function readNewsFromGate(
+  baseline: GateRow | undefined,
+  gated: GateRow | undefined,
+  fromDate: string
+): { verdict: "PASS" | "FAIL" | "UNKNOWN"; detail: string; clearedToBuild: boolean } {
+  if (!baseline || !gated || !baseline.ok || !gated.ok) {
+    return {
+      verdict: "UNKNOWN",
+      detail:
+        `One or both gate probes did not return 200 (baseline ${baseline?.httpStatus ?? "missing"}, ` +
+        `from ${gated?.httpStatus ?? "missing"}). The gate is unanswered, which is NOT a pass.`,
+      clearedToBuild: false,
+    };
+  }
+  if (!baseline.oldestPublished || !gated.oldestPublished) {
+    return {
+      verdict: "UNKNOWN",
+      detail:
+        "A gate probe returned rows with no usable publish dates, so the comparison cannot be made. " +
+        "The gate is unanswered, which is NOT a pass.",
+      clearedToBuild: false,
+    };
+  }
+
+  const fromMs = new Date(`${fromDate}T00:00:00Z`).getTime();
+  const gatedOldestMs = new Date(gated.oldestPublished).getTime();
+
+  if (!Number.isFinite(fromMs) || !Number.isFinite(gatedOldestMs)) {
+    return {
+      verdict: "UNKNOWN",
+      detail:
+        "Unparseable dates in the gate comparison, so it cannot be made. " +
+        "The gate is unanswered, which is NOT a pass.",
+      clearedToBuild: false,
+    };
+  }
+
+  if (gatedOldestMs >= fromMs) {
+    return {
+      verdict: "PASS",
+      detail:
+        `from=${fromDate} returned nothing older than ${gated.oldestPublished}, while the same request ` +
+        `without it reached back to ${baseline.oldestPublished}. The parameter filters. ` +
+        "Incremental fetching is possible and the stored-dataset design is cleared to build.",
+      clearedToBuild: true,
+    };
+  }
+
+  return {
+    verdict: "FAIL",
+    detail:
+      `from=${fromDate} still returned an item published ${gated.oldestPublished}, which predates it ` +
+      `(baseline oldest: ${baseline.oldestPublished}). The parameter is accepted and IGNORED. ` +
+      "Incremental fetching is impossible; the stored-dataset design stops here and the remaining " +
+      "lever is tuning `limit`.",
+    clearedToBuild: false,
+  };
+}
 
 function scrub(text: string, apiKey: string) {
   return apiKey ? text.split(apiKey).join("<key>") : text;
@@ -276,7 +450,8 @@ export async function GET(request: Request) {
   const results = [];
   let skippedForBudget = 0;
 
-  const probes = [...PROBES, ...buildDatedProbes(new Date())];
+  const probedAtDate = new Date();
+  const probes = [...PROBES, ...buildDatedProbes(probedAtDate)];
 
   for (const probe of probes) {
     const joiner = probe.path.includes("?") ? "&" : "?";
@@ -357,6 +532,13 @@ export async function GET(request: Request) {
               .map((row) => String(row?.title ?? "").trim())
               .filter(Boolean)
           : null,
+        // THE FIELD THE GATE IS READ FROM. Computed as a real minimum over
+        // every row rather than taken from the last one: FMP returns news
+        // newest-first today, but a probe that assumes the ordering it is
+        // trying to verify is not a measurement. Both `publishedDate` and
+        // `date` are accepted because the two vintages differ.
+        oldestPublished: publishedRange(arr).oldest,
+        newestPublished: publishedRange(arr).newest,
         // Fixed lookup of TARGET_SYMBOLS within this probe's rows, so
         // liquidity-dependent staleness can be checked for names other than
         // whichever mega-cap happens to sort first.
@@ -379,6 +561,8 @@ export async function GET(request: Request) {
         rowKeys: null,
         sampleRow: null,
         titleSample: null,
+        oldestPublished: null,
+        newestPublished: null,
         targetSamples: null,
         message: scrub(error instanceof Error ? error.message : "fetch failed", apiKey),
       });
@@ -388,8 +572,22 @@ export async function GET(request: Request) {
   const working = results.filter((r) => r.uniqueSymbols > 0);
   const bestForDiscovery = [...working].sort((a, b) => b.uniqueSymbols - a.uniqueSymbols)[0] ?? null;
 
+  // THE GATE, read rather than left for the eye. See readNewsFromGate.
+  const gateFrom = gateFromDate(probedAtDate);
+  const newsFromGate = {
+    question: "Does from= on /stable/news/stock filter, or is it accepted and ignored?",
+    from: gateFrom,
+    blocks: "claude/news-as-stored-dataset-spec-2026-08-22.md",
+    ...readNewsFromGate(
+      results.find((r) => r.id === "news-stock-BASELINE-no-from"),
+      results.find((r) => r.id === "news-stock-GATE-from"),
+      gateFrom
+    ),
+  };
+
   return NextResponse.json({
-    probedAt: new Date().toISOString(),
+    probedAt: probedAtDate.toISOString(),
+    newsFromGate,
     // Non-zero means the FMP budget was tight and some probes were skipped
     // rather than queued -- rerun in a quieter minute before reading anything
     // into a missing result.

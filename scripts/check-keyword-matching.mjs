@@ -198,9 +198,18 @@ check("exactly one definition of keywordHits in the tree", definers.length === 1
 check("...and it is the shared leaf module", definers[0] === "lib/keywordMatch.ts");
 
 const newsPage = read("app/stock/[symbol]/news/page.tsx");
+// This asserted that the page CALLED the lib's isEarningsNewsItem rather than
+// its own isEarningsHeadline copy. The earnings news card was removed entirely
+// on 2026-08-22 (no dedicated earnings source exists on this plan -- all four
+// candidates measured 402/403), so the page now classifies no earnings news at
+// all. The original intent survives as the stronger statement: no local
+// classifier, not even an unused one.
 check(
-  "the news page uses the lib's earnings classifier, not a local copy",
-  /isEarningsNewsItem\(item\)/.test(newsPage) && !/function isEarningsHeadline/.test(newsPage)
+  "the news page carries NO earnings classifier of its own",
+  !/function isEarningsHeadline/.test(newsPage) &&
+    !/"earnings","eps","results"/.test(newsPage) &&
+    !/function getEarningsNewsItems/.test(newsPage),
+  "the card is gone; a leftover private copy would be a validator with no consumer"
 );
 
 console.log("\n=== 6. The podcast filter looks at every field carrying the signal ===\n");
