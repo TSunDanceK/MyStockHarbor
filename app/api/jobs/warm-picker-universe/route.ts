@@ -27,6 +27,20 @@ import { recordJobRun } from "../../../../lib/server/jobRuns";
 // whose own comment records a timeout cliff; the question this answers is "did
 // the daily build run, and did it succeed".
 export async function GET(req: NextRequest) {
+  // READ-AND-DISCARD IN THE CATCH, not a finally.
+  //
+  // The counters are module state and a warm Lambda is reused across
+  // invocations, so a throw between the parse and the read leaves them sitting
+  // there to be attributed to whichever invocation reads next. A failed run
+  // silently donating its drops to the next good one is the wrong direction to
+  // be wrong in, because the flush decision rests on that number being an
+  // undercount at worst rather than an overcount.
+  //
+  // A `finally` would have been tidier and is wrong here: on the success path it
+  // would run AFTER the read, and on the failure path the counts have to be
+  // discarded rather than recorded -- a failed run's partial drops are not a
+  // measurement of anything. `recorded` distinguishes the two.
+  let recorded = false;
   try {
     const res = await buildPickerUniverse(req);
     // Read from module state, NOT from the response body -- the note above about
@@ -40,6 +54,7 @@ export async function GET(req: NextRequest) {
     // NOT latent, names up to 12 affected symbols, and makes flushing the
     // history namespace urgent rather than tidy.
     const drops = readHistoryDropCounts();
+    recorded = true;
     await recordJobRun("warm-picker-universe", res.ok, {
       status: res.status,
       historyRowsParsed: drops.rowsParsed,
@@ -49,6 +64,9 @@ export async function GET(req: NextRequest) {
     return res;
   } catch (error) {
     const message = error instanceof Error ? error.message : "warm-picker-universe failed";
+    // Discarded, not reported: a partial run's drop count would be attributed to
+    // the next successful run and inflate it.
+    if (!recorded) readHistoryDropCounts();
     await recordJobRun("warm-picker-universe", false, { error: message });
     throw error;
   }

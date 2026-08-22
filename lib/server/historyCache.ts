@@ -209,9 +209,17 @@ function toFiniteNumber(value: unknown) {
 // rows says nothing, zero drops out of 900k rows says the bug was genuinely
 // latent.
 //
+// A SAMPLE, NOT A CENSUS, and worth saying rather than leaving to be inferred:
+// this counts only drops that happen during a WARM RUN. History parsed by a live
+// request on a cache miss goes through the same parser and is not counted,
+// because nothing reads the counter on that path. A non-zero warm figure is
+// therefore a floor on the real rate, and a zero warm figure does not prove the
+// live path saw none either.
+//
 // Module state, read-and-reset by the job route. Same shape as fmpUsage's
 // buffer and for the same reason: this must not cost a Redis round-trip per
-// parsed row.
+// parsed row. The route discards the counts on its error path -- see the note
+// there on why a failed run must not donate its drops to the next good one.
 let historyRowsParsed = 0;
 let historyRowsDroppedNoClose = 0;
 const historyDropSymbols = new Set<string>();
