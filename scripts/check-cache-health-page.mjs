@@ -13,6 +13,7 @@
 // write control still renders. All four fail silently and all four are checked.
 //
 //   node scripts/check-cache-health-page.mjs
+import ts from "typescript";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -221,6 +222,79 @@ check(
   /UPPER BOUND/.test(fs.readFileSync(path.join(ROOT, "lib/server/fmpUsage.ts"), "utf8")),
   "a Data Cache hit records a sample with no network request"
 );
+
+console.log("\n=== 5d. Meter vs dashboard reconciliation ===\n");
+// The meter says 14.72 GB and nothing has ever checked that against the only
+// number that bills. /api/debug/fmp-usage?dashboardGb= does the comparison; the
+// arithmetic is extracted and run here, because the route itself needs Redis and
+// a key and so is not exercisable from a check.
+const usageRouteSrc = fs.readFileSync(path.join(ROOT, "app/api/debug/fmp-usage/route.ts"), "utf8");
+const usageSf = ts.createSourceFile("route.ts", usageRouteSrc, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+let reconFn = null;
+const findRecon = (node) => {
+  if (ts.isFunctionDeclaration(node) && node.name?.text === "buildReconciliation") reconFn = node.getText(usageSf);
+  ts.forEachChild(node, findRecon);
+};
+findRecon(usageSf);
+
+if (!reconFn) {
+  check("buildReconciliation is extractable", false, "measuring nothing");
+} else {
+  const reconJs = ts.transpileModule(
+    `const GB = 1024 ** 3;\n${reconFn}\nexport { buildReconciliation };`,
+    { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext } }
+  ).outputText;
+  const { buildReconciliation } = await import(
+    `data:text/javascript;base64,${Buffer.from(reconJs).toString("base64")}`
+  );
+
+  const GB = 1024 ** 3;
+  const rep = (opts) => ({
+    days: 30,
+    daysWithData: 10,
+    totalWireBytes: 5 * GB,
+    totalDecodedBytes: 5 * GB,
+    ...opts,
+  });
+
+  check(
+    "no dashboard figure -> says so, does not invent a ratio",
+    buildReconciliation(rep({}), NaN).done === false
+  );
+  // THE FAILURE THIS GUARDS. The meter started on 2026-08-22, so for weeks a
+  // 30-day dashboard figure sits against a 2-day meter reading. Comparing the
+  // raw totals gives ~0.07 and the false conclusion "the meter is catastrophically
+  // undercounting" -- a wrong answer of exactly the kind that gets acted on.
+  check(
+    "2 days of counters vs a 30-day dashboard figure -> refuses, does not compare",
+    buildReconciliation(rep({ daysWithData: 2 }), 14.72).done === false
+  );
+  check(
+    "...and it is normalised PER DAY once there is enough, not total vs total",
+    (() => {
+      // 10 covered days at 0.5 GB/day; dashboard 15 GB over 30 days = 0.5 GB/day.
+      const r = buildReconciliation(rep({ daysWithData: 10, totalWireBytes: 5 * GB }), 15);
+      return r.done === true && Math.abs(r.wireRatio - 1) < 0.01;
+    })(),
+    "raw totals would read 5 vs 15 and call it a 3x undercount"
+  );
+  check(
+    "a meter running high reads as EXPECTED, not as a fault",
+    /EXPECTED direction/.test(
+      buildReconciliation(rep({ totalWireBytes: 15 * GB, totalDecodedBytes: 15 * GB }), 15).verdict
+    ),
+    "cached responses record a sample with no network request"
+  );
+  check(
+    "a meter running LOW is flagged as the surprising direction",
+    /surprising/.test(buildReconciliation(rep({ totalWireBytes: 1 * GB, totalDecodedBytes: 1 * GB }), 15).verdict),
+    "something is calling FMP without going through fmpFetch"
+  );
+  check(
+    "it names which layer is closer rather than asserting one",
+    buildReconciliation(rep({ totalWireBytes: 5 * GB, totalDecodedBytes: 9 * GB }), 15).closerLayer === "wire"
+  );
+}
 
 console.log("\n=== 6. Unlinked and unindexed ===\n");
 check("noindex + nofollow", /index:\s*false/.test(code) && /follow:\s*false/.test(code));
