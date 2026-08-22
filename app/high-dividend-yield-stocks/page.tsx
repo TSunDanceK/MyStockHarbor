@@ -41,6 +41,8 @@ const config: PickerResultConfig = {
   tone: "green",
   kind: "preset",
   presetPredicates: [{ kind: "number", field: "divYield", min: 4 }],
+  // Ordered by the same field that defines the set. See /low-pe-stocks.
+  orderBy: { field: "divYield", dir: "desc", label: "Dividend Yield" },
   maxItems: 36,
   // Yield alone is close to meaningless (see the body copy). The Dividends tab
   // is where payout ratio, dividend growth and frequency sit beside it, which is
