@@ -8,7 +8,8 @@ import Link from "next/link";
 // both belong to an unused local copy (eslint reports scoreNews, trendLabel
 // and scoreEarnings here as never used). The gauge must be typed against the
 // type that actually reaches it, not the lookalike declared below.
-import { getStockNewsBaseData, type NewsScoreResult as LiveNewsScore } from "@/lib/stock-news-data";
+import { getStockNewsBaseData, isEarningsNewsItem, type NewsScoreResult as LiveNewsScore } from "@/lib/stock-news-data";
+import { keywordHits } from "@/lib/keywordMatch";
 import {
   buildWhyItMatters,
   buildBeyondHeadline,
@@ -122,10 +123,6 @@ function compactSource(source: string | null) {
   return source.replace(/\s+News$/i, "").trim();
 }
 
-function keywordHits(text: string, words: string[]) {
-  const lower = text.toLowerCase();
-  return words.some((word) => lower.includes(word));
-}
 
 function buildLeadSummary(args: {
   symbol: string;
@@ -142,6 +139,12 @@ function buildLeadSummary(args: {
   return `${lead} is currently showing a ${newsScore.label.toLowerCase()} headline tone${backdrop}. The latest news flow is being framed here as context rather than prediction, so beginners can quickly see whether headlines are helping, hurting, or complicating the chart story. Earnings tone is currently ${earningsScore.label.toLowerCase()}.`;
 }
 
+// NOT a duplicate of the lib's isLowValueNewsItem, despite the shared name: the
+// pattern list and the source list are both genuinely different (this one
+// blocks "forecast 2025"/"how to buy" and financialcontent/capital.com; the
+// lib's blocks "52-week"/"stocks to watch" and marketbeat/etfdailynews). Left
+// alone on purpose -- collapsing them would change what this page shows, which
+// is a content decision, not the matcher fix. Flagged rather than merged.
 function isLowValueNewsItem(item: NewsItem) {
   const title = item.title.toLowerCase();
   const source = (item.source ?? "").toLowerCase();
@@ -387,14 +390,13 @@ function DetailedNewsSection({
   );
 }
 
-function isEarningsHeadline(item: NewsItem) {
-  const text = `${item.title} ${item.description ?? ""}`.toLowerCase();
-  return keywordHits(text, ["earnings","eps","results","quarter","quarterly","revenue","guidance","profit","loss","margin","q1","q2","q3","q4"]);
-}
-
 function getEarningsNewsItems(news: NewsItem[]) {
   return [...news]
-    .filter((item) => !isLowValueNewsItem(item) && isEarningsHeadline(item))
+    // isEarningsNewsItem, not a local isEarningsHeadline. The local copy held a
+    // character-for-character duplicate of the lib's 14-word list, so THIS page
+    // -- the one where the misclassified stories were actually seen -- would
+    // have kept its own broken matcher if only the lib had been fixed.
+    .filter((item) => !isLowValueNewsItem(item) && isEarningsNewsItem(item))
     .sort((a, b) => {
       const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
       const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
