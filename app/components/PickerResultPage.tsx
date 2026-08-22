@@ -83,6 +83,24 @@ export type PickerResultConfig = {
   // presetFilters otherwise: the page ships the full universe with these
   // already applied, and the visitor can loosen or combine them in place.
   presetPredicates?: Predicate[];
+  // The single quantity this page's rows are ORDERED by, as opposed to the
+  // condition that decides which rows are on it. Separating the two is the
+  // whole point: membership stays a judgement, ordering becomes one named
+  // number that a reader can see in a column and check for themselves.
+  //
+  // Without this a page ships in `reasons.length` order -- how many of 25
+  // tracked technical conditions a stock happens to also meet -- which on a
+  // page called Lowest P/E is not an imprecise ranking, it is a ranking of a
+  // different subject. See claude/picker-ordering-classification-2026-08-22.md
+  // for which pages have a defensible key and which do not.
+  //
+  // `field` is resolved through valueForPredicateField, the same accessor the
+  // membership predicates use, so the set and the order can never disagree
+  // about what a field means. `label` is the human name of the quantity and is
+  // what makes the ordering checkable rather than asserted.
+  //
+  // WHERE THIS IS APPLIED MATTERS AND IS NOT OBVIOUS -- see applyOrderBy.
+  orderBy?: { field: keyof ResultEntry; dir: "asc" | "desc"; label: string };
   // "allSymbols" pages: show the whole list on load instead of hiding until a
   // condition is checked (used by the plain "All Stocks" / Stock Screener page).
   showAllImmediately?: boolean;
@@ -854,6 +872,86 @@ function valueForPredicateField(entry: ResultEntry, field: string): unknown {
     : undefined;
 }
 
+// Orders `entries` in place by config.orderBy, and returns what it found so the
+// caller can say whether the sort did anything.
+//
+// THE TIMING IS THE ENTIRE DIFFICULTY, and it is invisible in the source.
+//
+// The obvious home for this is buildEntries, which is where the existing
+// score-descending sorts live (the three `.sort((a, b) => (b.score ?? 0) ...`
+// calls). Putting it there does not work, and does not LOOK like it does not
+// work. buildEntries runs at the top of getPickerData, and the fundamentals it
+// would need are attached to the entries AFTERWARDS, by the extended-data block
+// further down: peRatio lands there, then divYield, then divGrowth. At
+// buildEntries time every one of those properties is `undefined` on every row.
+//
+// A comparator over undefined returns 0 for every pair, and Array#sort is
+// stable, so the array comes back in exactly the order it went in. Nothing
+// throws, nothing logs, the build is green, the page renders, and the ordering
+// silently does not exist. That is the same family as the inert
+// `export const revalidate` in claude/traps/inert-route-revalidate.md: a
+// correct-looking, correctly-typed declaration with no effect and no symptom.
+//
+// So it runs at the END of getPickerData -- after the fundamentals are on the
+// entries, and BEFORE seoEntries is derived. That second half matters too:
+// seoEntries is `entries.filter(...)`, which snapshots the order at the moment
+// it is called, so sorting after it would leave the JSON-LD ItemList in one
+// order and the rendered page in another.
+function applyOrderBy(entries: ResultEntry[], config: PickerResultConfig) {
+  const orderBy = config.orderBy;
+  if (!orderBy) return null;
+
+  const valueOf = (entry: ResultEntry) => {
+    const raw = valueForPredicateField(entry, orderBy.field as string);
+    return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
+  };
+
+  const factor = orderBy.dir === "asc" ? 1 : -1;
+  let withValue = 0;
+
+  const keyed = entries.map((entry) => {
+    const value = valueOf(entry);
+    if (value !== null) withValue++;
+    return { entry, value };
+  });
+
+  // If NOTHING carries the key, do not sort at all -- leave the order exactly
+  // as it came in and let the caller warn.
+  //
+  // This is not a micro-optimisation, it is the failure path. The block that
+  // attaches these fundamentals is wrapped in `try { } catch { /* extended data
+  // is optional */ }`, so an FMP outage silently produces entries with no
+  // peRatio on any row. Without this guard every comparison would fall through
+  // to the alphabetical tiebreak and the page would ship ordered A-Z by ticker
+  // -- not merely unsorted, but confidently sorted by the wrong thing, with the
+  // existing score order destroyed on the way. Measured, not reasoned: the
+  // control in scripts/check-orderby.mjs reordered a 13-row fixture to
+  // AAPL,BAC,C,F,GM,... before this guard existed.
+  //
+  // Degrading to "the order we already had" is the honest answer to "the
+  // quantity I rank by is unavailable".
+  if (withValue === 0) return { total: keyed.length, withValue };
+
+  keyed.sort((a, b) => {
+    // Missing sorts to the BOTTOM in both directions -- it is an absence, not a
+    // small number and not a large one. Ranking a stock with no P/E as the
+    // cheapest in the market is the kind of claim this whole change exists to
+    // stop making.
+    if (a.value === null && b.value === null) return a.entry.symbol.localeCompare(b.entry.symbol);
+    if (a.value === null) return 1;
+    if (b.value === null) return -1;
+    if (a.value !== b.value) return factor * (a.value - b.value);
+    // Ties are real and are kept alphabetical, matching the tiebreak the score
+    // sorts in buildEntries already use.
+    return a.entry.symbol.localeCompare(b.entry.symbol);
+  });
+
+  entries.length = 0;
+  entries.push(...keyed.map((k) => k.entry));
+
+  return { total: keyed.length, withValue };
+}
+
 async function getPickerData(config: PickerResultConfig) {
   try {
     // Read the pickers payload in-process (the same Redis-cached builder the
@@ -998,6 +1096,28 @@ async function getPickerData(config: PickerResultConfig) {
       // extended data is optional
     }
 
+    // Order by this page's declared key, now that the fundamentals it reads are
+    // actually on the entries, and before seoEntries snapshots the order. See
+    // applyOrderBy for why both halves of that sentence are load-bearing.
+    const ordered = applyOrderBy(entries, config);
+
+    // A declared ordering that finds its key on NOTHING is inert, and inert is
+    // exactly how this shipped the first time. Nothing else would say so: the
+    // page renders, the build is green, and the rows come back in whatever
+    // order they were already in.
+    //
+    // This is the cheap monitor from claude/traps/return-type-cannot-express-failure.md
+    // -- an assertion that is almost never legitimately true costs one log line
+    // and catches failures no error path will. A page declaring `orderBy` on a
+    // field none of its stocks carry is never a legitimate state; it means the
+    // field name is wrong, or the sort has drifted back above the code that
+    // populates it.
+    if (ordered && ordered.withValue === 0 && ordered.total > 0) {
+      console.warn(
+        `[pickers] ${config.href}: orderBy declared on "${String(config.orderBy?.field)}" but 0 of ${ordered.total} entries carry it — the ordering is inert`
+      );
+    }
+
     // On any page that ships the full universe with its own condition seeded
     // client-side (see buildEntries), that condition still has to be applied
     // here for the two things decided server-side and not re-derivable on the
@@ -1076,20 +1196,34 @@ function isEarningsPickerPage(config: PickerResultConfig) {
 // until someone names its key. That is the direction that fails safe: a missing
 // position understates, an unearned one asserts a ranking that is not there.
 //
-// Worth knowing when this list is next edited: of the entries below, only the
-// two buy/sell-signal pages currently order by a quantity they also DISPLAY --
-// the signal count is the sort key, the Score pill and the "N of 9 bullish
-// conditions met" note, all the same integer. The rest still sort by
-// `reasons.length`, a count of 25 unrelated technical conditions, which on e.g.
-// a dividend page is an ordering by a different subject. They keep their
-// positions only until that is fixed; they have not earned them yet.
+// Worth knowing when this list is next edited: an entry here is only honest
+// once that page orders by a quantity it also DISPLAYS. Five now do.
+//
+//   /low-pe-stocks, /high-dividend-yield-stocks, /dividend-growth-stocks
+//       declare `config.orderBy` and are sorted by that field, which is also a
+//       sortable column in the results table.
+//   /top-stocks-with-buy-signals, /top-stocks-with-sell-signals
+//       order by the signal count, which is also the Score pill and the
+//       "N of 9 bullish conditions met" note -- one integer, three surfaces.
+//
+// The rest still sort by `reasons.length`, a count of 25 unrelated technical
+// conditions, which on e.g. a breakout page is an ordering by a different
+// subject. They keep their positions only until that is fixed; they have not
+// earned them yet. Giving one of them a real key means adding `orderBy` to its
+// config -- not editing this list, which it is already on.
 const ORDERED_PICKER_HREFS = new Set<string>([
-  // A -- key already computed and already a shown column
+  // A -- key declared via config.orderBy and shown as a column
   "/low-pe-stocks",
   "/high-dividend-yield-stocks",
   "/dividend-growth-stocks",
+  // A -- key exists and is already a shown column, but no orderBy yet. Its key
+  // is peRatio ascending, identical to /low-pe-stocks; it was left out of that
+  // pass only because it is in NOINDEX_PICKER_PAGES, so its structured data
+  // reaches nobody and it was the cheapest thing to defer. One line when wanted.
   "/cheap-tech-stocks",
-  // A -- key already computed, needs carrying through to the entry
+  // A -- key already computed in pickersBuilder, needs carrying through to the
+  // entry before an orderBy can name it (the boolean survives, the number that
+  // produced it is discarded).
   "/all-time-high-breakout-stocks",
   "/3-month-high-breakout-stocks",
   "/volume-spike-stocks",
