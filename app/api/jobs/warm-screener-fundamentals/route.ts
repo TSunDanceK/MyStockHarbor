@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { refreshScreenerFundamentals } from "../../../../lib/server/screenerFundamentals";
+import { recordJobRun } from "../../../../lib/server/jobRuns";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,6 +47,12 @@ export async function GET(req: NextRequest) {
   const { symbols, ...summary } = result;
   const payload = { ...summary, symbolsReturned: symbols.length };
   console.log("[warm-screener-fundamentals]", JSON.stringify(payload));
+  await recordJobRun("warm-screener-fundamentals", result.ok, {
+    rows: result.rows,
+    cached: result.cached,
+    reason: result.reason ?? null,
+    status: result.status ?? null,
+  });
 
   // 200 even on a failed refresh, with ok:false in the body. A 5xx here would
   // make Vercel's cron surface mark the job failed for something that is

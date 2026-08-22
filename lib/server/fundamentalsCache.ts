@@ -9,6 +9,7 @@
 // claude/picker-pages-isr-2026-08-20.md.
 import { Redis } from "@upstash/redis";
 import { fmpFetch, flushFmpUsage } from "./fmpUsage";
+import { claimStalest, deferSymbol, markRefreshed, registerSymbols } from "./stalenessQueue";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 
@@ -609,6 +610,11 @@ export async function warmFundamentals(symbols: string[]) {
       }
       if (profile.industry) {
         profileIndustriesFound++;
+        // Staleness bookkeeping. Only on a REAL industry: a profile that came
+        // back without one has not been refreshed in any sense the health page
+        // cares about, and scoring it as fresh would make a permanently empty
+        // symbol read green.
+        await markRefreshed("profile", [sym]);
       } else {
         // Asked, and FMP had no industry. Mark it so the next few runs spend
         // their budget on symbols that might actually yield one.
@@ -625,6 +631,12 @@ export async function warmFundamentals(symbols: string[]) {
         } catch {
           // fail open
         }
+        // Queue rule 1: defer, never exclude. Without this a symbol FMP has no
+        // industry for is permanently the stalest thing in the set and holds
+        // the front of the queue forever, so "do the stalest first" quietly
+        // becomes "retry the broken ones forever". Same window as the
+        // empty-marker above so the two cannot disagree.
+        await deferSymbol("profile", sym, PROFILE_EMPTY_TTL_SECONDS);
       }
     }
   }
@@ -644,10 +656,31 @@ export async function warmFundamentals(symbols: string[]) {
       // fail open -- start from the top, which is exactly the old behaviour
     }
   }
-  const rotated = rotateFrom(cleanSymbols, quoteOffset);
+  // STALEST-FIRST when the queue can answer, rotation when it cannot.
+  //
+  // The rotation is a good approximation of "cover everything eventually": it
+  // guarantees no symbol is skipped forever, but it spends calls in list order
+  // regardless of what actually went stale. The staleness set knows, so ask it
+  // (spec, "Shared plumbing" -- the warm job pops the stalest N).
+  //
+  // THE FALLBACK IS NOT DECORATION. On the deploy that ships this the set is
+  // empty, and it stays partial until a few runs have populated it. Switching
+  // unconditionally would mean a run that quotes nothing, on the job whose
+  // coverage this whole line of work exists to fix -- a fix that breaks the
+  // thing it fixes on the way in. So the set is used only when it can order
+  // essentially the whole universe, and the rotation carries it until then.
+  const stalestFirst = await claimStalest("fundamentals", cleanSymbols.length);
+  const known = new Set(stalestFirst);
+  const useStalest = stalestFirst.length >= Math.floor(cleanSymbols.length * 0.9);
+  // Anything the queue has not heard of yet goes first: never-seen beats
+  // long-unrefreshed, and it keeps the order a permutation of the universe
+  // rather than a subset of it.
+  const quoteOrder = useStalest
+    ? [...cleanSymbols.filter((s) => !known.has(s)), ...stalestFirst.filter((s) => cleanSymbols.includes(s))]
+    : rotateFrom(cleanSymbols, quoteOffset);
 
   const { quotes: quoteMap, consumed: quotesConsumed, batchQuoteAvailable } =
-    await fetchQuoteFundamentals(rotated, apiKey, wait);
+    await fetchQuoteFundamentals(quoteOrder, apiKey, wait);
 
   // Advance by POSITIONS attempted, not quotes returned -- see the note on
   // fetchQuoteFundamentals.
@@ -708,6 +741,18 @@ export async function warmFundamentals(symbols: string[]) {
     if (cachedProfiles.get(sym)?.industry || screenerFund.get(sym)?.industry) industryKnown++;
   }
 
+  // Staleness bookkeeping for the health page and for future stalest-first
+  // selection. registerSymbols is `nx`, so calling it with the whole universe
+  // every run seeds newcomers at score 0 (never refreshed, sorts to the front,
+  // counts as a coverage gap) without ever overwriting a real refresh time.
+  //
+  // Without this the set would only ever contain symbols that already
+  // succeeded, so a dataset missing half the universe would report 100% fresh
+  // on the half it has -- coverage that cannot see what is absent.
+  await registerSymbols("fundamentals", cleanSymbols);
+  await registerSymbols("profile", cleanSymbols);
+  if (quoteMap.size) await markRefreshed("fundamentals", [...quoteMap.keys()]);
+
   // Write the buffered FMP byte samples once, at the end, rather than a Redis
   // round-trip per FMP response. This run makes ~477 calls and already spends
   // its full 90s wait budget, so per-call writes would have made the meter a
@@ -738,6 +783,11 @@ export async function warmFundamentals(symbols: string[]) {
     quotesFetched: quoteMap.size,
     // Where the rotation started and where it left off. Two consecutive runs
     // reporting the same pair means the offset is not advancing.
+    // Which selection actually ran. Without this, "the staleness queue is
+    // live" is an assumption rather than an observation -- and a silently
+    // never-satisfied condition is how an inert feature looks from outside.
+    quoteSelection: useStalest ? "stalest-first" : "rotation",
+    quoteQueueSize: stalestFirst.length,
     quoteOffset,
     quoteOffsetNext: nextQuoteOffset,
     quotesConsumed,
