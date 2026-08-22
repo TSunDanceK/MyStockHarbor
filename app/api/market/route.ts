@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fmpFetch } from "@/lib/server/fmpUsage";
 import { Redis } from "@upstash/redis";
 import {
   ensureQualifiedHistory,
@@ -782,7 +783,7 @@ async function fetchSingleQuote(symbol: string, apiKey: string) {
     symbol
   )}&apikey=${encodeURIComponent(apiKey)}`;
 
-  const res = await fetch(url, {
+  const res = await fmpFetch(url, {
     cache: "no-store",
     headers: {
       accept: "application/json,text/plain;q=0.9,*/*;q=0.8",

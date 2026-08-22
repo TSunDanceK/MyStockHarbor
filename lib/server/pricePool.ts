@@ -8,6 +8,7 @@
 // identical misses inside one render pass. Same fix as historyCache.ts; see
 // claude/picker-pages-isr-2026-08-20.md.
 import { Redis } from "@upstash/redis";
+import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 
@@ -245,7 +246,7 @@ async function fetchStableQuote(sym: string, apiKey: string): Promise<QuoteLite 
     const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(
       sym
     )}&apikey=${encodeURIComponent(apiKey)}`;
-    const res = await fetch(url, { next: { revalidate: 300 }, headers: { accept: "application/json" } });
+    const res = await fmpFetch(url, { next: { revalidate: 300 }, headers: { accept: "application/json" } });
     if (!res.ok) return null;
     const json = await res.json().catch(() => null);
     const row = (Array.isArray(json) ? json[0] : json) as Record<string, unknown> | null;
@@ -271,7 +272,7 @@ async function fetchPeTtm(sym: string, apiKey: string): Promise<number | null> {
     const url = `https://financialmodelingprep.com/stable/ratios-ttm?symbol=${encodeURIComponent(
       sym
     )}&apikey=${encodeURIComponent(apiKey)}`;
-    const res = await fetch(url, { next: { revalidate: 300 }, headers: { accept: "application/json" } });
+    const res = await fmpFetch(url, { next: { revalidate: 300 }, headers: { accept: "application/json" } });
     if (!res.ok) return null;
     const json = await res.json().catch(() => null);
     const row = (Array.isArray(json) ? json[0] : json) as Record<string, unknown> | null;
@@ -303,7 +304,7 @@ async function fetchMoverBucket(
     const url = `https://financialmodelingprep.com/stable/${path}?apikey=${encodeURIComponent(
       apiKey
     )}`;
-    const res = await fetch(url, { next: { revalidate: 300 }, headers: { accept: "application/json" } });
+    const res = await fmpFetch(url, { next: { revalidate: 300 }, headers: { accept: "application/json" } });
     if (!res.ok) return out;
     const json = await res.json().catch(() => null);
     if (!Array.isArray(json)) return out;

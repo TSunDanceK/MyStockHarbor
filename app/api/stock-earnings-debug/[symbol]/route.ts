@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { fmpFetch } from "@/lib/server/fmpUsage";
 type Props = {
   params: Promise<{ symbol: string }>;
 };
@@ -7,7 +8,7 @@ type Props = {
 const FMP_API_KEY = process.env.FMP_API_KEY;
 
 async function fetchJson(url: string) {
-  const response = await fetch(url, {
+  const response = await fmpFetch(url, {
     next: { revalidate: 0 },
   });
 

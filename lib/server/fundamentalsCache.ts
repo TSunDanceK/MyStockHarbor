@@ -8,6 +8,7 @@
 // identical misses inside one render pass. Same fix as historyCache.ts; see
 // claude/picker-pages-isr-2026-08-20.md.
 import { Redis } from "@upstash/redis";
+import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 
@@ -446,7 +447,7 @@ async function fetchQuoteFundamentals(
         const url = `https://financialmodelingprep.com/stable/batch-quote?symbols=${encodeURIComponent(
           group.join(",")
         )}&apikey=${encodeURIComponent(apiKey)}`;
-        const res = await fetch(url, {
+        const res = await fmpFetch(url, {
           next: { revalidate: 300 },
           headers: { accept: "application/json" },
         });
@@ -480,7 +481,7 @@ async function fetchQuoteFundamentals(
           const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(
             sym
           )}&apikey=${encodeURIComponent(apiKey)}`;
-          const res = await fetch(url, {
+          const res = await fmpFetch(url, {
             next: { revalidate: 300 },
             headers: { accept: "application/json" },
           });
@@ -504,7 +505,7 @@ async function fetchProfile(sym: string, apiKey: string): Promise<ProfileLite | 
     const url = `https://financialmodelingprep.com/stable/profile?symbol=${encodeURIComponent(
       sym
     )}&apikey=${encodeURIComponent(apiKey)}`;
-    const res = await fetch(url, { next: { revalidate: 300 }, headers: { accept: "application/json" } });
+    const res = await fmpFetch(url, { next: { revalidate: 300 }, headers: { accept: "application/json" } });
     if (!res.ok) return null;
     const json = await res.json().catch(() => null);
     const row = Array.isArray(json) ? json[0] : json;

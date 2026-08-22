@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { fmpFetch } from "./fmpUsage";
 import { timingCache, beginTiming } from "./timing";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 
@@ -150,7 +151,7 @@ async function fetchQuoteFromFmp(symbol: string): Promise<Quote> {
     // in unstable_cache (as lib/youtube.ts does for its own no-store fetches)
     // is the fix, and it is a freshness decision -- quotes have a 60s TTL here
     // -- so it is deliberately not made in an outage-recovery PR.
-    const res = await fetch(url, { cache: "no-store", headers: { accept: "application/json" } });
+    const res = await fmpFetch(url, { cache: "no-store", headers: { accept: "application/json" } });
 
     if (!res.ok) throw new Error(`FMP quote failed: ${res.status}`);
 

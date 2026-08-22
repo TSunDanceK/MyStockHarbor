@@ -1,5 +1,6 @@
 import { unstable_cache } from "next/cache";
 
+import { fmpFetch } from "@/lib/server/fmpUsage";
 import { getSectorBySlug, type SectorDef } from "@/lib/sectors";
 import { getSectorConstituents, getSectorIndex } from "@/lib/server/sectorUniverse";
 import { hasFmpCapacity, reserveFmpCallSlot } from "@/lib/server/historyCache";
@@ -205,7 +206,7 @@ async function fetchFmpSectorNews(symbols: string[]): Promise<NewsItem[]> {
     const url = `https://financialmodelingprep.com/stable/news/stock?symbols=${encoded}&limit=${SECTOR_NEWS_LIMIT_PER_CHUNK}&apikey=${key}`;
 
     try {
-      const res = await fetch(url, { next: { revalidate: 900 } });
+      const res = await fmpFetch(url, { next: { revalidate: 900 } });
       if (!res.ok) continue;
 
       const data = (await res.json()) as unknown;
