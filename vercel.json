@@ -33,8 +33,12 @@
       "schedule": "15 7 * * *"
     },
     {
+      "path": "/api/jobs/warm-screener-fundamentals",
+      "schedule": "50 6 * * *"
+    },
+    {
       "path": "/api/jobs/warm-fundamentals",
-      "schedule": "30 7 * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/jobs/warm-price-pool",

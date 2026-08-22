@@ -77,6 +77,23 @@ const SCREENER_FUND_TTL_SECONDS = 60 * 60 * 30; // 30h
 const PROFILE_EMPTY_KEY_PREFIX = "msh:pickers:profile-noindustry:v1:";
 const PROFILE_EMPTY_TTL_SECONDS = 60 * 60 * 24 * 7; // 7d
 
+// Where the quote stage stopped last run, as an index into the universe.
+//
+// The quote stage cannot finish in one run: stable/batch-quote answers 402 on
+// this plan (see fetchQuoteFundamentals), so it falls back to ONE FMP call per
+// symbol, and the shared 90s wait budget runs out partway. Measured 2026-08-22:
+// quotesFetched 357 of 755, waitedMs 90000 -- the entire budget spent.
+//
+// It restarted from index 0 every run, so it re-fetched the same head of the
+// list every day and the tail beyond the cut was NEVER covered -- not "covered
+// slowly", never. Raising the cadence without this would just redo the same
+// head more often.
+//
+// Deliberately NOT a TTL'd key: the offset is progress, not a cache. Losing it
+// costs a restart from the top rather than a wrong answer, so it fails safe,
+// but there is no reason to expire it.
+const QUOTE_OFFSET_KEY = "msh:pickers:quote-offset:v1";
+
 // Bounds so a single warm run can never run away with the FMP budget.
 const QUOTE_CHUNK_SIZE = 50; // batch-quote symbols per FMP call
 // Cap on fresh profile fetches per run.
@@ -358,12 +375,61 @@ export async function readCachedScreenerFundamentals(
 // Batch quote -> marketCap + PE for many symbols in one FMP call. Falls back to
 // per-symbol stable/quote for a chunk whose batch call fails (so this still
 // works on FMP plans without the batch endpoint).
+/**
+ * The universe reordered to start at `offset` and wrap around.
+ *
+ * ROTATE, do not slice. A slice would stop at the end of the list and a run
+ * with budget to spare would sit idle rather than wrapping onto the head, so
+ * the last window before the wrap would always be short-changed. Rotating keeps
+ * every symbol eligible in a single run and lets the offset decide only where
+ * the covering STARTS.
+ *
+ * The modulo is normalised for negative and non-integer input because the
+ * offset comes back from Redis, where anything could have been written.
+ */
+function rotateFrom<T>(items: T[], offset: number): T[] {
+  if (!items.length) return items;
+  const n = items.length;
+  const start = (((Math.floor(offset) || 0) % n) + n) % n;
+  return start === 0 ? items : [...items.slice(start), ...items.slice(0, start)];
+}
+
+/**
+ * Where the next run should start.
+ *
+ * `consumed <= 0` returns the offset unchanged: a run starved before it
+ * attempted anything must not move the cursor, or it would skip a window that
+ * nothing ever covered.
+ */
+function advanceOffset(offset: number, consumed: number, length: number): number {
+  if (!length) return 0;
+  const base = (((Math.floor(offset) || 0) % length) + length) % length;
+  if (!Number.isFinite(consumed) || consumed <= 0) return base;
+  return (base + Math.floor(consumed)) % length;
+}
+
+/**
+ * Quote fundamentals for as many of `symbols` as the FMP budget allows, IN THE
+ * ORDER GIVEN, reporting how far down the list it got.
+ *
+ * `consumed` is the number of list POSITIONS attempted, not the number of
+ * successful quotes, and the caller advances its rotation offset by it. Those
+ * differ whenever a symbol 404s or returns an unparseable row, and counting
+ * successes instead would make the offset stall on a permanently bad ticker --
+ * re-attempting it every run and never reaching the symbols behind it. Position
+ * is what "where did I stop" means.
+ */
 async function fetchQuoteFundamentals(
   symbols: string[],
   apiKey: string,
   wait: WaitBudget
-): Promise<Map<string, { marketCap: number | null; peRatio: number | null }>> {
+): Promise<{
+  quotes: Map<string, { marketCap: number | null; peRatio: number | null }>;
+  consumed: number;
+  batchQuoteAvailable: boolean;
+}> {
   const out = new Map<string, { marketCap: number | null; peRatio: number | null }>();
+  let consumed = 0;
 
   // stable/batch-quote is not on every FMP plan -- it answers 402 on Starter,
   // which is what this project runs. One rejection is enough to know: stop
@@ -374,7 +440,7 @@ async function fetchQuoteFundamentals(
     let ok = false;
 
     if (batchAvailable) {
-      if (!(await awaitFmpCapacity(wait))) return out;
+      if (!(await awaitFmpCapacity(wait))) return { quotes: out, consumed, batchQuoteAvailable: batchAvailable };
       try {
         await reserveFmpCallSlot();
         const url = `https://financialmodelingprep.com/stable/batch-quote?symbols=${encodeURIComponent(
@@ -400,12 +466,15 @@ async function fetchQuoteFundamentals(
       } catch {
         ok = false;
       }
+      // One call covered the whole chunk, so the whole chunk is behind us.
+      if (ok) consumed += group.length;
     }
 
     if (!ok) {
       // Per-symbol fallback for this chunk.
       for (const sym of group) {
-        if (!(await awaitFmpCapacity(wait))) return out;
+        if (!(await awaitFmpCapacity(wait))) return { quotes: out, consumed, batchQuoteAvailable: batchAvailable };
+        consumed++;
         try {
           await reserveFmpCallSlot();
           const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(
@@ -420,13 +489,13 @@ async function fetchQuoteFundamentals(
           const row = Array.isArray(json) ? json[0] : json;
           if (row) out.set(sym, { marketCap: num(row?.marketCap), peRatio: num(row?.pe) });
         } catch {
-          // skip this symbol
+          // skip this symbol -- still consumed, see the `consumed` note above
         }
       }
     }
   }
 
-  return out;
+  return { quotes: out, consumed, batchQuoteAvailable: batchAvailable };
 }
 
 async function fetchProfile(sym: string, apiKey: string): Promise<ProfileLite | null> {
@@ -559,8 +628,36 @@ export async function warmFundamentals(symbols: string[]) {
     }
   }
 
-  // 2) market cap + PE for everyone.
-  const quoteMap = await fetchQuoteFundamentals(cleanSymbols, apiKey, wait);
+  // 2) market cap + PE, resuming where the last run stopped.
+  //
+  // The list is ROTATED rather than sliced, so a run that gets further than
+  // expected simply wraps onto the head again instead of stopping short. Every
+  // symbol is still eligible in a single run if the budget allows; the offset
+  // only decides where the covering starts.
+  let quoteOffset = 0;
+  if (redis) {
+    try {
+      const stored = Number(await redis.get<number>(QUOTE_OFFSET_KEY));
+      if (Number.isFinite(stored) && stored >= 0) quoteOffset = Math.floor(stored) % cleanSymbols.length;
+    } catch {
+      // fail open -- start from the top, which is exactly the old behaviour
+    }
+  }
+  const rotated = rotateFrom(cleanSymbols, quoteOffset);
+
+  const { quotes: quoteMap, consumed: quotesConsumed, batchQuoteAvailable } =
+    await fetchQuoteFundamentals(rotated, apiKey, wait);
+
+  // Advance by POSITIONS attempted, not quotes returned -- see the note on
+  // fetchQuoteFundamentals.
+  const nextQuoteOffset = advanceOffset(quoteOffset, quotesConsumed, cleanSymbols.length);
+  if (redis && quotesConsumed > 0) {
+    try {
+      await redis.set(QUOTE_OFFSET_KEY, nextQuoteOffset);
+    } catch {
+      // fail open -- worst case the next run re-covers this window
+    }
+  }
 
   // 3) write combined records for every symbol we have any data for.
   const now = new Date().toISOString();
@@ -610,10 +707,36 @@ export async function warmFundamentals(symbols: string[]) {
     if (cachedProfiles.get(sym)?.industry || screenerFund.get(sym)?.industry) industryKnown++;
   }
 
+  // Incomplete quote coverage must never be silent.
+  //
+  // Read this WITH quoteOffset/quoteOffsetNext, not alone: under rotation a
+  // partial run is expected by design, so this line firing is not by itself a
+  // fault -- `lapRuns` is the number to watch. What would be a fault is
+  // quotesConsumed staying at 0, or lapRuns not falling after the screener cron
+  // and the cadence change land.
+  if (quoteMap.size < cleanSymbols.length) {
+    const lapRuns = quotesConsumed > 0 ? Math.ceil(cleanSymbols.length / quotesConsumed) : Infinity;
+    console.warn(
+      `[fundamentals] quote coverage ${quoteMap.size}/${cleanSymbols.length} this run` +
+        ` — offset ${quoteOffset} -> ${nextQuoteOffset}, ${quotesConsumed} consumed,` +
+        ` ~${lapRuns === Infinity ? "never" : lapRuns} runs per full lap` +
+        `${batchQuoteAvailable ? "" : " (batch-quote unavailable on this plan — one call per symbol)"}`
+    );
+  }
+
   return {
     ok: true,
     universe: cleanSymbols.length,
     quotesFetched: quoteMap.size,
+    // Where the rotation started and where it left off. Two consecutive runs
+    // reporting the same pair means the offset is not advancing.
+    quoteOffset,
+    quoteOffsetNext: nextQuoteOffset,
+    quotesConsumed,
+    // Measured per run rather than assumed from the comment in
+    // fetchQuoteFundamentals: false means the 402 fallback is in force and the
+    // per-symbol path is the permanent cost, not a transient one.
+    batchQuoteAvailable,
     screenerCovered: screenerFund.size,
     // Symbols no source has an industry for, BEFORE deferring the ones FMP has
     // already been asked about. Reported alongside profileMisses so a large

@@ -84,6 +84,24 @@ const PROBES: Probe[] = [
     note: "wider net, same endpoint",
   },
   { id: "stock-list", path: "stock-list", note: "full symbol directory if available" },
+  // Decides whether warmFundamentals' quote stage is permanently one call per
+  // symbol or could be one call per 50.
+  //
+  // fetchQuoteFundamentals comments that stable/batch-quote answers 402 on this
+  // plan and falls back accordingly -- but that claim was never probed here,
+  // and a comment is not a measurement
+  // (claude/traps/grep-finds-the-comment-not-the-code.md is the same shape:
+  // prose standing in for the code's actual behaviour). If this returns 200 the
+  // fallback is costing ~50x the calls it needs to and the rotation offset is a
+  // workaround for a problem that does not exist; if it 402s, the offset is a
+  // permanent requirement. The paired single-symbol quote is the control that
+  // separates "batch is restricted" from "quotes are broken".
+  {
+    id: "batch-quote",
+    path: "batch-quote?symbols=AAPL,MSFT,NVDA,AVGO,ORCL",
+    note: "DECIDES the quote-stage cost model -- 402 here means one FMP call per symbol, permanently",
+  },
+  { id: "quote-single", path: "quote?symbol=AAPL", note: "CONTROL for batch-quote -- the per-symbol fallback path" },
   // Does the screener honour fund/ETF exclusion? The live universe picked up
   // AAGTX / AALTX / CFNAX -- five letters ending in X, the US mutual-fund
   // convention -- so the current filter (market cap + exchange + actively
