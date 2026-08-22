@@ -615,8 +615,23 @@ async function fetchFmpStockNews(symbol: string): Promise<NewsItem[]> {
 }
 
 export function isVideoOrLowQualitySource(item: NewsItem) {
-  const combined = `${item.source ?? ""} ${item.link} ${item.title}`.toLowerCase();
+  // THE IMAGE URL IS PART OF THE EVIDENCE, and leaving it out was a real miss.
+  // Reported live: a Motley Fool podcast held the third lead card on
+  // /stock/MU/news because the only place the word "Podcast" appeared was the
+  // article's IMAGE -- source, link and title were all clean. A filter that
+  // reads three of the four fields carrying the signal reads as "this is not a
+  // podcast" rather than "I did not look there"
+  // (claude/traps/measuring-the-wrong-layer.md).
+  //
+  // The cost, stated rather than discovered: a written article whose thumbnail
+  // happens to sit at a .../podcast-... path is now filtered too. That is the
+  // right side to err on for a lead card, and it is a small set.
+  const combined = `${item.source ?? ""} ${item.link} ${item.title} ${item.image ?? ""}`.toLowerCase();
 
+  // Substring, NOT keywordHits, and deliberately so. These are URL fragments,
+  // not English words: "youtube.com" and "podcasts.apple.com" have no useful
+  // word boundaries around them, and boundary-matching would stop catching
+  // both. keywordHits is for prose; this is for hosts and paths.
   return [
     "youtube.com",
     "youtu.be",
