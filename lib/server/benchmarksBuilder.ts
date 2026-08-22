@@ -12,6 +12,7 @@
 // module and stay perfectly consistent.
 
 import { Redis } from "@upstash/redis";
+import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { withRedisTimeout } from "./redisGuardTimeout";
 import { timingCache, beginTiming } from "./timing";
@@ -128,7 +129,7 @@ function getBenchDefs(scope: string) {
 async function fetchFmpQuote(symbol: string, apiKey: string): Promise<any | null> {
   try {
     const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(apiKey)}`;
-    const res = await fetch(url, {
+    const res = await fmpFetch(url, {
       cache: "no-store",
       headers: { accept: "application/json" },
     });

@@ -1,3 +1,5 @@
+import { fmpFetch } from "./fmpUsage";
+
 export type SymbolRow = {
   symbol: string;
   name: string;
@@ -98,7 +100,7 @@ async function fetchFmpSearch(path: string, query: string): Promise<SymbolRow[]>
   if (!apiKey || !query) return [];
 
   try {
-    const res = await fetch(
+    const res = await fmpFetch(
       `${FMP_BASE}/${path}?query=${encodeURIComponent(query)}&limit=50&apikey=${apiKey}`,
       { next: { revalidate: 86400 } }
     );

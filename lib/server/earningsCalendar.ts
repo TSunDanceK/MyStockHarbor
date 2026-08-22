@@ -60,6 +60,7 @@
 // every real quote call still waits on.
 
 import { Redis } from "@upstash/redis";
+import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { reserveFmpCallSlot } from "./historyCache";
 import { readPricePoolBulk } from "./pricePool";
@@ -405,7 +406,7 @@ async function fetchMonthRows(year: number, month: number): Promise<RawEarningsR
   const to = `${key}-${String(daysInMonth(year, month)).padStart(2, "0")}`;
 
   try {
-    const res = await fetch(
+    const res = await fmpFetch(
       `https://financialmodelingprep.com/stable/earnings-calendar?from=${from}&to=${to}&apikey=${apiKey}`,
       { next: { revalidate: MONTH_CACHE_MS / 1000 } }
     );
@@ -428,7 +429,7 @@ async function getNameMap(): Promise<Map<string, string>> {
   if (!apiKey) return nameMapCache?.map ?? new Map();
 
   try {
-    const res = await fetch(`https://financialmodelingprep.com/stable/stock-list?apikey=${apiKey}`, {
+    const res = await fmpFetch(`https://financialmodelingprep.com/stable/stock-list?apikey=${apiKey}`, {
       next: { revalidate: NAME_MAP_CACHE_MS / 1000 },
     });
     if (!res.ok) throw new Error(`stock-list failed: ${res.status}`);
@@ -602,7 +603,7 @@ async function quoteOne(symbol: string, bypassCap: boolean): Promise<QuoteResult
   }
 
   try {
-    const res = await fetch(
+    const res = await fmpFetch(
       `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(symbol)}&apikey=${apiKey}`,
       { next: { revalidate: QUOTE_REVALIDATE_SECONDS } }
     );

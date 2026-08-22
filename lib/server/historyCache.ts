@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { timingCache, beginTiming } from "./timing";
 
@@ -383,7 +384,7 @@ const url = `https://financialmodelingprep.com/stable/historical-price-eod/full?
   // route dynamic, and it dedupes a burst of identical misses inside one render
   // pass. It is deliberately far shorter than the Redis TTL, so Redis still
   // decides when this data is stale.
-  const res = await fetch(url, {
+  const res = await fmpFetch(url, {
     next: { revalidate: 300 },
     headers: {
       accept: "application/json,text/plain;q=0.9,*/*;q=0.8",

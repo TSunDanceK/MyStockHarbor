@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { fmpFetch } from "@/lib/server/fmpUsage";
 // Debug-only route (same shape as app/api/debug/earnings/[symbol]/route.ts)
 // to inspect the raw shape of FMP's IPO calendar response. FMP's own docs
 // pages don't expose a full field list/example for this endpoint from this
@@ -10,7 +11,7 @@ import { NextResponse } from "next/server";
 const FMP_API_KEY = process.env.FMP_API_KEY;
 
 async function fetchJson(url: string) {
-  const response = await fetch(url, { next: { revalidate: 0 } });
+  const response = await fmpFetch(url, { next: { revalidate: 0 } });
   const text = await response.text();
 
   try {

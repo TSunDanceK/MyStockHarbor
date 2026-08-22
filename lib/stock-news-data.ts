@@ -1,4 +1,5 @@
 import { unstable_cache } from "next/cache";
+import { fmpFetch } from "@/lib/server/fmpUsage";
 import { beginTiming } from "./server/timing";
 import {
   getAiNewsBriefs,
@@ -237,7 +238,7 @@ async function fetchFmpQuote(symbol: string): Promise<Quote | null> {
 
   try {
     const url = `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(apiKey)}`;
-    const res = await fetch(url, {
+    const res = await fmpFetch(url, {
       next: { revalidate: 3600 },
       headers: { accept: "application/json" },
     });
@@ -532,7 +533,7 @@ async function fetchFmpStockNews(symbol: string): Promise<NewsItem[]> {
 
   for (const url of endpoints) {
     try {
-      const res = await fetch(url, {
+      const res = await fmpFetch(url, {
         next: { revalidate: 900 },
       });
 

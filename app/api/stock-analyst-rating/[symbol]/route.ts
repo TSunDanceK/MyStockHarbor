@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fmpFetch } from "@/lib/server/fmpUsage";
 import { isUnwantedBot } from "@/lib/botid-guard";
 
 export const runtime = "nodejs";
@@ -51,7 +52,7 @@ function firstRow(value: unknown): Record<string, unknown> | null {
 
 async function fetchFmpJson<T>(url: string): Promise<T | null> {
   try {
-    const response = await fetch(url, { next: { revalidate: 60 * 60 * 12 } });
+    const response = await fmpFetch(url, { next: { revalidate: 60 * 60 * 12 } });
     if (!response.ok) return null;
     return (await response.json()) as T;
   } catch {
