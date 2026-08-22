@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { recordJobRun } from "../../../../lib/server/jobRuns";
 import { getWarmTargetSymbols } from "../../../../lib/server/warmTargets";
 import { warmStockData } from "../../../../lib/server/stockDataCache";
 
@@ -47,11 +48,15 @@ export async function GET(req: NextRequest) {
 
     const result = await warmStockData(symbols, Date.now());
     console.log("[warm-stock-data]", JSON.stringify(result));
+    await recordJobRun("warm-stock-data", result.ok !== false, {
+      targets: symbols.length,
+      written: result.written ?? null,
+      reason: result.reason ?? null,
+    });
     return NextResponse.json(result);
   } catch (error) {
-    return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "warm-stock-data failed" },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "warm-stock-data failed";
+    await recordJobRun("warm-stock-data", false, { error: message });
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

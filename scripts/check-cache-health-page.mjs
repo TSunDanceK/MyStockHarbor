@@ -45,6 +45,19 @@ const readCode = (rel) => codeOf(fs.readFileSync(path.join(ROOT, rel), "utf8"));
 
 const code = codeOf(src);
 
+// For "does it USE this symbol" questions, string literals are blanked too.
+//
+// The read-only check reads `!/\brecordJobRun\b/.test(code)` and is labelled
+// "does not import or call". Adding the words "this job does not call
+// recordJobRun" to the page's own help text failed it -- a true detection of
+// the wrong thing, since a mention in prose is neither an import nor a call.
+// Left as-is it would have forced the page to talk around the identifier it
+// needs to name, which is the check bending the code rather than guarding it.
+const codeNoStrings = code
+  .replace(/`(?:[^`\\]|\\.)*`/g, "``")
+  .replace(/"(?:[^"\\]|\\.)*"/g, '""')
+  .replace(/'(?:[^'\\]|\\.)*'/g, "''");
+
 let failures = 0;
 const check = (label, ok, detail = "") => {
   console.log(`  ${ok ? "PASS" : "FAIL"}  ${label}${detail ? ` — ${detail}` : ""}`);
@@ -106,7 +119,7 @@ const WRITE_SYMBOLS = [
   "recordJobRun",
 ];
 for (const sym of WRITE_SYMBOLS) {
-  check(`does not import or call ${sym}`, !new RegExp(`\\b${sym}\\b`).test(code));
+  check(`does not import or call ${sym}`, !new RegExp(`\\b${sym}\\b`).test(codeNoStrings));
 }
 check("no form, button or action element at all", !/<form|<button|"use server"|formAction/.test(code));
 
@@ -115,7 +128,7 @@ console.log("\n=== 4. Cheap: aggregates only, never a scan ===\n");
 // in a counter instead (spec, "The page must be cheap to load").
 const SCAN_SYMBOLS = ["readCachedFundamentalsBulk", "readPricePoolBulk", "getDailyHistoryBulk", "hgetall", "keys(", "scan("];
 for (const sym of SCAN_SYMBOLS) {
-  check(`does not use ${sym}`, !code.includes(sym));
+  check(`does not use ${sym}`, !codeNoStrings.includes(sym));
 }
 check(
   "reads only the aggregate helpers",
@@ -169,6 +182,53 @@ check(
   /export async function claimStalest\(\s*dataset: DatasetKey,\s*limit: number/.test(queue) &&
     !/MAX_PER_RUN|budget/.test(queue)
 );
+
+console.log("\n=== 8. Every declaration has a producer behind it ===\n");
+// THE FAILURE THIS SECTION EXISTS FOR, reported by the owner and reproduced.
+// The jobs table listed six jobs and only two called recordJobRun, so
+// warm-price-pool -- which runs every three minutes -- rendered "never run, or
+// older than the 8-day record TTL". An uninstrumented job read exactly like a
+// dead one: the failure this whole page was built to remove, reproduced inside
+// it. The same hole existed on the dataset side, where screenerFundamentals sat
+// in the registry with nothing writing to its queue.
+//
+// A registry entry is a DECLARATION. Nothing made the declaration true, so both
+// are now verified against the tree: a job declared instrumented must have a
+// recordJobRun call, and a registered dataset must have a markRefreshed or
+// registerSymbols call.
+const treeFiles = [];
+const collect = (dir) => {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.name.startsWith(".") || e.name === "node_modules") continue;
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) collect(full);
+    else if (/\.tsx?$/.test(e.name)) treeFiles.push(full);
+  }
+};
+collect(path.join(ROOT, "app"));
+collect(path.join(ROOT, "lib"));
+const tree = treeFiles.map((f) => codeOf(fs.readFileSync(f, "utf8"))).join("\n");
+
+const jobs = readCode("lib/server/jobRuns.ts");
+const jobEntries = [...jobs.matchAll(/"([a-z-]+)":\s*\{\s*label:[^}]*instrumented:\s*(true|false)/g)];
+check("the JOBS registry declares instrumentation per job", jobEntries.length >= 6, `${jobEntries.length} entries`);
+for (const [, job, flag] of jobEntries) {
+  const has = new RegExp(`recordJobRun\\(\\s*"${job}"`).test(tree);
+  if (flag === "true") {
+    check(`${job}: declared instrumented AND calls recordJobRun`, has);
+  } else {
+    check(`${job}: declared NOT instrumented, and indeed does not record`, !has);
+  }
+}
+
+const datasetKeys = [...readCode("lib/server/stalenessQueue.ts").matchAll(/^  ([a-zA-Z]+):\s*\{$/gm)].map((m) => m[1]);
+check("the DATASETS registry has entries", datasetKeys.length >= 6, datasetKeys.join(", "));
+for (const ds of datasetKeys) {
+  const has =
+    new RegExp(`markRefreshed\\(\\s*"${ds}"`).test(tree) ||
+    new RegExp(`registerSymbols\\(\\s*"${ds}"`).test(tree);
+  check(`${ds}: something actually writes to its queue`, has);
+}
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);

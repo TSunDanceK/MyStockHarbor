@@ -71,17 +71,17 @@ export const DATASETS = {
   pricePool: {
     label: "Price pool",
     ttlSeconds: 60 * 15,
-    note: "warm-price-pool, every 3 min — NOT yet on a staleness set",
+    note: "warm-price-pool, every 3 min",
   },
   dailyHistory: {
     label: "Daily history",
     ttlSeconds: 60 * 60 * 12,
-    note: "historyCache — NOT yet on a staleness set",
+    note: "historyCache, on every write",
   },
   earnings: {
     label: "Earnings",
     ttlSeconds: 60 * 60 * 24 * 7,
-    note: "warm-earnings — NOT yet on a staleness set",
+    note: "warm-earnings, daily 07:15",
   },
 } as const;
 
