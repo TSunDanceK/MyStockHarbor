@@ -148,6 +148,80 @@ check(
 const queue = readCode("lib/server/stalenessQueue.ts");
 check("every registered dataset declares its own ttlSeconds", (queue.match(/ttlSeconds:/g) ?? []).length >= 5);
 
+console.log("\n=== 5b. Seeded is not faulted, and cannot stay neutral forever ===\n");
+// registerSymbols scores the whole universe 0, so a freshly instrumented
+// dataset reads "every symbol never refreshed" -- and the first version painted
+// that red. That is the jobs table's own bug one level down: unobserved
+// rendering as failed. The fix has to cut BOTH ways, though: a neutral status a
+// dead dataset can sit in forever is the same lie inverted, so the escalation
+// is asserted alongside it.
+check(
+  'a distinct "seeded" status exists, separate from "unknown"',
+  /"seeded"/.test(code) && /type Status = [^;]*"seeded"/.test(code)
+);
+check(
+  "...with its own colour, not reusing a judged one",
+  /seeded:\s*"#/.test(code)
+);
+check(
+  "all-never no longer returns a bare fault",
+  !/if \(d\.never === d\.tracked && d\.tracked > 0\) \{\s*return \{ status: "fault"/.test(code)
+);
+check(
+  "...and DOES escalate to fault once past a multiple of its own TTL",
+  /seededAgoSec > d\.ttlSeconds \* 2/.test(code) && /status: "fault"[\s\S]{0,120}nothing has ever refreshed/.test(code),
+  "a neutral status nothing can escalate is a dead dataset reading calm forever"
+);
+check(
+  "missing seed time is reported as unjudgeable, not assumed fresh",
+  /d\.seededAtMs === null[\s\S]{0,200}seed time unknown/.test(code)
+);
+check(
+  "the seed timestamp is written nx, so it records the FIRST seed and never moves",
+  /p\.set\(seededKey\(dataset\), Date\.now\(\), \{ nx: true \}\)/.test(queue),
+  "a refreshing timestamp would keep the status permanently young"
+);
+check(
+  "staleness is judged against the OBSERVED population, not the tracked one",
+  /const observed = Math\.max\(0, d\.tracked - d\.never\)/.test(code) && /d\.stale \/ observed/.test(code),
+  "otherwise 'went stale' and 'not reached yet' are the same number"
+);
+check(
+  "...and a mostly-unobserved dataset still cannot read ok",
+  /d\.never \/ d\.tracked >= 0\.25[\s\S]{0,160}status: "warn"/.test(code)
+);
+
+console.log("\n=== 5c. The FMP rolling window, pinned ===\n");
+// Reviewed 2026-08-22 and correct as written. Pinned because the two plausible
+// "corrections" -- anchoring to a calendar month, or widening past the 31-day
+// key TTL -- both make it silently wrong, and both look like fixes.
+const usage = readCode("lib/server/fmpUsage.ts");
+check(
+  "readFmpUsage still defaults to a 30-day window",
+  /export async function readFmpUsage\(days = 30\)/.test(usage)
+);
+check(
+  "...clamped to 31, so it can never sum buckets the TTL has already dropped",
+  /Math\.min\(31,/.test(usage) && /FMP_BYTES_TTL_SECONDS = 60 \* 60 \* 24 \* 31/.test(usage)
+);
+check(
+  "...and it is a rolling window ending today, not a calendar month",
+  /d\.setUTCDate\(d\.getUTCDate\(\) - i\)/.test(usage) && !/getUTCMonth\(\)\s*,\s*1/.test(usage)
+);
+check(
+  "the page asks for 30 and does not override it with something else",
+  /readFmpUsage\(30\)/.test(code)
+);
+// The meter's real limitation, recorded where a reader of the totals will meet
+// it. fmpFetch cannot see a Next Data Cache hit, so the totals are an upper
+// bound on wire bytes rather than a measurement of them -- and quoting them as
+// a measurement is exactly the layer confusion this project has paid for before.
+check(
+  "fmpFetch says plainly that it counts call sites, not wire bytes",
+  /UPPER BOUND/.test(fs.readFileSync(path.join(ROOT, "lib/server/fmpUsage.ts"), "utf8")),
+  "a Data Cache hit records a sample with no network request"
+);
+
 console.log("\n=== 6. Unlinked and unindexed ===\n");
 check("noindex + nofollow", /index:\s*false/.test(code) && /follow:\s*false/.test(code));
 const sitemap = readCode("app/sitemap.ts");
