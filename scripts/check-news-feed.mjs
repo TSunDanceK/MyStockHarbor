@@ -251,9 +251,22 @@ check(
   "the news page asks for 5",
   /maxDetailedItems: 5/.test(codeOf(read("app/stock/[symbol]/news/page.tsx")))
 );
+// The empty-card check that stood here asserted `if (!earningsNews.length)
+// return null`. The card is gone entirely now (owner's call, 2026-08-22) --
+// there is no dedicated earnings source on this plan (all four candidates
+// measured 402/403), the structured snapshot above it already carries actual
+// EPS/revenue/surprise/margins, and the word-boundary matcher means the keyword
+// filter behind it would come up empty far more often. So the assertion is now
+// about ABSENCE rather than about an empty state.
+const newsPageSrc = read("app/stock/[symbol]/news/page.tsx");
 check(
-  "the empty earnings card renders nothing at all",
-  /if \(!earningsNews\.length\) return null;/.test(read("app/stock/[symbol]/news/page.tsx"))
+  "the earnings news card is gone, not merely emptied",
+  !/EarningsNewsSection/.test(newsPageSrc) && !/function getEarningsNewsItems/.test(newsPageSrc)
+);
+check(
+  "...and the structured earnings snapshot it sat beside is still rendered",
+  /<SharedLatestEarningsCard /.test(newsPageSrc),
+  "removing the headlines card must not take the actual EPS/revenue figures with it"
 );
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
