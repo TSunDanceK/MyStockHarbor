@@ -960,6 +960,71 @@ function isEarningsPickerPage(config: PickerResultConfig) {
   return config.href.includes("earnings");
 }
 
+// Which pages may emit `position` in their ItemList structured data -- i.e.
+// which ones are entitled to tell Google their rows are RANKED.
+//
+// The picker composites order stocks by differences smaller than the smallest
+// signal they can express: measured adjacent-rank gaps of 0.20-0.30 points in
+// the bands where the visible cut is actually made, against a +10/+20
+// `dynamicBoost` popularity term and a liquidity term that neither appears on
+// screen nor is mentioned anywhere. A 0.1% price tick reshuffles ranks
+// (#327, #328). `position` on such a list is a machine-readable assertion of a
+// precision that does not exist -- the same shape as the empty-ItemList
+// corollary in claude/traps/return-type-cannot-express-failure.md, where a
+// structured-data claim was the sharpest form of the harm because it is
+// stronger than the prose beside it.
+//
+// So membership stays a judgement and ordering becomes a single named quantity
+// SHOWN AS A COLUMN. Until a page's order is by such a column, it claims no
+// order: no `position`, and `itemListOrder: ItemListUnordered` saying so
+// explicitly rather than leaving a missing field to be inferred from.
+//
+// This round removes `position` from the C families only -- the pages with no
+// defensible single key at all. The A families (a clean single key already
+// computed) and the B families (a key exists but ordering by it would contradict
+// a view the code deliberately holds) are LEFT AS THEY ARE, and are the entries
+// below. Full per-page reasoning, and which key each A page should end up
+// ordering by, is in claude/picker-ordering-classification-2026-08-22.md.
+//
+// This is an ALLOWLIST, not a denylist, so a page added later claims nothing
+// until someone names its key. That is the direction that fails safe: a missing
+// position understates, an unearned one asserts a ranking that is not there.
+//
+// Worth knowing when this list is next edited: of the entries below, only the
+// two buy/sell-signal pages currently order by a quantity they also DISPLAY --
+// the signal count is the sort key, the Score pill and the "N of 9 bullish
+// conditions met" note, all the same integer. The rest still sort by
+// `reasons.length`, a count of 25 unrelated technical conditions, which on e.g.
+// a dividend page is an ordering by a different subject. They keep their
+// positions only until that is fixed; they have not earned them yet.
+const ORDERED_PICKER_HREFS = new Set<string>([
+  // A -- key already computed and already a shown column
+  "/low-pe-stocks",
+  "/high-dividend-yield-stocks",
+  "/dividend-growth-stocks",
+  "/cheap-tech-stocks",
+  // A -- key already computed, needs carrying through to the entry
+  "/all-time-high-breakout-stocks",
+  "/3-month-high-breakout-stocks",
+  "/volume-spike-stocks",
+  "/atr-spike-stocks",
+  "/stocks-above-50-day-moving-average",
+  "/stocks-below-50-day-moving-average",
+  "/stocks-trading-above-200-day-moving-average",
+  "/stocks-below-200-day-moving-average",
+  // A -- already ordering by the integer it shows
+  "/top-stocks-with-buy-signals",
+  "/top-stocks-with-sell-signals",
+  // B -- a clean key exists, but adopting it reverses a view the composite
+  // deliberately encodes (see the doc; e.g. scoreTargetBand buries a -60% stock
+  // on /stocks-down-20-from-all-time-highs). Left alone pending that call.
+  "/stocks-down-20-from-all-time-highs",
+  "/stocks-near-200-day-moving-average",
+  "/stocks-near-weekly-200-day-moving-average",
+  "/stocks-with-positive-last-earnings",
+  "/stocks-with-strong-earnings-growth",
+]);
+
 export default async function PickerResultPage({ config }: { config: PickerResultConfig }) {
   const { entries, seoEntries, updatedAt, universeSize, dynamicUniverseCount, foundCount } = await getPickerData(config);
   const initialVisibleCount = config.maxItems ?? 36;
@@ -1017,6 +1082,8 @@ export default async function PickerResultPage({ config }: { config: PickerResul
   // working and cannot be misread the same way. See
   // claude/preset-pages-universe-blocker-2026-08-04.md.
 
+  const claimsAnOrder = ORDERED_PICKER_HREFS.has(config.href);
+
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
@@ -1025,9 +1092,15 @@ export default async function PickerResultPage({ config }: { config: PickerResul
     description: config.description,
     mainEntity: {
       "@type": "ItemList",
+      // The ItemList itself stays either way -- "these stocks meet this page's
+      // condition" is a true statement and is the page's actual claim. Only the
+      // RANKING half is conditional. See ORDERED_PICKER_HREFS above.
+      ...(claimsAnOrder
+        ? {}
+        : { itemListOrder: "https://schema.org/ItemListUnordered" }),
       itemListElement: seoEntries.slice(0, 24).map((entry, index) => ({
         "@type": "ListItem",
-        position: index + 1,
+        ...(claimsAnOrder ? { position: index + 1 } : {}),
         item: { "@type": "Thing", name: `${entry.symbol} ${config.title}`, url: `https://www.mystockharbor.com${entry.stockHref}` },
       })),
     },
