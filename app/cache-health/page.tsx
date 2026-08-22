@@ -296,25 +296,53 @@ export default async function CacheHealthPage({
               <tr><th style={th}>Job</th><th style={th}>When</th><th style={th}>Outcome</th><th style={th}>Summary</th></tr>
             </thead>
             <tbody>
-              {jobs.map(({ job, label, instrumented, run }) => {
+              {jobs.map(({ job, label, instrumented, cron, intervalSeconds, run }) => {
                 // THREE outcomes, not two. An uninstrumented job reading the
                 // same as a dead one is the failure this page exists to remove,
                 // and the first version reproduced it: four of six jobs recorded
                 // nothing, so warm-price-pool -- which runs every three minutes
                 // -- rendered "never run".
-                const status: Status = !instrumented ? "unknown" : run ? (run.ok ? "ok" : "fault") : "unknown";
+                // AND A FOURTH, for the same reason there had to be a third.
+                // "No run recorded" reads identically for a job firing every
+                // three minutes and one firing once a day, and those mean
+                // opposite things. Observed live: warm-picker-universe and
+                // warm-earnings both read "no run recorded" when neither had
+                // failed and both were scheduled -- recordJobRun reached their
+                // routes at 19:18 UTC and their crons fire at 07:00 and 07:15,
+                // so neither had had an OPPORTUNITY to record. Silence shorter
+                // than the job's own cadence is not evidence of anything.
+                // A daily job's silence is expected for most of the day; a
+                // 3-minute job's silence never is. That threshold is the whole
+                // distinction, so it is one named constant rather than a
+                // condition repeated in the status and the detail.
+                const silenceIsExpected = !run && intervalSeconds >= 60 * 60 * 12;
+                const status: Status = !instrumented
+                  ? "unknown"
+                  : run
+                    ? run.ok
+                      ? "ok"
+                      : "fault"
+                    // Neutral only while a full cycle has not yet passed. A job
+                    // that should have recorded by now and has not is a fault,
+                    // not a pending one.
+                    : silenceIsExpected
+                      ? "seeded"
+                      : "fault";
                 const outcome = !instrumented
                   ? "not instrumented"
                   : run
                     ? run.ok
                       ? "ok"
                       : "failed"
-                    : "no run recorded";
+                    : "no run recorded yet";
                 const detail = !instrumented
                   ? "this job does not call recordJobRun — nothing is known about it, which is not the same as nothing happening"
                   : run
                     ? Object.entries(run.summary).map(([k, v]) => `${k} ${v}`).join(" · ")
-                    : "never run, or older than the 8-day record TTL";
+                    : `runs on \`${cron}\` (about every ${fmtDuration(intervalSeconds)}) — nothing recorded yet. ` +
+                      (silenceIsExpected
+                        ? "A daily job is silent for most of the day by design, so this means nothing until a full cycle has passed since the instrumentation shipped."
+                        : "A job on this cadence should have recorded by now.");
                 return (
                   <tr key={job}>
                     <td style={cell}>{label}</td>
