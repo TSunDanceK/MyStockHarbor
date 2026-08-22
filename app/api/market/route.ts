@@ -9,7 +9,7 @@ import {
   addToDynamicUniverse,
   removeFromDynamicUniverse,
 } from "../../../lib/server/dynamicUniverseCache";
-import { cacheScreenerFundamentals } from "../../../lib/server/fundamentalsCache";
+import { refreshScreenerFundamentals } from "../../../lib/server/screenerFundamentals";
 import { seedColdPricePoolRows } from "../../../lib/server/pricePool";
 
 export const runtime = "nodejs";
@@ -654,8 +654,14 @@ function shuffleArray<T>(arr: T[]) {
 //      with zero fund-like symbols, so this costs no coverage.
 const MASTER_LIST_SOURCE_VERSION = 3;
 
-const SCREENER_MIN_MARKET_CAP = 1_000_000_000;
-const SCREENER_LIMIT = 1000;
+// SCREENER_MIN_MARKET_CAP and SCREENER_LIMIT moved to
+// lib/server/screenerFundamentals.ts with the call itself. Values unchanged.
+//
+// COUPLING WORTH KNOWING: MASTER_LIST_SOURCE_VERSION above versions the shape
+// of the list those parameters produce, and it now lives in a different file
+// from the parameters. Changing the screener's filters there without bumping
+// the version here leaves every cached master list stale against filters that
+// no longer describe it.
 
 /**
  * Candidate symbols from FMP's company screener.
@@ -676,59 +682,30 @@ const SCREENER_LIMIT = 1000;
  *
  * STEP 2 (2026-08-06 follow-up session): this response also carries
  * marketCap/sector/industry/beta/lastAnnualDividend per row, which used to be
- * discarded entirely here. Now handed to cacheScreenerFundamentals so
+ * discarded entirely here. Handed to cacheScreenerFundamentals so
  * warmFundamentals (lib/server/fundamentalsCache.ts) can use it instead of a
  * per-symbol `profile` fetch for any symbol this screener call covers -- zero
  * extra FMP calls, since this fetch already happens.
+ *
+ * STEP 3 (2026-08-22): the call moved to lib/server/screenerFundamentals.ts and
+ * gained its own cron. "Since this fetch already happens" was the load-bearing
+ * assumption in the paragraph above, and it had quietly stopped being true --
+ * this route is not on a schedule and nothing was requesting it, so the cache
+ * drained to zero. Piggybacking a critical refresh on an incidental caller is
+ * only free while the caller keeps running.
  */
 async function fetchFmpScreenerSymbols(apiKey: string) {
-  await reserveFmpCallSlot();
-
-  const url =
-    `https://financialmodelingprep.com/stable/company-screener` +
-    `?marketCapMoreThan=${SCREENER_MIN_MARKET_CAP}` +
-    `&exchange=NASDAQ,NYSE` +
-    `&isActivelyTrading=true` +
-    // Equities only. Without these the screener returns ~42% mutual funds --
-    // market cap and exchange filters do not exclude them.
-    `&isEtf=false` +
-    `&isFund=false` +
-    `&limit=${SCREENER_LIMIT}` +
-    `&apikey=${encodeURIComponent(apiKey)}`;
-
-  try {
-    const res = await fetch(url, {
-      cache: "no-store",
-      headers: { accept: "application/json" },
-    });
-
-    if (!res.ok) return [];
-
-    const json = await res.json().catch(() => null);
-    if (!Array.isArray(json)) return [];
-
-    // Fire this before mapping down to symbols below -- cacheScreenerFundamentals
-    // wants the full rows (marketCap/sector/industry/...), not just `symbol`.
-    // Awaited rather than fire-and-forget: Vercel does not guarantee unawaited
-    // work continues after this function's caller returns, and a Redis
-    // pipeline write here is cheap relative to the master-list rebuild this
-    // sits inside.
-    try {
-      const cached = await cacheScreenerFundamentals(json);
-      if (cached > 0) {
-        console.log(`[market] cached screener fundamentals for ${cached} symbols`);
-      }
-    } catch {
-      // fail open -- discovery must not break because caching fundamentals did
-    }
-
-    return json
-      .map((item) => String(item?.symbol ?? "").trim().toUpperCase())
-      .filter(isCleanStockSymbol);
-  } catch {
-    // fail open -- the static lists below still provide a working master list
-    return [];
-  }
+  // Delegates to lib/server/screenerFundamentals.ts. The body used to live here,
+  // which meant the ONLY thing that ever refreshed the screener-fundamentals
+  // cache was a master-list rebuild -- gated on an Eastern-day rollover AND on
+  // this route being requested at all. Nothing requests it on a schedule
+  // (pickersBuilder.fetchMarket() self-fetches on cache miss only), so a warm
+  // pickers cache meant the cache silently drained past its 30h TTL. Measured
+  // 2026-08-22: screenerCovered 0 of 755. It now has its own cron
+  // (app/api/jobs/warm-screener-fundamentals) and this stays as one of two
+  // callers of the same function rather than a second copy of it.
+  const { symbols } = await refreshScreenerFundamentals(apiKey);
+  return symbols.filter(isCleanStockSymbol);
 }
 
 async function buildExpandedDiscoveryMasterList(apiKey: string) {
