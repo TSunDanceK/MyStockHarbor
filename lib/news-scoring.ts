@@ -49,7 +49,6 @@ export {
   dedupeNews,
   mergeNewsPools,
   newestFirst,
-  oneArticlePerDate,
   // Aggregate scoring
   scoreNews,
   scoreEarnings,
