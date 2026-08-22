@@ -192,6 +192,16 @@ type SignalRecord = {
   // literal.
   oversoldIndicators?: string[];
   overboughtIndicators?: string[];
+  // The four Best Trend checks, for the same reason the two lists above are
+  // here: the Signals column on /best-trend-score-stocks is built from the
+  // UNIVERSE path, not from the section's top 20, so a field that only reaches
+  // the section item populates ~20 of 36 rows and leaves the rest dashed.
+  //
+  // Carried as the booleans rather than the derived label list so the label
+  // vocabulary has exactly one home (trendIndicatorsFrom) and the page decides
+  // WHICH list to show -- that selection is page context, and the builder does
+  // not have it.
+  trendChecks?: TrendChecks;
 
   isDynamicUniverse?: boolean;
   // True when this symbol earned its analyzed-universe slot from the Popular
@@ -230,6 +240,51 @@ type CachedPickersPayload = {
   cachedAt: number;
   data: PickersPayload;
 };
+
+/**
+ * The four Best Trend checks as booleans, exactly as buildTrendScoreFromHistory
+ * computed them.
+ *
+ * ONE OBJECT RATHER THAN FOUR OPTIONAL BOOLEANS, deliberately. Spread flat over
+ * an optional-field record, "false" and "never computed" become the same
+ * reading, and buildTrendScoreFromHistory genuinely returns null for a symbol
+ * with under 220 closes. A nested object is present or absent, so the two stay
+ * distinguishable (claude/traps/return-type-cannot-express-failure.md).
+ */
+export type TrendChecks = {
+  priceAboveMA200: boolean;
+  priceAboveMA50: boolean;
+  ma50AboveMA200: boolean;
+  macdBullish: boolean;
+};
+
+/**
+ * The trend checks that actually fired, strongest first.
+ *
+ * WHY THIS EXISTS. "Best Trend Score Stocks" rendered `4/4 trend checks` and
+ * nothing else: a bare count with no way to tell WHICH four, on a page whose
+ * entire subject is which ones. That is the same shape as #330 -- the fired
+ * detail is computed here for every symbol and was discarded at the object
+ * literal -- reappearing on the one page #330 did not cover, because its
+ * Signals column reads the composite's oversold/overbought lists and a trend
+ * leader is normally neither, so every row showed a muted dash.
+ *
+ * Order matches the weights the score itself uses (18/18/12/12), so "strongest
+ * first" means the same thing here as in the ranking above it.
+ *
+ * Returns undefined, never [], when nothing fired or nothing was computed --
+ * the grid renders a dash for both, and an empty array would assert "measured,
+ * found none" to any consumer that prints a count.
+ */
+export function trendIndicatorsFrom(checks: TrendChecks | null | undefined): string[] | undefined {
+  if (!checks) return undefined;
+  const out: string[] = [];
+  if (checks.priceAboveMA200) out.push("Price > MA200");
+  if (checks.ma50AboveMA200) out.push("MA50 > MA200");
+  if (checks.priceAboveMA50) out.push("Price > MA50");
+  if (checks.macdBullish) out.push("MACD(12,26,9) > 0");
+  return out.length ? out : undefined;
+}
 
 type TrendScoreResult = {
   total: number;
@@ -2705,6 +2760,10 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
               chartPoints,
               tone: trendScore.passed === 4 ? "green" : "yellow",
               note: `${trendScore.passed}/${trendScore.total} trend checks`,
+              // The note is the COUNT; this is which ones. Same derivation the
+              // universe path uses, so the section's top 20 and the other 16
+              // rows on the page cannot disagree about the same stock.
+              firedIndicators: trendIndicatorsFrom(trendScore),
               _score: score,
             });
           }
@@ -3090,6 +3149,16 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
             // so this costs nothing but the two array references.
             oversoldIndicators: comp?.oversoldIndicators,
             overboughtIndicators: comp?.overboughtIndicators,
+            // Same story, same fix: trendScore is already computed above for
+            // the trendLeaders ranking and was discarded here.
+            trendChecks: trendScore
+              ? {
+                  priceAboveMA200: trendScore.priceAboveMA200,
+                  priceAboveMA50: trendScore.priceAboveMA50,
+                  ma50AboveMA200: trendScore.ma50AboveMA200,
+                  macdBullish: trendScore.macdBullish,
+                }
+              : undefined,
             isDynamicUniverse: dynamicName,
             isPopularSearch: popularName,
           });
