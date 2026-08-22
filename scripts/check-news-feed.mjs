@@ -269,5 +269,109 @@ check(
   "removing the headlines card must not take the actual EPS/revenue figures with it"
 );
 
+console.log("\n=== 7. The article-per-day reading that decides limit= ===\n");
+// Free instrumentation on payloads already fetched. What it has to get right:
+// the per-day spread, and whether the response is genuinely newest-first --
+// because the argument "truncation happens at the old end, so recent days are
+// complete" is only true if it is.
+const capture = (rows, limit = 50) => {
+  const lines = [];
+  const real = console.log;
+  console.log = (line) => lines.push(String(line));
+  try {
+    m.logResponseWindow("test", "MU", rows, limit);
+  } finally {
+    console.log = real;
+  }
+  return lines.join(" ");
+};
+const at = (iso) => ({ publishedDate: iso });
+
+// Six articles over three days, newest first.
+const ordered = [
+  at("2026-08-22T15:00:00Z"),
+  at("2026-08-22T09:00:00Z"),
+  at("2026-08-21T18:00:00Z"),
+  at("2026-08-21T08:00:00Z"),
+  at("2026-08-21T07:00:00Z"),
+  at("2026-08-19T11:00:00Z"),
+];
+const orderedOut = capture(ordered);
+check("distinct days counts DAYS, not rows", /distinctDays=3\b/.test(orderedOut), orderedOut);
+check("maxPerDay is the busiest single day", /maxPerDay=3\b/.test(orderedOut));
+check("per-day breakdown is reported", /perDay=\[2026-08-22:2,2026-08-21:3,2026-08-19:1\]/.test(orderedOut));
+check("oldest and newest are both named", /oldest=2026-08-19/.test(orderedOut) && /newest=2026-08-22/.test(orderedOut));
+check("a properly newest-first response reads monotonic", /monotonic=true inversions=0/.test(orderedOut));
+
+// THE CASE THE ENDPOINT-COMPARISON TEST WOULD MISS. First row is the newest and
+// last row is the oldest, so checking the extremes says "sorted" -- but the
+// middle is shuffled. Every adjacent pair is compared precisely so this fails.
+// Endpoints deliberately in order -- row 0 is the newest of the whole set and
+// the last row is the oldest -- with TWO inversions buried between them, so the
+// reported count proves the pairwise walk rather than a boolean that could come
+// from any single comparison.
+const shuffledInside = [
+  at("2026-08-22T15:00:00Z"),
+  at("2026-08-19T11:00:00Z"),
+  at("2026-08-21T18:00:00Z"),
+  at("2026-08-19T20:00:00Z"),
+  at("2026-08-20T08:00:00Z"),
+  at("2026-08-18T07:00:00Z"),
+];
+const shuffledOut = capture(shuffledInside);
+check(
+  "a response sorted only at its ENDS is not called monotonic",
+  /monotonic=false/.test(shuffledOut),
+  "first row newest and last row oldest — the endpoints agree, the middle does not"
+);
+check("...and the inversion count is reported, not just the boolean", /inversions=2\b/.test(shuffledOut));
+
+console.log("\n=== 7b. Saturation — a floor must not read as a total ===\n");
+// The distinction the whole limit question turns on. rows === limit means FMP
+// gave everything it was asked for, so there is very likely more it did not send
+// and any count derived from it is a FLOOR.
+check(
+  "a full response is flagged saturated",
+  /rows=50\/50 saturated=true/.test(capture(Array.from({ length: 50 }, () => at("2026-08-22T10:00:00Z")), 50))
+);
+check(
+  "a short response is not",
+  /rows=6\/50 saturated=false/.test(capture(ordered, 50))
+);
+check(
+  "saturation is judged against the limit ACTUALLY sent, not a hardcoded 50",
+  /rows=6\/6 saturated=true/.test(capture(ordered, 6)),
+  "sector news sends 100 — one hardcoded number would misreport it"
+);
+
+console.log("\n=== 7c. No dates is reported, not silently zero ===\n");
+check(
+  "undated rows say so rather than reporting an empty distribution",
+  /dated=0/.test(capture([{ title: "no date here" }, { title: "nor here" }])),
+  "0 distinct days and 'we could not tell' are different readings"
+);
+check(
+  "rows with unparseable dates are excluded rather than counted",
+  /dated=0/.test(capture([{ publishedDate: "not a date" }]))
+);
+
+console.log("\n=== 7d. Measured before our filters, and on one limit constant ===\n");
+const newsSrc = codeOf(read("lib/stock-news-data.ts"));
+check(
+  "the reading is taken on the RAW response, before mapping or filtering",
+  /if \(!Array\.isArray\(data\)\) continue;[\s\S]{0,200}logResponseWindow\("stock"[\s\S]{0,120}const items = data/.test(newsSrc),
+  "filtering first would measure our own rules and blame FMP"
+);
+check(
+  "one FMP_NEWS_LIMIT constant feeds both URLs and the reading",
+  (newsSrc.match(/limit=\$\{FMP_NEWS_LIMIT\}/g) ?? []).length === 2 &&
+    /logResponseWindow\("stock", symbol\.toUpperCase\(\), data, FMP_NEWS_LIMIT\)/.test(newsSrc),
+  "a second copy of 50 would make saturated= lie the moment one moved"
+);
+check(
+  "sector news takes the same reading through the same function",
+  /logResponseWindow\(\s*"sector"/.test(codeOf(read("lib/sector-news-data.ts")))
+);
+
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);
