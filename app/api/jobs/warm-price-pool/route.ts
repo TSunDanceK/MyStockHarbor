@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { recordJobRun } from "../../../../lib/server/jobRuns";
 import { getWarmTargetSymbols } from "../../../../lib/server/warmTargets";
 import { warmPricePool } from "../../../../lib/server/pricePool";
 
@@ -58,11 +59,17 @@ export async function GET(req: NextRequest) {
 
     const result = await warmPricePool(symbols, Date.now());
     console.log("[warm-price-pool]", JSON.stringify(result));
+    await recordJobRun("warm-price-pool", result.ok !== false, {
+      targets: symbols.length,
+      written: result.written ?? null,
+      reason: result.reason ?? null,
+    });
     return NextResponse.json(result);
   } catch (error) {
-    return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "warm-price-pool failed" },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "warm-price-pool failed";
+    // Recorded on the throw too. Without this the page shows the last
+    // SUCCESSFUL run and reads healthy while the job has been failing.
+    await recordJobRun("warm-price-pool", false, { error: message });
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

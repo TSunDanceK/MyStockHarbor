@@ -13,6 +13,7 @@
 // write control still renders. All four fail silently and all four are checked.
 //
 //   node scripts/check-cache-health-page.mjs
+import ts from "typescript";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -44,6 +45,19 @@ const codeOf = (text) =>
 const readCode = (rel) => codeOf(fs.readFileSync(path.join(ROOT, rel), "utf8"));
 
 const code = codeOf(src);
+
+// For "does it USE this symbol" questions, string literals are blanked too.
+//
+// The read-only check reads `!/\brecordJobRun\b/.test(code)` and is labelled
+// "does not import or call". Adding the words "this job does not call
+// recordJobRun" to the page's own help text failed it -- a true detection of
+// the wrong thing, since a mention in prose is neither an import nor a call.
+// Left as-is it would have forced the page to talk around the identifier it
+// needs to name, which is the check bending the code rather than guarding it.
+const codeNoStrings = code
+  .replace(/`(?:[^`\\]|\\.)*`/g, "``")
+  .replace(/"(?:[^"\\]|\\.)*"/g, '""')
+  .replace(/'(?:[^'\\]|\\.)*'/g, "''");
 
 let failures = 0;
 const check = (label, ok, detail = "") => {
@@ -106,7 +120,7 @@ const WRITE_SYMBOLS = [
   "recordJobRun",
 ];
 for (const sym of WRITE_SYMBOLS) {
-  check(`does not import or call ${sym}`, !new RegExp(`\\b${sym}\\b`).test(code));
+  check(`does not import or call ${sym}`, !new RegExp(`\\b${sym}\\b`).test(codeNoStrings));
 }
 check("no form, button or action element at all", !/<form|<button|"use server"|formAction/.test(code));
 
@@ -115,7 +129,7 @@ console.log("\n=== 4. Cheap: aggregates only, never a scan ===\n");
 // in a counter instead (spec, "The page must be cheap to load").
 const SCAN_SYMBOLS = ["readCachedFundamentalsBulk", "readPricePoolBulk", "getDailyHistoryBulk", "hgetall", "keys(", "scan("];
 for (const sym of SCAN_SYMBOLS) {
-  check(`does not use ${sym}`, !code.includes(sym));
+  check(`does not use ${sym}`, !codeNoStrings.includes(sym));
 }
 check(
   "reads only the aggregate helpers",
@@ -134,6 +148,153 @@ check(
 );
 const queue = readCode("lib/server/stalenessQueue.ts");
 check("every registered dataset declares its own ttlSeconds", (queue.match(/ttlSeconds:/g) ?? []).length >= 5);
+
+console.log("\n=== 5b. Seeded is not faulted, and cannot stay neutral forever ===\n");
+// registerSymbols scores the whole universe 0, so a freshly instrumented
+// dataset reads "every symbol never refreshed" -- and the first version painted
+// that red. That is the jobs table's own bug one level down: unobserved
+// rendering as failed. The fix has to cut BOTH ways, though: a neutral status a
+// dead dataset can sit in forever is the same lie inverted, so the escalation
+// is asserted alongside it.
+check(
+  'a distinct "seeded" status exists, separate from "unknown"',
+  /"seeded"/.test(code) && /type Status = [^;]*"seeded"/.test(code)
+);
+check(
+  "...with its own colour, not reusing a judged one",
+  /seeded:\s*"#/.test(code)
+);
+check(
+  "all-never no longer returns a bare fault",
+  !/if \(d\.never === d\.tracked && d\.tracked > 0\) \{\s*return \{ status: "fault"/.test(code)
+);
+check(
+  "...and DOES escalate to fault once past a multiple of its own TTL",
+  /seededAgoSec > d\.ttlSeconds \* 2/.test(code) && /status: "fault"[\s\S]{0,120}nothing has ever refreshed/.test(code),
+  "a neutral status nothing can escalate is a dead dataset reading calm forever"
+);
+check(
+  "missing seed time is reported as unjudgeable, not assumed fresh",
+  /d\.seededAtMs === null[\s\S]{0,200}seed time unknown/.test(code)
+);
+check(
+  "the seed timestamp is written nx, so it records the FIRST seed and never moves",
+  /p\.set\(seededKey\(dataset\), Date\.now\(\), \{ nx: true \}\)/.test(queue),
+  "a refreshing timestamp would keep the status permanently young"
+);
+check(
+  "staleness is judged against the OBSERVED population, not the tracked one",
+  /const observed = Math\.max\(0, d\.tracked - d\.never\)/.test(code) && /d\.stale \/ observed/.test(code),
+  "otherwise 'went stale' and 'not reached yet' are the same number"
+);
+check(
+  "...and a mostly-unobserved dataset still cannot read ok",
+  /d\.never \/ d\.tracked >= 0\.25[\s\S]{0,160}status: "warn"/.test(code)
+);
+
+console.log("\n=== 5c. The FMP rolling window, pinned ===\n");
+// Reviewed 2026-08-22 and correct as written. Pinned because the two plausible
+// "corrections" -- anchoring to a calendar month, or widening past the 31-day
+// key TTL -- both make it silently wrong, and both look like fixes.
+const usage = readCode("lib/server/fmpUsage.ts");
+check(
+  "readFmpUsage still defaults to a 30-day window",
+  /export async function readFmpUsage\(days = 30\)/.test(usage)
+);
+check(
+  "...clamped to 31, so it can never sum buckets the TTL has already dropped",
+  /Math\.min\(31,/.test(usage) && /FMP_BYTES_TTL_SECONDS = 60 \* 60 \* 24 \* 31/.test(usage)
+);
+check(
+  "...and it is a rolling window ending today, not a calendar month",
+  /d\.setUTCDate\(d\.getUTCDate\(\) - i\)/.test(usage) && !/getUTCMonth\(\)\s*,\s*1/.test(usage)
+);
+check(
+  "the page asks for 30 and does not override it with something else",
+  /readFmpUsage\(30\)/.test(code)
+);
+// The meter's real limitation, recorded where a reader of the totals will meet
+// it. fmpFetch cannot see a Next Data Cache hit, so the totals are an upper
+// bound on wire bytes rather than a measurement of them -- and quoting them as
+// a measurement is exactly the layer confusion this project has paid for before.
+check(
+  "fmpFetch says plainly that it counts call sites, not wire bytes",
+  /UPPER BOUND/.test(fs.readFileSync(path.join(ROOT, "lib/server/fmpUsage.ts"), "utf8")),
+  "a Data Cache hit records a sample with no network request"
+);
+
+console.log("\n=== 5d. Meter vs dashboard reconciliation ===\n");
+// The meter says 14.72 GB and nothing has ever checked that against the only
+// number that bills. /api/debug/fmp-usage?dashboardGb= does the comparison; the
+// arithmetic is extracted and run here, because the route itself needs Redis and
+// a key and so is not exercisable from a check.
+const usageRouteSrc = fs.readFileSync(path.join(ROOT, "app/api/debug/fmp-usage/route.ts"), "utf8");
+const usageSf = ts.createSourceFile("route.ts", usageRouteSrc, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+let reconFn = null;
+const findRecon = (node) => {
+  if (ts.isFunctionDeclaration(node) && node.name?.text === "buildReconciliation") reconFn = node.getText(usageSf);
+  ts.forEachChild(node, findRecon);
+};
+findRecon(usageSf);
+
+if (!reconFn) {
+  check("buildReconciliation is extractable", false, "measuring nothing");
+} else {
+  const reconJs = ts.transpileModule(
+    `const GB = 1024 ** 3;\n${reconFn}\nexport { buildReconciliation };`,
+    { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext } }
+  ).outputText;
+  const { buildReconciliation } = await import(
+    `data:text/javascript;base64,${Buffer.from(reconJs).toString("base64")}`
+  );
+
+  const GB = 1024 ** 3;
+  const rep = (opts) => ({
+    days: 30,
+    daysWithData: 10,
+    totalWireBytes: 5 * GB,
+    totalDecodedBytes: 5 * GB,
+    ...opts,
+  });
+
+  check(
+    "no dashboard figure -> says so, does not invent a ratio",
+    buildReconciliation(rep({}), NaN).done === false
+  );
+  // THE FAILURE THIS GUARDS. The meter started on 2026-08-22, so for weeks a
+  // 30-day dashboard figure sits against a 2-day meter reading. Comparing the
+  // raw totals gives ~0.07 and the false conclusion "the meter is catastrophically
+  // undercounting" -- a wrong answer of exactly the kind that gets acted on.
+  check(
+    "2 days of counters vs a 30-day dashboard figure -> refuses, does not compare",
+    buildReconciliation(rep({ daysWithData: 2 }), 14.72).done === false
+  );
+  check(
+    "...and it is normalised PER DAY once there is enough, not total vs total",
+    (() => {
+      // 10 covered days at 0.5 GB/day; dashboard 15 GB over 30 days = 0.5 GB/day.
+      const r = buildReconciliation(rep({ daysWithData: 10, totalWireBytes: 5 * GB }), 15);
+      return r.done === true && Math.abs(r.wireRatio - 1) < 0.01;
+    })(),
+    "raw totals would read 5 vs 15 and call it a 3x undercount"
+  );
+  check(
+    "a meter running high reads as EXPECTED, not as a fault",
+    /EXPECTED direction/.test(
+      buildReconciliation(rep({ totalWireBytes: 15 * GB, totalDecodedBytes: 15 * GB }), 15).verdict
+    ),
+    "cached responses record a sample with no network request"
+  );
+  check(
+    "a meter running LOW is flagged as the surprising direction",
+    /surprising/.test(buildReconciliation(rep({ totalWireBytes: 1 * GB, totalDecodedBytes: 1 * GB }), 15).verdict),
+    "something is calling FMP without going through fmpFetch"
+  );
+  check(
+    "it names which layer is closer rather than asserting one",
+    buildReconciliation(rep({ totalWireBytes: 5 * GB, totalDecodedBytes: 9 * GB }), 15).closerLayer === "wire"
+  );
+}
 
 console.log("\n=== 6. Unlinked and unindexed ===\n");
 check("noindex + nofollow", /index:\s*false/.test(code) && /follow:\s*false/.test(code));
@@ -169,6 +330,53 @@ check(
   /export async function claimStalest\(\s*dataset: DatasetKey,\s*limit: number/.test(queue) &&
     !/MAX_PER_RUN|budget/.test(queue)
 );
+
+console.log("\n=== 8. Every declaration has a producer behind it ===\n");
+// THE FAILURE THIS SECTION EXISTS FOR, reported by the owner and reproduced.
+// The jobs table listed six jobs and only two called recordJobRun, so
+// warm-price-pool -- which runs every three minutes -- rendered "never run, or
+// older than the 8-day record TTL". An uninstrumented job read exactly like a
+// dead one: the failure this whole page was built to remove, reproduced inside
+// it. The same hole existed on the dataset side, where screenerFundamentals sat
+// in the registry with nothing writing to its queue.
+//
+// A registry entry is a DECLARATION. Nothing made the declaration true, so both
+// are now verified against the tree: a job declared instrumented must have a
+// recordJobRun call, and a registered dataset must have a markRefreshed or
+// registerSymbols call.
+const treeFiles = [];
+const collect = (dir) => {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.name.startsWith(".") || e.name === "node_modules") continue;
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) collect(full);
+    else if (/\.tsx?$/.test(e.name)) treeFiles.push(full);
+  }
+};
+collect(path.join(ROOT, "app"));
+collect(path.join(ROOT, "lib"));
+const tree = treeFiles.map((f) => codeOf(fs.readFileSync(f, "utf8"))).join("\n");
+
+const jobs = readCode("lib/server/jobRuns.ts");
+const jobEntries = [...jobs.matchAll(/"([a-z-]+)":\s*\{\s*label:[^}]*instrumented:\s*(true|false)/g)];
+check("the JOBS registry declares instrumentation per job", jobEntries.length >= 6, `${jobEntries.length} entries`);
+for (const [, job, flag] of jobEntries) {
+  const has = new RegExp(`recordJobRun\\(\\s*"${job}"`).test(tree);
+  if (flag === "true") {
+    check(`${job}: declared instrumented AND calls recordJobRun`, has);
+  } else {
+    check(`${job}: declared NOT instrumented, and indeed does not record`, !has);
+  }
+}
+
+const datasetKeys = [...readCode("lib/server/stalenessQueue.ts").matchAll(/^  ([a-zA-Z]+):\s*\{$/gm)].map((m) => m[1]);
+check("the DATASETS registry has entries", datasetKeys.length >= 6, datasetKeys.join(", "));
+for (const ds of datasetKeys) {
+  const has =
+    new RegExp(`markRefreshed\\(\\s*"${ds}"`).test(tree) ||
+    new RegExp(`registerSymbols\\(\\s*"${ds}"`).test(tree);
+  check(`${ds}: something actually writes to its queue`, has);
+}
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);

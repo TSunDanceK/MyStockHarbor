@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { markRefreshed } from "./stalenessQueue";
 import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { timingCache, beginTiming } from "./timing";
@@ -349,6 +350,7 @@ export async function writeHistoryEntry(symbol: string, entry: HistoryCacheEntry
   if (!redis) return;
 
   try {
+    await markRefreshed("dailyHistory", [normalized]);
     await redis.set(getHistoryRedisKey(normalized), entry, {
       ex: getRedisHistoryTtlSeconds(),
     });

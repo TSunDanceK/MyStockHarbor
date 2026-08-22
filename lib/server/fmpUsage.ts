@@ -271,6 +271,21 @@ function scheduleFlush() {
  * shaped so that degrades to a partial `decoded` rather than a wrong `wire`.
  */
 export async function fmpFetch(url: string, init?: RequestInit): Promise<Response> {
+  // WHAT THIS COUNTS, PRECISELY: responses observed at this call site. That is
+  // NOT the same as bytes on the wire, and the difference is not small.
+  //
+  // Every FMP call in this codebase passes `next: { revalidate: N }`, so Next
+  // may serve the response from its Data Cache -- and within a render pass may
+  // memoize it outright -- with no network request at all. This wrapper cannot
+  // see that: `fetch` returns a Response either way, and the sample is recorded
+  // either way. Where one symbol's news is fetched twice in a pass (fetchNews
+  // and fetchEarningsNews both call fetchFmpStockNews with the same URL), the
+  // meter counts two calls where at most one crossed the network.
+  //
+  // So the totals are an UPPER BOUND. That is the right side to err on for a
+  // cap you must not breach, but it means a figure from this meter is not
+  // evidence that a given number of bytes were actually paid for, and it should
+  // not be quoted as one (claude/traps/measuring-the-wrong-layer.md).
   const res = await fetch(url, init);
   try {
     const header = Number(res.headers.get("content-length"));
@@ -312,7 +327,28 @@ export type FmpUsageReport = {
   endpoints: FmpUsageEndpoint[];
 };
 
-/** Rolling window totals, per endpoint, newest `days` UTC days inclusive. */
+/**
+ * Rolling window totals, per endpoint, newest `days` UTC days inclusive.
+ *
+ * DO NOT "FIX" THE WINDOW. This is already the right shape and has been
+ * reviewed as such (2026-08-22). It sums the last 30 UTC day-buckets ending
+ * today, which is a genuine rolling 30-day total and matches how FMP bills the
+ * 20 GB cap. Two plausible-looking "corrections" would both make it wrong:
+ *
+ *   * Anchoring to a calendar month. The cap is not monthly. A month-to-date
+ *     figure reads LOW for the first three weeks of every month and would say
+ *     the cap is comfortable on exactly the days it is not.
+ *   * Making the window a single cumulative counter, or extending it past 30.
+ *     FMP_BYTES_TTL_SECONDS is 31 days, so days 32+ do not exist to be summed;
+ *     a longer window would silently report a partial total as a complete one.
+ *     The `window` clamp to 31 is what stops that, and it is deliberate.
+ *
+ * The one real limitation is recorded elsewhere and is NOT in this function:
+ * fmpFetch records a sample whenever a call site is reached, including when
+ * Next serves the response from its Data Cache with no network request. So
+ * these totals are call-site bytes, an UPPER BOUND on wire bytes, not a
+ * measurement of them. See the note on fmpFetch.
+ */
 export async function readFmpUsage(days = 30): Promise<FmpUsageReport> {
   const window = Math.max(1, Math.min(31, Math.floor(days) || 30));
   const empty: FmpUsageReport = {

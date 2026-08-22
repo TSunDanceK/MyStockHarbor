@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { recordJobRun } from "../../../../lib/server/jobRuns";
+import { deferSymbol, markRefreshed, registerSymbols } from "../../../../lib/server/stalenessQueue";
 import { fmpFetch } from "@/lib/server/fmpUsage";
 import { Redis } from "@upstash/redis";
 import {
@@ -240,6 +242,9 @@ export async function GET(req: NextRequest) {
 
   const lock = await acquireLock();
   if (!lock) {
+    // A lock-skip is a healthy outcome, not a gap. Left unrecorded, a run of
+    // skips would age the record out and the page would say "never run".
+    await recordJobRun("warm-earnings", true, { skipped: true, reason: "locked" });
     return NextResponse.json({ ok: true, skipped: true, reason: "locked" });
   }
 
@@ -292,6 +297,20 @@ export async function GET(req: NextRequest) {
         failed.push(symbol);
       }
     }
+
+    // fetched / failed map exactly onto the queue's two outcomes. Deferring the
+    // failures is queue rule 1: a symbol FMP cannot answer for stays the stalest
+    // thing in the set and holds the front of the queue forever otherwise.
+    await registerSymbols("earnings", cleanQueue);
+    if (fetched.length) await markRefreshed("earnings", fetched);
+    for (const sym of failed) await deferSymbol("earnings", sym);
+
+    await recordJobRun("warm-earnings", true, {
+      checked: cleanQueue.length,
+      fetched: fetched.length,
+      deferred: deferred.length,
+      failed: failed.length,
+    });
 
     return NextResponse.json({
       ok: true,

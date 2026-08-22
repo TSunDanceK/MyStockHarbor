@@ -46,6 +46,12 @@ const config: PickerResultConfig = {
   tone: "green",
   kind: "preset",
   presetFilters: ["bestTrendPick"],
+  // The Signals column on this page reports the four TREND checks, not the
+  // composite's oversold/overbought ones. Without this the column was a dash on
+  // every row: a trend leader is normally neither oversold nor overbought, so
+  // the default rule had nothing to return, and the page's only statement about
+  // which checks fired was the bare count in the note ("4/4 trend checks").
+  signalsFrom: "trend",
   sectionIncludes: ["best trend score"],
   maxItems: 36,
   relatedGuide: {

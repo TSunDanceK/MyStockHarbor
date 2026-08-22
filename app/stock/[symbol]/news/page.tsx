@@ -8,7 +8,8 @@ import Link from "next/link";
 // both belong to an unused local copy (eslint reports scoreNews, trendLabel
 // and scoreEarnings here as never used). The gauge must be typed against the
 // type that actually reaches it, not the lookalike declared below.
-import { getStockNewsBaseData, type NewsScoreResult as LiveNewsScore } from "@/lib/stock-news-data";
+import { getStockNewsBaseData, isEarningsNewsItem, type NewsScoreResult as LiveNewsScore } from "@/lib/stock-news-data";
+import { keywordHits } from "@/lib/keywordMatch";
 import {
   buildWhyItMatters,
   buildBeyondHeadline,
@@ -93,23 +94,6 @@ function formatDate(value: string | null) {
   }).format(date);
 }
 
-function formatPlainDate(value: string | null) {
-  if (!value) return "—";
-  const date = new Date(`${value}T00:00:00Z`);
-  if (Number.isNaN(date.getTime())) return value;
-
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  }).format(date);
-}
-
-// getLatestEarningsData already returns score: null when !hasStructuredData --
-// that is #314's fix, in the lib. This function threw that away and substituted
-// a literal 50, which rendered as a 24px number directly above the caption
-// "Structured data unavailable". null now means the same thing here that it
-// already meant one layer down.
 function earningsToneScore(earnings: LatestEarningsData): number | null {
   if (!earnings.hasStructuredData) return null;
   if (earnings.tone === "green") return 78;
@@ -122,10 +106,6 @@ function compactSource(source: string | null) {
   return source.replace(/\s+News$/i, "").trim();
 }
 
-function keywordHits(text: string, words: string[]) {
-  const lower = text.toLowerCase();
-  return words.some((word) => lower.includes(word));
-}
 
 function buildLeadSummary(args: {
   symbol: string;
@@ -142,6 +122,12 @@ function buildLeadSummary(args: {
   return `${lead} is currently showing a ${newsScore.label.toLowerCase()} headline tone${backdrop}. The latest news flow is being framed here as context rather than prediction, so beginners can quickly see whether headlines are helping, hurting, or complicating the chart story. Earnings tone is currently ${earningsScore.label.toLowerCase()}.`;
 }
 
+// NOT a duplicate of the lib's isLowValueNewsItem, despite the shared name: the
+// pattern list and the source list are both genuinely different (this one
+// blocks "forecast 2025"/"how to buy" and financialcontent/capital.com; the
+// lib's blocks "52-week"/"stocks to watch" and marketbeat/etfdailynews). Left
+// alone on purpose -- collapsing them would change what this page shows, which
+// is a content decision, not the matcher fix. Flagged rather than merged.
 function isLowValueNewsItem(item: NewsItem) {
   const title = item.title.toLowerCase();
   const source = (item.source ?? "").toLowerCase();
@@ -387,14 +373,13 @@ function DetailedNewsSection({
   );
 }
 
-function isEarningsHeadline(item: NewsItem) {
-  const text = `${item.title} ${item.description ?? ""}`.toLowerCase();
-  return keywordHits(text, ["earnings","eps","results","quarter","quarterly","revenue","guidance","profit","loss","margin","q1","q2","q3","q4"]);
-}
-
 function getEarningsNewsItems(news: NewsItem[]) {
   return [...news]
-    .filter((item) => !isLowValueNewsItem(item) && isEarningsHeadline(item))
+    // isEarningsNewsItem, not a local isEarningsHeadline. The local copy held a
+    // character-for-character duplicate of the lib's 14-word list, so THIS page
+    // -- the one where the misclassified stories were actually seen -- would
+    // have kept its own broken matcher if only the lib had been fixed.
+    .filter((item) => !isLowValueNewsItem(item) && isEarningsNewsItem(item))
     .sort((a, b) => {
       const aTime = a.pubDate ? new Date(a.pubDate).getTime() : 0;
       const bTime = b.pubDate ? new Date(b.pubDate).getTime() : 0;
@@ -403,15 +388,27 @@ function getEarningsNewsItems(news: NewsItem[]) {
     .slice(0, 5);
 }
 
-function EarningsNewsSection({ symbol, earningsNews, latestEarnings }: { symbol: string; earningsNews: NewsItem[]; latestEarnings: LatestEarningsData; }) {
+function EarningsNewsSection({ symbol, earningsNews }: { symbol: string; earningsNews: NewsItem[]; }) {
+  // NOTHING TO SAY MEANS SAY NOTHING. This used to render the full card -- an
+  // eyebrow, a heading, an explanatory paragraph -- wrapped around a box reading
+  // "No recent earnings-specific headlines found", which is a section whose
+  // entire content is an apology for having no content. The structured earnings
+  // snapshot it pointed at is rendered separately by SharedLatestEarningsCard
+  // and is unaffected, so there is genuinely nothing left here to show.
+  //
+  // Worth noting alongside the word-boundary matcher fix: this branch will be
+  // reached MORE often now, because the old substring matcher counted any story
+  // containing "headquartered" or "nonprofit" as earnings coverage. Emptier is
+  // the correct reading, not a regression.
+  if (!earningsNews.length) return null;
+
   return (
     <section style={sidebarCardStyle}>
       <div style={sectionEyebrowStyle}>Earnings news</div>
       <h2 style={sectionTitleSmallStyle}>{symbol} earnings headlines</h2>
       <p style={bodyCopyStyle}>This section is separated from the general news feed so investors can quickly connect the latest headlines with the structured earnings report.</p>
       <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
-        {earningsNews.length ? (
-          earningsNews.slice(0, 2).map((item, index) => (
+        {earningsNews.slice(0, 2).map((item, index) => (
             <a key={`${item.link}-${index}`} href={item.link} target="_blank" rel="noopener noreferrer" style={earningsNewsRowStyle}>
               <div style={earningsNewsNumberStyle}>{index + 1}</div>
               {/* The thumbnail floats at the top-right of this content column so the
@@ -430,13 +427,7 @@ function EarningsNewsSection({ symbol, earningsNews, latestEarnings }: { symbol:
                 {item.description ? <p style={earningsNewsTextStyle}>{stripAnyHtml(item.description)}</p> : null}
               </div>
             </a>
-          ))
-        ) : (
-          <div style={earningsNoNewsStyle}>
-            <strong>No recent earnings-specific headlines found.</strong>
-            <span>The latest structured earnings snapshot is still shown using FMP data{latestEarnings.reportDate ? ` from ${formatPlainDate(latestEarnings.reportDate)}` : ""}.</span>
-          </div>
-        )}
+        ))}
       </div>
     </section>
   );
@@ -446,7 +437,10 @@ export default async function StockNewsPage({ params }: Props) {
   const { symbol } = await params;
   const upper = symbol.toUpperCase();
 
-  const newsData = await getStockNewsBaseData(upper, { maxDetailedItems: 3 });
+  // 5 large cards, 10 compact. The feed walks back up to 90 days to fill them
+  // now that similarity dedup has replaced the one-article-per-date rule, so the
+  // old 3 was a limit set by how little the source gate cleared.
+  const newsData = await getStockNewsBaseData(upper, { maxDetailedItems: 5 });
 
   const {
     quote, companyName, news, trend, lastClose, lastMA50, lastMA200,
@@ -599,7 +593,7 @@ export default async function StockNewsPage({ params }: Props) {
               </div>
             </section>
             <SharedLatestEarningsCard earnings={latestEarnings} symbol={upper} />
-            <EarningsNewsSection symbol={upper} earningsNews={earningsNewsItems} latestEarnings={latestEarnings} />
+            <EarningsNewsSection symbol={upper} earningsNews={earningsNewsItems} />
             <section style={sidebarCardStyle}>
               <div style={sectionEyebrowStyle}>Chart context</div>
               <h2 style={sectionTitleSmallStyle}>Technical Picture</h2>
@@ -743,7 +737,6 @@ const earningsNewsNumberStyle: CSSProperties = { width: 28, height: 28, borderRa
 const earningsThumbStyle: CSSProperties = { float: "right", width: 64, height: 64, borderRadius: 10, objectFit: "cover", marginLeft: 12, marginBottom: 6, background: "rgba(255,255,255,0.04)" };
 const earningsNewsHeadlineStyle: CSSProperties = { margin: "9px 0 0", fontSize: 16, lineHeight: 1.38, color: "#f8fafc" };
 const earningsNewsTextStyle: CSSProperties = { margin: "8px 0 0", fontSize: 13, lineHeight: 1.6, color: "rgba(226,232,240,0.76)" };
-const earningsNoNewsStyle: CSSProperties = { border: "1px solid rgba(250,204,21,0.20)", background: "rgba(250,204,21,0.07)", borderRadius: 16, padding: 14, display: "grid", gap: 6, color: "rgba(254,249,195,0.88)", fontSize: 14, lineHeight: 1.55 };
 const sidebarCardStyle: CSSProperties = { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 20, padding: 18, background: "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02))", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" };
 const sectionEyebrowStyle: CSSProperties = { fontSize: 11, fontWeight: 950, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(147,197,253,0.82)" };
 const sectionTitleStyle: CSSProperties = { margin: "8px 0 0 0", fontSize: 28, lineHeight: 1.08, letterSpacing: "-0.04em" };

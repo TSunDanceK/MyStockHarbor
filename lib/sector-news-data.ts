@@ -190,6 +190,9 @@ async function fetchFmpSectorNews(symbols: string[]): Promise<NewsItem[]> {
   const key = encodeURIComponent(apiKey);
   const constituentSet = new Set(symbols);
   const pools: NewsItem[][] = [];
+  // Rows returned per chunk, for the depth reading below. Not the same as the
+  // requested limit: a chunk can come back short.
+  const fetchedPerChunk: number[] = [];
 
   for (const group of chunk(symbols, SECTOR_NEWS_CHUNK_SIZE)) {
     // Respect the same per-minute guard the crons use. If the budget is tight
@@ -213,17 +216,46 @@ async function fetchFmpSectorNews(symbols: string[]): Promise<NewsItem[]> {
       if (!Array.isArray(data)) continue;
 
       const items = data
-        .map((row: FmpStockNewsItem) => mapFmpItem(row, constituentSet))
+        .map((row: FmpStockNewsItem, index: number) => {
+          const mapped = mapFmpItem(row, constituentSet);
+          // Stamped at the only point where the upstream ordering is intact --
+          // see NewsItem.sourceIndex in lib/stock-news-data.ts.
+          if (mapped) mapped.sourceIndex = index;
+          return mapped;
+        })
         .filter((row): row is NewsItem => Boolean(row))
         .filter((row) => !isVideoOrLowQualitySource(row));
 
+      fetchedPerChunk.push(data.length);
       if (items.length) pools.push(items);
     } catch {
       continue;
     }
   }
 
-  return mergeNewsPools(pools).slice(0, MAX_POOL_ITEMS);
+  const pool = mergeNewsPools(pools).slice(0, MAX_POOL_ITEMS);
+
+  // THE SAME UNMEASURED QUESTION AS THE PER-STOCK FEED, one level up.
+  // SECTOR_NEWS_LIMIT_PER_CHUNK is 100 across 2 chunks, so up to 200 articles
+  // are fetched, 120 survive into the pool and the page renders 6 detailed
+  // plus 10 compact -- 16. That ratio looks like obvious waste and may not be:
+  // dedupeNews collapses the same market-wide story reported across several
+  // constituents, so a large fetch can shrink to very little. maxIndex is the
+  // smallest per-chunk limit that would have produced the same pool.
+  //
+  // Note this differs from the per-stock reading in one way worth not
+  // confusing: indices here are positions WITHIN A CHUNK, and there are two
+  // chunks, so a maxIndex of 90 means one of the two chunks reached 90 -- not
+  // that 90 of 200 were used.
+  const indices = pool
+    .map((item) => item.sourceIndex)
+    .filter((i): i is number => typeof i === "number");
+  console.log(
+    `[news-depth] sector chunks=${fetchedPerChunk.length} fetched=[${fetchedPerChunk.join(",")}]` +
+      ` pool=${pool.length} maxIndexWithinChunk=${indices.length ? Math.max(...indices) : "none"}`
+  );
+
+  return pool;
 }
 
 /**

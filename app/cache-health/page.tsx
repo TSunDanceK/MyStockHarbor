@@ -35,6 +35,24 @@ export const metadata: Metadata = {
 };
 
 const GB = 1024 ** 3;
+/**
+ * A policy duration, at whatever scale it actually is.
+ *
+ * The first version was `>= 48h ? days : hours`, which had no sub-hour branch:
+ * the price pool's real 900-second policy rendered as "0h". The CONFIG was
+ * right and the status logic read `ttlSeconds` directly, so the judgement on
+ * that row was always correct -- only the label lied, which is worse than a
+ * wrong judgement, because it makes a correct one look untrustworthy and
+ * invites someone to "fix" a value that was never broken.
+ */
+function fmtDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "—";
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+  if (seconds < 48 * 3600) return `${Math.round(seconds / 3600)}h`;
+  return `${Math.round(seconds / 86400)}d`;
+}
+
 const fmtBytes = (n: number) =>
   n >= GB ? `${(n / GB).toFixed(2)} GB` : n >= 1024 ** 2 ? `${(n / 1024 ** 2).toFixed(1)} MB` : n >= 1024 ? `${(n / 1024).toFixed(1)} KB` : `${n} B`;
 
@@ -47,7 +65,7 @@ function fmtAge(ms: number | null): string {
   return `${Math.round(s / 86400)}d ago`;
 }
 
-type Status = "ok" | "warn" | "fault" | "unknown";
+type Status = "ok" | "warn" | "fault" | "unknown" | "seeded";
 
 /**
  * A row's status, derived from THAT DATASET'S OWN TTL.
@@ -66,13 +84,49 @@ function statusFor(d: DatasetHealth): { status: Status; why: string } {
   if (!d.instrumented) {
     return { status: "unknown", why: "no staleness set yet — not measured, not necessarily healthy" };
   }
-  const unrefreshed = d.stale + d.never;
-  const pct = d.tracked > 0 ? unrefreshed / d.tracked : 0;
+
+  // SEEDED IS NOT FAULTED. registerSymbols scores the whole universe 0, so the
+  // moment a dataset is instrumented every symbol in it reads "never
+  // refreshed" -- and the first version rendered that as a red fault on a
+  // dataset whose warm job simply had not had its turn yet. That is the jobs
+  // table's own bug one level down: a state that has not been observed reading
+  // as a state that has failed.
+  //
+  // It stays neutral only while it is plausibly young. A dataset seeded twice
+  // its own TTL ago with nothing refreshed is not waiting, it is broken -- and a
+  // neutral status that can never escalate is the opposite error, a dead job
+  // that reads calm forever. seededAtMs is what lets the page tell those apart;
+  // where it is missing (a queue seeded before that key existed) the page says
+  // the age is unknown rather than assuming either answer.
   if (d.never === d.tracked && d.tracked > 0) {
-    return { status: "fault", why: "every tracked symbol is unrefreshed" };
+    if (d.seededAtMs === null) {
+      return { status: "seeded", why: "registered, none refreshed yet — seed time unknown, so age cannot be judged" };
+    }
+    const seededAgoSec = Math.max(0, (Date.now() - d.seededAtMs) / 1000);
+    if (seededAgoSec > d.ttlSeconds * 2) {
+      return {
+        status: "fault",
+        why: `seeded ${fmtAge(d.seededAtMs)} — past 2× its own TTL and nothing has ever refreshed`,
+      };
+    }
+    return { status: "seeded", why: `registered ${fmtAge(d.seededAtMs)}, waiting on its first run` };
   }
-  if (pct >= 0.25) return { status: "fault", why: `${Math.round(pct * 100)}% past their own TTL` };
-  if (pct >= 0.05) return { status: "warn", why: `${Math.round(pct * 100)}% past their own TTL` };
+
+  // Staleness is judged against the OBSERVED population, not the tracked one.
+  // Folding never-refreshed symbols into the stale percentage conflates "this
+  // symbol went stale" with "this symbol was added and has not come up yet" --
+  // two different problems with two different fixes. The never count is still
+  // shown in its own column, and the all-never case is handled above.
+  const observed = Math.max(0, d.tracked - d.never);
+  const pct = observed > 0 ? d.stale / observed : 0;
+  if (pct >= 0.25) return { status: "fault", why: `${Math.round(pct * 100)}% of observed symbols past their own TTL` };
+  if (pct >= 0.05) return { status: "warn", why: `${Math.round(pct * 100)}% of observed symbols past their own TTL` };
+  // Coverage is a separate question from staleness, and a mostly-unobserved
+  // dataset must not read "ok" just because the few symbols it has seen are
+  // fresh.
+  if (d.never > 0 && d.never / d.tracked >= 0.25) {
+    return { status: "warn", why: `observed symbols are within policy, but ${Math.round((d.never / d.tracked) * 100)}% have never been refreshed` };
+  }
   return { status: "ok", why: "within policy" };
 }
 
@@ -80,7 +134,11 @@ const STATUS_COLOR: Record<Status, string> = {
   ok: "#22c55e",
   warn: "#eab308",
   fault: "#ef4444",
+  // Both neutral, and deliberately distinct from every judged colour: neither
+  // is a verdict. "unknown" means nothing is measuring this; "seeded" means it
+  // is measured and has not run yet.
   unknown: "rgba(255,255,255,0.35)",
+  seeded: "#38bdf8",
 };
 
 function Denied({ reason }: { reason: string }) {
@@ -213,7 +271,7 @@ export default async function CacheHealthPage({
                     </td>
                     <td style={cell}>{d.instrumented ? d.stale : "—"}</td>
                     <td style={cell}>{fmtAge(d.oldestMs)}</td>
-                    <td style={cell}>{Math.round(d.ttlSeconds / 3600) >= 48 ? `${Math.round(d.ttlSeconds / 86400)}d` : `${Math.round(d.ttlSeconds / 3600)}h`}</td>
+                    <td style={cell}>{fmtDuration(d.ttlSeconds)}</td>
                     <td style={cell}>{d.instrumented ? d.deferred : "—"}</td>
                     <td style={cell}>
                       <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 999, background: STATUS_COLOR[status], marginRight: 7 }} />
@@ -238,21 +296,37 @@ export default async function CacheHealthPage({
               <tr><th style={th}>Job</th><th style={th}>When</th><th style={th}>Outcome</th><th style={th}>Summary</th></tr>
             </thead>
             <tbody>
-              {jobs.map(({ job, label, run }) => (
-                <tr key={job}>
-                  <td style={cell}>{label}</td>
-                  <td style={cell}>{run ? fmtAge(run.at) : "—"}</td>
-                  <td style={cell}>
-                    <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 999, background: run ? (run.ok ? STATUS_COLOR.ok : STATUS_COLOR.fault) : STATUS_COLOR.unknown, marginRight: 7 }} />
-                    {run ? (run.ok ? "ok" : "failed") : "no run recorded"}
-                  </td>
-                  <td style={{ ...cell, color: "#94a3b8", fontSize: 12 }}>
-                    {run
-                      ? Object.entries(run.summary).map(([k, v]) => `${k} ${v}`).join(" · ")
-                      : "never run, or older than the 8-day record TTL"}
-                  </td>
-                </tr>
-              ))}
+              {jobs.map(({ job, label, instrumented, run }) => {
+                // THREE outcomes, not two. An uninstrumented job reading the
+                // same as a dead one is the failure this page exists to remove,
+                // and the first version reproduced it: four of six jobs recorded
+                // nothing, so warm-price-pool -- which runs every three minutes
+                // -- rendered "never run".
+                const status: Status = !instrumented ? "unknown" : run ? (run.ok ? "ok" : "fault") : "unknown";
+                const outcome = !instrumented
+                  ? "not instrumented"
+                  : run
+                    ? run.ok
+                      ? "ok"
+                      : "failed"
+                    : "no run recorded";
+                const detail = !instrumented
+                  ? "this job does not call recordJobRun — nothing is known about it, which is not the same as nothing happening"
+                  : run
+                    ? Object.entries(run.summary).map(([k, v]) => `${k} ${v}`).join(" · ")
+                    : "never run, or older than the 8-day record TTL";
+                return (
+                  <tr key={job}>
+                    <td style={cell}>{label}</td>
+                    <td style={cell}>{run ? fmtAge(run.at) : "—"}</td>
+                    <td style={cell}>
+                      <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 999, background: STATUS_COLOR[status], marginRight: 7 }} />
+                      {outcome}
+                    </td>
+                    <td style={{ ...cell, color: "#94a3b8", fontSize: 12 }}>{detail}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </section>

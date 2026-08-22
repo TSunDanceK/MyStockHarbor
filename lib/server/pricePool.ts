@@ -8,6 +8,7 @@
 // identical misses inside one render pass. Same fix as historyCache.ts; see
 // claude/picker-pages-isr-2026-08-20.md.
 import { Redis } from "@upstash/redis";
+import { markRefreshed, registerSymbols } from "./stalenessQueue";
 import { fmpFetch } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
@@ -454,6 +455,14 @@ export async function warmPricePool(symbols: string[], nowMs: number) {
     if (quote) pxRefreshed++;
     if (peFetched && peValue != null) peRefreshed++;
   }
+
+  // Staleness bookkeeping. `payload` keys are exactly the symbols this run
+  // actually refreshed, so the score means what the health page says it means.
+  // registerSymbols is `nx`, seeding newcomers at 0 (never refreshed) without
+  // ever overwriting a real refresh time.
+  await registerSymbols("pricePool", clean);
+  const refreshed = Object.keys(payload);
+  if (refreshed.length) await markRefreshed("pricePool", refreshed);
 
   let written = 0;
   try {
