@@ -71,6 +71,14 @@ type Probe = {
    * this address".
    */
   base?: "stable" | "api/v3" | "api/v4";
+  /**
+   * HTTP method. Defaults to GET, which is every probe except the HEAD one.
+   *
+   * A HEAD probe asks a different question from every other probe here: not
+   * "what does this endpoint return" but "can the SIZE of what it returns be
+   * learned without paying for the body".
+   */
+  method?: "GET" | "HEAD";
 };
 
 // `symbol`-bearing list endpoints worth knowing about, plus two known-good
@@ -269,10 +277,38 @@ function buildDatedProbes(now: Date): Probe[] {
   const gateFrom = gateFromDate(now);
 
   return [
+    // CAN A COUNT BE HAD WITHOUT RETRIEVING THE ARTICLES?
+    //
+    // /stable/news/stock is the largest line on the byte meter. If HEAD returned
+    // a Content-Length, the size of a window could be sampled cheaply -- and a
+    // 4-week headline chart could be derived rather than paid for in reach.
+    //
+    // THE OTHER HALF OF THAT QUESTION IS ALREADY ANSWERED, and answered NO. The
+    // news response is a bare JSON array with eight per-row keys and no envelope
+    // (see `rowKeys` on the baseline probe below), so there is no `total` field
+    // to read. A count can only come from counting rows, which means having them.
+    //
+    // So HEAD is the last route to a free count, and the bar is high: it passes
+    // ONLY if it returns a Content-Length that MATCHES the GET's actual body
+    // length. Three ways it fails and two of them look like success --
+    //
+    //   * 405 / 404: unsupported. Clear.
+    //   * 200 with no content-length: looks fine, tells you nothing.
+    //   * 200 with a content-length that does not match the GET body: the worst
+    //     case, because it is a number, and a wrong number is worse than none.
+    //
+    // Deliberately the SAME URL as the baseline below, so the two are directly
+    // comparable rather than approximately so.
+    {
+      id: "news-stock-HEAD",
+      path: "news/stock?symbols=MU&limit=50",
+      method: "HEAD",
+      note: "Free-count probe. PASS only if contentLength is present AND equals bodyBytes on news-stock-BASELINE-no-from.",
+    },
     {
       id: "news-stock-BASELINE-no-from",
       path: "news/stock?symbols=MU&limit=50",
-      note: "GATE CONTROL -- the same request WITHOUT from=. Compare oldestPublished against the row below.",
+      note: "GATE CONTROL -- the same request WITHOUT from=. Compare oldestPublished against the row below. Also the byte-length reference for news-stock-HEAD.",
     },
     {
       id: "news-stock-GATE-from",
@@ -419,6 +455,97 @@ export function readNewsFromGate(
   };
 }
 
+export type HeadRow = {
+  id: string;
+  httpStatus: number | null;
+  contentLength: number | null;
+  bodyBytes: number;
+};
+
+/**
+ * Can the size of a news response be learned without retrieving it?
+ *
+ * READ RATHER THAN EYEBALLED, because two of the three failure modes look like
+ * success. A 200 is not a pass, and a present Content-Length is not a pass
+ * either -- only a Content-Length that MATCHES the GET's real body length is,
+ * because a wrong number is worse than no number: it would be believed.
+ *
+ * The tolerance is deliberately tight (1%). This is not a measurement subject
+ * to noise; the same URL fetched twice seconds apart should return the same
+ * bytes, and a large gap means the header is describing something other than
+ * what GET actually sends -- a compressed length against a decompressed body,
+ * most likely, which is precisely the layer confusion this project has paid for
+ * before (claude/traps/measuring-the-wrong-layer.md).
+ */
+export function readHeadProbe(
+  head: HeadRow | undefined,
+  get: HeadRow | undefined
+): { verdict: "PASS" | "FAIL" | "UNKNOWN"; detail: string; freeCountPossible: boolean } {
+  if (!head) {
+    return {
+      verdict: "UNKNOWN",
+      detail: "The HEAD probe did not run (skipped for budget, or absent). Not a pass.",
+      freeCountPossible: false,
+    };
+  }
+  if (head.httpStatus === null) {
+    return { verdict: "UNKNOWN", detail: "The HEAD probe threw before returning a status. Not a pass.", freeCountPossible: false };
+  }
+  if (head.httpStatus === 405 || head.httpStatus === 404 || head.httpStatus >= 400) {
+    return {
+      verdict: "FAIL",
+      detail:
+        `HEAD returned ${head.httpStatus}. The method is not supported here, so a size cannot be ` +
+        "learned without the body. Combined with the response being a bare array with no envelope " +
+        "and therefore no total field, there is no free count: a count requires retrieving the " +
+        "articles, and a 4-week chart has to be paid for in reach rather than derived.",
+      freeCountPossible: false,
+    };
+  }
+  if (head.contentLength === null) {
+    return {
+      verdict: "FAIL",
+      detail:
+        `HEAD returned ${head.httpStatus} but no Content-Length. A 200 with no length is the ` +
+        "failure that looks like success -- it answers the question with nothing. Same conclusion: " +
+        "no free count.",
+      freeCountPossible: false,
+    };
+  }
+  if (!get || !get.bodyBytes) {
+    return {
+      verdict: "UNKNOWN",
+      detail:
+        `HEAD reported Content-Length ${head.contentLength}, but the GET baseline it must be ` +
+        "checked against did not return a body. An unverified length is not a pass.",
+      freeCountPossible: false,
+    };
+  }
+
+  const delta = Math.abs(head.contentLength - get.bodyBytes);
+  const ratio = delta / get.bodyBytes;
+  if (ratio <= 0.01) {
+    return {
+      verdict: "PASS",
+      detail:
+        `HEAD's Content-Length (${head.contentLength}) matches the GET body (${get.bodyBytes}) ` +
+        `within ${(ratio * 100).toFixed(2)}%. A response's size CAN be sampled without retrieving ` +
+        "it. Note this gives a byte size, not an article count -- deriving one from the other " +
+        "assumes a stable bytes-per-article, which is a separate thing to measure before relying on.",
+      freeCountPossible: true,
+    };
+  }
+  return {
+    verdict: "FAIL",
+    detail:
+      `HEAD's Content-Length (${head.contentLength}) does NOT match the GET body ` +
+      `(${get.bodyBytes}) -- off by ${delta} bytes, ${(ratio * 100).toFixed(1)}%. This is the worst ` +
+      "of the three outcomes: a number that would be believed and is wrong. Most likely a " +
+      "compressed length against a decompressed body. Do not build on it.",
+    freeCountPossible: false,
+  };
+}
+
 function scrub(text: string, apiKey: string) {
   return apiKey ? text.split(apiKey).join("<key>") : text;
 }
@@ -466,10 +593,20 @@ export async function GET(request: Request) {
     try {
       await reserveFmpCallSlot();
       const res = await fetch(url, {
+        method: probe.method ?? "GET",
         cache: "no-store",
         headers: { accept: "application/json" },
       });
+      // A HEAD response has no body by definition, so res.text() returns "" and
+      // every downstream field falls out null/0 for it. That is correct, not a
+      // failure: the only things a HEAD probe reports are its status and its
+      // headers.
       const text = await res.text();
+      const contentLength = (() => {
+        const raw = Number(res.headers.get("content-length"));
+        return Number.isFinite(raw) && raw > 0 ? raw : null;
+      })();
+      const bodyBytes = text ? Buffer.byteLength(text, "utf8") : 0;
 
       let json: unknown = null;
       try {
@@ -537,6 +674,13 @@ export async function GET(request: Request) {
         // newest-first today, but a probe that assumes the ordering it is
         // trying to verify is not a measurement. Both `publishedDate` and
         // `date` are accepted because the two vintages differ.
+        method: probe.method ?? "GET",
+        // BOTH, always, and never one standing in for the other. A
+        // content-length that disagrees with the body it describes IS the
+        // finding, and reporting only the header would hide it
+        // (claude/traps/measuring-the-wrong-layer.md).
+        contentLength,
+        bodyBytes,
         oldestPublished: publishedRange(arr).oldest,
         newestPublished: publishedRange(arr).newest,
         // Fixed lookup of TARGET_SYMBOLS within this probe's rows, so
@@ -558,6 +702,9 @@ export async function GET(request: Request) {
         fundLikeSymbols: 0,
         fundLikeSample: [],
         sample: [],
+        method: probe.method ?? "GET",
+        contentLength: null,
+        bodyBytes: 0,
         rowKeys: null,
         sampleRow: null,
         titleSample: null,
@@ -585,9 +732,21 @@ export async function GET(request: Request) {
     ),
   };
 
+  const newsHeadProbe = {
+    question: "Can the size of a news response be learned without retrieving the articles?",
+    alreadyAnswered:
+      "There is no `total` field to read: the news response is a bare array with eight per-row " +
+      "keys and no envelope. HEAD is the only remaining route to a free count.",
+    ...readHeadProbe(
+      results.find((r) => r.id === "news-stock-HEAD"),
+      results.find((r) => r.id === "news-stock-BASELINE-no-from")
+    ),
+  };
+
   return NextResponse.json({
     probedAt: probedAtDate.toISOString(),
     newsFromGate,
+    newsHeadProbe,
     // Non-zero means the FMP budget was tight and some probes were skipped
     // rather than queued -- rerun in a quieter minute before reading anything
     // into a missing result.
