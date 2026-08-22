@@ -83,10 +83,57 @@ went stale unnoticed in the first place.*
 
 **Drifted:**
 
-- **`~49 files use "use client"` is now 64.** Up 15 since the policy was
-  written. The named page-level list has not grown, so the increase is in
-  islands — which is the policy working rather than failing, but the number in
-  the text was stale and would have been quoted as current.
+- **`~49 files use "use client"` is now 64.** But the total is the wrong number
+  to track, because growth in islands is the policy working and growth in
+  page-level components is the policy not holding, and one figure cannot tell
+  them apart. Split:
+
+  | | 2026-07-19 | 2026-08-22 |
+  |---|---|---|
+  | page-level | 10 (the named list) | **14** |
+  | islands | ~39 | **50** |
+  | total | ~49 | 64 |
+
+  No `page.tsx` is itself a client component.
+
+- **Four page-level components exist that the policy does not name:**
+  `InsightPostClient` (`/insights/[slug]`), `VideoPageClient`
+  (`/insights/videos/[videoId]`), `SPXChartClient` (`/markets/spx`),
+  `VerifyClient` (`/verify`). All ten named ones are still present, so this is
+  addition, not churn. **Track the page-level delta, not the total.**
+
+**The outstanding action item, done (2026-08-22).** "Eventually re-audit the
+page-level `*Client.tsx` list to confirm each one's `page.tsx` does the actual
+data fetch and only hands off interaction" — open since 19 July.
+
+All four of the new ones are compliant:
+
+- `InsightPostClient` — `page.tsx` fetches the post server-side; the client
+  component holds the chart interaction only.
+- `VideoPageClient` — `page.tsx` calls `getYouTubeVideoById`,
+  `getLatestYouTubeVideos` and `getVideoStockData`, and does the remark→HTML
+  pass, all server-side.
+- `SPXChartClient` — `page.tsx` fetches; the client half is the chart.
+- `VerifyClient` — `/verify` is a human-verification interstitial whose entire
+  content is a POST to `/api/internal/verify-human`. There is no data to
+  server-render. This is exactly the "core value *is* the interactivity"
+  exception the policy names, and `page.tsx` still owns the metadata.
+
+**A METHOD NOTE, because this audit produced two false findings before it
+produced a true one, and both were the same mistake in different clothes.**
+
+The first was the comment-vs-code grep described above. The second was a
+heuristic for "does `page.tsx` fetch server-side" that pattern-matched
+`await get[A-Z]`-shaped calls: it reported `app/insights/page.tsx` as doing no
+server fetch, when that file calls `getPaginatedPosts`, `getLatestYouTubeVideos`
+and `getAllVideoMeta` — it fetches plenty. Publishing that table would have
+raised a false alarm against a compliant page.
+
+The directive COUNT is mechanical and trustworthy: `"use client"` as the first
+non-comment statement is exact, and so is the page-level/island split, which
+keys off filename and import edges rather than behaviour. **Per-file compliance
+verdicts are not mechanical** and were reached by reading the four new files.
+Anyone re-running this should re-count freely and re-read before judging.
 
 **A near-miss worth recording, since this file is about not fooling yourself.**
 The first pass at this verification used `grep '"use client"' -l` and returned
