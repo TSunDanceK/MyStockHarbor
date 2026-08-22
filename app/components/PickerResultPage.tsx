@@ -139,6 +139,12 @@ type SignalRecord = {
   bearishMacdDivergence?: boolean;
   positiveLastEarnings?: boolean;
   strongEarningsGrowth?: boolean;
+
+  // Every composite check that fired, strongest first. Mirrors the two fields
+  // of the same name on pickersBuilder's SignalRecord -- this type is a
+  // structural copy of that payload, so the two have to be extended together.
+  oversoldIndicators?: string[];
+  overboughtIndicators?: string[];
 };
 
 type PickersPayload = {
@@ -611,6 +617,26 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
         stockHref: `/stock/${encodeURIComponent(symbol)}`,
         chartHref: chartHrefFor(symbol, record.dashboardHref),
         chartPoints: Array.isArray(record.chartPoints) ? record.chartPoints : [],
+        // Which checks fired, for the Signals column. This is the UNIVERSE
+        // path, so without it the column populated only for the ~20 rows a page
+        // that also appear in a section (which carry their own firedIndicators
+        // from the section item) and was blank for everything else -- reading as
+        // "no signals" rather than "not plumbed here".
+        //
+        // Whichever side the stock is actually on. A stock is not normally both,
+        // and where the composite says it is, oversold wins to match the
+        // green-before-red precedence pickIsGreenOverallSignal already applies.
+        //
+        // DELIBERATELY undefined when neither flag is set. A stock that is
+        // neither oversold nor overbought genuinely has no fired checks, so the
+        // grid's "--" is the correct and honest rendering. An empty array would
+        // render as "0 signals", which asserts a measurement was taken and came
+        // back empty -- a different and false claim.
+        firedIndicators: record.oversold
+          ? record.oversoldIndicators
+          : record.overbought
+            ? record.overboughtIndicators
+            : undefined,
         ...flags,
       };
     }).filter((entry): entry is ResultEntry => Boolean(entry)).sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.symbol.localeCompare(b.symbol)).slice(0, RESULT_SAFETY_CAP);
