@@ -13,6 +13,7 @@
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
+import { readHistoryDropCounts } from "@/lib/server/historyCache";
 import type { NextRequest } from "next/server";
 import { GET as buildPickerUniverse } from "../../../../lib/server/pickersBuilder";
 import { recordJobRun } from "../../../../lib/server/jobRuns";
@@ -28,7 +29,23 @@ import { recordJobRun } from "../../../../lib/server/jobRuns";
 export async function GET(req: NextRequest) {
   try {
     const res = await buildPickerUniverse(req);
-    await recordJobRun("warm-picker-universe", res.ok, { status: res.status });
+    // Read from module state, NOT from the response body -- the note above about
+    // not cloning this route's payload still holds. This run fetches and parses
+    // history for the whole universe, so it is the only place the figure is
+    // large enough to mean anything.
+    //
+    // rowsParsed is reported with it deliberately: 0 drops out of 0 rows says
+    // nothing at all, while 0 drops out of ~900k rows is real evidence the
+    // zero-bar bug was latent rather than active. A non-zero count says it was
+    // NOT latent, names up to 12 affected symbols, and makes flushing the
+    // history namespace urgent rather than tidy.
+    const drops = readHistoryDropCounts();
+    await recordJobRun("warm-picker-universe", res.ok, {
+      status: res.status,
+      historyRowsParsed: drops.rowsParsed,
+      historyRowsDroppedNoClose: drops.rowsDroppedNoClose,
+      historyDropSymbols: drops.symbols.join(",") || null,
+    });
     return res;
   } catch (error) {
     const message = error instanceof Error ? error.message : "warm-picker-universe failed";
