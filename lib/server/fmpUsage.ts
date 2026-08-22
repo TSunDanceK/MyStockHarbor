@@ -91,41 +91,164 @@ export function fmpEndpointLabel(url: string): string {
   return kept.join("/") || "unknown";
 }
 
+// ---------------------------------------------------------------------------
+// BUFFERING. The meter must not cost more than the thing it measures.
+//
+// The first version awaited a Redis pipeline per FMP response. warmFundamentals
+// makes ~477 calls in a run that ALREADY spends its entire 90-second wait
+// budget, so that is ~477 serial Redis round-trips added to the job whose
+// coverage the whole exercise is trying to improve -- an instrument that
+// changes the reading. Counts are now accumulated in memory and written once.
+//
+// KEYED BY DAY AT RECORD TIME, NOT FLUSH TIME. A buffer that spans midnight
+// would otherwise land every sample in whichever day the flush happened to
+// occur, silently moving spend between the day buckets the whole report is
+// built on. The day is stamped when the response is seen.
+//
+// ON LEAKING BETWEEN INVOCATIONS: this buffer is module state, and a warm
+// serverless instance is reused across invocations. Three things bound that.
+// The jobs call flushFmpUsage() explicitly when they finish, so the normal case
+// is an empty buffer between invocations. `after()` schedules a flush once the
+// response is sent, for request paths that do not flush explicitly. And a hard
+// cap flushes inline, so a long-running or crashed invocation can neither grow
+// the buffer without limit nor sit on samples indefinitely.
+//
+// Residual, and acceptable: if an invocation dies between recording and
+// flushing, those samples are written by whichever invocation flushes next.
+// They are still real calls attributed to the right DAY, just late. Losing them
+// would be worse, and double-counting is impossible because the buffer is
+// cleared before the write is awaited.
+type UsageCell = { calls: number; wire: number; decoded: number; wireExact: number };
+
+// Keyed `${dayKey}|${endpoint}` so the bucket cannot drift across a flush.
+const buffer = new Map<string, UsageCell>();
+let flushScheduled = false;
+
+// Flush inline once the buffer reaches either bound. Distinct endpoints are few
+// (a couple of dozen), so in practice the call bound is the one that fires --
+// it keeps a 477-call run to a handful of writes rather than one giant one, and
+// caps how many samples an abandoned invocation can be holding.
+const MAX_BUFFERED_KEYS = 200;
+const MAX_BUFFERED_CALLS = 250;
+let bufferedCalls = 0;
+
 /**
- * Record one FMP response.
+ * Write everything buffered, in one pipeline, and clear.
+ *
+ * Called explicitly by the warm jobs when they finish; also scheduled via
+ * `after()` and by the size cap. Safe to call when empty, and safe to call
+ * concurrently -- the buffer is swapped out before the await, so two overlapping
+ * flushes cannot write the same sample twice.
+ */
+export async function flushFmpUsage(): Promise<void> {
+  if (!redis || buffer.size === 0) return;
+
+  const pending = [...buffer.entries()];
+  buffer.clear();
+  bufferedCalls = 0;
+
+  try {
+    const p = redis.pipeline();
+    const days = new Set<string>();
+    for (const [composite, cell] of pending) {
+      const sep = composite.indexOf("|");
+      const day = composite.slice(0, sep);
+      const endpoint = composite.slice(sep + 1);
+      const key = `${FMP_BYTES_PREFIX}:${day}`;
+      days.add(key);
+      p.hincrby(key, `${endpoint}:calls`, cell.calls);
+      p.hincrby(key, `${endpoint}:decoded`, cell.decoded);
+      p.hincrby(key, `${endpoint}:wire`, cell.wire);
+      // How many of the wire figures came from a real Content-Length. Without
+      // this, a total that is largely inferred is indistinguishable from a
+      // measured one -- the same shape as trusting a number whose provenance is
+      // not recorded.
+      if (cell.wireExact > 0) p.hincrby(key, `${endpoint}:wireExact`, cell.wireExact);
+    }
+    for (const key of days) p.expire(key, FMP_BYTES_TTL_SECONDS);
+    await p.exec();
+  } catch {
+    // observer -- never throws into the caller. The samples are dropped rather
+    // than retried: a retry queue for a diagnostic is more machinery than the
+    // undercount it prevents is worth, and readFmpUsage already reports
+    // daysMissing so a thin window is visible rather than assumed complete.
+  }
+}
+
+/**
+ * Record one FMP response. Buffered; see flushFmpUsage.
  *
  * FAILS OPEN AND SILENT. This is an observer; it must never be able to break a
  * call it is only watching. The cost of a dropped sample is an undercount in a
  * diagnostic, and that is strictly better than a warm job throwing because a
  * metrics write failed.
+ *
+ * Not async any more, and that is the point: the caller no longer awaits a
+ * Redis round-trip per FMP response.
  */
-export async function recordFmpUsage(args: {
+export function recordFmpUsage(args: {
   url: string;
   decodedBytes: number;
   wireBytes?: number | null;
-}): Promise<void> {
+}): void {
   if (!redis) return;
-  const endpoint = fmpEndpointLabel(args.url);
-  const decoded = Number.isFinite(args.decodedBytes) && args.decodedBytes > 0 ? Math.round(args.decodedBytes) : 0;
-  const hasWire = typeof args.wireBytes === "number" && Number.isFinite(args.wireBytes) && args.wireBytes > 0;
-  const wire = hasWire ? Math.round(args.wireBytes as number) : decoded;
-
-  const key = `${FMP_BYTES_PREFIX}:${dayKey(new Date())}`;
   try {
-    const p = redis.pipeline();
-    p.hincrby(key, `${endpoint}:calls`, 1);
-    p.hincrby(key, `${endpoint}:decoded`, decoded);
-    p.hincrby(key, `${endpoint}:wire`, wire);
-    // How many of the wire figures came from a real Content-Length. Without
-    // this, a total that is largely inferred is indistinguishable from a
-    // measured one -- the same shape as trusting a number whose provenance is
-    // not recorded.
-    if (hasWire) p.hincrby(key, `${endpoint}:wireExact`, 1);
-    p.expire(key, FMP_BYTES_TTL_SECONDS);
-    await p.exec();
+    const endpoint = fmpEndpointLabel(args.url);
+    const decoded = Number.isFinite(args.decodedBytes) && args.decodedBytes > 0 ? Math.round(args.decodedBytes) : 0;
+    const hasWire = typeof args.wireBytes === "number" && Number.isFinite(args.wireBytes) && args.wireBytes > 0;
+    const wire = hasWire ? Math.round(args.wireBytes as number) : decoded;
+
+    const composite = `${dayKey(new Date())}|${endpoint}`;
+    const cell = buffer.get(composite) ?? { calls: 0, wire: 0, decoded: 0, wireExact: 0 };
+    cell.calls += 1;
+    cell.wire += wire;
+    cell.decoded += decoded;
+    if (hasWire) cell.wireExact += 1;
+    buffer.set(composite, cell);
+    bufferedCalls += 1;
+
+    if (buffer.size >= MAX_BUFFERED_KEYS || bufferedCalls >= MAX_BUFFERED_CALLS) {
+      // Deliberately not awaited: the caller is mid-fetch-loop and the whole
+      // point is to stop making it wait on Redis. Errors are swallowed inside
+      // flushFmpUsage.
+      void flushFmpUsage();
+      return;
+    }
+    scheduleFlush();
   } catch {
     // observer -- never throws into the caller
   }
+}
+
+/**
+ * Ask Next to flush once the current response is sent.
+ *
+ * `after()` only exists inside a request or render scope and throws outside one
+ * -- warm jobs invoked by cron are inside a route handler, so it applies there,
+ * but a module imported outside that scope is not. The throw is caught and the
+ * size cap plus the jobs' explicit flushFmpUsage() cover that case, so this is
+ * an optimisation rather than the mechanism.
+ *
+ * Registered at most once per flush cycle. Calling after() per response would
+ * queue ~477 callbacks for one run, which is the cost this change removes.
+ */
+function scheduleFlush() {
+  if (flushScheduled) return;
+  flushScheduled = true;
+  void (async () => {
+    try {
+      const { after } = await import("next/server");
+      after(async () => {
+        flushScheduled = false;
+        await flushFmpUsage();
+      });
+    } catch {
+      // Not in a request scope, or after() unavailable. Reset so the next
+      // record can try again; the size cap and the jobs' explicit flush are
+      // what actually guarantee the write.
+      flushScheduled = false;
+    }
+  })();
 }
 
 /**
@@ -153,7 +276,7 @@ export async function fmpFetch(url: string, init?: RequestInit): Promise<Respons
     const header = Number(res.headers.get("content-length"));
     const wireBytes = Number.isFinite(header) && header > 0 ? header : null;
     const body = await res.clone().arrayBuffer();
-    await recordFmpUsage({ url, decodedBytes: body.byteLength, wireBytes });
+    recordFmpUsage({ url, decodedBytes: body.byteLength, wireBytes });
   } catch {
     // Never let measurement affect the call being measured.
   }

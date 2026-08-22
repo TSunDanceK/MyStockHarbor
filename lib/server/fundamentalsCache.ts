@@ -8,7 +8,7 @@
 // identical misses inside one render pass. Same fix as historyCache.ts; see
 // claude/picker-pages-isr-2026-08-20.md.
 import { Redis } from "@upstash/redis";
-import { fmpFetch } from "./fmpUsage";
+import { fmpFetch, flushFmpUsage } from "./fmpUsage";
 import { PAGE_READ_CACHE } from "./redisCacheMode";
 import { hasFmpCapacity, reserveFmpCallSlot } from "./historyCache";
 
@@ -707,6 +707,13 @@ export async function warmFundamentals(symbols: string[]) {
   for (const sym of cleanSymbols) {
     if (cachedProfiles.get(sym)?.industry || screenerFund.get(sym)?.industry) industryKnown++;
   }
+
+  // Write the buffered FMP byte samples once, at the end, rather than a Redis
+  // round-trip per FMP response. This run makes ~477 calls and already spends
+  // its full 90s wait budget, so per-call writes would have made the meter a
+  // measurable cost of the job it measures. Awaited so the samples are durable
+  // before the route returns rather than relying on after().
+  await flushFmpUsage();
 
   // Incomplete quote coverage must never be silent.
   //
