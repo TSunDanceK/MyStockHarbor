@@ -1,4 +1,9 @@
 // lib/stock-news-templates.ts
+// keywordHits was a private copy of the same three-line substring test that
+// lives in stock-news-data.ts and app/stock/[symbol]/news/page.tsx. Three
+// copies of one classification rule is three places to fix a matcher bug and
+// two places to forget (claude/traps/two-validators-for-one-value.md).
+import { keywordHits } from "@/lib/keywordMatch";
 //
 // Pure, non-AI template helpers for the stock/news pages. These build the
 // algorithmic "why this matters" / "beyond the headline" / "what it means"
@@ -23,11 +28,6 @@ type ToneLike = {
 type ArticleLike = {
   title: string;
 };
-
-function keywordHits(text: string, words: string[]) {
-  const lower = text.toLowerCase();
-  return words.some((word) => lower.includes(word));
-}
 
 function formatMoney(value: number | null) {
   return typeof value === "number" && Number.isFinite(value)
