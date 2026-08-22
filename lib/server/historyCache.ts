@@ -157,6 +157,19 @@ function buildFmpSymbol(symbol: string) {
 }
 
 function toFiniteNumber(value: unknown) {
+  // null AND empty string are rejected BEFORE Number(), because Number(null) is
+  // 0 and Number("") is 0 -- not NaN. Without this, an FMP row carrying
+  // `"close": null` became a Point with close 0: a real-looking bar priced at
+  // zero, which drags a 200-day mean, prints a fake gap on the chart and can
+  // trip the support/resistance detector. Only `undefined` coerces to NaN, so
+  // the Number.isFinite guard alone caught exactly one of the three empty
+  // shapes and looked like it caught all of them.
+  //
+  // Found while adding collapseDuplicateDates, and it had to be fixed with it:
+  // a zero bar merely sat in the series before, but "last occurrence wins" would
+  // let it REPLACE the real bar for that date. A latent bug and a new rule that
+  // together make a worse one.
+  if (value === null || value === undefined || value === "") return null;
   const num = Number(value);
   return Number.isFinite(num) ? num : null;
 }
@@ -188,7 +201,48 @@ function parseFmpHistoricalRows(rows: FmpHistoricalRow[] | undefined) {
 
   daily.sort((a, b) => a.date.localeCompare(b.date));
 
-  return daily;
+  return collapseDuplicateDates(daily);
+}
+
+/**
+ * One Point per calendar date. Last occurrence after the sort wins.
+ *
+ * WHY THIS HAS TO EXIST. Nothing upstream guarantees FMP returns one row per
+ * date, and nothing downstream survives it if they do not. Every indicator in
+ * this codebase reads the series POSITIONALLY -- movingAverage(closes, 200)
+ * takes 200 array slots, not 200 trading days -- so a duplicated date silently
+ * shifts every window by one and changes MA, RSI, MACD, Bollinger, ATR and the
+ * support/resistance detector at once. Nothing throws. The chart still renders.
+ * The numbers are just wrong, by an amount nobody can see
+ * (claude/traps/a-visible-failure-is-not-a-harmless-one.md).
+ *
+ * It is a live risk TODAY, before any intraday-synthesis work: the sort above
+ * has always ordered by date and never collapsed on it.
+ *
+ * LAST WINS, and the reason is determinism rather than a claim about which row
+ * is better. Two rows for one date carry no signal about which is more correct,
+ * and Array.prototype.sort is stable, so "last after the sort" is "last in
+ * FMP's own response order" -- a rule that produces the same series every time
+ * from the same payload. An arbitrary winner would make the same input yield
+ * different indicators on different runs, which is worse than either choice.
+ *
+ * When a synthesised intraday bar is eventually appended, it is appended after
+ * everything else and therefore wins its date here for free -- which is the
+ * REPLACE semantics that work needs, arrived at without a special case. That is
+ * a convenience, not the reason this exists: the guard is required whichever way
+ * the today-bar probe answers.
+ */
+function collapseDuplicateDates(points: Point[]): Point[] {
+  const out: Point[] = [];
+  for (const point of points) {
+    const previous = out[out.length - 1];
+    if (previous && previous.date === point.date) {
+      out[out.length - 1] = point;
+      continue;
+    }
+    out.push(point);
+  }
+  return out;
 }
 
 function getMinuteBucketParts(now = new Date()) {
