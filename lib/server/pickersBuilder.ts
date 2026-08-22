@@ -177,6 +177,21 @@ type SignalRecord = {
   supportResistanceZone?: PickerSupportResistanceZone;
   dominantOversoldIndicator?: string;
   dominantOverboughtIndicator?: string;
+  // EVERY check that fired, strongest first -- the full list behind the single
+  // `dominant*` label above. Same arrays CompositeResult already carries.
+  //
+  // #330 added these to CompositeResult, OversoldCandidate, OverboughtCandidate
+  // and takeTop's destructure, but not here. SignalRecord is the UNIVERSE path
+  // -- every analyzed symbol -- while the section items are only each
+  // category's top 20. So the Signals column populated for ~20 rows a page and
+  // was blank for everything else, which reads as "these stocks have no
+  // signals" rather than "this field never reached this path".
+  //
+  // Nothing new is computed for this: buildCompositeFromHistory already builds
+  // both arrays for every symbol and they were discarded at this object
+  // literal.
+  oversoldIndicators?: string[];
+  overboughtIndicators?: string[];
 
   isDynamicUniverse?: boolean;
   // True when this symbol earned its analyzed-universe slot from the Popular
@@ -3070,6 +3085,11 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
               : undefined,
             dominantOversoldIndicator: comp?.dominantOversoldIndicator,
             dominantOverboughtIndicator: comp?.dominantOverboughtIndicator,
+            // The full fired-check lists, alongside the dominant labels that
+            // were already here. `comp` is the same object those two read from,
+            // so this costs nothing but the two array references.
+            oversoldIndicators: comp?.oversoldIndicators,
+            overboughtIndicators: comp?.overboughtIndicators,
             isDynamicUniverse: dynamicName,
             isPopularSearch: popularName,
           });
