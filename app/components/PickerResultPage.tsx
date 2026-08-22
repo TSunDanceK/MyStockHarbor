@@ -12,7 +12,7 @@ import { getCompanyNameMap } from "@/lib/server/companyNames";
 import { readCachedFundamentalsBulk } from "@/lib/server/fundamentalsCache";
 import { readPricePoolBulk } from "@/lib/server/pricePool";
 import { readCachedStockDataBulk } from "@/lib/server/stockDataCache";
-import { getPickersData } from "@/lib/server/pickersBuilder";
+import { getPickersData, trendIndicatorsFrom, type TrendChecks } from "@/lib/server/pickersBuilder";
 import { WatermarkVisibilityProvider, HideWatermarksBar } from "@/app/components/WatermarkVisibility";
 import { FILTER_DEFS, CATEGORY_FILTER_DEFS, type FilterKey, type AnyFilterKey } from "@/lib/pickerFilters";
 import { CATEGORY_FIELDS, valueSatisfies, type Predicate } from "@/lib/screenerFields";
@@ -86,7 +86,28 @@ export type PickerResultConfig = {
   // "allSymbols" pages: show the whole list on load instead of hiding until a
   // condition is checked (used by the plain "All Stocks" / Stock Screener page).
   showAllImmediately?: boolean;
+  // WHICH measurement the Signals column reports for this page. Defaults to
+  // "composite" -- the oversold/overbought checks -- which is right for every
+  // page whose subject is the composite.
+  //
+  // It is wrong for /best-trend-score-stocks, and silently so: a trend leader
+  // is normally neither oversold nor overbought, so the default returns
+  // undefined for essentially every row and the column renders a dash on a page
+  // that exists to say which checks fired. The page's own note said "4/4 trend
+  // checks" with no way to see WHICH four.
+  //
+  // DECLARED, NOT INFERRED. The inference was available -- presetFilters
+  // includes "bestTrendPick" -- but a rule that reads a filter key to decide
+  // what a column measures breaks the moment a page ticks that filter for a
+  // different reason, and breaks by going quiet. scripts/check-signals-plumbing.mjs
+  // asserts the trend page carries this.
+  signalsFrom?: SignalsSource;
 };
+
+/**
+ * Which measurement the Signals column reports. See `signalsFrom`.
+ */
+type SignalsSource = "composite" | "trend";
 
 type PickerChartFocus = { kind: "ath" | "rangeHigh"; price: number; date: string };
 
@@ -145,6 +166,8 @@ type SignalRecord = {
   // structural copy of that payload, so the two have to be extended together.
   oversoldIndicators?: string[];
   overboughtIndicators?: string[];
+  // The four Best Trend checks. Same mirroring obligation as the two above.
+  trendChecks?: TrendChecks;
 };
 
 type PickersPayload = {
@@ -427,8 +450,17 @@ function getReasons(record: SignalRecord, defs: Array<{ key: keyof SignalRecord;
  * Signals column reports the composite's oversold/overbought checks, which are
  * a different measurement and are true regardless of whether the visitor has
  * the page's own condition ticked.
+ *
+ * `source` IS PAGE CONTEXT, and this function had none. On
+ * /best-trend-score-stocks the column's subject is the four trend checks, and a
+ * trend leader is normally neither oversold nor overbought -- so the composite
+ * rule returned undefined for practically every row and the page showed a bare
+ * "4/4 trend checks" with a dashed Signals column beside it. The rule stays in
+ * one place; what changed is that the caller now says which measurement it
+ * wants (config.signalsFrom).
  */
-function firedIndicatorsFor(record: SignalRecord): string[] | undefined {
+function firedIndicatorsFor(record: SignalRecord, source: SignalsSource): string[] | undefined {
+  if (source === "trend") return trendIndicatorsFrom(record.trendChecks);
   if (record.oversold) return record.oversoldIndicators;
   if (record.overbought) return record.overboughtIndicators;
   return undefined;
@@ -552,6 +584,11 @@ function entriesFromSection(args: {
 function buildEntries(args: { config: PickerResultConfig; sections: PickerSection[]; signalRecords: SignalRecord[] }) {
   const { config, sections, signalRecords } = args;
   const recordMap = makeRecordMap(signalRecords);
+  // Resolved once, here, rather than at each of the three branches -- the point
+  // of firedIndicatorsFor is that one rule serves all three, and three copies
+  // of `config.signalsFrom ?? "composite"` is the same divergence risk one hop
+  // up (claude/traps/two-validators-for-one-value.md).
+  const signalsSource: SignalsSource = config.signalsFrom ?? "composite";
 
   if (config.kind === "buySignals") {
     // Every analyzed symbol is kept, not just those scoring above zero. The
@@ -594,7 +631,7 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
         // Same Signals column, same source, same rule as the universe branch --
         // this page feeds the identical grid, so leaving it out showed a blank
         // column on every row of /top-stocks-with-buy-signals.
-        firedIndicators: firedIndicatorsFor(record),
+        firedIndicators: firedIndicatorsFor(record, signalsSource),
         ...flagsFromRecord(record),
       };
     }).filter((entry): entry is ResultEntry => Boolean(entry)).sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.symbol.localeCompare(b.symbol)).slice(0, RESULT_SAFETY_CAP);
@@ -624,7 +661,7 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
         chartHref: chartHrefFor(symbol, record.dashboardHref),
         chartPoints: Array.isArray(record.chartPoints) ? record.chartPoints : [],
         // As above -- /top-stocks-with-sell-signals feeds the same grid.
-        firedIndicators: firedIndicatorsFor(record),
+        firedIndicators: firedIndicatorsFor(record, signalsSource),
         ...flagsFromRecord(record),
       };
     }).filter((entry): entry is ResultEntry => Boolean(entry)).sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.symbol.localeCompare(b.symbol)).slice(0, RESULT_SAFETY_CAP);
@@ -659,7 +696,7 @@ function buildEntries(args: { config: PickerResultConfig; sections: PickerSectio
         // that also appear in a section (which carry their own firedIndicators
         // from the section item) and was blank for everything else -- reading as
         // "no signals" rather than "not plumbed here". See firedIndicatorsFor.
-        firedIndicators: firedIndicatorsFor(record),
+        firedIndicators: firedIndicatorsFor(record, signalsSource),
         ...flags,
       };
     }).filter((entry): entry is ResultEntry => Boolean(entry)).sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.symbol.localeCompare(b.symbol)).slice(0, RESULT_SAFETY_CAP);
