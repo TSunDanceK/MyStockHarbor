@@ -395,7 +395,7 @@ export default function BreakoutStocksPage() {
               desc="Review pullback setups that may still fit a constructive trend."
             />
             <RelatedCard
-              href="/bullish-divergence-stocks"
+              href="/bullish-bearish-divergence-stocks"
               title="Bullish Divergence"
               desc="Understand how fading downside momentum can hint at a reversal setup."
             />
