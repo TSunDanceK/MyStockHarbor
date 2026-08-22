@@ -1,3 +1,4 @@
+import { keywordHits } from "@/lib/keywordMatch";
 import { unstable_cache } from "next/cache";
 import { fmpFetch } from "@/lib/server/fmpUsage";
 import { beginTiming } from "./server/timing";
@@ -533,8 +534,19 @@ async function fetchFmpStockNews(symbol: string): Promise<NewsItem[]> {
 
   for (const url of endpoints) {
     try {
+      // 3600, not 900. /stable/news/stock is the single largest line on the FMP
+      // byte meter -- ~34% of 30-day bandwidth against a cap already at 73.6% --
+      // and it was the ONLY fetch in this file still on 900s; its siblings sit
+      // at 1800, 3600 and 86400. A 4x cut in frequency with no content loss:
+      // the feed is not 15-minute-critical, and the callers are wrapped in an
+      // unstable_cache at 3600 anyway, so 900 was buying refreshes nothing
+      // downstream could see.
+      //
+      // Deliberately NOT paired with a cut to `limit=50`. That WOULD lose
+      // content, and how much is unmeasured -- see the depth instrumentation
+      // below, which exists to answer that before anyone touches the number.
       const res = await fmpFetch(url, {
-        next: { revalidate: 900 },
+        next: { revalidate: 3600 },
       });
 
       if (!res.ok) continue;
@@ -844,10 +856,10 @@ function trendLabel(lastClose: number | null, ma50: number | null, ma200: number
   return null;
 }
 
-export function keywordHits(text: string, words: string[]) {
-  const lower = text.toLowerCase();
-  return words.some((word) => lower.includes(word));
-}
+// The word-boundary matcher, in lib/keywordMatch.ts. Re-exported here because
+// lib/news-scoring.ts and a dozen call sites already import it from this
+// module; the implementation moved, the import surface did not.
+export { keywordHits };
 
 // Benzinga and Zacks publish a lot of low-value SEO content ("stock price
 // today", "price prediction"), but they are also two of the most prolific
