@@ -158,5 +158,63 @@ const beforeU = untouched.map((e) => e.symbol).join(",");
 const statsU = applyOrderBy(untouched, { href: "/oversold-stocks-today" });
 check("returns null and leaves order alone", statsU === null && untouched.map((e) => e.symbol).join(",") === beforeU);
 
+// ------------------------------------------------- E. the key must be VISIBLE
+console.log("\n=== E. Every declared orderBy key is a column the page shows ===\n");
+// THE NON-NEGOTIABLE OF THIS WHOLE LINE OF WORK. Ordering by a number nobody
+// can see is what these pages were already doing -- `reasons.length`, a count of
+// 25 unrelated conditions, invisible on screen. Replacing one invisible order
+// with another would be no improvement, so a page may only declare an orderBy
+// on a field the grid actually renders.
+//
+// Checked against PickerResultsGrid's Col accessors rather than a list kept
+// here, so a column removed from the grid fails this instead of quietly making
+// a page sort by something it stopped showing.
+const gridSrc = fs.readFileSync(path.join(ROOT, "app/components/PickerResultsGrid.tsx"), "utf8");
+const gridCode = gridSrc
+  .replace(/\/\*[\s\S]*?\*\//g, "")
+  .split("\n")
+  .map((l) => (l.trim().startsWith("//") ? "" : l))
+  .join("\n");
+const shownFields = new Set([...gridCode.matchAll(/\be\.([A-Za-z][A-Za-z0-9]*)/g)].map((m) => m[1]));
+
+const pageFiles = [];
+const walkPages = (dir) => {
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (ent.name.startsWith(".") || ent.name === "node_modules") continue;
+    const full = path.join(dir, ent.name);
+    if (ent.isDirectory()) walkPages(full);
+    else if (ent.name === "page.tsx") pageFiles.push(full);
+  }
+};
+walkPages(path.join(ROOT, "app"));
+
+const declared = [];
+for (const file of pageFiles) {
+  const code = fs
+    .readFileSync(file, "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .map((l) => (l.trim().startsWith("//") ? "" : l))
+    .join("\n");
+  const m = code.match(/orderBy:\s*\{\s*field:\s*"([^"]+)"\s*,\s*dir:\s*"(asc|desc)"\s*,\s*label:\s*"([^"]+)"/);
+  if (m) declared.push({ page: path.relative(ROOT, file), field: m[1], dir: m[2], label: m[3] });
+}
+
+check("at least one page declares an orderBy", declared.length > 0, `${declared.length} pages`);
+for (const d of declared) {
+  check(`${d.page.replace("app/", "").replace("/page.tsx", "")} orders by ${d.field} (${d.dir}) — a column the grid renders`, shownFields.has(d.field));
+}
+check(
+  "/cheap-tech-stocks orders by its own predicate field",
+  declared.some((d) => d.page.includes("cheap-tech-stocks") && d.field === "peRatio" && d.dir === "asc"),
+  "left out of #336 only because it is in NOINDEX_PICKER_PAGES — which governs crawlers, not readers"
+);
+// The grid scan has to actually find fields, or "every key is shown" is vacuous.
+check(
+  "the grid scan found real columns (sanity)",
+  shownFields.has("peRatio") && shownFields.has("symbol") && shownFields.size > 10,
+  `${shownFields.size} entry fields read by the grid`
+);
+
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);
