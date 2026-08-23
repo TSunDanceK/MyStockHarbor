@@ -44,6 +44,16 @@ const config: PickerResultConfig = {
     { kind: "category", field: "sector", values: ["Technology"] },
     { kind: "number", field: "peRatio", max: 25 },
   ],
+  // Same reasoning as /low-pe-stocks, and the same accessor as the predicate
+  // above so membership and order cannot disagree. This page shipped in
+  // `reasons.length` order -- how many of 25 unrelated technical conditions a
+  // stock happens to meet -- which on a page whose entire claim is a valuation
+  // ceiling is not an imprecise ranking, it is a ranking of a different subject.
+  //
+  // It was left out of #336 only because it is in NOINDEX_PICKER_PAGES. That
+  // governs whether search engines see the page, not whether a visitor reading
+  // it is shown the cheapest names first.
+  orderBy: { field: "peRatio", dir: "asc", label: "P/E Ratio" },
   maxItems: 36,
   // Same reasoning as /low-pe-stocks: the claim is about valuation, so open on
   // the tab that lets it be checked against more than one multiple.
