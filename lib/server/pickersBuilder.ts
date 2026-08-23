@@ -3978,6 +3978,46 @@ export async function buildPickerJitterDiagnostics(opts: {
 }
 
 /**
+ * What the last build did, for the warm job's run record.
+ *
+ * MODULE STATE, READ-AND-RESET, not read off the response body. The warm route's
+ * own comment explains why it must not clone its payload: that payload carries
+ * the entire picker universe on a route whose header records a timeout cliff.
+ * Same shape as historyCache's drop counters and for the same reason.
+ *
+ * These four are exactly what a forced-warm post-mortem needs and nothing else
+ * on the page can answer: how big the universe came out (a forced run must never
+ * yield a thinner one than an unforced run -- the invariant this whole change
+ * rests on), how much of it failed, and whether the degraded guard actually
+ * refused to publish. Without `wrote`, "guard fired" and "guard was not needed"
+ * look identical from outside.
+ */
+let lastBuildStats: {
+  universeSize: number;
+  degradedSymbolPct: number | null;
+  degradedFallbackUsed: boolean;
+  wrote: boolean;
+} | null = null;
+
+export function readLastBuildStats() {
+  const out = lastBuildStats;
+  lastBuildStats = null;
+  return out;
+}
+
+function recordBuildStats(
+  data: PickersPayload,
+  { degradedFallbackUsed, wrote }: { degradedFallbackUsed: boolean; wrote: boolean }
+) {
+  lastBuildStats = {
+    universeSize: typeof data.universeSize === "number" ? data.universeSize : 0,
+    degradedSymbolPct: typeof data.degradedSymbolPct === "number" ? data.degradedSymbolPct : null,
+    degradedFallbackUsed,
+    wrote,
+  };
+}
+
+/**
  * Is this build too degraded to publish?
  *
  * Extracted as a named predicate rather than left inline in two places, so the
@@ -4073,10 +4113,12 @@ export async function getPickersData(
           forceRefresh ? " on a FORCED run" : ""
         } -- keeping last known-good cache, not writing.`
       );
+      recordBuildStats(data, { degradedFallbackUsed: true, wrote: false });
       memo = { ts: now, data: cached.data };
       return cached.data;
     }
 
+    recordBuildStats(data, { degradedFallbackUsed: false, wrote: true });
     memo = { ts: now, data };
     await writePickersCache(data, () => buildReducedPickersPayload(data));
     return data;
@@ -4249,6 +4291,7 @@ async function handlePickersRequest(
         } — keeping last known-good cache, not writing.`
       );
 
+      recordBuildStats(data, { degradedFallbackUsed: true, wrote: false });
       memo = { ts: now, data: cached.data };
 
       return NextResponse.json(cached.data, {
@@ -4260,6 +4303,7 @@ async function handlePickersRequest(
       });
     }
 
+    recordBuildStats(data, { degradedFallbackUsed: false, wrote: true });
     memo = { ts: now, data };
     await writePickersCache(data, () => buildReducedPickersPayload(data));
 

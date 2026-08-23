@@ -15,11 +15,12 @@
 //   node scripts/check-pricepool-ohlc.mjs
 import fs from "node:fs";
 import path from "node:path";
+import { stripComments } from "./lib/source-code.mjs";
 
 const ROOT = process.cwd();
 const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
-const codeOf = (src) =>
-  src.replace(/\/\*[\s\S]*?\*\//g, "").split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
+// Comments stripped with the real tokeniser, and guarded -- see scripts/lib/source-code.mjs.
+const codeOf = (src, file) => stripComments(src, { file, dropLines: true });
 
 let failures = 0;
 const check = (label, ok, detail = "") => {
@@ -27,7 +28,7 @@ const check = (label, ok, detail = "") => {
   if (!ok) failures++;
 };
 
-const pool = codeOf(read("lib/server/pricePool.ts"));
+const pool = codeOf(read("lib/server/pricePool.ts"), "lib/server/pricePool.ts");
 
 // SCOPED, because `open: num(row.open)` and even
 // `const row = (Array.isArray(json) ? json[0] : json)` appear at MORE THAN ONE
@@ -117,7 +118,7 @@ console.log("\n=== 4. It is reported, not only warned about ===\n");
 // A warning that only fires at ZERO cannot show a slow decline. The count rides
 // on the run record so the ratio is visible before it becomes a cliff.
 check("openCarried is returned from warmPricePool", /openCarried,\n/.test(pool));
-const route = codeOf(read("app/api/jobs/warm-price-pool/route.ts"));
+const route = codeOf(read("app/api/jobs/warm-price-pool/route.ts"), "app/api/jobs/warm-price-pool/route.ts");
 check(
   "...and recorded on the job run, next to priceRefreshed",
   /priceRefreshed: result\.priceRefreshed \?\? null,/.test(route) &&
