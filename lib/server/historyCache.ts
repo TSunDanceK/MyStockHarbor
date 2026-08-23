@@ -34,8 +34,25 @@ const REDIS_HISTORY_PREFIX = "msh:history:v7";
 // becomes four times longer.
 //
 // So the order is load-bearing. Before raising this value: the parser fix must
-// be LIVE, and the history namespace must be FLUSHED. Raising it first turns a
-// bug that expires by itself into one that persists a day per symbol.
+// be LIVE, and the history namespace must be CLEAR of entries written before it.
+//
+// ANSWERED 2026-08-22, MEASURED NOT REASONED (scripts/check-history-ttl.mjs).
+// The question was whether the weekend extension below applies to writes made
+// DURING the weekend or only to the Friday-after-close write. It applies to
+// weekend writes too: getRedisHistoryTtlSeconds() is called with no argument at
+// the write site, so it reads the moment of the WRITE, and a Friday-evening,
+// Saturday or Sunday write all land on the same next-Monday-open expiry.
+//
+// CONSEQUENCE: no manual flush is needed. Every entry written after Friday's
+// close -- including anything written by the old parser before #349 deployed on
+// Saturday -- expires together at the Monday open (13:30 UTC in summer) and is
+// refetched through the fixed parser. Raise this value any time after that and
+// the namespace is already clean.
+//
+// The 30-minute margin the original plan assumed was wrong in the other
+// direction, and it is worth knowing why: the Monday open was being computed an
+// hour LATE, because getNextMondayOpenUtcMsFromEastern hardcoded the winter
+// offset. Fixed in the same change; see the note there.
 const REDIS_HISTORY_TTL_SECONDS = 6 * 60 * 60;
 const MIN_QUALIFIED_POINTS = 30;
 
@@ -124,12 +141,33 @@ function getNextMondayOpenUtcMsFromEastern(date = new Date()) {
 
   jsDate.setUTCDate(jsDate.getUTCDate() + daysUntilMonday);
 
-  const mondayYear = jsDate.getUTCFullYear();
-  const mondayMonth = String(jsDate.getUTCMonth() + 1).padStart(2, "0");
-  const mondayDay = String(jsDate.getUTCDate()).padStart(2, "0");
+  const mondayYear2 = jsDate.getUTCFullYear();
+  const mondayMonthNum = jsDate.getUTCMonth() + 1;
+  const mondayDayNum = jsDate.getUTCDate();
 
-  const easternOpen = `${mondayYear}-${mondayMonth}-${mondayDay}T09:30:00-05:00`;
-  return new Date(easternOpen).getTime();
+  // RESOLVED AGAINST THE ZONE, not against a hardcoded offset.
+  //
+  // This line read `T09:30:00-05:00`. -05:00 is EST, the WINTER offset; New York
+  // is on EDT (-04:00) from mid-March to early November. So for roughly eight
+  // months of the year the "next Monday open" this returns is 10:30 ET -- an
+  // hour after the real open -- and the weekend TTL held history stale through
+  // the first hour of Monday's session. Measured 2026-08-22: a Saturday write
+  // expired at 14:30 UTC when the open is 13:30 UTC.
+  //
+  // Everything else in this file already reads the zone properly through
+  // getEasternParts; this was the one place that guessed. Rather than swap one
+  // hardcoded offset for another (which breaks the other four months), the two
+  // candidates are tested against the zone itself and the one that really is
+  // 09:30 in New York wins.
+  for (const offsetHours of [4, 5]) {
+    const candidate = Date.UTC(mondayYear2, mondayMonthNum - 1, mondayDayNum, 9 + offsetHours, 30);
+    const { hour, minute } = getEasternParts(new Date(candidate));
+    if (hour === 9 && minute === 30) return candidate;
+  }
+  // Neither matched -- only reachable if the zone database disagrees with both
+  // US offsets. Fall back to EDT rather than throwing: this is a TTL, and a
+  // slightly wrong one beats a warm job that fails on a date-maths edge.
+  return Date.UTC(mondayYear2, mondayMonthNum - 1, mondayDayNum, 13, 30);
 }
 
 function getRedisHistoryTtlSeconds(now = new Date()) {
