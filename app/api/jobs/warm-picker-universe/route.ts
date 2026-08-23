@@ -13,14 +13,29 @@
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
-import { readHistoryDropCounts } from "@/lib/server/historyCache";
+import {
+  HISTORY_MAX_BAR_AGE_WEEKDAYS,
+  readHistoryBarAgeCounts,
+  readHistoryDropCounts,
+} from "@/lib/server/historyCache";
 import type { NextRequest } from "next/server";
-import { GET as buildPickerUniverse } from "../../../../lib/server/pickersBuilder";
+import { GET_WARM as buildPickerUniverse } from "../../../../lib/server/pickersBuilder";
 import { recordJobRun } from "../../../../lib/server/jobRuns";
 
 // WRAPPED, NOT REWRITTEN. This stays the identical handler -- the whole point of
 // the re-export is that this route and /api/pickers can never drift -- with one
 // run record added around it.
+//
+// GET_WARM vs GET is NOT a second copy. Both are one-line calls into the same
+// handlePickersRequest; the only difference is that this one asks for a forced
+// history refetch. That ask is authorised inside the handler (cron secret or
+// owner key), so importing GET_WARM here grants this route nothing it could not
+// already prove.
+//
+// WHY THE FORCE IS NEEDED AT ALL. getDailyHistoryBulk is miss-only, and the
+// Redis history TTL is now 50h. Without a force this job would find every symbol
+// present, fetch nothing, and record a successful run that refreshed zero bars
+// -- a green job doing no work, which is worse than a red one.
 //
 // Only the status is recorded. Reading the body to build a richer summary would
 // mean cloning a payload that carries the entire picker universe, on a route
@@ -54,19 +69,66 @@ export async function GET(req: NextRequest) {
     // NOT latent, names up to 12 affected symbols, and makes flushing the
     // history namespace urgent rather than tidy.
     const drops = readHistoryDropCounts();
+    const barAge = readHistoryBarAgeCounts();
     recorded = true;
+
+    // "The warm ran" and "the warm refreshed anything" are different facts, and
+    // only the first one is visible by default. The header is set by the handler
+    // from the value it actually used, not from what this route asked for, so a
+    // force that was refused (CRON_SECRET unset, say) shows as false here rather
+    // than being assumed true.
+    const historyForced = res.headers.get("X-Pickers-History-Forced") === "true";
+
+    if (!historyForced) {
+      console.warn(
+        "[warm-picker-universe] Ran WITHOUT a history force. With a 50h TTL the miss-only bulk read refreshes nothing, so this run almost certainly fetched no bars. Check CRON_SECRET is set in the Vercel project."
+      );
+    }
+
+    // THE DATA CAN BE STALE WHILE EVERY OTHER COUNTER READS ZERO. A fetch that
+    // succeeds and parses cleanly can still return bars days old; row drops
+    // measure the parser, this measures the data, and they fail independently.
+    if (barAge.stale > 0) {
+      console.warn(
+        `[warm-picker-universe] ${barAge.stale} of ${barAge.stale + barAge.fresh} refetched symbols have a newest bar more than ${HISTORY_MAX_BAR_AGE_WEEKDAYS} trading days old (newest seen anywhere: ${barAge.newestBarSeen ?? "none"}). Sample: ${barAge.symbols.join(", ")}`
+      );
+    }
+
+    if (barAge.forcedRefetchFailures > 0) {
+      console.warn(
+        `[warm-picker-universe] ${barAge.forcedRefetchFailures} forced refetches threw and fell back to their cached entry. Sample: ${barAge.forcedRefetchFailureSymbols.join(", ")}`
+      );
+    }
+
+    if (!res.ok) {
+      console.error(
+        `[warm-picker-universe] Run FAILED with status ${res.status}. The 50h history TTL is the margin this run just spent -- a second consecutive failure leaves the picker universe rebuilding against expiring bars.`
+      );
+    }
+
     await recordJobRun("warm-picker-universe", res.ok, {
       status: res.status,
+      historyForced,
       historyRowsParsed: drops.rowsParsed,
       historyRowsDroppedNoClose: drops.rowsDroppedNoClose,
       historyDropSymbols: drops.symbols.join(",") || null,
+      historyNewestBarSeen: barAge.newestBarSeen,
+      historyStaleNewestCount: barAge.stale,
+      historyFreshNewestCount: barAge.fresh,
+      historyStaleNewestSymbols: barAge.symbols.join(",") || null,
+      historyForcedRefetchFailures: barAge.forcedRefetchFailures,
     });
     return res;
   } catch (error) {
     const message = error instanceof Error ? error.message : "warm-picker-universe failed";
+    console.error(`[warm-picker-universe] Run THREW: ${message}`);
     // Discarded, not reported: a partial run's drop count would be attributed to
-    // the next successful run and inflate it.
-    if (!recorded) readHistoryDropCounts();
+    // the next successful run and inflate it. Same for the bar-age counters --
+    // a half-finished sweep's staleness ratio is not a measurement of anything.
+    if (!recorded) {
+      readHistoryDropCounts();
+      readHistoryBarAgeCounts();
+    }
     await recordJobRun("warm-picker-universe", false, { error: message });
     throw error;
   }
