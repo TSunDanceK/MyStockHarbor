@@ -1,5 +1,6 @@
 "use client";
 
+import { getBuySignalCount } from "@/lib/signalCounts";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import TickerLogo from "@/app/components/TickerLogo";
@@ -90,20 +91,6 @@ const COLOR_DOWN = "#f87171";
 const COLOR_EARNINGS = "#22d3ee";
 const COLOR_TECHNICAL = "#2f6bff";
 
-function getBuySignalCount(r: SignalRecordLite) {
-  if (!r.aboveMA200) return 0;
-  let count = 0;
-  if (r.oversold) count += 1;
-  if (r.buyTheDip) count += 1;
-  if (r.breakout) count += 1;
-  if (r.volumeSpike) count += 1;
-  if (r.atrSpike) count += 1;
-  if (r.aboveMA50) count += 1;
-  if (r.aboveMA200) count += 1;
-  if (r.bullishRsiDivergence) count += 1;
-  if (r.bullishMacdDivergence) count += 1;
-  return count;
-}
 
 function getSellSignalCount(r: SignalRecordLite) {
   if (!r.belowMA200) return 0;

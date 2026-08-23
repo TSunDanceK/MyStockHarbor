@@ -1,5 +1,6 @@
 "use client";
 
+import { getBuySignalCount } from "@/lib/signalCounts";
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { FILTER_DEFS, toneDotColor, type FilterKey } from "@/lib/pickerFilters";
@@ -157,14 +158,6 @@ function chooseCardTone(record: SignalRecord, matchedFilters: FilterKey[]): Pick
   return record.tone;
 }
 
-function getBuySignalCount(record: SignalRecord) {
-  if (!record.aboveMA200) return 0;
-  let count = 0;
-  if (record.oversold) count++; if (record.buyTheDip) count++; if (record.breakout) count++;
-  if (record.volumeSpike) count++; if (record.atrSpike) count++; if (record.aboveMA50) count++;
-  if (record.aboveMA200) count++; if (record.bullishRsiDivergence) count++; if (record.bullishMacdDivergence) count++;
-  return count;
-}
 
 function getSellSignalCount(record: SignalRecord) {
   let count = 0;
