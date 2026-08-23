@@ -12,6 +12,7 @@
 //   node scripts/check-signal-counts-single-source.mjs
 import fs from "node:fs";
 import path from "node:path";
+import { stripComments } from "./lib/source-code.mjs";
 
 const ROOT = process.cwd();
 let failures = 0;
@@ -20,12 +21,8 @@ const check = (label, ok, detail = "") => {
   if (!ok) failures++;
 };
 
-const codeOf = (src) =>
-  src
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .split("\n")
-    .map((l) => (l.trim().startsWith("//") ? "" : l))
-    .join("\n");
+// Comments stripped with the real tokeniser, and guarded -- see scripts/lib/source-code.mjs.
+const codeOf = (src, file) => stripComments(src, { file });
 
 const files = [];
 const walk = (dir) => {
@@ -41,7 +38,7 @@ walk(path.join(ROOT, "lib"));
 
 const definersOf = (name) =>
   files
-    .filter((f) => new RegExp(`function ${name}\\s*\\(`).test(codeOf(fs.readFileSync(f, "utf8"))))
+    .filter((f) => new RegExp(`function ${name}\\s*\\(`).test(codeOf(fs.readFileSync(f, "utf8"), path.relative(ROOT, f))))
     .map((f) => path.relative(ROOT, f));
 
 console.log("\n=== 1. getBuySignalCount has exactly one definition ===\n");
@@ -64,7 +61,7 @@ console.log("\n=== 2. The rules were NOT changed ===\n");
 // The brief parked the conditions themselves as a product question. This asserts
 // the moved arithmetic is the original: nine conditions, the aboveMA200 gate,
 // and aboveMA200 counted as one of the nine as well as gating.
-const shared = codeOf(fs.readFileSync(path.join(ROOT, "lib/signalCounts.ts"), "utf8"));
+const shared = codeOf(fs.readFileSync(path.join(ROOT, "lib/signalCounts.ts"), "utf8"), "lib/signalCounts.ts");
 const body = (shared.match(/export function getBuySignalCount[\s\S]*?\n\}/) ?? [""])[0];
 check("the aboveMA200 gate is intact", /if \(!record\.aboveMA200\) return 0;/.test(body));
 check("nine conditions, no more and no fewer", (body.match(/count \+= 1;/g) ?? []).length === 9, `${(body.match(/count \+= 1;/g) ?? []).length}`);
@@ -88,7 +85,7 @@ console.log("\n=== 3. getSellSignalCount is deliberately NOT collapsed ===\n");
 const sell = definersOf("getSellSignalCount");
 check("still three definitions, pending the product decision", sell.length === 3, sell.join(", "));
 const gated = sell.filter((f) =>
-  /function getSellSignalCount[\s\S]{0,120}if \(!\w+\.belowMA200\) return 0;/.test(codeOf(fs.readFileSync(path.join(ROOT, f), "utf8")))
+  /function getSellSignalCount[\s\S]{0,120}if \(!\w+\.belowMA200\) return 0;/.test(codeOf(fs.readFileSync(path.join(ROOT, f), "utf8"), f))
 );
 check(
   "exactly one of them carries the belowMA200 gate — the live disagreement",

@@ -20,6 +20,7 @@
 import ts from "typescript";
 import fs from "node:fs";
 import path from "node:path";
+import { stripComments } from "./lib/source-code.mjs";
 
 const ROOT = process.cwd();
 const SRC = "lib/server/historyCache.ts";
@@ -78,25 +79,8 @@ const m = await import(`data:text/javascript;base64,${Buffer.from(js).toString("
 // harness that reads its own subject through a broken filter reports the filter,
 // not the subject -- claude/traps/a-regex-over-source-has-no-scope.md, in the
 // one file that documented the rule.
-function stripComments(text) {
-  const scanner = ts.createScanner(ts.ScriptTarget.Latest, /* skipTrivia */ false, ts.LanguageVariant.Standard, text);
-  let out = "";
-  let kind;
-  while ((kind = scanner.scan()) !== ts.SyntaxKind.EndOfFileToken) {
-    const tok = scanner.getTokenText();
-    if (
-      kind === ts.SyntaxKind.SingleLineCommentTrivia ||
-      kind === ts.SyntaxKind.MultiLineCommentTrivia
-    ) {
-      // Newlines preserved so line-anchored assertions keep their meaning.
-      out += tok.replace(/[^\n]/g, "");
-    } else {
-      out += tok;
-    }
-  }
-  return out;
-}
-const codeOnly = stripComments(raw);
+const codeOnly = stripComments(raw, { file: SRC });
+
 // A stripper that ate the file would make every negative assertion below pass
 // for the wrong reason. Assert it did not before trusting anything it produced.
 check(
@@ -169,6 +153,15 @@ check(
   openOf("2026-01-17T12:00:00Z") === "2026-01-19T14:30:00Z",
   openOf("2026-01-17T12:00:00Z")
 );
+// VACUITY CHECKED, 2026-08-23, and it was NOT vacuous. The old regex stripper
+// ate this file from the `*/*` in its Accept header (character 28,631) onward;
+// getNextMondayOpenUtcMsFromEastern sits at character 2,616 and survived that
+// strip intact, so this assertion was always reading the real helper. Confirmed
+// by calibration rather than by reasoning: reintroducing a hardcoded `-05:00`
+// fails 5 checks including this one, and a hardcoded `-04:00` fails 2 including
+// this one -- which is the point of the meta-assertion, since the EDT hardcode
+// gets every summer expiry right and only this check names it.
+//
 // COMMENT-STRIPPED, and it failed on first run without it: the comment in
 // historyCache.ts explaining the bug quotes the offset it removed, so the
 // assertion matched the prose describing the fix. Same trap as

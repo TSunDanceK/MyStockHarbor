@@ -24,6 +24,7 @@
 import ts from "typescript";
 import fs from "node:fs";
 import path from "node:path";
+import { stripComments } from "./lib/source-code.mjs";
 
 const ROOT = process.cwd();
 const SRC = "lib/server/pickersBuilder.ts";
@@ -267,19 +268,7 @@ else process.env.CRON_SECRET = OLD_SECRET;
 console.log("\n=== 6. GET and GET_WARM are one implementation, not two ===\n");
 // The two routes were consolidated so they could never drift. Adding forced
 // behaviour must not reintroduce a second copy.
-const code = (() => {
-  const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.Standard, raw);
-  let out = "";
-  let k;
-  while ((k = scanner.scan()) !== ts.SyntaxKind.EndOfFileToken) {
-    const t = scanner.getTokenText();
-    out +=
-      k === ts.SyntaxKind.SingleLineCommentTrivia || k === ts.SyntaxKind.MultiLineCommentTrivia
-        ? t.replace(/[^\n]/g, "")
-        : t;
-  }
-  return out;
-})();
+const code = stripComments(raw, { file: SRC });
 check("the comment stripper kept the code", code.includes("export async function GET_WARM"), `${code.length} of ${raw.length} chars`);
 check(
   "GET delegates",

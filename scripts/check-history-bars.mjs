@@ -17,6 +17,7 @@
 import ts from "typescript";
 import fs from "node:fs";
 import path from "node:path";
+import { stripComments } from "./lib/source-code.mjs";
 
 const ROOT = process.cwd();
 const SRC = "lib/server/historyCache.ts";
@@ -220,7 +221,8 @@ check(
 );
 
 console.log("\n=== 6. The collapse is wired into the parser, not just present ===\n");
-const code = raw.replace(/\/\*[\s\S]*?\*\//g, "").split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
+// Comments stripped with the real tokeniser, and guarded -- see scripts/lib/source-code.mjs.
+const code = stripComments(raw, { file: SRC, dropLines: true });
 check(
   "parseFmpHistoricalRows returns through collapseDuplicateDates",
   /return collapseDuplicateDates\(daily\);/.test(code),

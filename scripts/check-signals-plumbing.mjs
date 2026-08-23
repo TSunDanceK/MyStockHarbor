@@ -28,6 +28,7 @@
 import ts from "typescript";
 import fs from "node:fs";
 import path from "node:path";
+import { stripComments } from "./lib/source-code.mjs";
 
 const ROOT = process.cwd();
 const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
@@ -43,15 +44,11 @@ const check = (label, ok, detail = "") => {
 // Comments stripped: this file's own explanation names the fields, and matching
 // prose would report the plumbing as present when it is not
 // (claude/traps/grep-finds-the-comment-not-the-code.md).
-const codeOf = (src) =>
-  src
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .split("\n")
-    .filter((l) => !l.trim().startsWith("//"))
-    .join("\n");
+// Comments stripped with the real tokeniser, and guarded -- see scripts/lib/source-code.mjs.
+const codeOf = (src, file) => stripComments(src, { file, dropLines: true });
 
-const builder = codeOf(read(BUILDER));
-const page = codeOf(read(PAGE));
+const builder = codeOf(read(BUILDER), BUILDER);
+const page = codeOf(read(PAGE), PAGE);
 
 console.log("\n=== 1. Every hop of the chain carries both fields ===\n");
 
@@ -118,7 +115,9 @@ check(
 );
 check(
   "/best-trend-score-stocks DECLARES signalsFrom: \"trend\"",
-  /signalsFrom:\s*"trend"/.test(codeOf(read("app/best-trend-score-stocks/page.tsx"))),
+  /signalsFrom:\s*"trend"/.test(
+    codeOf(read("app/best-trend-score-stocks/page.tsx"), "app/best-trend-score-stocks/page.tsx")
+  ),
   "without it the column silently falls back to the composite and dashes every row"
 );
 
@@ -233,7 +232,7 @@ check(
 );
 
 console.log("\n=== 3. The grid never prints a count ===\n");
-const grid = codeOf(read("app/components/PickerResultsGrid.tsx"));
+const grid = codeOf(read("app/components/PickerResultsGrid.tsx"), "app/components/PickerResultsGrid.tsx");
 check(
   "Signals cell renders MUTED when absent or empty",
   /e\.firedIndicators\?\.length\s*\?/.test(grid) && /MUTED/.test(grid)

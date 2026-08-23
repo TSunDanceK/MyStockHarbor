@@ -14,6 +14,7 @@
 // that disagrees with production.
 import fs from "node:fs";
 import path from "node:path";
+import { stripComments } from "./lib/source-code.mjs";
 
 const ROOT = process.cwd();
 const SKIP_DIRS = new Set(["node_modules", ".next", ".git", "scripts"]);
@@ -45,12 +46,8 @@ function walk(dir, out = []) {
 // Strip comments: several files EXPLAIN the FMP endpoints in prose, and matching
 // that would invent call sites that do not exist
 // (claude/traps/grep-finds-the-comment-not-the-code.md).
-const stripComments = (src) =>
-  src
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .split("\n")
-    .map((l) => (l.trim().startsWith("//") ? "" : l))
-    .join("\n");
+// Comments stripped with the real tokeniser, and guarded -- see scripts/lib/source-code.mjs.
+const codeOf = (src, file) => stripComments(src, { file });
 
 // The API host WITH a scheme, which is narrower than it looks and deliberately
 // so. The first draft matched the bare string "financialmodelingprep.com" and
@@ -79,7 +76,7 @@ const exempt = [];
 
 for (const full of files) {
   const rel = path.relative(ROOT, full);
-  const code = stripComments(fs.readFileSync(full, "utf8"));
+  const code = codeOf(fs.readFileSync(full, "utf8"), path.relative(ROOT, full));
   if (!FMP_API_URL.test(code)) continue;
 
   const fmpCalls = (code.match(/\bawait fmpFetch\s*\(/g) ?? []).length;
