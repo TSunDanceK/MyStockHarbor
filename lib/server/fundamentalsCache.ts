@@ -594,12 +594,35 @@ export async function warmFundamentals(symbols: string[]) {
   const cachedProfiles = await readCachedProfilesBulk(cleanSymbols);
   const screenerFund = await readCachedScreenerFundamentals(cleanSymbols);
   const emptyProfileMarks = await readEmptyProfileMarks(cleanSymbols);
-  const needsIndustry = cleanSymbols.filter(
-    (s) => !cachedProfiles.get(s)?.industry && !screenerFund.get(s)?.industry
-  );
+  // BOTH FIELDS, not just industry. `sector` and `industry` are SEPARATE
+  // nullable columns on ScreenerFundamentalsRow, and a row can carry one without
+  // the other. Testing only `industry` marked such a symbol as covered, so it
+  // never got a profile fetch and its sector stayed null forever -- which left
+  // /cheap-tech-stocks (`sector` = Technology) permanently truncated. Exactly the
+  // defect #337 fixed for /semiconductor-stocks, one field over.
+  const needsIndustry = cleanSymbols.filter((s) => {
+    const profile = cachedProfiles.get(s);
+    const screener = screenerFund.get(s);
+    const noIndustry = !profile?.industry && !screener?.industry;
+    const noSector = !profile?.sector && !screener?.sector;
+    return noIndustry || noSector;
+  });
   // Asked recently and FMP had nothing. Deferred, never excluded -- the mark
   // expires (PROFILE_EMPTY_TTL_SECONDS) and the symbol returns to the queue.
   const profileMisses = needsIndustry.filter((s) => !emptyProfileMarks.has(s));
+  // THE TRADE THIS CHANGE MAKES, MEASURED RATHER THAN ASSUMED.
+  //
+  // Widening the filter above turns every sector-only gap into a profile miss at
+  // once, so the profile stage now reaches PROFILE_MAX_PER_RUN on runs where it
+  // previously ran out of work. That stage spends the SHARED 90s wait budget
+  // FIRST, and fetchQuoteFundamentals `return out`s when the budget is dry
+  // rather than degrading -- so the cost of fixing sectors is paid in P/E
+  // coverage, silently, unless it is counted.
+  //
+  // Recorded before and after so the split is a number in the run summary. If
+  // waitAfterProfilesMs collapses toward zero, run the backlog out of band with
+  // MSH_PROFILE_MAX_PER_RUN instead of letting the daily job absorb it.
+  const waitBeforeProfilesMs = wait.remainingMs;
   let profileFetches = 0;
   let profileIndustriesFound = 0;
   let profileEmptyMarked = 0;
@@ -615,7 +638,12 @@ export async function warmFundamentals(symbols: string[]) {
       } catch {
         // fail open
       }
-      if (profile.industry) {
+      // ALSO BOTH FIELDS. The marker used to be set on `!profile.industry`
+      // alone, so a profile carrying an industry but no sector was cached,
+      // never marked, and never revisited -- it would be re-selected by the
+      // filter above every run and re-fetched forever, or (before that filter
+      // was fixed) never selected at all. Either way the sector never arrived.
+      if (profile.industry && profile.sector) {
         profileIndustriesFound++;
         // Staleness bookkeeping. Only on a REAL industry: a profile that came
         // back without one has not been refreshed in any sense the health page
@@ -744,8 +772,14 @@ export async function warmFundamentals(symbols: string[]) {
   // genuinely has nothing for. If it does not move at all, the cron is not
   // running; check for the log line before assuming the fix failed.
   let industryKnown = 0;
+  let sectorKnown = 0;
   for (const sym of cleanSymbols) {
     if (cachedProfiles.get(sym)?.industry || screenerFund.get(sym)?.industry) industryKnown++;
+    // Counted separately, because the two genuinely diverge -- that divergence
+    // IS the bug this change fixes, and a single "profile known" figure would
+    // have hidden it. Reported so the incidence is a number rather than an
+    // assumption (claude/traps/measuring-the-wrong-layer.md).
+    if (cachedProfiles.get(sym)?.sector || screenerFund.get(sym)?.sector) sectorKnown++;
   }
 
   // Staleness bookkeeping for the health page and for future stalest-first
@@ -806,6 +840,13 @@ export async function warmFundamentals(symbols: string[]) {
     // Symbols no source has an industry for, BEFORE deferring the ones FMP has
     // already been asked about. Reported alongside profileMisses so a large
     // gap between the two reads as "mostly deferred", not "mostly done".
+    // How much of the shared 90s wait budget the profile stage left for the
+    // quote stage. The quote stage exits early and silently when this hits
+    // zero, so a falling number here is P/E coverage being traded for sector
+    // coverage -- visible, rather than discovered later.
+    waitBeforeProfilesMs,
+    waitAfterProfilesMs: wait.remainingMs,
+    waitSpentOnProfilesMs: waitBeforeProfilesMs - wait.remainingMs,
     needsIndustry: needsIndustry.length,
     profileMisses: profileMisses.length,
     profileFetches,
@@ -815,6 +856,8 @@ export async function warmFundamentals(symbols: string[]) {
     profilesKnown: cachedProfiles.size,
     industryKnown,
     industryMissing: cleanSymbols.length - industryKnown,
+    sectorKnown,
+    sectorMissing: cleanSymbols.length - sectorKnown,
     profileMaxPerRun: PROFILE_MAX_PER_RUN,
     waitedMs: CAPACITY_WAIT_BUDGET_MS - wait.remainingMs,
     written,
