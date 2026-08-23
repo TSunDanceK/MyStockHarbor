@@ -65,7 +65,7 @@ function fmtAge(ms: number | null): string {
   return `${Math.round(s / 86400)}d ago`;
 }
 
-type Status = "ok" | "warn" | "fault" | "unknown" | "seeded";
+type Status = "ok" | "warn" | "fault" | "unknown" | "seeded" | "uncovered";
 
 /**
  * A row's status, derived from THAT DATASET'S OWN TTL.
@@ -83,6 +83,29 @@ type Status = "ok" | "warn" | "fault" | "unknown" | "seeded";
 function statusFor(d: DatasetHealth): { status: Status; why: string } {
   if (!d.instrumented) {
     return { status: "unknown", why: "no staleness set yet — not measured, not necessarily healthy" };
+  }
+
+  // A RATIO OF A SET TO ITSELF IS NOT COVERAGE, and this check comes FIRST so
+  // that no amount of freshness below can talk it into "ok".
+  //
+  // A dataset needs registerSymbols to declare its denominator and markRefreshed
+  // to fill in the numerator. With only the second, the queue contains exactly
+  // the symbols something already refreshed -- so every symbol that failed, or
+  // was never attempted, is missing from the denominator rather than counted
+  // against it. `dailyHistory` read "24 / 24, within policy" in that state, and
+  // it would have read 24 / 24 with the other 700 symbols of the universe
+  // entirely absent.
+  //
+  // This is the same failure as the "unknown" branch above, one level subtler:
+  // there, nothing is measured and the page says so. Here something IS measured,
+  // and what it measures is guaranteed to look perfect. The rendering has to be
+  // distinct because the remedy is different -- not "instrument this", but "give
+  // this a denominator".
+  if (!d.coverageEstablished) {
+    return {
+      status: "uncovered",
+      why: `${d.tracked} observed, no declared population — nothing calls registerSymbols for this dataset, so a ratio here could only ever be 100%`,
+    };
   }
 
   // SEEDED IS NOT FAULTED. registerSymbols scores the whole universe 0, so the
@@ -139,6 +162,9 @@ const STATUS_COLOR: Record<Status, string> = {
   // is measured and has not run yet.
   unknown: "rgba(255,255,255,0.35)",
   seeded: "#38bdf8",
+  // Also not a verdict, and deliberately NOT green: the dataset may be perfectly
+  // healthy, but this page has no way to tell and must not imply it does.
+  uncovered: "#a78bfa",
 };
 
 function Denied({ reason }: { reason: string }) {
@@ -266,7 +292,14 @@ export default async function CacheHealthPage({
                       <div style={{ color: "#64748b", fontSize: 11 }}>{d.note}</div>
                     </td>
                     <td style={cell}>
-                      {d.instrumented ? `${fresh} / ${d.tracked}` : "—"}
+                      {/* The number itself is withheld, not just recoloured. A
+                          purple "24 / 24" still reads as 24 of 24; the whole
+                          point is that the denominator is not a population. */}
+                      {!d.instrumented
+                        ? "—"
+                        : !d.coverageEstablished
+                          ? `${d.tracked} seen`
+                          : `${fresh} / ${d.tracked}`}
                       {d.never > 0 ? <div style={{ color: "#64748b", fontSize: 11 }}>{d.never} never refreshed</div> : null}
                     </td>
                     <td style={cell}>{d.instrumented ? d.stale : "—"}</td>
@@ -285,6 +318,14 @@ export default async function CacheHealthPage({
           <p style={{ color: "#64748b", fontSize: 11, marginTop: 8 }}>
             Status is judged against each dataset&apos;s own TTL, never a global threshold — a 30-day-old
             profile is healthy, a 30-day-old price is a fault.
+          </p>
+          <p style={{ color: "#64748b", fontSize: 11, marginTop: 4 }}>
+            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 999, background: STATUS_COLOR.uncovered, marginRight: 7 }} />
+            <strong style={{ color: "#94a3b8" }}>&ldquo;N seen&rdquo;</strong> is not a coverage figure. Those datasets
+            record refreshes but nothing declares which symbols <em>ought</em> to be fresh, so the only
+            symbols in the count are the ones that already succeeded — a ratio that is 100% by
+            construction. It is shown as a raw count, and never green, until something calls
+            <code style={{ margin: "0 3px" }}>registerSymbols</code> for them.
           </p>
         </section>
 

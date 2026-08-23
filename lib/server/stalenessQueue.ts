@@ -66,39 +66,77 @@ const SEEDED_PREFIX = "msh:staleness-seeded:v1";
  * uninstrumented dataset that simply does not appear is indistinguishable from
  * a healthy one, and that is the exact failure this whole page exists to end
  * (claude/traps/absence-needs-the-producer-to-have-run.md).
+ *
+ * `coverage` IS THE SECOND HALF OF THAT SAME PROBLEM, and it cost us a green
+ * panel that meant nothing. A dataset needs TWO different writers to report a
+ * meaningful ratio:
+ *
+ *   registerSymbols(...)  declares the DENOMINATOR -- every symbol that ought
+ *                         to be fresh, whether or not anything has refreshed it
+ *   markRefreshed(...)    supplies the NUMERATOR
+ *
+ * `dailyHistory` had only the second. Its queue therefore contained exactly the
+ * symbols something had recently written, so "24 / 24, within policy" meant "of
+ * the 24 we happened to observe, all 24 are fresh" -- a ratio that cannot be
+ * anything but green no matter how broken the dataset is, because every symbol
+ * that failed is simply absent from the denominator.
+ *
+ * So the registry declares which kind each dataset is, the page renders
+ * "observed-only" ones distinctly instead of showing an unearned ratio, and
+ * scripts/check-cache-health-page.mjs asserts the declaration matches the tree
+ * (a dataset marked "registered" must actually have a registerSymbols call). The
+ * point is not to fix dailyHistory once -- that is done below -- but to make the
+ * NEXT dataset added without a denominator impossible to mistake for healthy.
  */
 export const DATASETS = {
   fundamentals: {
     label: "Fundamentals (market cap, P/E)",
     ttlSeconds: 60 * 60 * 26,
     note: "warm-fundamentals, hourly",
+    coverage: "registered",
   },
   profile: {
     label: "Profile (industry, sector)",
     ttlSeconds: 60 * 60 * 24 * 30,
     note: "warm-fundamentals; effectively static, 30d is healthy",
+    coverage: "registered",
   },
   screenerFundamentals: {
     label: "Screener fundamentals",
     ttlSeconds: 60 * 60 * 30,
     note: "warm-screener-fundamentals, daily 06:50",
+    // OBSERVED-ONLY: markRefreshed with no registerSymbols caller. Its ratio is
+    // a self-selecting denominator and the page must not render it as coverage.
+    coverage: "observed-only",
   },
   pricePool: {
     label: "Price pool",
     ttlSeconds: 60 * 15,
     note: "warm-price-pool, every 3 min",
+    coverage: "registered",
   },
   dailyHistory: {
     label: "Daily history",
-    ttlSeconds: 60 * 60 * 12,
-    note: "historyCache, on every write",
+    // 26h, NOT the 50h Redis TTL. These are two different questions: the Redis
+    // TTL is how long a bar stays usable, this is how long before its age is a
+    // FAULT. 26h means one missed 07:00 warm shows amber the next morning, while
+    // the data itself is still there -- which is the point of the 50h TTL. Set
+    // to the cache TTL, a failure would only become visible once the data had
+    // already gone.
+    ttlSeconds: 60 * 60 * 26,
+    note: "warm-picker-universe forced refetch, daily 07:00",
+    coverage: "registered",
   },
   earnings: {
     label: "Earnings",
     ttlSeconds: 60 * 60 * 24 * 7,
     note: "warm-earnings, daily 07:15",
+    coverage: "registered",
   },
-} as const;
+} as const satisfies Record<
+  string,
+  { label: string; ttlSeconds: number; note: string; coverage: "registered" | "observed-only" }
+>;
 
 export type DatasetKey = keyof typeof DATASETS;
 
@@ -255,6 +293,13 @@ export type DatasetHealth = {
    */
   seededAtMs: number | null;
   instrumented: boolean;
+  /**
+   * FALSE when this dataset has no registerSymbols caller, so `tracked` counts
+   * only the symbols something happened to refresh. `stale / tracked` is then a
+   * ratio of a set to itself and cannot express a coverage failure at all. The
+   * page must render this state distinctly rather than showing the number.
+   */
+  coverageEstablished: boolean;
 };
 
 /**
@@ -275,6 +320,7 @@ export async function readDatasetHealth(dataset: DatasetKey): Promise<DatasetHea
     oldestMs: null,
     seededAtMs: null,
     instrumented: false,
+    coverageEstablished: def.coverage === "registered",
   };
   if (!redis) return base;
 

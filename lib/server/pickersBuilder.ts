@@ -16,6 +16,7 @@ import { readMarketState } from "./marketState";
 import { NextRequest, NextResponse } from "next/server";
 import { detectDivergenceFromHistory } from "../ta/divergence";
 import { getDailyHistoryBulk } from "./historyCache";
+import { registerSymbols } from "./stalenessQueue";
 import {
   addToDynamicUniverse,
   readDynamicUniverse,
@@ -2501,13 +2502,28 @@ const POPULAR_SEARCH_QUOTA = 30; // FMP sub-cap: max promoted names per build
 
 /* --------------------------- builder function ------------------------ */
 
-// `origin` and `forceFreshMarket` are vestigial: both existed only to drive the
-// old fetchMarket() self-fetch, which now reads in-process. They are kept on the
-// signature because getPickersData() still takes an `origin` from seven callers
-// (the ticker-lookup and debug routes, warmTargets, the two divergence pages),
-// and threading that removal through all of them is a separate change. Nothing
-// in here reads them.
-async function buildPickersPayload(origin: string, forceFreshMarket = false): Promise<PickersPayload> {
+// `origin` is vestigial: it existed only to drive the old fetchMarket()
+// self-fetch, which now reads in-process. It is kept on the signature because
+// getPickersData() still takes an `origin` from seven callers (the ticker-lookup
+// and debug routes, warmTargets, the two divergence pages), and threading that
+// removal through all of them is a separate change. Nothing in here reads it.
+//
+// `forceHistoryRefresh` REPLACES the old `forceFreshMarket`, which was vestigial
+// in the same way and read by nothing. It is not the same flag as
+// getPickersData's `forceRefresh`, and conflating the two is the mistake this
+// naming exists to prevent:
+//
+//   forceRefresh        -> ignore the cached PAYLOAD and rebuild it
+//   forceHistoryRefresh -> ignore the cached BARS and refetch them from FMP
+//
+// A payload rebuild against a warm history cache is cheap and happens whenever
+// the payload TTL lapses. A history refetch is ~700 FMP calls and is what the
+// 07:00 warm exists to do. Only the second is gated on cron/owner auth.
+async function buildPickersPayload(
+  origin: string,
+  opts: { forceHistoryRefresh?: boolean } = {}
+): Promise<PickersPayload> {
+  const forceHistoryRefresh = opts.forceHistoryRefresh ?? false;
   const buildStartedAt = Date.now();
   const market = await fetchMarket();
 
@@ -2632,7 +2648,24 @@ async function buildPickersPayload(origin: string, forceFreshMarket = false): Pr
   // up to ~200 individual Upstash REST calls just to check "is this already
   // cached", before any FMP fetch even happens). Cache misses still fall
   // back to the existing per-symbol lock+fetch path inside this helper.
-  const historyBySymbol = await getDailyHistoryBulk(universe);
+  //
+  // REGISTERED BEFORE THE FETCH, NOT AFTER. `dailyHistory` was the only dataset
+  // calling markRefreshed and never registerSymbols, so /cache-health showed
+  // "24 / 24, within policy" -- a denominator made only of the symbols that
+  // happened to be written recently, which can never be anything but green
+  // (claude/traps/absence-needs-the-producer-to-have-run.md). This is the first
+  // point at which the whole universe is both KNOWN and about to be TOUCHED,
+  // which is what makes it the right place. Registering before the fetch rather
+  // than after means a run that dies halfway still leaves a truthful
+  // denominator: the symbols it failed to refresh show as stale instead of
+  // vanishing from the count.
+  if (forceHistoryRefresh) {
+    await registerSymbols("dailyHistory", universe);
+  }
+
+  const historyBySymbol = await getDailyHistoryBulk(universe, {
+    force: forceHistoryRefresh,
+  });
 
   const limit = pLimit(10);
   const days = 1300;
@@ -3944,18 +3977,67 @@ export async function buildPickerJitterDiagnostics(opts: {
   };
 }
 
+/**
+ * Is this build too degraded to publish?
+ *
+ * Extracted as a named predicate rather than left inline in two places, so the
+ * force-safety harness can call the real thing instead of re-deriving the
+ * comparison from source and testing its own copy of it.
+ */
+export function isDegradedBuild(data: Pick<PickersPayload, "degradedSymbolPct">) {
+  return (
+    typeof data.degradedSymbolPct === "number" &&
+    data.degradedSymbolPct / 100 >= DEGRADED_BUILD_FAILURE_RATIO
+  );
+}
+
+/**
+ * FORCE MEANS "REFRESH UNCONDITIONALLY", NOT "OVERWRITE UNCONDITIONALLY".
+ *
+ * This is the whole substance of the fix, so it is written down where the code
+ * is. Before this change `forceRefresh` was doing two unrelated jobs at once:
+ *
+ *   1. do not SERVE the cached payload  (correct -- that is what force is for)
+ *   2. do not READ the cached payload   (`const cached = forceRefresh ? null : ...`)
+ *
+ * and (2) silently disabled three separate safety nets, because all three are
+ * spelled `cached?.data`:
+ *
+ *   - the degraded-build fallback  (also gated on `!forceRefresh`, twice over)
+ *   - the lock-contention fallback
+ *   - the build-threw fallback in the catch
+ *
+ * So a forced run that came back with >=15% of the universe missing wrote that
+ * thin payload straight over a healthy cached one, and a forced run that THREW
+ * had no cache to fall back to. Deleting the `!forceRefresh` clause alone would
+ * not have fixed either: `cached` was already null by then.
+ *
+ * The separation: always READ, gate only the SERVE. A forced run rebuilds every
+ * time -- it never short-circuits on a fresh cache -- but it still refuses to
+ * publish a degraded result over a good one, and it still has something to fall
+ * back to when it fails.
+ *
+ * WHAT THIS DELIBERATELY DOES NOT ADD: an override to publish a degraded payload
+ * anyway. There is no case for one. The only situation it blocks is "the build
+ * is degraded AND a good cache exists"; a force still replaces the cache on
+ * every healthy build, which is every normal run. An escape hatch here would be
+ * a footgun whose only function is to reintroduce the bug on purpose.
+ */
 export async function getPickersData(
   origin: string,
-  opts: { forceRefresh?: boolean } = {}
+  opts: { forceRefresh?: boolean; forceHistoryRefresh?: boolean } = {}
 ): Promise<PickersPayload> {
   const forceRefresh = opts.forceRefresh ?? false;
+  const forceHistoryRefresh = opts.forceHistoryRefresh ?? false;
   const now = Date.now();
 
   if (!forceRefresh && memo && now - memo.ts < MEMORY_CACHE_MS) {
     return memo.data;
   }
 
-  const cached = forceRefresh ? null : await readPickersCache();
+  // READ ALWAYS. See the note above -- this is the line the three fallbacks
+  // below depend on, and making it conditional on force is what disabled them.
+  const cached = await readPickersCache();
 
   if (!forceRefresh && cached?.data) {
     memo = { ts: now, data: cached.data };
@@ -3964,21 +4046,32 @@ export async function getPickersData(
 
   const lockToken = await acquirePickersLock();
 
-  if (!lockToken && cached?.data) {
+  // `!forceRefresh` ADDED HERE ALONGSIDE THE READ CHANGE, and it is not a new
+  // policy -- it restores the exact prior behaviour. Before this change `cached`
+  // was null under force, so this branch could never fire on a forced run and a
+  // forced run that lost the lock built anyway. Now that the read is
+  // unconditional, the branch would start firing and a forced 07:00 warm could
+  // silently return the cached payload having refreshed nothing.
+  //
+  // This is the failure mode the whole separation is about, arriving from the
+  // other direction: reading the cache must not change what a forced run DOES,
+  // only what it has available to fall back to.
+  if (!lockToken && !forceRefresh && cached?.data) {
     memo = { ts: now, data: cached.data };
     return cached.data;
   }
 
   try {
-    const data = await buildPickersPayload(origin, forceRefresh);
+    const data = await buildPickersPayload(origin, { forceHistoryRefresh });
 
-    const isDegraded =
-      typeof data.degradedSymbolPct === "number" &&
-      data.degradedSymbolPct / 100 >= DEGRADED_BUILD_FAILURE_RATIO;
-
-    if (isDegraded && cached?.data && !forceRefresh) {
+    // NO `!forceRefresh` HERE, and that absence is the fix. A forced rebuild is
+    // exactly as capable of coming back degraded as an unforced one, and it is
+    // the run with the most to destroy.
+    if (isDegradedBuild(data) && cached?.data) {
       console.warn(
-        `[pickers] Build degraded (${data.degradedSymbolPct}% symbol failure) -- serving last known-good cache instead.`
+        `[pickers] Build degraded (${data.degradedSymbolPct}% symbol failure)${
+          forceRefresh ? " on a FORCED run" : ""
+        } -- keeping last known-good cache, not writing.`
       );
       memo = { ts: now, data: cached.data };
       return cached.data;
@@ -3998,11 +4091,55 @@ export async function getPickersData(
   }
 }
 
-export async function GET(req: NextRequest) {
+/**
+ * Does this request carry the Vercel cron secret?
+ *
+ * Same shape as every other job route's isAuthorized (warm-price-pool,
+ * warm-earnings, warm-stock-data, ...) WITH ONE DELIBERATE DIFFERENCE: those
+ * fail OPEN when CRON_SECRET is unset, because their job is to decide whether a
+ * cheap warm may run at all. This decides whether a request may spend ~700 FMP
+ * calls forcing a full history refetch, so it fails CLOSED. An unset
+ * CRON_SECRET means no force, not force-for-everyone.
+ *
+ * The consequence is stated rather than hidden: if CRON_SECRET is not set in the
+ * Vercel project, the 07:00 warm still runs but does NOT force, and says so in
+ * its run record and in the log. That is a configuration gap you can see, which
+ * is the right failure mode for something whose alternative is an open endpoint
+ * that burns the daily FMP budget on request.
+ */
+function isCronAuthorized(req: NextRequest) {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return false;
+  return (req.headers.get("authorization") || "") === `Bearer ${secret}`;
+}
+
+export type PickersRequestOptions = {
+  /**
+   * Ask for a full history refetch. Still subject to the auth check below --
+   * this is a request, not a grant, so a caller cannot widen its own access by
+   * passing it.
+   */
+  requestHistoryForce?: boolean;
+};
+
+/**
+ * The single implementation behind BOTH /api/pickers and
+ * /api/jobs/warm-picker-universe.
+ *
+ * The two routes were consolidated in the first place so they could never drift
+ * (see this module's header). The forced warm needs behaviour the public route
+ * must not have, and the way to add that WITHOUT reopening the drift is one
+ * function with a parameter -- not a second handler that starts as a copy.
+ */
+async function handlePickersRequest(
+  req: NextRequest,
+  options: PickersRequestOptions = {}
+) {
   const now = Date.now();
   const forceRequested = req.nextUrl.searchParams.get("force") === "1";
 
   let forceRefresh = false;
+  let ownerKeyed = false;
 
   if (forceRequested) {
     const ip = getClientIp(req);
@@ -4020,6 +4157,7 @@ export async function GET(req: NextRequest) {
     if (checkBackfillKey(key)) {
       await clearBackfillFailures(ip);
       forceRefresh = true;
+      ownerKeyed = true;
     } else {
       await recordBackfillFailure(ip);
       // Falls through with forceRefresh left false -- serves the normal
@@ -4027,15 +4165,38 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // HISTORY FORCE IS SEPARATELY AUTHORISED, because it is separately expensive.
+  // `?force=1&key=...` rebuilds the payload against whatever bars are cached;
+  // spending ~700 FMP calls needs either the cron secret or the owner key.
+  const historyForceRequested = options.requestHistoryForce === true;
+  const historyForceAllowed = isCronAuthorized(req) || ownerKeyed;
+  const forceHistoryRefresh = historyForceRequested && historyForceAllowed;
+
+  if (historyForceRequested && !historyForceAllowed) {
+    console.warn(
+      "[pickers] History force requested but NOT authorised (CRON_SECRET unset or not presented, and no owner key) -- running as an ordinary warm, which with a 50h TTL refreshes nothing."
+    );
+  }
+
+  // A forced history refetch is pointless without a rebuild to consume it: the
+  // payload cache would be served and the fresh bars never read. Tying them
+  // here rather than at the caller means no caller can get that combination
+  // wrong.
+  if (forceHistoryRefresh) forceRefresh = true;
+
   if (!forceRefresh && memo && now - memo.ts < MEMORY_CACHE_MS) {
     return NextResponse.json(memo.data, {
       headers: {
         "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+        "X-Pickers-History-Forced": forceHistoryRefresh ? "true" : "false",
       },
     });
   }
 
-  const cached = forceRefresh ? null : await readPickersCache();
+  // READ ALWAYS, SERVE CONDITIONALLY. Identical to getPickersData -- see the
+  // long note there for why making this conditional on force is what disabled
+  // the degraded fallback, the lock fallback and the catch fallback at once.
+  const cached = await readPickersCache();
 
   if (!forceRefresh && cached?.data) {
     memo = { ts: now, data: cached.data };
@@ -4043,38 +4204,49 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(cached.data, {
       headers: {
         "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+        // Set on EVERY response path, not just the one that built something.
+        // The warm route reads this header to decide whether to warn, and an
+        // absent header and a "false" header are the same fact reported two
+        // different ways -- one of which is indistinguishable from the route
+        // having been changed to stop setting it.
+        "X-Pickers-History-Forced": forceHistoryRefresh ? "true" : "false",
       },
     });
   }
 
   const lockToken = await acquirePickersLock();
 
-  if (!lockToken && cached?.data) {
+  // See the matching note in getPickersData: `!forceRefresh` restores the
+  // pre-change behaviour, which the unconditional read would otherwise alter.
+  if (!lockToken && !forceRefresh && cached?.data) {
     memo = { ts: now, data: cached.data };
 
     return NextResponse.json(cached.data, {
       headers: {
         "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+        "X-Pickers-History-Forced": forceHistoryRefresh ? "true" : "false",
       },
     });
   }
 
   try {
     const origin = originFromReq(req);
-    const data = await buildPickersPayload(origin, forceRefresh);
+    const data = await buildPickersPayload(origin, { forceHistoryRefresh });
 
     // If this build looks systemically degraded (a large share of the
     // universe failed to fetch), prefer the last known-good cache over
     // publishing a thin payload that could silently zero out sections like
     // ATH breakouts even when real matches exist. Falls through to the
     // fresh (degraded) data only if no usable cache is available.
-    const isDegraded =
-      typeof data.degradedSymbolPct === "number" &&
-      data.degradedSymbolPct / 100 >= DEGRADED_BUILD_FAILURE_RATIO;
-
-    if (isDegraded && cached?.data && !forceRefresh) {
+    //
+    // NOT gated on `!forceRefresh`. A forced run is the one with the most to
+    // destroy, and "force" means refresh unconditionally, not overwrite
+    // unconditionally.
+    if (isDegradedBuild(data) && cached?.data) {
       console.warn(
-        `[pickers] Build degraded (${data.degradedSymbolPct}% symbol failure) — serving last known-good cache instead.`
+        `[pickers] Build degraded (${data.degradedSymbolPct}% symbol failure)${
+          forceRefresh ? " on a FORCED run" : ""
+        } — keeping last known-good cache, not writing.`
       );
 
       memo = { ts: now, data: cached.data };
@@ -4083,6 +4255,7 @@ export async function GET(req: NextRequest) {
         headers: {
           "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
           "X-Pickers-Degraded-Fallback": "true",
+          "X-Pickers-History-Forced": forceHistoryRefresh ? "true" : "false",
         },
       });
     }
@@ -4095,6 +4268,7 @@ export async function GET(req: NextRequest) {
         "Cache-Control": forceRefresh
           ? "no-store"
           : `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+        "X-Pickers-History-Forced": forceHistoryRefresh ? "true" : "false",
       },
     });
   } catch (error) {
@@ -4104,6 +4278,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(cached.data, {
         headers: {
           "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+          "X-Pickers-History-Forced": forceHistoryRefresh ? "true" : "false",
         },
       });
     }
@@ -4134,4 +4309,22 @@ export async function GET(req: NextRequest) {
   } finally {
     await releasePickersLock(lockToken);
   }
+}
+
+/** The public /api/pickers handler. Never forces a history refetch. */
+export async function GET(req: NextRequest) {
+  return handlePickersRequest(req);
+}
+
+/**
+ * The /api/jobs/warm-picker-universe handler. Identical to GET in every respect
+ * except that it ASKS for the history force; whether it gets one is decided by
+ * isCronAuthorized/the owner key inside, not here.
+ *
+ * The X-Pickers-History-Forced response header is how the job route learns
+ * whether the force actually happened, so "the warm ran" and "the warm
+ * refreshed anything" stay two separately visible facts.
+ */
+export async function GET_WARM(req: NextRequest) {
+  return handlePickersRequest(req, { requestHistoryForce: true });
 }

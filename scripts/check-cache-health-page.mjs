@@ -119,8 +119,15 @@ const WRITE_SYMBOLS = [
   "registerSymbols",
   "recordJobRun",
 ];
+// CALL-OR-IMPORT, NOT BARE WORD. The bare-word form fired on the page's own
+// legend text, which names registerSymbols in prose to explain what "N seen"
+// means -- a false positive that would have been "fixed" by making the page
+// vaguer. A call needs parentheses and a reference needs an import, so both
+// forms are asserted and neither can be reached by writing the name in JSX.
 for (const sym of WRITE_SYMBOLS) {
-  check(`does not import or call ${sym}`, !new RegExp(`\\b${sym}\\b`).test(codeNoStrings));
+  const calls = new RegExp(`\\b${sym}\\s*\\(`).test(codeNoStrings);
+  const imports = new RegExp(`import[\\s\\S]{0,200}?\\b${sym}\\b[\\s\\S]{0,200}?from`).test(codeNoStrings);
+  check(`does not import or call ${sym}`, !calls && !imports);
 }
 check("no form, button or action element at all", !/<form|<button|"use server"|formAction/.test(code));
 
@@ -397,7 +404,8 @@ for (const [, job, flag] of jobEntries) {
   }
 }
 
-const datasetKeys = [...readCode("lib/server/stalenessQueue.ts").matchAll(/^  ([a-zA-Z]+):\s*\{$/gm)].map((m) => m[1]);
+const stalenessSrc = readCode("lib/server/stalenessQueue.ts");
+const datasetKeys = [...stalenessSrc.matchAll(/^  ([a-zA-Z]+):\s*\{$/gm)].map((m) => m[1]);
 check("the DATASETS registry has entries", datasetKeys.length >= 6, datasetKeys.join(", "));
 for (const ds of datasetKeys) {
   const has =
@@ -405,6 +413,128 @@ for (const ds of datasetKeys) {
     new RegExp(`registerSymbols\\(\\s*"${ds}"`).test(tree);
   check(`${ds}: something actually writes to its queue`, has);
 }
+
+console.log("\n=== Coverage: a ratio of a set to itself is not coverage ===\n");
+// THE DISTINCTION THE OLD CHECK COULD NOT DRAW. Above, markRefreshed OR
+// registerSymbols counts as "a writer" -- and that is why dailyHistory passed
+// while rendering "24 / 24, within policy" off a queue that contained only the
+// symbols something had already refreshed. Every symbol that failed was missing
+// from the denominator instead of counted against it, so the ratio was 100% by
+// construction and could never have been anything else.
+//
+// The two writers do different jobs:
+//   registerSymbols -> declares the DENOMINATOR (what ought to be fresh)
+//   markRefreshed   -> supplies the NUMERATOR
+//
+// So the registry declares which kind each dataset is, and this asserts the
+// declaration matches the tree in BOTH directions. Fixing dailyHistory once was
+// not the point; the point is that the next dataset added without a denominator
+// cannot render green.
+for (const ds of datasetKeys) {
+  const declared = new RegExp(`${ds}:\\s*\\{[\\s\\S]*?coverage:\\s*"(registered|observed-only)"`).exec(stalenessSrc)?.[1];
+  const registers = new RegExp(`registerSymbols\\(\\s*"${ds}"`).test(tree);
+  check(`${ds}: declares a coverage kind`, Boolean(declared), declared ?? "MISSING");
+  if (declared === "registered") {
+    check(`${ds}: declared "registered" AND has a registerSymbols caller`, registers);
+  } else if (declared === "observed-only") {
+    check(
+      `${ds}: declared "observed-only", and indeed nothing registers it`,
+      !registers,
+      "a stale declaration here would hide a real denominator, or invent one"
+    );
+  }
+}
+
+// The page must act on it, not merely receive it. A field threaded through and
+// then rendered identically is the same green panel with more code behind it.
+const healthPage = readCode("app/cache-health/page.tsx");
+check(
+  "DatasetHealth carries coverageEstablished",
+  /coverageEstablished:\s*boolean/.test(stalenessSrc) &&
+    /coverageEstablished:\s*def\.coverage === "registered"/.test(stalenessSrc)
+);
+check(
+  "statusFor returns a distinct status for an uncovered dataset",
+  /if \(!d\.coverageEstablished\)/.test(healthPage) && /status: "uncovered"/.test(healthPage)
+);
+// RUN, NOT READ. The first version of this assertion compared the source
+// positions of `status: "uncovered"` and `status: "ok"` -- and calibration
+// showed it was worthless: moving the entire coverage branch down to sit just
+// above the `return { status: "ok" }` line kept the text order intact while
+// changing the control flow completely, and the check stayed green. That is
+// claude/traps/measuring-the-wrong-layer.md exactly. The property is about which
+// branch WINS, so the only honest test runs the function.
+const statusFn = (() => {
+  const pf = ts.createSourceFile(PAGE, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const want = ["fmtAge", "statusFor"];
+  const found = {};
+  const visit = (n) => {
+    if (ts.isFunctionDeclaration(n) && want.includes(n.name?.text)) {
+      found[n.name.text] = n.getText(pf).replace(/^export\s+/, "");
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(pf);
+  return want.every((w) => found[w]) ? want.map((w) => found[w]).join("\n") : null;
+})();
+check("statusFor was extracted", Boolean(statusFn), statusFn ? "ok" : "MISSING — measuring nothing");
+
+if (statusFn) {
+  const js = ts.transpileModule(`${statusFn}\nexport { statusFor };`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+  }).outputText;
+  const { statusFor } = await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
+
+  const row = (over) => ({
+    dataset: "x",
+    label: "x",
+    ttlSeconds: 3600,
+    note: "",
+    tracked: 100,
+    stale: 0,
+    never: 0,
+    deferred: 0,
+    oldestMs: Date.now(),
+    seededAtMs: Date.now(),
+    instrumented: true,
+    coverageEstablished: true,
+    ...over,
+  });
+
+  // The shape that produced "24 / 24, within policy": every observed symbol
+  // fresh, nothing declaring what ought to be there.
+  const perfectButUncovered = statusFor(row({ coverageEstablished: false }));
+  check(
+    "an uncovered dataset with EVERY observed symbol fresh is not ok",
+    perfectButUncovered.status !== "ok",
+    perfectButUncovered.status
+  );
+  check("...it is reported as uncovered", perfectButUncovered.status === "uncovered", perfectButUncovered.status);
+
+  // And it must not be reachable from the other direction either: an uncovered
+  // dataset that happens to look BAD is still an unearned measurement, not a
+  // verdict about the dataset.
+  const staleUncovered = statusFor(row({ coverageEstablished: false, stale: 90 }));
+  check("an uncovered dataset with stale symbols is still uncovered", staleUncovered.status === "uncovered", staleUncovered.status);
+
+  // The control: coverage established, so the ordinary judgements still apply.
+  check("a covered, fresh dataset is ok", statusFor(row({})).status === "ok");
+  check("a covered, mostly-stale dataset is a fault", statusFor(row({ stale: 90 })).status === "fault");
+  check(
+    "an uninstrumented dataset is still unknown, not uncovered",
+    statusFor(row({ instrumented: false, coverageEstablished: false })).status === "unknown",
+    "nothing measured and no denominator are different problems with different fixes"
+  );
+}
+check(
+  "uncovered is not coloured green",
+  /uncovered:\s*"#a78bfa"/.test(healthPage) && !/uncovered:\s*"#22c55e"/.test(healthPage)
+);
+check(
+  "the RATIO ITSELF is withheld, not just recoloured",
+  /!d\.coverageEstablished\s*\?\s*`\$\{d\.tracked\} seen`/.test(healthPage),
+  'a purple "24 / 24" still reads as 24 of 24'
+);
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);
