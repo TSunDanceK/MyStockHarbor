@@ -4204,6 +4204,12 @@ async function handlePickersRequest(
     return NextResponse.json(cached.data, {
       headers: {
         "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+        // Set on EVERY response path, not just the one that built something.
+        // The warm route reads this header to decide whether to warn, and an
+        // absent header and a "false" header are the same fact reported two
+        // different ways -- one of which is indistinguishable from the route
+        // having been changed to stop setting it.
+        "X-Pickers-History-Forced": forceHistoryRefresh ? "true" : "false",
       },
     });
   }
@@ -4218,6 +4224,7 @@ async function handlePickersRequest(
     return NextResponse.json(cached.data, {
       headers: {
         "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+        "X-Pickers-History-Forced": forceHistoryRefresh ? "true" : "false",
       },
     });
   }
@@ -4248,6 +4255,7 @@ async function handlePickersRequest(
         headers: {
           "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
           "X-Pickers-Degraded-Fallback": "true",
+          "X-Pickers-History-Forced": forceHistoryRefresh ? "true" : "false",
         },
       });
     }
@@ -4270,6 +4278,7 @@ async function handlePickersRequest(
       return NextResponse.json(cached.data, {
         headers: {
           "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
+          "X-Pickers-History-Forced": forceHistoryRefresh ? "true" : "false",
         },
       });
     }
