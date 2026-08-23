@@ -162,11 +162,20 @@ export function stripComments(text, { file, dropLines = false, minRetainedFracti
   }
   const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, scriptKindFor(file));
 
+  // LEADING **AND** TRAILING, and the second is not optional.
+  // ts.getLeadingCommentRanges deliberately EXCLUDES a comment that sits on the
+  // same line as preceding code -- that is what getTrailingCommentRanges is for.
+  // Collecting only the leading ones left every `const x = 1; // explanation`
+  // in place, which is the original trap exactly: an assertion asking whether
+  // the code does X, satisfied by the comment saying it does. A synthetic
+  // fixture caught it; none of the real-file fixtures would have, because the
+  // file they read has no inline comments at all.
   const ranges = [];
   const collect = (node) => {
     const kids = node.getChildren(sf);
     if (kids.length === 0) {
       for (const r of ts.getLeadingCommentRanges(text, node.getFullStart()) ?? []) ranges.push(r);
+      for (const r of ts.getTrailingCommentRanges(text, node.getEnd()) ?? []) ranges.push(r);
       return;
     }
     for (const k of kids) collect(k);
