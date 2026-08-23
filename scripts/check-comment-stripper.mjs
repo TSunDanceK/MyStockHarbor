@@ -83,7 +83,6 @@ console.log("\n=== 3. The strip actually strips ===\n");
 const histStripped = stripComments(hist, { file: HIST });
 check("a block-comment phrase is gone", !histStripped.includes("ORDERING CONSTRAINT"));
 check("a line-comment phrase is gone", !histStripped.includes("FIRST, AND BEFORE THE WEEKEND BRANCH"));
-check("a trailing comment is gone too", !histStripped.includes("skipTrivia"), "not just whole-line comments");
 check("the code is not", histStripped.includes("export async function getDailyHistoryBulk("));
 check("string contents survive", histStripped.includes("q=0.9"), "the *\\/* header itself is data, not a comment");
 check(
@@ -91,6 +90,41 @@ check(
   histStripped.replace(/\s+/g, "").length < hist.replace(/\s+/g, "").length * 0.9,
   `${hist.replace(/\s+/g, "").length} -> ${histStripped.replace(/\s+/g, "").length} non-whitespace chars`
 );
+
+console.log("\n=== 3b. SYNTHETIC FIXTURE: the exact semantics, pinned ===\n");
+// A REAL-FILE FIXTURE CAN GO VACUOUS, and one did. "a trailing comment is gone
+// too" asserted that `skipTrivia` was absent from stripped historyCache.ts --
+// but that file has no inline comments at all and never contained the word, so
+// the assertion was true no matter what the stripper did. Calibration found it:
+// making stripComments a no-op failed four checks and left that one green.
+//
+// This fixture is written here rather than found in the tree, so nothing can
+// edit the subject out from under it.
+const FIXTURE = [
+  '// leading line comment MARKER_LINE',
+  '/* block comment MARKER_BLOCK */',
+  'const accept = "application/json,*/*;q=0.8"; // trailing MARKER_TRAILING',
+  'const tpl = `${accept} literal`;',
+  'const after = "MARKER_AFTER_TEMPLATE";',
+  '/**',
+  ' * jsdoc MARKER_JSDOC',
+  ' */',
+  'function keptFn() { return "MARKER_BODY"; }',
+].join("\n");
+const fx = stripComments(FIXTURE, { file: "fixture.ts" });
+
+for (const gone of ["MARKER_LINE", "MARKER_BLOCK", "MARKER_TRAILING", "MARKER_JSDOC"]) {
+  check(`${gone} is removed`, !fx.includes(gone));
+}
+for (const kept of ["MARKER_AFTER_TEMPLATE", "MARKER_BODY", "keptFn", "q=0.8"]) {
+  check(`${kept} survives`, fx.includes(kept));
+}
+check(
+  "the */ inside a string does not open a comment",
+  fx.includes('"application/json,*/*;q=0.8"'),
+  "this is the original bug, reduced to one line"
+);
+check("line count is unchanged", fx.split("\n").length === FIXTURE.split("\n").length);
 
 console.log("\n=== 4. Line numbers are preserved unless dropLines is asked for ===\n");
 check(
