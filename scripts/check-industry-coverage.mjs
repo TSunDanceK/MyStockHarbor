@@ -81,6 +81,19 @@ if (!arrowSrc) {
 }
 console.log(`\n=== 2. Predicate under test (read from source) ===\n\n    ${arrowSrc.replace(/\s+/g, " ")}\n`);
 
+// The predicate must actually read BOTH fields. Without this, a predicate
+// narrowed back to `industry` alone would pass every case above -- the fixtures
+// where only sector is missing would simply stop being expected misses if
+// someone "fixed" them to match. The assertion is on the extracted source, so
+// it fails on the narrowing rather than on its consequences.
+if (!/\bindustry\b/.test(arrowSrc) || !/\bsector\b/.test(arrowSrc)) {
+  console.error(
+    "\nFAIL: the predicate no longer reads both `industry` AND `sector`.\n" +
+      "/cheap-tech-stocks selects on sector; an industry-only test marks those symbols covered and truncates it."
+  );
+  process.exit(1);
+}
+
 const js = ts.transpileModule(`export const pred = (cachedProfiles, screenerFund) => (${arrowSrc});`, {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext },
 }).outputText;
@@ -93,18 +106,36 @@ const CASES = [
   { sym: "TSEM", profile: null, screener: { industry: null }, miss: true, why: "same" },
   { sym: "ALAB", profile: null, screener: { industry: null }, miss: true, why: "same" },
   { sym: "MTSI", profile: null, screener: { industry: null }, miss: true, why: "same" },
-  { sym: "NVDA", profile: null, screener: { industry: "Semiconductors" }, miss: false, why: "screener has it — free, skip" },
-  { sym: "INTC", profile: { industry: "Semiconductors" }, screener: null, miss: false, why: "profile has it — skip" },
+  // FIXTURES NOW CARRY SECTOR TOO, because the predicate selects on BOTH fields
+  // as of 2026-08-22. These three failed when that landed -- correctly: they
+  // encoded the old one-field rule, and a symbol with an industry but no sector
+  // now IS a miss. Updated rather than loosened.
+  { sym: "NVDA", profile: null, screener: { industry: "Semiconductors", sector: "Technology" }, miss: false, why: "screener has both — free, skip" },
+  { sym: "INTC", profile: { industry: "Semiconductors", sector: "Technology" }, screener: null, miss: false, why: "profile has both — skip" },
+  // THE SECTOR-ONLY GAP, which is the whole point of the change.
+  // /cheap-tech-stocks selects on `sector`, and these rows would have been
+  // treated as covered by an industry-only test and never fetched -- leaving
+  // that page permanently truncated. Same defect #337 fixed, one field over.
+  { sym: "AVGO", profile: null, screener: { industry: "Semiconductors", sector: null }, miss: true, why: "industry but NO SECTOR — the new miss" },
+  { sym: "QCOM", profile: { industry: "Semiconductors", sector: null }, screener: null, miss: true, why: "cached profile with no sector" },
+  { sym: "MU", profile: { industry: null, sector: "Technology" }, screener: null, miss: true, why: "sector but no industry — still a miss, as before" },
+  { sym: "TXN", profile: { industry: "Semiconductors", sector: null }, screener: { industry: null, sector: "Technology" }, miss: false, why: "between them both fields are covered" },
   { sym: "NEWCO", profile: null, screener: null, miss: true, why: "nothing anywhere — always was a miss" },
-  { sym: "SPY", profile: { industry: null }, screener: null, miss: true, why: "cached profile, industry null" },
-  { sym: "AMD", profile: { industry: null }, screener: { industry: "Semiconductors" }, miss: false, why: "one source has it — skip" },
+  { sym: "SPY", profile: { industry: null, sector: null }, screener: null, miss: true, why: "cached profile, both null" },
+  { sym: "AMD", profile: { industry: null, sector: "Technology" }, screener: { industry: "Semiconductors", sector: null }, miss: false, why: "sources cover one field each — skip" },
 ];
 
 const cachedProfiles = new Map();
 const screenerFund = new Map();
 for (const c of CASES) {
-  if (c.profile) cachedProfiles.set(c.sym, { ...c.profile, sector: null, marketCap: null });
-  if (c.screener) screenerFund.set(c.sym, { symbol: c.sym, ...c.screener, sector: null, marketCap: null });
+  // SPREAD LAST. These two lines used to read `{ ...c.profile, sector: null }`,
+  // which pinned sector to null AFTER the fixture had set it -- harmless while
+  // the predicate only read `industry`, and silently fatal the moment it started
+  // reading `sector` too: every fixture became a miss and four correct cases
+  // failed. A scaffold that hardcodes a field the code under test does not yet
+  // read is a trap armed and waiting.
+  if (c.profile) cachedProfiles.set(c.sym, { sector: null, marketCap: null, ...c.profile });
+  if (c.screener) screenerFund.set(c.sym, { symbol: c.sym, sector: null, marketCap: null, ...c.screener });
 }
 
 console.log("=== 3. Selection, per case ===\n");
@@ -146,6 +177,20 @@ const afterDefer = newSel.filter((s) => !marked.has(s));
 check("a marked symbol is skipped this run", !afterDefer.includes("SPY"));
 check("...but is still selected by the predicate, so it returns when the mark expires", newSel.includes("SPY"));
 check("marking never touches a symbol that has an industry", !marked.has("NVDA") && !marked.has("AMD"));
+
+// THE MARKER MUST GATE ON BOTH FIELDS TOO, and this is the half that is easy to
+// miss because it fails in the opposite direction from the predicate. The
+// predicate decides who gets FETCHED; the marker decides who stops being asked.
+// Gated on `profile.industry` alone, a profile that came back with an industry
+// and no sector is marked "asked and answered" -- so the widened predicate
+// selects it every run and the marker defers it every run, and the sector never
+// arrives. Fixing one without the other leaves the page just as truncated.
+const markerSrc = (source.match(/if \(profile\.industry[^)]*\) \{/) ?? [])[0] ?? "";
+check(
+  "the empty-marker gates on BOTH industry and sector",
+  /profile\.industry\s*&&\s*profile\.sector/.test(markerSrc),
+  markerSrc || "no `if (profile.industry...)` found — the marker may have been restructured"
+);
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);
