@@ -19,6 +19,14 @@ export type HistoryCacheEntry = {
   checkedAt: number;
   source: "fmp";
   daily?: Point[];
+  /**
+   * How many bars the parser actually produced, BEFORE the qualification
+   * threshold. Recorded so the success/failure TTL split on a `non_qualified`
+   * entry is inspectable in Redis rather than being a decision that leaves no
+   * trace: 0 means the response was empty (failure, 15 min), 1..29 means a real
+   * but short history (success, full TTL).
+   */
+  parsedRows?: number;
 };
 
 const redis =
@@ -53,7 +61,44 @@ const REDIS_HISTORY_PREFIX = "msh:history:v7";
 // direction, and it is worth knowing why: the Monday open was being computed an
 // hour LATE, because getNextMondayOpenUtcMsFromEastern hardcoded the winter
 // offset. Fixed in the same change; see the note there.
-const REDIS_HISTORY_TTL_SECONDS = 6 * 60 * 60;
+const REDIS_HISTORY_TTL_SECONDS = 50 * 60 * 60;
+
+// SAFE TO RAISE FROM 6h AS OF THIS CHANGE, and the reason is that a TTL is
+// stamped at WRITE time and cannot be extended retroactively. Entries written by
+// the pre-#349 parser already carry their own 6h (weekday) or next-Monday-open
+// (Friday-close/weekend) expiry; raising this constant does not touch them. Only
+// writes made after this deploys get 50h, and those go through the fixed parser.
+// So the flush described above still completes on its own schedule.
+//
+// WHY 50 AND NOT 26. 26h was the figure in the measurement doc, chosen when the
+// TTL was still doing the scheduling. With a forced 07:00 refetch the TTL is
+// only the failure margin, and 50h (Monday 07:00 -> Wednesday 09:00) means ONE
+// failed warm leaves Monday's bars serving Tuesday's session instead of leaving
+// the cache empty at Tuesday's open. Emptying the cache is not how a failure
+// becomes visible -- the warn below and the job-run record are. A stale-but-
+// present cache degrades a page; an empty one refetches ~700 symbols mid-session.
+//
+// THIS VALUE IS THE SUCCESS PATH ONLY. See HISTORY_FAILURE_TTL_SECONDS.
+
+// The failure floor. DELIBERATELY NOT DERIVED FROM THE SUCCESS TTL, and it must
+// stay that way: a 50h failure TTL would mean one bad fetch removes a symbol
+// from every picker page until the day after tomorrow. 15 minutes is long enough
+// that a genuine FMP outage is not retried on every render, and short enough
+// that a transient failure clears well inside one session. Same shape as #337's
+// profile empty-marker: a defer marker, not a cache entry.
+const HISTORY_FAILURE_TTL_SECONDS = 15 * 60;
+
+// A `non_qualified` entry means "fewer than MIN_QUALIFIED_POINTS usable bars".
+// That covers two genuinely different things and they want different TTLs:
+//
+//   - ZERO parsed rows: almost always a bad response, not a real fact about the
+//     symbol. Treated as a FAILURE -> 15 minutes.
+//   - 1..29 parsed rows: a real, short history (a recent IPO). Treated as a
+//     SUCCESS -> the full TTL. Refetching a genuine 12-bar IPO every 15 minutes
+//     would be 96 calls/day/symbol to re-learn a fact that has not changed.
+//
+// Without this split the failure floor would turn every legitimately short
+// history into a permanent 15-minute refetch loop.
 const MIN_QUALIFIED_POINTS = 30;
 
 // The FMP "full" history endpoint is bounded to ~5 years of daily bars on
@@ -170,7 +215,15 @@ function getNextMondayOpenUtcMsFromEastern(date = new Date()) {
   return Date.UTC(mondayYear2, mondayMonthNum - 1, mondayDayNum, 13, 30);
 }
 
-function getRedisHistoryTtlSeconds(now = new Date()) {
+export type HistoryTtlOutcome = "success" | "failure";
+
+function getRedisHistoryTtlSeconds(outcome: HistoryTtlOutcome = "success", now = new Date()) {
+  // FIRST, AND BEFORE THE WEEKEND BRANCH. A failed fetch on a Saturday must get
+  // 15 minutes, not "hold this failure until Monday's open". The failure floor
+  // is a fixed number that no other branch may lengthen -- that is the whole
+  // point of it not being derived from the success path.
+  if (outcome === "failure") return HISTORY_FAILURE_TTL_SECONDS;
+
   const { weekday, hour, minute } = getEasternParts(now);
   const totalMinutes = hour * 60 + minute;
   const fridayCloseMinutes = 16 * 60;
@@ -181,7 +234,11 @@ function getRedisHistoryTtlSeconds(now = new Date()) {
   if (isFridayAfterClose || isWeekend) {
     const mondayOpenUtcMs = getNextMondayOpenUtcMsFromEastern(now);
     const diffSeconds = Math.ceil((mondayOpenUtcMs - now.getTime()) / 1000);
-    return Math.max(60, diffSeconds);
+    // MAX, not "choose one". At 50h the base TTL is longer than the gap from a
+    // Sunday write to the Monday open, so picking the weekend branch outright
+    // would SHORTEN the TTL rather than extend it. The weekend branch exists to
+    // hold data across a closed market, never to expire it sooner.
+    return Math.max(REDIS_HISTORY_TTL_SECONDS, Math.max(60, diffSeconds));
   }
 
   return REDIS_HISTORY_TTL_SECONDS;
@@ -276,6 +333,106 @@ export function readHistoryDropCounts(): {
   historyRowsParsed = 0;
   historyRowsDroppedNoClose = 0;
   historyDropSymbols.clear();
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// NEWEST-BAR STALENESS
+//
+// A history fetch can succeed, parse cleanly, and still be wrong: FMP can serve
+// a symbol whose newest bar is days old. Every counter above would read zero.
+// Row drops measure the parser; this measures the DATA, and they fail
+// independently.
+//
+// WHY TWO TRADING DAYS OF SLACK AND NOT ONE. "More than one trading day old" is
+// the requirement, but the previous WEEKDAY is not the same thing as the
+// previous TRADING day -- market holidays are weekdays with no bar. On the
+// Tuesday after a Monday holiday the newest bar is legitimately Friday's, which
+// a one-day rule would flag. A warn that cries wolf every public holiday is a
+// warn people learn to ignore, so the threshold absorbs exactly one holiday and
+// costs one day of detection latency on a genuine stall.
+export const HISTORY_MAX_BAR_AGE_WEEKDAYS = 2;
+
+// Forced refetches that threw and fell back to the cached entry. Reported with
+// the run so "the force ran" and "the force actually refreshed things" are two
+// different, separately visible facts -- a run where most symbols fell back is a
+// successful-looking run that refreshed almost nothing.
+let historyForcedRefetchFailures = 0;
+const historyForcedRefetchFailureSymbols = new Set<string>();
+
+let historyStaleNewestCount = 0;
+let historyFreshNewestCount = 0;
+const historyStaleNewestSymbols = new Set<string>();
+let historyNewestBarSeen: string | null = null;
+
+/** Weekdays strictly between `isoDate` and today (Eastern), today excluded. */
+function weekdaysBehindEastern(isoDate: string, now = new Date()) {
+  const barMs = Date.parse(`${isoDate}T00:00:00Z`);
+  if (!Number.isFinite(barMs)) return null;
+
+  const { year, month, day } = getEasternParts(now);
+  const todayMs = Date.UTC(year, month - 1, day);
+  if (barMs >= todayMs) return 0;
+
+  let count = 0;
+  for (let ms = barMs + 86_400_000; ms < todayMs; ms += 86_400_000) {
+    const dow = new Date(ms).getUTCDay();
+    if (dow !== 0 && dow !== 6) count++;
+  }
+  return count;
+}
+
+function recordNewestBarAge(symbol: string, daily: Point[]) {
+  const newest = daily.length ? daily[daily.length - 1]?.date : null;
+  if (!newest) return;
+
+  if (!historyNewestBarSeen || newest > historyNewestBarSeen) {
+    historyNewestBarSeen = newest;
+  }
+
+  const behind = weekdaysBehindEastern(newest);
+  if (behind === null) return;
+
+  if (behind > HISTORY_MAX_BAR_AGE_WEEKDAYS) {
+    historyStaleNewestCount++;
+    if (historyStaleNewestSymbols.size < MAX_DROP_SYMBOLS) {
+      historyStaleNewestSymbols.add(symbol);
+    }
+  } else {
+    historyFreshNewestCount++;
+  }
+}
+
+/**
+ * Read-and-reset, same contract as readHistoryDropCounts: the caller owns the
+ * numbers once it has read them, and a failed run must discard rather than
+ * donate them to the next good one.
+ *
+ * `fresh` is returned with `stale` for the same reason `rowsParsed` is returned
+ * with the drop count -- 0 stale out of 0 fetched is not evidence of anything.
+ */
+export function readHistoryBarAgeCounts(): {
+  stale: number;
+  fresh: number;
+  symbols: string[];
+  newestBarSeen: string | null;
+  forcedRefetchFailures: number;
+  forcedRefetchFailureSymbols: string[];
+} {
+  const out = {
+    stale: historyStaleNewestCount,
+    fresh: historyFreshNewestCount,
+    symbols: [...historyStaleNewestSymbols],
+    newestBarSeen: historyNewestBarSeen,
+    forcedRefetchFailures: historyForcedRefetchFailures,
+    forcedRefetchFailureSymbols: [...historyForcedRefetchFailureSymbols],
+  };
+  historyStaleNewestCount = 0;
+  historyFreshNewestCount = 0;
+  historyStaleNewestSymbols.clear();
+  historyNewestBarSeen = null;
+  historyForcedRefetchFailures = 0;
+  historyForcedRefetchFailureSymbols.clear();
   return out;
 }
 
@@ -514,15 +671,28 @@ export async function readHistoryEntry(symbol: string) {
   }
 }
 
-export async function writeHistoryEntry(symbol: string, entry: HistoryCacheEntry) {
+export async function writeHistoryEntry(
+  symbol: string,
+  entry: HistoryCacheEntry,
+  outcome: HistoryTtlOutcome = "success"
+) {
   const normalized = normalizeSymbol(symbol);
 
   if (!redis) return;
 
   try {
-    await markRefreshed("dailyHistory", [normalized]);
+    // NOT markRefreshed on the failure path. A 15-minute defer marker is not a
+    // refresh, and recording it as one would let a dataset of nothing but failed
+    // fetches read as perfectly fresh on /cache-health -- the exact shape
+    // claude/traps/absence-needs-the-producer-to-have-run.md is about.
+    if (outcome === "success") {
+      await markRefreshed("dailyHistory", [normalized]);
+    }
     await redis.set(getHistoryRedisKey(normalized), entry, {
-      ex: getRedisHistoryTtlSeconds(),
+      // STILL CALLED WITH THE WRITE INSTANT, not a hoisted or passed-in time --
+      // the weekend behaviour measured in #354 depends on this reading the
+      // moment of the write. The outcome is the only new argument.
+      ex: getRedisHistoryTtlSeconds(outcome),
     });
   } catch {
     // fail open
@@ -593,9 +763,11 @@ const url = `https://financialmodelingprep.com/stable/historical-price-eod/full?
       checkedAt: Date.now(),
       source: "fmp",
       daily,
+      parsedRows: parsed.length,
     };
 
-    await writeHistoryEntry(normalized, entry);
+    recordNewestBarAge(normalized, daily);
+    await writeHistoryEntry(normalized, entry, "success");
     return entry;
   }
 
@@ -604,24 +776,32 @@ const url = `https://financialmodelingprep.com/stable/historical-price-eod/full?
     status: "non_qualified",
     checkedAt: Date.now(),
     source: "fmp",
+    parsedRows: parsed.length,
   };
 
-  await writeHistoryEntry(normalized, entry);
+  // See the HISTORY_FAILURE_TTL_SECONDS comment: an EMPTY response is a failure,
+  // a short one is a fact. Only the first gets the 15-minute floor.
+  await writeHistoryEntry(normalized, entry, parsed.length === 0 ? "failure" : "success");
   return entry;
 }
 
-export async function getDailyHistory(symbol: string) {
+export async function getDailyHistory(symbol: string, opts: { force?: boolean } = {}) {
   const endTiming = beginTiming("history", "getDailyHistory");
   try {
-    return await getDailyHistoryInner(symbol);
+    return await getDailyHistoryInner(symbol, opts.force ?? false);
   } finally {
     endTiming();
   }
 }
 
-async function getDailyHistoryInner(symbol: string) {
+async function getDailyHistoryInner(symbol: string, force = false) {
   const normalized = normalizeSymbol(symbol);
-  const cached = await readHistoryEntry(normalized);
+  // FORCE SKIPS THE READ, NOT THE LOCK. Under force we refetch regardless of
+  // what is cached, but if another caller already holds this symbol's lock it is
+  // already doing a live fetch -- waiting on that is a fresh result, so the
+  // wait-for-other-request path below stays exactly as it is. Force means
+  // "ignore the TTL", not "ignore the other fetch in flight".
+  const cached = force ? null : await readHistoryEntry(normalized);
 
   if (cached) {
     if (cached.status === "qualified" && Array.isArray(cached.daily)) {
@@ -711,8 +891,10 @@ function createLimiter(limit: number) {
 // individual piece of it is, which is what the size ceiling actually cares
 // about.
 export async function getDailyHistoryBulk(
-  symbols: string[]
+  symbols: string[],
+  opts: { force?: boolean } = {}
 ): Promise<Map<string, Point[]>> {
+  const force = opts.force ?? false;
   const result = new Map<string, Point[]>();
 
   const normalized = Array.from(
@@ -725,7 +907,7 @@ export async function getDailyHistoryBulk(
     await Promise.all(
       normalized.map((symbol) =>
         limitNoRedis(async () => {
-          result.set(symbol, await getDailyHistory(symbol));
+          result.set(symbol, await getDailyHistory(symbol, { force }));
         })
       )
     );
@@ -735,6 +917,17 @@ export async function getDailyHistoryBulk(
   const keys = normalized.map((symbol) => getHistoryRedisKey(symbol));
   let entries: (HistoryCacheEntry | null)[] = normalized.map(() => null);
 
+  // THE READ HAPPENS EVEN UNDER FORCE, and that is deliberate. What force
+  // changes is the CLASSIFICATION below, not this round-trip.
+  //
+  // Under force every symbol is refetched regardless of what is cached -- that
+  // is the whole point, because this path is otherwise MISS-ONLY and, with a TTL
+  // longer than 24h, the daily 07:00 warm would find every symbol present, fetch
+  // nothing, and still report success. But the cached entry is still worth
+  // having: it is the fallback when a forced refetch fails, which is what stops
+  // a forced run from ever producing a THINNER universe than a non-forced one.
+  // Skipping the read would have thrown that away to save one Redis round-trip
+  // per build.
   try {
     const pipeline = redis.pipeline();
     for (const key of keys) {
@@ -745,22 +938,27 @@ export async function getDailyHistoryBulk(
     // Best-effort; every symbol just falls through to the per-symbol path.
   }
 
+  const usable = (entry: HistoryCacheEntry | null | undefined, symbol: string) =>
+    entry &&
+    typeof entry === "object" &&
+    entry.symbol === symbol &&
+    (entry.status === "qualified" || entry.status === "non_qualified") &&
+    entry.source === "fmp";
+
+  const pointsOf = (entry: HistoryCacheEntry) =>
+    entry.status === "qualified" && Array.isArray(entry.daily) ? entry.daily : [];
+
   const misses: string[] = [];
+  const cachedBySymbol = new Map<string, HistoryCacheEntry>();
 
   normalized.forEach((symbol, i) => {
     const entry = entries[i];
+    const ok = usable(entry, symbol);
 
-    if (
-      entry &&
-      typeof entry === "object" &&
-      entry.symbol === symbol &&
-      (entry.status === "qualified" || entry.status === "non_qualified") &&
-      entry.source === "fmp"
-    ) {
-      result.set(
-        symbol,
-        entry.status === "qualified" && Array.isArray(entry.daily) ? entry.daily : []
-      );
+    if (ok) cachedBySymbol.set(symbol, entry as HistoryCacheEntry);
+
+    if (ok && !force) {
+      result.set(symbol, pointsOf(entry as HistoryCacheEntry));
     } else {
       misses.push(symbol);
     }
@@ -771,7 +969,33 @@ export async function getDailyHistoryBulk(
     await Promise.all(
       misses.map((symbol) =>
         limit(async () => {
-          result.set(symbol, await getDailyHistory(symbol));
+          try {
+            result.set(symbol, await getDailyHistory(symbol, { force }));
+          } catch (error) {
+            // A FORCED RUN MUST NOT MAKE THE UNIVERSE THINNER THAN NOT RUNNING.
+            //
+            // getDailyHistory has no catch, so a single reserveFmpCallSlot
+            // timeout (it waits FMP_MAX_WAIT_MS and then THROWS) propagates out
+            // of this Promise.all and aborts the entire build. Without force
+            // that is rare -- a warm cache means few misses. With force every
+            // symbol is a miss, so ~700 fetches contend for a 300/min budget and
+            // some WILL time out waiting for a slot. Letting that abort the run,
+            // or silently drop the symbol, would mean forcing a refresh made the
+            // picker universe worse than leaving it alone.
+            //
+            // Only under force, and only when a usable cached entry exists: fall
+            // back to it. Without force the throw still propagates, because there
+            // the caller's cache fallback is the right handler and swallowing it
+            // here would hide a real outage.
+            const fallback = cachedBySymbol.get(symbol);
+            if (!force || !fallback) throw error;
+
+            historyForcedRefetchFailures++;
+            if (historyForcedRefetchFailureSymbols.size < MAX_DROP_SYMBOLS) {
+              historyForcedRefetchFailureSymbols.add(symbol);
+            }
+            result.set(symbol, pointsOf(fallback));
+          }
         })
       )
     );
