@@ -226,9 +226,25 @@ check("an unforced run that loses the lock serves the cache", bench.builds.lengt
 
 console.log("\n=== 3. The build-threw fallback survives under force ===\n");
 
+// CAUGHT, NOT LEFT TO PROPAGATE. This assertion is precisely about whether the
+// function throws, so an unhandled throw here aborts the whole run and reports a
+// failure count lower than the real one -- the harness measures how far it got
+// rather than what is broken.
+//
+// RE-APPLIED 2026-08-23. #362's "Calibration fixes" commit message described
+// this wrap; `git log -S threwWithCache` shows it was never committed. A
+// calibration `git checkout --` reverted it before the commit, so the reported
+// M2 = 7 was measured on a tree that had it and main shipped without it. Under
+// the crashing version the same mutation reads 4.
 reset({ cache: GOOD_CACHE, buildThrows: true });
-out = await m.getPickersData("o", { forceRefresh: true });
-check("FORCED + threw + good cache: the cache is returned, not an exception", out.label === "cached-good", out.label);
+out = null;
+let threwWithCache = false;
+try { out = await m.getPickersData("o", { forceRefresh: true }); } catch { threwWithCache = true; }
+check(
+  "FORCED + threw + good cache: the cache is returned, not an exception",
+  !threwWithCache && out?.label === "cached-good",
+  threwWithCache ? "threw" : String(out?.label)
+);
 
 reset({ cache: null, buildThrows: true });
 let threw = false;
