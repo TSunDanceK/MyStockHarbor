@@ -457,11 +457,75 @@ check(
   "statusFor returns a distinct status for an uncovered dataset",
   /if \(!d\.coverageEstablished\)/.test(healthPage) && /status: "uncovered"/.test(healthPage)
 );
-check(
-  "the uncovered branch comes BEFORE any branch that can return ok",
-  healthPage.indexOf('status: "uncovered"') < healthPage.indexOf('status: "ok"'),
-  "otherwise a fresh-looking uncovered dataset still reaches green"
-);
+// RUN, NOT READ. The first version of this assertion compared the source
+// positions of `status: "uncovered"` and `status: "ok"` -- and calibration
+// showed it was worthless: moving the entire coverage branch down to sit just
+// above the `return { status: "ok" }` line kept the text order intact while
+// changing the control flow completely, and the check stayed green. That is
+// claude/traps/measuring-the-wrong-layer.md exactly. The property is about which
+// branch WINS, so the only honest test runs the function.
+const statusFn = (() => {
+  const pf = ts.createSourceFile(PAGE, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const want = ["fmtAge", "statusFor"];
+  const found = {};
+  const visit = (n) => {
+    if (ts.isFunctionDeclaration(n) && want.includes(n.name?.text)) {
+      found[n.name.text] = n.getText(pf).replace(/^export\s+/, "");
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(pf);
+  return want.every((w) => found[w]) ? want.map((w) => found[w]).join("\n") : null;
+})();
+check("statusFor was extracted", Boolean(statusFn), statusFn ? "ok" : "MISSING — measuring nothing");
+
+if (statusFn) {
+  const js = ts.transpileModule(`${statusFn}\nexport { statusFor };`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+  }).outputText;
+  const { statusFor } = await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
+
+  const row = (over) => ({
+    dataset: "x",
+    label: "x",
+    ttlSeconds: 3600,
+    note: "",
+    tracked: 100,
+    stale: 0,
+    never: 0,
+    deferred: 0,
+    oldestMs: Date.now(),
+    seededAtMs: Date.now(),
+    instrumented: true,
+    coverageEstablished: true,
+    ...over,
+  });
+
+  // The shape that produced "24 / 24, within policy": every observed symbol
+  // fresh, nothing declaring what ought to be there.
+  const perfectButUncovered = statusFor(row({ coverageEstablished: false }));
+  check(
+    "an uncovered dataset with EVERY observed symbol fresh is not ok",
+    perfectButUncovered.status !== "ok",
+    perfectButUncovered.status
+  );
+  check("...it is reported as uncovered", perfectButUncovered.status === "uncovered", perfectButUncovered.status);
+
+  // And it must not be reachable from the other direction either: an uncovered
+  // dataset that happens to look BAD is still an unearned measurement, not a
+  // verdict about the dataset.
+  const staleUncovered = statusFor(row({ coverageEstablished: false, stale: 90 }));
+  check("an uncovered dataset with stale symbols is still uncovered", staleUncovered.status === "uncovered", staleUncovered.status);
+
+  // The control: coverage established, so the ordinary judgements still apply.
+  check("a covered, fresh dataset is ok", statusFor(row({})).status === "ok");
+  check("a covered, mostly-stale dataset is a fault", statusFor(row({ stale: 90 })).status === "fault");
+  check(
+    "an uninstrumented dataset is still unknown, not uncovered",
+    statusFor(row({ instrumented: false, coverageEstablished: false })).status === "unknown",
+    "nothing measured and no denominator are different problems with different fixes"
+  );
+}
 check(
   "uncovered is not coloured green",
   /uncovered:\s*"#a78bfa"/.test(healthPage) && !/uncovered:\s*"#22c55e"/.test(healthPage)
