@@ -1,3 +1,4 @@
+import { getBuySignalCount } from "@/lib/signalCounts";
 import { Suspense } from "react";
 import Link from "next/link";
 import type { MiniCandlePoint, SupportResistanceZone } from "@/app/components/MiniPickerCandleChart";
@@ -391,20 +392,6 @@ function chartHrefForEntry(
   return base;
 }
 
-function getBuySignalCount(record: SignalRecord) {
-  if (!record.aboveMA200) return 0;
-  let count = 0;
-  if (record.oversold) count += 1;
-  if (record.buyTheDip) count += 1;
-  if (record.breakout) count += 1;
-  if (record.volumeSpike) count += 1;
-  if (record.atrSpike) count += 1;
-  if (record.aboveMA50) count += 1;
-  if (record.aboveMA200) count += 1;
-  if (record.bullishRsiDivergence) count += 1;
-  if (record.bullishMacdDivergence) count += 1;
-  return count;
-}
 
 function getSellSignalCount(record: SignalRecord) {
   let count = 0;
