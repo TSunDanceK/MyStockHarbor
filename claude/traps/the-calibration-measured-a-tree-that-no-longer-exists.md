@@ -105,6 +105,50 @@ becomes a ritual that produces confident numbers about code nobody shipped —
 which is worse than not calibrating at all, because an uncalibrated check is
 merely unproven, while a falsely-calibrated one has been vouched for.
 
+## THE RULE LOST SIX TIMES. USE THE SCRIPT.
+
+Everything above was written down, agreed, and then violated again — six times,
+by the same reflex, the last two producing **commit messages describing fixes
+their commits did not contain**:
+
+- #363's second commit described collecting trailing comment ranges; the C5
+  mutation removed the line and `git checkout -- <file>` restored to a HEAD that
+  predated the fix. Caught by re-running the suite.
+- #362's "Calibration fixes" commit described wrapping a throwing assertion so a
+  mutation could not abort the run. `git log -S threwWithCache` is **empty** —
+  it never landed. Found a day later, when the same mutation reported 4 failures
+  instead of 7 and the difference turned out to be the harness dying at that
+  exact line.
+
+A rule that keeps losing to a reflex is not working as a control. **The restore
+is now mechanised:**
+
+```
+node scripts/calibrate.mjs scripts/calibrations/<name>.mjs [--id M3] [--verbose]
+```
+
+It snapshots every file the calibration will touch to a scratch directory
+**outside the repo**, mutates, runs, and restores **from the snapshot** — never
+from git. Nothing in the loop consults the index or HEAD, so uncommitted work is
+safe by construction rather than by remembering. It verifies each restore by
+hash and reports any file left dirty that the spec did not declare.
+
+Two properties beyond the restore, both learned the hard way:
+
+- **Expected counts live in the spec, not in a PR body.** A calibration whose
+  numbers exist only in prose is a measurement taken once. Here each mutation
+  carries the count it should break, so re-running is one command and drift is
+  an exit code. This is what turned "do #362's fourteen mutations still hold
+  under the new stripper" into a single run.
+- **A crash is not a count.** A harness that dies partway reports how far it
+  got. The tool detects a missing verdict line (`ALL CHECKS PASSED` /
+  `FAILED (n)`) and reports `CRASH`, rather than treating a partial tally as a
+  measurement — which is exactly how the #362 discrepancy above would otherwise
+  have been recorded as a real regression.
+
+**Do not hand-roll a calibration loop in the shell.** Add a spec file. The point
+of the script is that the reflex has nothing to reach for.
+
 ## Related
 
 - `a-regex-over-source-has-no-scope.md` — the harness measures less than it

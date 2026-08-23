@@ -88,6 +88,26 @@ red*. A mutation that removes one of four asserted hops should fail four checks.
 Failing one is the signal that three assertions are aliased onto something else.
 Both cases here were found that way and by nothing else.
 
+## Its mirror image: what the strip LEAVES BEHIND
+
+This doc is about a regex matching more than you scoped it to. The same
+machinery fails the opposite way too, and that half is worse because it fails
+green: a comment stripper that removes **too little** leaves prose in the text,
+so an assertion about the code is satisfied by the comment about the code — the
+original `grep-finds-the-comment-not-the-code.md` trap, sitting inside the
+machinery built to close it.
+
+That is not hypothetical here. Every comment-stripped assertion across sixteen
+harnesses could have been satisfied by a **trailing** comment
+(`const x = 1; // we no longer call legacyThing`), for as long as those harnesses
+have existed, because `ts.getLeadingCommentRanges` deliberately excludes
+same-line comments and nothing collected the trailing ones. Found 2026-08-23.
+
+The lesson to carry across: **a stripper's omissions are as dangerous as a
+regex's over-matching, and only one of the two is loud.** Written up in
+`a-strippers-omissions-fail-green.md`, along with why a size threshold cannot
+catch either.
+
 ## Where it does not apply
 
 Asserting **absence** — that a symbol appears nowhere, that a dead path is
