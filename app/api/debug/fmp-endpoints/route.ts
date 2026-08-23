@@ -28,11 +28,17 @@ export const maxDuration = 60;
 // Raising UNIVERSE_CAP cannot help; the candidate pool is the binding
 // constraint.
 //
-// The master list is 407 because buildExpandedDiscoveryMasterList unions three
-// FMP constituent endpoints with the static lists, and those endpoints appear to
-// answer 402 on this plan -- fetchFmpConstituentSymbols swallows a non-ok
-// response into [], so the failure is invisible. This route makes it visible,
-// and tests whether any endpoint on this plan CAN supply a larger candidate set.
+// HISTORICAL CONTEXT, CORRECTED 2026-08-22. The master list was 407 because
+// buildExpandedDiscoveryMasterList unioned three FMP constituent endpoints with
+// the static lists, and those endpoints answered 402 -- fetchFmpConstituentSymbols
+// swallowed a non-ok response into [], so the failure was invisible.
+//
+// That function no longer exists and nothing in lib/ calls the plain constituent
+// endpoints any more. The probes for them are kept as PLAN probes -- knowing
+// which endpoints this plan serves is still worth one call each -- but they no
+// longer describe anything live, and three of the notes below said they did.
+// They nearly got re-reported as fresh bugs today, which is the cost of a note
+// that outlives its subject.
 //
 // SAFETY
 // ------
@@ -84,9 +90,9 @@ type Probe = {
 // `symbol`-bearing list endpoints worth knowing about, plus two known-good
 // controls so a total failure is distinguishable from a plan restriction.
 const PROBES: Probe[] = [
-  { id: "sp500-constituent", path: "sp500-constituent", note: "currently used by buildExpandedDiscoveryMasterList" },
-  { id: "nasdaq-constituent", path: "nasdaq-constituent", note: "currently used" },
-  { id: "dowjones-constituent", path: "dowjones-constituent", note: "currently used" },
+  { id: "sp500-constituent", path: "sp500-constituent", note: "STALE NOTE CORRECTED 2026-08-22: no longer used by anything. buildExpandedDiscoveryMasterList is gone; nothing in lib/ calls the plain constituent endpoints. Kept as a plan probe only. Answers 402." },
+  { id: "nasdaq-constituent", path: "nasdaq-constituent", note: "Not used by anything either -- see the sp500 note above. Plan probe only." },
+  { id: "dowjones-constituent", path: "dowjones-constituent", note: "Not used by anything either -- see the sp500 note above. Plan probe only." },
   { id: "most-actives", path: "most-actives", note: "CONTROL -- known working (price pool uses it)" },
   { id: "biggest-gainers", path: "biggest-gainers", note: "CONTROL -- known working" },
   {
@@ -155,7 +161,7 @@ const PROBES: Probe[] = [
   {
     id: "screener-no-funds",
     path: "company-screener?marketCapMoreThan=1000000000&exchange=NASDAQ,NYSE&isActivelyTrading=true&isEtf=false&isFund=false&limit=1000",
-    note: "CANDIDATE FIX -- same filter plus isEtf=false&isFund=false",
+    note: "SHIPPED, not a candidate: screenerFundamentals.ts already sends isEtf=false&isFund=false (see its URL builder). Kept as a regression probe -- if the fund-like count climbs again, the filter has been dropped.",
   },
 
   // SECTOR NEWS (2026-08-07). Does stable/news/stock actually honour a

@@ -118,13 +118,28 @@ async function fetchRecentIndexAdditions(): Promise<IndexAddition[]> {
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
   // allSettled, not all: one index failing must not zero a page that covers
-  // three. FMP returns 402 on the Dow Jones constituent-history endpoint under
-  // this plan, and because the previous Promise.all threw on the first non-ok
-  // response, that single refusal discarded the S&P 500 and Nasdaq 100 results
-  // alongside it. The feed has therefore NEVER once succeeded, its Redis key
-  // has never been written, and the page has rendered as unavailable since it
-  // was built. It only became visible when #304 stopped DynamicServerError
-  // being misreported as an upstream failure.
+  // three. The previous Promise.all threw on the first non-ok response, so one
+  // refusal discarded the other two results alongside it.
+  //
+  // CORRECTED 2026-08-22, and the correction matters. This comment used to say
+  // FMP returns 402 on "the Dow Jones constituent-history endpoint" -- singular,
+  // implying two of three still answer. Probing all three
+  // (/api/debug/fmp-endpoints) proved 402 on ALL of them:
+  // historical-sp500-constituent, historical-nasdaq-constituent and
+  // historical-dowjones-constituent alike. So allSettled does not rescue a
+  // partial result here; there is nothing to rescue.
+  //
+  // What that means for this function is the GOOD outcome, and worth stating
+  // because the shape usually goes the other way: with every index failing,
+  // `succeeded.length === 0` below throws, readFeed marks the feed not-ok, and
+  // the page renders unavailable. It does NOT return [] and render "no recent
+  // index changes", which would be indistinguishable from a genuinely quiet
+  // month, forever (claude/traps/absence-needs-the-producer-to-have-run.md).
+  //
+  // The feed has therefore never once succeeded on this plan, its Redis key has
+  // never been written, and that is visible rather than silent. It only became
+  // visible at all when #304 stopped DynamicServerError being misreported as an
+  // upstream failure.
   const settled = await Promise.allSettled(
     INDEXES.map(async ({ name, url }) => {
       // See the note in lib/server/ipoCalendar.ts: no-store throws
