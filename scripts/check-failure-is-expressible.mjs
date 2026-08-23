@@ -17,6 +17,7 @@
 //   node scripts/check-failure-is-expressible.mjs
 import fs from "node:fs";
 import path from "node:path";
+import { stripComments } from "./lib/source-code.mjs";
 
 const ROOT = process.cwd();
 let failures = 0;
@@ -34,16 +35,12 @@ const ROUTES = [
 // claude/traps/a-regex-over-source-has-no-scope.md -- the notes added by this
 // change quote the old shape, and matching prose would report the bug as still
 // present (or as fixed, depending which way the regex leaned).
-const codeOf = (src) =>
-  src
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .split("\n")
-    .map((l) => (l.trim().startsWith("//") ? "" : l))
-    .join("\n");
+// Comments stripped with the real tokeniser, and guarded -- see scripts/lib/source-code.mjs.
+const codeOf = (src, file) => stripComments(src, { file });
 
 console.log("\n=== 1. A missing API key is a server error, not an empty answer ===\n");
 for (const rel of ROUTES) {
-  const code = codeOf(fs.readFileSync(path.join(ROOT, rel), "utf8"));
+  const code = codeOf(fs.readFileSync(path.join(ROOT, rel), "utf8"), rel);
   const name = rel.replace("app/api/", "").replace("/route.ts", "");
 
   check(
@@ -65,14 +62,14 @@ console.log("\n=== 2. A genuine absence of data still answers 200 ===\n");
 // this -- returning 404 or 503 for a ticker nobody covers -- would swap one
 // wrong reading for another, and the client would surface an error for a
 // perfectly normal small-cap.
-const rating = codeOf(fs.readFileSync(path.join(ROOT, ROUTES[1]), "utf8"));
+const rating = codeOf(fs.readFileSync(path.join(ROOT, ROUTES[1]), "utf8"), ROUTES[1]);
 check(
   "analyst-rating: no target and no grades still returns an empty payload at 200",
   /if \(!targetRow && !gradesRow\)[\s\S]{0,200}emptyPayload\(/.test(rating) &&
     !/if \(!targetRow && !gradesRow\)[\s\S]{0,200}status:/.test(rating),
   "a ticker nobody covers is an answer, not a fault"
 );
-const valuation = codeOf(fs.readFileSync(path.join(ROOT, ROUTES[0]), "utf8"));
+const valuation = codeOf(fs.readFileSync(path.join(ROOT, ROUTES[0]), "utf8"), ROUTES[0]);
 check(
   "valuation: emptyPayload is gone, having lost its only caller",
   !/function emptyPayload/.test(valuation),
@@ -82,7 +79,10 @@ check(
 console.log("\n=== 3. The client still guards on res.ok, so the status is read ===\n");
 // A status nothing reads is a status that changes nothing. This is what turns
 // the fix into a visible failure rather than a tidier server log.
-const client = codeOf(fs.readFileSync(path.join(ROOT, "app/stock/[symbol]/StockSymbolPageClient.tsx"), "utf8"));
+const client = codeOf(
+  fs.readFileSync(path.join(ROOT, "app/stock/[symbol]/StockSymbolPageClient.tsx"), "utf8"),
+  "app/stock/[symbol]/StockSymbolPageClient.tsx"
+);
 for (const ep of ["stock-valuation", "stock-analyst-rating"]) {
   const idx = client.indexOf(`/api/${ep}/`);
   check(

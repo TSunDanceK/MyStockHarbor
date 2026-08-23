@@ -20,6 +20,7 @@ import {
 } from "@/lib/server/historyCache";
 import type { NextRequest } from "next/server";
 import { GET_WARM as buildPickerUniverse } from "../../../../lib/server/pickersBuilder";
+import { readLastBuildStats } from "../../../../lib/server/pickersBuilder";
 import { recordJobRun } from "../../../../lib/server/jobRuns";
 
 // WRAPPED, NOT REWRITTEN. This stays the identical handler -- the whole point of
@@ -106,9 +107,30 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    // Read from module state for the same reason the drop counters are: this
+    // route must not clone a payload carrying the whole universe. `null` when
+    // the request never reached a build (served from memo or cache), which is
+    // itself the answer to "did the forced warm actually build".
+    const build = readLastBuildStats();
+
+    // THE INVARIANT, CHECKED WHERE IT CAN BE SEEN. A forced run must never yield
+    // a thinner universe than an unforced one; that is the property the
+    // per-symbol fallback in getDailyHistoryBulk exists to guarantee. If it ever
+    // does, the run record and the log both say so rather than leaving it to be
+    // noticed on a picker page.
+    if (build && build.degradedFallbackUsed) {
+      console.warn(
+        `[warm-picker-universe] Degraded build REFUSED (${build.degradedSymbolPct}% symbol failure) -- the previous payload is still serving. The cache was NOT overwritten.`
+      );
+    }
+
     await recordJobRun("warm-picker-universe", res.ok, {
       status: res.status,
       historyForced,
+      universeSize: build?.universeSize ?? null,
+      degradedSymbolPct: build?.degradedSymbolPct ?? null,
+      degradedFallbackUsed: build?.degradedFallbackUsed ?? null,
+      payloadWritten: build?.wrote ?? null,
       historyRowsParsed: drops.rowsParsed,
       historyRowsDroppedNoClose: drops.rowsDroppedNoClose,
       historyDropSymbols: drops.symbols.join(",") || null,
@@ -128,6 +150,7 @@ export async function GET(req: NextRequest) {
     if (!recorded) {
       readHistoryDropCounts();
       readHistoryBarAgeCounts();
+      readLastBuildStats();
     }
     await recordJobRun("warm-picker-universe", false, { error: message });
     throw error;

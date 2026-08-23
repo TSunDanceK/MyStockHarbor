@@ -27,6 +27,7 @@
 import ts from "typescript";
 import fs from "node:fs";
 import path from "node:path";
+import { stripComments } from "./lib/source-code.mjs";
 
 const ROOT = process.cwd();
 const SRC = path.join(ROOT, "lib/server/fundamentalsCache.ts");
@@ -44,11 +45,8 @@ const check = (label, ok, detail = "") => {
 // expression verbatim, and matching that would report the bug as still present
 // -- claude/traps/grep-finds-the-comment-not-the-code.md, which this repo has
 // paid for more than once.
-const code = source
-  .replace(/\/\*[\s\S]*?\*\//g, "")
-  .split("\n")
-  .filter((l) => !l.trim().startsWith("//"))
-  .join("\n");
+// Comments stripped with the real tokeniser, and guarded -- see scripts/lib/source-code.mjs.
+const code = stripComments(source, { file: SRC, dropLines: true });
 
 console.log("\n=== 1. The membership-not-content test is gone from the code ===");
 check(

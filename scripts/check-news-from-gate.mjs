@@ -16,6 +16,7 @@
 import ts from "typescript";
 import fs from "node:fs";
 import path from "node:path";
+import { stripComments } from "./lib/source-code.mjs";
 
 const ROOT = process.cwd();
 const ROUTE = "app/api/debug/fmp-endpoints/route.ts";
@@ -141,11 +142,8 @@ check(
   "...and it holds across a month boundary",
   m.gateFromDate(new Date("2026-09-01T00:30:00Z")) === "2026-08-31"
 );
-const code = src
-  .replace(/\/\*[\s\S]*?\*\//g, "")
-  .split("\n")
-  .filter((l) => !l.trim().startsWith("//"))
-  .join("\n");
+// Comments stripped with the real tokeniser, and guarded -- see scripts/lib/source-code.mjs.
+const code = stripComments(src, { file: ROUTE, dropLines: true });
 check(
   "the probe and the reader both call it — no second copy of the arithmetic",
   (code.match(/gateFromDate\(/g) ?? []).length === 3,

@@ -24,6 +24,7 @@
 import ts from "typescript";
 import fs from "node:fs";
 import path from "node:path";
+import { stripComments } from "./lib/source-code.mjs";
 
 const ROOT = process.cwd();
 const SRC = "lib/server/pickersBuilder.ts";
@@ -48,7 +49,7 @@ const grab = (name) => {
   return out;
 };
 
-const WANTED = ["isDegradedBuild", "getPickersData", "handlePickersRequest", "isCronAuthorized"];
+const WANTED = ["isDegradedBuild", "recordBuildStats", "getPickersData", "handlePickersRequest", "isCronAuthorized"];
 const fns = Object.fromEntries(WANTED.map((n) => [n, grab(n)]));
 const missing = WANTED.filter((n) => !fns[n]);
 if (missing.length) {
@@ -105,7 +106,9 @@ const checkBackfillKey = () => bench.keyOk;
 const NextResponse = {
   json: (data, init) => ({ data, status: init?.status ?? 200, headers: init?.headers ?? {} }),
 };
-export const resetMemo = () => { memo = null; };
+let lastBuildStats = null;
+export const resetMemo = () => { memo = null; lastBuildStats = null; };
+export const readStats = () => lastBuildStats;
 `;
 
 const js = ts.transpileModule(
@@ -173,6 +176,31 @@ check("FORCED + degraded + NO cache: it is returned", out.label === "fresh-degra
 reset({ cache: GOOD_CACHE, built: DEGRADED });
 out = await m.getPickersData("o", {});
 check("UNFORCED + degraded: unchanged — nothing written", bench.writes.length === 0);
+
+console.log("\n=== 1b. The run record tells the truth about what happened ===\n");
+// The Sunday/Monday post-mortem is read off ONE page, so the four facts it needs
+// have to be recorded rather than inferred. Without `wrote`, "the guard fired"
+// and "the guard was not needed" look identical from outside.
+reset({ cache: GOOD_CACHE, built: { ...DEGRADED, universeSize: 412 } });
+await m.getPickersData("o", { forceRefresh: true });
+let stats = m.readStats();
+check("a refused degraded build records degradedFallbackUsed", stats?.degradedFallbackUsed === true, JSON.stringify(stats));
+check("...and records that it did NOT write", stats?.wrote === false);
+check("...and carries the universe size it actually built", stats?.universeSize === 412, String(stats?.universeSize));
+
+reset({ cache: GOOD_CACHE, built: { ...HEALTHY, universeSize: 707 } });
+await m.getPickersData("o", { forceRefresh: true });
+stats = m.readStats();
+check("a published build records wrote:true", stats?.wrote === true && stats?.degradedFallbackUsed === false, JSON.stringify(stats));
+check("...with its universe size", stats?.universeSize === 707);
+
+reset({ cache: GOOD_CACHE, built: HEALTHY });
+await m.getPickersData("o", {});
+check(
+  "a run served from cache records NOTHING, rather than repeating the last build",
+  m.readStats() === null,
+  "null is the answer to \"did the forced warm actually build\""
+);
 
 console.log("\n=== 2. Force still means REFRESH, not just 'do not overwrite' ===\n");
 
@@ -267,19 +295,7 @@ else process.env.CRON_SECRET = OLD_SECRET;
 console.log("\n=== 6. GET and GET_WARM are one implementation, not two ===\n");
 // The two routes were consolidated so they could never drift. Adding forced
 // behaviour must not reintroduce a second copy.
-const code = (() => {
-  const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.Standard, raw);
-  let out = "";
-  let k;
-  while ((k = scanner.scan()) !== ts.SyntaxKind.EndOfFileToken) {
-    const t = scanner.getTokenText();
-    out +=
-      k === ts.SyntaxKind.SingleLineCommentTrivia || k === ts.SyntaxKind.MultiLineCommentTrivia
-        ? t.replace(/[^\n]/g, "")
-        : t;
-  }
-  return out;
-})();
+const code = stripComments(raw, { file: SRC });
 check("the comment stripper kept the code", code.includes("export async function GET_WARM"), `${code.length} of ${raw.length} chars`);
 check(
   "GET delegates",
