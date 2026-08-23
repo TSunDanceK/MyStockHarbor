@@ -20,6 +20,7 @@
 import ts from "typescript";
 import fs from "node:fs";
 import path from "node:path";
+import { stripComments } from "./lib/source-code.mjs";
 
 const ROOT = process.cwd();
 const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
@@ -32,12 +33,8 @@ const check = (label, ok, detail = "") => {
 
 // Comments stripped for the "does the code do X" assertions below, so this
 // script cannot be satisfied by its own subject's prose.
-const codeOfTs = (src) =>
-  src
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .split("\n")
-    .filter((l) => !l.trim().startsWith("//"))
-    .join("\n");
+// Comments stripped with the real tokeniser, and guarded -- see scripts/lib/source-code.mjs.
+const codeOfTs = (src, file) => stripComments(src, { file, dropLines: true });
 
 const sourceFile = (rel, kind = ts.ScriptKind.TS) =>
   ts.createSourceFile(rel, read(rel), ts.ScriptTarget.Latest, true, kind);
@@ -283,7 +280,7 @@ check('"Draft Report" is NOT the FT', !wire("Draft Report"));
 check('but "FT.com" still is', wire("FT.com"));
 
 console.log("\n=== 8. One tier table, and no gate ===\n");
-const newsCode = codeOfTs(read("lib/stock-news-data.ts"));
+const newsCode = codeOfTs(read("lib/stock-news-data.ts"), "lib/stock-news-data.ts");
 check(
   "scoreNewsItem uses the SAME tier table as the gate",
   /score \+= sourceTierScore\(source\)/.test(newsCode) &&

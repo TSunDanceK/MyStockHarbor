@@ -18,6 +18,7 @@
 //   node scripts/check-internal-links.mjs
 import fs from "node:fs";
 import path from "node:path";
+import { stripComments } from "./lib/source-code.mjs";
 
 const ROOT = process.cwd();
 let failures = 0;
@@ -55,14 +56,13 @@ walk(path.join(ROOT, "app"));
 // a prose mention of an old path is not a link, and counting it would make this
 // check cry wolf until someone turns it off
 // (claude/traps/a-regex-over-source-has-no-scope.md).
-const codeOf = (src) =>
-  src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
-    .split("\n").map((l) => (l.trim().startsWith("//") ? "" : l)).join("\n");
+// Comments stripped with the real tokeniser, and guarded -- see scripts/lib/source-code.mjs.
+const codeOf = (src, file) => stripComments(src, { file });
 
 const offenders = [];
 for (const file of files) {
   const rel = path.relative(ROOT, file);
-  const code = codeOf(fs.readFileSync(file, "utf8"));
+  const code = codeOf(fs.readFileSync(file, "utf8"), path.relative(ROOT, file));
   for (const [source, destination] of redirected) {
     // href="/x" only. A bare string mention of the path is not a link, and
     // next.config.ts itself obviously names every source.
@@ -85,7 +85,7 @@ check(
 // the walker and the regex are both live.
 let sanity = 0;
 for (const file of files) {
-  sanity += (codeOf(fs.readFileSync(file, "utf8")).match(/href=["'`]\/pickers["'`]/g) ?? []).length;
+  sanity += (codeOf(fs.readFileSync(file, "utf8"), path.relative(ROOT, file)).match(/href=["'`]\/pickers["'`]/g) ?? []).length;
 }
 check(
   "the walker and regex actually find links (sanity: /pickers)",

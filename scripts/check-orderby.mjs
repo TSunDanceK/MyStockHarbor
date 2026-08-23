@@ -25,6 +25,7 @@
 import ts from "typescript";
 import fs from "node:fs";
 import path from "node:path";
+import { stripComments } from "./lib/source-code.mjs";
 
 const ROOT = process.cwd();
 const SRC = path.join(ROOT, "app/components/PickerResultPage.tsx");
@@ -170,11 +171,8 @@ console.log("\n=== E. Every declared orderBy key is a column the page shows ===\
 // here, so a column removed from the grid fails this instead of quietly making
 // a page sort by something it stopped showing.
 const gridSrc = fs.readFileSync(path.join(ROOT, "app/components/PickerResultsGrid.tsx"), "utf8");
-const gridCode = gridSrc
-  .replace(/\/\*[\s\S]*?\*\//g, "")
-  .split("\n")
-  .map((l) => (l.trim().startsWith("//") ? "" : l))
-  .join("\n");
+// Comments stripped with the real tokeniser, and guarded -- see scripts/lib/source-code.mjs.
+const gridCode = stripComments(gridSrc, { file: "app/components/PickerResultsGrid.tsx" });
 const shownFields = new Set([...gridCode.matchAll(/\be\.([A-Za-z][A-Za-z0-9]*)/g)].map((m) => m[1]));
 
 const pageFiles = [];
@@ -190,12 +188,7 @@ walkPages(path.join(ROOT, "app"));
 
 const declared = [];
 for (const file of pageFiles) {
-  const code = fs
-    .readFileSync(file, "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .split("\n")
-    .map((l) => (l.trim().startsWith("//") ? "" : l))
-    .join("\n");
+  const code = stripComments(fs.readFileSync(file, "utf8"), { file: path.relative(ROOT, file) });
   const m = code.match(/orderBy:\s*\{\s*field:\s*"([^"]+)"\s*,\s*dir:\s*"(asc|desc)"\s*,\s*label:\s*"([^"]+)"/);
   if (m) declared.push({ page: path.relative(ROOT, file), field: m[1], dir: m[2], label: m[3] });
 }

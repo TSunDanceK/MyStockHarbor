@@ -14,15 +14,13 @@
 //   node scripts/check-inert-terms.mjs
 import fs from "node:fs";
 import path from "node:path";
+import { stripComments } from "./lib/source-code.mjs";
 
 const ROOT = process.cwd();
 const SRC = "lib/server/pickersBuilder.ts";
 const raw = fs.readFileSync(path.join(ROOT, SRC), "utf8");
-const code = raw
-  .replace(/\/\*[\s\S]*?\*\//g, "")
-  .split("\n")
-  .map((l) => (l.trim().startsWith("//") ? "" : l))
-  .join("\n");
+// Comments stripped with the real tokeniser, and guarded -- see scripts/lib/source-code.mjs.
+const code = stripComments(raw, { file: SRC });
 
 let failures = 0;
 const check = (label, ok, detail = "") => {

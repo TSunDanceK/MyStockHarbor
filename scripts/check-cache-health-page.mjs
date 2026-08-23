@@ -16,6 +16,7 @@
 import ts from "typescript";
 import fs from "node:fs";
 import path from "node:path";
+import { stripComments } from "./lib/source-code.mjs";
 
 const ROOT = process.cwd();
 const PAGE = "app/cache-health/page.tsx";
@@ -34,17 +35,12 @@ const src = fs.readFileSync(path.join(ROOT, PAGE), "utf8");
 //
 // The lesson generalises past this file: a checker that reads one source
 // carefully and the rest casually is only as good as its most casual read.
-const codeOf = (text) =>
-  text
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
-    .split("\n")
-    .map((l) => (l.trim().startsWith("//") ? "" : l))
-    .join("\n");
+// Comments stripped with the real tokeniser, and guarded -- see scripts/lib/source-code.mjs.
+const codeOf = (text, file) => stripComments(text, { file });
 
-const readCode = (rel) => codeOf(fs.readFileSync(path.join(ROOT, rel), "utf8"));
+const readCode = (rel) => codeOf(fs.readFileSync(path.join(ROOT, rel), "utf8"), rel);
 
-const code = codeOf(src);
+const code = codeOf(src, PAGE);
 
 // For "does it USE this symbol" questions, string literals are blanked too.
 //
@@ -317,7 +313,7 @@ const walk = (dir) => {
     else if (/\.tsx?$/.test(e.name)) {
       const rel = path.relative(ROOT, full);
       if (rel === PAGE) continue;
-      const body = codeOf(fs.readFileSync(full, "utf8"));
+      const body = codeOf(fs.readFileSync(full, "utf8"), path.relative(ROOT, full));
       if (/href=["'`]\/cache-health/.test(body)) linkers.push(rel);
     }
   }
@@ -362,7 +358,7 @@ const collect = (dir) => {
 };
 collect(path.join(ROOT, "app"));
 collect(path.join(ROOT, "lib"));
-const tree = treeFiles.map((f) => codeOf(fs.readFileSync(f, "utf8"))).join("\n");
+const tree = treeFiles.map((f) => codeOf(fs.readFileSync(f, "utf8"), path.relative(ROOT, f))).join("\n");
 
 const jobs = readCode("lib/server/jobRuns.ts");
 const jobEntries = [...jobs.matchAll(/"([a-z-]+)":\s*\{\s*label:[^}]*instrumented:\s*(true|false)/g)];

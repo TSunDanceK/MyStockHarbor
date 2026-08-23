@@ -21,6 +21,7 @@
 import ts from "typescript";
 import fs from "node:fs";
 import path from "node:path";
+import { stripComments } from "./lib/source-code.mjs";
 
 const ROOT = process.cwd();
 const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
@@ -31,12 +32,8 @@ const check = (label, ok, detail = "") => {
   if (!ok) failures++;
 };
 
-const codeOf = (src) =>
-  src
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .split("\n")
-    .filter((l) => !l.trim().startsWith("//"))
-    .join("\n");
+// Comments stripped with the real tokeniser, and guarded -- see scripts/lib/source-code.mjs.
+const codeOf = (src, file) => stripComments(src, { file, dropLines: true });
 
 // ---------------------------------------------------------------- load module
 const raw = read("lib/stock-news-data.ts");
@@ -170,7 +167,7 @@ check(
 );
 check(
   "...and the old position weights are gone from the source",
-  !/positionWeight/.test(codeOf(raw)) && !/1\.35 : i === 1/.test(codeOf(raw))
+  !/positionWeight/.test(codeOf(raw, "lib/stock-news-data.ts")) && !/1\.35 : i === 1/.test(codeOf(raw, "lib/stock-news-data.ts"))
 );
 
 console.log("\n=== 3. Confidence reports coverage, not drama ===\n");
@@ -201,7 +198,7 @@ const quietMany = m.scoreNews(NINE_SUBJECTS.map((title, i) => item(title, i)), N
 check("nine recent headlines read High, however quiet", quietMany.confidence === "High", quietMany.confidence);
 check(
   "confidence no longer keys off signalCount",
-  !/signalCount >= 4 \? "High"/.test(codeOf(raw))
+  !/signalCount >= 4 \? "High"/.test(codeOf(raw, "lib/stock-news-data.ts"))
 );
 
 console.log("\n=== 4. Similarity dedup, not one-per-date ===\n");
@@ -231,7 +228,7 @@ check(
 );
 
 console.log("\n=== 5. The source gate is gone ===\n");
-const code = codeOf(read("lib/stock-news-data.ts"));
+const code = codeOf(read("lib/stock-news-data.ts"), "lib/stock-news-data.ts");
 check("no mainFeedNews gate", !/mainFeedNews/.test(code));
 check("no two-tier highValue/fallback pool", !/const fallbackNews =/.test(code) && !/const highValueNews =/.test(code));
 check("no gate/backfill split", !/primaryDetailedNews|backfillCandidates/.test(code));
@@ -249,7 +246,7 @@ check("90-day floor on how far back the feed walks", /NEWS_FEED_MAX_AGE_DAYS = 9
 check("5 large cards and 10 compact", /options\.maxDetailedItems \?\? 5, 5/.test(code) && /MAX_COMPACT_NEWS_ITEMS = 10/.test(code));
 check(
   "the news page asks for 5",
-  /maxDetailedItems: 5/.test(codeOf(read("app/stock/[symbol]/news/page.tsx")))
+  /maxDetailedItems: 5/.test(codeOf(read("app/stock/[symbol]/news/page.tsx"), "app/stock/[symbol]/news/page.tsx"))
 );
 // The empty-card check that stood here asserted `if (!earningsNews.length)
 // return null`. The card is gone entirely now (owner's call, 2026-08-22) --
@@ -356,7 +353,7 @@ check(
 );
 
 console.log("\n=== 7d. Measured before our filters, and on one limit constant ===\n");
-const newsSrc = codeOf(read("lib/stock-news-data.ts"));
+const newsSrc = codeOf(read("lib/stock-news-data.ts"), "lib/stock-news-data.ts");
 check(
   "the reading is taken on the RAW response, before mapping or filtering",
   /if \(!Array\.isArray\(data\)\) continue;[\s\S]{0,200}logResponseWindow\("stock"[\s\S]{0,120}const items = data/.test(newsSrc),
@@ -370,7 +367,7 @@ check(
 );
 check(
   "sector news takes the same reading through the same function",
-  /logResponseWindow\(\s*"sector"/.test(codeOf(read("lib/sector-news-data.ts")))
+  /logResponseWindow\(\s*"sector"/.test(codeOf(read("lib/sector-news-data.ts"), "lib/sector-news-data.ts"))
 );
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
