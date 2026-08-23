@@ -113,8 +113,28 @@ export async function GET(_request: Request, { params }: Props) {
 
   const apiKey = process.env.FMP_API_KEY;
 
-  if (!clean || !apiKey) {
-    return NextResponse.json(emptyPayload("Analyst rating data is unavailable right now."));
+  // THREE DIFFERENT THINGS WERE ONE 200. A bad symbol is the caller's mistake, a
+  // missing FMP_API_KEY is this server broken, and "this ticker genuinely has no
+  // coverage" is a real, correct, empty answer. All three returned 200 with the
+  // same empty body, so the client -- which guards with `if (!res.ok) throw` --
+  // treated a misconfigured deployment as a stock nobody covers, and rendered
+  // the empty state on every symbol on the site with no error anywhere
+  // (claude/traps/return-type-cannot-express-failure.md).
+  //
+  // This also blocks caching: a 200 that might mean "we are broken" cannot
+  // safely be stored, so the distinction has to exist before anyone adds a
+  // cache header here, not after.
+  //
+  // The genuinely-empty case below KEEPS its 200 and its empty payload. That one
+  // is an answer.
+  if (!clean) {
+    return NextResponse.json({ error: "A symbol is required." }, { status: 400 });
+  }
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: "Analyst rating data is unavailable: the server is missing its FMP credentials." },
+      { status: 503 }
+    );
   }
 
   const encoded = encodeURIComponent(clean);
