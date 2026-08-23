@@ -119,8 +119,15 @@ const WRITE_SYMBOLS = [
   "registerSymbols",
   "recordJobRun",
 ];
+// CALL-OR-IMPORT, NOT BARE WORD. The bare-word form fired on the page's own
+// legend text, which names registerSymbols in prose to explain what "N seen"
+// means -- a false positive that would have been "fixed" by making the page
+// vaguer. A call needs parentheses and a reference needs an import, so both
+// forms are asserted and neither can be reached by writing the name in JSX.
 for (const sym of WRITE_SYMBOLS) {
-  check(`does not import or call ${sym}`, !new RegExp(`\\b${sym}\\b`).test(codeNoStrings));
+  const calls = new RegExp(`\\b${sym}\\s*\\(`).test(codeNoStrings);
+  const imports = new RegExp(`import[\\s\\S]{0,200}?\\b${sym}\\b[\\s\\S]{0,200}?from`).test(codeNoStrings);
+  check(`does not import or call ${sym}`, !calls && !imports);
 }
 check("no form, button or action element at all", !/<form|<button|"use server"|formAction/.test(code));
 
@@ -397,7 +404,8 @@ for (const [, job, flag] of jobEntries) {
   }
 }
 
-const datasetKeys = [...readCode("lib/server/stalenessQueue.ts").matchAll(/^  ([a-zA-Z]+):\s*\{$/gm)].map((m) => m[1]);
+const stalenessSrc = readCode("lib/server/stalenessQueue.ts");
+const datasetKeys = [...stalenessSrc.matchAll(/^  ([a-zA-Z]+):\s*\{$/gm)].map((m) => m[1]);
 check("the DATASETS registry has entries", datasetKeys.length >= 6, datasetKeys.join(", "));
 for (const ds of datasetKeys) {
   const has =
@@ -405,6 +413,64 @@ for (const ds of datasetKeys) {
     new RegExp(`registerSymbols\\(\\s*"${ds}"`).test(tree);
   check(`${ds}: something actually writes to its queue`, has);
 }
+
+console.log("\n=== Coverage: a ratio of a set to itself is not coverage ===\n");
+// THE DISTINCTION THE OLD CHECK COULD NOT DRAW. Above, markRefreshed OR
+// registerSymbols counts as "a writer" -- and that is why dailyHistory passed
+// while rendering "24 / 24, within policy" off a queue that contained only the
+// symbols something had already refreshed. Every symbol that failed was missing
+// from the denominator instead of counted against it, so the ratio was 100% by
+// construction and could never have been anything else.
+//
+// The two writers do different jobs:
+//   registerSymbols -> declares the DENOMINATOR (what ought to be fresh)
+//   markRefreshed   -> supplies the NUMERATOR
+//
+// So the registry declares which kind each dataset is, and this asserts the
+// declaration matches the tree in BOTH directions. Fixing dailyHistory once was
+// not the point; the point is that the next dataset added without a denominator
+// cannot render green.
+for (const ds of datasetKeys) {
+  const declared = new RegExp(`${ds}:\\s*\\{[\\s\\S]*?coverage:\\s*"(registered|observed-only)"`).exec(stalenessSrc)?.[1];
+  const registers = new RegExp(`registerSymbols\\(\\s*"${ds}"`).test(tree);
+  check(`${ds}: declares a coverage kind`, Boolean(declared), declared ?? "MISSING");
+  if (declared === "registered") {
+    check(`${ds}: declared "registered" AND has a registerSymbols caller`, registers);
+  } else if (declared === "observed-only") {
+    check(
+      `${ds}: declared "observed-only", and indeed nothing registers it`,
+      !registers,
+      "a stale declaration here would hide a real denominator, or invent one"
+    );
+  }
+}
+
+// The page must act on it, not merely receive it. A field threaded through and
+// then rendered identically is the same green panel with more code behind it.
+const healthPage = readCode("app/cache-health/page.tsx");
+check(
+  "DatasetHealth carries coverageEstablished",
+  /coverageEstablished:\s*boolean/.test(stalenessSrc) &&
+    /coverageEstablished:\s*def\.coverage === "registered"/.test(stalenessSrc)
+);
+check(
+  "statusFor returns a distinct status for an uncovered dataset",
+  /if \(!d\.coverageEstablished\)/.test(healthPage) && /status: "uncovered"/.test(healthPage)
+);
+check(
+  "the uncovered branch comes BEFORE any branch that can return ok",
+  healthPage.indexOf('status: "uncovered"') < healthPage.indexOf('status: "ok"'),
+  "otherwise a fresh-looking uncovered dataset still reaches green"
+);
+check(
+  "uncovered is not coloured green",
+  /uncovered:\s*"#a78bfa"/.test(healthPage) && !/uncovered:\s*"#22c55e"/.test(healthPage)
+);
+check(
+  "the RATIO ITSELF is withheld, not just recoloured",
+  /!d\.coverageEstablished\s*\?\s*`\$\{d\.tracked\} seen`/.test(healthPage),
+  'a purple "24 / 24" still reads as 24 of 24'
+);
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
 process.exit(failures ? 1 : 0);
