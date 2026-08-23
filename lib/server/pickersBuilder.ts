@@ -2030,8 +2030,21 @@ function computeOversoldCandidate(points: Point[], comp: CompositeResult | null,
     structureScore += 5;
   }
 
-  const recencyScore = 100;
-
+  // `const recencyScore = 100` stood here and contributed `recencyScore * 0.05`
+  // to the sum below -- a flat 5.00 added to EVERY candidate, which can never
+  // separate two stocks. It read as a considered weight and did no work, so this
+  // composite has FIVE discriminating terms, not six.
+  //
+  // Removed rather than given a range, because inventing a recency measure is a
+  // scoring change and the rules are parked with the owner. Removal is not:
+  // every score in a mode drops by exactly the same amount, so no ordering
+  // anywhere changes. Proven in scripts/check-inert-terms.mjs rather than
+  // asserted.
+  //
+  // The absolute numbers DO move -- ~5.00 lower on the live path, ~5.26 on the
+  // no-structure paths where the divisor is 0.95 -- so a score quoted from
+  // before this change will not match one quoted after. That is the whole of the
+  // visible effect.
   let penalty = 0;
   if (dailyDrop1 < 0.6 && dailyDrop5 < 3) penalty += 12;
   if (advScore < 35) penalty += 25;
@@ -2050,8 +2063,7 @@ function computeOversoldCandidate(points: Point[], comp: CompositeResult | null,
       advScore * 0.25 +
       exhaustionScore * 0.2 +
       distanceScore * 0.15 +
-      (mode === "live" ? clamp(structureScore, 0, 100) * STRUCTURE_WEIGHT : 0) +
-      recencyScore * 0.05) /
+      (mode === "live" ? clamp(structureScore, 0, 100) * STRUCTURE_WEIGHT : 0)) /
       keep -
     penalty;
 
