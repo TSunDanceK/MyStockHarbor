@@ -5,6 +5,7 @@ import type { PickersPayload } from "./PickersClient";
 import BookmarkPromptButton from "./BookmarkPromptButton";
 import PageShareBar from "@/app/components/PageShareBar";
 import { getAllPosts } from "@/lib/blog";
+import { getPickersData } from "@/lib/server/pickersBuilder";
 
 const pickersJsonLd = {
   "@context": "https://schema.org",
@@ -62,39 +63,51 @@ const SETUP_LINKS: { label: string; href: string }[] = [
   { label: "Stocks With Strong Earnings Growth", href: "/stocks-with-strong-earnings-growth" },
 ];
 
-// Fetch the screened-picks payload on the SERVER (same /api/pickers pipeline
-// PickersClient uses client-side) and pass it down as an initial prop. This
-// removes the old "loading skeleton on first paint" problem -- crawlers (and
-// users) get the real Screened Results content baked into the initial HTML
-// instead of an empty shell that only fills in after a post-mount fetch.
+// A fixed production origin, matching PickerResultPage.tsx. headers() alone
+// would force dynamic rendering, and this value feeds exactly one thing --
+// getPickersData(origin), whose vestigial `origin` parameter nothing reads.
+const SITE_ORIGIN = "https://www.mystockharbor.com";
+
+// Read the screened-picks payload IN-PROCESS, via the same Redis-cached builder
+// the /api/pickers route uses, and pass it down as an initial prop. This is what
+// removes the "loading skeleton on first paint" problem -- crawlers (and users)
+// get the real Screened Results content baked into the initial HTML instead of
+// an empty shell that only fills in after a post-mount fetch.
 //
-// /api/pickers itself is backed by a ~6-minute Redis cache plus a 60s
-// in-process memo (see lib/server/pickersBuilder.ts), and is kept warm by
-// the daily automation/pickers-warm cron job, so this call is normally cheap
-// -- it's hitting a warm cache, not recomputing the screen.
+// WAS AN HTTP SELF-FETCH UNTIL THIS CHANGE, and it was the LAST one in the tree.
+// Three things were wrong with it and only the first is about performance:
 //
-// THE `revalidate` BELOW IS INERT, AND THIS COMMENT USED TO CLAIM OTHERWISE.
-// It said we "layer Next's own data-cache revalidate on top ... so repeated
-// page requests within that window don't even need to re-hit the route". That
-// is not happening. Next's Data Cache refuses any single entry over 2 MB, and
-// this payload is far past it: splitPickersPayload's own note measured 3.38 MB
-// at a 260-symbol universe on 2026-08-06, of which 2.86 MB was chartPoints,
-// and records that the share grows LINEARLY with the cap. At today's 700 that
-// is roughly 8 MB. So the entry is refused, the revalidate never applies, and
-// every render re-hits /api/pickers.
+//   1. It serialised, transferred and re-parsed the whole payload -- roughly
+//      8 MB at today's 700-symbol universe -- and cost a second Lambda
+//      invocation per render. Redis reads are UNCHANGED either way: both paths
+//      read the same cached keys once. The saving is the HTTP hop and the
+//      double JSON, not the Redis traffic.
 //
-// Left in place deliberately rather than removed: it costs nothing (a refused
-// cache write is a no-op) and removing it would erase the only marker of where
-// the intended dedupe was supposed to happen. The fix is to cache this
-// somewhere that can hold it, or to stop shipping ~7 MB of chartPoints to a
-// page that renders a few dozen of them -- both real changes, neither a
-// comment edit. See lib/server/fmpUsage.ts warnIfTooBigToCache for the class.
+//   2. Its `next: { revalidate: 300 }` was INERT. Next's Data Cache refuses any
+//      single entry over 2 MB, so the dedupe the old comment here described was
+//      never happening. Going in-process removes the problem rather than working
+//      around it -- there is no longer anything to cache.
+//
+//   3. IT WAS BLOCKING A SECURITY STEP. claude/pickers-firewall-selfblock-
+//      2026-07-17.md records the next action as "add a tight per-IP rate limit
+//      on /api/* (~20-30/10s)", noted as "now safe post in-process fix" and
+//      still not done. It is not safe while any page self-fetches from Vercel's
+//      shared egress IP, because the site would throttle itself. That doc's
+//      durable fix (commit 1bf5085, 2026-07-18) converted PickerResultPage and
+//      left this page behind. This completes it: no server-side self-fetch of
+//      our own origin remains anywhere in the tree.
+//
+// The builder keeps a ~6-minute Redis cache plus a 60s in-process memo and is
+// kept warm by the daily cron, so this is normally a warm read rather than a
+// rescan -- exactly as it was through the route.
+//
+// NOT a BotID change. /api/pickers is still fetched from the BROWSER by
+// PickersClient (on mount and on refresh) and by DashboardTicker, so removing
+// this server-side caller does not by itself make the route safe to guard. See
+// instrumentation-client.ts.
 async function fetchInitialPickersPayload(): Promise<PickersPayload | null> {
   try {
-    const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mystockharbor.com";
-    const res = await fetch(`${base}/api/pickers`, { next: { revalidate: 300 } });
-    if (!res.ok) return null;
-    return (await res.json()) as PickersPayload;
+    return (await getPickersData(SITE_ORIGIN)) as unknown as PickersPayload;
   } catch {
     return null;
   }
