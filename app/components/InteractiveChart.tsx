@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 /**
  * InteractiveChart
@@ -615,6 +616,13 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
   const indicatorMenuRef = useRef<HTMLDivElement | null>(null);
   const typeMenuRef = useRef<HTMLDivElement | null>(null);
   const drawMenuRef = useRef<HTMLDivElement | null>(null);
+  // The open menu's own panel. The panels are portalled out of the toolbar
+  // (see menuPortal below), so they are no longer inside the *MenuRef
+  // wrappers -- the outside-click handler has to treat both as "inside" or a
+  // mousedown on a menu item would close the menu before the click lands.
+  const indicatorPanelRef = useRef<HTMLDivElement | null>(null);
+  const typePanelRef = useRef<HTMLDivElement | null>(null);
+  const drawPanelRef = useRef<HTMLDivElement | null>(null);
   // Default candle width captured at init, restored by "Recenter".
   const defaultBarSpaceRef = useRef<number | null>(null);
 
@@ -864,9 +872,13 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
   useEffect(() => {
     function onDown(e: MouseEvent) {
       const t = e.target as Node;
-      if (indicatorMenuRef.current && !indicatorMenuRef.current.contains(t)) setIndicatorMenuOpen(false);
-      if (typeMenuRef.current && !typeMenuRef.current.contains(t)) setTypeMenuOpen(false);
-      if (drawMenuRef.current && !drawMenuRef.current.contains(t)) setDrawMenuOpen(false);
+      const outside = (
+        wrap: React.RefObject<HTMLDivElement | null>,
+        panel: React.RefObject<HTMLDivElement | null>,
+      ) => !wrap.current?.contains(t) && !panel.current?.contains(t);
+      if (outside(indicatorMenuRef, indicatorPanelRef)) setIndicatorMenuOpen(false);
+      if (outside(typeMenuRef, typePanelRef)) setTypeMenuOpen(false);
+      if (outside(drawMenuRef, drawPanelRef)) setDrawMenuOpen(false);
     }
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
@@ -885,6 +897,25 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
     const vw = typeof window !== "undefined" ? window.innerWidth : rect.right;
     const left = Math.max(8, Math.min(rect.left, vw - menuWidth - 8));
     setMenuPos({ top: rect.bottom + 6, left });
+  };
+
+  // Toolbar dropdowns are portalled OUT of the toolbar row rather than
+  // rendered inside it. In landscape (`dense`) the toolbar is a horizontally
+  // scrolling flex row (`overflowX: auto`), and WebKit mispaints
+  // position:fixed descendants of a composited scroller: on an iPhone in
+  // landscape fullscreen the menus came out see-through, with the chart
+  // painting straight over them. Portalling removes the scroller from the
+  // menu's ancestry entirely, so the panel paints on its own.
+  //
+  // The target matters. When the dashboard has taken *native* browser
+  // fullscreen (desktop Chrome/Firefox), only the fullscreen element and its
+  // descendants are painted at all, so a <body> portal would be invisible
+  // there -- portal into the fullscreen element when there is one.
+  const menuPortal = (node: React.ReactNode) => {
+    if (typeof document === "undefined") return null;
+    const doc = document as Document & { webkitFullscreenElement?: Element | null };
+    const fs = (doc.fullscreenElement ?? doc.webkitFullscreenElement ?? null) as HTMLElement | null;
+    return createPortal(node, fs ?? document.body);
   };
 
   // ---- Styles ----
@@ -950,8 +981,8 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
           <button type="button" onClick={(e) => { const willOpen = !typeMenuOpen; setIndicatorMenuOpen(false); setDrawMenuOpen(false); if (willOpen) openMenuAt(e.currentTarget, 178); setTypeMenuOpen(willOpen); }} title={dense ? activeTypeLabel : undefined} style={{ ...btn(false), display: "inline-flex", alignItems: "center", gap: dense ? 3 : 6 }}>
             {TYPE_ICONS[chartType]}{!dense ? <span>{activeTypeLabel}</span> : null}<span style={{ opacity: 0.7 }}>▾</span>
           </button>
-          {typeMenuOpen ? (
-            <div style={{ position: "fixed", top: menuPos?.top ?? 0, left: menuPos?.left ?? 0, zIndex: 3000, minWidth: 178, maxWidth: "calc(100vw - 16px)", background: "#0f172a", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 12, boxShadow: "0 18px 34px rgba(0,0,0,0.45)", overflow: "hidden" }}>
+          {typeMenuOpen ? menuPortal(
+            <div ref={typePanelRef} style={{ position: "fixed", top: menuPos?.top ?? 0, left: menuPos?.left ?? 0, zIndex: 3000, minWidth: 178, maxWidth: "calc(100vw - 16px)", background: "#0f172a", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 12, boxShadow: "0 18px 34px rgba(0,0,0,0.45)", overflow: "hidden" }}>
               {CHART_TYPES.map((t) => (
                 <button
                   key={t.key}
@@ -975,8 +1006,8 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
               : <span>Indicators{activeIndicators.length ? ` · ${activeIndicators.length}` : ""}</span>}
             <span style={{ opacity: 0.7 }}>▾</span>
           </button>
-          {indicatorMenuOpen ? (
-            <div style={{ position: "fixed", top: menuPos?.top ?? 0, left: menuPos?.left ?? 0, zIndex: 3000, width: 250, maxWidth: "calc(100vw - 16px)", maxHeight: 340, overflowY: "auto", background: "#0f172a", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 12, boxShadow: "0 18px 34px rgba(0,0,0,0.45)" }}>
+          {indicatorMenuOpen ? menuPortal(
+            <div ref={indicatorPanelRef} style={{ position: "fixed", top: menuPos?.top ?? 0, left: menuPos?.left ?? 0, zIndex: 3000, width: 250, maxWidth: "calc(100vw - 16px)", maxHeight: 340, overflowY: "auto", background: "#0f172a", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 12, boxShadow: "0 18px 34px rgba(0,0,0,0.45)" }}>
               <div style={{ padding: "8px 12px 6px", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: "#7c8aa3" }}>Price overlays</div>
               {PRICE_INDICATORS.map((name) => (
                 <label key={name} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 12px", borderTop: "1px solid rgba(255,255,255,0.05)", cursor: "pointer", fontWeight: 700, fontSize: 13, color: "#cbd5e1" }}>
@@ -1000,8 +1031,8 @@ export default function InteractiveChart({ symbol, seed, isMobile = false, fill 
           <button type="button" onClick={(e) => { const willOpen = !drawMenuOpen; setTypeMenuOpen(false); setIndicatorMenuOpen(false); if (willOpen) openMenuAt(e.currentTarget, 210); setDrawMenuOpen(willOpen); }} title={dense ? "Drawing tools" : undefined} style={{ ...btn(drawMenuOpen || activeTool != null), display: "inline-flex", alignItems: "center", gap: dense ? 3 : 6 }}>
             {PENCIL_ICON}{!dense ? <span>Drawing tools</span> : null}<span style={{ opacity: 0.7 }}>▾</span>
           </button>
-          {drawMenuOpen ? (
-            <div style={{ position: "fixed", top: menuPos?.top ?? 0, left: menuPos?.left ?? 0, zIndex: 3000, width: 210, maxWidth: "calc(100vw - 16px)", background: "#0f172a", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 12, boxShadow: "0 18px 34px rgba(0,0,0,0.45)", overflow: "hidden" }}>
+          {drawMenuOpen ? menuPortal(
+            <div ref={drawPanelRef} style={{ position: "fixed", top: menuPos?.top ?? 0, left: menuPos?.left ?? 0, zIndex: 3000, width: 210, maxWidth: "calc(100vw - 16px)", background: "#0f172a", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 12, boxShadow: "0 18px 34px rgba(0,0,0,0.45)", overflow: "hidden" }}>
               <div style={{ padding: "8px 12px 6px", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: "#7c8aa3" }}>Draw</div>
               {DRAW_TOOLS.map((tool) => (
                 <button
