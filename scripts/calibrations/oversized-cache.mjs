@@ -59,11 +59,18 @@ export const MUTATIONS = [
   },
   {
     id: "O6",
-    description: "the pickers comment goes back to claiming the dedupe",
+    description: "the pickers page goes back to self-fetching",
     file: PAGE,
-    find: "// THE `revalidate` BELOW IS INERT, AND THIS COMMENT USED TO CLAIM OTHERWISE.",
-    replace: "// The dedupe works fine.",
+    // WAS "the pickers comment goes back to claiming the dedupe", which anchored
+    // on a comment correcting an inert revalidate. On 2026-08-24 the self-fetch
+    // itself went in-process, so there is no longer a workaround to describe --
+    // the anchor vanished and the calibration said ANCHOR MISSING, which is the
+    // tool reporting that a mutation had stopped testing anything. Re-pointed at
+    // the real property: the page reads its payload in-process.
+    find: "    return (await getPickersData(SITE_ORIGIN)) as unknown as PickersPayload;",
+    replace:
+      '    const res = await fetch(`${SITE_ORIGIN}/api/pickers`, { next: { revalidate: 300 } });\n    return (await res.json()) as PickersPayload;',
     harnesses: [H],
-    expect: 1,
+    expect: 2,
   },
 ];

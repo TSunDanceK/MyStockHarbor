@@ -22,17 +22,39 @@ import { initBotId } from "botid/client/core";
  *     build their own payloads. Those self-fetches carry no browser BotID
  *     header, so guarding /api/market would risk breaking all of their
  *     universe-refresh pipelines, not just an SSR nicety.
- *   - /api/pickers -- its GET handler (lib/server/pickersBuilder.ts) is
- *     re-exported verbatim by the /api/jobs/warm-picker-universe cron route,
- *     so a guard here would also block that scheduled warm-up. It's also
- *     still HTTP self-fetched server-side by app/pickers/page.tsx
- *     (`fetch(`${base}/api/pickers`, { next: { revalidate: 300 } })`, line
- *     ~81) with no client fallback -- the exact self-fetch-gets-blocked
- *     failure mode already documented in
- *     claude/pickers-firewall-selfblock-2026-07-17.md (a past production
- *     outage from a *different* blocking mechanism). Not safe to touch
- *     without first giving that page the same in-process treatment
- *     PickerResultPage.tsx already got (getPickersData()).
+ *   - /api/pickers -- STILL EXCLUDED, but for different reasons than it was.
+ *     Corrected 2026-08-24; both of the reasons previously given here have
+ *     since lapsed, and saying so is the point:
+ *
+ *       WAS: "still HTTP self-fetched server-side by app/pickers/page.tsx
+ *       ... with no client fallback". BOTH HALVES ARE NOW FALSE. The
+ *       self-fetch is gone -- that page reads getPickersData() in-process as
+ *       of 2026-08-24, and no server-side self-fetch of our own origin
+ *       remains anywhere in the tree. And there was never "no client
+ *       fallback": PickersClient.tsx re-fetches /api/pickers on mount and
+ *       treats it as a silent background refresh when the server seeded data,
+ *       which is precisely the safety net this comment credits /api/plays with
+ *       two paragraphs below.
+ *
+ *       WAS: "a guard here would also block that scheduled warm-up". True
+ *       when written -- the cron route re-exported this GET verbatim. Since
+ *       #362 the two are separate one-line wrappers over
+ *       handlePickersRequest, so an isUnwantedBot() guard can sit in GET
+ *       alone and never reach GET_WARM. The seam exists now; it did not then.
+ *
+ *     WHAT ACTUALLY REMAINS, and it is a real question rather than an
+ *     inherited one: TWO BROWSER CALLERS depend on this route --
+ *     PickersClient.tsx (mount + refresh, /pickers) and DashboardTicker.tsx
+ *     (mount, /dashboard). Guarding the route is safe only if both carry the
+ *     BotID header correctly under Basic. That has not been verified, and
+ *     verifying it is the whole remaining decision. Until then: excluded.
+ *
+ *     Read claude/pickers-firewall-selfblock-2026-07-17.md before acting.
+ *     NOTE THAT FILE IS NOT IN THIS REPO -- it lives only in the Claude
+ *     Project, despite being cited by 20 files here. Its root cause was a
+ *     Vercel Firewall rule ("Deny node User-Agent on /api/"), NOT BotID; the
+ *     two were conflated in this comment afterwards, and that rule was
+ *     removed on 2026-07-17.
  *
  *     Corrected 2026-08-22. This previously named
  *     app/bullish-divergence-stocks/page.tsx and its bearish twin as the
@@ -57,8 +79,10 @@ import { initBotId } from "botid/client/core";
  * Cache revalidate window keeps serving the last good payload, and the
  * client component re-fetches with the browser's real header on mount), the
  * same accepted trade-off already shipped for /api/quote on the dashboard.
- * /api/pickers and /api/market do NOT have that safety net, which is why
- * they're excluded above.
+ * /api/market does NOT have that safety net, which is why it's excluded above.
+ * /api/pickers DOES have it (PickersClient's mount re-fetch) -- this line used
+ * to claim otherwise; see the corrected entry above for what actually keeps it
+ * excluded.
  *
  * NOTE on checkLevel: every route below runs Basic (free) unless it sets
  * advancedOptions.checkLevel explicitly. Deep Analysis (paid) is reserved for
