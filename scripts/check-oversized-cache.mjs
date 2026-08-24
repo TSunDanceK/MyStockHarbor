@@ -103,19 +103,35 @@ check(
   "no second read of the body — it is measuring what the meter already measured"
 );
 
-console.log("\n=== 6. The known instance's comment no longer claims otherwise ===\n");
-// The pickers self-fetch described a dedupe the 2 MB limit prevents. A comment
-// asserting behaviour the code does not have is the same failure this whole
-// suite exists to catch, one layer down from the code.
-const pickersPage = fs.readFileSync(path.join(ROOT, "app/pickers/page.tsx"), "utf8");
-check(
-  "the pickers self-fetch is annotated as inert",
-  /THE `revalidate` BELOW IS INERT/.test(pickersPage),
-  "it still carries next.revalidate, which is a harmless no-op — the marker is the point"
+console.log("\n=== 6. The known instance was removed, not annotated ===\n");
+// This section used to assert that app/pickers/page.tsx CARRIED a corrected
+// comment about its inert revalidate. That was the right check for one day: on
+// 2026-08-24 the self-fetch itself went in-process, so there is no oversized
+// cached fetch there to annotate any more. The assertion correctly failed the
+// moment the underlying problem was fixed rather than described -- which is the
+// outcome you want from a check pinned to a workaround.
+//
+// What replaces it is the stronger claim: the page reads its payload in-process,
+// so the 2 MB limit is no longer relevant to it at all. The standing guard
+// against a self-fetch reappearing lives in check-no-self-fetch.mjs.
+const pickersPage = stripComments(
+  fs.readFileSync(path.join(ROOT, "app/pickers/page.tsx"), "utf8"),
+  { file: "app/pickers/page.tsx" }
 );
 check(
-  "and the old claim is gone",
-  !/don't even need to\s*\n?\s*\/\/ re-hit the route/.test(pickersPage)
+  "the pickers page no longer self-fetches at all",
+  !/fetch\(\s*`\$\{base\}\/api\/pickers`/.test(pickersPage),
+  "removed 2026-08-24 — the last server-side self-fetch in the tree"
+);
+check(
+  "it reads the payload in-process instead",
+  /getPickersData\(SITE_ORIGIN\)/.test(pickersPage),
+  "same Redis-cached builder, no HTTP hop, no 8 MB serialise/parse"
+);
+check(
+  "and no next.revalidate is left behind on it",
+  !/next: \{ revalidate/.test(pickersPage),
+  "an inert marker is only worth keeping while the fetch it marks still exists"
 );
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);
