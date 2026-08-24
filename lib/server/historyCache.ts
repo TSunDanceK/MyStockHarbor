@@ -153,6 +153,60 @@ type FmpHistoricalRow = {
 
 type FmpHistoricalResponse = FmpHistoricalRow[] | { Error?: string };
 
+/**
+ * A history fetch failure that knows WHY it failed.
+ *
+ * CLASSIFIED AT THE THROW SITE, NOT BY MATCHING THE MESSAGE LATER. The reason is
+ * known exactly where the throw happens and nowhere else; recovering it
+ * downstream would mean regexing error strings, which breaks silently the first
+ * time someone rewords one -- and this repo has a trap doc about exactly that
+ * class of read (claude/traps/grep-finds-the-comment-not-the-code.md, same
+ * shape: matching prose instead of structure).
+ *
+ * WHY IT IS WORTH A CLASS. The first live forced warm produced 20 refetch
+ * failures out of 700 and the count alone could not say what they were. A
+ * capacity timeout wants FMP_MAX_WAIT_MS raised; an http-429 wants the opposite
+ * (slow down); a scatter of network errors wants nothing at all except the
+ * knowledge that twenty is the background rate. Those are three different
+ * conclusions from one number, and "is it the same twenty tomorrow" cannot
+ * separate them -- transient network failure also produces a different twenty
+ * every morning.
+ */
+export type FmpFailureReason =
+  | "capacity-timeout"
+  | "no-api-key"
+  | "fmp-error"
+  | "network"
+  | "parse"
+  | "other"
+  | `http-${number}`;
+
+export class FmpHistoryError extends Error {
+  readonly reason: FmpFailureReason;
+
+  constructor(message: string, reason: FmpFailureReason) {
+    super(message);
+    this.name = "FmpHistoryError";
+    this.reason = reason;
+  }
+}
+
+/**
+ * Reason for an error that did NOT come from one of our own throw sites.
+ *
+ * Only two shapes reach here in practice and both are worth separating from
+ * "other": undici raises a TypeError for a failed connection, and Response.json
+ * raises a SyntaxError for a body that is not JSON (an HTML error page from a
+ * proxy, most often). Anything else is genuinely unclassified and says so
+ * rather than being folded into a neighbouring bucket.
+ */
+export function classifyFmpFailure(error: unknown): FmpFailureReason {
+  if (error instanceof FmpHistoryError) return error.reason;
+  if (error instanceof SyntaxError) return "parse";
+  if (error instanceof TypeError) return "network";
+  return "other";
+}
+
 function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
@@ -377,7 +431,16 @@ export const HISTORY_MAX_BAR_AGE_WEEKDAYS = 2;
 // different, separately visible facts -- a run where most symbols fell back is a
 // successful-looking run that refreshed almost nothing.
 let historyForcedRefetchFailures = 0;
-const historyForcedRefetchFailureSymbols = new Set<string>();
+// SYMBOL -> REASON, and a separate UNCAPPED histogram.
+//
+// The histogram is the diagnostic and it is deliberately not sampled: a capped
+// list can say "here are up to 40 of them", but only a complete tally can say
+// "all twenty were capacity timeouts" or "eighteen were http-429 and two were
+// network". Those are different fixes, and the sample cannot distinguish them
+// once it saturates. The per-symbol map is kept as well, so the same-symbols
+// comparison morning to morning is still possible.
+const historyForcedRefetchFailureSymbols = new Map<string, string>();
+const historyForcedFailureReasons = new Map<string, number>();
 
 let historyStaleNewestCount = 0;
 let historyFreshNewestCount = 0;
@@ -453,6 +516,8 @@ export function readHistoryBarAgeCounts(): {
   newestBarSeen: string | null;
   forcedRefetchFailures: number;
   forcedRefetchFailureSymbols: string[];
+  /** "reason:count", uncapped and sorted by count. The diagnostic. */
+  forcedRefetchFailureReasons: string[];
 } {
   const out = {
     stale: historyStaleNewestCount,
@@ -461,7 +526,14 @@ export function readHistoryBarAgeCounts(): {
     symbols: [...historyStaleNewest].map(([sym, date]) => `${sym}@${date}`),
     newestBarSeen: historyNewestBarSeen,
     forcedRefetchFailures: historyForcedRefetchFailures,
-    forcedRefetchFailureSymbols: [...historyForcedRefetchFailureSymbols],
+    // "SYM:reason", so the sample carries its own diagnosis rather than needing
+    // to be cross-referenced against the histogram.
+    forcedRefetchFailureSymbols: [...historyForcedRefetchFailureSymbols].map(
+      ([sym, reason]) => `${sym}:${reason}`
+    ),
+    forcedRefetchFailureReasons: [...historyForcedFailureReasons]
+      .sort((a, b) => b[1] - a[1])
+      .map(([reason, n]) => `${reason}:${n}`),
   };
   historyStaleNewestCount = 0;
   historyFreshNewestCount = 0;
@@ -469,6 +541,7 @@ export function readHistoryBarAgeCounts(): {
   historyNewestBarSeen = null;
   historyForcedRefetchFailures = 0;
   historyForcedRefetchFailureSymbols.clear();
+  historyForcedFailureReasons.clear();
   return out;
 }
 
@@ -598,7 +671,7 @@ export async function reserveFmpCallSlot() {
 
     const elapsed = Date.now() - startedAt;
     if (elapsed >= FMP_MAX_WAIT_MS) {
-      throw new Error("FMP call guard wait timeout");
+      throw new FmpHistoryError("FMP call guard wait timeout", "capacity-timeout");
     }
 
     await sleep(FMP_WAIT_STEP_MS);
@@ -741,7 +814,7 @@ export async function fetchAndCacheDailyHistory(symbol: string) {
   const apiKey = process.env.FMP_API_KEY;
 
   if (!apiKey) {
-    throw new Error("Missing FMP_API_KEY environment variable");
+    throw new FmpHistoryError("Missing FMP_API_KEY environment variable", "no-api-key");
   }
 
   await reserveFmpCallSlot();
@@ -770,7 +843,10 @@ const url = `https://financialmodelingprep.com/stable/historical-price-eod/full?
   });
 
   if (!res.ok) {
-    throw new Error(`FMP history request failed with status ${res.status} for ${normalized}`);
+    throw new FmpHistoryError(
+      `FMP history request failed with status ${res.status} for ${normalized}`,
+      `http-${res.status}`
+    );
   }
 
   const payload = (await res.json()) as FmpHistoricalResponse;
@@ -783,7 +859,7 @@ const url = `https://financialmodelingprep.com/stable/historical-price-eod/full?
     typeof payload.Error === "string" &&
     payload.Error.trim()
   ) {
-    throw new Error(`FMP history error for ${normalized}: ${payload.Error}`);
+    throw new FmpHistoryError(`FMP history error for ${normalized}: ${payload.Error}`, "fmp-error");
   }
 
   const parsed = parseFmpHistoricalRows(Array.isArray(payload) ? payload : undefined, normalized);
@@ -1027,8 +1103,10 @@ export async function getDailyHistoryBulk(
             if (!force || !fallback) throw error;
 
             historyForcedRefetchFailures++;
+            const reason = classifyFmpFailure(error);
+            historyForcedFailureReasons.set(reason, (historyForcedFailureReasons.get(reason) ?? 0) + 1);
             if (historyForcedRefetchFailureSymbols.size < MAX_DIAGNOSTIC_SYMBOLS) {
-              historyForcedRefetchFailureSymbols.add(symbol);
+              historyForcedRefetchFailureSymbols.set(symbol, reason);
             }
             result.set(symbol, pointsOf(fallback));
           }

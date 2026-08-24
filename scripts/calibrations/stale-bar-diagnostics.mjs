@@ -57,4 +57,45 @@ export const MUTATIONS = [
     harnesses: [BARS],
     expect: 1,
   },
+  {
+    id: "D6",
+    description: "throw sites lose their reason (back to bare Error)",
+    file: HISTORY,
+    find: 'throw new FmpHistoryError("FMP call guard wait timeout", "capacity-timeout");',
+    replace: 'throw new Error("FMP call guard wait timeout");',
+    harnesses: [BARS],
+    expect: 1,
+  },
+  {
+    id: "D7",
+    description: "network and parse folded into 'other'",
+    file: HISTORY,
+    edits: [
+      { find: '  if (error instanceof SyntaxError) return "parse";\n', replace: "" },
+      { find: '  if (error instanceof TypeError) return "network";\n', replace: "" },
+    ],
+    harnesses: [BARS],
+    // 2, not 3: the "three reasons want opposite fixes" check passes explicit
+    // FmpHistoryError instances, which still classify correctly. Only the two
+    // instanceof cases regress.
+    expect: 2,
+  },
+  {
+    id: "D8",
+    description: "reason histogram capped like the symbol sample",
+    file: HISTORY,
+    find: "            historyForcedFailureReasons.set(reason, (historyForcedFailureReasons.get(reason) ?? 0) + 1);",
+    replace: "            if (historyForcedFailureReasons.size < MAX_DIAGNOSTIC_SYMBOLS) historyForcedFailureReasons.set(reason, (historyForcedFailureReasons.get(reason) ?? 0) + 1);",
+    harnesses: [BARS],
+    expect: 1,
+  },
+  {
+    id: "D9",
+    description: "reason histogram not recorded on the run",
+    file: WARM,
+    find: "      historyForcedRefetchFailureReasons: barAge.forcedRefetchFailureReasons.join(\",\") || null,\n",
+    replace: "",
+    harnesses: [BARS],
+    expect: 1,
+  },
 ];
