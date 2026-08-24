@@ -78,6 +78,25 @@ const REDIS_HISTORY_TTL_SECONDS = 50 * 60 * 60;
 // becomes visible -- the warn below and the job-run record are. A stale-but-
 // present cache degrades a page; an empty one refetches ~700 symbols mid-session.
 //
+// MEASURED IN PRODUCTION 2026-08-24, the first forced 07:00 warm. Both of the
+// assumptions this whole design rested on are now facts rather than reasoning,
+// so they are recorded here rather than only in a conversation:
+//
+//   1. NO TODAY-DATED STUB EXISTS BEFORE THE OPEN. At 07:00 UK with the market
+//      shut, historyNewestBarSeen across the whole 700-symbol universe was
+//      2026-08-21 -- Friday's bar. FMP returns no partial bar for the current
+//      day ahead of the session, so fetching while the market is closed cannot
+//      cache a stub that then freezes as a false close. That was the open
+//      question behind "07:00 while closed", and it is answered from our own
+//      instrumentation rather than from the probe.
+//
+//   2. THE ZERO-BAR BUG WAS LATENT, NOT ACTIVE. 831,564 rows parsed, ZERO
+//      dropped for a null or blank close. #349's coercion guard is insurance
+//      against a payload shape FMP has never actually sent, not a repair of
+//      damage already in the cache -- so no namespace flush was ever needed.
+//      This is the reading the counter was built for: 0 out of 0 rows says
+//      nothing, 0 out of 831k says the bug never fired.
+//
 // THIS VALUE IS THE SUCCESS PATH ONLY. See HISTORY_FAILURE_TTL_SECONDS.
 
 // The failure floor. DELIBERATELY NOT DERIVED FROM THE SUCCESS TTL, and it must
@@ -362,8 +381,24 @@ const historyForcedRefetchFailureSymbols = new Set<string>();
 
 let historyStaleNewestCount = 0;
 let historyFreshNewestCount = 0;
-const historyStaleNewestSymbols = new Set<string>();
+// SYMBOL -> ITS NEWEST BAR DATE, not just the symbol.
+//
+// The date is what distinguishes the two explanations for a stale symbol, and it
+// costs nothing extra to record. A newest bar of 2024-05-03 means the ticker
+// stopped trading and FMP is correctly serving a frozen historical series; a
+// newest bar of last Wednesday means a live symbol genuinely missed its
+// refreshes. The first is a UNIVERSE problem, the second is a FETCH problem, and
+// the symbol name alone cannot tell them apart -- which is what the first live
+// run of this counter demonstrated.
+const historyStaleNewest = new Map<string, string>();
 let historyNewestBarSeen: string | null = null;
+
+// ITS OWN CAP, larger than MAX_DROP_SYMBOLS. The drop sample answers "is this
+// happening at all", so twelve is plenty. These two answer "to WHICH symbols,
+// and is it the same ones every morning" -- a truncated list cannot answer that,
+// and the first live run returned exactly 12 stale against a cap of 12 and 20
+// forced failures against the same cap. A sample that saturates is not a sample.
+const MAX_DIAGNOSTIC_SYMBOLS = 40;
 
 /** Weekdays strictly between `isoDate` and today (Eastern), today excluded. */
 function weekdaysBehindEastern(isoDate: string, now = new Date()) {
@@ -395,8 +430,8 @@ function recordNewestBarAge(symbol: string, daily: Point[]) {
 
   if (behind > HISTORY_MAX_BAR_AGE_WEEKDAYS) {
     historyStaleNewestCount++;
-    if (historyStaleNewestSymbols.size < MAX_DROP_SYMBOLS) {
-      historyStaleNewestSymbols.add(symbol);
+    if (historyStaleNewest.size < MAX_DIAGNOSTIC_SYMBOLS) {
+      historyStaleNewest.set(symbol, newest);
     }
   } else {
     historyFreshNewestCount++;
@@ -422,14 +457,15 @@ export function readHistoryBarAgeCounts(): {
   const out = {
     stale: historyStaleNewestCount,
     fresh: historyFreshNewestCount,
-    symbols: [...historyStaleNewestSymbols],
+    // "SYM@YYYY-MM-DD" rather than "SYM". See the note on historyStaleNewest.
+    symbols: [...historyStaleNewest].map(([sym, date]) => `${sym}@${date}`),
     newestBarSeen: historyNewestBarSeen,
     forcedRefetchFailures: historyForcedRefetchFailures,
     forcedRefetchFailureSymbols: [...historyForcedRefetchFailureSymbols],
   };
   historyStaleNewestCount = 0;
   historyFreshNewestCount = 0;
-  historyStaleNewestSymbols.clear();
+  historyStaleNewest.clear();
   historyNewestBarSeen = null;
   historyForcedRefetchFailures = 0;
   historyForcedRefetchFailureSymbols.clear();
@@ -991,7 +1027,7 @@ export async function getDailyHistoryBulk(
             if (!force || !fallback) throw error;
 
             historyForcedRefetchFailures++;
-            if (historyForcedRefetchFailureSymbols.size < MAX_DROP_SYMBOLS) {
+            if (historyForcedRefetchFailureSymbols.size < MAX_DIAGNOSTIC_SYMBOLS) {
               historyForcedRefetchFailureSymbols.add(symbol);
             }
             result.set(symbol, pointsOf(fallback));
