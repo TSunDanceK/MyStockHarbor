@@ -8,14 +8,19 @@
 // to choose between trusting a claim they cannot check and overriding a
 // constraint they do not understand.
 //
-// That is not hypothetical. The most-cited document in this codebase -- 20 code
-// files -- exists only in the Claude Project and was never mirrored here, while
-// the entire stated purpose of the claude/ directory is that these are
+// That was not hypothetical. The most-cited document in this codebase -- 20 code
+// files -- existed only in the Claude Project and had never been mirrored here,
+// while the entire stated purpose of the claude/ directory is that these are
 // "readable from GitHub itself -- e.g. from a phone, without needing to open
-// Claude" (CLAUDE.md). Its content materially changes what several of those 20
-// call sites mean.
+// Claude" (CLAUDE.md). Its content materially changed what several of those 20
+// call sites mean: the root cause was a Vercel Firewall rule on the `node`
+// User-Agent, NOT BotID, and that rule was removed on 2026-07-17. Anyone
+// reasoning from the call sites alone would have had the mechanism wrong.
 //
-// A DATED ALLOWLIST, NOT A CLEAN PASS. 24 of 59 cited paths are missing today.
+// MIRRORED 2026-08-25 and struck from the list below -- the first of the 24 off.
+//
+// A DATED ALLOWLIST, NOT A CLEAN PASS. 24 of 59 cited paths were missing on
+// 2026-08-24; 23 remain.
 // A check that fails on all of them is a check someone disables; a check with no
 // allowlist at all would have to be added as already-failing. So the backlog is
 // listed here explicitly -- visible in the repo rather than in a chat, shrinking
@@ -36,8 +41,14 @@ const check = (label, ok, detail = "") => {
 // Missing as of 2026-08-24. Each is a doc that exists in the Claude Project and
 // was never mirrored. Remove entries as they land; do not add without saying
 // why in the commit.
+//
+// STRUCK 2026-08-25: claude/pickers-firewall-selfblock-2026-07-17.md, mirrored
+// verbatim with a dated status block on top. The body is the July record and is
+// not edited -- the status block exists because the body's "Plays still
+// self-fetch; consider the same in-process treatment later" would otherwise send
+// the next reader to convert a page that was converted long ago. A mirrored doc
+// is a snapshot, and a snapshot with no date on the drift is its own trap.
 const KNOWN_MISSING = new Set([
-  "claude/pickers-firewall-selfblock-2026-07-17.md",
   "claude/seo-recovery-plan-2026-08-15.md",
   "claude/list-link-prefetch-disable-2026-07-21.md",
   "claude/stock-daily-rate-limit-2026-07-21.md",
@@ -63,11 +74,35 @@ const KNOWN_MISSING = new Set([
   "claude/firewall-ja4-repeat-offenders-selfblock-2026-07-21.md",
 ]);
 
-const files = execFileSync("git", ["ls-files"], { cwd: ROOT, encoding: "utf8" }).split("\n").filter(Boolean);
+// TRACKED **AND** UNTRACKED-BUT-NOT-IGNORED. `git ls-files` alone misses a file
+// that has not been committed yet, so a brand-new dangling citation would pass
+// until the commit AFTER the one that introduced it. Found the hard way: the S3
+// calibration fixture below sat untracked through a green run and only failed
+// once committed.
+const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], {
+  cwd: ROOT,
+  encoding: "utf8",
+}).split("\n").filter(Boolean);
+
+// TWO FILES CANNOT BE SCANNED, and both would corrupt the measurement rather
+// than merely add noise:
+//
+//   this file      -- its allowlist IS a list of claude/*.md paths, so scanning
+//                     itself would count every allowlisted doc as "cited from
+//                     code". That turned "19 of 24 cited from code" into "24 of
+//                     24" and inflated every per-doc weight by one, which is the
+//                     figure someone would use to decide what to mirror first.
+//   calibrations/  -- mutation specs carry deliberately-fake paths as fixtures.
+//                     A spec asserting that a dangling citation FAILS is not
+//                     itself a dangling citation.
+const SELF = "scripts/check-doc-citations.mjs";
+const skip = (rel) => rel === SELF || rel.startsWith("scripts/calibrations/");
+
 const PAT = /claude\/[A-Za-z0-9_\-./]+\.md/g;
 
 const cited = new Map(); // path -> Set(citing files)
 for (const rel of files) {
+  if (skip(rel)) continue;
   let text;
   try {
     text = fs.readFileSync(path.join(ROOT, rel), "utf8");
