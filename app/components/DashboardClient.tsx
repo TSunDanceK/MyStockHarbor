@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import PriceChart, { type Overlay, type ChartType, type SupportResistanceZone } from "./PriceChart";
@@ -484,6 +484,20 @@ export default function DashboardClient({
     return () => { window.removeEventListener("resize", check); window.removeEventListener("orientationchange", check); };
   }, [fullscreen]);
 
+  // Leaving fullscreen while Interactive is active. On a phone the Interactive
+  // chart has no inline view -- the card collapses to an "Open Interactive
+  // Chart" placeholder -- so closing fullscreen used to dump the user on that
+  // dead placeholder instead of a chart. Exiting returns the card to Basic.
+  // Desktop keeps Interactive: the inline engine renders there for real.
+  const exitFullscreen = useCallback(() => {
+    setFullscreen(false);
+    setChartMode((m) => (isMobile && m === "interactive" ? "basic" : m));
+  }, [isMobile]);
+  // Read by the fullscreen effect below, which must not re-run (and so
+  // re-request native fullscreen) every time this callback's identity changes.
+  const exitFullscreenRef = useRef(exitFullscreen);
+  exitFullscreenRef.current = exitFullscreen;
+
   function selectChartMode(next: ChartMode) {
     setChartMode(next);
     // On phones the Interactive chart is only usable at full size, so open it
@@ -607,7 +621,7 @@ export default function DashboardClient({
   // exits native fullscreen (Esc / browser UI), keep our state in sync.
   useEffect(() => {
     if (!fullscreen) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setFullscreen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") exitFullscreenRef.current(); };
     window.addEventListener("keydown", onKey);
 
     const el = fsOverlayRef.current as (HTMLDivElement & { webkitRequestFullscreen?: () => Promise<void> }) | null;
@@ -620,7 +634,7 @@ export default function DashboardClient({
     } catch { /* noop */ }
 
     const onFsChange = () => {
-      if (!doc.fullscreenElement && !doc.webkitFullscreenElement) setFullscreen(false);
+      if (!doc.fullscreenElement && !doc.webkitFullscreenElement) exitFullscreenRef.current();
     };
     document.addEventListener("fullscreenchange", onFsChange);
     document.addEventListener("webkitfullscreenchange", onFsChange as EventListener);
@@ -1283,7 +1297,7 @@ export default function DashboardClient({
         // close button into the chart's own single toolbar line instead.
         const injectToolbar = isInteractive && fsLandscape;
         const closeBtn = (
-          <button key="fs-close" type="button" onClick={() => setFullscreen(false)} aria-label="Close fullscreen" title="Close" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: injectToolbar ? 30 : 34, height: injectToolbar ? 30 : 34, flex: "0 0 auto", borderRadius: 9, border: "1px solid rgba(240,68,68,0.45)", background: "rgba(127,29,29,0.22)", color: "#f87171", fontWeight: 800, fontSize: 16, lineHeight: 1, cursor: "pointer" }}>
+          <button key="fs-close" type="button" onClick={exitFullscreen} aria-label="Close fullscreen" title="Close" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: injectToolbar ? 30 : 34, height: injectToolbar ? 30 : 34, flex: "0 0 auto", borderRadius: 9, border: "1px solid rgba(240,68,68,0.45)", background: "rgba(127,29,29,0.22)", color: "#f87171", fontWeight: 800, fontSize: 16, lineHeight: 1, cursor: "pointer" }}>
             ✕
           </button>
         );
