@@ -33,7 +33,12 @@ const sf = ts.createSourceFile(SRC, raw, ts.ScriptTarget.Latest, true, ts.Script
 const grab = (name) => {
   let out = null;
   const visit = (node) => {
-    if (ts.isFunctionDeclaration(node) && node.name?.text === name) out = node.getText(sf).replace(/^export\s+/, "");
+    if (
+      (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) &&
+      node.name?.text === name
+    ) {
+      out = node.getText(sf).replace(/^export\s+/, "");
+    }
     ts.forEachChild(node, visit);
   };
   visit(sf);
@@ -246,7 +251,7 @@ if (!barMissing.length) {
   const decls = raw
     .split("\n")
     .filter((l) =>
-      /^(let historyStaleNewestCount|let historyFreshNewestCount|const historyStaleNewest |let historyNewestBarSeen|const MAX_DIAGNOSTIC_SYMBOLS|let historyForcedRefetchFailures|const historyForcedRefetchFailureSymbols|export const HISTORY_MAX_BAR_AGE_WEEKDAYS)/.test(l)
+      /^(let historyStaleNewestCount|let historyFreshNewestCount|const historyStaleNewest |let historyNewestBarSeen|const MAX_DIAGNOSTIC_SYMBOLS|let historyForcedRefetchFailures|const historyForcedRefetchFailureSymbols|const historyForcedFailureReasons|export const HISTORY_MAX_BAR_AGE_WEEKDAYS)/.test(l)
     )
     .map((l) => l.replace(/^export\s+/, ""))
     .join("\n");
@@ -321,6 +326,62 @@ if (!barMissing.length) {
   check("the stale SAMPLE caps above the drop cap of 12", many.symbols.length > 12, `${many.symbols.length} sampled`);
 }
 
+console.log("\n=== 7b. A failure REASON, because a symbol list cannot say why ===\n");
+// The falsifier I first proposed was not diagnostic. "Is it the same twenty
+// every morning" only separates symbol-specific from not -- and transient
+// network failure produces a different twenty too, so a different set confirms
+// nothing about capacity. The reason is what discriminates, and it is knowable
+// exactly at the throw site and nowhere else.
+const failFns = ["FmpHistoryError", "classifyFmpFailure"];
+const failGrabbed = Object.fromEntries(failFns.map((n) => [n, grab(n)]));
+check("the failure classifier was extracted", failFns.every((n) => failGrabbed[n]), failFns.filter((n) => !failGrabbed[n]).join(", ") || "all present");
+
+if (failFns.every((n) => failGrabbed[n])) {
+  const failJs = ts.transpileModule(
+    `${failGrabbed.FmpHistoryError}\n${failGrabbed.classifyFmpFailure}\nexport { FmpHistoryError, classifyFmpFailure };`,
+    { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext } }
+  ).outputText;
+  const f = await import(`data:text/javascript;base64,${Buffer.from(failJs).toString("base64")}`);
+
+  const cases = [
+    ["capacity timeout", new f.FmpHistoryError("wait timeout", "capacity-timeout"), "capacity-timeout"],
+    ["an HTTP status", new f.FmpHistoryError("failed 429", "http-429"), "http-429"],
+    ["FMP's own error field at HTTP 200", new f.FmpHistoryError("x", "fmp-error"), "fmp-error"],
+    ["a dead connection (undici raises TypeError)", new TypeError("fetch failed"), "network"],
+    ["a non-JSON body (Response.json raises SyntaxError)", new SyntaxError("Unexpected token <"), "parse"],
+    ["anything else stays unclassified rather than folded in", new Error("???"), "other"],
+  ];
+  for (const [label, err, want] of cases) {
+    const got = f.classifyFmpFailure(err);
+    check(`${label} -> ${want}`, got === want, got);
+  }
+  check(
+    "the three reasons that want OPPOSITE fixes are distinguishable",
+    new Set(["capacity-timeout", "http-429", "network"].map((r) => f.classifyFmpFailure(new f.FmpHistoryError("x", r)))).size === 3,
+    "raise the wait / slow down / do nothing"
+  );
+}
+
+// The classification must actually reach the record. Extracted and run above is
+// the behaviour; this is the wiring, and the two fail independently.
+const histSrc = stripComments(raw, { file: SRC });
+check(
+  "the bulk catch classifies rather than counting blind",
+  /const reason = classifyFmpFailure\(error\);/.test(histSrc)
+);
+check(
+  "the reason histogram is UNCAPPED",
+  /historyForcedFailureReasons\.set\(reason, \(historyForcedFailureReasons\.get\(reason\) \?\? 0\) \+ 1\);/.test(histSrc) &&
+    !/historyForcedFailureReasons\.size < MAX_DIAGNOSTIC_SYMBOLS/.test(histSrc),
+  "a capped tally cannot say 'ALL twenty were capacity timeouts'"
+);
+check(
+  "every throw site carries a reason",
+  (histSrc.match(/throw new FmpHistoryError\(/g) ?? []).length === 4 &&
+    !/throw new Error\(/.test(histSrc.split("export async function reserveFmpCallSlot")[1] ?? ""),
+  "an unclassified throw lands in 'other' and tells you nothing"
+);
+
 console.log("\n=== 8. The run record carries what the diagnosis needs ===\n");
 const warmRoute = stripComments(
   fs.readFileSync(path.join(ROOT, "app/api/jobs/warm-picker-universe/route.ts"), "utf8"),
@@ -340,6 +401,11 @@ check(
   "the forced-refetch FAILURE SYMBOLS are recorded, not only counted",
   /historyForcedRefetchFailureSymbols: barAge\.forcedRefetchFailureSymbols/.test(warmRoute),
   "a count cannot answer 'is it the same twenty every morning'"
+);
+check(
+  "the failure REASON HISTOGRAM is recorded",
+  /historyForcedRefetchFailureReasons: barAge\.forcedRefetchFailureReasons/.test(warmRoute),
+  "and the symbol list cannot answer 'why', which is the question that picks the fix"
 );
 
 console.log(`\n${failures ? `FAILED (${failures})` : "ALL CHECKS PASSED"}\n`);

@@ -270,6 +270,49 @@ function scheduleFlush() {
  * to measure Content-Length only and stop reading the clone; the counters are
  * shaped so that degrades to a partial `decoded` rather than a wrong `wire`.
  */
+// Next's Data Cache refuses a single entry over 2 MB. It does not throw, and it
+// does not report at the call site.
+const NEXT_DATA_CACHE_MAX_BYTES = 2 * 1024 * 1024;
+
+const oversizedCacheWarned = new Set<string>();
+
+/**
+ * `next: { revalidate: N }` on a response over 2 MB IS SILENTLY INERT.
+ *
+ * Next's Data Cache refuses the entry, the revalidate never takes effect, and
+ * the only surviving layer is whatever module-level memo the caller happens to
+ * have -- which dies with the Lambda. Nothing logs at the call site; the tell is
+ * a runtime line somewhere else entirely.
+ *
+ * THE FAILURE LOOKS EXACTLY LIKE SUCCESS, which is why this exists. Two live
+ * instances found by sweep on 2026-08-24:
+ *
+ *   - /stable/stock-list at 3.0 MB, refetched on every cold start, 166.9 MB
+ *     across a window holding ~3 days of data.
+ *   - /api/pickers at roughly 8 MB (measured 3.38 MB at a 260 universe on
+ *     2026-08-06, growing linearly, now 700), whose call site carries a comment
+ *     stating the exact dedupe that is not happening.
+ *
+ * Deduped per endpoint so a hot path does not fill the log with one fact.
+ */
+function warnIfTooBigToCache(url: string, init: RequestInit | undefined, bytes: number) {
+  const wantsCache =
+    typeof (init as { next?: { revalidate?: number | false } } | undefined)?.next?.revalidate ===
+    "number";
+  if (!wantsCache || bytes <= NEXT_DATA_CACHE_MAX_BYTES) return;
+
+  const endpoint = fmpEndpointLabel(url);
+  if (oversizedCacheWarned.has(endpoint)) return;
+  oversizedCacheWarned.add(endpoint);
+
+  console.warn(
+    `[fmp] ${endpoint} returned ${(bytes / 1024 / 1024).toFixed(1)} MB with next.revalidate set. ` +
+      `Next's Data Cache refuses entries over ${NEXT_DATA_CACHE_MAX_BYTES / 1024 / 1024} MB, so that ` +
+      `revalidate is INERT and this call refetches on every cold start. Cache it somewhere that can ` +
+      `hold it, or fetch less.`
+  );
+}
+
 export async function fmpFetch(url: string, init?: RequestInit): Promise<Response> {
   // WHAT THIS COUNTS, PRECISELY: responses observed at this call site. That is
   // NOT the same as bytes on the wire, and the difference is not small.
@@ -292,6 +335,7 @@ export async function fmpFetch(url: string, init?: RequestInit): Promise<Respons
     const wireBytes = Number.isFinite(header) && header > 0 ? header : null;
     const body = await res.clone().arrayBuffer();
     recordFmpUsage({ url, decodedBytes: body.byteLength, wireBytes });
+    warnIfTooBigToCache(url, init, body.byteLength);
   } catch {
     // Never let measurement affect the call being measured.
   }
