@@ -80,9 +80,22 @@ export async function GET(req: NextRequest) {
     // than being assumed true.
     const historyForced = res.headers.get("X-Pickers-History-Forced") === "true";
 
+    // NAMED FOR WHAT IT MEANS, NOT FOR HOW IT IS TRIGGERED. `historyForced true`
+    // reads as "a human forced this run" -- which is how the owner read it on
+    // first sight, on a page whose entire job is being unambiguous at a glance.
+    // What it actually distinguishes is whether this run REFETCHED EVERY SYMBOL
+    // or only filled cache misses, and with a 50h TTL the miss-only case
+    // refreshes essentially nothing.
+    //
+    // The old key is written alongside for one cycle. Nothing in this repo reads
+    // it -- /cache-health renders whatever keys the summary carries -- but a
+    // run record is the kind of thing someone greps for, and one cycle of
+    // overlap costs nothing.
+    const refreshMode = historyForced ? "forced" : "miss-only";
+
     if (!historyForced) {
       console.warn(
-        "[warm-picker-universe] Ran WITHOUT a history force. With a 50h TTL the miss-only bulk read refreshes nothing, so this run almost certainly fetched no bars. Check CRON_SECRET is set in the Vercel project."
+        "[warm-picker-universe] refreshMode=miss-only. With a 50h TTL the miss-only bulk read refreshes nothing, so this run almost certainly fetched no bars. Check CRON_SECRET is set in the Vercel project."
       );
     }
 
@@ -126,7 +139,9 @@ export async function GET(req: NextRequest) {
 
     await recordJobRun("warm-picker-universe", res.ok, {
       status: res.status,
-      historyForced,
+      refreshMode,
+      historyForced, // deprecated 2026-08-24, remove after one cycle
+
       universeSize: build?.universeSize ?? null,
       degradedSymbolPct: build?.degradedSymbolPct ?? null,
       degradedFallbackUsed: build?.degradedFallbackUsed ?? null,
@@ -139,6 +154,11 @@ export async function GET(req: NextRequest) {
       historyFreshNewestCount: barAge.fresh,
       historyStaleNewestSymbols: barAge.symbols.join(",") || null,
       historyForcedRefetchFailures: barAge.forcedRefetchFailures,
+      // RECORDED, NOT JUST WARNED. The count alone cannot answer the question
+      // that matters -- is it the same symbols every morning, or a different
+      // twenty each time? The first is a class of symbol and wants a name; the
+      // second is capacity contention and wants a different fix.
+      historyForcedRefetchFailureSymbols: barAge.forcedRefetchFailureSymbols.join(",") || null,
     });
     return res;
   } catch (error) {
