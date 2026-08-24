@@ -71,10 +71,24 @@ const SETUP_LINKS: { label: string; href: string }[] = [
 // /api/pickers itself is backed by a ~6-minute Redis cache plus a 60s
 // in-process memo (see lib/server/pickersBuilder.ts), and is kept warm by
 // the daily automation/pickers-warm cron job, so this call is normally cheap
-// -- it's hitting a warm cache, not recomputing the screen. We layer Next's
-// own data-cache revalidate on top (shorter than the upstream 6-minute
-// window) so repeated page requests within that window don't even need to
-// re-hit the route.
+// -- it's hitting a warm cache, not recomputing the screen.
+//
+// THE `revalidate` BELOW IS INERT, AND THIS COMMENT USED TO CLAIM OTHERWISE.
+// It said we "layer Next's own data-cache revalidate on top ... so repeated
+// page requests within that window don't even need to re-hit the route". That
+// is not happening. Next's Data Cache refuses any single entry over 2 MB, and
+// this payload is far past it: splitPickersPayload's own note measured 3.38 MB
+// at a 260-symbol universe on 2026-08-06, of which 2.86 MB was chartPoints,
+// and records that the share grows LINEARLY with the cap. At today's 700 that
+// is roughly 8 MB. So the entry is refused, the revalidate never applies, and
+// every render re-hits /api/pickers.
+//
+// Left in place deliberately rather than removed: it costs nothing (a refused
+// cache write is a no-op) and removing it would erase the only marker of where
+// the intended dedupe was supposed to happen. The fix is to cache this
+// somewhere that can hold it, or to stop shipping ~7 MB of chartPoints to a
+// page that renders a few dozen of them -- both real changes, neither a
+// comment edit. See lib/server/fmpUsage.ts warnIfTooBigToCache for the class.
 async function fetchInitialPickersPayload(): Promise<PickersPayload | null> {
   try {
     const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mystockharbor.com";

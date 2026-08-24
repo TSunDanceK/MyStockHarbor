@@ -110,7 +110,7 @@ export async function GET(req: NextRequest) {
 
     if (barAge.forcedRefetchFailures > 0) {
       console.warn(
-        `[warm-picker-universe] ${barAge.forcedRefetchFailures} forced refetches threw and fell back to their cached entry. Sample: ${barAge.forcedRefetchFailureSymbols.join(", ")}`
+        `[warm-picker-universe] ${barAge.forcedRefetchFailures} forced refetches threw and fell back to their cached entry. Reasons: ${barAge.forcedRefetchFailureReasons.join(", ") || "unclassified"}. Sample: ${barAge.forcedRefetchFailureSymbols.join(", ")}`
       );
     }
 
@@ -159,6 +159,13 @@ export async function GET(req: NextRequest) {
       // twenty each time? The first is a class of symbol and wants a name; the
       // second is capacity contention and wants a different fix.
       historyForcedRefetchFailureSymbols: barAge.forcedRefetchFailureSymbols.join(",") || null,
+      // THE FIELD THAT ANSWERS IT OUTRIGHT rather than narrowing it. A count
+      // plus a symbol list can only distinguish symbol-specific from not, and
+      // transient network failure produces a different set every morning too --
+      // so "different twenty" confirms nothing on its own. The reason histogram
+      // is uncapped, so "capacity-timeout:20" and "http-429:18,network:2" are
+      // both readable in one glance, and they want opposite fixes.
+      historyForcedRefetchFailureReasons: barAge.forcedRefetchFailureReasons.join(",") || null,
     });
     return res;
   } catch (error) {
