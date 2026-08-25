@@ -181,8 +181,9 @@ type SignalRecord = {
   trendFlipDailyBars?: number | null;
   /** Weeks since the last confirmed weekly flip. Ranking key, weekly pages. */
   trendFlipWeeklyBars?: number | null;
-  /** Date of the last CLOSED weekly bar, so the weekly pages can say which
-   *  week the signal refers to rather than leaving a reader to guess. */
+  /** End date of the week the flip CONFIRMED in -- weekly[flipIndex], not the
+   *  newest closed week. Those two coincide only at barsSinceFlip 0, so three
+   *  of the four in-window ages printed a date that contradicted them. */
   trendFlipWeekEnding?: string;
 
   bullishRsiDivergence: boolean;
@@ -2571,14 +2572,40 @@ function computeTrendFlips(pts: Point[], now = new Date()): TrendFlipResult {
     trendFlipBearishWeekly: qualifies(weeklyFlip, -1),
     trendFlipDailyBars: dailyFlip?.barsSinceFlip ?? null,
     trendFlipWeeklyBars: weeklyFlip?.barsSinceFlip ?? null,
-    trendFlipWeekEnding: weekly.length ? weekly[weekly.length - 1].date : undefined,
+    // THE WEEK THE FLIP CONFIRMED IN, via flipIndex -- which is an index into
+    // `weekly` and exists for exactly this. NOT weekly[weekly.length - 1],
+    // which is the newest closed week and equals the flip week only when
+    // barsSinceFlip is 0; at 1, 2 and 3 it printed a date that contradicted
+    // the age shown beside it.
+    trendFlipWeekEnding:
+      weeklyFlip && weekly[weeklyFlip.flipIndex]
+        ? weekly[weeklyFlip.flipIndex].date
+        : undefined,
   };
 }
 
-/** "Today" / "1 day ago" / "3 days ago" -- or the weekly equivalent. */
+/**
+ * "today" / "1 day ago" / "3 days ago", or the weekly equivalent.
+ *
+ * THE WEEK BRANCH IS OFF BY ONE FROM THE BAR COUNT, DELIBERATELY. Weekly bars
+ * are counted back from the newest CLOSED week, and the week in progress is
+ * never evaluated -- so barsSinceFlip 0 is already a week ago, not "this week",
+ * which is what this used to say and which was never a week the screen could
+ * even see. 0 -> last week, 1 -> 2 weeks ago, and so on.
+ *
+ * It is still only a relative phrase. Under the one-trading-day lag
+ * resampleWeeklyClosed documents (the week ending Friday becomes available once
+ * Monday's bar lands), "last week" can be a week out early on a Monday. The
+ * WEEK-ENDING DATE never is, which is why the weekly rows lead with it and
+ * carry this only as the second, subordinate chip.
+ */
 function trendFlipAgeLabel(bars: number, unit: "day" | "week") {
-  if (bars <= 0) return unit === "week" ? "this week" : "today";
-  return `${bars} ${unit}${bars === 1 ? "" : "s"} ago`;
+  if (unit === "week") {
+    if (bars <= 0) return "last week";
+    return `${bars + 1} weeks ago`;
+  }
+  if (bars <= 0) return "today";
+  return `${bars} day${bars === 1 ? "" : "s"} ago`;
 }
 
 // Pure transform over already-fetched points -- the actual Redis/FMP fetch
@@ -3102,22 +3129,22 @@ async function buildPickersPayload(
             unit: "day" | "week"
           ) => {
             const age = trendFlipAgeLabel(bars, unit);
-            const weekNote =
-              unit === "week" && trendFlips.trendFlipWeekEnding
-                ? ` • week ending ${trendFlips.trendFlipWeekEnding}`
-                : "";
+            // Weekly LEADS WITH THE DATE. The date is the fact; the relative
+            // phrase is a convenience that the Monday lag can put a week out
+            // (see trendFlipAgeLabel). Daily has no such date and no such
+            // ambiguity, so its wording is unchanged.
+            const weekEnding = unit === "week" ? trendFlips.trendFlipWeekEnding : undefined;
             target.push({
               symbol,
               chartPoints,
               tone: direction === "Bullish" ? "green" : "red",
-              note: `${direction} Trend Helper flip • confirmed ${age}${weekNote}`,
+              note: weekEnding
+                ? `${direction} Trend Helper flip • week ending ${weekEnding} • ${age}`
+                : `${direction} Trend Helper flip • confirmed ${age}`,
               timeframe: unit === "week" ? "W" : "D",
-              firedIndicators: [
-                `${direction} flip ${age}`,
-                ...(unit === "week" && trendFlips.trendFlipWeekEnding
-                  ? [`week ending ${trendFlips.trendFlipWeekEnding}`]
-                  : []),
-              ],
+              firedIndicators: weekEnding
+                ? [`${direction} flip week ending ${weekEnding}`, age]
+                : [`${direction} flip ${age}`],
               dashboardHref: buildDashboardHref({
                 symbol,
                 timeframe: unit === "week" ? "W" : "D",
@@ -3127,6 +3154,18 @@ async function buildPickersPayload(
               // there; `score` is what actually ships on the item, and a bar
               // count is far more use to a reader (and to whatever builds the
               // display column) than a negative sort weight.
+              //
+              // CHECKED, because a bar count sitting in a field called `score`
+              // would read as a rating if anything rendered it generically:
+              // nothing does. The only path from PickerItem.score to a
+              // rendered value is entriesFromSection in PickerResultPage,
+              // which serves `kind: "section"` pages, and no page config uses
+              // that kind any more -- the preset branch these four pages take
+              // never reads it, so their Score pill stays the tracked-
+              // conditions count like every other preset page. If one of them
+              // is ever converted to `kind: "section"`, scoreLabelForEntry
+              // would show this number labelled "Score", where lower is better
+              // -- fix it there, not by making this field less honest.
               score: bars,
               _score: -bars,
             });
