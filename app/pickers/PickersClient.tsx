@@ -39,6 +39,8 @@ type SignalRecord = {
   oversold: boolean; overbought: boolean; buyTheDip: boolean; breakout: boolean;
   volumeSpike: boolean; atrSpike: boolean; aboveMA50: boolean; belowMA50: boolean;
   aboveMA200: boolean; belowMA200: boolean; dailyMa200Proximity: boolean; weeklyMa200Proximity: boolean;
+  trendFlipBullish?: boolean; trendFlipBearish?: boolean;
+  trendFlipBullishWeekly?: boolean; trendFlipBearishWeekly?: boolean;
   bullishRsiDivergence: boolean; bearishRsiDivergence: boolean; bullishMacdDivergence: boolean; bearishMacdDivergence: boolean;
   positiveLastEarnings?: boolean; strongEarningsGrowth?: boolean;
   preferredTimeframe?: "D" | "W" | "M";
@@ -142,6 +144,10 @@ function matchedSignalsForRecord(record: SignalRecord): FilterKey[] {
   if (record.belowMA200) out.push("belowMA200");
   if (record.dailyMa200Proximity) out.push("dailyMa200Proximity");
   if (record.weeklyMa200Proximity) out.push("weeklyMa200Proximity");
+  if (record.trendFlipBullish) out.push("trendFlipBullish");
+  if (record.trendFlipBearish) out.push("trendFlipBearish");
+  if (record.trendFlipBullishWeekly) out.push("trendFlipBullishWeekly");
+  if (record.trendFlipBearishWeekly) out.push("trendFlipBearishWeekly");
   if (record.bullishRsiDivergence) out.push("bullishRsiDivergence");
   if (record.bearishRsiDivergence) out.push("bearishRsiDivergence");
   if (record.bullishMacdDivergence) out.push("bullishMacdDivergence");
@@ -226,6 +232,8 @@ function createEmptySignalRecord(symbol: string, item?: PickerItem): SignalRecor
     oversold: false, overbought: false, buyTheDip: false, breakout: false,
     volumeSpike: false, atrSpike: false, aboveMA50: false, belowMA50: false,
     aboveMA200: false, belowMA200: false, dailyMa200Proximity: false, weeklyMa200Proximity: false,
+    trendFlipBullish: false, trendFlipBearish: false,
+    trendFlipBullishWeekly: false, trendFlipBearishWeekly: false,
     bullishRsiDivergence: false, bearishRsiDivergence: false, bullishMacdDivergence: false, bearishMacdDivergence: false,
     positiveLastEarnings: false, strongEarningsGrowth: false,
     preferredTimeframe: item?.timeframe, preferredIndicator: item?.indicator,

@@ -173,6 +173,10 @@ type SignalRecord = {
   belowMA200?: boolean;
   dailyMa200Proximity?: boolean;
   weeklyMa200Proximity?: boolean;
+  trendFlipBullish?: boolean;
+  trendFlipBearish?: boolean;
+  trendFlipBullishWeekly?: boolean;
+  trendFlipBearishWeekly?: boolean;
   bullishRsiDivergence?: boolean;
   bearishRsiDivergence?: boolean;
   bullishMacdDivergence?: boolean;
@@ -214,6 +218,10 @@ export type ResultEntryFlags = {
   belowMA200?: boolean;
   dailyMa200Proximity?: boolean;
   weeklyMa200Proximity?: boolean;
+  trendFlipBullish?: boolean;
+  trendFlipBearish?: boolean;
+  trendFlipBullishWeekly?: boolean;
+  trendFlipBearishWeekly?: boolean;
   bullishRsiDivergence?: boolean;
   bearishRsiDivergence?: boolean;
   bullishMacdDivergence?: boolean;
@@ -314,6 +322,7 @@ export type ResultEntry = ResultEntryFlags & {
 const FLAG_KEYS: FilterKey[] = [
   "oversold", "overbought", "buyTheDip", "breakout", "volumeSpike", "atrSpike",
   "aboveMA50", "belowMA50", "aboveMA200", "belowMA200", "dailyMa200Proximity", "weeklyMa200Proximity",
+  "trendFlipBullish", "trendFlipBearish", "trendFlipBullishWeekly", "trendFlipBearishWeekly",
   "bullishRsiDivergence", "bearishRsiDivergence", "bullishMacdDivergence", "bearishMacdDivergence",
   "positiveLastEarnings", "strongEarningsGrowth",
 ];
