@@ -2,6 +2,13 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import {
+  computeTrendHelper,
+  smaSeries,
+  TREND_HELPER_COLORS,
+  TREND_HELPER_SLOW,
+  TREND_HELPER_FAST,
+} from "@/lib/ta/trendHelper";
 
 /**
  * InteractiveChart
@@ -190,48 +197,9 @@ function thresholdBandDraw(lower: number, upper: number, fill: string) {
 // opposite direction confirms, instead of dropping back to grey on any single
 // counter-bar -- much less flicker. Two presets: Smooth (HMA 55, confirm 2)
 // and Fast (HMA 21, confirm 1).
-const NCT_BULL = "#3b82f6";    // blue   (confirmed up)
-const NCT_BEAR = "#eab308";    // yellow (confirmed down)
-const NCT_NEUTRAL = "#94a3b8"; // grey   (unconfirmed / pre-trend)
-const NCT_MA200 = "#a855f7";   // purple
-
-function wmaSeries(values: Array<number | null>, len: number): Array<number | null> {
-  const out: Array<number | null> = Array(values.length).fill(null);
-  if (len < 1) return out;
-  const denom = (len * (len + 1)) / 2;
-  for (let i = len - 1; i < values.length; i++) {
-    let num = 0, ok = true;
-    for (let k = 0; k < len; k++) {
-      const v = values[i - k];
-      if (typeof v !== "number" || !Number.isFinite(v)) { ok = false; break; }
-      num += v * (len - k);
-    }
-    if (ok) out[i] = num / denom;
-  }
-  return out;
-}
-function hmaSeries(values: number[], len: number): Array<number | null> {
-  const half = Math.max(1, Math.floor(len / 2));
-  const sq = Math.max(1, Math.round(Math.sqrt(len)));
-  const wHalf = wmaSeries(values, half);
-  const wFull = wmaSeries(values, len);
-  const diff: Array<number | null> = values.map((_, i) => {
-    const a = wHalf[i], b = wFull[i];
-    return typeof a === "number" && typeof b === "number" ? 2 * a - b : null;
-  });
-  return wmaSeries(diff, sq);
-}
-function smaSeries(values: number[], len: number): Array<number | null> {
-  const out: Array<number | null> = Array(values.length).fill(null);
-  if (len < 1) return out;
-  let sum = 0;
-  for (let i = 0; i < values.length; i++) {
-    sum += values[i];
-    if (i >= len) sum -= values[i - len];
-    if (i >= len - 1) out[i] = sum / len;
-  }
-  return out;
-}
+// Colours and math both come from lib/ta/trendHelper.ts -- the single source
+// of truth shared with PriceChart.tsx and the server-side picker builder.
+const { bull: NCT_BULL, bear: NCT_BEAR, neutral: NCT_NEUTRAL, ma200: NCT_MA200 } = TREND_HELPER_COLORS;
 
 type NctRow = { trend: number | null; ma200: number | null; state: number };
 
@@ -250,24 +218,13 @@ function makeTrendHelper(name: "NCT_SMOOTH" | "NCT_FAST", trendLen: number, conf
     ],
     calc: (dataList: Array<{ close: number }>) => {
       const closes = dataList.map((d) => d.close);
-      const trend = hmaSeries(closes, trendLen);
+      const { line, state } = computeTrendHelper(closes, trendLen, confirmBars);
       const ma200 = smaSeries(closes, 200);
-      const out: NctRow[] = new Array(dataList.length);
-      let bull = 0, bear = 0, lastState = 0;
-      for (let i = 0; i < dataList.length; i++) {
-        const t = trend[i], tp = i > 0 ? trend[i - 1] : null;
-        const up = typeof t === "number" && typeof tp === "number" && closes[i] > t && t > tp;
-        const dn = typeof t === "number" && typeof tp === "number" && closes[i] < t && t < tp;
-        bull = up ? bull + 1 : 0;
-        bear = dn ? bear + 1 : 0;
-        let state: number;
-        if (bull >= confirmBars) state = 1;
-        else if (bear >= confirmBars) state = -1;
-        else state = lastState; // hold last confirmed colour until the opposite confirms
-        lastState = state;
-        out[i] = { trend: typeof t === "number" ? t : null, ma200: typeof ma200[i] === "number" ? (ma200[i] as number) : null, state };
-      }
-      return out;
+      return dataList.map((_d, i): NctRow => ({
+        trend: line[i] ?? null,
+        ma200: ma200[i] ?? null,
+        state: state[i],
+      }));
     },
     draw: (params: {
       ctx: CanvasRenderingContext2D;
@@ -396,8 +353,8 @@ function registerCustomIndicators(kl: unknown) {
   });
 
   // Noise Cutter Trend Helper — two presets, price overlays on the candle pane.
-  register(makeTrendHelper("NCT_SMOOTH", 55, 2));
-  register(makeTrendHelper("NCT_FAST", 21, 1));
+  register(makeTrendHelper("NCT_SMOOTH", TREND_HELPER_SLOW.trendLen, TREND_HELPER_SLOW.confirmBars));
+  register(makeTrendHelper("NCT_FAST", TREND_HELPER_FAST.trendLen, TREND_HELPER_FAST.confirmBars));
 
   customIndicatorsRegistered = true;
 }
