@@ -51,7 +51,7 @@ const config: PickerResultConfig = {
     "Stocks whose Trend Helper (Slow) trend state has confirmed a flip to bullish within the last four closed weeks. The most recent flips are at the top, and each row names the week the flip confirmed in.",
   explainerTitle: "How to use a weekly trend flip",
   explainerBody:
-    "This screen is measured on CLOSED weekly bars only - the week in progress is never evaluated, so nothing here can appear on Tuesday and vanish by Friday. Each row's Signals column names the week the flip confirmed in, which is the last completed trading week at the time the screen was built. Weekly flips are much rarer and much slower than daily ones: a stock is usually one to four weeks into the new state by the time it lands here, so this is a screen for trend condition rather than for entries.",
+    "This screen is measured on CLOSED weekly bars only - the week in progress is never evaluated, so nothing here can appear on Tuesday and vanish by Friday. Each row leads with the week the flip actually confirmed in, which for most rows is NOT the most recent week - the age beside it says how far back that was. Weekly flips are much rarer and much slower than daily ones: a stock is usually one to four weeks into the new state by the time it lands here, so this is a screen for trend condition rather than for entries.",
   emptyText:
     "No stocks have confirmed a bullish weekly trend flip in the last four closed weeks.",
   tone: "green",

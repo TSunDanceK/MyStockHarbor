@@ -51,7 +51,7 @@ const config: PickerResultConfig = {
     "Stocks whose Trend Helper (Slow) trend state has confirmed a flip to bearish within the last four closed weeks. The most recent flips are at the top, and each row names the week the flip confirmed in.",
   explainerTitle: "How to use a weekly trend flip",
   explainerBody:
-    "This screen is measured on CLOSED weekly bars only - the week in progress is never evaluated, so nothing here can appear on Tuesday and vanish by Friday. Each row's Signals column names the week the flip confirmed in, which is the last completed trading week at the time the screen was built. A weekly bearish flip is a slow signal about trend condition: it says the higher-timeframe state has turned, not that the next week is down.",
+    "This screen is measured on CLOSED weekly bars only - the week in progress is never evaluated, so nothing here can appear on Tuesday and vanish by Friday. Each row leads with the week the flip actually confirmed in, which for most rows is NOT the most recent week - the age beside it says how far back that was. A weekly bearish flip is a slow signal about trend condition: it says the higher-timeframe state has turned, not that the next week is down.",
   emptyText:
     "No stocks have confirmed a bearish weekly trend flip in the last four closed weeks.",
   tone: "red",
