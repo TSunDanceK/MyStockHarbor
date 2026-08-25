@@ -181,6 +181,7 @@ function getHeaderHelp(title: string) {
   if (title.includes("Strong Earnings Growth")) return "Ranked by year-over-year earnings improvement, recent positive EPS consistency and revenue growth.";
   if (title.includes("Overbought")) return "Ranked overbought setups favouring stronger extension and cleaner pullback-risk profiles.";
   if (title.includes("Divergence")) return "Ranked by timeframe, duration and structure quality. Weekly divergences usually carry more weight than daily ones.";
+  if (title.includes("Trend Flip")) return "Stocks whose Trend Helper (Slow) state has confirmed a direction change in the last four bars, most recent flip first. Weekly is measured on closed weeks only.";
   if (title.includes("Macro Support") || title.includes("Resistance")) return "Stocks near wider weekly support or resistance zones, ranked by touch count, distance and structure length.";
   if (title.includes("All-Time Highs")) return "Pullback setups from all-time highs, ranked to favour liquid, tradable names over broken charts.";
   if (title.toLowerCase().includes("ma200")) return "Stocks near the 200-day moving average — a key long-term level traders watch for support, resistance and trend direction.";
@@ -202,6 +203,10 @@ function seoHrefForTitle(rawTitle: string): string {
   if (title.includes("overbought")) return "/overbought-stocks-today";
   if (title.includes("best trend score")) return "/best-trend-score-stocks";
   if (title.includes("divergence")) return "/bullish-bearish-divergence-stocks";
+  if (title.includes("bullish trend flip") && title.includes("weekly")) return "/stocks-with-weekly-bullish-trend-flip";
+  if (title.includes("bearish trend flip") && title.includes("weekly")) return "/stocks-with-weekly-bearish-trend-flip";
+  if (title.includes("bullish trend flip")) return "/stocks-with-bullish-trend-flip";
+  if (title.includes("bearish trend flip")) return "/stocks-with-bearish-trend-flip";
   if (title.includes("daily ma200")) return "/stocks-near-200-day-moving-average";
   if (title.includes("weekly ma200")) return "/stocks-near-weekly-200-day-moving-average";
   return "";
