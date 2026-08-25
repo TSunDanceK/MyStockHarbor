@@ -61,4 +61,45 @@ export const MUTATIONS = [
     harnesses: [CITE],
     expect: 2,
   },
+  {
+    id: "S6",
+    description: "the citation scan goes back to tracked files only",
+    file: CITE,
+    find: '["ls-files", "--cached", "--others", "--exclude-standard"]',
+    replace: '["ls-files"]',
+    // NOT a failure count: this mutation is invisible on a clean tree, because
+    // every file is already tracked. It is recorded so the reason for the flags
+    // survives -- an UNCOMMITTED new file carrying a dangling citation would
+    // pass under `ls-files` alone, which is exactly how the S3 fixture sat
+    // through a green run. The hole only opens on a dirty tree, so no harness
+    // can catch it here; the note is the artefact.
+    harnesses: [CITE],
+    expect: 0,
+  },
+  {
+    id: "S7",
+    description: "calibration fixtures no longer skipped",
+    file: CITE,
+    find: 'rel === SELF || rel.startsWith("scripts/calibrations/")',
+    replace: "rel === SELF",
+    harnesses: [CITE],
+    // Loud: a mutation spec's deliberately-fake path reads as a real dangling
+    // citation. This is the half that fails.
+    expect: 1,
+  },
+  {
+    id: "S8",
+    description: "the harness scans ITSELF (allowlist counted as citations)",
+    file: CITE,
+    find: 'rel === SELF || rel.startsWith("scripts/calibrations/")',
+    replace: 'rel.startsWith("scripts/calibrations/")',
+    harnesses: [CITE],
+    // SILENT, and that is the finding. Scanning itself breaks no assertion --
+    // it CORRUPTS THE REPORT. Every allowlisted doc then reads as "cited from
+    // code", turning 18-of-23 into 23-of-23 and inflating every per-doc weight
+    // by one, and that weighting is exactly what someone would use to decide
+    // which doc to mirror first. A measurement can be wrong with nothing going
+    // red; recorded here because no check can catch it.
+    expect: 0,
+  },
 ];
