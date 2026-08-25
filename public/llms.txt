@@ -66,6 +66,10 @@ the condition can be removed or combined with others in place.
 - [Stocks Below 50-Day Moving Average](https://www.mystockharbor.com/stocks-below-50-day-moving-average)
 - [Stocks Trading Above 200-Day Moving Average](https://www.mystockharbor.com/stocks-trading-above-200-day-moving-average)
 - [Stocks Below 200-Day Moving Average](https://www.mystockharbor.com/stocks-below-200-day-moving-average)
+- [Stocks With a Bullish Trend Flip](https://www.mystockharbor.com/stocks-with-bullish-trend-flip)
+- [Stocks With a Bearish Trend Flip](https://www.mystockharbor.com/stocks-with-bearish-trend-flip)
+- [Stocks With a Weekly Bullish Trend Flip](https://www.mystockharbor.com/stocks-with-weekly-bullish-trend-flip)
+- [Stocks With a Weekly Bearish Trend Flip](https://www.mystockharbor.com/stocks-with-weekly-bearish-trend-flip)
 
 ### Earnings
 

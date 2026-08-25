@@ -147,6 +147,27 @@ export const CRAWLABLE_NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    heading: "Trend Flips",
+    links: [
+      {
+        href: "/stocks-with-bullish-trend-flip",
+        label: "Bullish Trend Flip (Daily)",
+      },
+      {
+        href: "/stocks-with-bearish-trend-flip",
+        label: "Bearish Trend Flip (Daily)",
+      },
+      {
+        href: "/stocks-with-weekly-bullish-trend-flip",
+        label: "Bullish Trend Flip (Weekly)",
+      },
+      {
+        href: "/stocks-with-weekly-bearish-trend-flip",
+        label: "Bearish Trend Flip (Weekly)",
+      },
+    ],
+  },
+  {
     heading: "Signals & Earnings Screens",
     links: [
       { href: "/top-stocks-with-buy-signals", label: "Buy Signals" },

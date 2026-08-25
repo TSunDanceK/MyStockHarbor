@@ -41,6 +41,15 @@
 // redirects now land on noindexed pages. That is accepted: the sources were
 // thin footer pages with no measurable traffic, so there is no ranking to
 // consolidate. Noted so it isn't rediscovered as a bug.
+//
+// PENDING OWNER DECISION (2026-08-25). The four Trend Helper flip pages below
+// were added here as the CONSERVATIVE default, not as a settled call: GSC
+// currently shows 582 URLs discovered-but-never-crawled and crawl-budget
+// starvation, so putting four more thin picker routes into the sitemap on the
+// day they ship is the change most likely to make that worse. They stay live,
+// fully internally linked and crawlable-through, exactly like the 22 above.
+// To index them instead, delete those four lines -- app/sitemap.ts already
+// lists them and filters on this array, so nothing else changes.
 export const NOINDEX_PICKER_PAGES = [
   "/3-month-high-breakout-stocks",
   "/atr-spike-stocks",
@@ -61,6 +70,10 @@ export const NOINDEX_PICKER_PAGES = [
   "/stocks-trading-above-200-day-moving-average",
   "/stocks-with-positive-last-earnings",
   "/stocks-with-strong-earnings-growth",
+  "/stocks-with-bearish-trend-flip",
+  "/stocks-with-bullish-trend-flip",
+  "/stocks-with-weekly-bearish-trend-flip",
+  "/stocks-with-weekly-bullish-trend-flip",
   "/top-stocks-with-buy-signals",
   "/top-stocks-with-sell-signals",
   "/volume-spike-stocks",

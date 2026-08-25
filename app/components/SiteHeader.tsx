@@ -759,6 +759,10 @@ export default function SiteHeader({
           path === "/stocks-below-200-day-moving-average" ||
           path === "/stocks-near-200-day-moving-average" ||
           path === "/stocks-near-weekly-200-day-moving-average" ||
+          path === "/stocks-with-bullish-trend-flip" ||
+          path === "/stocks-with-bearish-trend-flip" ||
+          path === "/stocks-with-weekly-bullish-trend-flip" ||
+          path === "/stocks-with-weekly-bearish-trend-flip" ||
           path === "/top-stocks-with-buy-signals" ||
           path === "/top-stocks-with-sell-signals" ||
           path === "/stocks-down-20-from-all-time-highs" ||
@@ -991,6 +995,37 @@ export default function SiteHeader({
                 label: "Below 200-Day MA",
                 href: "/stocks-below-200-day-moving-average",
                 isActive: (path) => path === "/stocks-below-200-day-moving-average",
+              },
+            ],
+          },
+          {
+            kind: "submenu",
+            label: "Trend Flips",
+            isActive: (path) =>
+              path === "/stocks-with-bullish-trend-flip" ||
+              path === "/stocks-with-bearish-trend-flip" ||
+              path === "/stocks-with-weekly-bullish-trend-flip" ||
+              path === "/stocks-with-weekly-bearish-trend-flip",
+            items: [
+              {
+                label: "Bullish Trend Flip (Daily)",
+                href: "/stocks-with-bullish-trend-flip",
+                isActive: (path) => path === "/stocks-with-bullish-trend-flip",
+              },
+              {
+                label: "Bearish Trend Flip (Daily)",
+                href: "/stocks-with-bearish-trend-flip",
+                isActive: (path) => path === "/stocks-with-bearish-trend-flip",
+              },
+              {
+                label: "Bullish Trend Flip (Weekly)",
+                href: "/stocks-with-weekly-bullish-trend-flip",
+                isActive: (path) => path === "/stocks-with-weekly-bullish-trend-flip",
+              },
+              {
+                label: "Bearish Trend Flip (Weekly)",
+                href: "/stocks-with-weekly-bearish-trend-flip",
+                isActive: (path) => path === "/stocks-with-weekly-bearish-trend-flip",
               },
             ],
           },

@@ -137,6 +137,20 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
+    // Trend Helper (Slow) direction flips confirmed in the last four bars.
+    // Daily and weekly are separate flags, not one flag plus a timeframe
+    // control -- the same split /stocks-near-200-day-moving-average and its
+    // weekly twin already use.
+    heading: "Trend Flips",
+    headingColor: "#38bdf8",
+    items: [
+      { href: "/stocks-with-bullish-trend-flip", label: "Bullish Flip", icon: "▲", tone: "green", filterKey: "trendFlipBullish" },
+      { href: "/stocks-with-bearish-trend-flip", label: "Bearish Flip", icon: "▼", tone: "red", filterKey: "trendFlipBearish" },
+      { href: "/stocks-with-weekly-bullish-trend-flip", label: "Bullish Flip (W)", icon: "▲", tone: "green", filterKey: "trendFlipBullishWeekly" },
+      { href: "/stocks-with-weekly-bearish-trend-flip", label: "Bearish Flip (W)", icon: "▼", tone: "red", filterKey: "trendFlipBearishWeekly" },
+    ],
+  },
+  {
     heading: "Earnings",
     headingColor: "#34d399",
     items: [
