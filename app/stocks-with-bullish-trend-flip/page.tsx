@@ -51,7 +51,7 @@ const config: PickerResultConfig = {
     "Stocks whose Trend Helper (Slow) trend state has confirmed a flip to bullish within the last four daily bars. The most recent flips are at the top.",
   explainerTitle: "How to use a bullish trend flip",
   explainerBody:
-    "The Trend Helper confirms a direction only after two consecutive bars close on the correct side of a rising Hull moving average, so a flip here is a change that has already held for a bar rather than a single green candle. A stock that appears today flipped today; one showing three days is three bars into the new state. Treat the flip as the start of a case to check, not the case itself - look at where the flip happened relative to support, the 200-day moving average and volume before acting on it.",
+    "The Trend Helper confirms a direction only after two consecutive bars close on the correct side of a rising Hull moving average, so a flip here is a change that has already held for a bar rather than a single green candle. Each row leads with the session the flip actually confirmed on. That is never the current session - the screen only ever evaluates completed daily bars, and the newest one it has is the previous session's close for the whole trading day - so the age beside the date counts back in sessions, not calendar days. Treat the flip as the start of a case to check, not the case itself - look at where the flip happened relative to support, the 200-day moving average and volume before acting on it.",
   emptyText:
     "No stocks have confirmed a bullish trend flip in the last four trading days.",
   tone: "green",
